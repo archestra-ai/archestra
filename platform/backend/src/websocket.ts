@@ -804,7 +804,7 @@ class WebSocketService {
     request: IncomingMessage,
   ): Promise<WebSocketClientContext | null> {
     const { success: userIsMcpServerAdmin } = await hasPermission(
-      { mcpServer: ["admin"] },
+      { mcpServerInstallation: ["admin"] },
       request.headers,
     );
     const headers = new Headers(request.headers as HeadersInit);

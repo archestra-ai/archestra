@@ -149,7 +149,7 @@ export default function StatisticsPage() {
         params.set("timeframe", newTimeframe);
       }
 
-      router.push(`/llm/cost/statistics?${params.toString()}`, {
+      router.push(`/llm/costs?${params.toString()}`, {
         scroll: false,
       });
     },

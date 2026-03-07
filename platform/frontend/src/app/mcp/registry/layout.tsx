@@ -9,7 +9,7 @@ export default function McpCatalogLayout({
   children: React.ReactNode;
 }) {
   const { data: userIsMcpServerAdmin } = useHasPermissions({
-    mcpServer: ["admin"],
+    mcpServerInstallation: ["admin"],
   });
 
   return (

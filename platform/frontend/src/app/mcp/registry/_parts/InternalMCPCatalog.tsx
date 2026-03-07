@@ -162,7 +162,7 @@ export function InternalMCPCatalog({
   const { data: detailsServerData } = useMcpRegistryServer(detailsServerName);
 
   const { data: userIsMcpServerAdmin } = useHasPermissions({
-    mcpServer: ["admin"],
+    mcpServerInstallation: ["admin"],
   });
 
   const queryClient = useQueryClient();

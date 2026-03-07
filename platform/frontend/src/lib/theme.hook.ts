@@ -2,7 +2,7 @@ import { DEFAULT_THEME_ID, type OrganizationTheme } from "@shared";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { usePublicAppearance } from "./appearance.query";
-import { useUpdateOrganization } from "./organization.query";
+import { useUpdateAppearance } from "./organization.query";
 
 const THEME_STORAGE_KEY = "archestra-theme";
 const DEFAULT_THEME: OrganizationTheme = DEFAULT_THEME_ID as OrganizationTheme;
@@ -20,7 +20,7 @@ export function useOrgTheme() {
 
   const { theme: themeFromBackend, logo, logoDark } = appearance ?? {};
 
-  const updateThemeMutation = useUpdateOrganization(
+  const updateThemeMutation = useUpdateAppearance(
     "Appearance settings updated",
     "Failed to update appearance settings",
   );

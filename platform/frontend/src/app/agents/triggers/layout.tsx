@@ -46,7 +46,7 @@ export default function AgentTriggersLayout({
   children: React.ReactNode;
 }) {
   const { data: canUpdate } = useHasPermissions({
-    organization: ["update"],
+    agentTrigger: ["read"],
   });
   const {
     msTeams: msTeamsActive,

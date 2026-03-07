@@ -44,7 +44,7 @@ export default function InstallationRequestDetailPage({
   const [showDeclineForm, setShowDeclineForm] = useState(false);
 
   const { data: userIsMcpServerAdmin } = useHasPermissions({
-    mcpServer: ["admin"],
+    mcpServerInstallation: ["admin"],
   });
 
   const handleApprove = useCallback(async () => {

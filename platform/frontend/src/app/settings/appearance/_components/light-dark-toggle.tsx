@@ -51,7 +51,7 @@ export function LightDarkToggle({ currentThemeId }: LightDarkToggleProps) {
         <div className="flex gap-2">
           <div className="flex-1">
             <WithPermissions
-              permissions={{ organization: ["update"] }}
+              permissions={{ appearance: ["update"] }}
               noPermissionHandle="tooltip"
             >
               {({ hasPermission }) => (
@@ -69,7 +69,7 @@ export function LightDarkToggle({ currentThemeId }: LightDarkToggleProps) {
           </div>
           <div className="flex-1">
             <WithPermissions
-              permissions={{ organization: ["update"] }}
+              permissions={{ appearance: ["update"] }}
               noPermissionHandle="tooltip"
             >
               {({ hasPermission }) => (

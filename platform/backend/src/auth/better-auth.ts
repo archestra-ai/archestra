@@ -76,7 +76,6 @@ export const auth: any = betterAuth({
       ac,
       dynamicAccessControl: {
         enabled: true,
-        maximumRolesPerOrganization: 50, // Configurable limit for custom roles
         validateRoleName: async (roleName: string) => {
           // Role names must be lowercase alphanumeric with underscores
           if (!/^[a-z0-9_]+$/.test(roleName)) {

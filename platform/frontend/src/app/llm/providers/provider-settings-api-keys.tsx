@@ -346,7 +346,7 @@ export function ProviderSettingsApiKeys() {
             <ButtonGroup>
               <PermissionButton
                 permissions={{
-                  chatSettings: ["update"],
+                  llmProvider: ["update"],
                   ...(row.original.scope === "org_wide"
                     ? { team: ["admin"] }
                     : {}),
@@ -365,7 +365,7 @@ export function ProviderSettingsApiKeys() {
               </PermissionButton>
               <PermissionButton
                 permissions={{
-                  chatSettings: ["delete"],
+                  llmProvider: ["delete"],
                   ...(row.original.scope === "org_wide"
                     ? { team: ["admin"] }
                     : {}),
@@ -408,7 +408,7 @@ export function ProviderSettingsApiKeys() {
             </p>
           </div>
           <PermissionButton
-            permissions={{ chatSettings: ["create"] }}
+            permissions={{ llmProvider: ["create"] }}
             className="shrink-0"
             onClick={() => setIsCreateDialogOpen(true)}
             data-testid={E2eTestId.AddChatApiKeyButton}

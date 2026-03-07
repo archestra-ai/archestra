@@ -1,16 +1,8 @@
 "use client";
 
-import { AlertTriangle, FileImage, ShieldCheck, ShieldOff } from "lucide-react";
 import Link from "next/link";
 import { WithPermissions } from "@/components/roles/with-permissions";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { SettingsBlock } from "@/components/settings/settings-block";
 import {
   Select,
   SelectContent,
@@ -18,16 +10,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
 import {
   useOrganization,
-  useUpdateOrganization,
+  useUpdateSecuritySettings,
 } from "@/lib/organization.query";
 
 export default function SecuritySettingsPage() {
   const { data: organization } = useOrganization();
 
-  const updateOrgMutation = useUpdateOrganization(
+  const updateSecurityMutation = useUpdateSecuritySettings(
     "Setting updated",
     "Failed to update setting",
   );
@@ -35,122 +26,108 @@ export default function SecuritySettingsPage() {
   const handleGlobalToolPolicyChange = async (
     value: "permissive" | "restrictive",
   ) => {
-    await updateOrgMutation.mutateAsync({
+    await updateSecurityMutation.mutateAsync({
       globalToolPolicy: value,
     });
   };
 
   const handleToggleAllowChatFileUploads = async (checked: boolean) => {
-    await updateOrgMutation.mutateAsync({
+    await updateSecurityMutation.mutateAsync({
       allowChatFileUploads: checked,
     });
   };
 
+  const isRestrictive = organization?.globalToolPolicy === "restrictive";
+
   return (
     <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-2">
-            <ShieldCheck className="h-5 w-5 text-blue-500" />
-            <CardTitle>Agentic Security Engine</CardTitle>
-          </div>
-          <CardDescription>
-            Configure the default security policy for tool execution and result
-            treatment
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div>
-            <div className="w-fit">
-              <WithPermissions
-                permissions={{ organization: ["update"] }}
-                noPermissionHandle="tooltip"
+      <SettingsBlock
+        title="Agentic Security Engine"
+        description="Configure the default security policy for tool execution and result treatment"
+        control={
+          <WithPermissions
+            permissions={{ securitySettings: ["update"] }}
+            noPermissionHandle="tooltip"
+          >
+            {({ hasPermission }) => (
+              <Select
+                value={organization?.globalToolPolicy ?? "permissive"}
+                onValueChange={handleGlobalToolPolicyChange}
+                disabled={updateSecurityMutation.isPending || !hasPermission}
               >
-                {({ hasPermission }) => (
-                  <Select
-                    value={organization?.globalToolPolicy ?? "permissive"}
-                    onValueChange={handleGlobalToolPolicyChange}
-                    disabled={updateOrgMutation.isPending || !hasPermission}
-                  >
-                    <SelectTrigger
-                      id="global-tool-policy"
-                      className="w-[140px]"
-                    >
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="permissive">Disabled</SelectItem>
-                      <SelectItem value="restrictive">Enabled</SelectItem>
-                    </SelectContent>
-                  </Select>
-                )}
+                <SelectTrigger className="w-[140px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="permissive">Disabled</SelectItem>
+                  <SelectItem value="restrictive">Enabled</SelectItem>
+                </SelectContent>
+              </Select>
+            )}
+          </WithPermissions>
+        }
+        notice={
+          isRestrictive ? (
+            <span className="text-green-600 dark:text-green-400">
+              Policies apply to agents' tools.{" "}
+              <WithPermissions
+                permissions={{ securitySettings: ["update"] }}
+                noPermissionHandle="hide"
+              >
+                <Link
+                  href="/mcp/tool-policies"
+                  className="text-primary hover:underline"
+                >
+                  Configure policies
+                </Link>
               </WithPermissions>
-            </div>
-            <p className="text-sm mt-2">
-              {organization?.globalToolPolicy === "restrictive" ? (
-                <span className="inline-flex items-center gap-1.5 text-green-600 dark:text-green-400">
-                  <ShieldCheck className="h-4 w-4" />
-                  Policies apply to agents' tools.
-                  <WithPermissions
-                    permissions={{ organization: ["update"] }}
-                    noPermissionHandle="hide"
-                  >
-                    <Link
-                      href="/mcp/tool-policies"
-                      className="text-primary hover:underline"
-                    >
-                      Click here to configure policies
-                    </Link>
-                  </WithPermissions>
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-1.5 text-red-600 dark:text-red-400">
-                  <ShieldOff className="h-4 w-4" />
-                  Agents can perform any action. Tool calls are allowed and
-                  results are trusted.
-                </span>
-              )}
-            </p>
-          </div>
-        </CardContent>
-      </Card>
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <FileImage className="h-5 w-5 text-blue-500" />
-              <CardTitle>Chat File Uploads</CardTitle>
-            </div>
-            <WithPermissions
-              permissions={{ organization: ["update"] }}
-              noPermissionHandle="tooltip"
-            >
-              {({ hasPermission }) => (
-                <Switch
-                  id="allow-chat-file-uploads"
-                  checked={organization?.allowChatFileUploads ?? true}
-                  onCheckedChange={handleToggleAllowChatFileUploads}
-                  disabled={updateOrgMutation.isPending || !hasPermission}
-                />
-              )}
-            </WithPermissions>
-          </div>
-          <CardDescription>
-            Allow users to upload files in the Archestra chat UI
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <Alert variant="warning">
-            <AlertTriangle className="h-4 w-4" />
-            <AlertDescription>
-              <strong>Security notice:</strong> Tool invocation policies and
-              trusted data policies currently only apply to text-based content.
-              File-based content (images, PDFs) bypasses these security checks.
-              Support for file-based security policies is coming soon.
-            </AlertDescription>
-          </Alert>
-        </CardContent>
-      </Card>
+            </span>
+          ) : (
+            <span className="text-red-600 dark:text-red-400">
+              Agents can perform any action. Tool calls are allowed and results
+              are trusted.
+            </span>
+          )
+        }
+      />
+      <SettingsBlock
+        title="Chat File Uploads"
+        description="Allow users to upload files in the Archestra chat UI"
+        control={
+          <WithPermissions
+            permissions={{ securitySettings: ["update"] }}
+            noPermissionHandle="tooltip"
+          >
+            {({ hasPermission }) => (
+              <Select
+                value={
+                  (organization?.allowChatFileUploads ?? true)
+                    ? "enabled"
+                    : "disabled"
+                }
+                onValueChange={(value) =>
+                  handleToggleAllowChatFileUploads(value === "enabled")
+                }
+                disabled={updateSecurityMutation.isPending || !hasPermission}
+              >
+                <SelectTrigger className="w-[140px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="enabled">Enabled</SelectItem>
+                  <SelectItem value="disabled">Disabled</SelectItem>
+                </SelectContent>
+              </Select>
+            )}
+          </WithPermissions>
+        }
+        notice={
+          <span className="text-red-600 dark:text-red-400">
+            Security policies only apply to text content. File uploads (images,
+            PDFs) bypass policy checks. File-based policies coming soon.
+          </span>
+        }
+      />
     </div>
   );
 }

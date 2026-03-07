@@ -93,7 +93,7 @@ const mcpToolCallRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       const { success: isMcpServerAdmin } = await hasPermission(
-        { mcpServer: ["admin"] },
+        { mcpServerInstallation: ["admin"] },
         headers,
       );
 
@@ -124,7 +124,7 @@ const mcpToolCallRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async ({ params: { mcpToolCallId }, user, headers }, reply) => {
       const { success: isMcpServerAdmin } = await hasPermission(
-        { mcpServer: ["admin"] },
+        { mcpServerInstallation: ["admin"] },
         headers,
       );
 

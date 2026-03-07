@@ -8,7 +8,7 @@ import {
 import { AlertCircle, Plus } from "lucide-react";
 import Link from "next/link";
 import React, { useEffect, useState } from "react";
-import { Condition } from "@/app/llm/cost/optimization-rules/_parts/condition";
+import { Condition } from "@/app/llm/(costs)/optimization-rules/_parts/condition";
 import { WithPermissions } from "@/components/roles/with-permissions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -458,7 +458,7 @@ export function Rule({
   return (
     <div className={cn(className, "flex flex-row gap-2 items-center text-sm")}>
       <WithPermissions
-        permissions={{ limit: ["update"] }}
+        permissions={{ llmLimit: ["update"] }}
         noPermissionHandle="tooltip"
       >
         {({ hasPermission }) => (

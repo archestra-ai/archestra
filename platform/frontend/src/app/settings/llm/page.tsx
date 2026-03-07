@@ -5,14 +5,9 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { WithPermissions } from "@/components/roles/with-permissions";
+import { SettingsBlock } from "@/components/settings/settings-block";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { CardTitle } from "@/components/ui/card";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { PermissionButton } from "@/components/ui/permission-button";
 import {
@@ -24,7 +19,7 @@ import {
 } from "@/components/ui/select";
 import {
   useOrganization,
-  useUpdateOrganization,
+  useUpdateLlmSettings,
 } from "@/lib/organization.query";
 import { useTeams } from "@/lib/team.query";
 
@@ -39,7 +34,7 @@ export default function CompressionPage() {
   const [selectedTeamIds, setSelectedTeamIds] = useState<string[]>([]);
   const [hasChanges, setHasChanges] = useState(false);
 
-  const updateOrganizationMutation = useUpdateOrganization(
+  const updateLlmSettingsMutation = useUpdateLlmSettings(
     "Tool results compression settings updated",
     "Failed to update tool results compression settings",
   );
@@ -102,18 +97,18 @@ export default function CompressionPage() {
   const handleSave = async () => {
     // Update organization based on selected mode
     if (compressionMode === "disabled") {
-      await updateOrganizationMutation.mutateAsync({
+      await updateLlmSettingsMutation.mutateAsync({
         compressionScope: "organization",
         convertToolResultsToToon: false,
       });
     } else if (compressionMode === "organization") {
-      await updateOrganizationMutation.mutateAsync({
+      await updateLlmSettingsMutation.mutateAsync({
         compressionScope: "organization",
         convertToolResultsToToon: true,
       });
     } else {
       // Team mode
-      await updateOrganizationMutation.mutateAsync({
+      await updateLlmSettingsMutation.mutateAsync({
         compressionScope: "team",
         convertToolResultsToToon: false, // Not used in team mode
       });
@@ -163,92 +158,118 @@ export default function CompressionPage() {
 
   return (
     <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-lg">
-              Apply compression to tool results
-            </CardTitle>
-            <CardDescription>
-              Reduce LLM token usage up to 60% by using TOON (Token-Oriented
-              Object Notation) compression for tool results.
-            </CardDescription>
-            <WithPermissions
-              permissions={{ organization: ["update"] }}
-              noPermissionHandle="tooltip"
-            >
-              {({ hasPermission }) => (
-                <Select
-                  value={compressionMode}
-                  onValueChange={(
-                    value: "disabled" | "organization" | "team",
-                  ) => {
-                    setCompressionMode(value);
-                    setHasChanges(checkForChanges(value, selectedTeamIds));
-                  }}
-                  disabled={
-                    updateOrganizationMutation.isPending || !hasPermission
-                  }
-                >
-                  <SelectTrigger className="w-48">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="disabled">Disabled</SelectItem>
-                    <SelectItem value="organization">
-                      Organization level
-                    </SelectItem>
-                    <SelectItem value="team">Team level</SelectItem>
-                  </SelectContent>
-                </Select>
-              )}
-            </WithPermissions>
-          </div>
-        </CardHeader>
+      <SettingsBlock
+        title="Apply compression to tool results"
+        description="Reduce LLM token usage up to 60% by using TOON (Token-Oriented Object Notation) compression for tool results."
+        control={
+          <WithPermissions
+            permissions={{ llmSettings: ["update"] }}
+            noPermissionHandle="tooltip"
+          >
+            {({ hasPermission }) => (
+              <Select
+                value={compressionMode}
+                onValueChange={(
+                  value: "disabled" | "organization" | "team",
+                ) => {
+                  setCompressionMode(value);
+                  setHasChanges(checkForChanges(value, selectedTeamIds));
+                }}
+                disabled={updateLlmSettingsMutation.isPending || !hasPermission}
+              >
+                <SelectTrigger className="w-48">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="disabled">Disabled</SelectItem>
+                  <SelectItem value="organization">
+                    Organization level
+                  </SelectItem>
+                  <SelectItem value="team">Team level</SelectItem>
+                </SelectContent>
+              </Select>
+            )}
+          </WithPermissions>
+        }
+      >
         {compressionMode === "team" && (
-          <CardContent className="pt-6 border-t">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-lg">Select teams</CardTitle>
-              {teams.length === 0 ? (
-                <p className="text-sm text-muted-foreground w-48">
-                  No teams available
-                </p>
-              ) : (
-                <div className="w-48">
-                  <MultiSelect
-                    value={selectedTeamIds}
-                    onValueChange={(newTeamIds) => {
-                      setSelectedTeamIds(newTeamIds);
-                      setHasChanges(
-                        checkForChanges(compressionMode, newTeamIds),
-                      );
-                    }}
-                    placeholder="Select teams..."
-                    items={teams.map((team) => ({
-                      value: team.id,
-                      label: team.name,
-                    }))}
-                    disabled={updateOrganizationMutation.isPending}
-                  />
-                </div>
-              )}
-            </div>
-          </CardContent>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-lg">Select teams</CardTitle>
+            {teams.length === 0 ? (
+              <p className="text-sm text-muted-foreground w-48">
+                No teams available
+              </p>
+            ) : (
+              <div className="w-48">
+                <MultiSelect
+                  value={selectedTeamIds}
+                  onValueChange={(newTeamIds) => {
+                    setSelectedTeamIds(newTeamIds);
+                    setHasChanges(checkForChanges(compressionMode, newTeamIds));
+                  }}
+                  placeholder="Select teams..."
+                  items={teams.map((team) => ({
+                    value: team.id,
+                    label: team.name,
+                  }))}
+                  disabled={updateLlmSettingsMutation.isPending}
+                />
+              </div>
+            )}
+          </div>
         )}
-      </Card>
+      </SettingsBlock>
+      <SettingsBlock
+        title="Limit auto-cleanup interval"
+        description="How often expired or exceeded usage limits are automatically reset."
+        control={
+          <WithPermissions
+            permissions={{ llmSettings: ["update"] }}
+            noPermissionHandle="tooltip"
+          >
+            {({ hasPermission }) => (
+              <Select
+                value={organization?.limitCleanupInterval || "1h"}
+                onValueChange={(value) => {
+                  updateLlmSettingsMutation.mutate({
+                    limitCleanupInterval: value as
+                      | "1h"
+                      | "12h"
+                      | "24h"
+                      | "1w"
+                      | "1m",
+                  });
+                }}
+                disabled={updateLlmSettingsMutation.isPending || !hasPermission}
+              >
+                <SelectTrigger className="w-48">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="1h">Every hour</SelectItem>
+                  <SelectItem value="12h">Every 12 hours</SelectItem>
+                  <SelectItem value="24h">Every 24 hours</SelectItem>
+                  <SelectItem value="1w">Every week</SelectItem>
+                  <SelectItem value="1m">Every month</SelectItem>
+                </SelectContent>
+              </Select>
+            )}
+          </WithPermissions>
+        }
+      />
       {hasChanges && (
         <div className="flex gap-3 sticky bottom-0 bg-background p-4 rounded-lg border border-border shadow-lg">
           <PermissionButton
-            permissions={{ organization: ["update"] }}
+            permissions={{ llmSettings: ["update"] }}
             onClick={handleSave}
-            disabled={updateOrganizationMutation.isPending}
+            disabled={updateLlmSettingsMutation.isPending}
           >
-            {updateOrganizationMutation.isPending ? "Saving..." : "Save"}
+            {updateLlmSettingsMutation.isPending ? "Saving..." : "Save"}
           </PermissionButton>
           <Button
             variant="outline"
             onClick={handleCancel}
-            disabled={updateOrganizationMutation.isPending}
+            disabled={updateLlmSettingsMutation.isPending}
           >
             Cancel
           </Button>

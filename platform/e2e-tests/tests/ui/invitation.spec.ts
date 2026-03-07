@@ -23,7 +23,7 @@ test.describe(
       });
       await navigateAndVerifyAuth({
         page,
-        path: "/settings/members",
+        path: "/settings/users",
         email: ADMIN_EMAIL,
         password: ADMIN_PASSWORD,
         verifyLocator: inviteButton,
@@ -66,7 +66,7 @@ test.describe(
       });
       await navigateAndVerifyAuth({
         page,
-        path: "/settings/members",
+        path: "/settings/users",
         email: ADMIN_EMAIL,
         password: ADMIN_PASSWORD,
         verifyLocator: inviteButton,
@@ -175,7 +175,7 @@ test.describe(
 
         // PART 3: Verify the new user is listed in members (back to admin context)
         // Go back to the admin page and verify the new member appears
-        await goToPage(page, "/settings/members");
+        await goToPage(page, "/settings/users");
         await page.waitForTimeout(1000);
 
         // Look for the new user in the members list

@@ -2,7 +2,7 @@
 
 import { Edit, Plus, Save, Trash2, X } from "lucide-react";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Rule } from "@/app/llm/cost/optimization-rules/_parts/rule";
+import { Rule } from "@/app/llm/(costs)/optimization-rules/_parts/rule";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -87,7 +87,7 @@ function DeleteRuleConfirmation({
     <AlertDialog>
       <AlertDialogTrigger asChild>
         <PermissionButton
-          permissions={{ limit: ["delete"] }}
+          permissions={{ llmLimit: ["delete"] }}
           variant="ghost"
           size="sm"
           className="text-destructive hover:text-destructive"
@@ -250,7 +250,7 @@ export default function OptimizationRulesPage() {
           </div>
           <div className="flex items-center gap-2">
             <PermissionButton
-              permissions={{ limit: ["create"] }}
+              permissions={{ llmLimit: ["create"] }}
               onClick={() => {
                 if (editingRuleId !== null) {
                   setEditingRuleId(null);
@@ -401,7 +401,7 @@ export default function OptimizationRulesPage() {
                       ) : (
                         <>
                           <PermissionButton
-                            permissions={{ limit: ["update"] }}
+                            permissions={{ llmLimit: ["update"] }}
                             variant="ghost"
                             size="sm"
                             onClick={() => {

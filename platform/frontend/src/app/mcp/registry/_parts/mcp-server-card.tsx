@@ -187,7 +187,7 @@ export function McpServerCard({
   const session = authClient.useSession();
   const currentUserId = session.data?.user?.id;
   const { data: userIsMcpServerAdmin } = useHasPermissions({
-    mcpServer: ["admin"],
+    mcpServerInstallation: ["admin"],
   });
   const isLocalMcpEnabled = useFeatureFlag("orchestratorK8sRuntime");
 
@@ -428,7 +428,9 @@ export function McpServerCard({
         <User className="h-4 w-4 text-muted-foreground" />
         <span className="text-muted-foreground">
           Connections
-          <WithoutPermissions permissions={{ mcpServer: ["admin"] }}>
+          <WithoutPermissions
+            permissions={{ mcpServerInstallation: ["admin"] }}
+          >
             {" "}
             in your team
           </WithoutPermissions>
@@ -481,7 +483,9 @@ export function McpServerCard({
           data-testid={`${E2eTestId.CredentialsCount}-${installedServer?.catalogName}`}
         >
           Connections
-          <WithoutPermissions permissions={{ mcpServer: ["admin"] }}>
+          <WithoutPermissions
+            permissions={{ mcpServerInstallation: ["admin"] }}
+          >
             {" "}
             in your team
           </WithoutPermissions>
@@ -606,7 +610,7 @@ export function McpServerCard({
           {usersAuthenticated}
         </div>
         <WithPermissions
-          permissions={{ tool: ["update"], agent: ["update"] }}
+          permissions={{ toolPolicy: ["update"], agent: ["update"] }}
           noPermissionHandle="hide"
         >
           <div className="flex items-center justify-between px-3 py-2 text-sm border-b border-muted h-10">
@@ -620,7 +624,7 @@ export function McpServerCard({
         (needsReinstall || hasError) &&
         !isInstalling && (
           <PermissionButton
-            permissions={{ mcpServer: ["update"] }}
+            permissions={{ mcpServerInstallation: ["update"] }}
             onClick={onReinstall}
             size="sm"
             variant="default"
@@ -639,7 +643,7 @@ export function McpServerCard({
         {chatButton}
         {!isInstalling && canCreateNewInstallation && (
           <PermissionButton
-            permissions={{ mcpServer: ["create"] }}
+            permissions={{ mcpServerInstallation: ["create"] }}
             onClick={onInstallRemoteServer}
             size="sm"
             variant="outline"
@@ -660,7 +664,7 @@ export function McpServerCard({
           {localServersInstalled}
         </div>
         <WithPermissions
-          permissions={{ tool: ["update"], agent: ["update"] }}
+          permissions={{ toolPolicy: ["update"], agent: ["update"] }}
           noPermissionHandle="hide"
         >
           <div className="flex items-center justify-between px-3 py-2 text-sm border-b border-muted h-10">
@@ -672,7 +676,7 @@ export function McpServerCard({
       {/* Show reinstall button only when NOT installing (hide during reinstall to show progress bar) */}
       {isCurrentUserAuthenticated && needsReinstall && !isInstalling && (
         <PermissionButton
-          permissions={{ mcpServer: ["update"] }}
+          permissions={{ mcpServerInstallation: ["update"] }}
           onClick={onReinstall}
           size="sm"
           variant="default"
@@ -696,7 +700,7 @@ export function McpServerCard({
               <TooltipTrigger asChild>
                 <div className="w-full">
                   <PermissionButton
-                    permissions={{ mcpServer: ["create"] }}
+                    permissions={{ mcpServerInstallation: ["create"] }}
                     onClick={onInstallLocalServer}
                     disabled={!isLocalMcpEnabled}
                     size="sm"
@@ -741,7 +745,7 @@ export function McpServerCard({
           {localServersInstalled}
         </div>
         <WithPermissions
-          permissions={{ tool: ["update"], agent: ["update"] }}
+          permissions={{ toolPolicy: ["update"], agent: ["update"] }}
           noPermissionHandle="hide"
         >
           <div className="flex items-center justify-between px-3 py-2 text-sm border-b border-muted h-10">
@@ -753,7 +757,7 @@ export function McpServerCard({
       {/* Show reinstall button only when NOT installing */}
       {isCurrentUserAuthenticated && needsReinstall && !isInstalling && (
         <PermissionButton
-          permissions={{ mcpServer: ["update"] }}
+          permissions={{ mcpServerInstallation: ["update"] }}
           onClick={onReinstall}
           size="sm"
           variant="default"
@@ -792,7 +796,7 @@ export function McpServerCard({
               <TooltipTrigger asChild>
                 <div className="w-full">
                   <PermissionButton
-                    permissions={{ mcpServer: ["create"] }}
+                    permissions={{ mcpServerInstallation: ["create"] }}
                     onClick={onInstallLocalServer}
                     disabled={!isLocalMcpEnabled}
                     size="sm"
@@ -833,7 +837,7 @@ export function McpServerCard({
   const builtinCardContent = (
     <>
       <WithPermissions
-        permissions={{ tool: ["update"], agent: ["update"] }}
+        permissions={{ toolPolicy: ["update"], agent: ["update"] }}
         noPermissionHandle="hide"
       >
         <div className="bg-muted/50 rounded-md overflow-hidden flex flex-col">

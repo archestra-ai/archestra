@@ -6,7 +6,7 @@ test.describe("Organization Roles API - Custom Role CRUD Operations", () => {
       name: `test_role_${Date.now()}`,
       permission: {
         agent: ["read"],
-        tool: ["read", "create"],
+        toolPolicy: ["read", "create"],
       },
     };
 
@@ -152,7 +152,7 @@ test.describe("Organization Roles API - Custom Role CRUD Operations", () => {
     // Update the role permissions
     const newPermissions = {
       agent: ["read", "create"],
-      tool: ["read"],
+      toolPolicy: ["read"],
     };
     const updateResponse = await makeApiRequest({
       request,
@@ -234,10 +234,9 @@ test.describe("Organization Roles API - Permission Validation", () => {
   }) => {
     const complexPermissions = {
       agent: ["read", "create", "update", "delete"],
-      tool: ["read", "create"],
-      policy: ["read", "create", "update", "delete"],
-      interaction: ["read", "create"],
-      mcpServer: ["read", "create", "delete"],
+      toolPolicy: ["read", "create", "update", "delete"],
+      log: ["read"],
+      mcpServerInstallation: ["read", "create", "delete"],
     };
 
     const response = await makeApiRequest({
@@ -280,7 +279,7 @@ test.describe("Organization Roles API - Role Lifecycle", () => {
   }) => {
     const roleName = `lifecycle_test_${Date.now()}`;
     const initialPermissions = { agent: ["read"] };
-    const updatedPermissions = { agent: ["read", "create"], tool: ["read"] };
+    const updatedPermissions = { agent: ["read", "create"], toolPolicy: ["read"] };
 
     // 1. Create
     const createResponse = await makeApiRequest({

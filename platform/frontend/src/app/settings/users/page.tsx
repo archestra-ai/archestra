@@ -62,7 +62,7 @@ function MembersSettingsContent() {
         >
           <DialogContent className="sm:max-w-[500px]">
             <DialogHeader>
-              <DialogTitle>Invite Member</DialogTitle>
+              <DialogTitle>Invite User</DialogTitle>
             </DialogHeader>
             <InviteByLinkCard
               organizationId={activeOrg.id}
@@ -72,6 +72,12 @@ function MembersSettingsContent() {
         </Dialog>
       )}
       <OrganizationMembersCard
+        localization={{
+          MEMBERS: "Users",
+          MEMBERS_DESCRIPTION: "Add or remove users and manage their roles.",
+          MEMBERS_INSTRUCTIONS: "Invite new users to your organization.",
+          INVITE_MEMBER: "Invite User",
+        }}
         {...(!invitationsEnabled && {
           actionLabel: null,
           instructions: null,

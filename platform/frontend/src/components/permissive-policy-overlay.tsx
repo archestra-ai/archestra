@@ -15,7 +15,7 @@ export function PermissivePolicyOverlay({
 }: PermissivePolicyOverlayProps) {
   const { data: features, isLoading } = useFeatures();
   const { data: userCanUpdateOrganization } = useHasPermissions({
-    organization: ["update"],
+    securitySettings: ["update"],
   });
 
   const isPermissive =

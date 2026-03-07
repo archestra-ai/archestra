@@ -587,7 +587,7 @@ export function AssignedToolsTable({
 
           return (
             <WithPermissions
-              permissions={{ policy: ["update"] }}
+              permissions={{ toolPolicy: ["update"] }}
               noPermissionHandle="tooltip"
             >
               {({ hasPermission }) => (
@@ -655,7 +655,7 @@ export function AssignedToolsTable({
 
           return (
             <WithPermissions
-              permissions={{ policy: ["update"] }}
+              permissions={{ toolPolicy: ["update"] }}
               noPermissionHandle="tooltip"
             >
               {({ hasPermission }) => (
@@ -703,7 +703,7 @@ export function AssignedToolsTable({
         header: "Actions",
         cell: ({ row }) => (
           <WithPermissions
-            permissions={{ policy: ["update"] }}
+            permissions={{ toolPolicy: ["update"] }}
             noPermissionHandle="tooltip"
           >
             {({ hasPermission }) => (
@@ -798,7 +798,7 @@ export function AssignedToolsTable({
           </div>
           <div className="flex items-center gap-4 flex-wrap ml-auto">
             <WithPermissions
-              permissions={{ policy: ["update"] }}
+              permissions={{ toolPolicy: ["update"] }}
               noPermissionHandle="tooltip"
             >
               {({ hasPermission }) => (
@@ -837,7 +837,7 @@ export function AssignedToolsTable({
               )}
             </WithPermissions>
             <WithPermissions
-              permissions={{ policy: ["update"] }}
+              permissions={{ toolPolicy: ["update"] }}
               noPermissionHandle="tooltip"
             >
               {({ hasPermission }) => (
@@ -871,7 +871,7 @@ export function AssignedToolsTable({
             <Tooltip>
               <TooltipTrigger asChild>
                 <PermissionButton
-                  permissions={{ agent: ["update"], tool: ["update"] }}
+                  permissions={{ agent: ["update"], toolPolicy: ["update"] }}
                   size="sm"
                   variant="outline"
                   onClick={handleAutoConfigurePolicies}
@@ -940,7 +940,7 @@ export function AssignedToolsTable({
 
           {/* Call Policy */}
           <WithPermissions
-            permissions={{ policy: ["update"] }}
+            permissions={{ toolPolicy: ["update"] }}
             noPermissionHandle="tooltip"
           >
             {({ hasPermission }) => (
@@ -975,7 +975,7 @@ export function AssignedToolsTable({
 
           {/* Results are */}
           <WithPermissions
-            permissions={{ policy: ["update"] }}
+            permissions={{ toolPolicy: ["update"] }}
             noPermissionHandle="tooltip"
           >
             {({ hasPermission }) => (
@@ -1011,7 +1011,7 @@ export function AssignedToolsTable({
             <Tooltip>
               <TooltipTrigger asChild>
                 <PermissionButton
-                  permissions={{ agent: ["update"], tool: ["update"] }}
+                  permissions={{ agent: ["update"], toolPolicy: ["update"] }}
                   size="sm"
                   variant="outline"
                   className="w-full justify-center"

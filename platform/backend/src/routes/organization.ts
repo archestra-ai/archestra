@@ -14,10 +14,13 @@ import {
 } from "@/models";
 import {
   ApiError,
+  CompleteOnboardingSchema,
   constructResponseSchema,
   PublicAppearanceSchema,
   SelectOrganizationSchema,
-  UpdateOrganizationSchema,
+  UpdateAppearanceSchema,
+  UpdateLlmSettingsSchema,
+  UpdateSecuritySettingsSchema,
 } from "@/types";
 
 const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
@@ -43,13 +46,81 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.patch(
-    "/api/organization",
+    "/api/organization/appearance",
     {
       schema: {
-        operationId: RouteId.UpdateOrganization,
-        description: "Update organization details",
+        operationId: RouteId.UpdateAppearance,
+        description: "Update appearance settings (theme, logo, fonts)",
         tags: ["Organization"],
-        body: UpdateOrganizationSchema.partial(),
+        body: UpdateAppearanceSchema,
+        response: constructResponseSchema(SelectOrganizationSchema),
+      },
+    },
+    async ({ organizationId, body }, reply) => {
+      const organization = await OrganizationModel.patch(organizationId, body);
+
+      if (!organization) {
+        throw new ApiError(404, "Organization not found");
+      }
+
+      return reply.send(organization);
+    },
+  );
+
+  fastify.patch(
+    "/api/organization/security-settings",
+    {
+      schema: {
+        operationId: RouteId.UpdateSecuritySettings,
+        description:
+          "Update security settings (global tool policy, chat file uploads)",
+        tags: ["Organization"],
+        body: UpdateSecuritySettingsSchema,
+        response: constructResponseSchema(SelectOrganizationSchema),
+      },
+    },
+    async ({ organizationId, body }, reply) => {
+      const organization = await OrganizationModel.patch(organizationId, body);
+
+      if (!organization) {
+        throw new ApiError(404, "Organization not found");
+      }
+
+      return reply.send(organization);
+    },
+  );
+
+  fastify.patch(
+    "/api/organization/llm-settings",
+    {
+      schema: {
+        operationId: RouteId.UpdateLlmSettings,
+        description:
+          "Update LLM settings (TOON compression, compression scope, limit cleanup interval)",
+        tags: ["Organization"],
+        body: UpdateLlmSettingsSchema,
+        response: constructResponseSchema(SelectOrganizationSchema),
+      },
+    },
+    async ({ organizationId, body }, reply) => {
+      const organization = await OrganizationModel.patch(organizationId, body);
+
+      if (!organization) {
+        throw new ApiError(404, "Organization not found");
+      }
+
+      return reply.send(organization);
+    },
+  );
+
+  fastify.post(
+    "/api/organization/complete-onboarding",
+    {
+      schema: {
+        operationId: RouteId.CompleteOnboarding,
+        description: "Mark organization onboarding as complete",
+        tags: ["Organization"],
+        body: CompleteOnboardingSchema,
         response: constructResponseSchema(SelectOrganizationSchema),
       },
     },

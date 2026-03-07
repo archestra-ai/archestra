@@ -169,7 +169,7 @@ export function McpServerCard({
   onInstallRemoteServer,
   onInstallLocalServer,
   onReinstall,
-  onDetails,
+  onDetails: _onDetails,
   onEdit,
   onDelete,
   onCancelInstallation,

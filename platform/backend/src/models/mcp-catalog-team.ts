@@ -21,6 +21,7 @@ class McpCatalogTeamModel {
       return allCatalogs.map((c) => c.id);
     }
 
+    // Mirrors the agent (profile) access control approach: org-visible + personal + team-based
     const result = await db.execute<{ id: string }>(sql`
       SELECT id FROM internal_mcp_catalog WHERE scope = 'org'
       UNION

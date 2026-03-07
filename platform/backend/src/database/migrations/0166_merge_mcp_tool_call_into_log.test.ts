@@ -9,6 +9,21 @@ const migrationSql = fs.readFileSync(
   "utf-8",
 );
 
+/**
+ * PGlite doesn't support multiple statements in a single db.execute().
+ * Split on semicolons, filter out comments and empty lines, and run each statement.
+ */
+async function runMigration() {
+  const statements = migrationSql
+    .split(";")
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0 && !s.startsWith("--"));
+
+  for (const statement of statements) {
+    await db.execute(sql.raw(`${statement};`));
+  }
+}
+
 async function insertRole(
   organizationId: string,
   roleId: string,
@@ -43,7 +58,7 @@ describe("0166 migration: rename RBAC resources", () => {
       policy: ["read", "update", "delete"],
     });
 
-    await db.execute(sql.raw(migrationSql));
+    await runMigration();
 
     const perm = await getRolePermission("test-merge-1");
     expect(perm.toolPolicy).toBeDefined();
@@ -60,7 +75,7 @@ describe("0166 migration: rename RBAC resources", () => {
       policy: ["read"],
     });
 
-    await db.execute(sql.raw(migrationSql));
+    await runMigration();
 
     const perm = await getRolePermission("test-policy-only");
     expect(perm.toolPolicy).toEqual(["read"]);
@@ -74,7 +89,7 @@ describe("0166 migration: rename RBAC resources", () => {
       llmCosts: ["read"],
     });
 
-    await db.execute(sql.raw(migrationSql));
+    await runMigration();
 
     const perm = await getRolePermission("test-costs");
     expect(perm.llmCost).toEqual(["read"]);
@@ -88,7 +103,7 @@ describe("0166 migration: rename RBAC resources", () => {
       secrets: ["read", "update"],
     });
 
-    await db.execute(sql.raw(migrationSql));
+    await runMigration();
 
     const perm = await getRolePermission("test-secrets");
     expect(perm.secret).toEqual(["read", "update"]);
@@ -104,7 +119,7 @@ describe("0166 migration: rename RBAC resources", () => {
       agentTriggers: ["read", "create"],
     });
 
-    await db.execute(sql.raw(migrationSql));
+    await runMigration();
 
     const perm = await getRolePermission("test-triggers");
     expect(perm.agentTrigger).toEqual(["read", "create"]);
@@ -119,7 +134,7 @@ describe("0166 migration: rename RBAC resources", () => {
       agent: ["read"],
     });
 
-    await db.execute(sql.raw(migrationSql));
+    await runMigration();
 
     const perm = await getRolePermission("test-org");
     expect(perm.organization).toBeUndefined();
@@ -133,7 +148,7 @@ describe("0166 migration: rename RBAC resources", () => {
       llmLimits: ["read"],
     });
 
-    await db.execute(sql.raw(migrationSql));
+    await runMigration();
 
     const perm = await getRolePermission("test-limits");
     expect(perm.llmLimit).toEqual(["read"]);
@@ -147,7 +162,7 @@ describe("0166 migration: rename RBAC resources", () => {
       llmProviders: ["read", "create"],
     });
 
-    await db.execute(sql.raw(migrationSql));
+    await runMigration();
 
     const perm = await getRolePermission("test-providers");
     expect(perm.llmProvider).toEqual(["read", "create"]);
@@ -169,7 +184,7 @@ describe("0166 migration: rename RBAC resources", () => {
       llmProviders: ["read"],
     });
 
-    await db.execute(sql.raw(migrationSql));
+    await runMigration();
 
     const perm = await getRolePermission("test-multi");
     expect(perm.toolPolicy).toBeDefined();

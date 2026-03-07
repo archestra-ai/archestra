@@ -7,7 +7,7 @@ import { ArchestraQueryClientProvider } from "./_parts/query-client-provider";
 import { ThemeProvider } from "./_parts/theme-provider";
 import "./globals.css";
 import { OrgThemeLoader } from "@/components/org-theme-loader";
-import { ChatProvider } from "@/contexts/global-chat-context";
+import { ChatProvider } from "@/lib/global-chat.context";
 import { WebsocketInitializer } from "./_parts/websocket-initializer";
 import { WithAuthCheck } from "./_parts/with-auth-check";
 import { WithPagePermissions } from "./_parts/with-page-permissions";

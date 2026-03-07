@@ -8,7 +8,7 @@ import {
   type McpLogsMessage,
 } from "@shared";
 import { ArrowDown, Copy, Terminal } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -31,6 +31,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useAnimatedDots } from "@/lib/animated-dots.hook";
 import websocketService from "@/lib/websocket";
 import {
   type DeploymentState,
@@ -56,26 +57,8 @@ interface McpLogsDialogProps {
  * Hook that returns an animated "Streaming" text with cycling dots
  */
 function useStreamingAnimation(isActive: boolean) {
-  const [dotCount, setDotCount] = useState(0);
-
-  useEffect(() => {
-    if (!isActive) {
-      setDotCount(0);
-      return;
-    }
-
-    const interval = setInterval(() => {
-      setDotCount((prev) => (prev + 1) % 4);
-    }, 400);
-
-    return () => clearInterval(interval);
-  }, [isActive]);
-
-  return useMemo(() => {
-    const dots = ".".repeat(dotCount);
-    const spaces = "\u00A0".repeat(3 - dotCount); // Non-breaking spaces to maintain width
-    return `Streaming${dots}${spaces}`;
-  }, [dotCount]);
+  const dots = useAnimatedDots(isActive);
+  return `Streaming${dots}`;
 }
 
 export function McpLogsDialog({

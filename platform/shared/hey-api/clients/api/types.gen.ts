@@ -27425,7 +27425,7 @@ export type GetMcpServerInstallationRequestsResponses = {
         id: string;
         externalCatalogId: string | null;
         requestedBy: string;
-        status: string;
+        status: 'pending' | 'approved' | 'declined';
         requestReason: string | null;
         customServerConfig: {
             type: 'remote';
@@ -27661,7 +27661,7 @@ export type CreateMcpServerInstallationRequestResponses = {
         id: string;
         externalCatalogId: string | null;
         requestedBy: string;
-        status: string;
+        status: 'pending' | 'approved' | 'declined';
         requestReason: string | null;
         customServerConfig: {
             type: 'remote';
@@ -27905,7 +27905,7 @@ export type GetMcpServerInstallationRequestResponses = {
         id: string;
         externalCatalogId: string | null;
         requestedBy: string;
-        status: string;
+        status: 'pending' | 'approved' | 'declined';
         requestReason: string | null;
         customServerConfig: {
             type: 'remote';
@@ -28153,7 +28153,7 @@ export type UpdateMcpServerInstallationRequestResponses = {
         id: string;
         externalCatalogId: string | null;
         requestedBy: string;
-        status: string;
+        status: 'pending' | 'approved' | 'declined';
         requestReason: string | null;
         customServerConfig: {
             type: 'remote';
@@ -28320,7 +28320,7 @@ export type ApproveMcpServerInstallationRequestResponses = {
         id: string;
         externalCatalogId: string | null;
         requestedBy: string;
-        status: string;
+        status: 'pending' | 'approved' | 'declined';
         requestReason: string | null;
         customServerConfig: {
             type: 'remote';
@@ -28487,7 +28487,7 @@ export type DeclineMcpServerInstallationRequestResponses = {
         id: string;
         externalCatalogId: string | null;
         requestedBy: string;
-        status: string;
+        status: 'pending' | 'approved' | 'declined';
         requestReason: string | null;
         customServerConfig: {
             type: 'remote';
@@ -28654,7 +28654,7 @@ export type AddMcpServerInstallationRequestNoteResponses = {
         id: string;
         externalCatalogId: string | null;
         requestedBy: string;
-        status: string;
+        status: 'pending' | 'approved' | 'declined';
         requestReason: string | null;
         customServerConfig: {
             type: 'remote';

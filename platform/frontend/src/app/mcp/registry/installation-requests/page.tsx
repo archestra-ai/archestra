@@ -20,6 +20,7 @@ import {
   type McpServerInstallationRequest,
   useMcpServerInstallationRequests,
 } from "@/lib/mcp-server-installation-request.query";
+import { installationRequestStatusConfig } from "./status-config";
 
 type RequestStatus = NonNullable<
   NonNullable<
@@ -134,28 +135,7 @@ export default function InstallationRequestsPage() {
 
 function RequestRow({ request }: { request: McpServerInstallationRequest }) {
   const router = useRouter();
-  const statusConfig = {
-    pending: {
-      icon: Clock,
-      color: "bg-yellow-500/10 text-yellow-500 border-yellow-500/20",
-      label: "Pending",
-    },
-    approved: {
-      icon: CheckCircle,
-      color: "bg-green-500/10 text-green-500 border-green-500/20",
-      label: "Approved",
-    },
-    declined: {
-      icon: XCircle,
-      color: "bg-red-500/10 text-red-500 border-red-500/20",
-      label: "Declined",
-    },
-  };
-
-  const status =
-    request.status in statusConfig
-      ? statusConfig[request.status as keyof typeof statusConfig]
-      : statusConfig.pending;
+  const status = installationRequestStatusConfig[request.status];
   const StatusIcon = status.icon;
 
   return (

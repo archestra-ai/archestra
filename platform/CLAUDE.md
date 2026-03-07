@@ -250,7 +250,7 @@ Tool invocation policies and trusted data policies are still enforced by the pro
 
 - **Better-Auth**: Session management with dynamic RBAC
 - **API Key Auth**: `Authorization: ${apiKey}` header (not Bearer)
-- **Custom Roles**: Up to 50 custom roles per organization
+- **Custom Roles**: Unlimited custom roles per organization
 - **Middleware**: Fastify plugin at `backend/src/auth/fastify-plugin/`
 - **Route Permissions**: Configure in `shared/access-control.ts`
 - **Request Context**: `request.user` and `request.organizationId`

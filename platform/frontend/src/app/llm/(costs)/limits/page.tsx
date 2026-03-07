@@ -685,8 +685,8 @@ export default function LimitsPage() {
       try {
         await createLimit.mutateAsync(data);
         setIsAddingLlmLimit(false);
-      } catch (error) {
-        console.error("Failed to create limit:", error);
+      } catch {
+        // Error toast handled by mutation hook
       }
     },
     [createLimit],
@@ -697,8 +697,8 @@ export default function LimitsPage() {
       try {
         await updateLimit.mutateAsync({ id, ...data });
         setEditingLimitId(null);
-      } catch (error) {
-        console.error("Failed to update limit:", error);
+      } catch {
+        // Error toast handled by mutation hook
       }
     },
     [updateLimit],

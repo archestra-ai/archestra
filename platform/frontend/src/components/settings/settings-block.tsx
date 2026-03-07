@@ -33,7 +33,7 @@ export function SettingsBlock({
           {control}
         </div>
         {notice && (
-          <p className="text-sm text-muted-foreground mt-2">{notice}</p>
+          <div className="text-sm mt-2">{notice}</div>
         )}
       </CardHeader>
       {children && (

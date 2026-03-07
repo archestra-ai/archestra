@@ -43,7 +43,7 @@ SET "permission" = (
 )::text
 WHERE "permission"::text LIKE '%"conversation"%';
 
--- Step 4: Merge mcpToolCall into log
+-- Step 4: Merge "mcpToolCall" into "log"
 -- For roles that have mcpToolCall but no log, add log with ["read"]
 UPDATE "organization_role"
 SET "permission" = (
@@ -58,18 +58,14 @@ SET "permission" = ("permission"::jsonb - 'mcpToolCall')::text
 WHERE "permission"::text LIKE '%"mcpToolCall"%'
   AND "permission"::text LIKE '%"log"%';
 
--- Step 5: Merge "llmModels" and "chatSettings" into "llmProvider"
--- Take the union of actions from both resources, then remove the old keys.
--- chatSettings typically has more actions, so use it as the base and merge llmModels actions.
-
--- First: For roles with chatSettings, rename to llmProvider
+-- Step 5: Rename "chatSettings" to "llmProvider"
 UPDATE "organization_role"
 SET "permission" = (
   ("permission"::jsonb - 'chatSettings') || jsonb_build_object('llmProvider', "permission"::jsonb->'chatSettings')
 )::text
 WHERE "permission"::text LIKE '%"chatSettings"%';
 
--- Then: For roles with llmModels but no llmProvider (had llmModels but not chatSettings), rename to llmProvider
+-- Step 6: Rename "llmModels" to "llmProvider" (for roles without chatSettings)
 UPDATE "organization_role"
 SET "permission" = (
   ("permission"::jsonb - 'llmModels') || jsonb_build_object('llmProvider', "permission"::jsonb->'llmModels')
@@ -77,7 +73,7 @@ SET "permission" = (
 WHERE "permission"::text LIKE '%"llmModels"%'
   AND NOT "permission"::text LIKE '%"llmProvider"%';
 
--- Finally: For roles with both llmModels and llmProvider (had both old keys), just remove llmModels
+-- Step 7: Remove "llmModels" for roles that already have "llmProvider" (had both old keys)
 UPDATE "organization_role"
 SET "permission" = ("permission"::jsonb - 'llmModels')::text
 WHERE "permission"::text LIKE '%"llmModels"%'
@@ -99,8 +95,7 @@ SET "permission" = (
 WHERE "permission"::text LIKE '%"limit"%'
   AND NOT "permission"::text LIKE '%"llmLimit"%';
 
--- Step 10: Merge "tool" and "policy" into "toolPolicy"
--- For roles with both, take the union of actions
+-- Step 10: Merge "tool" into "toolPolicy"
 UPDATE "organization_role"
 SET "permission" = (
   ("permission"::jsonb - 'tool' - 'policy') || jsonb_build_object('toolPolicy', "permission"::jsonb->'tool')
@@ -108,6 +103,7 @@ SET "permission" = (
 WHERE "permission"::text LIKE '%"tool"%'
   AND NOT "permission"::text LIKE '%"toolPolicy"%';
 
+-- Step 11: Merge "policy" into "toolPolicy" (for roles without "tool")
 UPDATE "organization_role"
 SET "permission" = (
   ("permission"::jsonb - 'policy') || jsonb_build_object('toolPolicy', "permission"::jsonb->'policy')
@@ -115,14 +111,14 @@ SET "permission" = (
 WHERE "permission"::text LIKE '%"policy"%'
   AND NOT "permission"::text LIKE '%"toolPolicy"%';
 
--- Step 11: Rename "llmCosts" to "llmCost"
+-- Step 12: Rename "llmCosts" to "llmCost"
 UPDATE "organization_role"
 SET "permission" = (
   ("permission"::jsonb - 'llmCosts') || jsonb_build_object('llmCost', "permission"::jsonb->'llmCosts')
 )::text
 WHERE "permission"::text LIKE '%"llmCosts"%';
 
--- Step 12: Rename "llmLimits" to "llmLimit" (in case any were created between migrations)
+-- Step 13: Rename "llmLimits" to "llmLimit" (in case any were created between migrations)
 UPDATE "organization_role"
 SET "permission" = (
   ("permission"::jsonb - 'llmLimits') || jsonb_build_object('llmLimit', "permission"::jsonb->'llmLimits')
@@ -130,7 +126,7 @@ SET "permission" = (
 WHERE "permission"::text LIKE '%"llmLimits"%'
   AND NOT "permission"::text LIKE '%"llmLimit"%';
 
--- Step 13: Rename "llmProviders" to "llmProvider" (in case any were created between migrations)
+-- Step 14: Rename "llmProviders" to "llmProvider" (in case any were created between migrations)
 UPDATE "organization_role"
 SET "permission" = (
   ("permission"::jsonb - 'llmProviders') || jsonb_build_object('llmProvider', "permission"::jsonb->'llmProviders')
@@ -138,21 +134,21 @@ SET "permission" = (
 WHERE "permission"::text LIKE '%"llmProviders"%'
   AND NOT "permission"::text LIKE '%"llmProvider"%';
 
--- Step 14: Rename "secrets" to "secret"
+-- Step 15: Rename "secrets" to "secret"
 UPDATE "organization_role"
 SET "permission" = (
   ("permission"::jsonb - 'secrets') || jsonb_build_object('secret', "permission"::jsonb->'secrets')
 )::text
 WHERE "permission"::text LIKE '%"secrets"%';
 
--- Step 15: Rename "agentTriggers" to "agentTrigger"
+-- Step 16: Rename "agentTriggers" to "agentTrigger"
 UPDATE "organization_role"
 SET "permission" = (
   ("permission"::jsonb - 'agentTriggers') || jsonb_build_object('agentTrigger', "permission"::jsonb->'agentTriggers')
 )::text
 WHERE "permission"::text LIKE '%"agentTriggers"%';
 
--- Step 16: Remove "organization" from custom roles (now internal to better-auth)
+-- Step 17: Remove "organization" from custom roles (now internal to better-auth)
 UPDATE "organization_role"
 SET "permission" = ("permission"::jsonb - 'organization')::text
 WHERE "permission"::text LIKE '%"organization"%';

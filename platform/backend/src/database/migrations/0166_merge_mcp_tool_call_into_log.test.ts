@@ -17,7 +17,7 @@ async function runMigration() {
   const statements = migrationSql
     .split(";")
     .map((s) => s.trim())
-    .filter((s) => s.length > 0 && !s.startsWith("--"));
+    .filter((s) => s.includes("UPDATE"));
 
   for (const statement of statements) {
     await db.execute(sql.raw(`${statement};`));

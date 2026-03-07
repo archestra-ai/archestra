@@ -23,8 +23,7 @@ import {
 type RequestStatusFilter = "all" | "pending" | "approved" | "declined";
 
 export default function InstallationRequestsPage() {
-  const [statusFilter, setStatusFilter] =
-    useState<RequestStatusFilter>("all");
+  const [statusFilter, setStatusFilter] = useState<RequestStatusFilter>("all");
 
   const { data: requests, isLoading } = useMcpServerInstallationRequests(
     statusFilter === "all" ? undefined : { status: statusFilter },
@@ -34,9 +33,7 @@ export default function InstallationRequestsPage() {
     <div>
       <Tabs
         value={statusFilter}
-        onValueChange={(v) =>
-          setStatusFilter(v as RequestStatusFilter)
-        }
+        onValueChange={(v) => setStatusFilter(v as RequestStatusFilter)}
         className="space-y-4"
       >
         <TabsList>

@@ -112,7 +112,7 @@ function generateFrontmatter(lastUpdated: string): string {
 title: "Access Control"
 category: Administration
 description: "Role-based access control (RBAC) system for managing user permissions in Archestra"
-order: 4
+order: 1
 lastUpdated: ${lastUpdated}
 ---`;
 }

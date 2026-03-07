@@ -1,6 +1,10 @@
 "use client";
 
-import { E2eTestId, formatSecretStorageType } from "@shared";
+import {
+  E2eTestId,
+  formatSecretStorageType,
+  type McpDeploymentStatusEntry,
+} from "@shared";
 import { format } from "date-fns";
 import {
   AlertTriangle,
@@ -52,6 +56,10 @@ import {
   setOAuthState,
 } from "@/lib/oauth-session";
 import { useTeams } from "@/lib/team.query";
+import {
+  type DeploymentState,
+  DeploymentStatusDot,
+} from "./deployment-status";
 
 interface ManageUsersDialogProps {
   isOpen: boolean;
@@ -62,6 +70,10 @@ interface ManageUsersDialogProps {
   onAddPersonalConnection?: () => void;
   /** Called when user wants to add a shared connection for a specific team */
   onAddSharedConnection?: (teamId: string) => void;
+  /** Deployment statuses keyed by server ID */
+  deploymentStatuses?: Record<string, McpDeploymentStatusEntry>;
+  /** Called when user clicks a pod name to open the debug dialog */
+  onOpenPodLogs?: (serverId: string) => void;
 }
 
 export function ManageUsersDialog({
@@ -71,6 +83,8 @@ export function ManageUsersDialog({
   catalogId,
   onAddPersonalConnection,
   onAddSharedConnection,
+  deploymentStatuses = {},
+  onOpenPodLogs,
 }: ManageUsersDialogProps) {
   // Subscribe to live mcp-servers query to get fresh data
   const { data: allServers = [], isFetched: serversFetched } = useMcpServers({
@@ -235,7 +249,7 @@ export function ManageUsersDialog({
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent
-        className="sm:max-w-[800px]"
+        className="max-w-5xl h-[85vh] flex flex-col"
         data-testid={E2eTestId.ManageCredentialsDialog}
       >
         <DialogHeader>
@@ -272,6 +286,8 @@ export function ManageUsersDialog({
                 handleReauthenticate={handleReauthenticate}
                 handleRevoke={handleRevoke}
                 isDeleting={deleteMcpServerMutation.isPending}
+                deploymentStatuses={deploymentStatuses}
+                onOpenPodLogs={onOpenPodLogs}
                 onAdd={
                   onAddPersonalConnection
                     ? () => {
@@ -295,6 +311,8 @@ export function ManageUsersDialog({
                 handleReauthenticate={handleReauthenticate}
                 handleRevoke={handleRevoke}
                 isDeleting={deleteMcpServerMutation.isPending}
+                deploymentStatuses={deploymentStatuses}
+                onOpenPodLogs={onOpenPodLogs}
                 teamOptions={
                   onAddSharedConnection ? availableTeamsForShared : undefined
                 }
@@ -337,6 +355,8 @@ function ConnectionsTable({
   handleReauthenticate,
   handleRevoke,
   isDeleting,
+  deploymentStatuses = {},
+  onOpenPodLogs,
   onAdd,
   addDisabled,
   addDisabledReason,
@@ -354,6 +374,8 @@ function ConnectionsTable({
   handleReauthenticate: (s: ServerEntry) => void;
   handleRevoke: (s: ServerEntry) => void;
   isDeleting: boolean;
+  deploymentStatuses?: Record<string, McpDeploymentStatusEntry>;
+  onOpenPodLogs?: (serverId: string) => void;
   /** Simple add button (for personal connections) */
   onAdd?: () => void;
   /** Disable the simple add button */
@@ -367,6 +389,7 @@ function ConnectionsTable({
 }) {
   const hasAddButton = onAdd || (teamOptions && onAddForTeam);
   if (servers.length === 0 && !hasAddButton) return null;
+  const hasDeploymentStatuses = servers.some((s) => deploymentStatuses[s.id]);
 
   return (
     <div>
@@ -445,6 +468,7 @@ function ConnectionsTable({
             <TableHeader>
               <TableRow>
                 <TableHead className="w-[200px]">Owner</TableHead>
+                {hasDeploymentStatuses && <TableHead>Pod</TableHead>}
                 <TableHead>Secret Storage</TableHead>
                 <TableHead>Created At</TableHead>
                 <TableHead>Action</TableHead>
@@ -484,6 +508,31 @@ function ConnectionsTable({
                       </span>
                     )}
                   </TableCell>
+                  {hasDeploymentStatuses && (
+                    <TableCell>
+                      {deploymentStatuses[mcpServer.id] ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onOpenPodLogs?.(mcpServer.id);
+                          }}
+                          className="flex items-center gap-1.5 text-sm hover:underline cursor-pointer"
+                        >
+                          <DeploymentStatusDot
+                            state={
+                              (deploymentStatuses[mcpServer.id].state === "not_created" ||
+                              deploymentStatuses[mcpServer.id].state === "succeeded"
+                                ? "running"
+                                : deploymentStatuses[mcpServer.id].state) as DeploymentState
+                            }
+                          />
+                          <span className="truncate max-w-[150px]">{mcpServer.name}</span>
+                        </button>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+                  )}
                   <TableCell className="text-muted-foreground">
                     {formatSecretStorageType(mcpServer.secretStorageType)}
                   </TableCell>

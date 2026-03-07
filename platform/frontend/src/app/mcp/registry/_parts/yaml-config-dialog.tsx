@@ -87,7 +87,7 @@ export function YamlConfigDialog({ item, onClose }: YamlConfigDialogProps) {
 
   return (
     <Dialog open={!!item} onOpenChange={handleClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-5xl h-[85vh] flex flex-col overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Edit K8s Deployment YAML</DialogTitle>
           <DialogDescription asChild>

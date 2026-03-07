@@ -756,6 +756,17 @@ export class McpServerRuntimeManager {
   }
 
   /**
+   * Refresh the state of all deployments from K8s.
+   * Detects state changes like a running pod entering CrashLoopBackOff.
+   */
+  async refreshAllStates(): Promise<void> {
+    const refreshPromises = Array.from(
+      this.mcpServerIdToDeploymentMap.values(),
+    ).map((deployment) => deployment.refreshState().catch(() => {}));
+    await Promise.all(refreshPromises);
+  }
+
+  /**
    * Get the runtime status summary
    */
   get statusSummary(): K8sRuntimeStatusSummary {

@@ -641,6 +641,8 @@ class WebSocketService {
             state: deploymentStatus.state,
             message: deploymentStatus.message,
             error: deploymentStatus.error,
+            restartCount: deploymentStatus.restartCount,
+            podAge: deploymentStatus.podAge,
           };
         } else {
           result[serverId] = {
@@ -654,7 +656,8 @@ class WebSocketService {
       return result;
     };
 
-    // Build initial statuses from the runtime manager
+    // Refresh and build initial statuses from the runtime manager
+    await McpServerRuntimeManager.refreshAllStates();
     const runtimeSummary = McpServerRuntimeManager.statusSummary;
     const statuses = buildStatuses(runtimeSummary);
 
@@ -675,6 +678,9 @@ class WebSocketService {
       }
 
       try {
+        // Refresh deployment states from K8s before reading cached summaries
+        await McpServerRuntimeManager.refreshAllStates();
+
         const currentSummary = McpServerRuntimeManager.statusSummary;
         const currentStatuses = buildStatuses(currentSummary);
 

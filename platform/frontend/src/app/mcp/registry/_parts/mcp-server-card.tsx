@@ -92,7 +92,7 @@ export type McpServerCardProps = {
   deploymentStatuses: Record<string, McpDeploymentStatusEntry>;
   onInstallRemoteServer: () => void;
   onInstallLocalServer: () => void;
-  onReinstall: () => void;
+  onReinstall: () => void | Promise<void>;
   onDetails: () => void;
   onEdit: () => void;
   onDelete: () => void;
@@ -240,6 +240,7 @@ export function McpServerCard({
   // Dialog state
   const [isManageUsersDialogOpen, setIsManageUsersDialogOpen] = useState(false);
   const [isLogsDialogOpen, setIsLogsDialogOpen] = useState(false);
+  const [logsInitialServerId, setLogsInitialServerId] = useState<string | null>(null);
   const [isYamlConfigDialogOpen, setIsYamlConfigDialogOpen] = useState(false);
   const [uninstallingServer, setUninstallingServer] = useState<{
     id: string;
@@ -320,8 +321,17 @@ export function McpServerCard({
   }
 
   const needsReinstall = installedServer?.reinstallRequired;
+
+  // Check if the K8s deployment has failed (e.g. CrashLoopBackOff) even while installation is "pending"
+  const installedDeploymentStatus = installedServer?.id
+    ? deploymentStatuses[installedServer.id]
+    : null;
+  const isDeploymentFailed = installedDeploymentStatus?.state === "failed";
+
   const hasError = installedServer?.localInstallationStatus === "error";
-  const errorMessage = installedServer?.localInstallationError;
+  const errorMessage =
+    installedServer?.localInstallationError ||
+    installedDeploymentStatus?.error;
   const _mcpServersCount = mcpServerOfCurrentCatalogItem?.length ?? 0;
 
   // Check for OAuth refresh errors on any credential the user can see
@@ -332,10 +342,11 @@ export function McpServerCard({
     (mcpServerOfCurrentCatalogItem?.some((s) => s.oauthRefreshError) ?? false);
 
   const isInstalling = Boolean(
-    installingItemId === item.id ||
-      (variant === "local" &&
-        (installationStatus === "pending" ||
-          (installationStatus === "discovering-tools" && installedServer))),
+    !isDeploymentFailed &&
+      (installingItemId === item.id ||
+        (variant === "local" &&
+          (installationStatus === "pending" ||
+            (installationStatus === "discovering-tools" && installedServer)))),
   );
 
   const isCurrentUserAuthenticated =
@@ -574,7 +585,7 @@ export function McpServerCard({
     </div>
   ) : null;
 
-  const shouldShowErrorBanner = hasError;
+  const shouldShowErrorBanner = hasError || isDeploymentFailed;
 
   const remoteCardContent = (
     <>
@@ -763,10 +774,15 @@ export function McpServerCard({
     <>
       <McpLogsDialog
         open={isLogsDialogOpen}
-        onOpenChange={setIsLogsDialogOpen}
+        onOpenChange={(open) => {
+          setIsLogsDialogOpen(open);
+          if (!open) setLogsInitialServerId(null);
+        }}
         serverName={item.label || item.name}
         installs={localInstalls}
         deploymentStatuses={deploymentStatuses}
+        onReinstall={() => onReinstall()}
+        initialServerId={logsInitialServerId}
       />
 
       <ManageUsersDialog
@@ -776,6 +792,12 @@ export function McpServerCard({
         label={item.label || item.name}
         onAddPersonalConnection={onAddPersonalConnection}
         onAddSharedConnection={onAddSharedConnection}
+        deploymentStatuses={deploymentStatuses}
+        onOpenPodLogs={(sid) => {
+          setIsManageUsersDialogOpen(false);
+          setLogsInitialServerId(sid);
+          setIsLogsDialogOpen(true);
+        }}
       />
 
       <UninstallServerDialog
@@ -833,6 +855,7 @@ export function McpServerCard({
                   }
                   serverId={installedServer?.id}
                   serverName={item.label || item.name}
+                  deploymentStatuses={deploymentStatuses}
                 />
               </div>
             ) : isCurrentUserAuthenticated &&

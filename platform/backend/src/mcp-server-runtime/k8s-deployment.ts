@@ -221,6 +221,8 @@ export default class K8sDeployment {
   private deploymentName: string; // Used for deployment name
   private state: McpDeploymentState = "not_created";
   private errorMessage: string | null = null;
+  private cachedRestartCount = 0;
+  private cachedPodCreationTime: Date | null = null;
   private catalogItem?: InternalMcpCatalog | null;
   private userConfigValues?: Record<string, string>;
   private environmentValues?: Record<string, string>;
@@ -2333,7 +2335,13 @@ export default class K8sDeployment {
             const logStream = new PassThrough();
             let hasLogData = false;
 
-            const header = `=== Container is in ${waitingReason || "Waiting"} state (${containerStatus?.restartCount} restarts) ===\n=== Showing logs from the last crashed container ===\n\n`;
+            const waitingMessage =
+              containerStatus?.state?.waiting?.message;
+            let header = `=== Container is in ${waitingReason || "Waiting"} state (${containerStatus?.restartCount} restarts) ===\n`;
+            if (waitingMessage) {
+              header += `=== Error: ${waitingMessage} ===\n`;
+            }
+            header += `=== Showing logs from the last crashed container ===\n\n`;
             responseStream.write(header);
 
             logStream.on("data", (chunk) => {
@@ -2351,9 +2359,22 @@ export default class K8sDeployment {
                 `Log stream error for pod ${anyPod.metadata?.name} (previous):`,
               );
             });
-            logStream.on("end", () => {
+            logStream.on("end", async () => {
               if (!hasLogData) {
-                responseStream.write("(No logs from previous container)\n\n");
+                // No previous logs — append events as fallback
+                try {
+                  const events = await this.getDeploymentEvents();
+                  const podInfo = this.getPodStatusInfo(anyPod);
+                  responseStream.write("--- Pod Status ---\n");
+                  responseStream.write(podInfo);
+                  responseStream.write("\n\n--- Kubernetes Events ---\n");
+                  responseStream.write(events);
+                  responseStream.write("\n");
+                } catch {
+                  responseStream.write(
+                    "(No logs from previous container)\n\n",
+                  );
+                }
               }
               if (
                 !("destroyed" in responseStream) ||
@@ -2515,6 +2536,73 @@ export default class K8sDeployment {
   }
 
   /**
+   * Re-evaluate the deployment state from the actual K8s pod status.
+   * Called periodically by the status polling to detect state changes
+   * (e.g. a running pod entering CrashLoopBackOff).
+   */
+  async refreshState(): Promise<void> {
+    // Only refresh for active states
+    if (this.state === "not_created") {
+      return;
+    }
+
+    try {
+      // Update pod metadata (restarts, age) from the latest pod
+      const anyPod = await this.findAnyPodForDeployment();
+      if (anyPod) {
+        const cs = anyPod.status?.containerStatuses?.find(
+          (c) => c.name === "mcp-server",
+        );
+        this.cachedRestartCount = cs?.restartCount ?? 0;
+        this.cachedPodCreationTime = anyPod.metadata?.creationTimestamp
+          ? new Date(anyPod.metadata.creationTimestamp)
+          : null;
+      }
+
+      // Don't re-evaluate state for terminal failed (user must reinstall)
+      // but DO keep refreshing pod metadata above
+      if (this.state !== "pending" && this.state !== "running") {
+        return;
+      }
+
+      // Check if deployment has available replicas
+      const deployment = await this.k8sAppsApi.readNamespacedDeployment({
+        name: this.deploymentName,
+        namespace: this.namespace,
+      });
+
+      if (
+        deployment.status?.availableReplicas &&
+        deployment.status.availableReplicas > 0
+      ) {
+        const pod = await this.findPodForDeployment();
+        if (pod) {
+          this.state = "running";
+          this.errorMessage = null;
+          return;
+        }
+      }
+
+      // No available replicas — check for container failure states
+      const failureCheck = await this.checkPodContainerStatusesForFailure();
+      if (failureCheck.hasFailed) {
+        this.state = "failed";
+        this.errorMessage = failureCheck.message;
+      } else if (this.state === "running") {
+        this.state = "pending";
+        this.errorMessage = null;
+      }
+    } catch (error) {
+      if (!isK8s404Error(error)) {
+        logger.error(
+          { err: error },
+          `Failed to refresh state for ${this.deploymentName}`,
+        );
+      }
+    }
+  }
+
+  /**
    * Get the deployment's status summary
    */
   get statusSummary(): K8sDeploymentStatusSummary {
@@ -2532,7 +2620,23 @@ export default class K8sDeployment {
       serverName: this.mcpServer.name,
       deploymentName: this.deploymentName,
       namespace: this.namespace,
+      restartCount: this.cachedRestartCount,
+      podAge: this.cachedPodCreationTime
+        ? K8sDeployment.formatAge(this.cachedPodCreationTime)
+        : undefined,
     };
+  }
+
+  private static formatAge(createdAt: Date): string {
+    const diffMs = Date.now() - createdAt.getTime();
+    const seconds = Math.floor(diffMs / 1000);
+    if (seconds < 60) return `${seconds}s`;
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes}m`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours}h`;
+    const days = Math.floor(hours / 24);
+    return `${days}d`;
   }
 
   get containerName(): string {

@@ -8,9 +8,10 @@ import {
   type McpLogsErrorMessage,
   type McpLogsMessage,
 } from "@shared";
-import { ArrowDown, Copy, Terminal } from "lucide-react";
+import { ArrowDown, Copy, RefreshCw, Terminal } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -19,13 +20,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Tooltip,
@@ -36,8 +30,8 @@ import { useAnimatedDots } from "@/lib/animated-dots.hook";
 import websocketService from "@/lib/websocket";
 import {
   type DeploymentState,
-  DeploymentStatusBanner,
   DeploymentStatusDot,
+  getDeploymentLabel,
 } from "./deployment-status";
 import { McpExecTerminal } from "./mcp-exec-terminal";
 
@@ -48,10 +42,16 @@ interface McpLogsDialogProps {
   installs: {
     id: string;
     name: string;
+    ownerEmail?: string | null;
+    teamDetails?: { teamId: string; name: string } | null;
   }[];
   deploymentStatuses: Record<string, McpDeploymentStatusEntry>;
   /** Hide the installation dropdown selector */
   hideInstallationSelector?: boolean;
+  /** Called when user clicks Reinstall for a specific server */
+  onReinstall?: (serverId: string) => void | Promise<void>;
+  /** Pre-select a specific server when opening */
+  initialServerId?: string | null;
 }
 
 /**
@@ -69,6 +69,8 @@ export function McpLogsDialog({
   installs,
   deploymentStatuses,
   hideInstallationSelector = false,
+  onReinstall,
+  initialServerId = null,
 }: McpLogsDialogProps) {
   const [activeTab, setActiveTab] = useState<"logs" | "debug">("logs");
   const [copied, setCopied] = useState(false);
@@ -78,6 +80,7 @@ export function McpLogsDialog({
   const [command, setCommand] = useState("");
   const [autoScroll, setAutoScroll] = useState(true);
   const [isStreaming, setIsStreaming] = useState(false);
+  const [isReinstalling, setIsReinstalling] = useState(false);
   const unsubscribeLogsRef = useRef<(() => void) | null>(null);
   const unsubscribeErrorRef = useRef<(() => void) | null>(null);
   const unsubscribeEndedRef = useRef<(() => void) | null>(null);
@@ -91,22 +94,24 @@ export function McpLogsDialog({
   // State for selected installation
   const [serverId, setServerId] = useState<string | null>(null);
 
-  // Default to first installation when dialog opens
+  // Default to initialServerId or first installation when dialog opens
   useEffect(() => {
     if (open && installs.length > 0 && !serverId) {
-      setServerId(installs[0].id);
+      const initial = initialServerId && installs.some((i) => i.id === initialServerId)
+        ? initialServerId
+        : installs[0].id;
+      setServerId(initial);
     }
-  }, [open, installs, serverId]);
+  }, [open, installs, serverId, initialServerId]);
 
   const currentDeploymentStatus = serverId
     ? deploymentStatuses[serverId]
     : null;
 
   // Streaming animation for when waiting for logs
-  // Don't show "Streaming..." when deployment has already failed — show the error instead
   const isDeploymentFailed = currentDeploymentStatus?.state === "failed";
   const isWaitingForLogs =
-    isStreaming && !streamedLogs && !streamError && !isDeploymentFailed;
+    isStreaming && !streamedLogs && !streamError;
   const streamingText = useStreamingAnimation(isWaitingForLogs);
 
   const stopStreaming = useCallback(() => {
@@ -144,8 +149,29 @@ export function McpLogsDialog({
 
   const startStreaming = useCallback(
     (targetServerId: string) => {
-      // Stop any existing stream first
-      stopStreaming();
+      // Clean up existing stream without resetting UI state (we set it all below)
+      if (connectionTimeoutRef.current) {
+        clearTimeout(connectionTimeoutRef.current);
+        connectionTimeoutRef.current = null;
+      }
+      if (unsubscribeLogsRef.current) {
+        unsubscribeLogsRef.current();
+        unsubscribeLogsRef.current = null;
+      }
+      if (unsubscribeErrorRef.current) {
+        unsubscribeErrorRef.current();
+        unsubscribeErrorRef.current = null;
+      }
+      if (unsubscribeEndedRef.current) {
+        unsubscribeEndedRef.current();
+        unsubscribeEndedRef.current = null;
+      }
+      if (currentServerIdRef.current) {
+        websocketService.send({
+          type: "unsubscribe_mcp_logs",
+          payload: { serverId: currentServerIdRef.current },
+        });
+      }
 
       setStreamError(null);
       setStreamedLogs("");
@@ -245,7 +271,7 @@ export function McpLogsDialog({
         payload: { serverId: targetServerId, lines: MCP_DEFAULT_LOG_LINES },
       });
     },
-    [autoScroll, stopStreaming],
+    [autoScroll],
   );
 
   // Auto-start streaming when dialog opens or serverId changes
@@ -332,88 +358,132 @@ export function McpLogsDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="max-w-5xl h-[70vh] flex flex-col p-8"
+        className="max-w-5xl h-[85vh] flex flex-col p-8"
         data-testid={E2eTestId.McpLogsDialog}
       >
         <DialogHeader className="flex-shrink-0">
-          <div className="flex items-center justify-between gap-4">
-            <div className="min-w-0">
-              <DialogTitle className="flex items-center gap-2 overflow-hidden">
-                <Terminal className="h-5 w-5 flex-shrink-0" />
-                <span className="truncate">{serverName}</span>
-              </DialogTitle>
-            </div>
-            {!hideInstallationSelector && installs.length > 1 && (
-              <div className="flex flex-col gap-1 flex-shrink-0">
-                <Select
-                  value={serverId ?? undefined}
-                  onValueChange={setServerId}
-                >
-                  <SelectTrigger className="w-[300px] h-8">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {installs.map((install) => {
-                      const status = deploymentStatuses[install.id];
-                      const dotState =
-                        status &&
-                        status.state !== "not_created" &&
-                        status.state !== "succeeded"
-                          ? (status.state as DeploymentState)
-                          : null;
-                      return (
-                        <SelectItem key={install.id} value={install.id}>
-                          <span className="flex items-center gap-2">
-                            {dotState && (
-                              <DeploymentStatusDot state={dotState} />
-                            )}
-                            {install.name}
-                          </span>
-                        </SelectItem>
-                      );
-                    })}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
+          <div className="min-w-0">
+            <DialogTitle className="flex items-center gap-2 overflow-hidden">
+              <Terminal className="h-5 w-5 flex-shrink-0" />
+              <span className="truncate">{serverName}</span>
+            </DialogTitle>
           </div>
         </DialogHeader>
+
+        {/* Pod selector cards */}
+        {!hideInstallationSelector && installs.length >= 1 && (
+          <div className="flex gap-3 overflow-x-auto pb-1 flex-shrink-0">
+            {installs.map((install) => {
+              const status = deploymentStatuses[install.id];
+              const isSelected = serverId === install.id;
+              const isFailed = status?.state === "failed";
+              const isRunning =
+                status?.state === "running" || status?.state === "succeeded";
+
+              return (
+                <button
+                  key={install.id}
+                  type="button"
+                  onClick={() => { if (serverId !== install.id) setServerId(install.id); }}
+                  className={`relative flex-1 min-w-0 max-w-[20%] rounded-lg border p-3 text-left transition-colors cursor-pointer ${
+                    isSelected
+                      ? isFailed
+                        ? "border-destructive/50 bg-destructive/5 ring-1 ring-destructive/30"
+                        : "border-primary/50 bg-primary/5 ring-1 ring-primary/30"
+                      : "border-border hover:bg-muted/50"
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-2 mb-1.5">
+                    <span className="flex items-center gap-1.5 text-sm font-medium truncate">
+                      <DeploymentStatusDot
+                        state={
+                          (status?.state === "not_created" ||
+                          status?.state === "succeeded"
+                            ? "running"
+                            : status?.state ?? "pending") as DeploymentState
+                        }
+                      />
+                      {install.name}
+                    </span>
+                    {status &&
+                      status.state !== "not_created" && (
+                        <span
+                          className={`text-xs px-1.5 py-0.5 rounded-full border font-medium flex-shrink-0 ${
+                            isFailed
+                              ? "text-destructive border-destructive/30 bg-destructive/10"
+                              : isRunning
+                                ? "text-green-700 border-green-300 bg-green-50 dark:text-green-400 dark:border-green-700 dark:bg-green-950"
+                                : "text-yellow-700 border-yellow-300 bg-yellow-50 dark:text-yellow-400 dark:border-yellow-700 dark:bg-yellow-950"
+                          }`}
+                        >
+                          {getDeploymentLabel(
+                            (status.state === "succeeded"
+                              ? "running"
+                              : status.state) as DeploymentState,
+                          )}
+                        </span>
+                      )}
+                  </div>
+                  <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                    {(install.teamDetails || install.ownerEmail) && (
+                      <span className="flex items-center gap-1.5 truncate">
+                        <Avatar className="size-4 flex-shrink-0">
+                          <AvatarFallback className={`text-[8px] font-medium ${install.teamDetails ? "bg-accent" : ""}`}>
+                            {install.teamDetails
+                              ? install.teamDetails.name.slice(0, 2).toUpperCase()
+                              : install.ownerEmail!.slice(0, 2).toUpperCase()}
+                          </AvatarFallback>
+                        </Avatar>
+                        <span className="truncate">
+                          {install.teamDetails
+                            ? install.teamDetails.name
+                            : install.ownerEmail}
+                        </span>
+                      </span>
+                    )}
+                    {status?.restartCount !== undefined && (
+                      <span className="flex-shrink-0">Restarts: {status.restartCount}</span>
+                    )}
+                    {status?.podAge && <span className="flex-shrink-0">Age: {status.podAge}</span>}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
 
         <Tabs
           value={activeTab}
           onValueChange={(v) => setActiveTab(v as "logs" | "debug")}
           className="flex flex-col flex-1 min-h-0"
         >
-          <div className="flex items-center gap-4">
-            <TabsList className="w-fit bg-slate-100 dark:bg-slate-800 border h-9 p-1">
-              <TabsTrigger
-                value="logs"
-                data-testid={E2eTestId.McpLogsTab}
-                className="px-6"
-              >
-                Logs
+          <TabsList className="w-fit bg-slate-100 dark:bg-slate-800 border h-9 p-1 flex-shrink-0">
+            <TabsTrigger
+              value="logs"
+              data-testid={E2eTestId.McpLogsTab}
+              className="px-6"
+            >
+              Logs
+            </TabsTrigger>
+            {isDebugDisabled ? (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span>
+                    <TabsTrigger value="debug" disabled className="px-6">
+                      Shell
+                    </TabsTrigger>
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>
+                  Pod must be running to start a shell session
+                </TooltipContent>
+              </Tooltip>
+            ) : (
+              <TabsTrigger value="debug" className="px-6">
+                Shell
               </TabsTrigger>
-              {isDebugDisabled ? (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span>
-                      <TabsTrigger value="debug" disabled className="px-6">
-                        Shell
-                      </TabsTrigger>
-                    </span>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    Pod must be running to start a shell session
-                  </TooltipContent>
-                </Tooltip>
-              ) : (
-                <TabsTrigger value="debug" className="px-6">
-                  Shell
-                </TabsTrigger>
-              )}
-            </TabsList>
-            <DeploymentStatusBanner status={currentDeploymentStatus} />
-          </div>
+            )}
+          </TabsList>
 
           <TabsContent
             value="logs"
@@ -421,6 +491,42 @@ export function McpLogsDialog({
           >
             <div className="flex flex-col gap-4 flex-1 min-h-0">
               <div className="flex flex-col gap-2 flex-1 min-h-0">
+
+                {isDeploymentFailed && currentDeploymentStatus?.error && (
+                  <div className="flex items-start gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-3 flex-shrink-0">
+                    <span className="mt-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-destructive/15 text-destructive flex-shrink-0">
+                      <span className="text-sm font-bold">✕</span>
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-destructive">
+                        Deployment failed
+                      </p>
+                      <p className="text-sm text-destructive/80 break-words">
+                        {currentDeploymentStatus.error}
+                      </p>
+                    </div>
+                    {onReinstall && serverId && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={isReinstalling}
+                        className="flex-shrink-0 border-destructive/30 text-destructive hover:bg-destructive/10"
+                        onClick={async () => {
+                          setIsReinstalling(true);
+                          try {
+                            await onReinstall(serverId);
+                          } finally {
+                            setIsReinstalling(false);
+                          }
+                          startStreaming(serverId);
+                        }}
+                      >
+                        <RefreshCw className={`h-3 w-3 mr-1.5 ${isReinstalling ? "animate-spin" : ""}`} />
+                        {isReinstalling ? "Reinstalling..." : "Reinstall"}
+                      </Button>
+                    )}
+                  </div>
+                )}
                 <div className="flex items-center justify-between flex-shrink-0">
                   <h3 className="text-sm font-semibold">Deployment Logs</h3>
                   {!autoScroll && (

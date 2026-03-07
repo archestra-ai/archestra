@@ -15,6 +15,8 @@ export interface K8sDeploymentStatusSummary {
   serverName: string;
   deploymentName: string | null;
   namespace: string;
+  restartCount?: number;
+  podAge?: string;
 }
 
 export interface K8sRuntimeStatusSummary {

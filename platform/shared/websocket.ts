@@ -338,6 +338,8 @@ export type McpDeploymentStatusEntry = {
   state: McpDeploymentState;
   message: string;
   error: string | null;
+  restartCount?: number;
+  podAge?: string; // e.g. "24m", "2h", "3d"
 };
 
 export type McpDeploymentStatusesMessage = {

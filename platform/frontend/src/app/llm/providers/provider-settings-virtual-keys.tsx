@@ -183,7 +183,7 @@ export function ProviderSettingsVirtualKeys() {
           <div className="text-center py-8 text-muted-foreground">
             <p>
               <a
-                href="/llm/providers"
+                href="/llm/providers/api-keys"
                 className="underline hover:text-foreground"
               >
                 Add an API key

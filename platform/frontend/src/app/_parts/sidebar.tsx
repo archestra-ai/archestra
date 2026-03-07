@@ -145,7 +145,7 @@ const contentNavGroups: NavGroup[] = [
         subItems: [
           {
             title: "Providers",
-            url: "/llm/providers",
+            url: "/llm/providers/api-keys",
             customIsActive: (pathname: string) =>
               pathname.startsWith("/llm/providers"),
           },

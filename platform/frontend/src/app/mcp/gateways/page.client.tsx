@@ -12,7 +12,6 @@ import {
   Globe,
   Plus,
   Route,
-  Search,
   Server,
   User,
   Users,
@@ -28,12 +27,12 @@ import {
   AgentScopeFilter,
 } from "@/components/agent-scope-filter";
 import { ConnectDialog } from "@/components/connect-dialog";
-import { DebouncedInput } from "@/components/debounced-input";
 import { LabelTags } from "@/components/label-tags";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { McpConnectionInstructions } from "@/components/mcp-connection-instructions";
 import { PageLayout } from "@/components/page-layout";
 import { ProxyConnectionInstructions } from "@/components/proxy-connection-instructions";
+import { SearchInput } from "@/components/search-input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
@@ -254,7 +253,6 @@ function McpGateways({
   const currentUserId = session?.user?.id;
   const userTeamIdSet = new Set((userTeams ?? []).map((t) => t.id));
 
-  const [searchQuery, setSearchQuery] = useState(nameFilter);
   const [sorting, setSorting] = useState<SortingState>([
     { id: sortBy, desc: sortDirection === "desc" },
   ]);
@@ -280,22 +278,6 @@ function McpGateways({
   );
   const [deletingGatewayId, setDeletingGatewayId] = useState<string | null>(
     null,
-  );
-
-  // Update URL when search query changes
-  const handleSearchChange = useCallback(
-    (value: string) => {
-      setSearchQuery(value);
-      const params = new URLSearchParams(searchParams.toString());
-      if (value) {
-        params.set("name", value);
-      } else {
-        params.delete("name");
-      }
-      params.set("page", "1"); // Reset to first page on search
-      router.push(`${pathname}?${params.toString()}`, { scroll: false });
-    },
-    [searchParams, router, pathname],
   );
 
   // Update URL when sorting changes
@@ -550,16 +532,12 @@ function McpGateways({
           <div>
             <div className="mb-6 flex flex-col gap-2">
               <div className="flex items-center gap-4">
-                <div className="relative max-w-md flex-1">
-                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <DebouncedInput
-                    placeholder="Search gateways by name..."
-                    initialValue={searchQuery}
-                    onChange={handleSearchChange}
-                    className="pl-9"
-                  />
-                </div>
-                <AgentScopeFilter onClearSearch={() => setSearchQuery("")} />
+                <SearchInput
+                  placeholder="Search gateways by name..."
+                  paramName="name"
+                  className="relative max-w-md flex-1"
+                />
+                <AgentScopeFilter />
               </div>
               <ActiveFilterBadges />
             </div>

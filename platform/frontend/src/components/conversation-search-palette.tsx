@@ -137,7 +137,7 @@ const navigationItems = [
     label: "Provider Settings",
     value: "provider-settings",
     keywords: "provider settings api keys virtual keys models llm",
-    href: "/llm/providers",
+    href: "/llm/providers/api-keys",
   },
   {
     icon: MessagesSquare,

@@ -474,7 +474,11 @@ function AssignedToolsGrid({
               className="flex flex-col items-center gap-1.5 w-full"
               onClick={() => onEditTool(catalog)}
             >
-              <McpCatalogIcon icon={catalog.icon} catalogId={catalog.id} size={24} />
+              <McpCatalogIcon
+                icon={catalog.icon}
+                catalogId={catalog.id}
+                size={24}
+              />
               <span className="text-xs font-medium truncate w-full">
                 {catalog.name}
               </span>
@@ -564,7 +568,11 @@ function AddToolView({
                     !hasCredentials && "opacity-40 cursor-not-allowed",
                   )}
                 >
-                  <McpCatalogIcon icon={catalog.icon} catalogId={catalog.id} size={28} />
+                  <McpCatalogIcon
+                    icon={catalog.icon}
+                    catalogId={catalog.id}
+                    size={28}
+                  />
                   <span className="text-sm font-medium truncate w-full">
                     {catalog.name}
                   </span>
@@ -618,16 +626,14 @@ function ConfigureToolView({
   const invalidateAllQueries = useInvalidateToolAssignmentQueries();
 
   // Get currently assigned tool IDs and agent-tool IDs for this catalog
-  const { assignedToolIds, agentToolIdByToolId } = useMemo(() => {
+  const assignedToolIds = useMemo(() => {
     const ids = new Set<string>();
-    const idMap = new Map<string, string>();
     for (const at of assignedToolsData?.data ?? []) {
       if (at.tool.catalogId === catalog.id) {
         ids.add(at.tool.id);
-        idMap.set(at.tool.id, at.id);
       }
     }
-    return { assignedToolIds: ids, agentToolIdByToolId: idMap };
+    return ids;
   }, [assignedToolsData, catalog.id]);
 
   const initializedRef = useRef(false);

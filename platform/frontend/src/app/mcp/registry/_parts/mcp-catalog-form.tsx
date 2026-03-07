@@ -240,9 +240,7 @@ export function McpCatalogForm({
                     disabled={nameDisabled}
                   />
                 </FormControl>
-                <FormDescription>
-                  Display name for this server
-                </FormDescription>
+                <FormDescription>Display name for this server</FormDescription>
                 <FormMessage />
               </FormItem>
             )}
@@ -261,7 +259,7 @@ export function McpCatalogForm({
                     {...field}
                   />
                 </FormControl>
-<FormMessage />
+                <FormMessage />
               </FormItem>
             )}
           />

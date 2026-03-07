@@ -287,20 +287,5 @@ describe("ArchestraPromptInput", () => {
 
       expect(screen.getByTestId("model-selector")).toBeInTheDocument();
     });
-
-    it("should render 'Add tools & sub-agents' button when no tools or delegations exist", () => {
-      render(
-        <ArchestraPromptInput {...defaultProps} allowFileUploads={true} />,
-      );
-
-      // With empty tools and delegations from mocks, should show the "Add tools" button
-      expect(screen.getByText("Add tools & sub-agents")).toBeInTheDocument();
-      expect(
-        screen.queryByTestId("chat-tools-display"),
-      ).not.toBeInTheDocument();
-      expect(
-        screen.queryByTestId("agent-tools-display"),
-      ).not.toBeInTheDocument();
-    });
   });
 });

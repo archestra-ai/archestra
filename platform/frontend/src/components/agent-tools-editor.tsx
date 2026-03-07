@@ -443,7 +443,13 @@ const AgentToolsEditorContent = forwardRef<
         id: catalog.id,
         name: catalog.name,
         description: catalog.description || undefined,
-        icon: <McpCatalogIcon icon={catalog.icon} catalogId={catalog.id} size={16} />,
+        icon: (
+          <McpCatalogIcon
+            icon={catalog.icon}
+            catalogId={catalog.id}
+            size={16}
+          />
+        ),
         badge: isDisabled
           ? undefined
           : assignedCount > 0
@@ -761,7 +767,11 @@ function McpServerPill({
               hasPendingChanges && "border-primary opacity-100",
             )}
           >
-            <McpCatalogIcon icon={catalogItem.icon} catalogId={catalogItem.id} size={14} />
+            <McpCatalogIcon
+              icon={catalogItem.icon}
+              catalogId={catalogItem.id}
+              size={14}
+            />
             <span className="font-medium">{catalogItem.name}</span>
             <span className="text-muted-foreground">({displayedCount})</span>
             <Pencil className="h-3 w-3 shrink-0 text-muted-foreground" />

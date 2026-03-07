@@ -1,10 +1,10 @@
 "use client";
 
 import {
+  ARCHESTRA_MCP_CATALOG_ID,
   archestraApiSdk,
   type archestraApiTypes,
   E2eTestId,
-  ARCHESTRA_MCP_CATALOG_ID,
   type McpDeploymentStatusEntry,
 } from "@shared";
 import {

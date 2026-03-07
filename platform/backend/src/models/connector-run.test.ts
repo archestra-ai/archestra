@@ -234,7 +234,7 @@ describe("ConnectorRunModel", () => {
 
       const run = await ConnectorRunModel.create({
         connectorId: connector.id,
-        status: "completed",
+        status: "success",
         startedAt: startTime,
         completedAt: endTime,
         documentsProcessed: 100,
@@ -263,7 +263,7 @@ describe("ConnectorRunModel", () => {
       const completedAt = new Date();
 
       const updated = await ConnectorRunModel.update(run.id, {
-        status: "completed",
+        status: "success",
         completedAt,
         documentsProcessed: 50,
         documentsIngested: 45,
@@ -319,19 +319,19 @@ describe("ConnectorRunModel", () => {
 
       await ConnectorRunModel.create({
         connectorId: connector1.id,
-        status: "completed",
+        status: "success",
         startedAt: new Date(),
         documentsIngested: 10,
       });
       await ConnectorRunModel.create({
         connectorId: connector1.id,
-        status: "completed",
+        status: "success",
         startedAt: new Date(),
         documentsIngested: 20,
       });
       await ConnectorRunModel.create({
         connectorId: connector2.id,
-        status: "completed",
+        status: "success",
         startedAt: new Date(),
         documentsIngested: 5,
       });
@@ -390,13 +390,13 @@ describe("ConnectorRunModel", () => {
 
       await ConnectorRunModel.create({
         connectorId: connector1.id,
-        status: "completed",
+        status: "success",
         startedAt: new Date(),
         documentsIngested: 10,
       });
       await ConnectorRunModel.create({
         connectorId: connector2.id,
-        status: "completed",
+        status: "success",
         startedAt: new Date(),
         documentsIngested: 20,
       });
@@ -421,13 +421,13 @@ describe("ConnectorRunModel", () => {
 
       await ConnectorRunModel.create({
         connectorId: connector1.id,
-        status: "completed",
+        status: "success",
         startedAt: new Date(),
         documentsIngested: 15,
       });
       await ConnectorRunModel.create({
         connectorId: connector2.id,
-        status: "completed",
+        status: "success",
         startedAt: new Date(),
         documentsIngested: 25,
       });

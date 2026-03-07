@@ -16,6 +16,7 @@ import {
   getOtlpAuthHeaders,
   getTrustedOrigins,
   parseBodyLimit,
+  parseConnectorSyncMaxDuration,
   parseContentMaxLength,
   parseSampleRate,
   parseVirtualKeyDefaultExpiration,
@@ -996,6 +997,36 @@ describe("parseVirtualKeyDefaultExpiration", () => {
 
   test("should cap value just over 1 year", () => {
     expect(parseVirtualKeyDefaultExpiration("31536001")).toBe(31_536_000);
+  });
+});
+
+describe("parseConnectorSyncMaxDuration", () => {
+  test("should return default 3300 when undefined", () => {
+    expect(parseConnectorSyncMaxDuration(undefined)).toBe(3300);
+  });
+
+  test("should return default 3300 when empty string", () => {
+    expect(parseConnectorSyncMaxDuration("")).toBe(3300);
+  });
+
+  test("should parse valid positive integer", () => {
+    expect(parseConnectorSyncMaxDuration("1800")).toBe(1800);
+  });
+
+  test("should return undefined for zero (disables time-bounded runs)", () => {
+    expect(parseConnectorSyncMaxDuration("0")).toBeUndefined();
+  });
+
+  test("should return undefined for negative value", () => {
+    expect(parseConnectorSyncMaxDuration("-100")).toBeUndefined();
+  });
+
+  test("should return undefined for non-numeric value", () => {
+    expect(parseConnectorSyncMaxDuration("abc")).toBeUndefined();
+  });
+
+  test("should parse large value", () => {
+    expect(parseConnectorSyncMaxDuration("7200")).toBe(7200);
   });
 });
 

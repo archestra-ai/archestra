@@ -10,6 +10,7 @@ import {
 import type {
   ConnectorCheckpoint,
   ConnectorConfig,
+  ConnectorSyncStatus,
   ConnectorType,
 } from "@/types";
 import knowledgeBasesTable from "./knowledge-base";
@@ -29,7 +30,7 @@ const knowledgeBaseConnectorsTable = pgTable(
     schedule: text("schedule").notNull().default("0 */6 * * *"),
     enabled: boolean("enabled").notNull().default(true),
     lastSyncAt: timestamp("last_sync_at", { mode: "date" }),
-    lastSyncStatus: text("last_sync_status"),
+    lastSyncStatus: text("last_sync_status").$type<ConnectorSyncStatus>(),
     lastSyncError: text("last_sync_error"),
     checkpoint: jsonb("checkpoint").$type<ConnectorCheckpoint>(),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),

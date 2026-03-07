@@ -10,6 +10,16 @@ const GITLAB = z.literal("gitlab");
 export const ConnectorTypeSchema = z.union([JIRA, CONFLUENCE, GITHUB, GITLAB]);
 export type ConnectorType = z.infer<typeof ConnectorTypeSchema>;
 
+// ===== Connector Sync Status =====
+
+export const ConnectorSyncStatusSchema = z.enum([
+  "running",
+  "success",
+  "failed",
+  "partial",
+]);
+export type ConnectorSyncStatus = z.infer<typeof ConnectorSyncStatusSchema>;
+
 // ===== Connector Credentials =====
 
 export const ConnectorCredentialsSchema = z.object({

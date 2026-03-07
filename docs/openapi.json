@@ -96185,7 +96185,13 @@
                           },
                           "lastSyncStatus": {
                             "nullable": true,
-                            "type": "string"
+                            "type": "string",
+                            "enum": [
+                              "running",
+                              "success",
+                              "failed",
+                              "partial"
+                            ]
                           },
                           "lastSyncError": {
                             "nullable": true,
@@ -97020,7 +97026,13 @@
                     },
                     "lastSyncStatus": {
                       "nullable": true,
-                      "type": "string"
+                      "type": "string",
+                      "enum": [
+                        "running",
+                        "success",
+                        "failed",
+                        "partial"
+                      ]
                     },
                     "lastSyncError": {
                       "nullable": true,
@@ -97550,7 +97562,13 @@
                     },
                     "lastSyncStatus": {
                       "nullable": true,
-                      "type": "string"
+                      "type": "string",
+                      "enum": [
+                        "running",
+                        "success",
+                        "failed",
+                        "partial"
+                      ]
                     },
                     "lastSyncError": {
                       "nullable": true,
@@ -98268,7 +98286,13 @@
                     },
                     "lastSyncStatus": {
                       "nullable": true,
-                      "type": "string"
+                      "type": "string",
+                      "enum": [
+                        "running",
+                        "success",
+                        "failed",
+                        "partial"
+                      ]
                     },
                     "lastSyncError": {
                       "nullable": true,
@@ -100203,7 +100227,13 @@
                             "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                           },
                           "status": {
-                            "type": "string"
+                            "type": "string",
+                            "enum": [
+                              "running",
+                              "success",
+                              "failed",
+                              "partial"
+                            ]
                           },
                           "startedAt": {
                             "type": "string",
@@ -100597,7 +100627,13 @@
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
                     "status": {
-                      "type": "string"
+                      "type": "string",
+                      "enum": [
+                        "running",
+                        "success",
+                        "failed",
+                        "partial"
+                      ]
                     },
                     "startedAt": {
                       "type": "string",

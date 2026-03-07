@@ -17,10 +17,7 @@ import { useSearchParams } from "next/navigation";
 import { useCallback, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { ConnectorRunLogsDialog } from "@/app/knowledge/connectors/_parts/connector-run-logs-dialog";
-import {
-  ConnectorStatusDot,
-  getConnectorDotState,
-} from "@/app/knowledge/knowledge-bases/_parts/connector-enabled-dot";
+import { ConnectorStatusDot } from "@/app/knowledge/knowledge-bases/_parts/connector-enabled-dot";
 import { ConnectorTypeIcon } from "@/app/knowledge/knowledge-bases/_parts/connector-icons";
 import { ConnectorStatusBadge } from "@/app/knowledge/knowledge-bases/_parts/connector-status-badge";
 import { EditConnectorDialog } from "@/app/knowledge/knowledge-bases/_parts/edit-connector-dialog";
@@ -205,7 +202,10 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
     <PageLayout
       title={
         <div className="flex items-center gap-2.5">
-          <ConnectorStatusDot state={getConnectorDotState(connector)} />
+          <ConnectorStatusDot
+            enabled={connector.enabled}
+            lastSyncStatus={connector.lastSyncStatus}
+          />
           <div>
             <span>{connector.name}</span>
             <div>

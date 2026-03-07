@@ -7,10 +7,7 @@ import Link from "next/link";
 import type React from "react";
 import { useCallback, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
-import {
-  ConnectorStatusDot,
-  getConnectorDotState,
-} from "@/app/knowledge/knowledge-bases/_parts/connector-enabled-dot";
+import { ConnectorStatusDot } from "@/app/knowledge/knowledge-bases/_parts/connector-enabled-dot";
 import { ConnectorTypeIcon } from "@/app/knowledge/knowledge-bases/_parts/connector-icons";
 import { ConnectorStatusBadge } from "@/app/knowledge/knowledge-bases/_parts/connector-status-badge";
 import { CreateConnectorDialog } from "@/app/knowledge/knowledge-bases/_parts/create-connector-dialog";
@@ -153,7 +150,10 @@ function ConnectorCard({
         <CardHeader className="pb-3">
           <div className="flex items-start justify-between">
             <div className="flex items-center gap-2.5">
-              <ConnectorStatusDot state={getConnectorDotState(connector)} />
+              <ConnectorStatusDot
+                enabled={connector.enabled}
+                lastSyncStatus={connector.lastSyncStatus}
+              />
               <div>
                 <CardTitle className="text-base">{connector.name}</CardTitle>
                 <Badge variant="secondary" className="gap-1.5 capitalize mt-1">

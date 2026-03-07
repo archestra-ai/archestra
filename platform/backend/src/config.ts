@@ -692,7 +692,7 @@ const config = {
   orchestrator: {
     mcpServerBaseImage:
       process.env.ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE ||
-      "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:1.0.60", // x-release-please-version
+      `europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:${packageJsonVersion}`,
     kubernetes: {
       namespace: process.env.ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE || "default",
       kubeconfig: process.env.ARCHESTRA_ORCHESTRATOR_KUBECONFIG,
@@ -771,7 +771,11 @@ const config = {
       process.env.ARCHESTRA_KNOWLEDGE_BASE_EMBEDDING_API_KEY || "",
     hybridSearchEnabled:
       process.env.ARCHESTRA_KB_HYBRID_SEARCH_ENABLED !== "false",
-    rerankerEnabled: process.env.ARCHESTRA_KB_RERANKER_ENABLED !== "false",
+    rerankerEnabled:
+      process.env.ARCHESTRA_KNOWLEDGE_BASE_RERANKER_ENABLED !== "false",
+    connectorSyncMaxDurationSeconds: parseConnectorSyncMaxDuration(
+      process.env.ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_SYNC_MAX_DURATION_SECONDS,
+    ),
   },
   authRateLimitDisabled:
     process.env.ARCHESTRA_AUTH_RATE_LIMIT_DISABLED === "true",
@@ -780,6 +784,17 @@ const config = {
 };
 
 export default config;
+
+// ===== Internal helpers =====
+
+export function parseConnectorSyncMaxDuration(
+  value: string | undefined,
+): number | undefined {
+  const DEFAULT = 3300; // 55 minutes
+  const seconds = Number.parseInt(value || String(DEFAULT), 10);
+  if (Number.isNaN(seconds) || seconds <= 0) return undefined;
+  return seconds;
+}
 
 /**
  * Get the environment variable API key for a provider.

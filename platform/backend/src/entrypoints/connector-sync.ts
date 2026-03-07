@@ -5,12 +5,12 @@
  * Usage: node dist/entrypoints/connector-sync.mjs --connector-id=<uuid>
  */
 
+import config from "@/config";
 import { cronJobManager } from "@/k8s/cron-job";
 import { connectorSyncService } from "@/knowledge-base/connector-sync";
 import { bootstrap, parseArg } from "./_shared/bootstrap";
 import { createCapturingLogger } from "./_shared/log-capture";
 
-const DEFAULT_MAX_DURATION_SECONDS = 3300; // 55 minutes
 const MAX_CONTINUATIONS = 50;
 
 async function main(): Promise<void> {
@@ -27,15 +27,9 @@ async function main(): Promise<void> {
   try {
     await bootstrap();
 
-    const maxDurationSeconds = Number.parseInt(
-      process.env.ARCHESTRA_CONNECTOR_SYNC_MAX_DURATION_SECONDS ||
-        String(DEFAULT_MAX_DURATION_SECONDS),
-      10,
-    );
-    const maxDurationMs =
-      !Number.isNaN(maxDurationSeconds) && maxDurationSeconds > 0
-        ? maxDurationSeconds * 1000
-        : undefined;
+    const maxDurationMs = config.kb.connectorSyncMaxDurationSeconds
+      ? config.kb.connectorSyncMaxDurationSeconds * 1000
+      : undefined;
 
     const continuationCount = Number.parseInt(
       process.env.ARCHESTRA_CONNECTOR_CONTINUATION_COUNT || "0",

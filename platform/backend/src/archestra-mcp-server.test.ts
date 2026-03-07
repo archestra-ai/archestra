@@ -4,6 +4,8 @@ import {
   isArchestraMcpServerTool,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
 } from "@shared";
+import { eq } from "drizzle-orm";
+import db, { schema } from "@/database";
 import { AgentModel, InternalMcpCatalogModel } from "@/models";
 import { beforeEach, describe, expect, test, vi } from "@/test";
 import type { Agent } from "@/types";
@@ -719,15 +721,122 @@ describe("executeArchestraTool", () => {
   });
 
   describe("query_knowledge_base tool", () => {
-    test("should return not-yet-implemented error during pgvector migration", async () => {
+    const toolName = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}query_knowledge_base`;
+
+    test("should return error when query param is missing", async () => {
+      const result = await executeArchestraTool(toolName, {}, mockContext);
+
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain(
+        "query parameter is required",
+      );
+    });
+
+    test("should return error when no knowledge base is assigned", async () => {
       const result = await executeArchestraTool(
-        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}query_knowledge_base`,
+        toolName,
         { query: "test query" },
         mockContext,
       );
 
       expect(result.isError).toBe(true);
-      expect((result.content[0] as any).text).toContain("pgvector RAG stack");
+      expect((result.content[0] as any).text).toContain(
+        "No knowledge base assigned",
+      );
+    });
+
+    test("should return error when assigned knowledge base does not exist", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+
+      // Assign KB to agent, then delete it so findById returns null
+      await AgentModel.update(testAgent.id, { knowledgeBaseIds: [kb.id] });
+
+      // Delete the KB directly so the lookup fails
+      await db
+        .delete(schema.knowledgeBasesTable)
+        .where(eq(schema.knowledgeBasesTable.id, kb.id));
+
+      const result = await executeArchestraTool(
+        toolName,
+        { query: "test query" },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain(
+        "Knowledge base not found",
+      );
+    });
+
+    test("should call query service and return results when KB is assigned", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+    }) => {
+      const { queryService } = await import("@/knowledge-base/query");
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      await AgentModel.update(testAgent.id, { knowledgeBaseIds: [kb.id] });
+
+      const mockResults = [
+        {
+          content: "Test chunk content",
+          score: 0.95,
+          chunkIndex: 0,
+          citation: {
+            title: "Test Document",
+            sourceUrl: "https://example.com/doc",
+            documentId: "doc-123",
+            connectorType: "github",
+          },
+        },
+      ];
+      const querySpy = vi
+        .spyOn(queryService, "query")
+        .mockResolvedValueOnce(mockResults);
+
+      const result = await executeArchestraTool(
+        toolName,
+        { query: "test query" },
+        mockContext,
+      );
+
+      expect(result.isError).toBeUndefined();
+      const parsed = JSON.parse((result.content[0] as any).text);
+      expect(parsed.totalChunks).toBe(1);
+      expect(parsed.results[0].citation.title).toBe("Test Document");
+
+      querySpy.mockRestore();
+    });
+
+    test("should return error when query service throws", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+    }) => {
+      const { queryService } = await import("@/knowledge-base/query");
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      await AgentModel.update(testAgent.id, { knowledgeBaseIds: [kb.id] });
+
+      const querySpy = vi
+        .spyOn(queryService, "query")
+        .mockRejectedValueOnce(new Error("Embedding API unavailable"));
+
+      const result = await executeArchestraTool(
+        toolName,
+        { query: "test query" },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain(
+        "Embedding API unavailable",
+      );
+
+      querySpy.mockRestore();
     });
   });
 

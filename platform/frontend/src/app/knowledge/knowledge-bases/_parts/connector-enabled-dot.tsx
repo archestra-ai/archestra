@@ -1,3 +1,4 @@
+import type { archestraApiTypes } from "@shared";
 import {
   Tooltip,
   TooltipContent,
@@ -5,33 +6,24 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
-export type ConnectorDotState = "active" | "paused" | "syncing" | "error";
+type ConnectorSyncStatus = NonNullable<
+  archestraApiTypes.GetConnectorsResponses["200"]["data"][number]["lastSyncStatus"]
+>;
 
-export function getConnectorDotState({
+interface DotConfig {
+  dotClass: string;
+  pulse: boolean;
+  label: string;
+}
+
+export function ConnectorStatusDot({
   enabled,
   lastSyncStatus,
 }: {
   enabled: boolean;
-  lastSyncStatus: string | null;
-}): ConnectorDotState {
-  if (lastSyncStatus === "running") return "syncing";
-  if (lastSyncStatus === "failed") return "error";
-  if (!enabled) return "paused";
-  return "active";
-}
-
-const DOT_CONFIG: Record<
-  ConnectorDotState,
-  { dotClass: string; pulse: boolean; label: string }
-> = {
-  active: { dotClass: "bg-green-500", pulse: false, label: "Active" },
-  paused: { dotClass: "bg-muted-foreground", pulse: false, label: "Paused" },
-  syncing: { dotClass: "bg-blue-500", pulse: true, label: "Syncing" },
-  error: { dotClass: "bg-red-500", pulse: false, label: "Last sync failed" },
-};
-
-export function ConnectorStatusDot({ state }: { state: ConnectorDotState }) {
-  const config = DOT_CONFIG[state];
+  lastSyncStatus: ConnectorSyncStatus | null;
+}) {
+  const config = getDotConfig(enabled, lastSyncStatus);
 
   return (
     <TooltipProvider>
@@ -54,4 +46,21 @@ export function ConnectorStatusDot({ state }: { state: ConnectorDotState }) {
       </Tooltip>
     </TooltipProvider>
   );
+}
+
+function getDotConfig(
+  enabled: boolean,
+  lastSyncStatus: ConnectorSyncStatus | null,
+): DotConfig {
+  if (lastSyncStatus === "running")
+    return { dotClass: "bg-blue-500", pulse: true, label: "Syncing" };
+  if (lastSyncStatus === "failed")
+    return { dotClass: "bg-red-500", pulse: false, label: "Last sync failed" };
+  if (!enabled)
+    return {
+      dotClass: "bg-muted-foreground",
+      pulse: false,
+      label: "Paused",
+    };
+  return { dotClass: "bg-green-500", pulse: false, label: "Active" };
 }

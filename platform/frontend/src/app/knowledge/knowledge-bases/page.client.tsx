@@ -17,10 +17,7 @@ import {
 import Link from "next/link";
 import { useCallback, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
-import {
-  ConnectorStatusDot,
-  getConnectorDotState,
-} from "@/app/knowledge/knowledge-bases/_parts/connector-enabled-dot";
+import { ConnectorStatusDot } from "@/app/knowledge/knowledge-bases/_parts/connector-enabled-dot";
 import { ConnectorStatusBadge } from "@/app/knowledge/knowledge-bases/_parts/connector-status-badge";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
@@ -353,7 +350,10 @@ function ExpandedConnectors({ knowledgeBaseId }: { knowledgeBaseId: string }) {
             <TableRow key={connector.id} className="hover:bg-muted/50">
               <TableCell>
                 <div className="flex items-center gap-3">
-                  <ConnectorStatusDot state={getConnectorDotState(connector)} />
+                  <ConnectorStatusDot
+                    enabled={connector.enabled}
+                    lastSyncStatus={connector.lastSyncStatus}
+                  />
                   <Badge variant="secondary" className="gap-1.5 capitalize">
                     <ConnectorTypeIcon
                       type={connector.connectorType}

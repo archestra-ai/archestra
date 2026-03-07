@@ -9,6 +9,7 @@ import { KnowledgeBaseVisibilitySchema } from "./knowledge-base";
 import {
   ConnectorCheckpointSchema,
   ConnectorConfigSchema,
+  ConnectorSyncStatusSchema,
   ConnectorTypeSchema,
 } from "./knowledge-connector";
 
@@ -48,11 +49,14 @@ export type UpdateKnowledgeBase = z.infer<typeof UpdateKnowledgeBaseSchema>;
 
 // ===== Knowledge Base Connector Schemas =====
 
+const NullableConnectorSyncStatusSchema = ConnectorSyncStatusSchema.nullable();
+
 export const SelectKnowledgeBaseConnectorSchema = createSelectSchema(
   schema.knowledgeBaseConnectorsTable,
   {
     connectorType: ConnectorTypeSchema,
     config: ConnectorConfigSchema,
+    lastSyncStatus: NullableConnectorSyncStatusSchema,
   },
 );
 export const InsertKnowledgeBaseConnectorSchema = createInsertSchema(
@@ -61,6 +65,7 @@ export const InsertKnowledgeBaseConnectorSchema = createInsertSchema(
     connectorType: ConnectorTypeSchema,
     config: ConnectorConfigSchema,
     checkpoint: ConnectorCheckpointSchema.optional(),
+    lastSyncStatus: NullableConnectorSyncStatusSchema.optional(),
   },
 ).omit({ id: true, createdAt: true, updatedAt: true });
 export const UpdateKnowledgeBaseConnectorSchema = createUpdateSchema(
@@ -69,6 +74,7 @@ export const UpdateKnowledgeBaseConnectorSchema = createUpdateSchema(
     connectorType: ConnectorTypeSchema.optional(),
     config: ConnectorConfigSchema.optional(),
     checkpoint: ConnectorCheckpointSchema.nullable().optional(),
+    lastSyncStatus: NullableConnectorSyncStatusSchema.optional(),
   },
 ).pick({
   name: true,
@@ -96,15 +102,18 @@ export type UpdateKnowledgeBaseConnector = z.infer<
 
 export const SelectConnectorRunSchema = createSelectSchema(
   schema.connectorRunsTable,
+  { status: ConnectorSyncStatusSchema },
 );
 export const SelectConnectorRunListSchema = SelectConnectorRunSchema.omit({
   logs: true,
 });
 export const InsertConnectorRunSchema = createInsertSchema(
   schema.connectorRunsTable,
+  { status: ConnectorSyncStatusSchema },
 ).omit({ id: true, createdAt: true });
 export const UpdateConnectorRunSchema = createUpdateSchema(
   schema.connectorRunsTable,
+  { status: ConnectorSyncStatusSchema.optional() },
 ).pick({
   status: true,
   completedAt: true,

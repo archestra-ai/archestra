@@ -46,12 +46,12 @@ import { cacheManager } from "@/cache-manager";
 import config from "@/config";
 import { initializeDatabase, isDatabaseHealthy } from "@/database";
 import { seedRequiredStartingData } from "@/database/seed";
-import { cronJobManager } from "@/k8s/cron-job";
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
+import { startEmbeddingCron } from "@/knowledge-base/embedder";
+import { reconcileConnectorCronJobs } from "@/knowledge-base/reconcile-connector-cron-jobs";
 import logger from "@/logging";
 import { enterpriseLicenseMiddleware } from "@/middleware";
 import AgentLabelModel from "@/models/agent-label";
-import KnowledgeBaseConnectorModel from "@/models/knowledge-base-connector";
 import OrganizationModel from "@/models/organization";
 import { metrics } from "@/observability";
 import { systemKeyManager } from "@/services/system-key-manager";
@@ -532,53 +532,6 @@ const startMcpServerRuntime = async (
   }
 };
 
-/**
- * Reconcile CronJobs for enabled connectors.
- * Ensures that every enabled connector has a corresponding K8s CronJob.
- * Runs on server startup to handle cases where CronJobs were deleted externally.
- */
-const reconcileConnectorCronJobs = async () => {
-  try {
-    cronJobManager.initialize();
-  } catch {
-    logger.info(
-      "[CronJobReconcile] CronJobManager not available, skipping reconciliation",
-    );
-    return;
-  }
-
-  const connectors = await KnowledgeBaseConnectorModel.findAllEnabled();
-  if (connectors.length === 0) {
-    return;
-  }
-
-  let reconciled = 0;
-  for (const connector of connectors) {
-    try {
-      await cronJobManager.createOrUpdateCronJob({
-        connectorId: connector.id,
-        schedule: connector.schedule,
-      });
-      reconciled++;
-    } catch (error) {
-      logger.warn(
-        {
-          connectorId: connector.id,
-          error: error instanceof Error ? error.message : String(error),
-        },
-        "[CronJobReconcile] Failed to reconcile CronJob",
-      );
-    }
-  }
-
-  if (reconciled > 0) {
-    logger.info(
-      { reconciled, total: connectors.length },
-      "[CronJobReconcile] Connector CronJobs reconciled",
-    );
-  }
-};
-
 const start = async () => {
   const fastify = createFastifyInstance();
 
@@ -695,7 +648,6 @@ const start = async () => {
     await chatOpsManager.initialize();
 
     // Start embedding cron to process pending document embeddings
-    const { startEmbeddingCron } = await import("@/knowledge-base/embedder");
     startEmbeddingCron();
 
     // Reconcile CronJobs for knowledge base connectors

@@ -48,7 +48,7 @@ test.describe("Auth Permissions API - Custom Roles", () => {
       makeApiRequest,
       data: {
         permissions: {
-          organization: ["read", "update", "delete"],
+          organization: ["update", "delete"],
         },
       },
     });

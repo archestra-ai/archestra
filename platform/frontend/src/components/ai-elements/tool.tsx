@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
 import { CodeBlock } from "./code-block";
+import { UIResourceRenderer } from "@mcp-ui/client";
 
 export type ToolProps = ComponentProps<typeof Collapsible>;
 
@@ -267,6 +268,7 @@ export const ToolOutput = ({
   }
 
   let Output = <div>{output as ReactNode}</div>;
+  let uiResource: any = null;
 
   if (typeof output === "object" || typeof output === "string") {
     // If output is a string, try to parse it as JSON for proper formatting
@@ -278,49 +280,66 @@ export const ToolOutput = ({
         // Not valid JSON, use as-is
       }
     }
-    const codeString =
-      typeof formattedOutput === "object"
-        ? JSON.stringify(formattedOutput, null, 2)
-        : String(formattedOutput);
-    const lines = codeString.split("\n");
-    const MAX_LINES = 50;
-    const isLarge = lines.length > MAX_LINES;
+    
+    if (typeof formattedOutput === "object" && formattedOutput !== null) {
+      const out = formattedOutput as any;
+      if (out._meta?.uiResource) uiResource = out._meta.uiResource;
+      else if (out._meta?.ui_resource) uiResource = out._meta.ui_resource;
+      else if (out.uiResource) uiResource = out.uiResource;
+      else if (out.ui_resource) uiResource = out.ui_resource;
+    }
 
-    const displayCode =
-      isExpanded || !isLarge
-        ? codeString
-        : `${lines.slice(0, MAX_LINES).join("\n")}\n... (${
-            lines.length - MAX_LINES
-          } more lines)`;
+    if (uiResource) {
+      Output = (
+        <div className="w-full min-h-[400px] bg-background">
+          <UIResourceRenderer resource={uiResource} />
+        </div>
+      );
+    } else {
+      const codeString =
+        typeof formattedOutput === "object"
+          ? JSON.stringify(formattedOutput, null, 2)
+          : String(formattedOutput);
+      const lines = codeString.split("\n");
+      const MAX_LINES = 50;
+      const isLarge = lines.length > MAX_LINES;
 
-    Output = (
-      <div className="relative group">
-        <CodeBlock code={displayCode} language="json" />
-        {isLarge && (
-          <div
-            className={cn(
-              "absolute bottom-4 left-0 right-0 flex justify-center transition-all duration-200",
-              !isExpanded &&
-                "pt-16 pb-2 bg-gradient-to-t from-background/80 to-transparent",
-            )}
-          >
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={(e) => {
-                e.stopPropagation();
-                setIsExpanded(!isExpanded);
-              }}
-              className="h-7 text-xs shadow-sm bg-background/80 backdrop-blur-sm hover:bg-background border"
+      const displayCode =
+        isExpanded || !isLarge
+          ? codeString
+          : `${lines.slice(0, MAX_LINES).join("\n")}\n... (${
+              lines.length - MAX_LINES
+            } more lines)`;
+
+      Output = (
+        <div className="relative group">
+          <CodeBlock code={displayCode} language="json" />
+          {isLarge && (
+            <div
+              className={cn(
+                "absolute bottom-4 left-0 right-0 flex justify-center transition-all duration-200",
+                !isExpanded &&
+                  "pt-16 pb-2 bg-gradient-to-t from-background/80 to-transparent",
+              )}
             >
-              {isExpanded
-                ? "Show Less"
-                : `Show ${lines.length - MAX_LINES} more lines`}
-            </Button>
-          </div>
-        )}
-      </div>
-    );
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsExpanded(!isExpanded);
+                }}
+                className="h-7 text-xs shadow-sm bg-background/80 backdrop-blur-sm hover:bg-background border"
+              >
+                {isExpanded
+                  ? "Show Less"
+                  : `Show ${lines.length - MAX_LINES} more lines`}
+              </Button>
+            </div>
+          )}
+        </div>
+      );
+    }
   }
 
   return (

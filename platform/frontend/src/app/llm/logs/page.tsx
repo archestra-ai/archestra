@@ -43,7 +43,7 @@ export default async function LlmProxyLogsPageServer() {
       }),
       archestraApiSdk.getAllAgents({
         headers,
-        query: { excludeBuiltIn: true },
+        query: { excludeBuiltIn: true, agentTypes: ["agent", "llm_proxy"] },
       }),
     ]);
     if (interactionsResponse.error) {

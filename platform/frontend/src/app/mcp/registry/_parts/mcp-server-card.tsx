@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  ARCHESTRA_MCP_CATALOG_ID,
   archestraApiSdk,
   type archestraApiTypes,
   E2eTestId,
@@ -14,12 +15,14 @@ import {
   MoreVertical,
   Pencil,
   RefreshCw,
+  Server,
   Terminal,
   Trash2,
   User,
   Wrench,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import Image from "next/image";
+import { useState } from "react";
 import { toast } from "sonner";
 import { LabelTags } from "@/components/label-tags";
 import {
@@ -89,13 +92,58 @@ export type McpServerCardProps = {
   onEdit: () => void;
   onDelete: () => void;
   onCancelInstallation?: (serverId: string) => void;
-  /** When true, auto-opens the assignments dialog */
-  autoOpenAssignmentsDialog?: boolean;
-  /** Called when the auto-opened assignments dialog is closed */
-  onAssignmentsDialogClose?: () => void;
   /** When true, renders as a built-in Playwright server (non-editable, personal-only) */
   isBuiltInPlaywright?: boolean;
 };
+
+function McpCatalogIcon({
+  icon,
+  catalogId,
+  size = 20,
+}: {
+  icon?: string | null;
+  catalogId?: string;
+  size?: number;
+}) {
+  if (!icon && catalogId === ARCHESTRA_MCP_CATALOG_ID) {
+    return (
+      <Image
+        src="/logo.png"
+        alt="Archestra"
+        width={size}
+        height={size}
+        className="shrink-0 rounded-sm object-contain"
+      />
+    );
+  }
+
+  if (!icon) {
+    return (
+      <Server
+        className="shrink-0 text-muted-foreground"
+        style={{ width: size, height: size }}
+      />
+    );
+  }
+
+  if (icon.startsWith("data:")) {
+    return (
+      <Image
+        src={icon}
+        alt="MCP server icon"
+        width={size}
+        height={size}
+        className="shrink-0 rounded-sm object-contain"
+      />
+    );
+  }
+
+  return (
+    <span className="shrink-0 leading-none" style={{ fontSize: size }}>
+      {icon}
+    </span>
+  );
+}
 
 export type McpServerCardVariant = "remote" | "local" | "builtin";
 
@@ -117,8 +165,6 @@ export function McpServerCard({
   onEdit,
   onDelete,
   onCancelInstallation,
-  autoOpenAssignmentsDialog,
-  onAssignmentsDialogClose,
   isBuiltInPlaywright = false,
 }: McpServerCardBaseProps) {
   const isBuiltin = variant === "builtin";
@@ -190,33 +236,21 @@ export function McpServerCard({
     name: string;
   } | null>(null);
 
-  // Auto-open assignments dialog when requested by parent
-  // Ensure other dialogs are closed when auto-opening
-  useEffect(() => {
-    if (autoOpenAssignmentsDialog) {
-      setIsToolsDialogOpen(true);
-      setIsManageUsersDialogOpen(false);
-      setIsLogsDialogOpen(false);
-    }
-  }, [autoOpenAssignmentsDialog]);
-
-  // Handle assignments dialog close - notify parent if it was auto-opened
   const handleToolsDialogOpenChange = (open: boolean) => {
     setIsToolsDialogOpen(open);
-    if (!open && autoOpenAssignmentsDialog) {
-      onAssignmentsDialogClose?.();
-    }
   };
 
   const handleChatWithMcpServer = async () => {
     setIsChatCreating(true);
     const agentName = item.label || item.name;
     try {
-      // Get or create: check if an agent with this name already exists
+      // Get or create: check if a personal agent with this name already exists for the current user
       const { data: existingAgents } = await archestraApiSdk.getAllAgents({
         query: { agentType: "agent" },
       });
-      const existing = existingAgents?.find((a) => a.name === agentName);
+      const existing = existingAgents?.find(
+        (a) => a.name === agentName && a.authorId === currentUserId,
+      );
 
       const agent =
         existing ??
@@ -225,6 +259,7 @@ export function McpServerCard({
           agentType: "agent",
           scope: "personal",
           teams: [],
+          icon: item.icon ?? undefined,
         }));
 
       if (agent && tools && tools.length > 0) {
@@ -862,6 +897,7 @@ export function McpServerCard({
               className="flex items-center gap-2 mb-1 overflow-hidden w-full"
               title={item.name}
             >
+              <McpCatalogIcon icon={item.icon} catalogId={item.id} size={20} />
               <span className="text-lg font-semibold whitespace-nowrap text-ellipsis overflow-hidden">
                 {item.name}
               </span>

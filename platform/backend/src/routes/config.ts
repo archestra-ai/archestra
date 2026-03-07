@@ -23,6 +23,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
             enterpriseFeatures: z.strictObject({
               core: z.boolean(),
               knowledgeBase: z.boolean(),
+              fullWhiteLabeling: z.boolean(),
             }),
             features: z.strictObject({
               orchestratorK8sRuntime: z.boolean(),
@@ -57,7 +58,11 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
         org?.globalToolPolicy ?? "permissive";
 
       return reply.send({
-        enterpriseFeatures: config.enterpriseFeatures,
+        enterpriseFeatures: {
+          core: config.enterpriseFeatures.core,
+          knowledgeBase: config.enterpriseFeatures.knowledgeBase,
+          fullWhiteLabeling: config.enterpriseFeatures.fullWhiteLabeling,
+        },
         features: {
           orchestratorK8sRuntime: McpServerRuntimeManager.isEnabled,
           byosEnabled: isByosEnabled(),

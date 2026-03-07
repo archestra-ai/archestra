@@ -146,7 +146,7 @@ const contentNavGroups: NavGroup[] = [
         subItems: [
           {
             title: "Providers",
-            url: "/llm/providers",
+            url: "/llm/providers/api-keys",
             customIsActive: (pathname: string) =>
               pathname.startsWith("/llm/providers"),
           },
@@ -332,7 +332,7 @@ const NavSecondary = ({
               </SidebarMenuButton>
             </SidebarMenuItem>
           ))}
-          {!config.enterpriseFeatures.core && (
+          {!config.enterpriseFeatures.fullWhiteLabeling && (
             <>
               <SidebarMenuItem>
                 <SidebarMenuButton asChild>
@@ -440,7 +440,7 @@ export function AppSidebar() {
             />
           </>
         )}
-        {!isAuthenticated && !config.enterpriseFeatures.core && (
+        {!isAuthenticated && !config.enterpriseFeatures.fullWhiteLabeling && (
           <NavSecondary
             items={[]}
             pathname={pathname}

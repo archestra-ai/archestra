@@ -321,7 +321,7 @@ export function ChatApiKeySelector({
             disabled={disabled}
             className="max-w-[220px] min-w-0"
           >
-            <Key className="h-3.5 w-3.5 shrink-0" />
+            <Key className="size-4 shrink-0" />
             <span className="truncate flex-1 text-left">
               {currentConversationChatApiKey
                 ? getKeyDisplayName(currentConversationChatApiKey)

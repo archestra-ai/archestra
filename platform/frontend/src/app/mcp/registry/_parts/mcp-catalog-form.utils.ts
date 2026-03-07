@@ -15,7 +15,9 @@ export function transformFormToApiData(
 ): McpCatalogApiData {
   const data: McpCatalogApiData = {
     name: values.name,
+    description: values.description || null,
     serverType: values.serverType,
+    icon: values.icon ?? null,
   };
 
   if (values.serverUrl) {
@@ -293,6 +295,8 @@ export function transformCatalogItemToFormValues(
 
   return {
     name: item.name,
+    description: item.description || "",
+    icon: item.icon ?? null,
     serverType: item.serverType as "remote" | "local",
     serverUrl: item.serverUrl || "",
     authMethod,

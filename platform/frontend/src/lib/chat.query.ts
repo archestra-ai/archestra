@@ -4,7 +4,12 @@ import {
   PLAYWRIGHT_MCP_SERVER_NAME,
   type SupportedProvider,
 } from "@shared";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { invalidateToolAssignmentQueries } from "./agent-tools.hook";
@@ -172,10 +177,15 @@ export function useUpdateConversation() {
     },
     onSuccess: (data, variables) => {
       if (!data) return;
+      // Optimistically update the conversation cache to avoid flicker
+      queryClient.setQueryData(["conversation", variables.id], data);
       queryClient.invalidateQueries({ queryKey: ["conversations"] });
-      queryClient.invalidateQueries({
-        queryKey: ["conversation", variables.id],
-      });
+      if (variables.agentId) {
+        // Agent changed — invalidate tools-related queries
+        queryClient.invalidateQueries({
+          queryKey: ["conversation", variables.id, "enabled-tools"],
+        });
+      }
       if (variables.chatApiKeyId) {
         queryClient.invalidateQueries({ queryKey: ["chat-models"] });
       }
@@ -444,6 +454,7 @@ export function useProfileToolsWithIds(agentId: string | undefined) {
     enabled: !!agentId,
     staleTime: 5 * 60 * 1000, // 5 minutes
     gcTime: 10 * 60 * 1000,
+    placeholderData: keepPreviousData,
   });
 }
 

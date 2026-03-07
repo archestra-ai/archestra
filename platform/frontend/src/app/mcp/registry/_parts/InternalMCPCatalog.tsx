@@ -161,10 +161,6 @@ export function InternalMCPCatalog({
   );
   const { data: detailsServerData } = useMcpRegistryServer(detailsServerName);
 
-  // State for auto-opening assignments dialog after installation (stores catalog ID)
-  const [autoOpenAssignmentsCatalogId, setAutoOpenAssignmentsCatalogId] =
-    useState<string | null>(null);
-
   const { data: userIsMcpServerAdmin } = useHasPermissions({
     mcpServer: ["admin"],
   });
@@ -214,15 +210,8 @@ export function InternalMCPCatalog({
                   queryKey: ["mcp-catalog", server.catalogId, "tools"],
                 });
 
-                // Auto-open assignments dialog only for first installation
+                // Remove from first installation tracking
                 if (firstInstallationServerIds.has(serverId)) {
-                  const catalogItem = catalogItems?.find(
-                    (item) => item.id === server.catalogId,
-                  );
-                  if (catalogItem) {
-                    setAutoOpenAssignmentsCatalogId(catalogItem.id);
-                  }
-                  // Remove from first installation tracking
                   setFirstInstallationServerIds((prev) => {
                     const newSet = new Set(prev);
                     newSet.delete(serverId);
@@ -240,7 +229,6 @@ export function InternalMCPCatalog({
     installedServers,
     installingServerIds,
     queryClient,
-    catalogItems,
     firstInstallationServerIds,
   ]);
 
@@ -258,11 +246,10 @@ export function InternalMCPCatalog({
     }
   }, [installedServers]);
 
-  // Check for OAuth installation completion and open assignments dialog
+  // Clear OAuth installation completion state
   useEffect(() => {
     const oauthCatalogId = getOAuthInstallationCompleteCatalogId();
     if (oauthCatalogId) {
-      setAutoOpenAssignmentsCatalogId(oauthCatalogId);
       clearInstallationCompleteCatalogId();
     }
   }, []);
@@ -447,11 +434,6 @@ export function InternalMCPCatalog({
 
     const catalogItem = noAuthCatalogItem;
 
-    // Check if this is the first installation for this catalog item
-    const isFirstInstallation = !installedServers?.some(
-      (s) => s.catalogId === catalogItem.id,
-    );
-
     setInstallingItemId(catalogItem.id);
     await installMutation.mutateAsync({
       name: catalogItem.name,
@@ -461,11 +443,6 @@ export function InternalMCPCatalog({
     closeDialog("no-auth");
     setNoAuthCatalogItem(null);
     setInstallingItemId(null);
-
-    // Auto-open assignments dialog only for the first installation
-    if (isFirstInstallation) {
-      setAutoOpenAssignmentsCatalogId(catalogItem.id);
-    }
   };
 
   const handleLocalServerInstallConfirm = async (
@@ -626,11 +603,6 @@ export function InternalMCPCatalog({
       return;
     }
 
-    // Check if this is the first installation for this catalog item
-    const isFirstInstallation = !installedServers?.some(
-      (s) => s.catalogId === catalogItem.id,
-    );
-
     setInstallingItemId(catalogItem.id);
 
     await installMutation.mutateAsync({
@@ -644,11 +616,6 @@ export function InternalMCPCatalog({
       teamId: result.teamId ?? undefined,
     });
     setInstallingItemId(null);
-
-    // Auto-open assignments dialog only for the first installation
-    if (isFirstInstallation) {
-      setAutoOpenAssignmentsCatalogId(catalogItem.id);
-    }
   };
 
   const handleOAuthConfirm = async (result: OAuthInstallResult) => {
@@ -1004,12 +971,6 @@ export function InternalMCPCatalog({
                   }}
                   onDelete={() => setDeletingItem(item)}
                   onCancelInstallation={handleCancelInstallation}
-                  autoOpenAssignmentsDialog={
-                    autoOpenAssignmentsCatalogId === item.id
-                  }
-                  onAssignmentsDialogClose={() =>
-                    setAutoOpenAssignmentsCatalogId(null)
-                  }
                   isBuiltInPlaywright={isPlaywrightCatalogItem(item.id)}
                 />
               );

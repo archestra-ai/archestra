@@ -33,7 +33,7 @@ export function AppLogo({ centered = true }: AppLogoProps) {
             height={60}
             className="object-contain h-12 w-auto max-w-[calc(100vw-6rem)]"
           />
-          {!config.enterpriseFeatures.core && (
+          {!config.enterpriseFeatures.fullWhiteLabeling && (
             <p className="text-[10px] text-muted-foreground">
               Powered by Archestra
             </p>

@@ -680,6 +680,8 @@ const config = {
     knowledgeBase:
       process.env.ARCHESTRA_ENTERPRISE_LICENSE_KNOWLEDGE_BASE_ACTIVATED ===
       "true",
+    fullWhiteLabeling:
+      process.env.ARCHESTRA_ENTERPRISE_FULL_WHITE_LABELING === "true",
   },
   /**
    * Codegen mode is set when running `pnpm codegen` via turbo.

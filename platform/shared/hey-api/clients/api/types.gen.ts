@@ -11744,6 +11744,7 @@ export type GetAgentsResponses = {
                 [key: string]: unknown;
             } | Array<unknown> | null;
             description: string | null;
+            icon: string | null;
             incomingEmailEnabled: boolean;
             incomingEmailSecurityMode: 'private' | 'internal' | 'public';
             incomingEmailAllowedDomain: string | null;
@@ -11826,6 +11827,7 @@ export type CreateAgentData = {
         systemPrompt?: string | null;
         userPrompt?: string | null;
         description?: string | null;
+        icon?: string | null;
         incomingEmailEnabled?: boolean;
         incomingEmailSecurityMode?: 'private' | 'internal' | 'public';
         incomingEmailAllowedDomain?: string | null;
@@ -11931,6 +11933,7 @@ export type CreateAgentResponses = {
             [key: string]: unknown;
         } | Array<unknown> | null;
         description: string | null;
+        icon: string | null;
         incomingEmailEnabled: boolean;
         incomingEmailSecurityMode: 'private' | 'internal' | 'public';
         incomingEmailAllowedDomain: string | null;
@@ -12092,6 +12095,7 @@ export type GetAllAgentsResponses = {
             [key: string]: unknown;
         } | Array<unknown> | null;
         description: string | null;
+        icon: string | null;
         incomingEmailEnabled: boolean;
         incomingEmailSecurityMode: 'private' | 'internal' | 'public';
         incomingEmailAllowedDomain: string | null;
@@ -12240,6 +12244,7 @@ export type GetDefaultMcpGatewayResponses = {
             [key: string]: unknown;
         } | Array<unknown> | null;
         description: string | null;
+        icon: string | null;
         incomingEmailEnabled: boolean;
         incomingEmailSecurityMode: 'private' | 'internal' | 'public';
         incomingEmailAllowedDomain: string | null;
@@ -12388,6 +12393,7 @@ export type GetDefaultLlmProxyResponses = {
             [key: string]: unknown;
         } | Array<unknown> | null;
         description: string | null;
+        icon: string | null;
         incomingEmailEnabled: boolean;
         incomingEmailSecurityMode: 'private' | 'internal' | 'public';
         incomingEmailAllowedDomain: string | null;
@@ -12617,6 +12623,7 @@ export type GetAgentResponses = {
             [key: string]: unknown;
         } | Array<unknown> | null;
         description: string | null;
+        icon: string | null;
         incomingEmailEnabled: boolean;
         incomingEmailSecurityMode: 'private' | 'internal' | 'public';
         incomingEmailAllowedDomain: string | null;
@@ -12690,6 +12697,7 @@ export type UpdateAgentData = {
         systemPrompt?: string | null;
         userPrompt?: string | null;
         description?: string | null;
+        icon?: string | null;
         incomingEmailEnabled?: boolean;
         incomingEmailSecurityMode?: 'private' | 'internal' | 'public';
         incomingEmailAllowedDomain?: string | null;
@@ -12797,6 +12805,7 @@ export type UpdateAgentResponses = {
             [key: string]: unknown;
         } | Array<unknown> | null;
         description: string | null;
+        icon: string | null;
         incomingEmailEnabled: boolean;
         incomingEmailSecurityMode: 'private' | 'internal' | 'public';
         incomingEmailAllowedDomain: string | null;
@@ -12948,6 +12957,7 @@ export type GetAgentVersionsResponses = {
                 [key: string]: unknown;
             } | Array<unknown> | null;
             description: string | null;
+            icon: string | null;
             incomingEmailEnabled: boolean;
             incomingEmailSecurityMode: 'private' | 'internal' | 'public';
             incomingEmailAllowedDomain: string | null;
@@ -13110,6 +13120,7 @@ export type RollbackAgentResponses = {
             [key: string]: unknown;
         } | Array<unknown> | null;
         description: string | null;
+        icon: string | null;
         incomingEmailEnabled: boolean;
         incomingEmailSecurityMode: 'private' | 'internal' | 'public';
         incomingEmailAllowedDomain: string | null;
@@ -21213,6 +21224,7 @@ export type GetConfigResponses = {
         enterpriseFeatures: {
             core: boolean;
             knowledgeBase: boolean;
+            fullWhiteLabeling: boolean;
         };
         features: {
             orchestratorK8sRuntime: boolean;
@@ -25270,6 +25282,7 @@ export type GetInternalMcpCatalogResponses = {
             streamable_http_url?: string;
             streamable_http_port?: number;
         } | null;
+        icon: string | null;
         createdAt: string;
         updatedAt: string;
         labels: Array<{
@@ -25370,6 +25383,7 @@ export type CreateInternalMcpCatalogItemData = {
             streamable_http_url?: string;
             streamable_http_port?: number;
         } | null;
+        icon?: string | null;
         labels?: Array<{
             key: string;
             value: string;
@@ -25535,6 +25549,7 @@ export type CreateInternalMcpCatalogItemResponses = {
             streamable_http_url?: string;
             streamable_http_port?: number;
         } | null;
+        icon: string | null;
         createdAt: string;
         updatedAt: string;
         labels: Array<{
@@ -25785,6 +25800,7 @@ export type GetInternalMcpCatalogItemResponses = {
             streamable_http_url?: string;
             streamable_http_port?: number;
         } | null;
+        icon: string | null;
         createdAt: string;
         updatedAt: string;
         labels: Array<{
@@ -25884,6 +25900,7 @@ export type UpdateInternalMcpCatalogItemData = {
             streamable_http_url?: string;
             streamable_http_port?: number;
         } | null;
+        icon?: string | null;
         labels?: Array<{
             key: string;
             value: string;
@@ -26051,6 +26068,7 @@ export type UpdateInternalMcpCatalogItemResponses = {
             streamable_http_url?: string;
             streamable_http_port?: number;
         } | null;
+        icon: string | null;
         createdAt: string;
         updatedAt: string;
         labels: Array<{

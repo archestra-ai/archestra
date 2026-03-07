@@ -28,6 +28,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ConnectorTypeIcon } from "@/app/knowledge/knowledge-bases/_parts/connector-icons";
 import { AgentBadge } from "@/components/agent-badge";
+import { AgentIconPicker } from "@/components/agent-icon-picker";
 import {
   type ProfileLabel,
   ProfileLabels,
@@ -607,6 +608,7 @@ export function AgentDialog({
 
   // Form state
   const [name, setName] = useState("");
+  const [icon, setIcon] = useState<string | null>(null);
   const [description, setDescription] = useState("");
   const [userPrompt, setUserPrompt] = useState("");
   const [systemPrompt, setSystemPrompt] = useState("");
@@ -660,6 +662,11 @@ export function AgentDialog({
       if (agentData) {
         // Edit mode
         setName(agentData.name);
+        setIcon(
+          (agentData as unknown as Record<string, unknown>).icon as
+            | string
+            | null,
+        );
         setDescription(agentData.description || "");
         setUserPrompt(agentData.userPrompt || "");
         setSystemPrompt(agentData.systemPrompt || "");
@@ -711,6 +718,7 @@ export function AgentDialog({
       } else {
         // Create mode - reset all fields
         setName("");
+        setIcon(null);
         setDescription("");
         setUserPrompt("");
         setSystemPrompt("");
@@ -934,6 +942,7 @@ export function AgentDialog({
           id: agent.id,
           data: {
             name: trimmedName,
+            icon: icon || null,
             agentType: agentType,
             ...(isInternalAgent && {
               description: description.trim() || null,
@@ -964,6 +973,7 @@ export function AgentDialog({
         // Create new agent
         const created = await createAgent.mutateAsync({
           name: trimmedName,
+          icon: icon || null,
           agentType: agentType,
           ...(isInternalAgent && {
             description: description.trim() || null,
@@ -1027,6 +1037,7 @@ export function AgentDialog({
     }
   }, [
     name,
+    icon,
     description,
     userPrompt,
     systemPrompt,
@@ -1108,17 +1119,20 @@ export function AgentDialog({
 
             {/* Section 1: Name, Description, Visibility, LLM Configuration */}
             <div className="rounded-lg border bg-card p-4 space-y-4">
-              {/* Name (hidden for built-in agents, shown in dialog title) */}
+              {/* Name + Icon (hidden for built-in agents, shown in dialog title) */}
               {!isBuiltIn && (
-                <div className="space-y-2">
-                  <Label htmlFor="agentName">Name *</Label>
-                  <Input
-                    id="agentName"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder={getNamePlaceholder(agentType)}
-                    autoFocus
-                  />
+                <div className="space-y-4">
+                  <AgentIconPicker value={icon} onChange={setIcon} />
+                  <div className="space-y-2">
+                    <Label htmlFor="agentName">Name *</Label>
+                    <Input
+                      id="agentName"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      placeholder={getNamePlaceholder(agentType)}
+                      autoFocus
+                    />
+                  </div>
                 </div>
               )}
 
@@ -1215,6 +1229,7 @@ export function AgentDialog({
                         setLlmApiKeyId(null);
                         lastAutoSelectedProviderRef.current = null;
                       }}
+                      variant="outline"
                     />
 
                     {/* API Key Selector Pill */}
@@ -1238,12 +1253,12 @@ export function AgentDialog({
                             </>
                           ) : (
                             <span className="text-muted-foreground">
-                              Select API key...
+                              Dynamic API key
                             </span>
                           )}
                         </Button>
                       </PopoverTrigger>
-                      <PopoverContent className="w-80 p-0" align="start">
+                      <PopoverContent className="w-96 p-0" align="start">
                         <Command>
                           <CommandInput placeholder="Search API keys..." />
                           <CommandList>
@@ -1258,7 +1273,8 @@ export function AgentDialog({
                                 }}
                               >
                                 <span className="text-muted-foreground">
-                                  None (use default)
+                                  Dynamic API key (resolved at runtime: org-wide
+                                  → team → personal)
                                 </span>
                                 {!llmApiKeyId && (
                                   <CheckIcon className="ml-auto h-4 w-4" />

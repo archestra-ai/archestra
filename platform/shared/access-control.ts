@@ -782,7 +782,13 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/settings/appearance": {
     organization: ["read"],
   },
-  "/llm/providers": {
+  "/llm/providers/api-keys": {
+    chatSettings: ["read"],
+  },
+  "/llm/providers/virtual-keys": {
+    chatSettings: ["read"],
+  },
+  "/llm/providers/models": {
     chatSettings: ["read"],
   },
   "/settings/identity-providers": {

@@ -240,7 +240,9 @@ export function McpServerCard({
   // Dialog state
   const [isManageUsersDialogOpen, setIsManageUsersDialogOpen] = useState(false);
   const [isLogsDialogOpen, setIsLogsDialogOpen] = useState(false);
-  const [logsInitialServerId, setLogsInitialServerId] = useState<string | null>(null);
+  const [logsInitialServerId, setLogsInitialServerId] = useState<string | null>(
+    null,
+  );
   const [isYamlConfigDialogOpen, setIsYamlConfigDialogOpen] = useState(false);
   const [uninstallingServer, setUninstallingServer] = useState<{
     id: string;
@@ -330,8 +332,7 @@ export function McpServerCard({
 
   const hasError = installedServer?.localInstallationStatus === "error";
   const errorMessage =
-    installedServer?.localInstallationError ||
-    installedDeploymentStatus?.error;
+    installedServer?.localInstallationError || installedDeploymentStatus?.error;
   const _mcpServersCount = mcpServerOfCurrentCatalogItem?.length ?? 0;
 
   // Check for OAuth refresh errors on any credential the user can see

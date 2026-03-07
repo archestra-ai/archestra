@@ -56,10 +56,7 @@ import {
   setOAuthState,
 } from "@/lib/oauth-session";
 import { useTeams } from "@/lib/team.query";
-import {
-  type DeploymentState,
-  DeploymentStatusDot,
-} from "./deployment-status";
+import { type DeploymentState, DeploymentStatusDot } from "./deployment-status";
 
 interface ManageUsersDialogProps {
   isOpen: boolean;
@@ -520,13 +517,18 @@ function ConnectionsTable({
                         >
                           <DeploymentStatusDot
                             state={
-                              (deploymentStatuses[mcpServer.id].state === "not_created" ||
-                              deploymentStatuses[mcpServer.id].state === "succeeded"
+                              (deploymentStatuses[mcpServer.id].state ===
+                                "not_created" ||
+                              deploymentStatuses[mcpServer.id].state ===
+                                "succeeded"
                                 ? "running"
-                                : deploymentStatuses[mcpServer.id].state) as DeploymentState
+                                : deploymentStatuses[mcpServer.id]
+                                    .state) as DeploymentState
                             }
                           />
-                          <span className="truncate max-w-[150px]">{mcpServer.name}</span>
+                          <span className="truncate max-w-[150px]">
+                            {mcpServer.name}
+                          </span>
                         </button>
                       ) : (
                         <span className="text-muted-foreground">—</span>

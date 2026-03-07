@@ -29446,6 +29446,91 @@ export type GetMcpServerToolsResponses = {
 
 export type GetMcpServerToolsResponse = GetMcpServerToolsResponses[keyof GetMcpServerToolsResponses];
 
+export type InspectMcpServerData = {
+    body: {
+        method: 'tools/list' | 'tools/call';
+        toolName?: string;
+        toolArguments?: {
+            [key: string]: unknown;
+        };
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/mcp_server/{id}/inspect';
+};
+
+export type InspectMcpServerErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type InspectMcpServerError = InspectMcpServerErrors[keyof InspectMcpServerErrors];
+
+export type InspectMcpServerResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type InspectMcpServerResponse = InspectMcpServerResponses[keyof InspectMcpServerResponses];
+
 export type ReinstallMcpServerData = {
     body?: {
         environmentValues?: {

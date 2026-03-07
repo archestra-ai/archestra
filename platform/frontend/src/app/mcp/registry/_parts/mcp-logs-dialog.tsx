@@ -34,6 +34,7 @@ import {
   getDeploymentLabel,
 } from "./deployment-status";
 import { McpExecTerminal } from "./mcp-exec-terminal";
+import { McpInspector } from "./mcp-inspector";
 
 interface McpLogsDialogProps {
   open: boolean;
@@ -72,7 +73,9 @@ export function McpLogsDialog({
   onReinstall,
   initialServerId = null,
 }: McpLogsDialogProps) {
-  const [activeTab, setActiveTab] = useState<"logs" | "debug">("logs");
+  const [activeTab, setActiveTab] = useState<"logs" | "debug" | "inspector">(
+    "logs",
+  );
   const [copied, setCopied] = useState(false);
   const [commandCopied, setCommandCopied] = useState(false);
   const [streamedLogs, setStreamedLogs] = useState("");
@@ -97,9 +100,10 @@ export function McpLogsDialog({
   // Default to initialServerId or first installation when dialog opens
   useEffect(() => {
     if (open && installs.length > 0 && !serverId) {
-      const initial = initialServerId && installs.some((i) => i.id === initialServerId)
-        ? initialServerId
-        : installs[0].id;
+      const initial =
+        initialServerId && installs.some((i) => i.id === initialServerId)
+          ? initialServerId
+          : installs[0].id;
       setServerId(initial);
     }
   }, [open, installs, serverId, initialServerId]);
@@ -110,8 +114,7 @@ export function McpLogsDialog({
 
   // Streaming animation for when waiting for logs
   const isDeploymentFailed = currentDeploymentStatus?.state === "failed";
-  const isWaitingForLogs =
-    isStreaming && !streamedLogs && !streamError;
+  const isWaitingForLogs = isStreaming && !streamedLogs && !streamError;
   const streamingText = useStreamingAnimation(isWaitingForLogs);
 
   const stopStreaming = useCallback(() => {
@@ -384,7 +387,9 @@ export function McpLogsDialog({
                 <button
                   key={install.id}
                   type="button"
-                  onClick={() => { if (serverId !== install.id) setServerId(install.id); }}
+                  onClick={() => {
+                    if (serverId !== install.id) setServerId(install.id);
+                  }}
                   className={`relative flex-1 min-w-0 max-w-[20%] rounded-lg border p-3 text-left transition-colors cursor-pointer ${
                     isSelected
                       ? isFailed
@@ -400,38 +405,41 @@ export function McpLogsDialog({
                           (status?.state === "not_created" ||
                           status?.state === "succeeded"
                             ? "running"
-                            : status?.state ?? "pending") as DeploymentState
+                            : (status?.state ?? "pending")) as DeploymentState
                         }
                       />
                       {install.name}
                     </span>
-                    {status &&
-                      status.state !== "not_created" && (
-                        <span
-                          className={`text-xs px-1.5 py-0.5 rounded-full border font-medium flex-shrink-0 ${
-                            isFailed
-                              ? "text-destructive border-destructive/30 bg-destructive/10"
-                              : isRunning
-                                ? "text-green-700 border-green-300 bg-green-50 dark:text-green-400 dark:border-green-700 dark:bg-green-950"
-                                : "text-yellow-700 border-yellow-300 bg-yellow-50 dark:text-yellow-400 dark:border-yellow-700 dark:bg-yellow-950"
-                          }`}
-                        >
-                          {getDeploymentLabel(
-                            (status.state === "succeeded"
-                              ? "running"
-                              : status.state) as DeploymentState,
-                          )}
-                        </span>
-                      )}
+                    {status && status.state !== "not_created" && (
+                      <span
+                        className={`text-xs px-1.5 py-0.5 rounded-full border font-medium flex-shrink-0 ${
+                          isFailed
+                            ? "text-destructive border-destructive/30 bg-destructive/10"
+                            : isRunning
+                              ? "text-green-700 border-green-300 bg-green-50 dark:text-green-400 dark:border-green-700 dark:bg-green-950"
+                              : "text-yellow-700 border-yellow-300 bg-yellow-50 dark:text-yellow-400 dark:border-yellow-700 dark:bg-yellow-950"
+                        }`}
+                      >
+                        {getDeploymentLabel(
+                          (status.state === "succeeded"
+                            ? "running"
+                            : status.state) as DeploymentState,
+                        )}
+                      </span>
+                    )}
                   </div>
                   <div className="flex items-center gap-3 text-xs text-muted-foreground">
                     {(install.teamDetails || install.ownerEmail) && (
                       <span className="flex items-center gap-1.5 truncate">
                         <Avatar className="size-4 flex-shrink-0">
-                          <AvatarFallback className={`text-[8px] font-medium ${install.teamDetails ? "bg-accent" : ""}`}>
+                          <AvatarFallback
+                            className={`text-[8px] font-medium ${install.teamDetails ? "bg-accent" : ""}`}
+                          >
                             {install.teamDetails
-                              ? install.teamDetails.name.slice(0, 2).toUpperCase()
-                              : install.ownerEmail!.slice(0, 2).toUpperCase()}
+                              ? install.teamDetails.name
+                                  .slice(0, 2)
+                                  .toUpperCase()
+                              : install.ownerEmail?.slice(0, 2).toUpperCase()}
                           </AvatarFallback>
                         </Avatar>
                         <span className="truncate">
@@ -442,9 +450,15 @@ export function McpLogsDialog({
                       </span>
                     )}
                     {status?.restartCount !== undefined && (
-                      <span className="flex-shrink-0">Restarts: {status.restartCount}</span>
+                      <span className="flex-shrink-0">
+                        Restarts: {status.restartCount}
+                      </span>
                     )}
-                    {status?.podAge && <span className="flex-shrink-0">Age: {status.podAge}</span>}
+                    {status?.podAge && (
+                      <span className="flex-shrink-0">
+                        Age: {status.podAge}
+                      </span>
+                    )}
                   </div>
                 </button>
               );
@@ -454,7 +468,9 @@ export function McpLogsDialog({
 
         <Tabs
           value={activeTab}
-          onValueChange={(v) => setActiveTab(v as "logs" | "debug")}
+          onValueChange={(v) =>
+            setActiveTab(v as "logs" | "debug" | "inspector")
+          }
           className="flex flex-col flex-1 min-h-0"
         >
           <TabsList className="w-fit bg-slate-100 dark:bg-slate-800 border h-9 p-1 flex-shrink-0">
@@ -465,6 +481,24 @@ export function McpLogsDialog({
             >
               Logs
             </TabsTrigger>
+            {isDebugDisabled ? (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span>
+                    <TabsTrigger value="inspector" disabled className="px-6">
+                      Inspector
+                    </TabsTrigger>
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>
+                  Pod must be running to inspect tools
+                </TooltipContent>
+              </Tooltip>
+            ) : (
+              <TabsTrigger value="inspector" className="px-6">
+                Inspector
+              </TabsTrigger>
+            )}
             {isDebugDisabled ? (
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -491,7 +525,6 @@ export function McpLogsDialog({
           >
             <div className="flex flex-col gap-4 flex-1 min-h-0">
               <div className="flex flex-col gap-2 flex-1 min-h-0">
-
                 {isDeploymentFailed && currentDeploymentStatus?.error && (
                   <div className="flex items-start gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-3 flex-shrink-0">
                     <span className="mt-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-destructive/15 text-destructive flex-shrink-0">
@@ -521,7 +554,9 @@ export function McpLogsDialog({
                           startStreaming(serverId);
                         }}
                       >
-                        <RefreshCw className={`h-3 w-3 mr-1.5 ${isReinstalling ? "animate-spin" : ""}`} />
+                        <RefreshCw
+                          className={`h-3 w-3 mr-1.5 ${isReinstalling ? "animate-spin" : ""}`}
+                        />
                         {isReinstalling ? "Reinstalling..." : "Reinstall"}
                       </Button>
                     )}
@@ -632,6 +667,18 @@ export function McpLogsDialog({
                 </div>
               )}
             </div>
+          </TabsContent>
+
+          <TabsContent
+            value="inspector"
+            className="flex flex-col flex-1 min-h-0 mt-2"
+          >
+            {serverId && (
+              <McpInspector
+                serverId={serverId}
+                isActive={activeTab === "inspector" && open}
+              />
+            )}
           </TabsContent>
 
           <TabsContent

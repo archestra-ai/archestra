@@ -2335,8 +2335,7 @@ export default class K8sDeployment {
             const logStream = new PassThrough();
             let hasLogData = false;
 
-            const waitingMessage =
-              containerStatus?.state?.waiting?.message;
+            const waitingMessage = containerStatus?.state?.waiting?.message;
             let header = `=== Container is in ${waitingReason || "Waiting"} state (${containerStatus?.restartCount} restarts) ===\n`;
             if (waitingMessage) {
               header += `=== Error: ${waitingMessage} ===\n`;
@@ -2371,9 +2370,7 @@ export default class K8sDeployment {
                   responseStream.write(events);
                   responseStream.write("\n");
                 } catch {
-                  responseStream.write(
-                    "(No logs from previous container)\n\n",
-                  );
+                  responseStream.write("(No logs from previous container)\n\n");
                 }
               }
               if (

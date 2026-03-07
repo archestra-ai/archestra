@@ -31,6 +31,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { MultiSelectCombobox } from "@/components/ui/multi-select-combobox";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
@@ -41,9 +42,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { useHasPermissions } from "@/lib/auth.query";
 import { useFeatureFlag, useFeatureValue } from "@/lib/features.hook";
 import { useK8sImagePullSecrets } from "@/lib/internal-mcp-catalog.query";
 import { useGetSecret } from "@/lib/secrets.query";
+import { useTeams } from "@/lib/team.query";
 import {
   formSchema,
   type McpCatalogFormValues,
@@ -114,6 +117,8 @@ export function McpCatalogForm({
             serviceAccount: "",
             imagePullSecrets: [],
           },
+          scope: "personal",
+          teams: [],
         },
   });
 
@@ -135,6 +140,11 @@ export function McpCatalogForm({
   );
   const [labelsOpen, setLabelsOpen] = useState(false);
   const labelsRef = useRef<ProfileLabelsRef>(null);
+
+  // Check admin status for scope options
+  const { data: isAdmin } = useHasPermissions({ mcpServer: ["admin"] });
+  const { data: teams } = useTeams();
+  const currentScope = form.watch("scope");
 
   // Check if BYOS feature is available (enterprise license)
   const showByosOption = useFeatureFlag("byosEnabled");
@@ -263,6 +273,65 @@ export function McpCatalogForm({
               </FormItem>
             )}
           />
+
+          <FormField
+            control={form.control}
+            name="scope"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Visibility</FormLabel>
+                <Select
+                  value={field.value ?? "personal"}
+                  onValueChange={(value) => {
+                    field.onChange(value);
+                    if (value !== "team") {
+                      form.setValue("teams", []);
+                    }
+                  }}
+                >
+                  <FormControl>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select visibility" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    <SelectItem value="personal">
+                      Personal (draft, only you)
+                    </SelectItem>
+                    {isAdmin && (
+                      <SelectItem value="team">
+                        Team (visible to team members)
+                      </SelectItem>
+                    )}
+                    {isAdmin && (
+                      <SelectItem value="org">
+                        Organization (visible to everyone)
+                      </SelectItem>
+                    )}
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          {currentScope === "team" && (
+            <div className="space-y-2">
+              <Label>Teams</Label>
+              <MultiSelectCombobox
+                options={
+                  teams?.map((t) => ({
+                    label: t.name,
+                    value: t.id,
+                  })) ?? []
+                }
+                value={form.watch("teams") ?? []}
+                onChange={(ids) => form.setValue("teams", ids)}
+                placeholder="Select teams..."
+                emptyMessage="No teams found"
+              />
+            </div>
+          )}
 
           {currentServerType === "remote" && (
             <FormField

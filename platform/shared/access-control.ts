@@ -82,7 +82,7 @@ export const memberPermissions: Record<Resource, Action[]> = {
   interaction: ["create", "read", "update", "delete"],
   dualLlmConfig: ["read"],
   dualLlmResult: ["read"],
-  internalMcpCatalog: ["read"],
+  internalMcpCatalog: ["create", "read", "update", "delete"],
   mcpServer: ["create", "read", "delete"],
   mcpServerInstallationRequest: ["create", "read", "update"],
   organization: ["read"],

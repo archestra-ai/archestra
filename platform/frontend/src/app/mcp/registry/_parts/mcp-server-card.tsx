@@ -25,10 +25,13 @@ import Image from "next/image";
 import { useState } from "react";
 import { toast } from "sonner";
 import { LabelTags } from "@/components/label-tags";
+import { WithPermissions } from "@/components/roles/with-permissions";
 import {
-  WithoutPermissions,
-  WithPermissions,
-} from "@/components/roles/with-permissions";
+  Avatar,
+  AvatarFallback,
+  AvatarGroup,
+  AvatarGroupCount,
+} from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -422,42 +425,89 @@ export function McpServerCard({
     </div>
   );
 
-  const localServersInstalled = (
+  const MAX_AVATARS = 4;
+  const connectionAvatars: Array<{
+    type: "team" | "user";
+    label: string;
+    key: string;
+  }> = [];
+  const seenKeys = new Set<string>();
+  for (const server of mcpServerOfCurrentCatalogItem ?? []) {
+    if (server.teamDetails?.name) {
+      const key = `team-${server.teamDetails.teamId}`;
+      if (!seenKeys.has(key)) {
+        seenKeys.add(key);
+        connectionAvatars.push({
+          type: "team",
+          label: server.teamDetails.name,
+          key,
+        });
+      }
+    } else if (server.ownerEmail) {
+      const key = `user-${server.ownerEmail}`;
+      if (!seenKeys.has(key)) {
+        seenKeys.add(key);
+        connectionAvatars.push({
+          type: "user",
+          label: server.ownerEmail,
+          key,
+        });
+      }
+    }
+  }
+  const extraCount = connectionAvatars.length - MAX_AVATARS;
+
+  const connectionsAvatarGroup = (
     <>
       <div className="flex items-center gap-2">
-        <User className="h-4 w-4 text-muted-foreground" />
-        <span className="text-muted-foreground">
-          Connections
-          <WithoutPermissions permissions={{ mcpServer: ["admin"] }}>
-            {" "}
-            in your team
-          </WithoutPermissions>
-          :{" "}
-          <span
-            className="font-medium text-foreground"
-            data-testid={`${E2eTestId.CredentialsCount}-${installedServer?.catalogName}`}
-          >
-            {mcpServersCount}
-          </span>
-          {hasOAuthRefreshError && (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <AlertTriangle className="h-4 w-4 text-amber-500 inline-block ml-1 cursor-help" />
-                </TooltipTrigger>
-                <TooltipContent className="max-w-xs">
-                  <p className="font-medium mb-1">Authentication failed</p>
-                  <p className="text-xs text-muted-foreground">
-                    Some connections need re-authentication.
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Click Manage to fix.
-                  </p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          )}
-        </span>
+        {connectionAvatars.length > 0 ? (
+          <AvatarGroup>
+            {connectionAvatars.slice(0, MAX_AVATARS).map((entry) => (
+              <TooltipProvider key={entry.key}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Avatar
+                      className={`size-6 border-2 border-background ${entry.type === "team" ? "rounded-md" : ""}`}
+                    >
+                      <AvatarFallback
+                        className={`text-[10px] ${entry.type === "team" ? "rounded-md bg-primary/10" : ""}`}
+                      >
+                        {entry.label.slice(0, 2).toUpperCase()}
+                      </AvatarFallback>
+                    </Avatar>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {entry.type === "team"
+                      ? `Team: ${entry.label}`
+                      : entry.label}
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            ))}
+            {extraCount > 0 && (
+              <AvatarGroupCount className="size-6 text-[10px]">
+                +{extraCount}
+              </AvatarGroupCount>
+            )}
+          </AvatarGroup>
+        ) : (
+          <span className="text-xs text-muted-foreground">No connections</span>
+        )}
+        {hasOAuthRefreshError && (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <AlertTriangle className="h-4 w-4 text-amber-500 cursor-help" />
+              </TooltipTrigger>
+              <TooltipContent className="max-w-xs">
+                <p className="font-medium mb-1">Authentication failed</p>
+                <p className="text-xs text-muted-foreground">
+                  Some connections need re-authentication.
+                </p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )}
       </div>
       {mcpServersCount > 0 && (
         <Button
@@ -466,53 +516,6 @@ export function McpServerCard({
           variant="link"
           className="h-7 text-xs"
           data-testid={`${E2eTestId.ManageCredentialsButton}-${installedServer?.catalogName}`}
-        >
-          Manage
-        </Button>
-      )}
-    </>
-  );
-  const usersAuthenticated = (
-    <>
-      <div className="flex items-center gap-2">
-        <User className="h-4 w-4 text-muted-foreground" />
-        <span
-          className="text-muted-foreground"
-          data-testid={`${E2eTestId.CredentialsCount}-${installedServer?.catalogName}`}
-        >
-          Connections
-          <WithoutPermissions permissions={{ mcpServer: ["admin"] }}>
-            {" "}
-            in your team
-          </WithoutPermissions>
-          :{" "}
-          <span className="font-medium text-foreground">{mcpServersCount}</span>
-          {hasOAuthRefreshError && (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <AlertTriangle className="h-4 w-4 text-amber-500 inline-block ml-1 cursor-help" />
-                </TooltipTrigger>
-                <TooltipContent className="max-w-xs">
-                  <p className="font-medium mb-1">Authentication failed</p>
-                  <p className="text-xs text-muted-foreground">
-                    Some connections need re-authentication.
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Click Manage to fix.
-                  </p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          )}
-        </span>
-      </div>
-      {mcpServersCount > 0 && (
-        <Button
-          onClick={() => setIsManageUsersDialogOpen(true)}
-          size="sm"
-          variant="link"
-          className="h-7 text-xs"
         >
           Manage
         </Button>
@@ -603,7 +606,7 @@ export function McpServerCard({
     <>
       <div className="bg-muted/50 rounded-md overflow-hidden flex flex-col">
         <div className="flex items-center justify-between px-3 py-2 text-sm border-b border-muted h-10">
-          {usersAuthenticated}
+          {connectionsAvatarGroup}
         </div>
         <WithPermissions
           permissions={{ tool: ["update"], agent: ["update"] }}
@@ -633,7 +636,9 @@ export function McpServerCard({
       {/* Spacer + action buttons pinned to bottom */}
       <div className="mt-auto flex flex-col gap-2">
         <div className="flex gap-1">
-          {userIsMcpServerAdmin && editButton}
+          {(userIsMcpServerAdmin ||
+            (item.scope === "personal" && item.authorId === currentUserId)) &&
+            editButton}
           {logsButton}
         </div>
         {chatButton}
@@ -657,7 +662,7 @@ export function McpServerCard({
     <>
       <div className="bg-muted/50 rounded-md overflow-hidden flex flex-col">
         <div className="flex items-center justify-between px-3 py-2 text-sm border-b border-muted h-10">
-          {localServersInstalled}
+          {connectionsAvatarGroup}
         </div>
         <WithPermissions
           permissions={{ tool: ["update"], agent: ["update"] }}
@@ -685,7 +690,9 @@ export function McpServerCard({
       {/* Spacer + action buttons pinned to bottom */}
       <div className="mt-auto flex flex-col gap-2">
         <div className="flex gap-1">
-          {userIsMcpServerAdmin && editButton}
+          {(userIsMcpServerAdmin ||
+            (item.scope === "personal" && item.authorId === currentUserId)) &&
+            editButton}
           {logsButton}
         </div>
         {chatButton}
@@ -704,8 +711,8 @@ export function McpServerCard({
                     className="w-full"
                     data-testid={`${E2eTestId.ConnectCatalogItemButton}-${item.name}`}
                   >
-                    <User className="mr-2 h-4 w-4" />
-                    Connect
+                    <Server className="mr-2 h-4 w-4" />
+                    Install
                   </PermissionButton>
                 </div>
               </TooltipTrigger>
@@ -738,7 +745,7 @@ export function McpServerCard({
     <>
       <div className="bg-muted/50 rounded-md overflow-hidden flex flex-col">
         <div className="flex items-center justify-between px-3 py-2 text-sm border-b border-muted h-10">
-          {localServersInstalled}
+          {connectionsAvatarGroup}
         </div>
         <WithPermissions
           permissions={{ tool: ["update"], agent: ["update"] }}
@@ -766,7 +773,9 @@ export function McpServerCard({
       {/* Spacer + action buttons pinned to bottom */}
       <div className="mt-auto flex flex-col gap-2">
         <div className="flex gap-1">
-          {userIsMcpServerAdmin && editButton}
+          {(userIsMcpServerAdmin ||
+            (item.scope === "personal" && item.authorId === currentUserId)) &&
+            editButton}
           {logsButton}
         </div>
         {chatButton}
@@ -800,8 +809,8 @@ export function McpServerCard({
                     className="w-full"
                     data-testid={`${E2eTestId.ConnectCatalogItemButton}-${item.name}`}
                   >
-                    <User className="mr-2 h-4 w-4" />
-                    Connect
+                    <Server className="mr-2 h-4 w-4" />
+                    Install
                   </PermissionButton>
                 </div>
               </TooltipTrigger>
@@ -934,12 +943,32 @@ export function McpServerCard({
                   No auth required
                 </Badge>
               )}
+              {item.scope === "personal" && (
+                <Badge variant="outline" className="text-xs">
+                  Draft
+                </Badge>
+              )}
+              {item.scope === "team" && item.teams && item.teams.length > 0 && (
+                <Badge variant="outline" className="text-xs">
+                  {item.teams.map((t) => t.name).join(", ")}
+                </Badge>
+              )}
+              {item.authorName && item.scope === "personal" && (
+                <Badge
+                  variant="outline"
+                  className="text-xs text-muted-foreground"
+                >
+                  by {item.authorName}
+                </Badge>
+              )}
               {item.labels && item.labels.length > 0 && (
                 <LabelTags labels={item.labels} />
               )}
             </div>
           </div>
-          {userIsMcpServerAdmin && manageCatalogItemDropdownMenu}
+          {(userIsMcpServerAdmin ||
+            (item.scope === "personal" && item.authorId === currentUserId)) &&
+            manageCatalogItemDropdownMenu}
         </div>
       </CardHeader>
       <CardContent className="flex flex-col gap-4 flex-grow">

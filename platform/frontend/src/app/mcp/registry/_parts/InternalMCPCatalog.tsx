@@ -8,9 +8,9 @@ import {
   MCP_CATALOG_SERVER_QUERY_PARAM,
 } from "@shared";
 import { useQueryClient } from "@tanstack/react-query";
-import { Cable, Plus, Search } from "lucide-react";
+import { Plus, Search } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { DebouncedInput } from "@/components/debounced-input";
 import {
@@ -825,15 +825,22 @@ export function InternalMCPCatalog({
     });
   };
 
-  const sortInstalledFirst = (items: CatalogItem[]) =>
-    [...items].sort((a, b) => {
-      // Primary sort: connected (has installations) first
-      const aConnected = installedServers?.some((s) => s.catalogId === a.id)
-        ? 0
-        : 1;
-      const bConnected = installedServers?.some((s) => s.catalogId === b.id)
-        ? 0
-        : 1;
+  // Capture connected catalog IDs on first load to keep sort order stable.
+  // Only update when the set of catalog IDs changes (new item added/removed),
+  // not when connection status changes (which would cause items to jump around).
+  const connectedCatalogIdsRef = useRef<Set<string> | null>(null);
+  if (connectedCatalogIdsRef.current === null && installedServers) {
+    connectedCatalogIdsRef.current = new Set(
+      installedServers.map((s) => s.catalogId).filter(Boolean) as string[],
+    );
+  }
+
+  const sortInstalledFirst = (items: CatalogItem[]) => {
+    const connectedIds = connectedCatalogIdsRef.current;
+    return [...items].sort((a, b) => {
+      // Primary sort: connected (has installations) first — using stable snapshot
+      const aConnected = connectedIds?.has(a.id) ? 0 : 1;
+      const bConnected = connectedIds?.has(b.id) ? 0 : 1;
       if (aConnected !== bConnected) return aConnected - bConnected;
 
       // Secondary sort priority: builtin > remote > local
@@ -850,6 +857,7 @@ export function InternalMCPCatalog({
       // Tertiary sort by createdAt (newest first)
       return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
     });
+  };
 
   const filterCatalogItems = (items: CatalogItem[], query: string) => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -865,9 +873,16 @@ export function InternalMCPCatalog({
     });
   };
 
-  const filteredCatalogItems = sortInstalledFirst(
+  const allFilteredItems = sortInstalledFirst(
     filterCatalogItems(catalogItems || [], searchQueryFromUrl),
   ).filter((item) => item.id !== ARCHESTRA_MCP_CATALOG_ID);
+
+  const draftItems = allFilteredItems.filter(
+    (item) => item.scope === "personal",
+  );
+  const publishedItems = allFilteredItems.filter(
+    (item) => item.scope !== "personal",
+  );
 
   const getInstalledServerInfo = (item: CatalogItem) => {
     const installedServer = getAggregatedInstallation(item.id);
@@ -898,29 +913,23 @@ export function InternalMCPCatalog({
     <div className="space-y-4">
       <div className="space-y-4">
         <div className="flex flex-col gap-3 sm:flex-row">
-          <Button
-            onClick={() =>
-              userIsMcpServerAdmin
-                ? openDialog("create")
-                : openDialog("custom-request")
-            }
-            className="bg-linear-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white shadow-lg hover:shadow-xl transition-all duration-200"
-          >
-            <Plus className="mr-0.5 h-4 w-4" />
-            {userIsMcpServerAdmin
-              ? "Add MCP Server to the Registry"
-              : "Request Custom MCP"}
-          </Button>
-          <Button
-            variant="outline"
-            onClick={() => {
-              window.location.href = "/connection?tab=mcp";
-            }}
-            className="bg-linear-to-r from-green-500/10 to-emerald-500/10 hover:from-green-500/20 hover:to-emerald-500/20 border-green-500/50 hover:border-green-500 transition-all duration-200 shadow-sm hover:shadow-md whitespace-normal text-left h-auto"
-          >
-            <Cable className="mr-0.5 h-4 w-4" />
-            Connect to the Unified MCP Gateway to access those servers
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              onClick={() => openDialog("create")}
+              className="bg-linear-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white shadow-lg hover:shadow-xl transition-all duration-200"
+            >
+              <Plus className="mr-0.5 h-4 w-4" />
+              Add MCP Server
+            </Button>
+            {!userIsMcpServerAdmin && (
+              <Button
+                variant="outline"
+                onClick={() => openDialog("custom-request")}
+              >
+                Request Custom MCP
+              </Button>
+            )}
+          </div>
         </div>
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -933,57 +942,115 @@ export function InternalMCPCatalog({
           />
         </div>
       </div>
-      <div className="space-y-4">
-        {filteredCatalogItems.length > 0 ? (
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {filteredCatalogItems.map((item) => {
-              const serverInfo = getInstalledServerInfo(item);
-              return (
-                <McpServerCard
-                  variant={
-                    item.serverType === "builtin"
-                      ? "builtin"
-                      : item.serverType === "remote"
-                        ? "remote"
-                        : "local"
-                  }
-                  key={item.id}
-                  item={item}
-                  installedServer={serverInfo.installedServer}
-                  installingItemId={installingItemId}
-                  installationStatus={
-                    serverInfo.installedServer?.localInstallationStatus ||
-                    undefined
-                  }
-                  deploymentStatuses={deploymentStatuses}
-                  onInstallRemoteServer={() =>
-                    handleInstallRemoteServer(item, false)
-                  }
-                  onInstallLocalServer={() =>
-                    isPlaywrightCatalogItem(item.id)
-                      ? handleInstallPlaywright(item)
-                      : handleInstallLocalServer(item)
-                  }
-                  onReinstall={() => handleReinstall(item)}
-                  onEdit={() => setEditingItem(item)}
-                  onDetails={() => {
-                    setDetailsServerName(item.name);
-                  }}
-                  onDelete={() => setDeletingItem(item)}
-                  onCancelInstallation={handleCancelInstallation}
-                  isBuiltInPlaywright={isPlaywrightCatalogItem(item.id)}
-                />
-              );
-            })}
+      <div className="space-y-6">
+        {draftItems.length > 0 && (
+          <div className="space-y-3">
+            <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
+              Unpublished
+            </h3>
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {draftItems.map((item) => {
+                const serverInfo = getInstalledServerInfo(item);
+                return (
+                  <McpServerCard
+                    variant={
+                      item.serverType === "builtin"
+                        ? "builtin"
+                        : item.serverType === "remote"
+                          ? "remote"
+                          : "local"
+                    }
+                    key={item.id}
+                    item={item}
+                    installedServer={serverInfo.installedServer}
+                    installingItemId={installingItemId}
+                    installationStatus={
+                      serverInfo.installedServer?.localInstallationStatus ||
+                      undefined
+                    }
+                    deploymentStatuses={deploymentStatuses}
+                    onInstallRemoteServer={() =>
+                      handleInstallRemoteServer(item, false)
+                    }
+                    onInstallLocalServer={() =>
+                      isPlaywrightCatalogItem(item.id)
+                        ? handleInstallPlaywright(item)
+                        : handleInstallLocalServer(item)
+                    }
+                    onReinstall={() => handleReinstall(item)}
+                    onEdit={() => setEditingItem(item)}
+                    onDetails={() => {
+                      setDetailsServerName(item.name);
+                    }}
+                    onDelete={() => setDeletingItem(item)}
+                    onCancelInstallation={handleCancelInstallation}
+                    isBuiltInPlaywright={isPlaywrightCatalogItem(item.id)}
+                  />
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {publishedItems.length > 0 ? (
+          <div className="space-y-3">
+            {draftItems.length > 0 && (
+              <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
+                Published
+              </h3>
+            )}
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {publishedItems.map((item) => {
+                const serverInfo = getInstalledServerInfo(item);
+                return (
+                  <McpServerCard
+                    variant={
+                      item.serverType === "builtin"
+                        ? "builtin"
+                        : item.serverType === "remote"
+                          ? "remote"
+                          : "local"
+                    }
+                    key={item.id}
+                    item={item}
+                    installedServer={serverInfo.installedServer}
+                    installingItemId={installingItemId}
+                    installationStatus={
+                      serverInfo.installedServer?.localInstallationStatus ||
+                      undefined
+                    }
+                    deploymentStatuses={deploymentStatuses}
+                    onInstallRemoteServer={() =>
+                      handleInstallRemoteServer(item, false)
+                    }
+                    onInstallLocalServer={() =>
+                      isPlaywrightCatalogItem(item.id)
+                        ? handleInstallPlaywright(item)
+                        : handleInstallLocalServer(item)
+                    }
+                    onReinstall={() => handleReinstall(item)}
+                    onEdit={() => setEditingItem(item)}
+                    onDetails={() => {
+                      setDetailsServerName(item.name);
+                    }}
+                    onDelete={() => setDeletingItem(item)}
+                    onCancelInstallation={handleCancelInstallation}
+                    isBuiltInPlaywright={isPlaywrightCatalogItem(item.id)}
+                  />
+                );
+              })}
+            </div>
           </div>
         ) : (
-          <div className="py-8 text-center">
-            <p className="text-muted-foreground">
-              {searchQueryFromUrl.trim()
-                ? `No MCP servers match "${searchQueryFromUrl}".`
-                : "No MCP servers found."}
-            </p>
-          </div>
+          draftItems.length === 0 && (
+            <div className="py-8 text-center">
+              <p className="text-muted-foreground">
+                {searchQueryFromUrl.trim()
+                  ? `No MCP servers match "${searchQueryFromUrl}".`
+                  : "No MCP servers found."}
+              </p>
+            </div>
+          )
         )}
       </div>
 

@@ -88,6 +88,7 @@ export function McpCatalogForm({
       ? transformCatalogItemToFormValues(initialValues, undefined)
       : {
           name: "",
+          description: "",
           icon: null,
           serverType: serverType,
           serverUrl: "",
@@ -243,6 +244,24 @@ export function McpCatalogForm({
                   Display name for this server
                 </FormDescription>
                 <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="description"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Description</FormLabel>
+                <FormControl>
+                  <Textarea
+                    placeholder="Describe what this MCP server does..."
+                    className="min-h-20"
+                    {...field}
+                  />
+                </FormControl>
+<FormMessage />
               </FormItem>
             )}
           />

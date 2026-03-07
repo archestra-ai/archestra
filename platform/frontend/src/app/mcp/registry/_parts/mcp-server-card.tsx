@@ -4,6 +4,7 @@ import {
   archestraApiSdk,
   type archestraApiTypes,
   E2eTestId,
+  ARCHESTRA_MCP_CATALOG_ID,
   type McpDeploymentStatusEntry,
 } from "@shared";
 import {
@@ -97,11 +98,25 @@ export type McpServerCardProps = {
 
 function McpCatalogIcon({
   icon,
+  catalogId,
   size = 20,
 }: {
   icon?: string | null;
+  catalogId?: string;
   size?: number;
 }) {
+  if (!icon && catalogId === ARCHESTRA_MCP_CATALOG_ID) {
+    return (
+      <Image
+        src="/logo.png"
+        alt="Archestra"
+        width={size}
+        height={size}
+        className="shrink-0 rounded-sm object-contain"
+      />
+    );
+  }
+
   if (!icon) {
     return (
       <Server
@@ -229,11 +244,13 @@ export function McpServerCard({
     setIsChatCreating(true);
     const agentName = item.label || item.name;
     try {
-      // Get or create: check if an agent with this name already exists
+      // Get or create: check if a personal agent with this name already exists for the current user
       const { data: existingAgents } = await archestraApiSdk.getAllAgents({
         query: { agentType: "agent" },
       });
-      const existing = existingAgents?.find((a) => a.name === agentName);
+      const existing = existingAgents?.find(
+        (a) => a.name === agentName && a.authorId === currentUserId,
+      );
 
       const agent =
         existing ??
@@ -880,7 +897,7 @@ export function McpServerCard({
               className="flex items-center gap-2 mb-1 overflow-hidden w-full"
               title={item.name}
             >
-              <McpCatalogIcon icon={item.icon} size={20} />
+              <McpCatalogIcon icon={item.icon} catalogId={item.id} size={20} />
               <span className="text-lg font-semibold whitespace-nowrap text-ellipsis overflow-hidden">
                 {item.name}
               </span>

@@ -5,11 +5,12 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { WithPermissions } from "@/components/roles/with-permissions";
-import { SettingsBlock } from "@/components/settings/settings-block";
-import { Button } from "@/components/ui/button";
+import {
+  SettingsBlock,
+  SettingsSaveBar,
+} from "@/components/settings/settings-block";
 import { CardTitle } from "@/components/ui/card";
 import { MultiSelect } from "@/components/ui/multi-select";
-import { PermissionButton } from "@/components/ui/permission-button";
 import {
   Select,
   SelectContent,
@@ -267,24 +268,13 @@ export default function LlmSettingsPage() {
           </WithPermissions>
         }
       />
-      {hasChanges && (
-        <div className="flex gap-3 sticky bottom-0 bg-background p-4 rounded-lg border border-border shadow-lg">
-          <PermissionButton
-            permissions={{ llmSettings: ["update"] }}
-            onClick={handleSave}
-            disabled={updateLlmSettingsMutation.isPending}
-          >
-            {updateLlmSettingsMutation.isPending ? "Saving..." : "Save"}
-          </PermissionButton>
-          <Button
-            variant="outline"
-            onClick={handleCancel}
-            disabled={updateLlmSettingsMutation.isPending}
-          >
-            Cancel
-          </Button>
-        </div>
-      )}
+      <SettingsSaveBar
+        hasChanges={hasChanges}
+        isSaving={updateLlmSettingsMutation.isPending}
+        permissions={{ llmSettings: ["update"] }}
+        onSave={handleSave}
+        onCancel={handleCancel}
+      />
     </div>
   );
 }

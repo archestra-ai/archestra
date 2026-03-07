@@ -4,9 +4,10 @@ import type { archestraApiTypes } from "@shared";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { WithPermissions } from "@/components/roles/with-permissions";
-import { SettingsBlock } from "@/components/settings/settings-block";
-import { Button } from "@/components/ui/button";
-import { PermissionButton } from "@/components/ui/permission-button";
+import {
+  SettingsBlock,
+  SettingsSaveBar,
+} from "@/components/settings/settings-block";
 import {
   Select,
   SelectContent,
@@ -36,10 +37,8 @@ export default function SecuritySettingsPage() {
     "Failed to update security settings",
   );
 
-  const [toolPolicy, setToolPolicy] =
-    useState<GlobalToolPolicy>("permissive");
-  const [fileUploads, setFileUploads] =
-    useState<FileUploadsEnabled>("enabled");
+  const [toolPolicy, setToolPolicy] = useState<GlobalToolPolicy>("permissive");
+  const [fileUploads, setFileUploads] = useState<FileUploadsEnabled>("enabled");
 
   // Sync state when organization data loads
   useEffect(() => {
@@ -159,24 +158,13 @@ export default function SecuritySettingsPage() {
           </span>
         }
       />
-      {hasChanges && (
-        <div className="flex gap-3 sticky bottom-0 bg-background p-4 rounded-lg border border-border shadow-lg">
-          <PermissionButton
-            permissions={{ securitySettings: ["update"] }}
-            onClick={handleSave}
-            disabled={updateSecurityMutation.isPending}
-          >
-            {updateSecurityMutation.isPending ? "Saving..." : "Save"}
-          </PermissionButton>
-          <Button
-            variant="outline"
-            onClick={handleCancel}
-            disabled={updateSecurityMutation.isPending}
-          >
-            Cancel
-          </Button>
-        </div>
-      )}
+      <SettingsSaveBar
+        hasChanges={hasChanges}
+        isSaving={updateSecurityMutation.isPending}
+        permissions={{ securitySettings: ["update"] }}
+        onSave={handleSave}
+        onCancel={handleCancel}
+      />
     </div>
   );
 }

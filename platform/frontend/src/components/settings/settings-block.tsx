@@ -1,5 +1,8 @@
+import type { Permissions } from "@shared";
 import type { ReactNode } from "react";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { PermissionButton } from "@/components/ui/permission-button";
 
 interface SettingsBlockProps {
   title: string;
@@ -38,5 +41,38 @@ export function SettingsBlock({
         <CardContent className="pt-6 border-t">{children}</CardContent>
       )}
     </Card>
+  );
+}
+
+interface SettingsSaveBarProps {
+  hasChanges: boolean;
+  isSaving: boolean;
+  permissions: Permissions;
+  onSave: () => void;
+  onCancel: () => void;
+}
+
+export function SettingsSaveBar({
+  hasChanges,
+  isSaving,
+  permissions,
+  onSave,
+  onCancel,
+}: SettingsSaveBarProps) {
+  if (!hasChanges) return null;
+
+  return (
+    <div className="flex gap-3 sticky bottom-0 bg-background p-4 rounded-lg border border-border shadow-lg">
+      <PermissionButton
+        permissions={permissions}
+        onClick={onSave}
+        disabled={isSaving}
+      >
+        {isSaving ? "Saving..." : "Save"}
+      </PermissionButton>
+      <Button variant="outline" onClick={onCancel} disabled={isSaving}>
+        Cancel
+      </Button>
+    </div>
   );
 }

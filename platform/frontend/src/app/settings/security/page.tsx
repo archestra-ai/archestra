@@ -1,5 +1,6 @@
 "use client";
 
+import type { archestraApiTypes } from "@shared";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { WithPermissions } from "@/components/roles/with-permissions";
@@ -18,7 +19,13 @@ import {
   useUpdateSecuritySettings,
 } from "@/lib/organization.query";
 
-type GlobalToolPolicy = "permissive" | "restrictive";
+type GlobalToolPolicy = NonNullable<
+  NonNullable<
+    archestraApiTypes.UpdateSecuritySettingsData["body"]
+  >["globalToolPolicy"]
+>;
+
+// UI-only type — the API uses a boolean, not a string enum
 type FileUploadsEnabled = "enabled" | "disabled";
 
 export default function SecuritySettingsPage() {

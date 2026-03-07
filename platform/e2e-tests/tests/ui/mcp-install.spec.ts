@@ -242,7 +242,7 @@ test.describe("MCP Install", () => {
 
     await adminPage
       .getByRole("button", {
-        name: "Self-hosted (orchestrated by Archestra in K8s)",
+        name: "Self-hosted",
       })
       .click();
 

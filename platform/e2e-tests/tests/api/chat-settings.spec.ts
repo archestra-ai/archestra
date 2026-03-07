@@ -40,10 +40,10 @@ async function cleanupKeyByName(
   }
 }
 
-test.describe("Chat API Keys CRUD", () => {
+test.describe("LLM Provider API Keys CRUD", () => {
   test.describe.configure({ mode: "serial" });
 
-  test("should list chat API keys (initially empty or with existing keys)", async ({
+  test("should list LLM provider API keys (initially empty or with existing keys)", async ({
     request,
     makeApiRequest,
   }) => {
@@ -56,7 +56,7 @@ test.describe("Chat API Keys CRUD", () => {
     expect(Array.isArray(apiKeys)).toBe(true);
   });
 
-  test("should create a personal chat API key", async ({
+  test("should create a personal LLM provider API key", async ({
     request,
     makeApiRequest,
   }) => {
@@ -92,7 +92,7 @@ test.describe("Chat API Keys CRUD", () => {
     });
   });
 
-  test("should create an org-wide chat API key", async ({
+  test("should create an org-wide LLM provider API key", async ({
     request,
     makeApiRequest,
   }) => {
@@ -129,7 +129,7 @@ test.describe("Chat API Keys CRUD", () => {
     });
   });
 
-  test("should get a specific chat API key by ID", async ({
+  test("should get a specific LLM provider API key by ID", async ({
     request,
     makeApiRequest,
   }) => {
@@ -170,7 +170,7 @@ test.describe("Chat API Keys CRUD", () => {
     });
   });
 
-  test("should update a chat API key name", async ({
+  test("should update an LLM provider API key name", async ({
     request,
     makeApiRequest,
   }) => {
@@ -214,7 +214,10 @@ test.describe("Chat API Keys CRUD", () => {
     });
   });
 
-  test("should delete a chat API key", async ({ request, makeApiRequest }) => {
+  test("should delete an LLM provider API key", async ({
+    request,
+    makeApiRequest,
+  }) => {
     // Clean up any leftover key from previous runs
     await cleanupKeyByName(makeApiRequest, request, "Delete Test Key");
 
@@ -253,7 +256,7 @@ test.describe("Chat API Keys CRUD", () => {
     expect(getResponse.status()).toBe(404);
   });
 
-  test("should return 404 for non-existent API key", async ({
+  test("should return 404 for non-existent LLM provider API key", async ({
     request,
     makeApiRequest,
   }) => {
@@ -370,7 +373,7 @@ test.describe("Chat API Keys CRUD", () => {
   });
 });
 
-test.describe("Chat API Keys Available Endpoint", () => {
+test.describe("LLM Provider API Keys Available Endpoint", () => {
   test.describe.configure({ mode: "serial" });
 
   // Use openai provider to avoid conflicts with CRUD tests that use anthropic
@@ -462,10 +465,10 @@ test.describe("Chat API Keys Available Endpoint", () => {
   });
 });
 
-test.describe("Chat API Keys Team Scope", () => {
+test.describe("LLM Provider API Keys Team Scope", () => {
   test.describe.configure({ mode: "serial" });
 
-  test("should create a team-scoped API key", async ({
+  test("should create a team-scoped LLM provider API key", async ({
     request,
     makeApiRequest,
   }) => {
@@ -515,7 +518,7 @@ test.describe("Chat API Keys Team Scope", () => {
     });
   });
 
-  test("should require teamId for team-scoped keys", async ({
+  test("should require teamId for team-scoped LLM provider API keys", async ({
     request,
     makeApiRequest,
   }) => {
@@ -537,7 +540,7 @@ test.describe("Chat API Keys Team Scope", () => {
   });
 });
 
-test.describe("Chat API Keys Scope Update", () => {
+test.describe("LLM Provider API Keys Scope Update", () => {
   test.describe.configure({ mode: "serial" });
 
   test("should update scope from personal to org_wide", async ({
@@ -586,10 +589,10 @@ test.describe("Chat API Keys Scope Update", () => {
   });
 });
 
-test.describe("Chat API Keys Access Control", () => {
+test.describe("LLM Provider API Keys Access Control", () => {
   test.describe.configure({ mode: "serial" });
 
-  test("member should be able to read chat API keys", async ({
+  test("member should be able to read LLM provider API keys", async ({
     memberRequest,
     makeApiRequest,
   }) => {
@@ -602,7 +605,7 @@ test.describe("Chat API Keys Access Control", () => {
     expect(response.ok()).toBe(true);
   });
 
-  test("member should not be able to create chat API keys", async ({
+  test("member should not be able to create LLM provider API keys", async ({
     memberRequest,
     makeApiRequest,
   }) => {

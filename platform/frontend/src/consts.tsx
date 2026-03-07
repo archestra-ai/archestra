@@ -12,6 +12,7 @@ export const LOCAL_MCP_DISABLED_MESSAGE = (
     </a>
   </>
 );
+
 export const LOGS_LAYOUT_CONFIG = {
   title: "Logs",
   description:

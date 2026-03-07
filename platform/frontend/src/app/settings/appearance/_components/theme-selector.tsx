@@ -11,7 +11,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { type ThemeMetadata, themes } from "@/config/themes";
+import { type ThemeMetadata, themes } from "@/themes";
 
 interface ThemeSelectorProps {
   selectedTheme: OrganizationTheme | undefined;

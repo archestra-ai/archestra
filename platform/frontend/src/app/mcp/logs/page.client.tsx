@@ -5,6 +5,7 @@ import type { ColumnDef, SortingState } from "@tanstack/react-table";
 import { ChevronDown, ChevronUp, User } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
+import { LogsEmptyState } from "@/components/logs-empty-state";
 import { SearchInput } from "@/components/search-input";
 import { TruncatedText } from "@/components/truncated-text";
 import { Badge } from "@/components/ui/badge";
@@ -145,7 +146,7 @@ function McpToolCallsTable({
         ? "createdAt"
         : undefined;
 
-  const { data: mcpToolCallsResponse } = useMcpToolCalls({
+  const { data: mcpToolCallsResponse, isFetching } = useMcpToolCalls({
     agentId: profileFilter !== "all" ? profileFilter : undefined,
     limit: pagination.pageSize,
     offset: pagination.pageIndex * pagination.pageSize,
@@ -410,13 +411,11 @@ function McpToolCallsTable({
           {datePickerComponent}
         </div>
 
-        <div className="text-center py-12">
-          <p className="text-muted-foreground text-sm">
-            {hasFilters
-              ? "No MCP tool calls match your filters. Try adjusting your search."
-              : "No MCP tool calls found. Tool calls will appear here when agents use MCP tools."}
-          </p>
-        </div>
+        <LogsEmptyState
+          isLoading={isFetching}
+          hasFilters={hasFilters}
+          emptyMessage="No MCP tool calls found. Tool calls will appear here when agents use MCP tools."
+        />
       </div>
     );
   }

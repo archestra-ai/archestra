@@ -36,6 +36,7 @@ test.describe("Config endpoint", () => {
     // Verify enterpriseFeatures has expected keys
     const enterpriseFeatures = data.enterpriseFeatures;
     expect(enterpriseFeatures).toHaveProperty("core");
+    expect(enterpriseFeatures).toHaveProperty("fullWhiteLabeling");
 
     // Verify providerBaseUrls has an entry for every supported provider
     const urls = data.providerBaseUrls;

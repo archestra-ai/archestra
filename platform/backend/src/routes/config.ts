@@ -24,6 +24,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
           200: z.strictObject({
             enterpriseFeatures: z.strictObject({
               core: z.boolean(),
+              fullWhiteLabeling: z.boolean(),
             }),
             features: z.strictObject({
               orchestratorK8sRuntime: z.boolean(),
@@ -65,6 +66,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
       return reply.send({
         enterpriseFeatures: {
           core: config.enterpriseFeatures.core,
+          fullWhiteLabeling: config.enterpriseFeatures.fullWhiteLabeling,
         },
         features: {
           orchestratorK8sRuntime: McpServerRuntimeManager.isEnabled,

@@ -71329,10 +71329,14 @@
                       "properties": {
                         "core": {
                           "type": "boolean"
+                        },
+                        "fullWhiteLabeling": {
+                          "type": "boolean"
                         }
                       },
                       "required": [
-                        "core"
+                        "core",
+                        "fullWhiteLabeling"
                       ],
                       "additionalProperties": false
                     },

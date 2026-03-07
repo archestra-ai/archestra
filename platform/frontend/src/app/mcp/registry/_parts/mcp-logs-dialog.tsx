@@ -4,6 +4,7 @@ import {
   E2eTestId,
   MCP_DEFAULT_LOG_LINES,
   type McpDeploymentStatusEntry,
+  type McpLogsEndedMessage,
   type McpLogsErrorMessage,
   type McpLogsMessage,
 } from "@shared";
@@ -79,6 +80,7 @@ export function McpLogsDialog({
   const [isStreaming, setIsStreaming] = useState(false);
   const unsubscribeLogsRef = useRef<(() => void) | null>(null);
   const unsubscribeErrorRef = useRef<(() => void) | null>(null);
+  const unsubscribeEndedRef = useRef<(() => void) | null>(null);
   const connectionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
@@ -96,8 +98,15 @@ export function McpLogsDialog({
     }
   }, [open, installs, serverId]);
 
+  const currentDeploymentStatus = serverId
+    ? deploymentStatuses[serverId]
+    : null;
+
   // Streaming animation for when waiting for logs
-  const isWaitingForLogs = isStreaming && !streamedLogs && !streamError;
+  // Don't show "Streaming..." when deployment has already failed — show the error instead
+  const isDeploymentFailed = currentDeploymentStatus?.state === "failed";
+  const isWaitingForLogs =
+    isStreaming && !streamedLogs && !streamError && !isDeploymentFailed;
   const streamingText = useStreamingAnimation(isWaitingForLogs);
 
   const stopStreaming = useCallback(() => {
@@ -115,6 +124,10 @@ export function McpLogsDialog({
     if (unsubscribeErrorRef.current) {
       unsubscribeErrorRef.current();
       unsubscribeErrorRef.current = null;
+    }
+    if (unsubscribeEndedRef.current) {
+      unsubscribeEndedRef.current();
+      unsubscribeEndedRef.current = null;
     }
 
     // Send unsubscribe message to server
@@ -217,6 +230,15 @@ export function McpLogsDialog({
         },
       );
 
+      // Subscribe to stream ended messages for this server
+      unsubscribeEndedRef.current = websocketService.subscribe(
+        "mcp_logs_ended",
+        (message: McpLogsEndedMessage) => {
+          if (message.payload.serverId !== targetServerId) return;
+          setIsStreaming(false);
+        },
+      );
+
       // Send subscribe message to server
       websocketService.send({
         type: "subscribe_mcp_logs",
@@ -304,10 +326,6 @@ export function McpLogsDialog({
       }
     }
   }, []);
-
-  const currentDeploymentStatus = serverId
-    ? deploymentStatuses[serverId]
-    : null;
 
   const isDebugDisabled = currentDeploymentStatus?.state !== "running";
 
@@ -442,6 +460,17 @@ export function McpLogsDialog({
                         >
                           {streamedLogs}
                         </pre>
+                      ) : isDeploymentFailed &&
+                        currentDeploymentStatus?.error ? (
+                        <div className="text-red-400 font-mono text-sm">
+                          <div className="mb-2">
+                            Deployment failed: {currentDeploymentStatus.error}
+                          </div>
+                          <div className="text-slate-400">
+                            No container logs available. Use the manual command
+                            below to inspect the pod.
+                          </div>
+                        </div>
                       ) : (
                         <div className="text-slate-400 font-mono text-sm">
                           No logs available

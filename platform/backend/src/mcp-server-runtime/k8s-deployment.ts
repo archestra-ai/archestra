@@ -1520,13 +1520,24 @@ export default class K8sDeployment {
           return;
         }
 
-        // If deployment exists but is not ready, return to let waitForDeploymentReady handle it
+        // Deployment exists but is not ready — check if pods are in a failure state
         logger.info(
           `Deployment ${this.deploymentName} exists but is not yet ready`,
         );
-        this.state = "pending";
 
-        // Even if pending, ensure HTTP configuration (Service + URL) is set up
+        // Check pod container statuses for failure states (e.g. CrashLoopBackOff)
+        const failureCheck = await this.checkPodContainerStatusesForFailure();
+        if (failureCheck.hasFailed) {
+          this.state = "failed";
+          this.errorMessage = failureCheck.message;
+          logger.warn(
+            `Deployment ${this.deploymentName} is in a failure state: ${failureCheck.message}`,
+          );
+        } else {
+          this.state = "pending";
+        }
+
+        // Even if pending/failed, ensure HTTP configuration (Service + URL) is set up
         await this.ensureHttpServerConfigured();
         return;
       } catch (error: unknown) {
@@ -1805,8 +1816,53 @@ export default class K8sDeployment {
   }
 
   /**
-   * Check pod conditions for scheduling/initialization failures.
+   * Check all pods for container failure states (e.g. CrashLoopBackOff, ImagePullBackOff).
+   * Used on startup to detect deployments that are stuck in a failure state.
    */
+  private async checkPodContainerStatusesForFailure(): Promise<{
+    hasFailed: boolean;
+    message: string;
+  }> {
+    try {
+      const sanitizedId = K8sDeployment.sanitizeLabelValue(this.mcpServer.id);
+      const pods = await this.k8sApi.listNamespacedPod({
+        namespace: this.namespace,
+        labelSelector: `mcp-server-id=${sanitizedId}`,
+      });
+
+      const failureStates = [
+        "CrashLoopBackOff",
+        "ImagePullBackOff",
+        "ErrImagePull",
+        "ErrImageNeverPull",
+        "CreateContainerConfigError",
+        "CreateContainerError",
+        "RunContainerError",
+        "InvalidImageName",
+      ];
+
+      for (const pod of pods.items) {
+        for (const cs of pod.status?.containerStatuses ?? []) {
+          const reason = cs.state?.waiting?.reason;
+          if (reason && failureStates.includes(reason)) {
+            return {
+              hasFailed: true,
+              message:
+                cs.state?.waiting?.message || `Container in ${reason} state`,
+            };
+          }
+        }
+      }
+    } catch (error) {
+      logger.error(
+        { err: error },
+        `Failed to check pod statuses for ${this.deploymentName}`,
+      );
+    }
+
+    return { hasFailed: false, message: "" };
+  }
+
   private checkPodConditionsForFailure(pod: k8s.V1Pod): {
     hasFailure: boolean;
     message: string | null;
@@ -2244,9 +2300,99 @@ export default class K8sDeployment {
     abortSignal?: AbortSignal,
   ): Promise<void> {
     try {
-      const pod = await this.findPodForDeployment();
+      // Try to find any pod (including non-running) to check container status
+      const anyPod = await this.findAnyPodForDeployment();
+      if (!anyPod || !anyPod.metadata?.name) {
+        // No pod at all - show events
+        await this.streamEventsAsFallback(responseStream);
+        return;
+      }
+
+      // Check if the container is in a waiting state (e.g. CrashLoopBackOff)
+      const containerStatus = anyPod.status?.containerStatuses?.find(
+        (cs) => cs.name === "mcp-server",
+      );
+      const isContainerWaiting = !!containerStatus?.state?.waiting;
+      const waitingReason = containerStatus?.state?.waiting?.reason;
+      const hasRestarted = (containerStatus?.restartCount ?? 0) > 0;
+
+      // If container is waiting (CrashLoopBackOff, etc.), show previous logs or events
+      if (isContainerWaiting) {
+        if (hasRestarted) {
+          // Container has restarted — try to get logs from the previous crashed container
+          logger.info(
+            {
+              pod: anyPod.metadata.name,
+              reason: waitingReason,
+              restartCount: containerStatus?.restartCount,
+            },
+            "Container is in waiting state, fetching previous container logs",
+          );
+
+          try {
+            const logStream = new PassThrough();
+            let hasLogData = false;
+
+            const header = `=== Container is in ${waitingReason || "Waiting"} state (${containerStatus?.restartCount} restarts) ===\n=== Showing logs from the last crashed container ===\n\n`;
+            responseStream.write(header);
+
+            logStream.on("data", (chunk) => {
+              hasLogData = true;
+              if (
+                !("destroyed" in responseStream) ||
+                !responseStream.destroyed
+              ) {
+                responseStream.write(chunk);
+              }
+            });
+            logStream.on("error", (error) => {
+              logger.error(
+                { err: error },
+                `Log stream error for pod ${anyPod.metadata?.name} (previous):`,
+              );
+            });
+            logStream.on("end", () => {
+              if (!hasLogData) {
+                responseStream.write("(No logs from previous container)\n\n");
+              }
+              if (
+                !("destroyed" in responseStream) ||
+                !responseStream.destroyed
+              ) {
+                responseStream.end();
+              }
+            });
+
+            await this.k8sLog.log(
+              this.namespace,
+              anyPod.metadata.name,
+              "mcp-server",
+              logStream,
+              {
+                follow: false,
+                tailLines: lines,
+                pretty: false,
+                timestamps: false,
+                previous: true,
+              },
+            );
+            return;
+          } catch (error) {
+            logger.warn(
+              { err: error },
+              "Failed to get previous container logs, falling back to events",
+            );
+          }
+        }
+
+        // Container never started or previous logs unavailable — show events
+        await this.streamEventsAsFallback(responseStream);
+        return;
+      }
+
+      // For non-waiting containers, check if pod is actually running
+      const pod = anyPod.status?.phase === "Running" ? anyPod : undefined;
       if (!pod || !pod.metadata?.name) {
-        // No running pod - try to show events instead
         await this.streamEventsAsFallback(responseStream);
         return;
       }

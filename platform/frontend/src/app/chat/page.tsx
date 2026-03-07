@@ -1518,6 +1518,22 @@ export default function ChatPage() {
                   }
                 }}
               >
+                <div className="flex justify-end p-2">
+                  <Button
+                    variant={
+                      isBrowserPanelOpen && !isPlaywrightSetupVisible
+                        ? "secondary"
+                        : "ghost"
+                    }
+                    size="sm"
+                    onClick={toggleBrowserPanel}
+                    className="text-xs"
+                    disabled={isPlaywrightSetupVisible}
+                  >
+                    <Globe className="h-3 w-3 mr-1" />
+                    Browser
+                  </Button>
+                </div>
                 {isPlaywrightSetupRequired && (
                   <PlaywrightInstallDialog
                     agentId={playwrightSetupAgentId}

@@ -283,6 +283,13 @@ export type McpLogsErrorMessage = {
   };
 };
 
+export type McpLogsEndedMessage = {
+  type: "mcp_logs_ended";
+  payload: {
+    serverId: string;
+  };
+};
+
 // MCP Exec server -> client messages
 export type McpExecStartedMessage = {
   type: "mcp_exec_started";
@@ -359,6 +366,7 @@ export type ServerWebSocketMessage =
   | BrowserSetZoomResultMessage
   | McpLogsMessage
   | McpLogsErrorMessage
+  | McpLogsEndedMessage
   | McpExecStartedMessage
   | McpExecOutputMessage
   | McpExecErrorMessage

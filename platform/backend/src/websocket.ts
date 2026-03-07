@@ -371,6 +371,12 @@ class WebSocketService {
 
     stream.on("end", () => {
       logger.info({ serverId }, "MCP logs stream ended");
+      if (ws.readyState === WS.OPEN) {
+        this.sendToClient(ws, {
+          type: "mcp_logs_ended",
+          payload: { serverId },
+        });
+      }
       this.unsubscribeMcpLogs(ws);
     });
 

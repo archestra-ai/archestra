@@ -452,7 +452,7 @@ export function McpServerCard({
                       className={`size-6 border-2 border-background ${entry.type === "team" ? "rounded-md" : ""}`}
                     >
                       <AvatarFallback
-                        className={`text-[10px] ${entry.type === "team" ? "rounded-md bg-primary/10" : ""}`}
+                        className={`text-[10px] ${entry.type === "team" ? "rounded-md bg-muted" : ""}`}
                       >
                         {entry.label.slice(0, 2).toUpperCase()}
                       </AvatarFallback>
@@ -512,24 +512,21 @@ export function McpServerCard({
           {connectionsAvatarGroup}
         </div>
       </div>
-      {/* Show reconnect button only when NOT installing */}
-      {isCurrentUserAuthenticated &&
-        (needsReinstall || hasError) &&
-        !isInstalling && (
+      {/* Spacer + action buttons pinned to bottom */}
+      <div className="mt-auto flex flex-wrap gap-2">
+        {chatButton}
+        {!isInstalling && isCurrentUserAuthenticated && needsReinstall && (
           <PermissionButton
             permissions={{ mcpServer: ["update"] }}
             onClick={onReinstall}
             size="sm"
-            variant="default"
-            className="flex-1"
+            variant="outline"
+            className="flex-1 text-destructive border-destructive/30 hover:bg-destructive/10"
           >
             <RefreshCw className="mr-2 h-4 w-4" />
-            Reconnect Required
+            Reconnect
           </PermissionButton>
         )}
-      {/* Spacer + action buttons pinned to bottom */}
-      <div className="mt-auto flex flex-wrap gap-2">
-        {chatButton}
         {!isInstalling &&
           (hasPersonalConnection ? (
             <Button
@@ -570,22 +567,21 @@ export function McpServerCard({
           {connectionsAvatarGroup}
         </div>
       </div>
-      {/* Show reinstall button only when NOT installing (hide during reinstall to show progress bar) */}
-      {isCurrentUserAuthenticated && needsReinstall && !isInstalling && (
-        <PermissionButton
-          permissions={{ mcpServer: ["update"] }}
-          onClick={onReinstall}
-          size="sm"
-          variant="default"
-          className="w-full"
-        >
-          <RefreshCw className="mr-2 h-4 w-4" />
-          Reinstall Required
-        </PermissionButton>
-      )}
       {/* Spacer + action buttons pinned to bottom */}
       <div className="mt-auto flex flex-wrap gap-2">
         {chatButton}
+        {!isInstalling && isCurrentUserAuthenticated && needsReinstall && (
+          <PermissionButton
+            permissions={{ mcpServer: ["update"] }}
+            onClick={onReinstall}
+            size="sm"
+            variant="outline"
+            className="flex-1 text-destructive border-destructive/30 hover:bg-destructive/10"
+          >
+            <RefreshCw className="mr-2 h-4 w-4" />
+            Reinstall
+          </PermissionButton>
+        )}
         {!isInstalling &&
           (hasPersonalConnection ? (
             <Button
@@ -641,22 +637,21 @@ export function McpServerCard({
           {connectionsAvatarGroup}
         </div>
       </div>
-      {/* Show reinstall button only when NOT installing */}
-      {isCurrentUserAuthenticated && needsReinstall && !isInstalling && (
-        <PermissionButton
-          permissions={{ mcpServer: ["update"] }}
-          onClick={onReinstall}
-          size="sm"
-          variant="default"
-          className="w-full"
-        >
-          <RefreshCw className="mr-2 h-4 w-4" />
-          Reinstall Required
-        </PermissionButton>
-      )}
       {/* Spacer + action buttons pinned to bottom */}
       <div className="mt-auto flex flex-wrap gap-2">
         {chatButton}
+        {!isInstalling && isCurrentUserAuthenticated && needsReinstall && (
+          <PermissionButton
+            permissions={{ mcpServer: ["update"] }}
+            onClick={onReinstall}
+            size="sm"
+            variant="outline"
+            className="flex-1 text-destructive border-destructive/30 hover:bg-destructive/10"
+          >
+            <RefreshCw className="mr-2 h-4 w-4" />
+            Reinstall
+          </PermissionButton>
+        )}
         {!isInstalling &&
           (hasPersonalConnection ? (
             <Button
@@ -773,75 +768,78 @@ export function McpServerCard({
         </div>
       </CardHeader>
       <CardContent className="flex flex-col gap-4 flex-grow">
-        {(deploymentSummary || isInstalling || shouldShowErrorBanner) && (
-          <div className="bg-muted/50 rounded-md overflow-hidden">
-            {isInstalling ? (
-              <div className="px-3 py-2">
-                <InstallationProgress
-                  status={
-                    installationStatus === "error"
-                      ? null
-                      : (installationStatus ?? null)
-                  }
-                  serverId={installedServer?.id}
-                  serverName={item.label || item.name}
-                />
-              </div>
-            ) : isCurrentUserAuthenticated &&
-              shouldShowErrorBanner &&
-              errorMessage ? (
-              <div className="flex items-center justify-between px-3 py-2 text-sm">
-                <span
-                  className="text-destructive"
-                  data-testid={`${E2eTestId.McpServerError}-${item.name}`}
-                >
-                  Failed to start MCP server,{" "}
-                  <button
-                    type="button"
-                    onClick={() => setIsLogsDialogOpen(true)}
-                    className="text-primary hover:underline cursor-pointer"
-                    data-testid={`${E2eTestId.McpLogsViewButton}-${item.name}`}
+        {variant === "local" &&
+          (deploymentSummary || isInstalling || shouldShowErrorBanner) && (
+            <div className="bg-muted/50 rounded-md overflow-hidden">
+              {isInstalling ? (
+                <div className="px-3 py-2">
+                  <InstallationProgress
+                    status={
+                      installationStatus === "error"
+                        ? null
+                        : (installationStatus ?? null)
+                    }
+                    serverId={installedServer?.id}
+                    serverName={item.label || item.name}
+                  />
+                </div>
+              ) : isCurrentUserAuthenticated &&
+                shouldShowErrorBanner &&
+                errorMessage ? (
+                <div className="flex items-center justify-between px-3 py-2 text-sm">
+                  <span
+                    className="text-destructive"
+                    data-testid={`${E2eTestId.McpServerError}-${item.name}`}
                   >
-                    view the logs
-                  </button>{" "}
-                  or{" "}
-                  <button
-                    type="button"
-                    onClick={onEdit}
-                    className="text-primary hover:underline cursor-pointer"
-                    data-testid={`${E2eTestId.McpLogsEditConfigButton}-${item.name}`}
-                  >
-                    edit your config
-                  </button>
-                  .
-                </span>
-              </div>
-            ) : deploymentSummary ? (
-              <div className="flex items-center justify-between px-3 py-2 text-sm h-10">
-                <div className="flex items-center gap-2">
-                  <DeploymentStatusDot state={deploymentSummary.overallState} />
-                  <span className="text-muted-foreground">
-                    {deploymentSummary.running} / {deploymentSummary.total}{" "}
-                    deployments{" "}
-                    {getDeploymentLabel(
-                      deploymentSummary.overallState,
-                    ).toLowerCase()}
+                    Failed to start MCP server,{" "}
+                    <button
+                      type="button"
+                      onClick={() => setIsLogsDialogOpen(true)}
+                      className="text-primary hover:underline cursor-pointer"
+                      data-testid={`${E2eTestId.McpLogsViewButton}-${item.name}`}
+                    >
+                      view the logs
+                    </button>{" "}
+                    or{" "}
+                    <button
+                      type="button"
+                      onClick={onEdit}
+                      className="text-primary hover:underline cursor-pointer"
+                      data-testid={`${E2eTestId.McpLogsEditConfigButton}-${item.name}`}
+                    >
+                      edit your config
+                    </button>
+                    .
                   </span>
                 </div>
-                {isLogsAvailable && (
-                  <Button
-                    onClick={() => setIsLogsDialogOpen(true)}
-                    size="sm"
-                    variant="link"
-                    className="h-7 text-xs"
-                  >
-                    Debug
-                  </Button>
-                )}
-              </div>
-            ) : null}
-          </div>
-        )}
+              ) : deploymentSummary ? (
+                <div className="flex items-center justify-between px-3 py-2 text-sm h-10">
+                  <div className="flex items-center gap-2">
+                    <DeploymentStatusDot
+                      state={deploymentSummary.overallState}
+                    />
+                    <span className="text-muted-foreground">
+                      {deploymentSummary.running} / {deploymentSummary.total}{" "}
+                      deployments{" "}
+                      {getDeploymentLabel(
+                        deploymentSummary.overallState,
+                      ).toLowerCase()}
+                    </span>
+                  </div>
+                  {isLogsAvailable && (
+                    <Button
+                      onClick={() => setIsLogsDialogOpen(true)}
+                      size="sm"
+                      variant="link"
+                      className="h-7 text-xs"
+                    >
+                      Debug
+                    </Button>
+                  )}
+                </div>
+              ) : null}
+            </div>
+          )}
         {isBuiltinVariant
           ? builtinCardContent
           : isPlaywrightVariant

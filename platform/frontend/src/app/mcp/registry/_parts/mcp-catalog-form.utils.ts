@@ -1,9 +1,11 @@
 import {
   type archestraApiTypes,
+  type archestraCatalogTypes,
   type ImagePullSecretConfig,
   isVaultReference,
   parseVaultReference,
 } from "@shared";
+import { parseDockerArgsToLocalConfig } from "./docker-args-parser";
 import type { McpCatalogFormValues } from "./mcp-catalog-form.types";
 
 type McpCatalogApiData =
@@ -325,6 +327,217 @@ export function transformCatalogItemToFormValues(
     scope: (item.scope as "personal" | "team" | "org") ?? "org",
     // Teams
     teams: item.teams?.map((t) => t.id) ?? [],
+  } as McpCatalogFormValues;
+}
+
+// Transform an external catalog server manifest into form values for pre-filling
+export function transformExternalCatalogToFormValues(
+  server: archestraCatalogTypes.ArchestraMcpServerManifest,
+): McpCatalogFormValues {
+  const getValue = (
+    config: NonNullable<
+      archestraCatalogTypes.ArchestraMcpServerManifest["user_config"]
+    >[string],
+  ) => {
+    if (config.type === "boolean") {
+      return typeof config.default === "boolean"
+        ? String(config.default)
+        : "false";
+    }
+    if (config.type === "number" && typeof config.default === "number") {
+      return String(config.default);
+    }
+    return undefined;
+  };
+
+  const getEnvVarType = (
+    userConfigEntry: NonNullable<
+      archestraCatalogTypes.ArchestraMcpServerManifest["user_config"]
+    >[string],
+  ) => {
+    if (userConfigEntry.sensitive) return "secret" as const;
+    if (userConfigEntry.type === "boolean") return "boolean" as const;
+    if (userConfigEntry.type === "number") return "number" as const;
+    return "plain_text" as const;
+  };
+
+  // Determine auth method
+  let authMethod: "none" | "bearer" | "raw_token" | "oauth" = "none";
+
+  // Rewrite redirect URIs to prefer platform callback
+  let oauthConfig: McpCatalogFormValues["oauthConfig"] | undefined;
+  if (server.oauth_config && !server.oauth_config.requires_proxy) {
+    authMethod = "oauth";
+    const redirectUris =
+      server.oauth_config.redirect_uris
+        ?.map((u) =>
+          u === "http://localhost:8080/oauth/callback"
+            ? `${window.location.origin}/oauth-callback`
+            : u,
+        )
+        .join(", ") || "";
+    oauthConfig = {
+      client_id: server.oauth_config.client_id || "",
+      client_secret: server.oauth_config.client_secret || "",
+      redirect_uris:
+        redirectUris ||
+        (typeof window !== "undefined"
+          ? `${window.location.origin}/oauth-callback`
+          : ""),
+      scopes: server.oauth_config.scopes?.join(", ") || "read, write",
+      supports_resource_metadata:
+        server.oauth_config.supports_resource_metadata ?? true,
+      oauthServerUrl:
+        server.server.type === "local"
+          ? server.oauth_config.server_url || ""
+          : undefined,
+    };
+  }
+
+  // Build local config for local servers
+  let localConfig: McpCatalogFormValues["localConfig"];
+  if (server.server.type === "local") {
+    // Track which user_config keys are referenced in server.env
+    const referencedUserConfigKeys = new Set<string>();
+
+    // Parse server.env entries
+    const envFromServerEnv = server.server.env
+      ? Object.entries(server.server.env).map(([envKey, envValue]) => {
+          const match = envValue.match(/^\$\{user_config\.(.+)\}$/);
+          if (match && server.user_config) {
+            const userConfigKey = match[1];
+            const userConfigEntry = server.user_config[userConfigKey];
+            referencedUserConfigKeys.add(userConfigKey);
+            if (userConfigEntry) {
+              return {
+                key: envKey,
+                type: getEnvVarType(userConfigEntry),
+                value: "" as string | undefined,
+                promptOnInstallation: true,
+                required: userConfigEntry.required ?? false,
+                description: [
+                  userConfigEntry.title,
+                  userConfigEntry.description,
+                ]
+                  .filter(Boolean)
+                  .join(": "),
+                default: Array.isArray(userConfigEntry.default)
+                  ? undefined
+                  : userConfigEntry.default,
+                mounted: (
+                  userConfigEntry as typeof userConfigEntry & {
+                    mounted?: boolean;
+                  }
+                ).mounted,
+              };
+            }
+          }
+          return {
+            key: envKey,
+            type: "plain_text" as const,
+            value: envValue as string | undefined,
+            promptOnInstallation: false,
+            required: false,
+            description: "",
+            default: undefined,
+          };
+        })
+      : [];
+
+    // Add user_config entries NOT referenced in server.env
+    const envFromUnreferencedUserConfig = server.user_config
+      ? Object.entries(server.user_config)
+          .filter(([key]) => !referencedUserConfigKeys.has(key))
+          .map(([key, config]) => ({
+            key,
+            type: getEnvVarType(config),
+            value: getValue(config),
+            promptOnInstallation: true,
+            required: config.required ?? false,
+            description: [config.title, config.description]
+              .filter(Boolean)
+              .join(": "),
+            default: Array.isArray(config.default) ? undefined : config.default,
+            mounted: (config as typeof config & { mounted?: boolean }).mounted,
+          }))
+      : [];
+
+    const environment = [...envFromServerEnv, ...envFromUnreferencedUserConfig];
+
+    // Parse docker args
+    const dockerConfig = parseDockerArgsToLocalConfig(
+      server.server.command,
+      server.server.args,
+      server.server.docker_image,
+    );
+
+    const serviceAccount = (
+      server.server as typeof server.server & { service_account?: string }
+    ).service_account;
+    const normalizedServiceAccount = serviceAccount
+      ? serviceAccount.replace(
+          /\{\{ARCHESTRA_RELEASE_NAME\}\}/g,
+          "{{HELM_RELEASE_NAME}}",
+        )
+      : "";
+
+    if (dockerConfig) {
+      localConfig = {
+        command: dockerConfig.command || "",
+        arguments: dockerConfig.arguments?.join("\n") || "",
+        dockerImage: dockerConfig.dockerImage || "",
+        transportType: dockerConfig.transportType || "stdio",
+        httpPort: dockerConfig.httpPort?.toString() || "",
+        httpPath: "/mcp",
+        serviceAccount: normalizedServiceAccount,
+        imagePullSecrets: [],
+        environment,
+      };
+    } else {
+      localConfig = {
+        command: server.server.command || "",
+        arguments: server.server.args?.join("\n") || "",
+        dockerImage: server.server.docker_image || "",
+        transportType: "stdio",
+        httpPort: "",
+        httpPath: "/mcp",
+        serviceAccount: normalizedServiceAccount,
+        imagePullSecrets: [],
+        environment,
+      };
+    }
+  }
+
+  return {
+    name: server.name,
+    description: server.description || "",
+    icon: server.icon ?? null,
+    serverType: server.server.type as "remote" | "local",
+    serverUrl: server.server.type === "remote" ? server.server.url : "",
+    authMethod,
+    oauthConfig: oauthConfig ?? {
+      client_id: "",
+      client_secret: "",
+      redirect_uris:
+        typeof window !== "undefined"
+          ? `${window.location.origin}/oauth-callback`
+          : "",
+      scopes: "read, write",
+      supports_resource_metadata: true,
+    },
+    localConfig: localConfig ?? {
+      command: "",
+      arguments: "",
+      environment: [],
+      dockerImage: "",
+      transportType: "stdio",
+      httpPort: "",
+      httpPath: "/mcp",
+      serviceAccount: "",
+      imagePullSecrets: [],
+    },
+    scope: "personal",
+    teams: [],
   } as McpCatalogFormValues;
 }
 

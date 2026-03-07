@@ -26,29 +26,22 @@ import {
   useMcpRegistryServersInfinite,
   useMcpServerCategories,
 } from "@/lib/external-mcp-catalog.query";
-import {
-  useCreateInternalMcpCatalogItem,
-  useInternalMcpCatalog,
-} from "@/lib/internal-mcp-catalog.query";
+import { useInternalMcpCatalog } from "@/lib/internal-mcp-catalog.query";
 import type { SelectedCategory } from "./CatalogFilters";
 import { DetailsDialog } from "./details-dialog";
-import { parseDockerArgsToLocalConfig } from "./docker-args-parser";
+import type { McpCatalogFormValues } from "./mcp-catalog-form.types";
+import { transformExternalCatalogToFormValues } from "./mcp-catalog-form.utils";
 import { RequestInstallationDialog } from "./request-installation-dialog";
 import { TransportBadges } from "./transport-badges";
 
 type ServerType = "all" | "remote" | "local";
 
-type CatalogItem =
-  archestraApiTypes.GetInternalMcpCatalogResponses["200"][number];
-
 export function ArchestraCatalogTab({
   catalogItems: initialCatalogItems,
-  onClose,
-  onSuccess,
+  onSelectServer,
 }: {
   catalogItems?: archestraApiTypes.GetInternalMcpCatalogResponses["200"];
-  onClose: () => void;
-  onSuccess?: (createdItem: CatalogItem) => void;
+  onSelectServer: (formValues: McpCatalogFormValues) => void;
 }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [readmeServer, setReadmeServer] =
@@ -85,237 +78,11 @@ export function ArchestraCatalogTab({
     isFetchingNextPage,
   } = useMcpRegistryServersInfinite(searchQuery, filters.category);
 
-  // Mutation for adding servers to catalog
-  const createMutation = useCreateInternalMcpCatalogItem();
-
-  const handleAddToCatalog = async (
+  const handleSelectServer = (
     server: archestraCatalogTypes.ArchestraMcpServerManifest,
   ) => {
-    const getValue = (
-      config: NonNullable<
-        archestraCatalogTypes.ArchestraMcpServerManifest["user_config"]
-      >[string],
-    ) => {
-      if (config.type === "boolean") {
-        return typeof config.default === "boolean"
-          ? String(config.default)
-          : "false";
-      }
-      if (config.type === "number" && typeof config.default === "number") {
-        return String(config.default);
-      }
-      return undefined;
-    };
-
-    // For local servers, construct environment from server.env and user_config
-    if (server.server.type === "local") {
-      // Track which user_config keys are referenced in server.env
-      const referencedUserConfigKeys = new Set<string>();
-
-      const getEnvVarType = (
-        userConfigEntry: NonNullable<
-          archestraCatalogTypes.ArchestraMcpServerManifest["user_config"]
-        >[string],
-      ) => {
-        if (userConfigEntry.sensitive) return "secret" as const;
-        if (userConfigEntry.type === "boolean") return "boolean" as const;
-        if (userConfigEntry.type === "number") return "number" as const;
-        return "plain_text" as const;
-      };
-
-      // First pass: Parse server.env entries
-      const envFromServerEnv = server.server.env
-        ? Object.entries(server.server.env).map(([envKey, envValue]) => {
-            // Check if value is ${user_config.xxx} placeholder
-            const match = envValue.match(/^\$\{user_config\.(.+)\}$/);
-
-            if (match && server.user_config) {
-              const userConfigKey = match[1];
-              const userConfigEntry = server.user_config[userConfigKey];
-              referencedUserConfigKeys.add(userConfigKey);
-
-              if (userConfigEntry) {
-                return {
-                  key: envKey, // Use env var name (e.g., CONFLUENCE_URL)
-                  type: getEnvVarType(userConfigEntry),
-                  value: "", // Empty - will be prompted
-                  promptOnInstallation: true,
-                  required: userConfigEntry.required ?? false,
-                  description: [
-                    userConfigEntry.title,
-                    userConfigEntry.description,
-                  ]
-                    .filter(Boolean)
-                    .join(": "),
-                  default: Array.isArray(userConfigEntry.default)
-                    ? undefined
-                    : userConfigEntry.default,
-                  mounted: (
-                    userConfigEntry as typeof userConfigEntry & {
-                      mounted?: boolean;
-                    }
-                  ).mounted,
-                };
-              }
-            }
-
-            // Static env var (no user_config reference)
-            return {
-              key: envKey,
-              type: "plain_text" as const,
-              value: envValue,
-              promptOnInstallation: false,
-              required: false,
-              description: "",
-              default: undefined,
-            };
-          })
-        : [];
-
-      // Second pass: Add user_config entries NOT referenced in server.env
-      const envFromUnreferencedUserConfig = server.user_config
-        ? Object.entries(server.user_config)
-            .filter(([key]) => !referencedUserConfigKeys.has(key))
-            .map(([key, config]) => ({
-              key,
-              type: getEnvVarType(config),
-              value: getValue(config),
-              promptOnInstallation: true,
-              required: config.required ?? false,
-              description: [config.title, config.description]
-                .filter(Boolean)
-                .join(": "),
-              default: Array.isArray(config.default)
-                ? undefined
-                : config.default,
-              mounted: (config as typeof config & { mounted?: boolean })
-                .mounted,
-            }))
-        : [];
-
-      const environment = [
-        ...envFromServerEnv,
-        ...envFromUnreferencedUserConfig,
-      ];
-      await addServerToCatalog(server, environment);
-      return;
-    }
-
-    // For remote servers, proceed with direct addition
-    await addServerToCatalog(server, undefined);
-  };
-
-  const addServerToCatalog = async (
-    server: archestraCatalogTypes.ArchestraMcpServerManifest,
-    environment?: Array<{
-      key: string;
-      type: "plain_text" | "secret" | "boolean" | "number";
-      value?: string;
-      promptOnInstallation: boolean;
-      required?: boolean;
-      description?: string;
-      default?: string | number | boolean;
-      mounted?: boolean;
-    }>,
-  ) => {
-    // Rewrite redirect URIs to prefer platform callback (port 3000)
-    const rewrittenOauth =
-      server.oauth_config && !server.oauth_config.requires_proxy
-        ? {
-            ...server.oauth_config,
-            redirect_uris: server.oauth_config.redirect_uris?.map((u) =>
-              u === "http://localhost:8080/oauth/callback"
-                ? `${window.location.origin}/oauth-callback`
-                : u,
-            ),
-          }
-        : undefined;
-
-    let localConfig:
-      | archestraApiTypes.CreateInternalMcpCatalogItemData["body"]["localConfig"]
-      | undefined;
-    if (server.server.type === "local") {
-      const dockerConfig = parseDockerArgsToLocalConfig(
-        server.server.command,
-        server.server.args,
-        server.server.docker_image,
-      );
-      if (dockerConfig) {
-        const serviceAccount = (
-          server.server as typeof server.server & { service_account?: string }
-        ).service_account;
-        localConfig = {
-          command: dockerConfig.command,
-          arguments: dockerConfig.arguments,
-          dockerImage: dockerConfig.dockerImage,
-          transportType: dockerConfig.transportType,
-          httpPort: dockerConfig.httpPort,
-          serviceAccount: serviceAccount
-            ? serviceAccount.replace(
-                /\{\{ARCHESTRA_RELEASE_NAME\}\}/g,
-                "{{HELM_RELEASE_NAME}}",
-              )
-            : undefined,
-          environment:
-            environment ||
-            (server.server.env
-              ? Object.entries(server.server.env).map(([key, value]) => ({
-                  key,
-                  type: "plain_text" as const,
-                  value,
-                  promptOnInstallation: false,
-                }))
-              : undefined),
-        };
-      } else {
-        const serviceAccount = (
-          server.server as typeof server.server & { service_account?: string }
-        ).service_account;
-        localConfig = {
-          command: server.server.command,
-          arguments: server.server.args,
-          dockerImage: server.server.docker_image,
-          serviceAccount: serviceAccount
-            ? serviceAccount.replace(
-                /\{\{ARCHESTRA_RELEASE_NAME\}\}/g,
-                "{{HELM_RELEASE_NAME}}",
-              )
-            : undefined,
-          environment:
-            environment ||
-            (server.server.env
-              ? Object.entries(server.server.env).map(([key, value]) => ({
-                  key,
-                  type: "plain_text" as const,
-                  value,
-                  promptOnInstallation: false,
-                }))
-              : undefined),
-        };
-      }
-    }
-
-    const createdItem = await createMutation.mutateAsync({
-      name: server.name,
-      version: undefined, // No version in archestra catalog
-      instructions: server.instructions,
-      serverType: server.server.type,
-      serverUrl:
-        server.server.type === "remote" ? server.server.url : undefined,
-      docsUrl:
-        server.server.type === "remote"
-          ? (server.server.docs_url ?? undefined)
-          : undefined,
-      localConfig,
-      userConfig: server.user_config,
-      oauthConfig: rewrittenOauth,
-    });
-
-    // Close the dialog after adding
-    onClose();
-    if (createdItem) {
-      onSuccess?.(createdItem);
-    }
+    const formValues = transformExternalCatalogToFormValues(server);
+    onSelectServer(formValues);
   };
 
   const handleRequestInstallation = async (
@@ -466,9 +233,8 @@ export function ArchestraCatalogTab({
                   <ServerCard
                     key={`${server.name}-${index}`}
                     server={server}
-                    onAddToCatalog={handleAddToCatalog}
+                    onSelectServer={handleSelectServer}
                     onRequestInstallation={handleRequestInstallation}
-                    isAdding={createMutation.isPending}
                     onOpenReadme={setReadmeServer}
                     isInCatalog={catalogServerNames.has(server.name)}
                     userIsMcpServerAdmin={userIsMcpServerAdmin}
@@ -516,21 +282,19 @@ export function ArchestraCatalogTab({
 // Server card component for a single server
 function ServerCard({
   server,
-  onAddToCatalog,
+  onSelectServer,
   onRequestInstallation,
-  isAdding,
   onOpenReadme,
   isInCatalog,
   userIsMcpServerAdmin,
 }: {
   server: archestraCatalogTypes.ArchestraMcpServerManifest;
-  onAddToCatalog: (
+  onSelectServer: (
     server: archestraCatalogTypes.ArchestraMcpServerManifest,
   ) => void;
   onRequestInstallation: (
     server: archestraCatalogTypes.ArchestraMcpServerManifest,
   ) => void;
-  isAdding: boolean;
   onOpenReadme: (
     server: archestraCatalogTypes.ArchestraMcpServerManifest,
   ) => void;
@@ -625,10 +389,10 @@ function ServerCard({
           <Button
             onClick={() =>
               userIsMcpServerAdmin
-                ? onAddToCatalog(server)
+                ? onSelectServer(server)
                 : onRequestInstallation(server)
             }
-            disabled={isAdding || isInCatalog}
+            disabled={isInCatalog}
             size="sm"
             className="w-full"
             data-testid={E2eTestId.AddCatalogItemButton}
@@ -636,7 +400,7 @@ function ServerCard({
             {isInCatalog
               ? "Added"
               : userIsMcpServerAdmin
-                ? "Add to Your Registry"
+                ? "Use as Template"
                 : "Request to add to internal registry"}
           </Button>
         </div>

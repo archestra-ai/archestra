@@ -165,7 +165,7 @@ export default function ChatPage() {
 
   // Check if user can create catalog items directly
   const { data: canCreateCatalog } = useHasPermissions({
-    internalMcpCatalog: ["create"],
+    mcpRegistry: ["create"],
   });
 
   const { data: isAgentAdmin } = useHasPermissions({

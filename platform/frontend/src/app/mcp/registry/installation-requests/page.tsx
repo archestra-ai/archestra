@@ -152,7 +152,10 @@ function RequestRow({ request }: { request: McpServerInstallationRequest }) {
     },
   };
 
-  const status = statusConfig[request.status as keyof typeof statusConfig];
+  const status =
+    request.status in statusConfig
+      ? statusConfig[request.status as keyof typeof statusConfig]
+      : statusConfig.pending;
   const StatusIcon = status.icon;
 
   return (

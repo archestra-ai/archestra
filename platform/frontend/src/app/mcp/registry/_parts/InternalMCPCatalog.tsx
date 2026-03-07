@@ -45,6 +45,7 @@ import {
   setOAuthState,
   setOAuthTeamId,
 } from "@/lib/oauth-session";
+import websocketService from "@/lib/websocket";
 import { CreateCatalogDialog } from "./create-catalog-dialog";
 import { CustomServerRequestDialog } from "./custom-server-request-dialog";
 import { DeleteCatalogDialog } from "./delete-catalog-dialog";
@@ -201,6 +202,11 @@ export function InternalMCPCatalog({
           if (server) {
             if (server.localInstallationStatus === "success") {
               toast.success(`Successfully installed ${server.name}`);
+              // Force immediate deployment status refresh via WebSocket
+              websocketService.send({
+                type: "subscribe_mcp_deployment_statuses",
+                payload: {},
+              });
               // Invalidate tools queries to update "Tools assigned" count
               queryClient.invalidateQueries({
                 queryKey: ["mcp-servers", server.id, "tools"],

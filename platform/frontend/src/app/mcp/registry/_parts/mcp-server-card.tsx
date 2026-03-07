@@ -13,11 +13,13 @@ import {
   MessageSquare,
   MoreVertical,
   Pencil,
+  Plus,
   RefreshCw,
   Server,
   Terminal,
   Trash2,
   User,
+  Wrench,
 } from "lucide-react";
 import Image from "next/image";
 import { useState } from "react";
@@ -57,7 +59,6 @@ import { useTeams } from "@/lib/team.query";
 import {
   computeDeploymentStatusSummary,
   DeploymentStatusDot,
-  getDeploymentLabel,
 } from "./deployment-status";
 import { InstallationProgress } from "./installation-progress";
 import { ManageUsersDialog } from "./manage-users-dialog";
@@ -380,6 +381,15 @@ export function McpServerCard({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
+          {!isBuiltinVariant && (
+            <DropdownMenuItem
+              onClick={() => setIsManageUsersDialogOpen(true)}
+              data-testid={`${E2eTestId.ManageCredentialsButton}-${installedServer?.catalogName}`}
+            >
+              <User className="mr-2 h-4 w-4" />
+              Manage Connections
+            </DropdownMenuItem>
+          )}
           <DropdownMenuItem onClick={onEdit}>
             <Pencil className="mr-2 h-4 w-4" />
             Edit
@@ -412,6 +422,7 @@ export function McpServerCard({
     type: "team" | "user";
     label: string;
     key: string;
+    serverIds: string[];
   }> = [];
   const seenKeys = new Set<string>();
   for (const server of mcpServerOfCurrentCatalogItem ?? []) {
@@ -423,7 +434,10 @@ export function McpServerCard({
           type: "team",
           label: server.teamDetails.name,
           key,
+          serverIds: [server.id],
         });
+      } else {
+        connectionAvatars.find((a) => a.key === key)?.serverIds.push(server.id);
       }
     } else if (server.ownerEmail) {
       const key = `user-${server.ownerEmail}`;
@@ -433,103 +447,151 @@ export function McpServerCard({
           type: "user",
           label: server.ownerEmail,
           key,
+          serverIds: [server.id],
         });
+      } else {
+        connectionAvatars.find((a) => a.key === key)?.serverIds.push(server.id);
       }
     }
   }
   const extraCount = connectionAvatars.length - MAX_AVATARS;
 
-  const connectionsAvatarGroup = (
-    <>
-      <div className="flex items-center gap-2">
-        {connectionAvatars.length > 0 ? (
+  const toolsCount = tools?.length ?? 0;
+
+  const hasCompactInfoContent =
+    toolsCount > 0 ||
+    (variant === "local" && deploymentServerIds.length > 0) ||
+    (!isBuiltinVariant && connectionAvatars.length > 0);
+
+  const compactInfoRow = hasCompactInfoContent ? (
+    <div className="flex items-center gap-3 text-sm text-muted-foreground border-t pt-3">
+      {toolsCount > 0 && (
+        <>
+          <div className="flex items-center gap-1">
+            <Wrench className="h-3.5 w-3.5" />
+            <span>{toolsCount}</span>
+          </div>
+          <div className="h-4 w-px bg-border" />
+        </>
+      )}
+      {variant === "local" && deploymentServerIds.length > 0 && (
+        <>
+          {deploymentSummary ? (
+            <button
+              type="button"
+              onClick={() => setIsLogsDialogOpen(true)}
+              className="flex items-center gap-1.5 cursor-pointer hover:text-foreground transition-colors"
+            >
+              <DeploymentStatusDot state={deploymentSummary.overallState} />
+              <span>
+                {deploymentSummary.running}/{deploymentSummary.total}
+              </span>
+            </button>
+          ) : (
+            <span className="relative flex h-2 w-2 shrink-0">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-muted-foreground/50 opacity-75" />
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-muted-foreground/50" />
+            </span>
+          )}
+          <div className="h-4 w-px bg-border" />
+        </>
+      )}
+      {!isBuiltinVariant && connectionAvatars.length > 0 && (
+        <div className="flex items-center gap-2">
           <AvatarGroup>
-            {connectionAvatars.slice(0, MAX_AVATARS).map((entry) => (
-              <TooltipProvider key={entry.key}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Avatar
-                      className={`size-6 border-2 border-background ${entry.type === "team" ? "rounded-md" : ""}`}
-                    >
-                      <AvatarFallback
-                        className={`text-[10px] ${entry.type === "team" ? "rounded-md bg-primary/10" : ""}`}
-                      >
-                        {entry.label.slice(0, 2).toUpperCase()}
-                      </AvatarFallback>
-                    </Avatar>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    {entry.type === "team"
-                      ? `Team: ${entry.label}`
-                      : entry.label}
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            ))}
+            {connectionAvatars.slice(0, MAX_AVATARS).map((entry) => {
+              const connDeployment = computeDeploymentStatusSummary(
+                entry.serverIds,
+                deploymentStatuses,
+              );
+              const borderClass = connDeployment
+                ? {
+                    running: "border-green-600 dark:border-green-800",
+                    pending: "border-yellow-500 dark:border-yellow-600",
+                    failed: "border-red-500 dark:border-red-700",
+                    degraded: "border-orange-500 dark:border-orange-600",
+                  }[connDeployment.overallState]
+                : "border-background";
+              return (
+                <TooltipProvider key={entry.key}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Avatar className={`size-6 border-2 ${borderClass}`}>
+                        <AvatarFallback
+                          className={`text-[10px] ${entry.type === "team" ? "bg-accent" : ""}`}
+                        >
+                          {entry.label.slice(0, 2).toUpperCase()}
+                        </AvatarFallback>
+                      </Avatar>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      {entry.type === "team"
+                        ? `Team: ${entry.label}`
+                        : entry.label}
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              );
+            })}
             {extraCount > 0 && (
               <AvatarGroupCount className="size-6 text-[10px]">
                 +{extraCount}
               </AvatarGroupCount>
             )}
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Avatar
+                    className="size-6 border-2 border-background cursor-pointer hover:opacity-80 transition-opacity"
+                    onClick={() => setIsManageUsersDialogOpen(true)}
+                  >
+                    <AvatarFallback className="text-muted-foreground bg-muted">
+                      <Plus className="h-3 w-3" />
+                    </AvatarFallback>
+                  </Avatar>
+                </TooltipTrigger>
+                <TooltipContent>Manage connections</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           </AvatarGroup>
-        ) : (
-          <span className="text-xs text-muted-foreground">No connections</span>
-        )}
-        {hasOAuthRefreshError && (
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <AlertTriangle className="h-4 w-4 text-amber-500 cursor-help" />
-              </TooltipTrigger>
-              <TooltipContent className="max-w-xs">
-                <p className="font-medium mb-1">Authentication failed</p>
-                <p className="text-xs text-muted-foreground">
-                  Some connections need re-authentication.
-                </p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        )}
-      </div>
-      <Button
-        onClick={() => setIsManageUsersDialogOpen(true)}
-        size="sm"
-        variant="link"
-        className="h-7 text-xs"
-        data-testid={`${E2eTestId.ManageCredentialsButton}-${installedServer?.catalogName}`}
-      >
-        Manage
-      </Button>
-    </>
-  );
+          {hasOAuthRefreshError && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <AlertTriangle className="h-4 w-4 text-amber-500 cursor-help" />
+                </TooltipTrigger>
+                <TooltipContent className="max-w-xs">
+                  <p className="font-medium mb-1">Authentication failed</p>
+                  <p className="text-xs text-muted-foreground">
+                    Some connections need re-authentication.
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
+        </div>
+      )}
+    </div>
+  ) : null;
 
   const shouldShowErrorBanner = hasError;
 
   const remoteCardContent = (
     <>
-      <div className="bg-muted/50 rounded-md overflow-hidden flex flex-col">
-        <div className="flex items-center justify-between px-3 py-2 text-sm border-b border-muted h-10">
-          {connectionsAvatarGroup}
-        </div>
-      </div>
-      {/* Show reconnect button only when NOT installing */}
-      {isCurrentUserAuthenticated &&
-        (needsReinstall || hasError) &&
-        !isInstalling && (
+      <div className="flex flex-wrap gap-2">
+        {chatButton}
+        {!isInstalling && isCurrentUserAuthenticated && needsReinstall && (
           <PermissionButton
             permissions={{ mcpServerInstallation: ["update"] }}
             onClick={onReinstall}
             size="sm"
-            variant="default"
-            className="flex-1"
+            variant="outline"
+            className="flex-1 text-destructive border-destructive/30 hover:bg-destructive/10"
           >
             <RefreshCw className="mr-2 h-4 w-4" />
-            Reconnect Required
+            Reconnect
           </PermissionButton>
         )}
-      {/* Spacer + action buttons pinned to bottom */}
-      <div className="mt-auto flex flex-wrap gap-2">
-        {chatButton}
         {!isInstalling &&
           (hasPersonalConnection ? (
             <Button
@@ -565,27 +627,20 @@ export function McpServerCard({
 
   const localCardContent = (
     <>
-      <div className="bg-muted/50 rounded-md overflow-hidden flex flex-col">
-        <div className="flex items-center justify-between px-3 py-2 text-sm border-b border-muted h-10">
-          {connectionsAvatarGroup}
-        </div>
-      </div>
-      {/* Show reinstall button only when NOT installing (hide during reinstall to show progress bar) */}
-      {isCurrentUserAuthenticated && needsReinstall && !isInstalling && (
-        <PermissionButton
-          permissions={{ mcpServerInstallation: ["update"] }}
-          onClick={onReinstall}
-          size="sm"
-          variant="default"
-          className="w-full"
-        >
-          <RefreshCw className="mr-2 h-4 w-4" />
-          Reinstall Required
-        </PermissionButton>
-      )}
-      {/* Spacer + action buttons pinned to bottom */}
-      <div className="mt-auto flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-2">
         {chatButton}
+        {!isInstalling && isCurrentUserAuthenticated && needsReinstall && (
+          <PermissionButton
+            permissions={{ mcpServerInstallation: ["update"] }}
+            onClick={onReinstall}
+            size="sm"
+            variant="outline"
+            className="flex-1 text-destructive border-destructive/30 hover:bg-destructive/10"
+          >
+            <RefreshCw className="mr-2 h-4 w-4" />
+            Reinstall
+          </PermissionButton>
+        )}
         {!isInstalling &&
           (hasPersonalConnection ? (
             <Button
@@ -636,27 +691,20 @@ export function McpServerCard({
 
   const playwrightCardContent = (
     <>
-      <div className="bg-muted/50 rounded-md overflow-hidden flex flex-col">
-        <div className="flex items-center justify-between px-3 py-2 text-sm border-b border-muted h-10">
-          {connectionsAvatarGroup}
-        </div>
-      </div>
-      {/* Show reinstall button only when NOT installing */}
-      {isCurrentUserAuthenticated && needsReinstall && !isInstalling && (
-        <PermissionButton
-          permissions={{ mcpServerInstallation: ["update"] }}
-          onClick={onReinstall}
-          size="sm"
-          variant="default"
-          className="w-full"
-        >
-          <RefreshCw className="mr-2 h-4 w-4" />
-          Reinstall Required
-        </PermissionButton>
-      )}
-      {/* Spacer + action buttons pinned to bottom */}
-      <div className="mt-auto flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-2">
         {chatButton}
+        {!isInstalling && isCurrentUserAuthenticated && needsReinstall && (
+          <PermissionButton
+            permissions={{ mcpServerInstallation: ["update"] }}
+            onClick={onReinstall}
+            size="sm"
+            variant="outline"
+            className="flex-1 text-destructive border-destructive/30 hover:bg-destructive/10"
+          >
+            <RefreshCw className="mr-2 h-4 w-4" />
+            Reinstall
+          </PermissionButton>
+        )}
         {!isInstalling &&
           (hasPersonalConnection ? (
             <Button
@@ -707,7 +755,7 @@ export function McpServerCard({
 
   const builtinCardContent = (
     <>
-      <div className="mt-auto">{chatButton}</div>
+      <div>{chatButton}</div>
     </>
   );
 
@@ -773,7 +821,7 @@ export function McpServerCard({
         </div>
       </CardHeader>
       <CardContent className="flex flex-col gap-4 flex-grow">
-        {(deploymentSummary || isInstalling || shouldShowErrorBanner) && (
+        {variant === "local" && (isInstalling || shouldShowErrorBanner) && (
           <div className="bg-muted/50 rounded-md overflow-hidden">
             {isInstalling ? (
               <div className="px-3 py-2">
@@ -816,39 +864,19 @@ export function McpServerCard({
                   .
                 </span>
               </div>
-            ) : deploymentSummary ? (
-              <div className="flex items-center justify-between px-3 py-2 text-sm h-10">
-                <div className="flex items-center gap-2">
-                  <DeploymentStatusDot state={deploymentSummary.overallState} />
-                  <span className="text-muted-foreground">
-                    {deploymentSummary.running} / {deploymentSummary.total}{" "}
-                    deployments{" "}
-                    {getDeploymentLabel(
-                      deploymentSummary.overallState,
-                    ).toLowerCase()}
-                  </span>
-                </div>
-                {isLogsAvailable && (
-                  <Button
-                    onClick={() => setIsLogsDialogOpen(true)}
-                    size="sm"
-                    variant="link"
-                    className="h-7 text-xs"
-                  >
-                    Debug
-                  </Button>
-                )}
-              </div>
             ) : null}
           </div>
         )}
-        {isBuiltinVariant
-          ? builtinCardContent
-          : isPlaywrightVariant
-            ? playwrightCardContent
-            : isRemoteVariant
-              ? remoteCardContent
-              : localCardContent}
+        <div className="mt-auto flex flex-col gap-4">
+          {compactInfoRow}
+          {isBuiltinVariant
+            ? builtinCardContent
+            : isPlaywrightVariant
+              ? playwrightCardContent
+              : isRemoteVariant
+                ? remoteCardContent
+                : localCardContent}
+        </div>
       </CardContent>
       {dialogs}
     </Card>

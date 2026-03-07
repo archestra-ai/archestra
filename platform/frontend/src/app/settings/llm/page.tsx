@@ -67,31 +67,24 @@ export default function LlmSettingsPage() {
     "Failed to update LLM settings",
   );
 
-  // Sync state when organization data loads
+  // Sync state when both organization and teams data are loaded
   useEffect(() => {
-    if (organization) {
-      if (organization.compressionScope === "organization") {
-        setCompressionMode(
-          organization.convertToolResultsToToon ? "organization" : "disabled",
-        );
-      } else {
-        setCompressionMode("team");
-      }
-      setCleanupInterval(
-        (organization.limitCleanupInterval as LimitCleanupInterval) || "1h",
+    if (!organization) return;
+    if (organization.compressionScope === "organization") {
+      setCompressionMode(
+        organization.convertToolResultsToToon ? "organization" : "disabled",
       );
+    } else {
+      setCompressionMode("team");
     }
-  }, [organization]);
-
-  // Load teams with compression enabled
-  useEffect(() => {
-    if (teams.length > 0) {
-      const enabledTeams = teams
-        .filter((team) => team.convertToolResultsToToon)
-        .map((team) => team.id);
-      setSelectedTeamIds(enabledTeams);
-    }
-  }, [teams]);
+    setCleanupInterval(
+      (organization.limitCleanupInterval as LimitCleanupInterval) || "1h",
+    );
+    const enabledTeams = teams
+      .filter((team) => team.convertToolResultsToToon)
+      .map((team) => team.id);
+    setSelectedTeamIds(enabledTeams);
+  }, [organization, teams]);
 
   // Determine if anything has changed from server state
   const serverCompressionMode: CompressionMode =
@@ -119,50 +112,67 @@ export default function LlmSettingsPage() {
   const hasChanges = hasCompressionChanges || hasCleanupChanges;
 
   const handleSave = async () => {
-    // Save compression settings
+    const mutations: Promise<unknown>[] = [];
+
+    // Collect compression settings mutation
     if (hasCompressionChanges) {
       if (compressionMode === "disabled") {
-        await updateLlmSettingsMutation.mutateAsync({
-          compressionScope: "organization",
-          convertToolResultsToToon: false,
-        });
+        mutations.push(
+          updateLlmSettingsMutation.mutateAsync({
+            compressionScope: "organization",
+            convertToolResultsToToon: false,
+          }),
+        );
       } else if (compressionMode === "organization") {
-        await updateLlmSettingsMutation.mutateAsync({
-          compressionScope: "organization",
-          convertToolResultsToToon: true,
-        });
+        mutations.push(
+          updateLlmSettingsMutation.mutateAsync({
+            compressionScope: "organization",
+            convertToolResultsToToon: true,
+          }),
+        );
       } else {
-        await updateLlmSettingsMutation.mutateAsync({
-          compressionScope: "team",
-          convertToolResultsToToon: false,
-        });
-
-        try {
-          await Promise.all(
-            teams.map((team) =>
-              archestraApiSdk.updateTeam({
-                path: { id: team.id },
-                body: {
-                  name: team.name,
-                  description: team.description ?? undefined,
-                  convertToolResultsToToon: selectedTeamIds.includes(team.id),
-                },
-              }),
-            ),
-          );
-          queryClient.invalidateQueries({ queryKey: ["teams"] });
-        } catch {
-          toast.error("Failed to update team compression settings");
-          return;
-        }
+        mutations.push(
+          updateLlmSettingsMutation
+            .mutateAsync({
+              compressionScope: "team",
+              convertToolResultsToToon: false,
+            })
+            .then(() =>
+              Promise.all(
+                teams.map((team) =>
+                  archestraApiSdk.updateTeam({
+                    path: { id: team.id },
+                    body: {
+                      name: team.name,
+                      description: team.description ?? undefined,
+                      convertToolResultsToToon: selectedTeamIds.includes(
+                        team.id,
+                      ),
+                    },
+                  }),
+                ),
+              ),
+            )
+            .then(() => queryClient.invalidateQueries({ queryKey: ["teams"] })),
+        );
       }
     }
 
-    // Save cleanup interval
+    // Collect cleanup interval mutation
     if (hasCleanupChanges) {
-      await updateLlmSettingsMutation.mutateAsync({
-        limitCleanupInterval: cleanupInterval,
-      });
+      mutations.push(
+        updateLlmSettingsMutation.mutateAsync({
+          limitCleanupInterval: cleanupInterval,
+        }),
+      );
+    }
+
+    const results = await Promise.allSettled(mutations);
+    const failures = results.filter((r) => r.status === "rejected");
+    if (failures.length > 0 && failures.length < results.length) {
+      toast.error("Some settings failed to save. Please try again.");
+    } else if (failures.length === results.length && failures.length > 0) {
+      toast.error("Failed to save settings.");
     }
   };
 

@@ -1,8 +1,10 @@
 "use client";
 
 import {
+  DocsPage,
   E2eTestId,
   formatSecretStorageType,
+  getDocsUrl,
   PROVIDERS_WITH_OPTIONAL_API_KEY,
 } from "@shared";
 import type { ColumnDef } from "@tanstack/react-table";
@@ -302,7 +304,10 @@ export function ProviderSettingsApiKeys() {
             <span className="text-sm text-muted-foreground">
               Env Vars{" "}
               <a
-                href="https://archestra.ai/docs/platform-supported-llm-providers#using-vertex-ai"
+                href={getDocsUrl(
+                  DocsPage.PlatformSupportedLlmProviders,
+                  "using-vertex-ai",
+                )}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1 text-primary hover:underline"

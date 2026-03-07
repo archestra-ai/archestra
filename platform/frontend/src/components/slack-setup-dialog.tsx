@@ -1,6 +1,6 @@
 "use client";
 
-import { SLACK_REQUIRED_BOT_SCOPES } from "@shared";
+import { DocsPage, getDocsUrl, SLACK_REQUIRED_BOT_SCOPES } from "@shared";
 import { ExternalLink } from "lucide-react";
 import * as React from "react";
 import { useState } from "react";
@@ -171,7 +171,7 @@ export function SlackSetupDialog({
           Follow these steps to connect your Archestra agents to Slack. Find out
           more in our{" "}
           <a
-            href="https://archestra.ai/docs/platform-slack"
+            href={getDocsUrl(DocsPage.PlatformSlack)}
             target="_blank"
             rel="noopener noreferrer"
             className="text-primary underline hover:no-underline"

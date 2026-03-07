@@ -1,11 +1,12 @@
 "use client";
 
+import { getDocsUrl } from "@shared";
 import { Github, Slack } from "lucide-react";
 import config from "@/lib/config";
 
 export const COMMUNITY_GITHUB_URL = "https://github.com/archestra-ai/archestra";
 export const COMMUNITY_SLACK_URL = "https://archestra.ai/join-slack";
-export const COMMUNITY_DOCS_URL = "https://archestra.ai/docs/";
+export const COMMUNITY_DOCS_URL = getDocsUrl("platform-quickstart");
 export const COMMUNITY_BUG_REPORT_URL =
   "https://github.com/archestra-ai/archestra/issues/new";
 

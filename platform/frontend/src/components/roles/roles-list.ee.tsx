@@ -1,6 +1,11 @@
 "use client";
 
-import type { archestraApiTypes, Permissions } from "@shared";
+import {
+  type archestraApiTypes,
+  DocsPage,
+  getDocsUrl,
+  type Permissions,
+} from "@shared";
 import { allAvailableActions } from "@shared/access-control";
 import { Plus, Shield, Trash2 } from "lucide-react";
 import { useCallback, useState } from "react";
@@ -169,7 +174,7 @@ export function RolesList() {
                 <br />
                 See documentation{" "}
                 <a
-                  href="https://archestra.ai/docs/platform-access-control"
+                  href={getDocsUrl(DocsPage.PlatformAccessControl)}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-blue-500 hover:underline inline-flex items-center gap-1 block"

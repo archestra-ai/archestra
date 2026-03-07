@@ -4,6 +4,7 @@ import {
   type Action,
   type Permissions,
   type Resource,
+  resourceCategories,
   resourceDescriptions,
   resourceLabels,
 } from "@shared";
@@ -20,30 +21,6 @@ interface RolePermissionBuilderProps {
   onChange: (permission: Permissions) => void;
   userPermissions: Permissions;
 }
-
-// Group resources by category for better organization
-const resourceCategories: Record<string, Resource[]> = {
-  Agents: ["agent", "agentTrigger"],
-  MCP: [
-    "mcpGateway",
-    "toolPolicy",
-    "mcpRegistry",
-    "mcpServerInstallation",
-    "mcpServerInstallationRequest",
-  ],
-  LLM: ["llmProxy", "llmProvider", "llmLimit", "llmSettings", "llmCost"],
-  Other: ["chat", "log", "dualLlmConfig", "dualLlmResult"],
-  Administration: [
-    "member",
-    "ac",
-    "team",
-    "invitation",
-    "identityProvider",
-    "secret",
-    "appearance",
-    "securitySettings",
-  ],
-};
 
 // Human-readable labels for actions
 const actionLabels: Record<Action, string> = {

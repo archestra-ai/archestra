@@ -123,6 +123,33 @@ export const resourceDescriptions: Record<Resource, string> = {
  */
 export const internalResources: Resource[] = ["organization"];
 
+/**
+ * Groups resources by category for the RBAC UI (role builder and permissions card).
+ * Used in both the create/edit role dialog and the account permissions display.
+ */
+export const resourceCategories: Record<string, Resource[]> = {
+  Agents: ["agent", "agentTrigger"],
+  MCP: [
+    "mcpGateway",
+    "toolPolicy",
+    "mcpRegistry",
+    "mcpServerInstallation",
+    "mcpServerInstallationRequest",
+  ],
+  LLM: ["llmProxy", "llmProvider", "llmLimit", "llmSettings", "llmCost"],
+  Other: ["chat", "log", "dualLlmConfig", "dualLlmResult"],
+  Administration: [
+    "member",
+    "ac",
+    "team",
+    "invitation",
+    "identityProvider",
+    "secret",
+    "appearance",
+    "securitySettings",
+  ],
+};
+
 export type Resource = (typeof resources)[number];
 export type Action = (typeof actions)[number];
 export type Permissions = Partial<Record<Resource, Action[]>>;

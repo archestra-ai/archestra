@@ -2,7 +2,7 @@
 
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { useConversationSearch } from "./use-conversation-search";
+import { useConversationSearch } from "./conversation-search.hook";
 
 const mockPush = vi.fn();
 vi.mock("next/navigation", () => ({

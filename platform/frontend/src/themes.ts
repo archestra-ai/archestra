@@ -6,11 +6,11 @@
  * Single source of truth: shared/themes/tweakcn-themes.json
  */
 
-import type { OrganizationTheme } from "@shared";
 import {
   DEFAULT_THEME_ID,
   getThemeById as getThemeByIdShared,
   getThemeMetadata,
+  type OrganizationTheme,
   type ThemeMetadata as ThemeMetadataShared,
 } from "@shared";
 

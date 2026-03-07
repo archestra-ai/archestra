@@ -25265,12 +25265,20 @@ export type GetInternalMcpCatalogResponses = {
             streamable_http_port?: number;
         } | null;
         icon: string | null;
+        organizationId: string | null;
+        authorId: string | null;
+        scope: 'personal' | 'team' | 'org';
         createdAt: string;
         updatedAt: string;
         labels: Array<{
             key: string;
             value: string;
         }>;
+        teams: Array<{
+            id: string;
+            name: string;
+        }>;
+        authorName?: string | null;
     }>;
 };
 
@@ -25366,10 +25374,12 @@ export type CreateInternalMcpCatalogItemData = {
             streamable_http_port?: number;
         } | null;
         icon?: string | null;
+        scope?: 'personal' | 'team' | 'org';
         labels?: Array<{
             key: string;
             value: string;
         }>;
+        teams?: Array<string>;
         oauthClientSecretVaultPath?: string;
         oauthClientSecretVaultKey?: string;
         localConfigVaultPath?: string;
@@ -25532,12 +25542,20 @@ export type CreateInternalMcpCatalogItemResponses = {
             streamable_http_port?: number;
         } | null;
         icon: string | null;
+        organizationId: string | null;
+        authorId: string | null;
+        scope: 'personal' | 'team' | 'org';
         createdAt: string;
         updatedAt: string;
         labels: Array<{
             key: string;
             value: string;
         }>;
+        teams: Array<{
+            id: string;
+            name: string;
+        }>;
+        authorName?: string | null;
     };
 };
 
@@ -25783,12 +25801,20 @@ export type GetInternalMcpCatalogItemResponses = {
             streamable_http_port?: number;
         } | null;
         icon: string | null;
+        organizationId: string | null;
+        authorId: string | null;
+        scope: 'personal' | 'team' | 'org';
         createdAt: string;
         updatedAt: string;
         labels: Array<{
             key: string;
             value: string;
         }>;
+        teams: Array<{
+            id: string;
+            name: string;
+        }>;
+        authorName?: string | null;
     };
 };
 
@@ -25883,10 +25909,12 @@ export type UpdateInternalMcpCatalogItemData = {
             streamable_http_port?: number;
         } | null;
         icon?: string | null;
+        scope?: 'personal' | 'team' | 'org';
         labels?: Array<{
             key: string;
             value: string;
         }>;
+        teams?: Array<string>;
         oauthClientSecretVaultPath?: string;
         oauthClientSecretVaultKey?: string;
         localConfigVaultPath?: string;
@@ -26051,12 +26079,20 @@ export type UpdateInternalMcpCatalogItemResponses = {
             streamable_http_port?: number;
         } | null;
         icon: string | null;
+        organizationId: string | null;
+        authorId: string | null;
+        scope: 'personal' | 'team' | 'org';
         createdAt: string;
         updatedAt: string;
         labels: Array<{
             key: string;
             value: string;
         }>;
+        teams: Array<{
+            id: string;
+            name: string;
+        }>;
+        authorName?: string | null;
     };
 };
 

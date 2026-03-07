@@ -87843,6 +87843,22 @@
                         "nullable": true,
                         "type": "string"
                       },
+                      "organizationId": {
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      "authorId": {
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      "scope": {
+                        "type": "string",
+                        "enum": [
+                          "personal",
+                          "team",
+                          "org"
+                        ]
+                      },
                       "createdAt": {
                         "type": "string",
                         "format": "date-time"
@@ -87872,6 +87888,30 @@
                           ],
                           "additionalProperties": false
                         }
+                      },
+                      "teams": {
+                        "default": [],
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "name": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "name"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "authorName": {
+                        "nullable": true,
+                        "type": "string"
                       }
                     },
                     "required": [
@@ -87895,9 +87935,13 @@
                       "userConfig",
                       "oauthConfig",
                       "icon",
+                      "organizationId",
+                      "authorId",
+                      "scope",
                       "createdAt",
                       "updatedAt",
-                      "labels"
+                      "labels",
+                      "teams"
                     ],
                     "additionalProperties": false
                   }
@@ -88527,6 +88571,14 @@
                     "nullable": true,
                     "type": "string"
                   },
+                  "scope": {
+                    "type": "string",
+                    "enum": [
+                      "personal",
+                      "team",
+                      "org"
+                    ]
+                  },
                   "labels": {
                     "type": "array",
                     "items": {
@@ -88545,6 +88597,12 @@
                         "key",
                         "value"
                       ]
+                    }
+                  },
+                  "teams": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
                     }
                   },
                   "oauthClientSecretVaultPath": {
@@ -88984,6 +89042,22 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "organizationId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "authorId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "scope": {
+                      "type": "string",
+                      "enum": [
+                        "personal",
+                        "team",
+                        "org"
+                      ]
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -89013,6 +89087,30 @@
                         ],
                         "additionalProperties": false
                       }
+                    },
+                    "teams": {
+                      "default": [],
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "authorName": {
+                      "nullable": true,
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -89036,9 +89134,13 @@
                     "userConfig",
                     "oauthConfig",
                     "icon",
+                    "organizationId",
+                    "authorId",
+                    "scope",
                     "createdAt",
                     "updatedAt",
-                    "labels"
+                    "labels",
+                    "teams"
                   ],
                   "additionalProperties": false
                 }
@@ -89692,6 +89794,22 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "organizationId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "authorId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "scope": {
+                      "type": "string",
+                      "enum": [
+                        "personal",
+                        "team",
+                        "org"
+                      ]
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -89721,6 +89839,30 @@
                         ],
                         "additionalProperties": false
                       }
+                    },
+                    "teams": {
+                      "default": [],
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "authorName": {
+                      "nullable": true,
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -89744,9 +89886,13 @@
                     "userConfig",
                     "oauthConfig",
                     "icon",
+                    "organizationId",
+                    "authorId",
+                    "scope",
                     "createdAt",
                     "updatedAt",
-                    "labels"
+                    "labels",
+                    "teams"
                   ],
                   "additionalProperties": false
                 }
@@ -90370,6 +90516,14 @@
                     "nullable": true,
                     "type": "string"
                   },
+                  "scope": {
+                    "type": "string",
+                    "enum": [
+                      "personal",
+                      "team",
+                      "org"
+                    ]
+                  },
                   "labels": {
                     "type": "array",
                     "items": {
@@ -90388,6 +90542,12 @@
                         "key",
                         "value"
                       ]
+                    }
+                  },
+                  "teams": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
                     }
                   },
                   "oauthClientSecretVaultPath": {
@@ -90834,6 +90994,22 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "organizationId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "authorId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "scope": {
+                      "type": "string",
+                      "enum": [
+                        "personal",
+                        "team",
+                        "org"
+                      ]
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -90863,6 +91039,30 @@
                         ],
                         "additionalProperties": false
                       }
+                    },
+                    "teams": {
+                      "default": [],
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "authorName": {
+                      "nullable": true,
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -90886,9 +91086,13 @@
                     "userConfig",
                     "oauthConfig",
                     "icon",
+                    "organizationId",
+                    "authorId",
+                    "scope",
                     "createdAt",
                     "updatedAt",
-                    "labels"
+                    "labels",
+                    "teams"
                   ],
                   "additionalProperties": false
                 }

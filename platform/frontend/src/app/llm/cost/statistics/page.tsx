@@ -454,7 +454,7 @@ export default function StatisticsPage() {
           <p className="text-sm text-muted-foreground">
             View and edit model token prices{" "}
             <a
-              href="/llm/providers?tab=models"
+              href="/llm/providers/models"
               className="underline hover:text-foreground transition-colors"
             >
               on Provider Settings

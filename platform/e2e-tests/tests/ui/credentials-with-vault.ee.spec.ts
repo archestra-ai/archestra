@@ -14,7 +14,7 @@ import {
  * Navigate to the LLM API Keys page and expand pagination to show all rows.
  */
 async function goToApiKeysPage(page: Page) {
-  await goToPage(page, "/llm/providers");
+  await goToPage(page, "/llm/providers/api-keys");
   await expandTablePagination(page, E2eTestId.ChatApiKeysTable);
 }
 

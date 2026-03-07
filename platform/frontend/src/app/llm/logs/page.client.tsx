@@ -1,12 +1,13 @@
 "use client";
 
 import type { archestraApiTypes } from "@shared";
-import { Layers, MessageSquare, Search, User } from "lucide-react";
+import { Layers, MessageSquare, User } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
-import { DebouncedInput } from "@/components/debounced-input";
+import { LogsEmptyState } from "@/components/logs-empty-state";
 import { Savings } from "@/components/savings";
+import { SearchInput } from "@/components/search-input";
 import { SourceBadge } from "@/components/source-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -309,7 +310,6 @@ function SessionsTable({
 
   const [profileFilter, setProfileFilter] = useState(profileIdFromUrl || "all");
   const [userFilter, setUserFilter] = useState(userIdFromUrl || "all");
-  const [searchFilter, setSearchFilter] = useState(searchFromUrl || "");
 
   // Helper to update URL params
   const updateUrlParams = useCallback(
@@ -375,62 +375,42 @@ function SessionsTable({
     [updateUrlParams],
   );
 
-  const handleSearchChange = useCallback(
-    (value: string) => {
-      setSearchFilter(value);
-      updateUrlParams({
-        search: value || null,
-        page: "1", // Reset to first page
-      });
-    },
-    [updateUrlParams],
-  );
-
-  const { data: sessionsResponse } = useInteractionSessions({
+  const { data: sessionsResponse, isFetching } = useInteractionSessions({
     limit: pageSize,
     offset: pageIndex * pageSize,
     profileId: profileFilter !== "all" ? profileFilter : undefined,
     userId: userFilter !== "all" ? userFilter : undefined,
     startDate: dateTimePicker.startDateParam,
     endDate: dateTimePicker.endDateParam,
-    search: searchFilter || undefined,
+    search: searchFromUrl || undefined,
   });
 
   const { data: agents } = useProfiles({
     initialData: initialData?.agents,
+    filters: { agentTypes: ["agent", "llm_proxy"] },
   });
 
   const { data: uniqueUsers } = useUniqueUserIds();
 
   const sessions = sessionsResponse?.data ?? [];
   const paginationMeta = sessionsResponse?.pagination;
-
   const hasFilters =
     profileFilter !== "all" ||
     userFilter !== "all" ||
     dateTimePicker.dateRange !== undefined ||
-    searchFilter !== "";
+    !!searchFromUrl;
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap gap-4">
-        <div className="relative w-[250px]">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <DebouncedInput
-            initialValue={searchFromUrl || ""}
-            onChange={handleSearchChange}
-            placeholder="Search sessions..."
-            className="pl-9"
-            debounceMs={400}
-          />
-        </div>
+        <SearchInput placeholder="Search sessions..." paramName="search" />
 
         <SearchableSelect
           value={profileFilter}
           onValueChange={handleProfileFilterChange}
           placeholder="Filter by Profile"
           items={[
-            { value: "all", label: "All Profiles" },
+            { value: "all", label: "All Agents & LLM Proxies" },
             ...(agents?.map((agent) => ({
               value: agent.id,
               label: agent.name,
@@ -474,10 +454,10 @@ function SessionsTable({
             variant="ghost"
             size="sm"
             onClick={() => {
-              handleSearchChange("");
               handleProfileFilterChange("all");
               handleUserFilterChange("all");
               dateTimePicker.clearDateRange();
+              updateUrlParams({ search: null, page: "1" });
             }}
           >
             Clear all filters
@@ -486,11 +466,11 @@ function SessionsTable({
       </div>
 
       {!sessions || sessions.length === 0 ? (
-        <p className="text-muted-foreground">
-          {hasFilters
-            ? "No sessions match your filters. Try adjusting your search."
-            : "No sessions found"}
-        </p>
+        <LogsEmptyState
+          isLoading={isFetching}
+          hasFilters={hasFilters}
+          emptyMessage="No LLM proxy logs found. Logs will appear here when agents start making requests."
+        />
       ) : (
         <div className="w-full space-y-4">
           <div className="overflow-hidden rounded-md border">

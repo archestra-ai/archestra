@@ -80,7 +80,6 @@ import {
 } from "@/components/ui/empty";
 import { TypingText } from "@/components/ui/typing-text";
 import { Version } from "@/components/version";
-import { useChatSession } from "@/contexts/global-chat-context";
 import { useInternalAgents } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth.query";
 import { useRecentlyGeneratedTitles } from "@/lib/chat.hook";
@@ -106,6 +105,7 @@ import {
 import { useFeatures } from "@/lib/config.query";
 import { useDialogs } from "@/lib/dialog.hook";
 import { useFeatureFlag } from "@/lib/features.hook";
+import { useChatSession } from "@/lib/global-chat.context";
 import { useOrganization } from "@/lib/organization.query";
 import {
   applyPendingActions,

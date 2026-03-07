@@ -417,15 +417,36 @@ async function makeInternalMcpCatalog(
       | "localConfig"
       | "userConfig"
       | "oauthConfig"
+      | "scope"
+      | "teams"
     >
-  > = {},
+  > & {
+    organizationId?: string;
+    authorId?: string;
+  } = {},
 ) {
-  return await InternalMcpCatalogModel.create({
-    name: `test-catalog-${crypto.randomUUID().substring(0, 8)}`,
-    serverType: "remote",
-    serverUrl: "https://api.example.com/mcp/",
-    ...overrides,
-  });
+  const { organizationId, authorId, ...catalogOverrides } = overrides;
+
+  // Auto-create organization if not provided
+  let orgId = organizationId;
+  if (!orgId) {
+    const org = await makeOrganization();
+    orgId = org.id;
+  }
+
+  return await InternalMcpCatalogModel.create(
+    {
+      name: `test-catalog-${crypto.randomUUID().substring(0, 8)}`,
+      serverType: "remote",
+      serverUrl: "https://api.example.com/mcp/",
+      scope: "org",
+      ...catalogOverrides,
+    },
+    {
+      organizationId: orgId,
+      authorId,
+    },
+  );
 }
 
 /**

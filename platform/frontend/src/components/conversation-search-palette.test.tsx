@@ -21,7 +21,7 @@ vi.mock("@uidotdev/usehooks", () => ({
   useDebounce: (value: string) => value,
 }));
 
-vi.mock("@/hooks/use-platform", () => ({
+vi.mock("@/lib/platform.hook", () => ({
   usePlatform: () => ({ modKey: "⌘", altKey: "⌥", isMac: true }),
 }));
 

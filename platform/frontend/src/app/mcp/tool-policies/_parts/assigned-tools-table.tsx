@@ -17,10 +17,10 @@ import {
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { DebouncedInput } from "@/components/debounced-input";
 import { LoadingSpinner } from "@/components/loading";
 import { PermissivePolicyOverlay } from "@/components/permissive-policy-overlay";
 import { WithPermissions } from "@/components/roles/with-permissions";
+import { SearchInput } from "@/components/search-input";
 import { TruncatedText } from "@/components/truncated-text";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -137,7 +137,6 @@ export function AssignedToolsTable({
   const pageSize = Number(pageSizeFromUrl || DEFAULT_TOOLS_PAGE_SIZE);
 
   // State
-  const [searchQuery, setSearchQuery] = useState(searchFromUrl || "");
   const [originFilter, setOriginFilter] = useState(
     originFromUrl || DEFAULT_FILTER_ALL,
   );
@@ -164,7 +163,7 @@ export function AssignedToolsTable({
   const useInitialData =
     pageIndex === 0 &&
     pageSize === DEFAULT_TOOLS_PAGE_SIZE &&
-    !searchQuery &&
+    !searchFromUrl &&
     originFilter === DEFAULT_FILTER_ALL &&
     (sorting[0]?.id === DEFAULT_SORT_BY || !sorting[0]?.id) &&
     sorting[0]?.desc !== false;
@@ -180,7 +179,7 @@ export function AssignedToolsTable({
       sortDirection: sorting[0]?.desc ? "desc" : "asc",
     },
     filters: {
-      search: searchQuery || undefined,
+      search: searchFromUrl || undefined,
       origin: originFilter !== "all" ? originFilter : undefined,
     },
   });
@@ -229,18 +228,10 @@ export function AssignedToolsTable({
     [tools],
   );
 
-  const handleSearchChange = useCallback(
-    (value: string) => {
-      setSearchQuery(value);
-      updateUrlParams({
-        search: value || null,
-        page: "1", // Reset to first page
-      });
-      setRowSelection({});
-      setSelectedTools([]);
-    },
-    [updateUrlParams],
-  );
+  const handleSearchChange = useCallback(() => {
+    setRowSelection({});
+    setSelectedTools([]);
+  }, []);
 
   const handleOriginFilterChange = useCallback(
     (value: string) => {
@@ -757,15 +748,12 @@ export function AssignedToolsTable({
     <PermissivePolicyOverlay>
       <div className="space-y-6">
         <div className="flex flex-wrap gap-4">
-          <div className="relative flex-1 min-w-[200px] max-w-md">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <DebouncedInput
-              placeholder="Search tools by name..."
-              initialValue={searchQuery}
-              onChange={handleSearchChange}
-              className="pl-9"
-            />
-          </div>
+          <SearchInput
+            placeholder="Search tools by name..."
+            paramName="search"
+            className="relative flex-1 min-w-[200px] max-w-md"
+            onSearchChange={handleSearchChange}
+          />
 
           <SearchableSelect
             value={originFilter}
@@ -1074,16 +1062,17 @@ export function AssignedToolsTable({
             <Search className="mb-4 h-12 w-12 text-muted-foreground/50" />
             <h3 className="mb-2 text-lg font-semibold">No tools found</h3>
             <p className="mb-4 text-sm text-muted-foreground">
-              {searchQuery || originFilter !== DEFAULT_FILTER_ALL
+              {searchFromUrl || originFilter !== DEFAULT_FILTER_ALL
                 ? "No tools match your filters. Try adjusting your search or filters."
                 : "No tools have been assigned yet."}
             </p>
-            {(searchQuery || originFilter !== DEFAULT_FILTER_ALL) && (
+            {(searchFromUrl || originFilter !== DEFAULT_FILTER_ALL) && (
               <Button
                 variant="outline"
                 onClick={() => {
-                  handleSearchChange("");
+                  handleSearchChange();
                   handleOriginFilterChange(DEFAULT_FILTER_ALL);
+                  updateUrlParams({ search: null, page: "1" });
                 }}
               >
                 Clear all filters

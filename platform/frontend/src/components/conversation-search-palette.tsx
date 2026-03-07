@@ -30,7 +30,6 @@ import {
   CommandList,
   CommandSeparator,
 } from "@/components/ui/command";
-import { usePlatform } from "@/hooks/use-platform";
 import { useIsAuthenticated } from "@/lib/auth.hook";
 import {
   useConversations,
@@ -45,6 +44,7 @@ import {
   SHORTCUT_SEARCH,
   SHORTCUT_SIDEBAR,
 } from "@/lib/keyboard-shortcuts";
+import { usePlatform } from "@/lib/platform.hook";
 
 /**
  * Extracts all text content from messages for preview purposes.
@@ -137,7 +137,7 @@ const navigationItems = [
     label: "Provider Settings",
     value: "provider-settings",
     keywords: "provider settings api keys virtual keys models llm",
-    href: "/llm/providers",
+    href: "/llm/providers/api-keys",
   },
   {
     icon: MessagesSquare,
@@ -165,7 +165,7 @@ const navigationItems = [
     label: "Cost & Limits",
     value: "cost-limits",
     keywords: "cost dashboard limits budget",
-    href: "/llm/cost",
+    href: "/llm/costs",
   },
   {
     icon: Cable,

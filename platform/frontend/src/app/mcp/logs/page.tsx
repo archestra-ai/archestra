@@ -44,7 +44,7 @@ export default async function McpGatewayLogsPageServer() {
       }),
       archestraApiSdk.getAllAgents({
         headers,
-        query: { excludeBuiltIn: true },
+        query: { excludeBuiltIn: true, agentTypes: ["agent", "mcp_gateway"] },
       }),
     ]);
     if (mcpToolCallsResponse.error) {

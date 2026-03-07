@@ -145,6 +145,16 @@ export function transformFormToApiData(
     data.labels = [];
   }
 
+  // Handle scope
+  if (values.scope) {
+    data.scope = values.scope;
+  }
+
+  // Handle teams for team scope
+  if (values.scope === "team" && values.teams) {
+    data.teams = values.teams;
+  }
+
   return data;
 }
 
@@ -311,6 +321,10 @@ export function transformCatalogItemToFormValues(
     oauthClientSecretVaultKey,
     // Labels
     labels: item.labels ?? [],
+    // Scope
+    scope: (item.scope as "personal" | "team" | "org") ?? "org",
+    // Teams
+    teams: item.teams?.map((t) => t.id) ?? [],
   } as McpCatalogFormValues;
 }
 

@@ -326,7 +326,7 @@ export function ProviderSettingsModels() {
               <p>
                 No models available.{" "}
                 <a
-                  href="/llm/providers"
+                  href="/llm/providers/api-keys"
                   className="underline hover:text-foreground"
                 >
                   Add an API key

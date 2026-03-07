@@ -8,16 +8,15 @@ import {
   MCP_CATALOG_SERVER_QUERY_PARAM,
 } from "@shared";
 import { useQueryClient } from "@tanstack/react-query";
-import { Cable, Plus, Search } from "lucide-react";
+import { Search } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { DebouncedInput } from "@/components/debounced-input";
 import {
   OAuthConfirmationDialog,
   type OAuthInstallResult,
 } from "@/components/oauth-confirmation-dialog";
-import { Button } from "@/components/ui/button";
 import { useHasPermissions } from "@/lib/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import { useDialogs } from "@/lib/dialog.hook";
@@ -124,6 +123,12 @@ export function InternalMCPCatalog({
 
   // Deep-link manage connections dialog state
   const [manageCatalogId, setManageCatalogId] = useState<string | null>(null);
+  // Pre-selected team ID when adding a shared connection from manage dialog
+  const [preselectedTeamId, setPreselectedTeamId] = useState<string | null>(
+    null,
+  );
+  // When true, install dialog hides the team selector (personal connection only)
+  const [installPersonalOnly, setInstallPersonalOnly] = useState(false);
 
   // Update URL when search query changes (debounced via DebouncedInput)
   const handleSearchChange = useCallback(
@@ -161,7 +166,7 @@ export function InternalMCPCatalog({
   );
   const { data: detailsServerData } = useMcpRegistryServer(detailsServerName);
 
-  const { data: userIsMcpServerAdmin } = useHasPermissions({
+  const { data: _userIsMcpServerAdmin } = useHasPermissions({
     mcpServer: ["admin"],
   });
 
@@ -245,6 +250,13 @@ export function InternalMCPCatalog({
       }
     }
   }, [installedServers]);
+
+  // Listen for create event from layout header button
+  useEffect(() => {
+    const handler = () => openDialog("create");
+    window.addEventListener("mcp-registry:create", handler);
+    return () => window.removeEventListener("mcp-registry:create", handler);
+  }, [openDialog]);
 
   // Clear OAuth installation completion state
   useEffect(() => {
@@ -427,6 +439,82 @@ export function InternalMCPCatalog({
       }
     }
     setInstallingItemId(null);
+  };
+
+  // Check if a catalog item needs any config dialogs, or can be installed directly
+  const canDirectInstall = (catalogItem: CatalogItem) => {
+    if (catalogItem.oauthConfig) return false;
+    if (catalogItem.serverType === "remote") {
+      const hasUserConfig =
+        catalogItem.userConfig &&
+        Object.keys(catalogItem.userConfig).length > 0;
+      return !hasUserConfig;
+    }
+    // Local server: check for prompted env vars
+    const promptedEnvVars =
+      catalogItem.localConfig?.environment?.filter(
+        (env) => env.promptOnInstallation === true,
+      ) || [];
+    return promptedEnvVars.length === 0;
+  };
+
+  // Install directly without opening a dialog (works for both personal and shared)
+  const handleDirectInstall = async (
+    catalogItem: CatalogItem,
+    teamId?: string,
+  ) => {
+    setInstallingItemId(catalogItem.id);
+    const result = await installMutation.mutateAsync({
+      name: catalogItem.name,
+      catalogId: catalogItem.id,
+      ...(teamId && { teamId }),
+      dontShowToast: true,
+    });
+
+    const installedServerId = result?.installedServer?.id;
+    if (installedServerId) {
+      setInstallingServerIds((prev) => new Set(prev).add(installedServerId));
+      const isFirstInstallation = !installedServers?.some(
+        (s) => s.catalogId === catalogItem.id,
+      );
+      if (isFirstInstallation) {
+        setFirstInstallationServerIds((prev) =>
+          new Set(prev).add(installedServerId),
+        );
+      }
+    }
+    setInstallingItemId(null);
+  };
+
+  // Add personal connection: skip dialog if no config needed, otherwise open dialog with personalOnly
+  const handleAddPersonalConnection = (catalogItem: CatalogItem) => {
+    if (canDirectInstall(catalogItem)) {
+      handleDirectInstall(catalogItem);
+    } else {
+      setInstallPersonalOnly(true);
+      if (catalogItem.serverType === "local") {
+        handleInstallLocalServer(catalogItem);
+      } else {
+        handleInstallRemoteServer(catalogItem, false);
+      }
+    }
+  };
+
+  // Add shared connection: skip dialog if no config needed, otherwise open dialog with preselected team
+  const handleAddSharedConnection = (
+    catalogItem: CatalogItem,
+    teamId: string,
+  ) => {
+    if (canDirectInstall(catalogItem)) {
+      handleDirectInstall(catalogItem, teamId);
+    } else {
+      setPreselectedTeamId(teamId);
+      if (catalogItem.serverType === "local") {
+        handleInstallLocalServer(catalogItem);
+      } else {
+        handleInstallRemoteServer(catalogItem, false);
+      }
+    }
   };
 
   const handleNoAuthConfirm = async (result: NoAuthInstallResult) => {
@@ -825,15 +913,22 @@ export function InternalMCPCatalog({
     });
   };
 
-  const sortInstalledFirst = (items: CatalogItem[]) =>
-    [...items].sort((a, b) => {
-      // Primary sort: connected (has installations) first
-      const aConnected = installedServers?.some((s) => s.catalogId === a.id)
-        ? 0
-        : 1;
-      const bConnected = installedServers?.some((s) => s.catalogId === b.id)
-        ? 0
-        : 1;
+  // Capture connected catalog IDs on first load to keep sort order stable.
+  // Only update when the set of catalog IDs changes (new item added/removed),
+  // not when connection status changes (which would cause items to jump around).
+  const connectedCatalogIdsRef = useRef<Set<string> | null>(null);
+  if (connectedCatalogIdsRef.current === null && installedServers) {
+    connectedCatalogIdsRef.current = new Set(
+      installedServers.map((s) => s.catalogId).filter(Boolean) as string[],
+    );
+  }
+
+  const sortInstalledFirst = (items: CatalogItem[]) => {
+    const connectedIds = connectedCatalogIdsRef.current;
+    return [...items].sort((a, b) => {
+      // Primary sort: connected (has installations) first — using stable snapshot
+      const aConnected = connectedIds?.has(a.id) ? 0 : 1;
+      const bConnected = connectedIds?.has(b.id) ? 0 : 1;
       if (aConnected !== bConnected) return aConnected - bConnected;
 
       // Secondary sort priority: builtin > remote > local
@@ -850,6 +945,7 @@ export function InternalMCPCatalog({
       // Tertiary sort by createdAt (newest first)
       return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
     });
+  };
 
   const filterCatalogItems = (items: CatalogItem[], query: string) => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -865,9 +961,16 @@ export function InternalMCPCatalog({
     });
   };
 
-  const filteredCatalogItems = sortInstalledFirst(
+  const allFilteredItems = sortInstalledFirst(
     filterCatalogItems(catalogItems || [], searchQueryFromUrl),
   ).filter((item) => item.id !== ARCHESTRA_MCP_CATALOG_ID);
+
+  const draftItems = allFilteredItems.filter(
+    (item) => item.scope === "personal",
+  );
+  const publishedItems = allFilteredItems.filter(
+    (item) => item.scope !== "personal",
+  );
 
   const getInstalledServerInfo = (item: CatalogItem) => {
     const installedServer = getAggregatedInstallation(item.id);
@@ -896,94 +999,137 @@ export function InternalMCPCatalog({
 
   return (
     <div className="space-y-4">
-      <div className="space-y-4">
-        <div className="flex flex-col gap-3 sm:flex-row">
-          <Button
-            onClick={() =>
-              userIsMcpServerAdmin
-                ? openDialog("create")
-                : openDialog("custom-request")
-            }
-            className="bg-linear-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white shadow-lg hover:shadow-xl transition-all duration-200"
-          >
-            <Plus className="mr-0.5 h-4 w-4" />
-            {userIsMcpServerAdmin
-              ? "Add MCP Server to the Registry"
-              : "Request Custom MCP"}
-          </Button>
-          <Button
-            variant="outline"
-            onClick={() => {
-              window.location.href = "/connection?tab=mcp";
-            }}
-            className="bg-linear-to-r from-green-500/10 to-emerald-500/10 hover:from-green-500/20 hover:to-emerald-500/20 border-green-500/50 hover:border-green-500 transition-all duration-200 shadow-sm hover:shadow-md whitespace-normal text-left h-auto"
-          >
-            <Cable className="mr-0.5 h-4 w-4" />
-            Connect to the Unified MCP Gateway to access those servers
-          </Button>
-        </div>
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <DebouncedInput
-            placeholder="Search registry by name..."
-            initialValue={searchQueryFromUrl}
-            onChange={handleSearchChange}
-            debounceMs={300}
-            className="pl-9 h-11 bg-background/50 backdrop-blur-sm border-border/50 focus:border-primary/50 transition-colors"
-          />
-        </div>
+      <div className="relative max-w-md">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <DebouncedInput
+          placeholder="Search registry by name..."
+          initialValue={searchQueryFromUrl}
+          onChange={handleSearchChange}
+          debounceMs={300}
+          className="pl-9 h-11 bg-background/50 backdrop-blur-sm border-border/50 focus:border-primary/50 transition-colors"
+        />
       </div>
-      <div className="space-y-4">
-        {filteredCatalogItems.length > 0 ? (
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {filteredCatalogItems.map((item) => {
-              const serverInfo = getInstalledServerInfo(item);
-              return (
-                <McpServerCard
-                  variant={
-                    item.serverType === "builtin"
-                      ? "builtin"
-                      : item.serverType === "remote"
-                        ? "remote"
-                        : "local"
-                  }
-                  key={item.id}
-                  item={item}
-                  installedServer={serverInfo.installedServer}
-                  installingItemId={installingItemId}
-                  installationStatus={
-                    serverInfo.installedServer?.localInstallationStatus ||
-                    undefined
-                  }
-                  deploymentStatuses={deploymentStatuses}
-                  onInstallRemoteServer={() =>
-                    handleInstallRemoteServer(item, false)
-                  }
-                  onInstallLocalServer={() =>
-                    isPlaywrightCatalogItem(item.id)
-                      ? handleInstallPlaywright(item)
-                      : handleInstallLocalServer(item)
-                  }
-                  onReinstall={() => handleReinstall(item)}
-                  onEdit={() => setEditingItem(item)}
-                  onDetails={() => {
-                    setDetailsServerName(item.name);
-                  }}
-                  onDelete={() => setDeletingItem(item)}
-                  onCancelInstallation={handleCancelInstallation}
-                  isBuiltInPlaywright={isPlaywrightCatalogItem(item.id)}
-                />
-              );
-            })}
+      <div className="space-y-6">
+        {draftItems.length > 0 && (
+          <div className="space-y-3">
+            <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
+              Unpublished
+            </h3>
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {draftItems.map((item) => {
+                const serverInfo = getInstalledServerInfo(item);
+                return (
+                  <McpServerCard
+                    variant={
+                      item.serverType === "builtin"
+                        ? "builtin"
+                        : item.serverType === "remote"
+                          ? "remote"
+                          : "local"
+                    }
+                    key={item.id}
+                    item={item}
+                    installedServer={serverInfo.installedServer}
+                    installingItemId={installingItemId}
+                    installationStatus={
+                      serverInfo.installedServer?.localInstallationStatus ||
+                      undefined
+                    }
+                    deploymentStatuses={deploymentStatuses}
+                    onInstallRemoteServer={() =>
+                      handleInstallRemoteServer(item, false)
+                    }
+                    onInstallLocalServer={() =>
+                      isPlaywrightCatalogItem(item.id)
+                        ? handleInstallPlaywright(item)
+                        : handleInstallLocalServer(item)
+                    }
+                    onReinstall={() => handleReinstall(item)}
+                    onEdit={() => setEditingItem(item)}
+                    onDetails={() => {
+                      setDetailsServerName(item.name);
+                    }}
+                    onDelete={() => setDeletingItem(item)}
+                    onCancelInstallation={handleCancelInstallation}
+                    onAddPersonalConnection={() =>
+                      handleAddPersonalConnection(item)
+                    }
+                    onAddSharedConnection={(teamId) =>
+                      handleAddSharedConnection(item, teamId)
+                    }
+                    isBuiltInPlaywright={isPlaywrightCatalogItem(item.id)}
+                  />
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {publishedItems.length > 0 ? (
+          <div className="space-y-3">
+            {draftItems.length > 0 && (
+              <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
+                Published
+              </h3>
+            )}
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {publishedItems.map((item) => {
+                const serverInfo = getInstalledServerInfo(item);
+                return (
+                  <McpServerCard
+                    variant={
+                      item.serverType === "builtin"
+                        ? "builtin"
+                        : item.serverType === "remote"
+                          ? "remote"
+                          : "local"
+                    }
+                    key={item.id}
+                    item={item}
+                    installedServer={serverInfo.installedServer}
+                    installingItemId={installingItemId}
+                    installationStatus={
+                      serverInfo.installedServer?.localInstallationStatus ||
+                      undefined
+                    }
+                    deploymentStatuses={deploymentStatuses}
+                    onInstallRemoteServer={() =>
+                      handleInstallRemoteServer(item, false)
+                    }
+                    onInstallLocalServer={() =>
+                      isPlaywrightCatalogItem(item.id)
+                        ? handleInstallPlaywright(item)
+                        : handleInstallLocalServer(item)
+                    }
+                    onReinstall={() => handleReinstall(item)}
+                    onEdit={() => setEditingItem(item)}
+                    onDetails={() => {
+                      setDetailsServerName(item.name);
+                    }}
+                    onDelete={() => setDeletingItem(item)}
+                    onCancelInstallation={handleCancelInstallation}
+                    onAddPersonalConnection={() =>
+                      handleAddPersonalConnection(item)
+                    }
+                    onAddSharedConnection={(teamId) =>
+                      handleAddSharedConnection(item, teamId)
+                    }
+                    isBuiltInPlaywright={isPlaywrightCatalogItem(item.id)}
+                  />
+                );
+              })}
+            </div>
           </div>
         ) : (
-          <div className="py-8 text-center">
-            <p className="text-muted-foreground">
-              {searchQueryFromUrl.trim()
-                ? `No MCP servers match "${searchQueryFromUrl}".`
-                : "No MCP servers found."}
-            </p>
-          </div>
+          draftItems.length === 0 && (
+            <div className="py-8 text-center">
+              <p className="text-muted-foreground">
+                {searchQueryFromUrl.trim()
+                  ? `No MCP servers match "${searchQueryFromUrl}".`
+                  : "No MCP servers found."}
+              </p>
+            </div>
+          )
         )}
       </div>
 
@@ -1053,11 +1199,15 @@ export function InternalMCPCatalog({
           closeDialog("remote-install");
           setSelectedCatalogItem(null);
           setReauthServerId(null);
+          setPreselectedTeamId(null);
+          setInstallPersonalOnly(false);
         }}
         onConfirm={handleRemoteServerInstallConfirm}
         catalogItem={selectedCatalogItem}
         isInstalling={installMutation.isPending || reauthMutation.isPending}
         isReauth={!!reauthServerId}
+        preselectedTeamId={preselectedTeamId}
+        personalOnly={installPersonalOnly}
       />
 
       <OAuthConfirmationDialog
@@ -1073,8 +1223,12 @@ export function InternalMCPCatalog({
           closeDialog("oauth");
           setSelectedCatalogItem(null);
           setReauthServerId(null);
+          setPreselectedTeamId(null);
+          setInstallPersonalOnly(false);
         }}
         catalogId={selectedCatalogItem?.id}
+        preselectedTeamId={preselectedTeamId}
+        personalOnly={installPersonalOnly}
       />
 
       <ReinstallConfirmationDialog
@@ -1094,10 +1248,14 @@ export function InternalMCPCatalog({
         onClose={() => {
           closeDialog("no-auth");
           setNoAuthCatalogItem(null);
+          setPreselectedTeamId(null);
+          setInstallPersonalOnly(false);
         }}
         onInstall={handleNoAuthConfirm}
         catalogItem={noAuthCatalogItem}
         isInstalling={installMutation.isPending}
+        preselectedTeamId={preselectedTeamId}
+        personalOnly={installPersonalOnly}
       />
 
       {localServerCatalogItem && (
@@ -1109,6 +1267,8 @@ export function InternalMCPCatalog({
             setReinstallServerId(null);
             setReinstallServerTeamId(null);
             setReauthServerId(null);
+            setPreselectedTeamId(null);
+            setInstallPersonalOnly(false);
           }}
           onConfirm={handleLocalServerInstallConfirm}
           catalogItem={localServerCatalogItem}
@@ -1120,6 +1280,8 @@ export function InternalMCPCatalog({
           isReinstall={!!reinstallServerId}
           existingTeamId={reinstallServerTeamId}
           isReauth={!!reauthServerId}
+          preselectedTeamId={preselectedTeamId}
+          personalOnly={installPersonalOnly}
         />
       )}
 
@@ -1128,6 +1290,20 @@ export function InternalMCPCatalog({
           isOpen={isDialogOpened("manage")}
           onClose={handleManageDialogClose}
           catalogId={manageCatalogId}
+          onAddPersonalConnection={() => {
+            const catalogItem = catalogItems?.find(
+              (item) => item.id === manageCatalogId,
+            );
+            if (!catalogItem) return;
+            handleAddPersonalConnection(catalogItem);
+          }}
+          onAddSharedConnection={(teamId) => {
+            const catalogItem = catalogItems?.find(
+              (item) => item.id === manageCatalogId,
+            );
+            if (!catalogItem) return;
+            handleAddSharedConnection(catalogItem, teamId);
+          }}
         />
       )}
     </div>

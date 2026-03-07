@@ -33,8 +33,12 @@ interface SelectMcpServerCredentialTypeAndTeamsProps {
   existingTeamId?: string | null;
   /** When true, only personal installation is allowed (teams are disabled) */
   personalOnly?: boolean;
+  /** When true, only team installation is allowed (personal is disabled) */
+  teamOnly?: boolean;
   /** Callback when install availability changes (false when user lacks all options) */
   onCanInstallChange?: (canInstall: boolean) => void;
+  /** Pre-select a specific team (used when adding shared connection from manage dialog) */
+  preselectedTeamId?: string | null;
 }
 
 export function SelectMcpServerCredentialTypeAndTeams({
@@ -44,7 +48,9 @@ export function SelectMcpServerCredentialTypeAndTeams({
   isReinstall = false,
   existingTeamId,
   personalOnly = false,
+  teamOnly = false,
   onCanInstallChange,
+  preselectedTeamId,
 }: SelectMcpServerCredentialTypeAndTeamsProps) {
   const { data: teams, isLoading: isLoadingTeams } = useTeams();
   const { data: installedServers } = useMcpServers();
@@ -93,11 +99,13 @@ export function SelectMcpServerCredentialTypeAndTeams({
 
   // WHY: During reinstall, lock credential type to existing value (can't change ownership)
   // Personal is disabled if: reinstalling a team server, or (for new install) already has personal or BYOS enabled
-  const isPersonalDisabled = personalOnly
-    ? false
-    : isReinstall
-      ? !!existingTeamId // Reinstalling team server - can't switch to personal
-      : hasPersonalInstallation;
+  const isPersonalDisabled = teamOnly
+    ? true
+    : personalOnly
+      ? false
+      : isReinstall
+        ? !!existingTeamId // Reinstalling team server - can't switch to personal
+        : hasPersonalInstallation;
 
   // WHY: Team options are disabled if:
   // 1. personalOnly mode (e.g. Playwright - only personal installs allowed)
@@ -121,6 +129,12 @@ export function SelectMcpServerCredentialTypeAndTeams({
     if (personalOnly) {
       return PERSONAL_VALUE;
     }
+    if (preselectedTeamId) {
+      return preselectedTeamId;
+    }
+    if (teamOnly && availableTeams.length > 0) {
+      return availableTeams[0].id;
+    }
     if (isReinstall) {
       return existingTeamId || PERSONAL_VALUE;
     }
@@ -131,6 +145,8 @@ export function SelectMcpServerCredentialTypeAndTeams({
     return PERSONAL_VALUE;
   }, [
     personalOnly,
+    preselectedTeamId,
+    teamOnly,
     hasPersonalInstallation,
     availableTeams,
     isReinstall,
@@ -203,9 +219,14 @@ export function SelectMcpServerCredentialTypeAndTeams({
     );
   }
 
+  // When personalOnly or preselectedTeamId, hide the selector entirely — already determined
+  if (personalOnly || preselectedTeamId) {
+    return null;
+  }
+
   return (
     <div className="space-y-2">
-      <Label>Connect MCP Server for</Label>
+      <Label>{teamOnly ? "Select team" : "Connect MCP Server for"}</Label>
       <Select
         value={selectedValue}
         onValueChange={handleValueChange}
@@ -219,21 +240,23 @@ export function SelectMcpServerCredentialTypeAndTeams({
           />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem
-            value={PERSONAL_VALUE}
-            disabled={isPersonalDisabled}
-            data-testid={E2eTestId.SelectCredentialTypePersonal}
-          >
-            Myself
-            {hasPersonalInstallation && !isReinstall && (
-              <span className="text-muted-foreground ml-1">
-                (already installed)
-              </span>
-            )}
-          </SelectItem>
+          {!teamOnly && (
+            <SelectItem
+              value={PERSONAL_VALUE}
+              disabled={isPersonalDisabled}
+              data-testid={E2eTestId.SelectCredentialTypePersonal}
+            >
+              Myself
+              {hasPersonalInstallation && !isReinstall && (
+                <span className="text-muted-foreground ml-1">
+                  (already installed)
+                </span>
+              )}
+            </SelectItem>
+          )}
           {(isReinstall ? availableTeams : (teams ?? [])).length > 0 && (
             <SelectGroup>
-              <SelectLabel>Teams</SelectLabel>
+              {!teamOnly && <SelectLabel>Teams</SelectLabel>}
               {(isReinstall ? availableTeams : (teams ?? [])).map((team) => {
                 const isAlreadyInstalled =
                   !isReinstall && teamsWithInstallation.includes(team.id);

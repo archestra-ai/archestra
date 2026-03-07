@@ -61,10 +61,18 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ),
       },
     },
-    async (_request, reply) => {
+    async (request, reply) => {
+      const { success: isAdmin } = await hasPermission(
+        { mcpServer: ["admin"] },
+        request.headers,
+      );
       // Don't expand secrets for list view
       return reply.send(
-        await InternalMcpCatalogModel.findAll({ expandSecrets: false }),
+        await InternalMcpCatalogModel.findAll({
+          expandSecrets: false,
+          userId: request.user.id,
+          isAdmin,
+        }),
       );
     },
   );
@@ -89,7 +97,8 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectInternalMcpCatalogSchema),
       },
     },
-    async ({ body }, reply) => {
+    async (request, reply) => {
+      const { body } = request;
       const {
         oauthClientSecretVaultPath,
         oauthClientSecretVaultKey,
@@ -97,6 +106,24 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         localConfigVaultKey,
         ...restBody
       } = body;
+
+      // Enforce scope restrictions
+      const { success: isAdmin } = await hasPermission(
+        { mcpServer: ["admin"] },
+        request.headers,
+      );
+
+      restBody.scope = restBody.scope ?? "personal";
+      if (!isAdmin && restBody.scope === "org") {
+        throw new ApiError(
+          403,
+          "Only admins can create org-scoped catalog items",
+        );
+      }
+      if (restBody.scope !== "team") {
+        delete restBody.teams;
+      }
+
       let clientSecretId: string | undefined;
       let localConfigSecretId: string | undefined;
 
@@ -229,7 +256,10 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
-      const catalogItem = await InternalMcpCatalogModel.create(restBody);
+      const catalogItem = await InternalMcpCatalogModel.create(restBody, {
+        organizationId: request.organizationId,
+        authorId: request.user.id,
+      });
       return reply.send(catalogItem);
     },
   );
@@ -247,8 +277,16 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectInternalMcpCatalogSchema),
       },
     },
-    async ({ params: { id } }, reply) => {
-      const catalogItem = await InternalMcpCatalogModel.findById(id);
+    async (request, reply) => {
+      const { id } = request.params;
+      const { success: isAdmin } = await hasPermission(
+        { mcpServer: ["admin"] },
+        request.headers,
+      );
+      const catalogItem = await InternalMcpCatalogModel.findById(id, {
+        userId: request.user.id,
+        isAdmin,
+      });
 
       if (!catalogItem) {
         throw new ApiError(404, "Catalog item not found");
@@ -310,7 +348,9 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectInternalMcpCatalogSchema),
       },
     },
-    async ({ params: { id }, body }, reply) => {
+    async (request, reply) => {
+      const { id } = request.params;
+      const { body } = request;
       if (isBuiltInCatalogId(id) && !isPlaywrightCatalogItem(id)) {
         throw new ApiError(403, "Built-in catalog items cannot be modified");
       }
@@ -333,6 +373,36 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       if (!originalCatalogItem) {
         throw new ApiError(404, "Catalog item not found");
+      }
+
+      // Enforce scope restrictions
+      const { success: isAdmin } = await hasPermission(
+        { mcpServer: ["admin"] },
+        request.headers,
+      );
+
+      if (!isAdmin) {
+        // Non-admins can only edit their own personal items
+        if (
+          originalCatalogItem.scope !== "personal" ||
+          originalCatalogItem.authorId !== request.user.id
+        ) {
+          throw new ApiError(
+            403,
+            "You can only edit your own personal catalog items",
+          );
+        }
+        // Non-admins cannot set scope to "org"
+        if (restBody.scope === "org") {
+          throw new ApiError(
+            403,
+            "Only admins can set catalog items to org scope",
+          );
+        }
+      }
+
+      if (restBody.scope && restBody.scope !== "team") {
+        delete restBody.teams;
       }
 
       let clientSecretId = originalCatalogItem.clientSecretId;
@@ -630,7 +700,8 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(DeleteObjectResponseSchema),
       },
     },
-    async ({ params: { id } }, reply) => {
+    async (request, reply) => {
+      const { id } = request.params;
       if (isBuiltInCatalogId(id)) {
         throw new ApiError(403, "Built-in catalog items cannot be deleted");
       }
@@ -640,13 +711,31 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         expandSecrets: false,
       });
 
-      if (catalogItem?.clientSecretId) {
-        // Delete the associated OAuth secret
+      if (!catalogItem) {
+        throw new ApiError(404, "Catalog item not found");
+      }
+
+      // Enforce ownership: non-admins can only delete own personal items
+      const { success: isAdmin } = await hasPermission(
+        { mcpServer: ["admin"] },
+        request.headers,
+      );
+      if (
+        !isAdmin &&
+        (catalogItem.scope !== "personal" ||
+          catalogItem.authorId !== request.user.id)
+      ) {
+        throw new ApiError(
+          403,
+          "You can only delete your own personal catalog items",
+        );
+      }
+
+      if (catalogItem.clientSecretId) {
         await secretManager().deleteSecret(catalogItem.clientSecretId);
       }
 
-      if (catalogItem?.localConfigSecretId) {
-        // Delete the associated local config secret
+      if (catalogItem.localConfigSecretId) {
         await secretManager().deleteSecret(catalogItem.localConfigSecretId);
       }
 
@@ -669,8 +758,8 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(DeleteObjectResponseSchema),
       },
     },
-    async ({ params: { name } }, reply) => {
-      // Find the catalog item by name
+    async (request, reply) => {
+      const { name } = request.params;
       const catalogItem = await InternalMcpCatalogModel.findByName(name);
 
       if (!catalogItem) {
@@ -681,13 +770,27 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(403, "Built-in catalog items cannot be deleted");
       }
 
-      if (catalogItem?.clientSecretId) {
-        // Delete the associated OAuth secret
+      // Enforce ownership: non-admins can only delete own personal items
+      const { success: isAdmin } = await hasPermission(
+        { mcpServer: ["admin"] },
+        request.headers,
+      );
+      if (
+        !isAdmin &&
+        (catalogItem.scope !== "personal" ||
+          catalogItem.authorId !== request.user.id)
+      ) {
+        throw new ApiError(
+          403,
+          "You can only delete your own personal catalog items",
+        );
+      }
+
+      if (catalogItem.clientSecretId) {
         await secretManager().deleteSecret(catalogItem.clientSecretId);
       }
 
-      if (catalogItem?.localConfigSecretId) {
-        // Delete the associated local config secret
+      if (catalogItem.localConfigSecretId) {
         await secretManager().deleteSecret(catalogItem.localConfigSecretId);
       }
 

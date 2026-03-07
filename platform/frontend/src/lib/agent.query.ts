@@ -73,13 +73,13 @@ export function useProfilesPaginated(params?: {
 
   // Check if we can use initialData (server-side fetched data)
   // Only use it for the first page (offset 0), default sorting, no search filter,
-  // no agentTypes filter, no scope filter, AND matching default page size (20)
+  // no scope filter, AND matching default page size (20)
+  // Note: agentTypes is allowed since the server fetches with the page-specific agentTypes
   const useInitialData =
     offset === 0 &&
     (sortBy === undefined || sortBy === DEFAULT_SORT_BY) &&
     (sortDirection === undefined || sortDirection === DEFAULT_SORT_DIRECTION) &&
     name === undefined &&
-    agentTypes === undefined &&
     scope === undefined &&
     teamIds === undefined &&
     authorIds === undefined &&

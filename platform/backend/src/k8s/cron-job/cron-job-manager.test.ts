@@ -169,8 +169,8 @@ describe("CronJobManager", () => {
     test("falls back to in-process scheduler when connector image is not configured", async () => {
       const manager = await getManager();
       const { default: mockedConfig } = await import("@/config");
-      const original = mockedConfig.orchestrator.connectorImage;
-      mockedConfig.orchestrator.connectorImage = "";
+      const original = mockedConfig.kb.connectorImage;
+      mockedConfig.kb.connectorImage = "";
 
       try {
         await manager.createOrUpdateCronJob(defaultParams);
@@ -179,7 +179,7 @@ describe("CronJobManager", () => {
         expect(mockCreateNamespacedCronJob).not.toHaveBeenCalled();
         expect(mockInProcessSchedule).toHaveBeenCalledWith(defaultParams);
       } finally {
-        mockedConfig.orchestrator.connectorImage = original;
+        mockedConfig.kb.connectorImage = original;
       }
     });
 
@@ -305,8 +305,8 @@ describe("CronJobManager", () => {
     test("uses in-process unschedule and skips K8s when no image configured", async () => {
       const manager = await getManager();
       const { default: mockedConfig } = await import("@/config");
-      const original = mockedConfig.orchestrator.connectorImage;
-      mockedConfig.orchestrator.connectorImage = "";
+      const original = mockedConfig.kb.connectorImage;
+      mockedConfig.kb.connectorImage = "";
 
       try {
         await manager.deleteCronJob("connector-123");
@@ -314,7 +314,7 @@ describe("CronJobManager", () => {
         expect(mockInProcessUnschedule).toHaveBeenCalledWith("connector-123");
         expect(mockDeleteNamespacedCronJob).not.toHaveBeenCalled();
       } finally {
-        mockedConfig.orchestrator.connectorImage = original;
+        mockedConfig.kb.connectorImage = original;
       }
     });
 
@@ -359,8 +359,8 @@ describe("CronJobManager", () => {
     test("uses in-process suspend when no image configured", async () => {
       const manager = await getManager();
       const { default: mockedConfig } = await import("@/config");
-      const original = mockedConfig.orchestrator.connectorImage;
-      mockedConfig.orchestrator.connectorImage = "";
+      const original = mockedConfig.kb.connectorImage;
+      mockedConfig.kb.connectorImage = "";
 
       try {
         await manager.suspendCronJob("connector-123");
@@ -368,7 +368,7 @@ describe("CronJobManager", () => {
         expect(mockInProcessSuspend).toHaveBeenCalledWith("connector-123");
         expect(mockPatchNamespacedCronJob).not.toHaveBeenCalled();
       } finally {
-        mockedConfig.orchestrator.connectorImage = original;
+        mockedConfig.kb.connectorImage = original;
       }
     });
 
@@ -392,8 +392,8 @@ describe("CronJobManager", () => {
     test("uses in-process resume when no image configured", async () => {
       const manager = await getManager();
       const { default: mockedConfig } = await import("@/config");
-      const original = mockedConfig.orchestrator.connectorImage;
-      mockedConfig.orchestrator.connectorImage = "";
+      const original = mockedConfig.kb.connectorImage;
+      mockedConfig.kb.connectorImage = "";
 
       try {
         await manager.resumeCronJob("connector-123");
@@ -401,7 +401,7 @@ describe("CronJobManager", () => {
         expect(mockInProcessResume).toHaveBeenCalledWith("connector-123");
         expect(mockPatchNamespacedCronJob).not.toHaveBeenCalled();
       } finally {
-        mockedConfig.orchestrator.connectorImage = original;
+        mockedConfig.kb.connectorImage = original;
       }
     });
 

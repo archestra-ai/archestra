@@ -1,5 +1,6 @@
 "use client";
 
+import type { archestraApiTypes } from "@shared";
 import { CheckCircle, Clock, XCircle } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -20,7 +21,12 @@ import {
   useMcpServerInstallationRequests,
 } from "@/lib/mcp-server-installation-request.query";
 
-type RequestStatusFilter = "all" | "pending" | "approved" | "declined";
+type RequestStatus = NonNullable<
+  NonNullable<
+    archestraApiTypes.GetMcpServerInstallationRequestsData["query"]
+  >["status"]
+>;
+type RequestStatusFilter = "all" | RequestStatus;
 
 export default function InstallationRequestsPage() {
   const [statusFilter, setStatusFilter] = useState<RequestStatusFilter>("all");

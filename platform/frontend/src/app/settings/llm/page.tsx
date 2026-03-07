@@ -27,16 +27,13 @@ type LimitCleanupInterval = NonNullable<
   NonNullable<archestraApiTypes.UpdateLlmSettingsData["body"]>["limitCleanupInterval"]
 >;
 
-const CLEANUP_INTERVAL_OPTIONS: {
-  value: LimitCleanupInterval;
-  label: string;
-}[] = [
-  { value: "1h", label: "Every hour" },
-  { value: "12h", label: "Every 12 hours" },
-  { value: "24h", label: "Every 24 hours" },
-  { value: "1w", label: "Every week" },
-  { value: "1m", label: "Every month" },
-];
+const CLEANUP_INTERVAL_LABELS: Record<LimitCleanupInterval, string> = {
+  "1h": "Every hour",
+  "12h": "Every 12 hours",
+  "24h": "Every 24 hours",
+  "1w": "Every week",
+  "1m": "Every month",
+};
 
 export default function CompressionPage() {
   const { data: organization } = useOrganization();
@@ -256,11 +253,13 @@ export default function CompressionPage() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {CLEANUP_INTERVAL_OPTIONS.map((opt) => (
-                    <SelectItem key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </SelectItem>
-                  ))}
+                  {Object.entries(CLEANUP_INTERVAL_LABELS).map(
+                    ([value, label]) => (
+                      <SelectItem key={value} value={value}>
+                        {label}
+                      </SelectItem>
+                    ),
+                  )}
                 </SelectContent>
               </Select>
             )}

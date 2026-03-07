@@ -1,6 +1,5 @@
 import type * as k8s from "@kubernetes/client-node";
 import config from "@/config";
-import { DEFAULT_CONNECTOR_NAMESPACE } from "@/k8s/consts";
 import { inProcessScheduler } from "@/k8s/cron-job/in-process-scheduler";
 import {
   createK8sClients,
@@ -16,7 +15,7 @@ import logger from "@/logging";
  */
 class CronJobManager {
   private batchApi: k8s.BatchV1Api | null = null;
-  private namespace = DEFAULT_CONNECTOR_NAMESPACE;
+  private namespace = config.kb.connectorNamespace;
   private initialized = false;
 
   initialize(): void {

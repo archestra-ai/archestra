@@ -1,14 +1,4 @@
 /**
- * Default Kubernetes namespace for MCP server pods.
- */
-export const DEFAULT_MCP_SERVER_NAMESPACE = "default";
-
-/**
- * Default Kubernetes namespace for connector CronJobs.
- */
-export const DEFAULT_CONNECTOR_NAMESPACE = "archestra-connectors";
-
-/**
  * Common K8s label keys used across Archestra resources.
  */
 export const K8S_LABEL_KEYS = {

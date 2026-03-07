@@ -11,7 +11,6 @@ import {
   SupportedProviders,
 } from "@shared";
 import dotenv from "dotenv";
-import { DEFAULT_CONNECTOR_NAMESPACE } from "@/k8s/consts";
 import logger from "@/logging";
 import {
   type EmailProviderType,
@@ -774,7 +773,7 @@ const config = {
     ),
     connectorNamespace:
       process.env.ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_K8S_CRONJOB_NAMESPACE ||
-      DEFAULT_CONNECTOR_NAMESPACE,
+      "archestra-connectors",
     connectorImage: getConnectorImage(),
   },
   authRateLimitDisabled:

@@ -50,7 +50,7 @@ const COMPRESSION_MODE_LABELS: Record<CompressionMode, string> = {
   team: "Team level",
 };
 
-export default function CompressionPage() {
+export default function LlmSettingsPage() {
   const { data: organization } = useOrganization();
   const { data: teams = [] } = useTeams();
   const queryClient = useQueryClient();
@@ -58,17 +58,17 @@ export default function CompressionPage() {
   const [compressionMode, setCompressionMode] =
     useState<CompressionMode>("disabled");
   const [selectedTeamIds, setSelectedTeamIds] = useState<string[]>([]);
-  const [hasChanges, setHasChanges] = useState(false);
+  const [cleanupInterval, setCleanupInterval] =
+    useState<LimitCleanupInterval>("1h");
 
   const updateLlmSettingsMutation = useUpdateLlmSettings(
-    "Tool results compression settings updated",
-    "Failed to update tool results compression settings",
+    "LLM settings updated",
+    "Failed to update LLM settings",
   );
 
   // Sync state when organization data loads
   useEffect(() => {
     if (organization) {
-      // Determine current mode based on scope and enabled state
       if (organization.compressionScope === "organization") {
         setCompressionMode(
           organization.convertToolResultsToToon ? "organization" : "disabled",
@@ -76,6 +76,9 @@ export default function CompressionPage() {
       } else {
         setCompressionMode("team");
       }
+      setCleanupInterval(
+        (organization.limitCleanupInterval as LimitCleanupInterval) || "1h",
+      );
     }
   }, [organization]);
 
@@ -89,94 +92,87 @@ export default function CompressionPage() {
     }
   }, [teams]);
 
-  const checkForChanges = (mode: CompressionMode, teamIds: string[]) => {
-    // Determine current mode from organization settings
-    const currentMode =
-      organization?.compressionScope === "organization"
-        ? organization.convertToolResultsToToon
-          ? "organization"
-          : "disabled"
-        : "team";
+  // Determine if anything has changed from server state
+  const serverCompressionMode: CompressionMode =
+    organization?.compressionScope === "organization"
+      ? organization?.convertToolResultsToToon
+        ? "organization"
+        : "disabled"
+      : "team";
 
-    if (mode !== currentMode) {
-      return true;
-    }
+  const serverCleanupInterval =
+    (organization?.limitCleanupInterval as LimitCleanupInterval) || "1h";
 
-    // If in team mode, check if team selections changed
-    if (mode === "team") {
-      const currentEnabledTeams = teams
-        .filter((team) => team.convertToolResultsToToon)
-        .map((team) => team.id)
-        .sort();
-      const newEnabledTeams = [...teamIds].sort();
-      return (
-        JSON.stringify(currentEnabledTeams) !== JSON.stringify(newEnabledTeams)
-      );
-    }
+  const serverTeamIds = teams
+    .filter((team) => team.convertToolResultsToToon)
+    .map((team) => team.id)
+    .sort();
 
-    return false;
-  };
+  const hasCompressionChanges =
+    compressionMode !== serverCompressionMode ||
+    (compressionMode === "team" &&
+      JSON.stringify([...selectedTeamIds].sort()) !==
+        JSON.stringify(serverTeamIds));
+
+  const hasCleanupChanges = cleanupInterval !== serverCleanupInterval;
+  const hasChanges = hasCompressionChanges || hasCleanupChanges;
 
   const handleSave = async () => {
-    // Update organization based on selected mode
-    if (compressionMode === "disabled") {
-      await updateLlmSettingsMutation.mutateAsync({
-        compressionScope: "organization",
-        convertToolResultsToToon: false,
-      });
-    } else if (compressionMode === "organization") {
-      await updateLlmSettingsMutation.mutateAsync({
-        compressionScope: "organization",
-        convertToolResultsToToon: true,
-      });
-    } else {
-      // Team mode
-      await updateLlmSettingsMutation.mutateAsync({
-        compressionScope: "team",
-        convertToolResultsToToon: false, // Not used in team mode
-      });
+    // Save compression settings
+    if (hasCompressionChanges) {
+      if (compressionMode === "disabled") {
+        await updateLlmSettingsMutation.mutateAsync({
+          compressionScope: "organization",
+          convertToolResultsToToon: false,
+        });
+      } else if (compressionMode === "organization") {
+        await updateLlmSettingsMutation.mutateAsync({
+          compressionScope: "organization",
+          convertToolResultsToToon: true,
+        });
+      } else {
+        await updateLlmSettingsMutation.mutateAsync({
+          compressionScope: "team",
+          convertToolResultsToToon: false,
+        });
 
-      // Update team compression settings
-      try {
-        await Promise.all(
-          teams.map((team) =>
-            archestraApiSdk.updateTeam({
-              path: { id: team.id },
-              body: {
-                name: team.name,
-                description: team.description ?? undefined,
-                convertToolResultsToToon: selectedTeamIds.includes(team.id),
-              },
-            }),
-          ),
-        );
-        // Invalidate teams query to refresh data
-        queryClient.invalidateQueries({ queryKey: ["teams"] });
-      } catch (error) {
-        toast.error("Failed to update team compression settings");
-        throw error; // Re-throw to prevent setHasChanges(false) from running
+        try {
+          await Promise.all(
+            teams.map((team) =>
+              archestraApiSdk.updateTeam({
+                path: { id: team.id },
+                body: {
+                  name: team.name,
+                  description: team.description ?? undefined,
+                  convertToolResultsToToon: selectedTeamIds.includes(team.id),
+                },
+              }),
+            ),
+          );
+          queryClient.invalidateQueries({ queryKey: ["teams"] });
+        } catch {
+          toast.error("Failed to update team compression settings");
+          return;
+        }
       }
     }
 
-    setHasChanges(false);
+    // Save cleanup interval
+    if (hasCleanupChanges) {
+      await updateLlmSettingsMutation.mutateAsync({
+        limitCleanupInterval: cleanupInterval,
+      });
+    }
   };
 
   const handleCancel = () => {
-    // Reset to current organization state
-    if (organization) {
-      if (organization.compressionScope === "organization") {
-        setCompressionMode(
-          organization.convertToolResultsToToon ? "organization" : "disabled",
-        );
-      } else {
-        setCompressionMode("team");
-      }
-    }
-    const enabledTeams = teams
-      .filter((team) => team.convertToolResultsToToon)
-      .map((team) => team.id);
-    setSelectedTeamIds(enabledTeams);
-    setHasChanges(false);
+    setCompressionMode(serverCompressionMode);
+    setCleanupInterval(serverCleanupInterval);
+    setSelectedTeamIds(
+      teams
+        .filter((team) => team.convertToolResultsToToon)
+        .map((team) => team.id),
+    );
   };
 
   return (
@@ -192,10 +188,9 @@ export default function CompressionPage() {
             {({ hasPermission }) => (
               <Select
                 value={compressionMode}
-                onValueChange={(value: CompressionMode) => {
-                  setCompressionMode(value);
-                  setHasChanges(checkForChanges(value, selectedTeamIds));
-                }}
+                onValueChange={(value: CompressionMode) =>
+                  setCompressionMode(value)
+                }
                 disabled={updateLlmSettingsMutation.isPending || !hasPermission}
               >
                 <SelectTrigger className="w-48">
@@ -226,10 +221,7 @@ export default function CompressionPage() {
               <div className="w-48">
                 <MultiSelect
                   value={selectedTeamIds}
-                  onValueChange={(newTeamIds) => {
-                    setSelectedTeamIds(newTeamIds);
-                    setHasChanges(checkForChanges(compressionMode, newTeamIds));
-                  }}
+                  onValueChange={setSelectedTeamIds}
                   placeholder="Select teams..."
                   items={teams.map((team) => ({
                     value: team.id,
@@ -252,12 +244,10 @@ export default function CompressionPage() {
           >
             {({ hasPermission }) => (
               <Select
-                value={organization?.limitCleanupInterval || "1h"}
-                onValueChange={(value: LimitCleanupInterval) => {
-                  updateLlmSettingsMutation.mutate({
-                    limitCleanupInterval: value,
-                  });
-                }}
+                value={cleanupInterval}
+                onValueChange={(value: LimitCleanupInterval) =>
+                  setCleanupInterval(value)
+                }
                 disabled={updateLlmSettingsMutation.isPending || !hasPermission}
               >
                 <SelectTrigger className="w-48">

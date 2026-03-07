@@ -1,8 +1,11 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import { WithPermissions } from "@/components/roles/with-permissions";
 import { SettingsBlock } from "@/components/settings/settings-block";
+import { Button } from "@/components/ui/button";
+import { PermissionButton } from "@/components/ui/permission-button";
 import {
   Select,
   SelectContent,
@@ -15,29 +18,52 @@ import {
   useUpdateSecuritySettings,
 } from "@/lib/organization.query";
 
+type GlobalToolPolicy = "permissive" | "restrictive";
+type FileUploadsEnabled = "enabled" | "disabled";
+
 export default function SecuritySettingsPage() {
   const { data: organization } = useOrganization();
 
   const updateSecurityMutation = useUpdateSecuritySettings(
-    "Setting updated",
-    "Failed to update setting",
+    "Security settings updated",
+    "Failed to update security settings",
   );
 
-  const handleGlobalToolPolicyChange = async (
-    value: "permissive" | "restrictive",
-  ) => {
+  const [toolPolicy, setToolPolicy] =
+    useState<GlobalToolPolicy>("permissive");
+  const [fileUploads, setFileUploads] =
+    useState<FileUploadsEnabled>("enabled");
+
+  // Sync state when organization data loads
+  useEffect(() => {
+    if (organization) {
+      setToolPolicy(organization.globalToolPolicy ?? "permissive");
+      setFileUploads(
+        (organization.allowChatFileUploads ?? true) ? "enabled" : "disabled",
+      );
+    }
+  }, [organization]);
+
+  const serverToolPolicy = organization?.globalToolPolicy ?? "permissive";
+  const serverFileUploads =
+    (organization?.allowChatFileUploads ?? true) ? "enabled" : "disabled";
+
+  const hasChanges =
+    toolPolicy !== serverToolPolicy || fileUploads !== serverFileUploads;
+
+  const handleSave = async () => {
     await updateSecurityMutation.mutateAsync({
-      globalToolPolicy: value,
+      globalToolPolicy: toolPolicy,
+      allowChatFileUploads: fileUploads === "enabled",
     });
   };
 
-  const handleToggleAllowChatFileUploads = async (checked: boolean) => {
-    await updateSecurityMutation.mutateAsync({
-      allowChatFileUploads: checked,
-    });
+  const handleCancel = () => {
+    setToolPolicy(serverToolPolicy);
+    setFileUploads(serverFileUploads);
   };
 
-  const isRestrictive = organization?.globalToolPolicy === "restrictive";
+  const isRestrictive = toolPolicy === "restrictive";
 
   return (
     <div className="space-y-6">
@@ -51,8 +77,10 @@ export default function SecuritySettingsPage() {
           >
             {({ hasPermission }) => (
               <Select
-                value={organization?.globalToolPolicy ?? "permissive"}
-                onValueChange={handleGlobalToolPolicyChange}
+                value={toolPolicy}
+                onValueChange={(value: GlobalToolPolicy) =>
+                  setToolPolicy(value)
+                }
                 disabled={updateSecurityMutation.isPending || !hasPermission}
               >
                 <SelectTrigger className="w-[140px]">
@@ -100,13 +128,9 @@ export default function SecuritySettingsPage() {
           >
             {({ hasPermission }) => (
               <Select
-                value={
-                  (organization?.allowChatFileUploads ?? true)
-                    ? "enabled"
-                    : "disabled"
-                }
-                onValueChange={(value) =>
-                  handleToggleAllowChatFileUploads(value === "enabled")
+                value={fileUploads}
+                onValueChange={(value: FileUploadsEnabled) =>
+                  setFileUploads(value)
                 }
                 disabled={updateSecurityMutation.isPending || !hasPermission}
               >
@@ -128,6 +152,24 @@ export default function SecuritySettingsPage() {
           </span>
         }
       />
+      {hasChanges && (
+        <div className="flex gap-3 sticky bottom-0 bg-background p-4 rounded-lg border border-border shadow-lg">
+          <PermissionButton
+            permissions={{ securitySettings: ["update"] }}
+            onClick={handleSave}
+            disabled={updateSecurityMutation.isPending}
+          >
+            {updateSecurityMutation.isPending ? "Saving..." : "Save"}
+          </PermissionButton>
+          <Button
+            variant="outline"
+            onClick={handleCancel}
+            disabled={updateSecurityMutation.isPending}
+          >
+            Cancel
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

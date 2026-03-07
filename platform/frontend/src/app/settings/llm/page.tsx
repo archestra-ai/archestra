@@ -1,6 +1,6 @@
 "use client";
 
-import { type archestraApiTypes, archestraApiSdk } from "@shared";
+import { archestraApiSdk, type archestraApiTypes } from "@shared";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -24,7 +24,9 @@ import {
 import { useTeams } from "@/lib/team.query";
 
 type LimitCleanupInterval = NonNullable<
-  NonNullable<archestraApiTypes.UpdateLlmSettingsData["body"]>["limitCleanupInterval"]
+  NonNullable<
+    archestraApiTypes.UpdateLlmSettingsData["body"]
+  >["limitCleanupInterval"]
 >;
 
 const CLEANUP_INTERVAL_LABELS: Record<LimitCleanupInterval, string> = {

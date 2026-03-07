@@ -32,9 +32,7 @@ export function SettingsBlock({
           </div>
           {control}
         </div>
-        {notice && (
-          <div className="text-sm mt-2">{notice}</div>
-        )}
+        {notice && <div className="text-sm mt-2">{notice}</div>}
       </CardHeader>
       {children && (
         <CardContent className="pt-6 border-t">{children}</CardContent>

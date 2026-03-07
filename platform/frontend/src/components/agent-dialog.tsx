@@ -1107,10 +1107,6 @@ export function AgentDialog({
               {isInternalAgent && !isBuiltIn && (
                 <div className="space-y-2">
                   <Label htmlFor="agentDescription">Description</Label>
-                  <p className="text-sm text-muted-foreground">
-                    A brief summary of what this agent does. Helps other agents
-                    quickly understand if this agent is relevant for their task.
-                  </p>
                   <Textarea
                     id="agentDescription"
                     value={description}
@@ -1180,11 +1176,9 @@ export function AgentDialog({
                 <div className="space-y-2">
                   <Label>LLM Configuration</Label>
                   <p className="text-sm text-muted-foreground">
-                    {!llmModel
-                      ? "If nothing selected, best model from user\u2019s keys is used (org-wide \u2192 team \u2192 personal)."
-                      : selectedApiKey && selectedApiKey.scope !== "org_wide"
-                        ? "Selected key will be available to everyone who has access to this agent."
-                        : null}
+                    {selectedApiKey && selectedApiKey.scope !== "org_wide"
+                      ? "Selected key will be available to everyone who has access to this agent."
+                      : null}
                   </p>
                   <div className="flex flex-wrap items-center gap-2">
                     {/* Model Selector - uses the same Dialog-based ModelSelector as prompt input */}
@@ -1309,37 +1303,22 @@ export function AgentDialog({
               )}
             </div>
 
-            {/* Section 2: Prompts (Agent only) */}
+            {/* Section 2: Instruction (Agent only) */}
             {isInternalAgent && (
               <div className="rounded-lg border bg-card p-4 space-y-4">
-                <h3 className="text-sm font-semibold">Prompts</h3>
+                <h3 className="text-sm font-semibold">Instruction</h3>
 
-                {/* System Prompt (read-only for built-in) */}
+                {/* Instruction (read-only for built-in) */}
                 <div className="space-y-2">
-                  <Label htmlFor="systemPrompt">System Prompt</Label>
                   <Textarea
                     id="systemPrompt"
                     value={systemPrompt}
                     onChange={(e) => setSystemPrompt(e.target.value)}
-                    placeholder="Enter system prompt (instructions for the LLM)"
+                    placeholder="Enter instruction for the LLM"
                     className="min-h-[150px] font-mono"
                     disabled={isBuiltIn}
                   />
                 </div>
-
-                {/* User Prompt (hidden for built-in) */}
-                {!isBuiltIn && (
-                  <div className="space-y-2">
-                    <Label htmlFor="userPrompt">User Prompt</Label>
-                    <Textarea
-                      id="userPrompt"
-                      value={userPrompt}
-                      onChange={(e) => setUserPrompt(e.target.value)}
-                      placeholder="Enter user prompt (shown to user, sent to LLM)"
-                      className="min-h-[150px] font-mono"
-                    />
-                  </div>
-                )}
               </div>
             )}
 

@@ -460,7 +460,7 @@ export function McpServerCard({
 
   const hasCompactInfoContent =
     toolsCount > 0 ||
-    (variant === "local" && deploymentSummary) ||
+    (variant === "local" && deploymentServerIds.length > 0) ||
     (!isBuiltinVariant && connectionAvatars.length > 0);
 
   const compactInfoRow = hasCompactInfoContent ? (
@@ -474,18 +474,25 @@ export function McpServerCard({
           <div className="h-4 w-px bg-border" />
         </>
       )}
-      {variant === "local" && deploymentSummary && (
+      {variant === "local" && deploymentServerIds.length > 0 && (
         <>
-          <button
-            type="button"
-            onClick={() => setIsLogsDialogOpen(true)}
-            className="flex items-center gap-1.5 cursor-pointer hover:text-foreground transition-colors"
-          >
-            <DeploymentStatusDot state={deploymentSummary.overallState} />
-            <span>
-              {deploymentSummary.running}/{deploymentSummary.total}
+          {deploymentSummary ? (
+            <button
+              type="button"
+              onClick={() => setIsLogsDialogOpen(true)}
+              className="flex items-center gap-1.5 cursor-pointer hover:text-foreground transition-colors"
+            >
+              <DeploymentStatusDot state={deploymentSummary.overallState} />
+              <span>
+                {deploymentSummary.running}/{deploymentSummary.total}
+              </span>
+            </button>
+          ) : (
+            <span className="relative flex h-2 w-2 shrink-0">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-muted-foreground/50 opacity-75" />
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-muted-foreground/50" />
             </span>
-          </button>
+          )}
           <div className="h-4 w-px bg-border" />
         </>
       )}

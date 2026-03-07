@@ -110,7 +110,7 @@ describe("0167 migration: rename RBAC resources", () => {
     expect(perm.mcpToolCall).toBeUndefined();
   });
 
-  test("removes mcpToolCall when log already exists", async ({
+  test("unions mcpToolCall actions into log when log already exists", async ({
     makeOrganization,
   }) => {
     const org = await makeOrganization();
@@ -121,9 +121,9 @@ describe("0167 migration: rename RBAC resources", () => {
 
     await runMigration();
 
-    // interaction was renamed to log in step 1, then mcpToolCall merged in step 4
+    // interaction was renamed to log in step 1, then mcpToolCall unioned in step 4b
     const perm = await getRolePermission("test-toolcall-log");
-    expect(perm.log).toEqual(["read", "create"]);
+    expect(perm.log.sort()).toEqual(["create", "read"]);
     expect(perm.mcpToolCall).toBeUndefined();
     expect(perm.interaction).toBeUndefined();
   });
@@ -158,7 +158,7 @@ describe("0167 migration: rename RBAC resources", () => {
     expect(perm.llmModels).toBeUndefined();
   });
 
-  test("removes llmModels when chatSettings already renamed to llmProvider", async ({
+  test("unions llmModels into llmProvider when chatSettings already renamed", async ({
     makeOrganization,
   }) => {
     const org = await makeOrganization();
@@ -169,9 +169,9 @@ describe("0167 migration: rename RBAC resources", () => {
 
     await runMigration();
 
-    // chatSettings renamed to llmProvider in step 5, llmModels removed in step 7
+    // chatSettings renamed to llmProvider in step 5, llmModels unioned in step 7
     const perm = await getRolePermission("test-both-llm");
-    expect(perm.llmProvider).toEqual(["read", "update"]);
+    expect(perm.llmProvider.sort()).toEqual(["create", "read", "update"]);
     expect(perm.llmModels).toBeUndefined();
     expect(perm.chatSettings).toBeUndefined();
   });
@@ -229,12 +229,12 @@ describe("0167 migration: rename RBAC resources", () => {
     expect(perm.limit).toBeUndefined();
   });
 
-  test("limit rename does not affect llmLimits key", async ({
+  test("unions limit and llmLimits into llmLimit", async ({
     makeOrganization,
   }) => {
     const org = await makeOrganization();
-    // Role has both limit and llmLimits — limit should rename to llmLimit,
-    // llmLimits should be handled by step 13
+    // Role has both limit and llmLimits — limit should rename to llmLimit (step 9),
+    // then llmLimits should union into llmLimit (step 13b)
     await insertRole(org.id, "test-limit-vs-limits", "test_limit_vs_limits", {
       limit: ["read"],
       llmLimits: ["read", "update"],
@@ -243,11 +243,11 @@ describe("0167 migration: rename RBAC resources", () => {
     await runMigration();
 
     const perm = await getRolePermission("test-limit-vs-limits");
-    // Both should end up as llmLimit; step 9 renames limit, step 13 renames llmLimits
-    // Since step 9 runs first: limit -> llmLimit
-    // Then step 13: llmLimits -> llmLimit is skipped (llmLimit already exists)
-    expect(perm.llmLimit).toEqual(["read"]);
+    // Step 9: limit -> llmLimit with ["read"]
+    // Step 13b: llmLimits unioned into llmLimit -> ["read", "update"]
+    expect(perm.llmLimit.sort()).toEqual(["read", "update"]);
     expect(perm.limit).toBeUndefined();
+    expect(perm.llmLimits).toBeUndefined();
   });
 
   // Step 10: tool + policy -> toolPolicy (UNION of action arrays)
@@ -353,6 +353,29 @@ describe("0167 migration: rename RBAC resources", () => {
     const perm = await getRolePermission("test-providers");
     expect(perm.llmProvider).toEqual(["read", "create"]);
     expect(perm.llmProviders).toBeUndefined();
+  });
+
+  test("unions llmProviders into llmProvider when llmProvider already exists", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    // chatSettings renames to llmProvider in step 5, llmProviders should union in step 14b
+    await insertRole(
+      org.id,
+      "test-providers-conflict",
+      "test_providers_conflict",
+      {
+        chatSettings: ["read"],
+        llmProviders: ["read", "create", "update"],
+      },
+    );
+
+    await runMigration();
+
+    const perm = await getRolePermission("test-providers-conflict");
+    expect(perm.llmProvider.sort()).toEqual(["create", "read", "update"]);
+    expect(perm.llmProviders).toBeUndefined();
+    expect(perm.chatSettings).toBeUndefined();
   });
 
   // Step 15

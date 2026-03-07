@@ -26,49 +26,7 @@ const nextConfig: NextConfig = {
     keepAlive: true,
   },
   async redirects() {
-    return [
-      // Legacy paths → new locations
-      {
-        source: "/settings",
-        destination: "/settings/account",
-        permanent: true,
-      },
-      {
-        source: "/llm/cost",
-        destination: "/llm/costs",
-        permanent: true,
-      },
-      {
-        source: "/llm/cost/compression",
-        destination: "/settings/llm",
-        permanent: true,
-      },
-      {
-        source: "/llm/cost/statistics",
-        destination: "/llm/costs",
-        permanent: true,
-      },
-      {
-        source: "/llm/cost/limits",
-        destination: "/llm/limits",
-        permanent: true,
-      },
-      {
-        source: "/llm/cost/optimization-rules",
-        destination: "/llm/optimization-rules",
-        permanent: true,
-      },
-      {
-        source: "/settings/members",
-        destination: "/settings/users",
-        permanent: true,
-      },
-      {
-        source: "/organization/:path*",
-        destination: "/settings/account",
-        permanent: true,
-      },
-    ];
+    return [];
   },
   async rewrites() {
     const backendUrl =

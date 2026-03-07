@@ -54,9 +54,21 @@ SET "permission" = (
 WHERE "permission"::text LIKE '%"mcpToolCall":%'
   AND NOT "permission"::text LIKE '%"log":%';
 
--- For roles that have both mcpToolCall and log, just remove mcpToolCall
+-- For roles that have both mcpToolCall and log, union actions into log
 UPDATE "organization_role"
-SET "permission" = ("permission"::jsonb - 'mcpToolCall')::text
+SET "permission" = (
+  ("permission"::jsonb - 'mcpToolCall') || jsonb_build_object(
+    'log',
+    (
+      SELECT jsonb_agg(DISTINCT val)
+      FROM (
+        SELECT jsonb_array_elements_text("permission"::jsonb->'log') AS val
+        UNION
+        SELECT jsonb_array_elements_text("permission"::jsonb->'mcpToolCall') AS val
+      ) combined
+    )
+  )
+)::text
 WHERE "permission"::text LIKE '%"mcpToolCall":%'
   AND "permission"::text LIKE '%"log":%';
 
@@ -75,9 +87,21 @@ SET "permission" = (
 WHERE "permission"::text LIKE '%"llmModels":%'
   AND NOT "permission"::text LIKE '%"llmProvider":%';
 
--- Step 7: Remove "llmModels" for roles that already have "llmProvider" (had both old keys)
+-- Step 7: Union "llmModels" into "llmProvider" for roles that have both (had both old keys)
 UPDATE "organization_role"
-SET "permission" = ("permission"::jsonb - 'llmModels')::text
+SET "permission" = (
+  ("permission"::jsonb - 'llmModels') || jsonb_build_object(
+    'llmProvider',
+    (
+      SELECT jsonb_agg(DISTINCT val)
+      FROM (
+        SELECT jsonb_array_elements_text("permission"::jsonb->'llmProvider') AS val
+        UNION
+        SELECT jsonb_array_elements_text("permission"::jsonb->'llmModels') AS val
+      ) combined
+    )
+  )
+)::text
 WHERE "permission"::text LIKE '%"llmModels":%'
   AND "permission"::text LIKE '%"llmProvider":%';
 
@@ -144,7 +168,7 @@ SET "permission" = (
 )::text
 WHERE "permission"::text LIKE '%"llmCosts":%';
 
--- Step 13: Rename "llmLimits" to "llmLimit" (in case any were created between migrations)
+-- Step 13a: Rename "llmLimits" to "llmLimit" (when llmLimit does not yet exist)
 UPDATE "organization_role"
 SET "permission" = (
   ("permission"::jsonb - 'llmLimits') || jsonb_build_object('llmLimit', "permission"::jsonb->'llmLimits')
@@ -152,13 +176,49 @@ SET "permission" = (
 WHERE "permission"::text LIKE '%"llmLimits":%'
   AND NOT "permission"::text LIKE '%"llmLimit":%';
 
--- Step 14: Rename "llmProviders" to "llmProvider" (in case any were created between migrations)
+-- Step 13b: Union "llmLimits" into "llmLimit" (when llmLimit already exists from step 9)
+UPDATE "organization_role"
+SET "permission" = (
+  ("permission"::jsonb - 'llmLimits') || jsonb_build_object(
+    'llmLimit',
+    (
+      SELECT jsonb_agg(DISTINCT val)
+      FROM (
+        SELECT jsonb_array_elements_text("permission"::jsonb->'llmLimit') AS val
+        UNION
+        SELECT jsonb_array_elements_text("permission"::jsonb->'llmLimits') AS val
+      ) combined
+    )
+  )
+)::text
+WHERE "permission"::text LIKE '%"llmLimits":%'
+  AND "permission"::text LIKE '%"llmLimit":%';
+
+-- Step 14a: Rename "llmProviders" to "llmProvider" (when llmProvider does not yet exist)
 UPDATE "organization_role"
 SET "permission" = (
   ("permission"::jsonb - 'llmProviders') || jsonb_build_object('llmProvider', "permission"::jsonb->'llmProviders')
 )::text
 WHERE "permission"::text LIKE '%"llmProviders":%'
   AND NOT "permission"::text LIKE '%"llmProvider":%';
+
+-- Step 14b: Union "llmProviders" into "llmProvider" (when llmProvider already exists from step 5)
+UPDATE "organization_role"
+SET "permission" = (
+  ("permission"::jsonb - 'llmProviders') || jsonb_build_object(
+    'llmProvider',
+    (
+      SELECT jsonb_agg(DISTINCT val)
+      FROM (
+        SELECT jsonb_array_elements_text("permission"::jsonb->'llmProvider') AS val
+        UNION
+        SELECT jsonb_array_elements_text("permission"::jsonb->'llmProviders') AS val
+      ) combined
+    )
+  )
+)::text
+WHERE "permission"::text LIKE '%"llmProviders":%'
+  AND "permission"::text LIKE '%"llmProvider":%';
 
 -- Step 15: Rename "secrets" to "secret"
 UPDATE "organization_role"

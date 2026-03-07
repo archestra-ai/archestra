@@ -1,38 +1,35 @@
 "use client";
 
+import { Plus } from "lucide-react";
+import { usePathname } from "next/navigation";
 import { PageLayout } from "@/components/page-layout";
-import { useHasPermissions } from "@/lib/auth.query";
+import { PermissionButton } from "@/components/ui/permission-button";
 
 export default function McpCatalogLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const { data: userIsMcpServerAdmin } = useHasPermissions({
-    mcpServer: ["admin"],
-  });
+  const pathname = usePathname();
+  const isRegistryPage = pathname === "/mcp/registry";
 
   return (
     <PageLayout
       title="MCP Registry"
-      description={
-        <>
-          Self-hosted MCP registry allows you to manage your own list of MCP
-          servers and make them available to your agents.
-          <br />
-          You can also{" "}
-          {userIsMcpServerAdmin
-            ? "review and manage installation requests from your team members"
-            : "view your installation requests and their status"}
-        </>
+      description="Self-hosted MCP registry allows you to manage your own list of MCP servers and make them available to your agents."
+      actionButton={
+        isRegistryPage ? (
+          <PermissionButton
+            permissions={{ internalMcpCatalog: ["create"] }}
+            onClick={() =>
+              window.dispatchEvent(new CustomEvent("mcp-registry:create"))
+            }
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            Add MCP Server
+          </PermissionButton>
+        ) : undefined
       }
-      tabs={[
-        { label: "Registry", href: "/mcp/registry" },
-        {
-          label: "Installation Requests",
-          href: "/mcp/registry/installation-requests",
-        },
-      ]}
     >
       {children}
     </PageLayout>

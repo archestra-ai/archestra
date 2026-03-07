@@ -71,6 +71,10 @@ interface RemoteServerInstallDialogProps {
   isInstalling: boolean;
   /** When true, shows re-authentication mode (info banner, different title) */
   isReauth?: boolean;
+  /** Pre-select a specific team in the credential type selector */
+  preselectedTeamId?: string | null;
+  /** When true, only personal installation is allowed */
+  personalOnly?: boolean;
 }
 
 export function RemoteServerInstallDialog({
@@ -80,6 +84,8 @@ export function RemoteServerInstallDialog({
   catalogItem,
   isInstalling,
   isReauth = false,
+  preselectedTeamId,
+  personalOnly = false,
 }: RemoteServerInstallDialogProps) {
   const [configValues, setConfigValues] = useState<Record<string, string>>({});
 
@@ -276,6 +282,8 @@ export function RemoteServerInstallDialog({
               catalogId={catalogItem?.id}
               onCredentialTypeChange={setCredentialType}
               onCanInstallChange={setCanInstall}
+              preselectedTeamId={preselectedTeamId}
+              personalOnly={personalOnly}
             />
 
             {useVaultSecrets && credentialType === "personal" && (

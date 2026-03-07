@@ -159,6 +159,7 @@ function McpToolCallsTable({
 
   const { data: agents } = useProfiles({
     initialData: initialData?.agents,
+    filters: { agentTypes: ["agent", "mcp_gateway"] },
   });
 
   const { data: mcpServers } = useMcpServers();
@@ -398,7 +399,7 @@ function McpToolCallsTable({
             onValueChange={handleProfileFilterChange}
             placeholder="Filter by MCP Gateway"
             items={[
-              { value: "all", label: "All MCP Gateways" },
+              { value: "all", label: "All Agents & MCP Gateways" },
               ...(agents?.map((agent) => ({
                 value: agent.id,
                 label: agent.name,
@@ -429,7 +430,7 @@ function McpToolCallsTable({
           onValueChange={handleProfileFilterChange}
           placeholder="Filter by MCP Gateway"
           items={[
-            { value: "all", label: "All MCP Gateways" },
+            { value: "all", label: "All Agents & MCP Gateways" },
             ...(agents?.map((agent) => ({
               value: agent.id,
               label: agent.name,

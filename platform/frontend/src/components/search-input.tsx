@@ -11,6 +11,7 @@ type SearchInputProps = {
   debounceMs?: number;
   className?: string;
   inputClassName?: string;
+  onSearchChange?: (value: string) => void;
 };
 
 export function SearchInput({
@@ -19,6 +20,7 @@ export function SearchInput({
   debounceMs = 400,
   className,
   inputClassName,
+  onSearchChange,
 }: SearchInputProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -28,6 +30,7 @@ export function SearchInput({
 
   const handleChange = useCallback(
     (value: string) => {
+      onSearchChange?.(value);
       const params = new URLSearchParams(searchParams.toString());
       if (value) {
         params.set(paramName, value);
@@ -37,7 +40,7 @@ export function SearchInput({
       params.set("page", "1");
       router.push(`${pathname}?${params.toString()}`, { scroll: false });
     },
-    [searchParams, router, pathname, paramName],
+    [searchParams, router, pathname, paramName, onSearchChange],
   );
 
   return (

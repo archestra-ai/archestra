@@ -7,16 +7,15 @@ import {
   ChevronUp,
   Hash,
   Plus,
-  Search,
   X,
 } from "lucide-react";
 import Image from "next/image";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
 import { AgentBadge } from "@/components/agent-badge";
-import { DebouncedInput } from "@/components/debounced-input";
 import Divider from "@/components/divider";
 import { LoadingSpinner } from "@/components/loading";
+import { SearchInput } from "@/components/search-input";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -215,16 +214,9 @@ export function ChannelsSection({
     [searchParams, router, pathname],
   );
 
-  const handleSearchChange = useCallback(
-    (value: string) => {
-      // Skip if the value matches what's already in the URL (avoids
-      // React Strict Mode double-effect in DebouncedInput resetting the page)
-      if ((value || "") === searchFromUrl) return;
-      clearSelection();
-      updateUrlParams({ search: value || null, page: "1" });
-    },
-    [updateUrlParams, clearSelection, searchFromUrl],
-  );
+  const handleSearchChange = useCallback(() => {
+    clearSelection();
+  }, [clearSelection]);
 
   const handleStatusChange = useCallback(
     (status: StatusFilter) => {
@@ -363,16 +355,13 @@ export function ChannelsSection({
         <>
           {/* Search + bulk assign */}
           <div className="flex items-center gap-3">
-            <div className="relative max-w-md flex-1">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <DebouncedInput
-                placeholder="Search channels..."
-                initialValue={searchFromUrl}
-                onChange={handleSearchChange}
-                debounceMs={300}
-                className="pl-9"
-              />
-            </div>
+            <SearchInput
+              placeholder="Search channels..."
+              paramName="search"
+              className="relative max-w-md flex-1"
+              debounceMs={300}
+              onSearchChange={handleSearchChange}
+            />
             <div className="ml-auto">
               <BulkAssignButton
                 agents={channelAgentList}

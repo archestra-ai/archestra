@@ -386,6 +386,7 @@ function SessionsTable({
 
   const { data: agents } = useProfiles({
     initialData: initialData?.agents,
+    filters: { agentTypes: ["agent", "llm_proxy"] },
   });
 
   const { data: uniqueUsers } = useUniqueUserIds();
@@ -409,7 +410,7 @@ function SessionsTable({
           onValueChange={handleProfileFilterChange}
           placeholder="Filter by Profile"
           items={[
-            { value: "all", label: "All Profiles" },
+            { value: "all", label: "All Agents & LLM Proxies" },
             ...(agents?.map((agent) => ({
               value: agent.id,
               label: agent.name,

@@ -87,13 +87,13 @@ test.describe("Security Settings API", () => {
     expect(org.allowChatFileUploads).toBe(false);
   });
 
-  // Clean up: reset to safe defaults
+  // Clean up: reset to the same defaults that auth.admin.setup.ts sets
   test("cleanup: reset security settings to defaults", async ({
     request,
     updateSecuritySettings,
   }) => {
     await updateSecuritySettings(request, {
-      globalToolPolicy: "permissive",
+      globalToolPolicy: "restrictive",
       allowChatFileUploads: true,
     });
   });

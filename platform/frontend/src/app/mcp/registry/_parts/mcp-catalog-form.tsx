@@ -142,7 +142,9 @@ export function McpCatalogForm({
   const labelsRef = useRef<ProfileLabelsRef>(null);
 
   // Check admin status for scope options
-  const { data: isAdmin } = useHasPermissions({ mcpServerInstallation: ["admin"] });
+  const { data: isAdmin } = useHasPermissions({
+    mcpServerInstallation: ["admin"],
+  });
   const { data: teams } = useTeams();
   const currentScope = form.watch("scope");
 

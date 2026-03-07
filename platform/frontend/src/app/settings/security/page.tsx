@@ -105,7 +105,7 @@ export default function SecuritySettingsPage() {
             <span className="text-green-600 dark:text-green-400">
               Policies apply to agents' tools.{" "}
               <WithPermissions
-                permissions={{ securitySettings: ["update"] }}
+                permissions={{ toolPolicy: ["read"] }}
                 noPermissionHandle="hide"
               >
                 <Link

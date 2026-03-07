@@ -266,9 +266,12 @@ describe("0167 migration: rename RBAC resources", () => {
     const perm = await getRolePermission("test-merge-union");
     // Should be the union of both: read, create, update, delete
     expect(perm.toolPolicy).toBeDefined();
-    expect(perm.toolPolicy.sort()).toEqual(
-      ["create", "delete", "read", "update"],
-    );
+    expect(perm.toolPolicy.sort()).toEqual([
+      "create",
+      "delete",
+      "read",
+      "update",
+    ]);
     expect(perm.tool).toBeUndefined();
     expect(perm.policy).toBeUndefined();
   });
@@ -433,9 +436,12 @@ describe("0167 migration: rename RBAC resources", () => {
     expect(perm.mcpServerInstallation).toEqual(["read", "create", "delete"]);
     expect(perm.llmLimit).toEqual(["read", "create"]);
     expect(perm.toolPolicy).toBeDefined();
-    expect(perm.toolPolicy.sort()).toEqual(
-      ["create", "delete", "read", "update"],
-    );
+    expect(perm.toolPolicy.sort()).toEqual([
+      "create",
+      "delete",
+      "read",
+      "update",
+    ]);
     expect(perm.llmCost).toEqual(["read"]);
     expect(perm.secret).toEqual(["read", "update"]);
     expect(perm.agentTrigger).toEqual(["read"]);

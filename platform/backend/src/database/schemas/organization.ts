@@ -57,10 +57,8 @@ const organizationsTable = pgTable("organization", {
     .notNull()
     .default(true),
 
-  /** Embedding model for knowledge base RAG */
-  embeddingModel: text("embedding_model")
-    .$type<EmbeddingModel>()
-    .default("text-embedding-3-small"),
+  /** Embedding model for knowledge base RAG — set explicitly when user configures embedding */
+  embeddingModel: text("embedding_model").$type<EmbeddingModel>(),
 
   /**
    * Chat API key used for generating embeddings (must be an OpenAI provider key).

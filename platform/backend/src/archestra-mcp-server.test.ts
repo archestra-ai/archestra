@@ -774,10 +774,12 @@ describe("executeArchestraTool", () => {
     test("should call query service and return results when KB is assigned", async ({
       makeOrganization,
       makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
     }) => {
       const { queryService } = await import("@/knowledge-base/query");
       const org = await makeOrganization();
       const kb = await makeKnowledgeBase(org.id);
+      await makeKnowledgeBaseConnector(kb.id, org.id);
       await AgentModel.update(testAgent.id, { knowledgeBaseIds: [kb.id] });
 
       const mockResults = [
@@ -800,7 +802,7 @@ describe("executeArchestraTool", () => {
       const result = await executeArchestraTool(
         toolName,
         { query: "test query" },
-        mockContext,
+        { ...mockContext, organizationId: org.id },
       );
 
       expect(result.isError).toBeUndefined();
@@ -814,10 +816,12 @@ describe("executeArchestraTool", () => {
     test("should return error when query service throws", async ({
       makeOrganization,
       makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
     }) => {
       const { queryService } = await import("@/knowledge-base/query");
       const org = await makeOrganization();
       const kb = await makeKnowledgeBase(org.id);
+      await makeKnowledgeBaseConnector(kb.id, org.id);
       await AgentModel.update(testAgent.id, { knowledgeBaseIds: [kb.id] });
 
       const querySpy = vi
@@ -827,7 +831,7 @@ describe("executeArchestraTool", () => {
       const result = await executeArchestraTool(
         toolName,
         { query: "test query" },
-        mockContext,
+        { ...mockContext, organizationId: org.id },
       );
 
       expect(result.isError).toBe(true);

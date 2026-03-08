@@ -445,4 +445,28 @@ describe("QueryService", () => {
     vectorSearchSpy.mockRestore();
     fullTextSearchSpy.mockRestore();
   });
+
+  test("returns empty array when no embedding config", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+
+    // No embedding config available
+    mockResolveEmbeddingConfig.mockResolvedValueOnce(null);
+
+    const results = await queryService.query({
+      connectorIds: [connector.id],
+      organizationId: org.id,
+      queryText: "test",
+      userAcl: ["org:*"],
+    });
+
+    expect(results).toEqual([]);
+    // Should not attempt to create embeddings
+    expect(mockEmbeddingsCreate).not.toHaveBeenCalled();
+  });
 });

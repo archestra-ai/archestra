@@ -202,6 +202,48 @@ test.describe("Knowledge Settings API", () => {
     });
   });
 
+  test("should reject non-OpenAI API key for embedding", async ({
+    request,
+    makeApiRequest,
+    updateKnowledgeSettings,
+  }) => {
+    // Create a non-OpenAI chat API key (e.g. anthropic)
+    const createKeyResponse = await makeApiRequest({
+      request,
+      method: "post",
+      urlSuffix: "/api/chat-api-keys",
+      data: {
+        name: "Anthropic Key For Embedding Test",
+        provider: "anthropic",
+        apiKey: "sk-ant-embedding-provider-test",
+        scope: "org_wide",
+      },
+    });
+    const chatApiKey = await createKeyResponse.json();
+
+    // Attempt to set it as the embedding key — should be rejected
+    const response = await makeApiRequest({
+      request,
+      method: "patch",
+      urlSuffix: "/api/organization/knowledge-settings",
+      data: { embeddingChatApiKeyId: chatApiKey.id },
+      ignoreStatusCheck: true,
+    });
+    expect(response.status()).toBe(400);
+
+    const errorBody = await response.json();
+    expect(errorBody.error.message).toContain(
+      "Embedding API key must be an OpenAI provider key",
+    );
+
+    // Cleanup
+    await makeApiRequest({
+      request,
+      method: "delete",
+      urlSuffix: `/api/chat-api-keys/${chatApiKey.id}`,
+    });
+  });
+
   // Clean up: reset to default
   test("cleanup: reset knowledge settings to defaults", async ({
     request,

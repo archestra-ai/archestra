@@ -1,4 +1,4 @@
-import type { EmbeddingModel } from "@shared";
+import type { EmbeddingModel, SupportedProvider } from "@shared";
 import { getEmbeddingDimensions } from "@shared";
 import OpenAI from "openai";
 import { createDirectLLMModel, type LLMModel } from "@/clients/llm-client";
@@ -61,11 +61,6 @@ export async function resolveRerankerConfig(
     return null;
   }
 
-  const chatApiKey = await ChatApiKeyModel.findById(org.rerankerChatApiKeyId);
-  if (!chatApiKey) {
-    return null;
-  }
-
   const resolved = await resolveApiKeyFromChatApiKey(org.rerankerChatApiKeyId);
   if (!resolved) {
     logger.warn(
@@ -79,7 +74,7 @@ export async function resolveRerankerConfig(
 
   return {
     llmModel: createDirectLLMModel({
-      provider: chatApiKey.provider,
+      provider: resolved.provider,
       apiKey: resolved.apiKey,
       modelName,
       baseUrl: resolved.baseUrl,
@@ -107,14 +102,16 @@ export async function getDefaultOrgEmbeddingConfig(): Promise<{
 
 // ===== Internal helpers =====
 
-async function resolveApiKeyFromChatApiKey(
-  chatApiKeyId: string,
-): Promise<{ apiKey: string; baseUrl: string | null } | null> {
+async function resolveApiKeyFromChatApiKey(chatApiKeyId: string): Promise<{
+  apiKey: string;
+  baseUrl: string | null;
+  provider: SupportedProvider;
+} | null> {
   const chatApiKey = await ChatApiKeyModel.findById(chatApiKeyId);
   if (!chatApiKey?.secretId) return null;
 
   const apiKey = await getSecretValueForLlmProviderApiKey(chatApiKey.secretId);
   if (!apiKey) return null;
 
-  return { apiKey, baseUrl: chatApiKey.baseUrl };
+  return { apiKey, baseUrl: chatApiKey.baseUrl, provider: chatApiKey.provider };
 }

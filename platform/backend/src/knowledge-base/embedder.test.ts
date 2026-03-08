@@ -355,6 +355,41 @@ describe("EmbeddingService", () => {
     expect(chunks2[0].embedding).toHaveLength(1536);
   });
 
+  test("processDocuments resets docs to pending when no embedding config", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+
+    // No embedding config available
+    mockGetDefaultOrgEmbeddingConfig.mockResolvedValue(null);
+
+    const doc = await KbDocumentModel.create({
+      connectorId: connector.id,
+      organizationId: org.id,
+      title: "No Config Doc",
+      content: "Content",
+      contentHash: "hash-noconfig",
+      embeddingStatus: "pending",
+    });
+
+    await KbChunkModel.insertMany([
+      { documentId: doc.id, content: "Chunk", chunkIndex: 0 },
+    ]);
+
+    await embeddingService.processDocuments([doc.id]);
+
+    // Document should be reset to pending (not failed, not completed)
+    const updated = await KbDocumentModel.findById(doc.id);
+    expect(updated?.embeddingStatus).toBe("pending");
+
+    // No OpenAI API call should have been made
+    expect(mockEmbeddingsCreate).not.toHaveBeenCalled();
+  });
+
   test("processDocuments marks only affected documents as failed on partial API failure", async ({
     makeOrganization,
     makeKnowledgeBase,

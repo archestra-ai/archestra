@@ -481,7 +481,7 @@ export const requiredEndpointPermissionsMap: Partial<
     mcpServerInstallation: ["read"],
   },
   [RouteId.InspectMcpServer]: {
-    mcpServer: ["read"],
+    mcpServerInstallation: ["read"],
   },
   [RouteId.InstallMcpServer]: {
     mcpServerInstallation: ["create"],

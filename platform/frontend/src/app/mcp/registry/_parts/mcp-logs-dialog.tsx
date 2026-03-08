@@ -63,8 +63,6 @@ function useStreamingAnimation(isActive: boolean) {
   return `Streaming${dots}`;
 }
 
-type LogsTab = "logs" | "debug";
-
 export function McpLogsDialog({
   open,
   onOpenChange,

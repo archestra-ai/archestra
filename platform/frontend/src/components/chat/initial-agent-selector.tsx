@@ -1,7 +1,17 @@
 "use client";
 
 import type { archestraApiTypes } from "@shared";
-import { ArrowLeft, Check, Info, Loader2, Plus, Search, XIcon } from "lucide-react";
+import {
+  ArrowLeft,
+  Bot,
+  Check,
+  ExternalLink,
+  Info,
+  Loader2,
+  Plus,
+  Search,
+  XIcon,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AgentBadge } from "@/components/agent-badge";
 import { AgentIcon } from "@/components/agent-icon";
@@ -28,8 +38,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { useInternalAgents, useUpdateProfile } from "@/lib/agent.query";
 import { useInvalidateToolAssignmentQueries } from "@/lib/agent-tools.hook";
 import {
+  useAgentDelegations,
   useAllProfileTools,
   useAssignTool,
+  useRemoveAgentDelegation,
+  useSyncAgentDelegations,
   useUnassignTool,
 } from "@/lib/agent-tools.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
@@ -41,7 +54,12 @@ import { useMcpServersGroupedByCatalog } from "@/lib/mcp-server.query";
 import { cn } from "@/lib/utils";
 
 type ScopeFilter = "all" | "personal" | "team" | "org";
-type DialogView = "settings" | "change" | "add-tool" | "configure-tool";
+type DialogView =
+  | "settings"
+  | "change"
+  | "add-tool"
+  | "configure-tool"
+  | "add-delegation";
 
 type CatalogItem =
   archestraApiTypes.GetInternalMcpCatalogResponses["200"][number];
@@ -118,6 +136,14 @@ export function InitialAgentSelector({
     return catalogItems.filter((c) => catalogIds.has(c.id));
   }, [assignedToolsData, catalogItems]);
 
+  const { data: triggerDelegations = [] } = useAgentDelegations(
+    effectiveAgentId ?? undefined,
+  );
+  const triggerSubagents = useMemo(() => {
+    const targetIds = new Set(triggerDelegations.map((d) => d.id));
+    return agents.filter((a) => targetIds.has(a.id));
+  }, [agents, triggerDelegations]);
+
   const handleAgentSelect = (agentId: string) => {
     onAgentChange(agentId);
     setView("settings");
@@ -162,7 +188,7 @@ export function InitialAgentSelector({
           <span className="truncate flex-1 text-left">
             {currentAgent?.name ?? "Select agent"}
           </span>
-          <ToolServerAvatarGroup catalogs={assignedCatalogs} />
+          <ToolServerAvatarGroup catalogs={assignedCatalogs} subagents={triggerSubagents} />
         </PromptInputButton>
       </DialogTrigger>
       <DialogContent
@@ -175,6 +201,7 @@ export function InitialAgentSelector({
           {view === "change" && "Select Agent"}
           {view === "add-tool" && "Add Tools"}
           {view === "configure-tool" && "Configure Tools"}
+          {view === "add-delegation" && "Call an Agent"}
         </DialogTitle>
 
         {view === "settings" && (
@@ -251,6 +278,14 @@ export function InitialAgentSelector({
           <AddToolView
             onBack={resetToSettings}
             onSelectCatalog={handleSelectCatalog}
+            onAddDelegation={() => setView("add-delegation")}
+          />
+        )}
+
+        {view === "add-delegation" && currentAgent && (
+          <AddDelegationView
+            agentId={currentAgent.id}
+            onBack={() => setView("add-tool")}
           />
         )}
 
@@ -410,9 +445,9 @@ function AgentSettingsView({
           </Alert>
         )}
         <div>
-          <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
+          <Label className="mb-1.5">
             Instructions
-          </div>
+          </Label>
           <Textarea
             value={instructions}
             onChange={(e) => handleInstructionsChange(e.target.value)}
@@ -422,9 +457,9 @@ function AgentSettingsView({
         </div>
 
         <div>
-          <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
-            Tools
-          </div>
+          <Label className="mb-1.5">
+            Tools and subagents
+          </Label>
           <AssignedToolsGrid
             agentId={agent.id}
             onAddTool={onAddTool}
@@ -452,8 +487,16 @@ function AssignedToolsGrid({
     skipPagination: true,
     enabled: !!agentId,
   });
+  const { data: allAgents = [] } = useInternalAgents();
+  const { data: delegations = [] } = useAgentDelegations(agentId);
+  const removeDelegation = useRemoveAgentDelegation();
   const unassignTool = useUnassignTool();
   const invalidateAllQueries = useInvalidateToolAssignmentQueries();
+
+  const delegatedAgents = useMemo(() => {
+    const targetIds = new Set(delegations.map((d) => d.id));
+    return allAgents.filter((a) => targetIds.has(a.id));
+  }, [allAgents, delegations]);
 
   // Group assigned tools by catalogId
   const assignedByCatalog = useMemo(() => {
@@ -491,6 +534,40 @@ function AssignedToolsGrid({
 
   return (
     <div className="grid grid-cols-3 gap-2">
+      {delegatedAgents.map((agent) => (
+        <div
+          key={`delegation-${agent.id}`}
+          className="group relative flex flex-col items-center gap-1.5 rounded-lg border border-primary bg-primary/5 p-3 text-center"
+        >
+          <button
+            type="button"
+            className="absolute top-1.5 right-1.5 hidden group-hover:flex h-5 w-5 items-center justify-center rounded-full bg-muted hover:bg-destructive hover:text-destructive-foreground transition-colors z-10"
+            onClick={() =>
+              removeDelegation.mutate({
+                agentId,
+                targetAgentId: agent.id,
+              })
+            }
+            title={`Remove ${agent.name}`}
+          >
+            <XIcon className="size-3" />
+          </button>
+          <div className="flex flex-col items-center gap-1.5 w-full">
+            <AgentIcon
+              icon={
+                (agent as unknown as Record<string, unknown>).icon as
+                  | string
+                  | null
+              }
+              size={24}
+            />
+            <span className="text-xs font-medium truncate w-full">
+              {agent.name}
+            </span>
+            <AgentToolAvatars agentId={agent.id} />
+          </div>
+        </div>
+      ))}
       {assignedCatalogs.map((catalog) => {
         const info = assignedByCatalog.get(catalog.id);
         return (
@@ -523,7 +600,7 @@ function AssignedToolsGrid({
                 {catalog.name}
               </span>
               <span className="text-[10px] text-muted-foreground">
-                {info?.count ?? 0} tools
+                {info?.count ?? 0} {(info?.count ?? 0) === 1 ? "tool" : "tools"}
               </span>
             </button>
           </div>
@@ -548,9 +625,11 @@ function AssignedToolsGrid({
 function AddToolView({
   onBack,
   onSelectCatalog,
+  onAddDelegation,
 }: {
   onBack: () => void;
   onSelectCatalog: (catalog: CatalogItem) => void;
+  onAddDelegation: () => void;
 }) {
   const { data: catalogItems = [], isPending } = useInternalMcpCatalog();
   const allCredentials = useMcpServersGroupedByCatalog();
@@ -593,6 +672,21 @@ function AddToolView({
           </p>
         ) : (
           <div className="grid grid-cols-3 gap-3">
+            {!search && (
+              <button
+                type="button"
+                onClick={onAddDelegation}
+                className="flex flex-col items-center gap-2 rounded-lg border p-4 text-center transition-colors cursor-pointer hover:bg-accent"
+              >
+                <Bot className="size-7 text-muted-foreground" />
+                <span className="text-sm font-medium truncate w-full">
+                  Call an Agent
+                </span>
+                <p className="text-xs text-muted-foreground line-clamp-2 w-full">
+                  Delegate tasks to another agent
+                </p>
+              </button>
+            )}
             {filteredCatalogs.map((catalog) => {
               const hasCredentials =
                 catalog.serverType === "builtin" ||
@@ -813,6 +907,106 @@ function ConfigureToolView({
 }
 
 // ============================================================================
+// Add Delegation View - Pick agents to delegate to
+// ============================================================================
+
+function AddDelegationView({
+  agentId,
+  onBack,
+}: {
+  agentId: string;
+  onBack: () => void;
+}) {
+  const { data: allAgents = [] } = useInternalAgents();
+  const { data: delegations = [] } = useAgentDelegations(agentId);
+  const syncDelegations = useSyncAgentDelegations();
+
+  const delegatedIds = useMemo(
+    () => new Set(delegations.map((d) => d.id)),
+    [delegations],
+  );
+
+  const availableAgents = useMemo(
+    () => allAgents.filter((a) => a.id !== agentId),
+    [allAgents, agentId],
+  );
+
+  const handleToggle = (targetAgentId: string) => {
+    const newIds = new Set(delegatedIds);
+    if (newIds.has(targetAgentId)) {
+      newIds.delete(targetAgentId);
+    } else {
+      newIds.add(targetAgentId);
+    }
+    syncDelegations.mutate({
+      agentId,
+      targetAgentIds: [...newIds],
+    });
+  };
+
+  return (
+    <div className="flex flex-col h-full">
+      <DialogHeader title="Call an Agent" onBack={onBack} />
+      <div className="px-4 pt-4 pb-4 flex-1 min-h-0 overflow-y-auto">
+        {availableAgents.length === 0 ? (
+          <p className="text-sm text-muted-foreground text-center py-8">
+            No other agents available.
+          </p>
+        ) : (
+          <div className="grid grid-cols-3 gap-3">
+            {availableAgents.map((agent) => (
+              <button
+                key={agent.id}
+                type="button"
+                onClick={() => handleToggle(agent.id)}
+                className={cn(
+                  "flex h-full flex-col items-start gap-2 rounded-lg border p-4 text-left transition-colors hover:bg-accent cursor-pointer",
+                  delegatedIds.has(agent.id) && "border-primary bg-accent",
+                )}
+              >
+                <div className="flex w-full items-center gap-2">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-muted">
+                    <AgentIcon
+                      icon={
+                        (agent as unknown as Record<string, unknown>).icon as
+                          | string
+                          | null
+                      }
+                      size={16}
+                    />
+                  </div>
+                  <span className="text-sm font-medium truncate flex-1">
+                    {agent.name}
+                  </span>
+                  {delegatedIds.has(agent.id) && (
+                    <Check className="h-4 w-4 shrink-0 text-primary" />
+                  )}
+                </div>
+                {agent.description && (
+                  <p className="text-xs text-muted-foreground line-clamp-2 w-full">
+                    {agent.description}
+                  </p>
+                )}
+                <AgentToolAvatars agentId={agent.id} />
+              </button>
+            ))}
+            <a
+              href="/agents?create=true"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex h-full flex-col items-center justify-center gap-2 rounded-lg border border-dashed p-4 text-center transition-colors hover:bg-accent cursor-pointer text-muted-foreground"
+            >
+              <ExternalLink className="size-5" />
+              <span className="text-xs font-medium">Create Agent</span>
+            </a>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
 // Agent Card (for change agent view)
 // ============================================================================
 
@@ -870,16 +1064,55 @@ function AgentCard({
   );
 }
 
+function AgentToolAvatars({ agentId }: { agentId: string }) {
+  const { data: catalogItems = [] } = useInternalMcpCatalog();
+  const { data: allAgents = [] } = useInternalAgents();
+  const { data: assignedToolsData } = useAllProfileTools({
+    filters: { agentId },
+    skipPagination: true,
+    enabled: !!agentId,
+  });
+  const { data: delegations = [] } = useAgentDelegations(agentId);
+
+  const catalogs = useMemo(() => {
+    const catalogIds = new Set<string>();
+    for (const at of assignedToolsData?.data ?? []) {
+      if (at.tool.catalogId) catalogIds.add(at.tool.catalogId);
+    }
+    return catalogItems.filter((c) => catalogIds.has(c.id));
+  }, [assignedToolsData, catalogItems]);
+
+  const subagents = useMemo(() => {
+    const targetIds = new Set(delegations.map((d) => d.id));
+    return allAgents.filter((a) => targetIds.has(a.id));
+  }, [allAgents, delegations]);
+
+  if (catalogs.length === 0 && subagents.length === 0) return null;
+
+  return (
+    <div className="mt-auto w-full flex justify-center">
+      <ToolServerAvatarGroup catalogs={catalogs} subagents={subagents} />
+    </div>
+  );
+}
+
 const MAX_VISIBLE_AVATARS = 3;
+
+type SubagentItem = {
+  id: string;
+  name: string;
+  icon?: string | null;
+};
 
 function ToolServerAvatarGroup({
   catalogs,
+  subagents = [],
 }: {
   catalogs: CatalogItem[];
+  subagents?: SubagentItem[];
 }) {
-  const visible = catalogs.slice(0, MAX_VISIBLE_AVATARS);
-  const remaining = catalogs.length - MAX_VISIBLE_AVATARS;
-  if (catalogs.length === 0) {
+  const totalCount = catalogs.length + subagents.length;
+  if (totalCount === 0) {
     return (
       <Tooltip>
         <TooltipTrigger asChild>
@@ -892,38 +1125,67 @@ function ToolServerAvatarGroup({
     );
   }
 
-  const maxTooltipItems = 5;
-  const tooltipNames = catalogs.slice(0, maxTooltipItems).map((c) => c.name);
-  const tooltipRemaining = catalogs.length - maxTooltipItems;
-  const tooltipText =
-    tooltipRemaining > 0
-      ? `${tooltipNames.join(", ")} and ${tooltipRemaining} more`
-      : tooltipNames.join(", ");
+  // Build a unified list of avatar items
+  const allItems: Array<
+    | { type: "catalog"; item: CatalogItem }
+    | { type: "subagent"; item: SubagentItem }
+  > = [
+    ...subagents.map((a) => ({ type: "subagent" as const, item: a })),
+    ...catalogs.map((c) => ({ type: "catalog" as const, item: c })),
+  ];
+
+  const visible = allItems.slice(0, MAX_VISIBLE_AVATARS);
+  const remaining = totalCount - MAX_VISIBLE_AVATARS;
+
+  const hiddenItems = allItems.slice(MAX_VISIBLE_AVATARS);
+  const hiddenText =
+    hiddenItems.length <= 5
+      ? hiddenItems.map((i) => i.item.name).join(", ")
+      : `${hiddenItems
+          .slice(0, 5)
+          .map((i) => i.item.name)
+          .join(", ")} and ${hiddenItems.length - 5} more`;
 
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <div className="flex -space-x-1.5 items-center ml-1">
-          {visible.map((catalog) => (
-            <div
-              key={catalog.id}
-              className="flex size-5 shrink-0 items-center justify-center rounded-full bg-muted ring-1 ring-background overflow-hidden"
-            >
-              <McpCatalogIcon
-                icon={catalog.icon}
-                catalogId={catalog.id}
-                size={12}
-              />
-            </div>
-          ))}
-          {remaining > 0 && (
+    <div className="flex -space-x-1.5 items-center ml-1">
+      {visible.map((entry) =>
+        entry.type === "catalog" ? (
+          <Tooltip key={entry.item.id}>
+            <TooltipTrigger asChild>
+              <div className="flex size-5 shrink-0 items-center justify-center rounded-full bg-muted ring-1 ring-background overflow-hidden">
+                <McpCatalogIcon
+                  icon={entry.item.icon}
+                  catalogId={entry.item.id}
+                  size={12}
+                />
+              </div>
+            </TooltipTrigger>
+            <TooltipContent side="top">{entry.item.name}</TooltipContent>
+          </Tooltip>
+        ) : (
+          <Tooltip key={entry.item.id}>
+            <TooltipTrigger asChild>
+              <div className="flex size-5 shrink-0 items-center justify-center rounded-full bg-muted ring-1 ring-background overflow-hidden">
+                <AgentIcon
+                  icon={entry.item.icon as string | null}
+                  size={12}
+                />
+              </div>
+            </TooltipTrigger>
+            <TooltipContent side="top">{entry.item.name}</TooltipContent>
+          </Tooltip>
+        ),
+      )}
+      {remaining > 0 && (
+        <Tooltip>
+          <TooltipTrigger asChild>
             <div className="flex size-5 shrink-0 items-center justify-center rounded-full bg-muted ring-1 ring-background text-[9px] font-medium text-muted-foreground">
               +{remaining}
             </div>
-          )}
-        </div>
-      </TooltipTrigger>
-      <TooltipContent side="top">{tooltipText}</TooltipContent>
-    </Tooltip>
+          </TooltipTrigger>
+          <TooltipContent side="top">{hiddenText}</TooltipContent>
+        </Tooltip>
+      )}
+    </div>
   );
 }

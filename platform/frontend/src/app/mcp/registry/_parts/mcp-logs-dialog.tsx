@@ -478,8 +478,8 @@ export function McpLogsContent({
                     </span>
                   )}
                 </div>
-                <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                  {(install.teamDetails || install.ownerEmail) && (
+                {(install.teamDetails || install.ownerEmail) && (
+                  <div className="flex items-center gap-3 text-xs text-muted-foreground">
                     <span className="flex items-center gap-1.5 truncate">
                       <Avatar className="size-4 flex-shrink-0">
                         <AvatarFallback
@@ -496,16 +496,20 @@ export function McpLogsContent({
                           : install.ownerEmail}
                       </span>
                     </span>
-                  )}
-                  {status?.restartCount !== undefined && (
-                    <span className="flex-shrink-0">
-                      Restarts: {status.restartCount}
-                    </span>
-                  )}
-                  {status?.podAge && (
-                    <span className="flex-shrink-0">Age: {status.podAge}</span>
-                  )}
-                </div>
+                  </div>
+                )}
+                {(status?.restartCount !== undefined || status?.podAge) && (
+                  <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                    {status?.restartCount !== undefined && (
+                      <span className="flex-shrink-0">
+                        Restarts: {status.restartCount}
+                      </span>
+                    )}
+                    {status?.podAge && (
+                      <span className="flex-shrink-0">Age: {status.podAge}</span>
+                    )}
+                  </div>
+                )}
               </button>
             );
           })}

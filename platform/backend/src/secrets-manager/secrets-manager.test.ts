@@ -34,6 +34,7 @@ describe("SecretsManager", async () => {
 
   describe("getSecretsManagerTypeBasedOnEnvVars", () => {
     const originalEnv = process.env;
+    const originalSecretsManagerConfig = { ...config.secretsManager };
 
     beforeEach(() => {
       process.env = { ...originalEnv };
@@ -41,10 +42,12 @@ describe("SecretsManager", async () => {
 
     afterEach(() => {
       process.env = originalEnv;
+      Object.assign(config.secretsManager, originalSecretsManagerConfig);
     });
 
     test("should return DB when ARCHESTRA_SECRETS_MANAGER is not set", () => {
       delete process.env.ARCHESTRA_SECRETS_MANAGER;
+      config.secretsManager.type = "DB";
 
       const type = getSecretsManagerTypeBasedOnEnvVars();
 
@@ -53,6 +56,7 @@ describe("SecretsManager", async () => {
 
     test("should return DB when ARCHESTRA_SECRETS_MANAGER is 'DB'", () => {
       process.env.ARCHESTRA_SECRETS_MANAGER = "DB";
+      config.secretsManager.type = "DB";
 
       const type = getSecretsManagerTypeBasedOnEnvVars();
 
@@ -61,6 +65,7 @@ describe("SecretsManager", async () => {
 
     test("should return DB when ARCHESTRA_SECRETS_MANAGER is 'db' (case insensitive)", () => {
       process.env.ARCHESTRA_SECRETS_MANAGER = "db";
+      config.secretsManager.type = "DB";
 
       const type = getSecretsManagerTypeBasedOnEnvVars();
 
@@ -69,6 +74,7 @@ describe("SecretsManager", async () => {
 
     test("should return Vault when ARCHESTRA_SECRETS_MANAGER is 'Vault'", () => {
       process.env.ARCHESTRA_SECRETS_MANAGER = "Vault";
+      config.secretsManager.type = "VAULT";
 
       const type = getSecretsManagerTypeBasedOnEnvVars();
 
@@ -77,6 +83,7 @@ describe("SecretsManager", async () => {
 
     test("should return Vault when ARCHESTRA_SECRETS_MANAGER is 'vault' (case insensitive)", () => {
       process.env.ARCHESTRA_SECRETS_MANAGER = "vault";
+      config.secretsManager.type = "VAULT";
 
       const type = getSecretsManagerTypeBasedOnEnvVars();
 
@@ -85,6 +92,7 @@ describe("SecretsManager", async () => {
 
     test("should return DB for unknown values", () => {
       process.env.ARCHESTRA_SECRETS_MANAGER = "unknown";
+      config.secretsManager.type = "UNKNOWN";
 
       const type = getSecretsManagerTypeBasedOnEnvVars();
 
@@ -95,6 +103,7 @@ describe("SecretsManager", async () => {
   describe("createSecretManager", () => {
     const originalEnv = process.env;
     const originalEnterpriseLicenseActivated = config.enterpriseFeatures.core;
+    const originalSecretsManagerConfig = { ...config.secretsManager };
 
     const setEnterpriseLicenseActivated = (value: boolean) => {
       Object.defineProperty(config.enterpriseFeatures, "core", {
@@ -112,10 +121,12 @@ describe("SecretsManager", async () => {
     afterEach(() => {
       process.env = originalEnv;
       setEnterpriseLicenseActivated(originalEnterpriseLicenseActivated);
+      Object.assign(config.secretsManager, originalSecretsManagerConfig);
     });
 
     test("should return DbSecretsManager when ARCHESTRA_SECRETS_MANAGER is not set", async () => {
       delete process.env.ARCHESTRA_SECRETS_MANAGER;
+      config.secretsManager.type = "DB";
 
       const manager = await createSecretManager();
 
@@ -124,6 +135,7 @@ describe("SecretsManager", async () => {
 
     test("should return DbSecretsManager when ARCHESTRA_SECRETS_MANAGER is 'DB'", async () => {
       process.env.ARCHESTRA_SECRETS_MANAGER = "DB";
+      config.secretsManager.type = "DB";
 
       const manager = await createSecretManager();
 
@@ -132,6 +144,7 @@ describe("SecretsManager", async () => {
 
     test("should return DbSecretsManager when ARCHESTRA_SECRETS_MANAGER is 'Vault' but VAULT_ADDR is not set", async () => {
       process.env.ARCHESTRA_SECRETS_MANAGER = "Vault";
+      config.secretsManager.type = "VAULT";
       delete process.env.ARCHESTRA_HASHICORP_VAULT_ADDR;
       setEnterpriseLicenseActivated(true);
 
@@ -142,6 +155,7 @@ describe("SecretsManager", async () => {
 
     test("should return DbSecretsManager when ARCHESTRA_SECRETS_MANAGER is 'Vault' but token is missing (default auth method)", async () => {
       process.env.ARCHESTRA_SECRETS_MANAGER = "Vault";
+      config.secretsManager.type = "VAULT";
       process.env.ARCHESTRA_HASHICORP_VAULT_ADDR = "http://localhost:8200";
       process.env.ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD = "TOKEN";
       delete process.env.ARCHESTRA_HASHICORP_VAULT_TOKEN;
@@ -154,6 +168,7 @@ describe("SecretsManager", async () => {
 
     test("should return VaultSecretManager when ARCHESTRA_SECRETS_MANAGER is 'Vault' and vault env vars are set and enterprise license is activated", async () => {
       process.env.ARCHESTRA_SECRETS_MANAGER = "Vault";
+      config.secretsManager.type = "VAULT";
       process.env.ARCHESTRA_HASHICORP_VAULT_ADDR = "http://localhost:8200";
       process.env.ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD = "TOKEN";
       process.env.ARCHESTRA_HASHICORP_VAULT_TOKEN = "dev-root-token";
@@ -166,6 +181,7 @@ describe("SecretsManager", async () => {
 
     test("should return DbSecretsManager when ARCHESTRA_SECRETS_MANAGER is 'Vault' but enterprise license is not activated", async () => {
       process.env.ARCHESTRA_SECRETS_MANAGER = "Vault";
+      config.secretsManager.type = "VAULT";
       process.env.ARCHESTRA_HASHICORP_VAULT_ADDR = "http://localhost:8200";
       process.env.ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD = "TOKEN";
       process.env.ARCHESTRA_HASHICORP_VAULT_TOKEN = "dev-root-token";
@@ -178,6 +194,7 @@ describe("SecretsManager", async () => {
 
     test("should return DbSecretsManager even when vault env vars are set if ARCHESTRA_SECRETS_MANAGER is 'DB'", async () => {
       process.env.ARCHESTRA_SECRETS_MANAGER = "DB";
+      config.secretsManager.type = "DB";
       process.env.ARCHESTRA_HASHICORP_VAULT_ADDR = "http://localhost:8200";
       process.env.ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD = "TOKEN";
       process.env.ARCHESTRA_HASHICORP_VAULT_TOKEN = "dev-root-token";
@@ -189,6 +206,7 @@ describe("SecretsManager", async () => {
 
     test("should return DbSecretsManager when AUTH_METHOD=K8S but K8S_ROLE is missing", async () => {
       process.env.ARCHESTRA_SECRETS_MANAGER = "Vault";
+      config.secretsManager.type = "VAULT";
       process.env.ARCHESTRA_HASHICORP_VAULT_ADDR = "http://localhost:8200";
       process.env.ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD = "K8S";
       delete process.env.ARCHESTRA_HASHICORP_VAULT_K8S_ROLE;
@@ -201,6 +219,7 @@ describe("SecretsManager", async () => {
 
     test("should return DbSecretsManager when AUTH_METHOD=AWS but AWS_ROLE is missing", async () => {
       process.env.ARCHESTRA_SECRETS_MANAGER = "Vault";
+      config.secretsManager.type = "VAULT";
       process.env.ARCHESTRA_HASHICORP_VAULT_ADDR = "http://localhost:8200";
       process.env.ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD = "AWS";
       delete process.env.ARCHESTRA_HASHICORP_VAULT_AWS_ROLE;
@@ -214,6 +233,7 @@ describe("SecretsManager", async () => {
 
   describe("getVaultConfigFromEnv", () => {
     const originalEnv = process.env;
+    const originalSecretsManagerConfig = { ...config.secretsManager };
 
     beforeEach(() => {
       process.env = { ...originalEnv };
@@ -221,6 +241,7 @@ describe("SecretsManager", async () => {
 
     afterEach(() => {
       process.env = originalEnv;
+      Object.assign(config.secretsManager, originalSecretsManagerConfig);
     });
 
     test("should throw with all errors when multiple env vars are missing (token auth)", () => {
@@ -542,10 +563,18 @@ describe("SecretsManager", async () => {
     });
 
     describe("KV version configuration", () => {
+      // Helper to set vaultKvVersion on the imported config object.
+      // Needed because tests use `const config = getVaultConfigFromEnv()` which
+      // shadows the import, making direct `config.secretsManager` access hit TDZ.
+      const setKvVersion = (v: string) => {
+        config.secretsManager.vaultKvVersion = v;
+      };
+
       test("should default to KV v2 when ARCHESTRA_HASHICORP_VAULT_KV_VERSION is not set", () => {
         process.env.ARCHESTRA_HASHICORP_VAULT_ADDR = "http://localhost:8200";
         process.env.ARCHESTRA_HASHICORP_VAULT_TOKEN = "dev-root-token";
         delete process.env.ARCHESTRA_HASHICORP_VAULT_KV_VERSION;
+        setKvVersion("2");
         delete process.env.ARCHESTRA_HASHICORP_VAULT_SECRET_PATH;
 
         const config = getVaultConfigFromEnv();
@@ -558,6 +587,7 @@ describe("SecretsManager", async () => {
         process.env.ARCHESTRA_HASHICORP_VAULT_ADDR = "http://localhost:8200";
         process.env.ARCHESTRA_HASHICORP_VAULT_TOKEN = "dev-root-token";
         process.env.ARCHESTRA_HASHICORP_VAULT_KV_VERSION = "1";
+        setKvVersion("1");
         delete process.env.ARCHESTRA_HASHICORP_VAULT_SECRET_PATH;
 
         const config = getVaultConfigFromEnv();
@@ -570,6 +600,7 @@ describe("SecretsManager", async () => {
         process.env.ARCHESTRA_HASHICORP_VAULT_ADDR = "http://localhost:8200";
         process.env.ARCHESTRA_HASHICORP_VAULT_TOKEN = "dev-root-token";
         process.env.ARCHESTRA_HASHICORP_VAULT_KV_VERSION = "2";
+        setKvVersion("2");
         delete process.env.ARCHESTRA_HASHICORP_VAULT_SECRET_PATH;
 
         const config = getVaultConfigFromEnv();
@@ -582,6 +613,7 @@ describe("SecretsManager", async () => {
         process.env.ARCHESTRA_HASHICORP_VAULT_ADDR = "http://localhost:8200";
         process.env.ARCHESTRA_HASHICORP_VAULT_TOKEN = "dev-root-token";
         process.env.ARCHESTRA_HASHICORP_VAULT_KV_VERSION = "3";
+        setKvVersion("3");
 
         expect(() => getVaultConfigFromEnv()).toThrow(
           SecretsManagerConfigurationError,
@@ -595,6 +627,7 @@ describe("SecretsManager", async () => {
         process.env.ARCHESTRA_HASHICORP_VAULT_ADDR = "http://localhost:8200";
         process.env.ARCHESTRA_HASHICORP_VAULT_TOKEN = "dev-root-token";
         process.env.ARCHESTRA_HASHICORP_VAULT_KV_VERSION = "1";
+        setKvVersion("1");
         process.env.ARCHESTRA_HASHICORP_VAULT_SECRET_PATH = "custom/secrets";
 
         const config = getVaultConfigFromEnv();
@@ -608,6 +641,7 @@ describe("SecretsManager", async () => {
         process.env.ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD = "K8S";
         process.env.ARCHESTRA_HASHICORP_VAULT_K8S_ROLE = "archestra";
         process.env.ARCHESTRA_HASHICORP_VAULT_KV_VERSION = "1";
+        setKvVersion("1");
         delete process.env.ARCHESTRA_HASHICORP_VAULT_SECRET_PATH;
         delete process.env.ARCHESTRA_HASHICORP_VAULT_K8S_TOKEN_PATH;
         delete process.env.ARCHESTRA_HASHICORP_VAULT_K8S_MOUNT_POINT;
@@ -623,6 +657,7 @@ describe("SecretsManager", async () => {
         process.env.ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD = "AWS";
         process.env.ARCHESTRA_HASHICORP_VAULT_AWS_ROLE = "archestra-role";
         process.env.ARCHESTRA_HASHICORP_VAULT_KV_VERSION = "1";
+        setKvVersion("1");
         delete process.env.ARCHESTRA_HASHICORP_VAULT_SECRET_PATH;
         delete process.env.ARCHESTRA_HASHICORP_VAULT_AWS_MOUNT_POINT;
         delete process.env.ARCHESTRA_HASHICORP_VAULT_AWS_REGION;

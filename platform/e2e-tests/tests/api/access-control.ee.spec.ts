@@ -279,7 +279,10 @@ test.describe("Organization Roles API - Role Lifecycle", () => {
   }) => {
     const roleName = `lifecycle_test_${Date.now()}`;
     const initialPermissions = { agent: ["read"] };
-    const updatedPermissions = { agent: ["read", "create"], toolPolicy: ["read"] };
+    const updatedPermissions = {
+      agent: ["read", "create"],
+      toolPolicy: ["read"],
+    };
 
     // 1. Create
     const createResponse = await makeApiRequest({

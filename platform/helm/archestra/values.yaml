@@ -527,6 +527,12 @@ postgresql:
   # Resource configuration for PostgreSQL
   # See: https://artifacthub.io/packages/helm/bitnami/postgresql for all options
   primary:
+    # Pre-create pgvector extension as superuser during DB init.
+    # The default 'archestra' user lacks superuser privileges for CREATE EXTENSION.
+    initdb:
+      scripts:
+        create-vector-extension.sql: |
+          CREATE EXTENSION IF NOT EXISTS vector;
     resources:
       requests:
         cpu: "1000m"

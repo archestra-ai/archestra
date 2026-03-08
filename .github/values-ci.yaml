@@ -103,8 +103,13 @@ postgresql:
     database: archestra_dev
     username: archestra
     password: archestra_dev_password
-  # Use NodePort to expose PostgreSQL for debugging if needed
+  # Pre-create pgvector extension as superuser during DB init.
+  # The migration user (archestra) lacks superuser privileges for CREATE EXTENSION.
   primary:
+    initdb:
+      scripts:
+        create-vector-extension.sql: |
+          CREATE EXTENSION IF NOT EXISTS vector;
     service:
       type: NodePort
       nodePorts:

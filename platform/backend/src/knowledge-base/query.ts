@@ -137,7 +137,83 @@ class QueryService {
       "[QueryService] Final results",
     );
 
-    return topResults.map((row) => ({
+    return this.mapResults(topResults);
+  }
+
+  async queryByConnector(params: {
+    connectorId: string;
+    queryText: string;
+    userAcl: AclEntry[];
+    limit?: number;
+  }): Promise<ChunkResult[]> {
+    const { connectorId, queryText, limit = 10 } = params;
+    const hybridEnabled = config.kb.hybridSearchEnabled;
+    const overFetchLimit = hybridEnabled ? limit * 2 : limit;
+
+    const embeddingPromise = this.getOpenAIClient().embeddings.create({
+      model: "text-embedding-3-small",
+      input: queryText,
+    });
+
+    const fullTextPromise = hybridEnabled
+      ? KbChunkModel.fullTextSearchByConnector({
+          connectorId,
+          queryText,
+          limit: overFetchLimit,
+        })
+      : Promise.resolve([] as VectorSearchResult[]);
+
+    const [embeddingResponse, fullTextRows] = await Promise.all([
+      embeddingPromise,
+      fullTextPromise,
+    ]);
+
+    const queryEmbedding = embeddingResponse.data[0].embedding;
+
+    const vectorRows = await KbChunkModel.vectorSearchByConnector({
+      connectorId,
+      queryEmbedding,
+      limit: overFetchLimit,
+    });
+
+    logger.info(
+      {
+        connectorId,
+        queryText,
+        vectorCount: vectorRows.length,
+        fullTextCount: fullTextRows.length,
+      },
+      "[QueryService] Connector search candidates retrieved",
+    );
+
+    let topResults: VectorSearchResult[];
+    if (hybridEnabled) {
+      const fused = reciprocalRankFusion<VectorSearchResult>({
+        rankings: [vectorRows, fullTextRows],
+        idExtractor: (row) => row.id,
+      });
+      topResults = fused.slice(
+        0,
+        config.kb.rerankerEnabled ? overFetchLimit : limit,
+      );
+    } else {
+      topResults = vectorRows;
+    }
+
+    if (config.kb.rerankerEnabled) {
+      topResults = await rerank({
+        queryText,
+        chunks: topResults,
+        openaiApiKey: config.kb.embeddingApiKey,
+      });
+      topResults = topResults.slice(0, limit);
+    }
+
+    return this.mapResults(topResults);
+  }
+
+  private mapResults(rows: VectorSearchResult[]): ChunkResult[] {
+    return rows.map((row) => ({
       content: row.content,
       score: row.score,
       chunkIndex: row.chunkIndex,

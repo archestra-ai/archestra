@@ -38,14 +38,15 @@ describe("EmbeddingService", () => {
   test("processes pending document — chunks get embeddings, status completed", async ({
     makeOrganization,
     makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
   }) => {
     const org = await makeOrganization();
     const kb = await makeKnowledgeBase(org.id);
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
 
     const doc = await KbDocumentModel.create({
-      knowledgeBaseId: kb.id,
+      connectorId: connector.id,
       organizationId: org.id,
-      sourceType: "api",
       title: "Test Doc",
       content: "Some content",
       contentHash: "hash1",
@@ -93,14 +94,15 @@ describe("EmbeddingService", () => {
   test("OpenAI failure marks document as failed", async ({
     makeOrganization,
     makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
   }) => {
     const org = await makeOrganization();
     const kb = await makeKnowledgeBase(org.id);
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
 
     const doc = await KbDocumentModel.create({
-      knowledgeBaseId: kb.id,
+      connectorId: connector.id,
       organizationId: org.id,
-      sourceType: "api",
       title: "Fail Doc",
       content: "Content",
       contentHash: "hash2",
@@ -126,14 +128,15 @@ describe("EmbeddingService", () => {
   test("no chunks marks document as completed with chunkCount 0", async ({
     makeOrganization,
     makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
   }) => {
     const org = await makeOrganization();
     const kb = await makeKnowledgeBase(org.id);
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
 
     const doc = await KbDocumentModel.create({
-      knowledgeBaseId: kb.id,
+      connectorId: connector.id,
       organizationId: org.id,
-      sourceType: "api",
       title: "Empty Doc",
       content: "Content but no chunks",
       contentHash: "hash3",
@@ -151,14 +154,15 @@ describe("EmbeddingService", () => {
   test("already-completed document is skipped", async ({
     makeOrganization,
     makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
   }) => {
     const org = await makeOrganization();
     const kb = await makeKnowledgeBase(org.id);
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
 
     const doc = await KbDocumentModel.create({
-      knowledgeBaseId: kb.id,
+      connectorId: connector.id,
       organizationId: org.id,
-      sourceType: "api",
       title: "Done Doc",
       content: "Already done",
       contentHash: "hash4",
@@ -174,14 +178,15 @@ describe("EmbeddingService", () => {
   test("processPendingDocuments processes multiple documents", async ({
     makeOrganization,
     makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
   }) => {
     const org = await makeOrganization();
     const kb = await makeKnowledgeBase(org.id);
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
 
     const doc1 = await KbDocumentModel.create({
-      knowledgeBaseId: kb.id,
+      connectorId: connector.id,
       organizationId: org.id,
-      sourceType: "api",
       title: "Doc 1",
       content: "Content 1",
       contentHash: "hash5",
@@ -189,9 +194,8 @@ describe("EmbeddingService", () => {
     });
 
     const doc2 = await KbDocumentModel.create({
-      knowledgeBaseId: kb.id,
+      connectorId: connector.id,
       organizationId: org.id,
-      sourceType: "api",
       title: "Doc 2",
       content: "Content 2",
       contentHash: "hash6",
@@ -210,14 +214,15 @@ describe("EmbeddingService", () => {
   test("concurrency guard prevents double processing", async ({
     makeOrganization,
     makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
   }) => {
     const org = await makeOrganization();
     const kb = await makeKnowledgeBase(org.id);
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
 
     await KbDocumentModel.create({
-      knowledgeBaseId: kb.id,
+      connectorId: connector.id,
       organizationId: org.id,
-      sourceType: "api",
       title: "Slow Doc",
       content: "Slow content",
       contentHash: "hash7",

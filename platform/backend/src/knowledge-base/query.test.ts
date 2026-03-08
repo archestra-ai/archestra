@@ -49,14 +49,15 @@ describe("QueryService", () => {
   test("returns ranked results with citations", async ({
     makeOrganization,
     makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
   }) => {
     const org = await makeOrganization();
     const kb = await makeKnowledgeBase(org.id);
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
 
     const doc = await KbDocumentModel.create({
-      knowledgeBaseId: kb.id,
+      connectorId: connector.id,
       organizationId: org.id,
-      sourceType: "api",
       title: "Test Document",
       content: "Some content",
       contentHash: "hash-query-1",
@@ -107,7 +108,7 @@ describe("QueryService", () => {
       title: "Test Document",
       sourceUrl: "https://example.com/doc",
       documentId: doc.id,
-      connectorType: null,
+      connectorType: "jira",
     });
     // First result should have higher score (closer embedding)
     expect(results[0].score).toBeGreaterThanOrEqual(results[1].score);
@@ -142,14 +143,15 @@ describe("QueryService", () => {
   test("returns empty array when chunks have no embeddings", async ({
     makeOrganization,
     makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
   }) => {
     const org = await makeOrganization();
     const kb = await makeKnowledgeBase(org.id);
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
 
     const doc = await KbDocumentModel.create({
-      knowledgeBaseId: kb.id,
+      connectorId: connector.id,
       organizationId: org.id,
-      sourceType: "api",
       title: "Unembedded Doc",
       content: "Content",
       contentHash: "hash-query-2",
@@ -181,14 +183,15 @@ describe("QueryService", () => {
   test("respects limit parameter", async ({
     makeOrganization,
     makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
   }) => {
     const org = await makeOrganization();
     const kb = await makeKnowledgeBase(org.id);
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
 
     const doc = await KbDocumentModel.create({
-      knowledgeBaseId: kb.id,
+      connectorId: connector.id,
       organizationId: org.id,
-      sourceType: "api",
       title: "Multi Chunk Doc",
       content: "Content",
       contentHash: "hash-query-3",
@@ -239,7 +242,6 @@ describe("QueryService", () => {
       documentId: "doc-1",
       title: "Doc 1",
       sourceUrl: null,
-      sourceType: "api",
       metadata: null,
       connectorType: null,
       score: 0.9,
@@ -252,7 +254,6 @@ describe("QueryService", () => {
       documentId: "doc-2",
       title: "Doc 2",
       sourceUrl: null,
-      sourceType: "api",
       metadata: null,
       connectorType: null,
       score: 5.0,
@@ -265,7 +266,6 @@ describe("QueryService", () => {
       documentId: "doc-3",
       title: "Doc 3",
       sourceUrl: "https://example.com",
-      sourceType: "api",
       metadata: null,
       connectorType: null,
       score: 0.8,
@@ -314,7 +314,6 @@ describe("QueryService", () => {
       documentId: "doc-1",
       title: "Doc 1",
       sourceUrl: null,
-      sourceType: "api",
       metadata: null,
       connectorType: null,
       score: 0.85,
@@ -361,7 +360,6 @@ describe("QueryService", () => {
       documentId: "doc-1",
       title: "Doc 1",
       sourceUrl: null,
-      sourceType: "api",
       metadata: null,
       connectorType: null,
       score: 0.9,
@@ -374,7 +372,6 @@ describe("QueryService", () => {
       documentId: "doc-2",
       title: "Doc 2",
       sourceUrl: null,
-      sourceType: "api",
       metadata: null,
       connectorType: null,
       score: 0.7,
@@ -431,7 +428,6 @@ describe("QueryService", () => {
       documentId: "doc-1",
       title: "Doc 1",
       sourceUrl: null,
-      sourceType: "api",
       metadata: null,
       connectorType: null,
       score: 0.9,

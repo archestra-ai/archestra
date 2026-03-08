@@ -732,7 +732,7 @@ describe("executeArchestraTool", () => {
       );
     });
 
-    test("should return error when no knowledge base is assigned", async () => {
+    test("should return error when no knowledge base or connector is assigned", async () => {
       const result = await executeArchestraTool(
         toolName,
         { query: "test query" },
@@ -741,7 +741,7 @@ describe("executeArchestraTool", () => {
 
       expect(result.isError).toBe(true);
       expect((result.content[0] as any).text).toContain(
-        "No knowledge base assigned",
+        "No knowledge base or connector assigned",
       );
     });
 
@@ -767,7 +767,7 @@ describe("executeArchestraTool", () => {
 
       expect(result.isError).toBe(true);
       expect((result.content[0] as any).text).toContain(
-        "No knowledge base assigned",
+        "No knowledge base or connector assigned",
       );
     });
 

@@ -9,7 +9,6 @@ export interface VectorSearchResult {
   documentId: string;
   title: string;
   sourceUrl: string | null;
-  sourceType: string;
   metadata: Record<string, unknown> | null;
   connectorType: string | null;
   score: number;
@@ -58,13 +57,14 @@ class KbChunkModel {
     const rows = await db.execute(sql`
       SELECT
         c.id, c.content, c.chunk_index AS "chunkIndex", c.document_id AS "documentId",
-        d.title, d.source_url AS "sourceUrl", d.source_type AS "sourceType", d.metadata,
+        d.title, d.source_url AS "sourceUrl", d.metadata,
         kbc.connector_type AS "connectorType",
         1 - (c.embedding <=> ${embeddingStr}::vector(1536)) AS score
       FROM kb_chunks c
       JOIN kb_documents d ON d.id = c.document_id
       LEFT JOIN knowledge_base_connectors kbc ON kbc.id = d.connector_id
-      WHERE d.knowledge_base_id = ${knowledgeBaseId}
+      JOIN knowledge_base_connector_assignment kbca ON kbca.connector_id = d.connector_id
+      WHERE kbca.knowledge_base_id = ${knowledgeBaseId}
         AND c.embedding IS NOT NULL
       ORDER BY c.embedding <=> ${embeddingStr}::vector(1536)
       LIMIT ${limit}
@@ -83,13 +83,65 @@ class KbChunkModel {
     const rows = await db.execute(sql`
       SELECT
         c.id, c.content, c.chunk_index AS "chunkIndex", c.document_id AS "documentId",
-        d.title, d.source_url AS "sourceUrl", d.source_type AS "sourceType", d.metadata,
+        d.title, d.source_url AS "sourceUrl", d.metadata,
         kbc.connector_type AS "connectorType",
         ts_rank(c.search_vector, plainto_tsquery('english', ${queryText})) AS score
       FROM kb_chunks c
       JOIN kb_documents d ON d.id = c.document_id
       LEFT JOIN knowledge_base_connectors kbc ON kbc.id = d.connector_id
-      WHERE d.knowledge_base_id = ${knowledgeBaseId}
+      JOIN knowledge_base_connector_assignment kbca ON kbca.connector_id = d.connector_id
+      WHERE kbca.knowledge_base_id = ${knowledgeBaseId}
+        AND c.search_vector @@ plainto_tsquery('english', ${queryText})
+      ORDER BY score DESC
+      LIMIT ${limit}
+    `);
+
+    return rows.rows as unknown as VectorSearchResult[];
+  }
+
+  static async vectorSearchByConnector(params: {
+    connectorId: string;
+    queryEmbedding: number[];
+    limit?: number;
+  }): Promise<VectorSearchResult[]> {
+    const { connectorId, queryEmbedding, limit = 10 } = params;
+    const embeddingStr = `[${queryEmbedding.join(",")}]`;
+
+    const rows = await db.execute(sql`
+      SELECT
+        c.id, c.content, c.chunk_index AS "chunkIndex", c.document_id AS "documentId",
+        d.title, d.source_url AS "sourceUrl", d.metadata,
+        kbc.connector_type AS "connectorType",
+        1 - (c.embedding <=> ${embeddingStr}::vector(1536)) AS score
+      FROM kb_chunks c
+      JOIN kb_documents d ON d.id = c.document_id
+      LEFT JOIN knowledge_base_connectors kbc ON kbc.id = d.connector_id
+      WHERE d.connector_id = ${connectorId}
+        AND c.embedding IS NOT NULL
+      ORDER BY c.embedding <=> ${embeddingStr}::vector(1536)
+      LIMIT ${limit}
+    `);
+
+    return rows.rows as unknown as VectorSearchResult[];
+  }
+
+  static async fullTextSearchByConnector(params: {
+    connectorId: string;
+    queryText: string;
+    limit?: number;
+  }): Promise<VectorSearchResult[]> {
+    const { connectorId, queryText, limit = 10 } = params;
+
+    const rows = await db.execute(sql`
+      SELECT
+        c.id, c.content, c.chunk_index AS "chunkIndex", c.document_id AS "documentId",
+        d.title, d.source_url AS "sourceUrl", d.metadata,
+        kbc.connector_type AS "connectorType",
+        ts_rank(c.search_vector, plainto_tsquery('english', ${queryText})) AS score
+      FROM kb_chunks c
+      JOIN kb_documents d ON d.id = c.document_id
+      LEFT JOIN knowledge_base_connectors kbc ON kbc.id = d.connector_id
+      WHERE d.connector_id = ${connectorId}
         AND c.search_vector @@ plainto_tsquery('english', ${queryText})
       ORDER BY score DESC
       LIMIT ${limit}

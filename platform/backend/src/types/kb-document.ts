@@ -31,15 +31,11 @@ export const EmbeddingStatusSchema = z.enum([
 ]);
 export type EmbeddingStatus = z.infer<typeof EmbeddingStatusSchema>;
 
-export const DocumentSourceTypeSchema = z.enum(["connector", "api"]);
-export type DocumentSourceType = z.infer<typeof DocumentSourceTypeSchema>;
-
 export const KbDocumentMetadataSchema = z.record(z.string(), z.unknown());
 export type KbDocumentMetadata = z.infer<typeof KbDocumentMetadataSchema>;
 
 // Shared field overrides for drizzle-zod schema generation
 const extendedFields = {
-  sourceType: DocumentSourceTypeSchema,
   embeddingStatus: EmbeddingStatusSchema,
   acl: z.array(AclEntrySchema),
   metadata: KbDocumentMetadataSchema.nullable(),
@@ -53,7 +49,6 @@ export const InsertKbDocumentSchema = createInsertSchema(
   schema.kbDocumentsTable,
   {
     ...extendedFields,
-    sourceType: DocumentSourceTypeSchema,
     embeddingStatus: EmbeddingStatusSchema.optional(),
     acl: z.array(AclEntrySchema).optional(),
     metadata: KbDocumentMetadataSchema.optional(),

@@ -1,4 +1,4 @@
-import { and, count, desc, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { InsertKbDocument, KbDocument, UpdateKbDocument } from "@/types";
 
@@ -17,45 +17,21 @@ class KbDocumentModel {
     limit?: number;
     offset?: number;
   }): Promise<KbDocument[]> {
-    let query = db
-      .select()
-      .from(schema.kbDocumentsTable)
-      .where(
-        eq(schema.kbDocumentsTable.knowledgeBaseId, params.knowledgeBaseId),
-      )
-      .orderBy(desc(schema.kbDocumentsTable.createdAt))
-      .$dynamic();
+    const rows = await db.execute(sql`
+      SELECT d.*
+      FROM kb_documents d
+      JOIN knowledge_base_connector_assignment kbca ON kbca.connector_id = d.connector_id
+      WHERE kbca.knowledge_base_id = ${params.knowledgeBaseId}
+      ORDER BY d.created_at DESC
+      ${params.limit !== undefined ? sql`LIMIT ${params.limit}` : sql``}
+      ${params.offset !== undefined ? sql`OFFSET ${params.offset}` : sql``}
+    `);
 
-    if (params.limit !== undefined) {
-      query = query.limit(params.limit);
-    }
-    if (params.offset !== undefined) {
-      query = query.offset(params.offset);
-    }
-
-    return await query;
-  }
-
-  static async findByContentHash(params: {
-    knowledgeBaseId: string;
-    contentHash: string;
-  }): Promise<KbDocument | null> {
-    const [result] = await db
-      .select()
-      .from(schema.kbDocumentsTable)
-      .where(
-        and(
-          eq(schema.kbDocumentsTable.knowledgeBaseId, params.knowledgeBaseId),
-          eq(schema.kbDocumentsTable.contentHash, params.contentHash),
-        ),
-      );
-
-    return result ?? null;
+    return rows.rows as unknown as KbDocument[];
   }
 
   static async findBySourceId(params: {
-    knowledgeBaseId: string;
-    sourceType: "connector" | "api";
+    connectorId: string;
     sourceId: string;
   }): Promise<KbDocument | null> {
     const [result] = await db
@@ -63,8 +39,7 @@ class KbDocumentModel {
       .from(schema.kbDocumentsTable)
       .where(
         and(
-          eq(schema.kbDocumentsTable.knowledgeBaseId, params.knowledgeBaseId),
-          eq(schema.kbDocumentsTable.sourceType, params.sourceType),
+          eq(schema.kbDocumentsTable.connectorId, params.connectorId),
           eq(schema.kbDocumentsTable.sourceId, params.sourceId),
         ),
       );
@@ -103,12 +78,14 @@ class KbDocumentModel {
   }
 
   static async countByKnowledgeBase(knowledgeBaseId: string): Promise<number> {
-    const [result] = await db
-      .select({ count: count() })
-      .from(schema.kbDocumentsTable)
-      .where(eq(schema.kbDocumentsTable.knowledgeBaseId, knowledgeBaseId));
+    const rows = await db.execute(sql`
+      SELECT COUNT(*)::int AS count
+      FROM kb_documents d
+      JOIN knowledge_base_connector_assignment kbca ON kbca.connector_id = d.connector_id
+      WHERE kbca.knowledge_base_id = ${knowledgeBaseId}
+    `);
 
-    return result?.count ?? 0;
+    return (rows.rows[0] as { count: number })?.count ?? 0;
   }
 
   static async findPending(params: { limit?: number }): Promise<KbDocument[]> {

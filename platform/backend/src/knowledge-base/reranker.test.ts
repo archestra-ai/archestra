@@ -22,7 +22,6 @@ function makeChunk(id: string, content: string): VectorSearchResult {
     documentId: `doc-${id}`,
     title: `Title ${id}`,
     sourceUrl: null,
-    sourceType: "api",
     metadata: null,
     connectorType: null,
     score: 0.5,

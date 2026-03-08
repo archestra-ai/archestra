@@ -14,6 +14,7 @@ import type { TokenAuthContext } from "@/clients/mcp-client";
 import { buildUserAcl, queryService } from "@/knowledge-base";
 import logger from "@/logging";
 import {
+  AgentConnectorAssignmentModel,
   AgentModel,
   AgentTeamModel,
   ConversationModel,
@@ -1798,12 +1799,18 @@ export async function executeArchestraTool(
       }
 
       const agent = await AgentModel.findById(contextAgent.id);
-      if (!agent?.knowledgeBaseIds?.length) {
+
+      const hasKbs = agent?.knowledgeBaseIds?.length;
+      const connectorAssignments =
+        await AgentConnectorAssignmentModel.findByAgent(contextAgent.id);
+      const connectorIds = connectorAssignments.map((a) => a.connectorId);
+
+      if (!hasKbs && connectorIds.length === 0) {
         return {
           content: [
             {
               type: "text",
-              text: "No knowledge base assigned to this agent. Assign a knowledge base in agent settings to enable knowledge search.",
+              text: "No knowledge base or connector assigned to this agent. Assign a knowledge base or connector in agent settings to enable knowledge search.",
             },
           ],
           isError: true,
@@ -1811,18 +1818,14 @@ export async function executeArchestraTool(
       }
 
       // Query all assigned knowledge bases and merge results
-      const kbs = await Promise.all(
-        agent.knowledgeBaseIds.map((id) => KnowledgeBaseModel.findById(id)),
-      );
+      const kbs = hasKbs
+        ? await Promise.all(
+            agent.knowledgeBaseIds.map((id) => KnowledgeBaseModel.findById(id)),
+          )
+        : [];
       const validKbs = kbs.filter(
         (kb): kb is NonNullable<typeof kb> => kb !== null,
       );
-      if (validKbs.length === 0) {
-        return {
-          content: [{ type: "text", text: "Knowledge base not found." }],
-          isError: true,
-        };
-      }
 
       let userAcl: AclEntry[] = ["org:*"];
       if (context.userId) {
@@ -1845,19 +1848,50 @@ export async function executeArchestraTool(
         }
       }
 
-      const allResults = await Promise.all(
-        validKbs.map((kb) =>
-          queryService.query({
-            knowledgeBaseId: kb.id,
-            queryText: query,
-            userAcl,
-            limit: 10,
-          }),
-        ),
-      );
-      // Flatten and take top results by score
-      const results = allResults
-        .flat()
+      // Search knowledge bases
+      const kbResultsPromise =
+        validKbs.length > 0
+          ? Promise.all(
+              validKbs.map((kb) =>
+                queryService.query({
+                  knowledgeBaseId: kb.id,
+                  queryText: query,
+                  userAcl,
+                  limit: 10,
+                }),
+              ),
+            )
+          : Promise.resolve([]);
+
+      // Search connectors directly assigned to the agent
+      const connectorResultsPromise =
+        connectorIds.length > 0
+          ? Promise.all(
+              connectorIds.map((cId) =>
+                queryService.queryByConnector({
+                  connectorId: cId,
+                  queryText: query,
+                  userAcl,
+                  limit: 10,
+                }),
+              ),
+            )
+          : Promise.resolve([]);
+
+      const [kbResults, connectorResults] = await Promise.all([
+        kbResultsPromise,
+        connectorResultsPromise,
+      ]);
+
+      // Merge, deduplicate by documentId, sort by score
+      const allFlat = [...kbResults.flat(), ...connectorResults.flat()];
+      const seen = new Set<string>();
+      const deduped = allFlat.filter((r) => {
+        if (seen.has(r.citation.documentId)) return false;
+        seen.add(r.citation.documentId);
+        return true;
+      });
+      const results = deduped
         .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
         .slice(0, 10);
 

@@ -4,15 +4,14 @@ import KbChunkModel from "./kb-chunk";
 import KbDocumentModel from "./kb-document";
 
 function createDocumentData(
-  knowledgeBaseId: string,
+  connectorId: string,
   organizationId: string,
   overrides: Partial<InsertKbDocument> = {},
 ): InsertKbDocument {
   const id = crypto.randomUUID().substring(0, 8);
   return {
-    knowledgeBaseId,
+    connectorId,
     organizationId,
-    sourceType: "api",
     title: `Test Document ${id}`,
     content: `Content for document ${id}`,
     contentHash: `hash-${id}`,
@@ -25,11 +24,13 @@ describe("KbChunkModel", () => {
     test("inserts multiple chunks for a document", async ({
       makeOrganization,
       makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
     }) => {
       const org = await makeOrganization();
       const kb = await makeKnowledgeBase(org.id);
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
       const doc = await KbDocumentModel.create(
-        createDocumentData(kb.id, org.id),
+        createDocumentData(connector.id, org.id),
       );
 
       const chunks = await KbChunkModel.insertMany([
@@ -55,11 +56,13 @@ describe("KbChunkModel", () => {
     test("inserts chunks with optional acl", async ({
       makeOrganization,
       makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
     }) => {
       const org = await makeOrganization();
       const kb = await makeKnowledgeBase(org.id);
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
       const doc = await KbDocumentModel.create(
-        createDocumentData(kb.id, org.id),
+        createDocumentData(connector.id, org.id),
       );
 
       const chunks = await KbChunkModel.insertMany([
@@ -80,11 +83,13 @@ describe("KbChunkModel", () => {
     test("returns chunks ordered by chunkIndex", async ({
       makeOrganization,
       makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
     }) => {
       const org = await makeOrganization();
       const kb = await makeKnowledgeBase(org.id);
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
       const doc = await KbDocumentModel.create(
-        createDocumentData(kb.id, org.id),
+        createDocumentData(connector.id, org.id),
       );
 
       // Insert chunks in non-sequential order
@@ -108,14 +113,16 @@ describe("KbChunkModel", () => {
     test("does not return chunks from other documents", async ({
       makeOrganization,
       makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
     }) => {
       const org = await makeOrganization();
       const kb = await makeKnowledgeBase(org.id);
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
       const doc1 = await KbDocumentModel.create(
-        createDocumentData(kb.id, org.id),
+        createDocumentData(connector.id, org.id),
       );
       const doc2 = await KbDocumentModel.create(
-        createDocumentData(kb.id, org.id),
+        createDocumentData(connector.id, org.id),
       );
 
       await KbChunkModel.insertMany([
@@ -132,11 +139,13 @@ describe("KbChunkModel", () => {
     test("returns empty array when document has no chunks", async ({
       makeOrganization,
       makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
     }) => {
       const org = await makeOrganization();
       const kb = await makeKnowledgeBase(org.id);
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
       const doc = await KbDocumentModel.create(
-        createDocumentData(kb.id, org.id),
+        createDocumentData(connector.id, org.id),
       );
 
       const chunks = await KbChunkModel.findByDocument(doc.id);
@@ -148,11 +157,13 @@ describe("KbChunkModel", () => {
     test("deletes all chunks for a document", async ({
       makeOrganization,
       makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
     }) => {
       const org = await makeOrganization();
       const kb = await makeKnowledgeBase(org.id);
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
       const doc = await KbDocumentModel.create(
-        createDocumentData(kb.id, org.id),
+        createDocumentData(connector.id, org.id),
       );
 
       await KbChunkModel.insertMany([
@@ -171,14 +182,16 @@ describe("KbChunkModel", () => {
     test("does not delete chunks from other documents", async ({
       makeOrganization,
       makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
     }) => {
       const org = await makeOrganization();
       const kb = await makeKnowledgeBase(org.id);
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
       const doc1 = await KbDocumentModel.create(
-        createDocumentData(kb.id, org.id),
+        createDocumentData(connector.id, org.id),
       );
       const doc2 = await KbDocumentModel.create(
-        createDocumentData(kb.id, org.id),
+        createDocumentData(connector.id, org.id),
       );
 
       await KbChunkModel.insertMany([
@@ -195,11 +208,13 @@ describe("KbChunkModel", () => {
     test("does not error when document has no chunks", async ({
       makeOrganization,
       makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
     }) => {
       const org = await makeOrganization();
       const kb = await makeKnowledgeBase(org.id);
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
       const doc = await KbDocumentModel.create(
-        createDocumentData(kb.id, org.id),
+        createDocumentData(connector.id, org.id),
       );
 
       // Should not throw even when there are no chunks to delete
@@ -214,11 +229,13 @@ describe("KbChunkModel", () => {
     test("returns the count of chunks for a document", async ({
       makeOrganization,
       makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
     }) => {
       const org = await makeOrganization();
       const kb = await makeKnowledgeBase(org.id);
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
       const doc = await KbDocumentModel.create(
-        createDocumentData(kb.id, org.id),
+        createDocumentData(connector.id, org.id),
       );
 
       await KbChunkModel.insertMany([
@@ -233,11 +250,13 @@ describe("KbChunkModel", () => {
     test("returns 0 when document has no chunks", async ({
       makeOrganization,
       makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
     }) => {
       const org = await makeOrganization();
       const kb = await makeKnowledgeBase(org.id);
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
       const doc = await KbDocumentModel.create(
-        createDocumentData(kb.id, org.id),
+        createDocumentData(connector.id, org.id),
       );
 
       const count = await KbChunkModel.countByDocument(doc.id);
@@ -247,14 +266,16 @@ describe("KbChunkModel", () => {
     test("does not count chunks from other documents", async ({
       makeOrganization,
       makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
     }) => {
       const org = await makeOrganization();
       const kb = await makeKnowledgeBase(org.id);
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
       const doc1 = await KbDocumentModel.create(
-        createDocumentData(kb.id, org.id),
+        createDocumentData(connector.id, org.id),
       );
       const doc2 = await KbDocumentModel.create(
-        createDocumentData(kb.id, org.id),
+        createDocumentData(connector.id, org.id),
       );
 
       await KbChunkModel.insertMany([

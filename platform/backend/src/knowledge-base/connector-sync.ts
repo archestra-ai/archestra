@@ -6,16 +6,13 @@ import {
   KbChunkModel,
   KbDocumentModel,
   KnowledgeBaseConnectorModel,
-  KnowledgeBaseModel,
 } from "@/models";
 import { secretManager } from "@/secrets-manager";
-import type { KnowledgeBase } from "@/types";
 import type { AclEntry } from "@/types/kb-document";
 import type {
   ConnectorCredentials,
   ConnectorDocument,
 } from "@/types/knowledge-connector";
-import { buildDocumentAcl } from "./acl";
 import { chunkDocument } from "./chunker";
 import { getConnector } from "./connectors/registry";
 
@@ -23,8 +20,8 @@ import { getConnector } from "./connectors/registry";
  * Service that orchestrates the sync of data from external connectors
  * (e.g., Jira, Confluence) into kb_documents.
  *
- * A connector can be assigned to multiple knowledge bases. During sync,
- * documents are ingested into ALL assigned knowledge bases.
+ * Documents are stored once per connector. The knowledge_base_connector_assignment
+ * junction table resolves which KBs a document belongs to.
  */
 class ConnectorSyncService {
   async executeSync(
@@ -42,31 +39,12 @@ class ConnectorSyncService {
       throw new Error(`Connector not found: ${connectorId}`);
     }
 
-    // Find all assigned knowledge bases
+    // Verify connector is assigned to at least one knowledge base
     const knowledgeBaseIds =
       await KnowledgeBaseConnectorModel.getKnowledgeBaseIds(connectorId);
     if (knowledgeBaseIds.length === 0) {
       throw new Error(
         `Connector ${connectorId} is not assigned to any knowledge base`,
-      );
-    }
-
-    const knowledgeBases: KnowledgeBase[] = [];
-    for (const kbId of knowledgeBaseIds) {
-      const kb = await KnowledgeBaseModel.findById(kbId);
-      if (!kb) {
-        log.warn(
-          { connectorId, knowledgeBaseId: kbId },
-          "[ConnectorSync] Knowledge base not found, skipping",
-        );
-        continue;
-      }
-      knowledgeBases.push(kb);
-    }
-
-    if (knowledgeBases.length === 0) {
-      throw new Error(
-        `No valid knowledge bases found for connector ${connectorId}`,
       );
     }
 
@@ -129,32 +107,28 @@ class ConnectorSyncService {
       for await (const batch of syncGenerator) {
         for (const doc of batch.documents) {
           documentsProcessed++;
-          // Ingest document into all assigned knowledge bases
-          for (const kb of knowledgeBases) {
-            try {
-              const ingested = await this.ingestDocument({
-                doc,
-                knowledgeBase: kb,
-                connectorId,
-                connectorType: connector.connectorType,
-                log: runLog,
-              });
-              if (ingested) {
-                documentsIngested++;
-              }
-            } catch (docError) {
-              runLog.warn(
-                {
-                  knowledgeBaseId: kb.id,
-                  documentId: doc.id,
-                  error:
-                    docError instanceof Error
-                      ? docError.message
-                      : String(docError),
-                },
-                "[ConnectorSync] Failed to ingest document into knowledge base",
-              );
+          try {
+            const ingested = await this.ingestDocument({
+              doc,
+              connectorId,
+              connectorType: connector.connectorType,
+              organizationId: connector.organizationId,
+              log: runLog,
+            });
+            if (ingested) {
+              documentsIngested++;
             }
+          } catch (docError) {
+            runLog.warn(
+              {
+                documentId: doc.id,
+                error:
+                  docError instanceof Error
+                    ? docError.message
+                    : String(docError),
+              },
+              "[ConnectorSync] Failed to ingest document",
+            );
           }
         }
 
@@ -230,7 +204,6 @@ class ConnectorSyncService {
         {
           documentsProcessed,
           documentsIngested,
-          knowledgeBaseCount: knowledgeBases.length,
         },
         "[ConnectorSync] Sync completed successfully",
       );
@@ -261,64 +234,46 @@ class ConnectorSyncService {
   }
 
   /**
-   * Ingest a single connector document into a knowledge base via kb_documents.
-   * Uses content hash deduplication — returns false if the document already exists
-   * with the same content hash (skipped).
+   * Ingest a single connector document into kb_documents.
+   * Lookup by connectorId + sourceId. Compare contentHash to detect changes.
+   * Returns false if the document already exists with the same content (skipped).
    */
   private async ingestDocument(params: {
     doc: ConnectorDocument;
-    knowledgeBase: KnowledgeBase;
     connectorId: string;
     connectorType: string;
+    organizationId: string;
     log: pino.Logger;
   }): Promise<boolean> {
-    const { doc, knowledgeBase, connectorId, connectorType, log } = params;
+    const { doc, connectorId, connectorType, organizationId, log } = params;
 
     const contentHash = createHash("sha256").update(doc.content).digest("hex");
 
-    // Check for existing document with the same content hash (dedup)
-    const existing = await KbDocumentModel.findByContentHash({
-      knowledgeBaseId: knowledgeBase.id,
-      contentHash,
-    });
-
-    if (existing) {
-      log.debug(
-        {
-          documentId: doc.id,
-          knowledgeBaseId: knowledgeBase.id,
-          existingDocId: existing.id,
-        },
-        "[ConnectorSync] Document already exists with same content hash, skipping",
-      );
-      return false;
-    }
-
-    // Build ACL based on knowledge base visibility
-    const acl = buildDocumentAcl({
-      visibility: knowledgeBase.visibility as
-        | "org-wide"
-        | "team-scoped"
-        | "auto-sync-permissions",
-      teamIds: (knowledgeBase.teamIds as string[]) ?? [],
-      permissions: doc.permissions,
-    });
-
-    // Also check for existing document by source ID (update case)
-    const existingBySource = await KbDocumentModel.findBySourceId({
-      knowledgeBaseId: knowledgeBase.id,
-      sourceType: "connector",
+    // Lookup existing document by connector + source ID
+    const existing = await KbDocumentModel.findBySourceId({
+      connectorId,
       sourceId: doc.id,
     });
 
-    if (existingBySource) {
+    if (existing) {
+      // Same content hash → skip (unchanged)
+      if (existing.contentHash === contentHash) {
+        log.debug(
+          {
+            documentId: doc.id,
+            existingDocId: existing.id,
+          },
+          "[ConnectorSync] Document unchanged, skipping",
+        );
+        return false;
+      }
+
       // Content has changed — update existing document
-      await KbDocumentModel.update(existingBySource.id, {
+      await KbDocumentModel.update(existing.id, {
         title: doc.title,
         content: doc.content,
         contentHash,
         sourceUrl: doc.sourceUrl ?? null,
-        acl,
         metadata: {
           ...doc.metadata,
           connectorType,
@@ -327,20 +282,19 @@ class ConnectorSyncService {
       });
 
       // Re-chunk: content changed, so replace stale chunks
-      await KbChunkModel.deleteByDocument(existingBySource.id);
+      await KbChunkModel.deleteByDocument(existing.id);
       await this.chunkAndStore({
-        documentId: existingBySource.id,
+        documentId: existing.id,
         title: doc.title,
         content: doc.content,
-        acl,
+        acl: existing.acl as AclEntry[],
         log,
       });
 
       log.debug(
         {
           documentId: doc.id,
-          kbDocumentId: existingBySource.id,
-          knowledgeBaseId: knowledgeBase.id,
+          kbDocumentId: existing.id,
         },
         "[ConnectorSync] Updated existing document with new content",
       );
@@ -349,16 +303,14 @@ class ConnectorSyncService {
 
     // Create new document
     const created = await KbDocumentModel.create({
-      knowledgeBaseId: knowledgeBase.id,
-      organizationId: knowledgeBase.organizationId,
-      sourceType: "connector",
+      organizationId,
       sourceId: doc.id,
       connectorId,
       title: doc.title,
       content: doc.content,
       contentHash,
       sourceUrl: doc.sourceUrl,
-      acl,
+      acl: [],
       metadata: {
         ...doc.metadata,
         connectorType,
@@ -369,14 +321,13 @@ class ConnectorSyncService {
       documentId: created.id,
       title: doc.title,
       content: doc.content,
-      acl,
+      acl: [],
       log,
     });
 
     log.debug(
       {
         documentId: doc.id,
-        knowledgeBaseId: knowledgeBase.id,
       },
       "[ConnectorSync] Document ingested into kb_documents",
     );

@@ -179,11 +179,11 @@ export const UpdateAgentSchemaBase = createUpdateSchema(
   insertExtendedFields,
 )
   .extend({
-    teams: z.array(z.string()),
+    teams: z.array(z.string()).optional(),
     labels: z.array(AgentLabelWithDetailsSchema).optional(),
-    scope: AgentScopeSchema,
-    knowledgeBaseIds: z.array(z.string()),
-    connectorIds: z.array(z.string()),
+    scope: AgentScopeSchema.optional(),
+    knowledgeBaseIds: z.array(z.string()).optional(),
+    connectorIds: z.array(z.string()).optional(),
   })
   .omit({
     id: true,

@@ -745,17 +745,16 @@ describe("executeArchestraTool", () => {
       );
     });
 
-    test("should return error when assigned knowledge base does not exist", async ({
+    test("should return error when assigned knowledge base is deleted (cascade removes assignment)", async ({
       makeOrganization,
       makeKnowledgeBase,
     }) => {
       const org = await makeOrganization();
       const kb = await makeKnowledgeBase(org.id);
 
-      // Assign KB to agent, then delete it so findById returns null
+      // Assign KB to agent, then delete it — CASCADE removes the junction entry too
       await AgentModel.update(testAgent.id, { knowledgeBaseIds: [kb.id] });
 
-      // Delete the KB directly so the lookup fails
       await db
         .delete(schema.knowledgeBasesTable)
         .where(eq(schema.knowledgeBasesTable.id, kb.id));
@@ -768,7 +767,7 @@ describe("executeArchestraTool", () => {
 
       expect(result.isError).toBe(true);
       expect((result.content[0] as any).text).toContain(
-        "Knowledge base not found",
+        "No knowledge base assigned",
       );
     });
 

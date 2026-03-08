@@ -43,7 +43,7 @@ export async function chunkDocument(document: DocumentInput): Promise<Chunk[]> {
   const rawChunks = await chunker.chunk(document.content);
 
   return rawChunks.map((raw, index) => {
-    const content = effectiveTitlePrefix + raw.text;
+    const content = effectiveTitlePrefix + raw.text.trimStart();
     return {
       content,
       chunkIndex: index,

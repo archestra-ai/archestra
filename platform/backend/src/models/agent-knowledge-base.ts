@@ -32,16 +32,17 @@ class AgentKnowledgeBaseModel {
     agentId: string,
     knowledgeBaseId: string,
   ): Promise<boolean> {
-    const result = await db
+    const deleted = await db
       .delete(schema.agentKnowledgeBasesTable)
       .where(
         and(
           eq(schema.agentKnowledgeBasesTable.agentId, agentId),
           eq(schema.agentKnowledgeBasesTable.knowledgeBaseId, knowledgeBaseId),
         ),
-      );
+      )
+      .returning({ agentId: schema.agentKnowledgeBasesTable.agentId });
 
-    return result.rowCount !== null && result.rowCount > 0;
+    return deleted.length > 0;
   }
 
   static async syncForAgent(

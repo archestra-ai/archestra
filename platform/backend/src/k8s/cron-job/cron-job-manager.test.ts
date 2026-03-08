@@ -49,6 +49,7 @@ vi.mock("@kubernetes/client-node", () => {
     AppsV1Api: vi.fn(),
     BatchV1Api: vi.fn(),
     Attach: vi.fn(),
+    Exec: vi.fn(),
     Log: vi.fn(),
   };
 });
@@ -58,14 +59,18 @@ vi.mock("@/config", async (importOriginal) => {
   return {
     default: {
       ...actual.default,
+      kb: {
+        ...actual.default.kb,
+        connectorNamespace: "test-connector-namespace",
+        connectorImage: "archestra-backend:test",
+      },
       orchestrator: {
+        ...actual.default.orchestrator,
         kubernetes: {
           namespace: "test-connector-namespace",
           kubeconfig: undefined,
           loadKubeconfigFromCurrentCluster: false,
         },
-        connectorNamespace: "test-connector-namespace",
-        connectorImage: "archestra-backend:test",
       },
     },
   };

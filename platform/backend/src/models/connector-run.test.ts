@@ -242,7 +242,7 @@ describe("ConnectorRunModel", () => {
         error: null,
       });
 
-      expect(run.status).toBe("completed");
+      expect(run.status).toBe("success");
       expect(run.completedAt).toEqual(endTime);
       expect(run.documentsProcessed).toBe(100);
       expect(run.documentsIngested).toBe(95);
@@ -270,7 +270,7 @@ describe("ConnectorRunModel", () => {
       });
 
       expect(updated).not.toBeNull();
-      expect(updated?.status).toBe("completed");
+      expect(updated?.status).toBe("success");
       expect(updated?.completedAt).toEqual(completedAt);
       expect(updated?.documentsProcessed).toBe(50);
       expect(updated?.documentsIngested).toBe(45);

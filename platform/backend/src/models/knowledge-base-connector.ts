@@ -221,8 +221,7 @@ class KnowledgeBaseConnectorModel {
   static async getConnectorIds(knowledgeBaseId: string): Promise<string[]> {
     const results = await db
       .select({
-        connectorId:
-          schema.knowledgeBaseConnectorAssignmentsTable.connectorId,
+        connectorId: schema.knowledgeBaseConnectorAssignmentsTable.connectorId,
       })
       .from(schema.knowledgeBaseConnectorAssignmentsTable)
       .where(

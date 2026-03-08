@@ -1804,9 +1804,7 @@ export async function executeArchestraTool(
       const hasKbs = agent?.knowledgeBaseIds?.length;
       const connectorAssignments =
         await AgentConnectorAssignmentModel.findByAgent(contextAgent.id);
-      const directConnectorIds = connectorAssignments.map(
-        (a) => a.connectorId,
-      );
+      const directConnectorIds = connectorAssignments.map((a) => a.connectorId);
 
       if (!hasKbs && directConnectorIds.length === 0) {
         return {
@@ -1875,9 +1873,21 @@ export async function executeArchestraTool(
         }
       }
 
+      if (!organizationId) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: "Error: Organization context not available.",
+            },
+          ],
+          isError: true,
+        };
+      }
+
       const results = await queryService.query({
         connectorIds,
-        organizationId: organizationId!,
+        organizationId,
         queryText: query,
         userAcl,
         limit: 10,

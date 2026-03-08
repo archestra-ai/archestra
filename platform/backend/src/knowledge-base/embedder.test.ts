@@ -278,16 +278,17 @@ describe("EmbeddingService", () => {
   test("processPendingDocuments skips when no embedding config available", async ({
     makeOrganization,
     makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
   }) => {
     const org = await makeOrganization();
     const kb = await makeKnowledgeBase(org.id);
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
 
     mockGetDefaultOrgEmbeddingConfig.mockResolvedValue(null);
 
     const doc = await KbDocumentModel.create({
-      knowledgeBaseId: kb.id,
+      connectorId: connector.id,
       organizationId: org.id,
-      sourceType: "api",
       title: "No Config Doc",
       content: "Content",
       contentHash: "hash8",

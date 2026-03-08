@@ -1,10 +1,10 @@
 DO $$
 BEGIN
-    CREATE EXTENSION IF NOT EXISTS vector;
-EXCEPTION WHEN insufficient_privilege THEN
     IF NOT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'vector') THEN
-        RAISE EXCEPTION 'The pgvector extension is not installed and the current user lacks permission to create it. A superuser must run: CREATE EXTENSION vector;';
+        CREATE EXTENSION IF NOT EXISTS vector;
     END IF;
+EXCEPTION WHEN others THEN
+    RAISE EXCEPTION 'The pgvector extension is not installed and the current user lacks permission to create it. A superuser must run: CREATE EXTENSION vector;';
 END
 $$;
 --> statement-breakpoint

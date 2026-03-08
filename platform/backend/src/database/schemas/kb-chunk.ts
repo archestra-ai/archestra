@@ -1,3 +1,4 @@
+import { EMBEDDING_DIMENSIONS } from "@shared";
 import {
   customType,
   index,
@@ -12,7 +13,7 @@ import kbDocumentsTable from "./kb-document";
 
 const vector = customType<{ data: number[]; driverParam: string }>({
   dataType() {
-    return "vector(1536)";
+    return `vector(${EMBEDDING_DIMENSIONS})`;
   },
   toDriver(value: number[]): string {
     return `[${value.join(",")}]`;

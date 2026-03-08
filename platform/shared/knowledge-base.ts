@@ -15,6 +15,9 @@ export const DEFAULT_EMBEDDING_MODEL: EmbeddingModel = "text-embedding-3-small";
 /** Maximum number of chunks to embed per OpenAI API call */
 export const EMBEDDING_BATCH_SIZE = 100;
 
+/** Vector dimensions used for pgvector index and embedding API calls */
+export const EMBEDDING_DIMENSIONS = 1536;
+
 interface EmbeddingModelMeta {
   label: string;
   description: string;
@@ -30,14 +33,16 @@ interface EmbeddingModelMeta {
  */
 export const EMBEDDING_MODELS: Record<EmbeddingModel, EmbeddingModelMeta> = {
   "text-embedding-3-small": {
+    // https://developers.openai.com/api/docs/guides/embeddings/#embedding-models
     label: "text-embedding-3-small",
     description: "Best cost/quality ratio (1536 dims)",
-    dimensions: 1536,
+    dimensions: EMBEDDING_DIMENSIONS,
   },
   "text-embedding-3-large": {
+    // https://developers.openai.com/api/docs/guides/embeddings/#embedding-models
     label: "text-embedding-3-large",
     description: "Higher quality, 3072 dims, reduced to 1536 dims",
-    dimensions: 1536,
+    dimensions: EMBEDDING_DIMENSIONS,
   },
 };
 

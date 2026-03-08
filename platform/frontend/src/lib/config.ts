@@ -186,7 +186,8 @@ export default {
     },
     get fullWhiteLabeling() {
       return (
-        env("NEXT_PUBLIC_ARCHESTRA_ENTERPRISE_FULL_WHITE_LABELING") === "true"
+        env("NEXT_PUBLIC_ARCHESTRA_ENTERPRISE_LICENSE_FULL_WHITE_LABELING") ===
+        "true"
       );
     },
   },

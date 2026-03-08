@@ -1,4 +1,10 @@
-CREATE EXTENSION IF NOT EXISTS vector;
+DO $$
+BEGIN
+    CREATE EXTENSION IF NOT EXISTS vector;
+EXCEPTION WHEN OTHERS THEN
+    RAISE WARNING 'Failed to create pgvector extension: %. Knowledge base features requiring vector search will not work.', SQLERRM;
+END
+$$;
 --> statement-breakpoint
 CREATE TABLE "agent_connector_assignment" (
 	"agent_id" uuid NOT NULL,

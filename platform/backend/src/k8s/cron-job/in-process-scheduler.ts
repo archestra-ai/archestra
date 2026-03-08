@@ -1,6 +1,6 @@
 import { schedule as cronSchedule, type ScheduledTask } from "node-cron";
 import { createCapturingLogger } from "@/entrypoints/_shared/log-capture";
-import { connectorSyncService } from "@/knowledge-base/connector-sync";
+import { connectorSyncService } from "@/knowledge-base";
 import logger from "@/logging";
 
 const MAX_CONTINUATIONS = 50;

@@ -29,7 +29,7 @@ import {
 } from "@/clients/llm-client";
 import config from "@/config";
 import { browserStreamFeature } from "@/features/browser-stream/services/browser-stream.feature";
-import { extractAndIngestDocuments } from "@/knowledge-base/chat-document-extractor";
+import { extractAndIngestDocuments } from "@/knowledge-base";
 import logger from "@/logging";
 import {
   AgentModel,

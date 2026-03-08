@@ -3,7 +3,7 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { createCapturingLogger } from "@/entrypoints/_shared/log-capture";
 import { cronJobManager } from "@/k8s/cron-job";
-import { connectorSyncService } from "@/knowledge-base/connector-sync";
+import { connectorSyncService } from "@/knowledge-base";
 import { getConnector } from "@/knowledge-base/connectors/registry";
 import logger from "@/logging";
 import {

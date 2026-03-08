@@ -47,8 +47,10 @@ import config from "@/config";
 import { initializeDatabase, isDatabaseHealthy } from "@/database";
 import { seedRequiredStartingData } from "@/database/seed";
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
-import { startEmbeddingCron } from "@/knowledge-base/embedder";
-import { reconcileConnectorCronJobs } from "@/knowledge-base/reconcile-connector-cron-jobs";
+import {
+  reconcileConnectorCronJobs,
+  startEmbeddingCron,
+} from "@/knowledge-base";
 import logger from "@/logging";
 import { enterpriseLicenseMiddleware } from "@/middleware";
 import AgentLabelModel from "@/models/agent-label";

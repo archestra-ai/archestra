@@ -7,7 +7,7 @@
 
 import config from "@/config";
 import { cronJobManager } from "@/k8s/cron-job";
-import { connectorSyncService } from "@/knowledge-base/connector-sync";
+import { connectorSyncService } from "@/knowledge-base";
 import { bootstrap, parseArg } from "./_shared/bootstrap";
 import { createCapturingLogger } from "./_shared/log-capture";
 

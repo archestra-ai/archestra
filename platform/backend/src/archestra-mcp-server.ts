@@ -11,8 +11,7 @@ import {
 import { executeA2AMessage } from "@/agents/a2a-executor";
 import { userHasPermission } from "@/auth/utils";
 import type { TokenAuthContext } from "@/clients/mcp-client";
-import { buildUserAcl } from "@/knowledge-base/acl";
-import { queryService } from "@/knowledge-base/query";
+import { buildUserAcl, queryService } from "@/knowledge-base";
 import logger from "@/logging";
 import {
   AgentModel,

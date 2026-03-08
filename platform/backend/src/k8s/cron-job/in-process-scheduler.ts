@@ -1,4 +1,4 @@
-import { schedule as cronSchedule, type ScheduledTask } from "node-cron";
+import { Cron } from "croner";
 import { createCapturingLogger } from "@/entrypoints/_shared/log-capture";
 import { connectorSyncService } from "@/knowledge-base";
 import logger from "@/logging";
@@ -8,16 +8,16 @@ const MAX_CONTINUATIONS = 50;
 /**
  * In-process cron scheduler for connector syncs.
  * Used as a fallback when K8s is not configured (e.g., local development).
- * Runs sync jobs directly in the backend process using node-cron.
+ * Runs sync jobs directly in the backend process using croner.
  */
 class InProcessScheduler {
-  private tasks = new Map<string, ScheduledTask>();
+  private tasks = new Map<string, Cron>();
   private continuationCounts = new Map<string, number>();
 
   schedule(params: { connectorId: string; schedule: string }): void {
     this.unschedule(params.connectorId);
 
-    const task = cronSchedule(params.schedule, () => {
+    const task = new Cron(params.schedule, () => {
       this.continuationCounts.delete(params.connectorId);
       this.runSync(params.connectorId);
     });
@@ -45,7 +45,7 @@ class InProcessScheduler {
   suspend(connectorId: string): void {
     const task = this.tasks.get(connectorId);
     if (task) {
-      task.stop();
+      task.pause();
       logger.info(
         { connectorId },
         "[InProcessScheduler] Suspended connector sync",
@@ -56,7 +56,7 @@ class InProcessScheduler {
   resume(connectorId: string): void {
     const task = this.tasks.get(connectorId);
     if (task) {
-      task.start();
+      task.resume();
       logger.info(
         { connectorId },
         "[InProcessScheduler] Resumed connector sync",

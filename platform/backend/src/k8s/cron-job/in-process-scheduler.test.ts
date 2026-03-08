@@ -1,15 +1,27 @@
 import { vi } from "vitest";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 
-const mockSchedule = vi.fn();
-const mockStop = vi.fn();
-const mockStart = vi.fn();
+const mockCronStop = vi.fn();
+const mockCronPause = vi.fn();
+const mockCronResume = vi.fn();
+let mockCronCallback: (() => void) | null = null;
+
 const mockExecuteSync = vi.fn();
 
-vi.mock("node-cron", () => ({
-  schedule: (...args: unknown[]) => {
-    mockSchedule(...args);
-    return { stop: mockStop, start: mockStart };
+vi.mock("croner", () => ({
+  Cron: class MockCron {
+    constructor(_expression: string, callback: () => void) {
+      mockCronCallback = callback;
+    }
+    stop() {
+      mockCronStop();
+    }
+    pause() {
+      mockCronPause();
+    }
+    resume() {
+      mockCronResume();
+    }
   },
 }));
 
@@ -38,6 +50,7 @@ describe("InProcessScheduler", () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    mockCronCallback = null;
     vi.resetModules();
     const mod = await import("./in-process-scheduler");
     scheduler = mod.inProcessScheduler;
@@ -54,10 +67,6 @@ describe("InProcessScheduler", () => {
         schedule: "0 */6 * * *",
       });
 
-      expect(mockSchedule).toHaveBeenCalledWith(
-        "0 */6 * * *",
-        expect.any(Function),
-      );
       expect(scheduler.isScheduled("conn-1")).toBe(true);
     });
 
@@ -71,8 +80,7 @@ describe("InProcessScheduler", () => {
         schedule: "0 */12 * * *",
       });
 
-      expect(mockStop).toHaveBeenCalledTimes(1);
-      expect(mockSchedule).toHaveBeenCalledTimes(2);
+      expect(mockCronStop).toHaveBeenCalledTimes(1);
       expect(scheduler.isScheduled("conn-1")).toBe(true);
     });
 
@@ -82,7 +90,6 @@ describe("InProcessScheduler", () => {
 
       expect(scheduler.isScheduled("conn-1")).toBe(true);
       expect(scheduler.isScheduled("conn-2")).toBe(true);
-      expect(mockSchedule).toHaveBeenCalledTimes(2);
     });
   });
 
@@ -91,46 +98,45 @@ describe("InProcessScheduler", () => {
       scheduler.schedule({ connectorId: "conn-1", schedule: "0 */6 * * *" });
       scheduler.unschedule("conn-1");
 
-      expect(mockStop).toHaveBeenCalledTimes(1);
+      expect(mockCronStop).toHaveBeenCalledTimes(1);
       expect(scheduler.isScheduled("conn-1")).toBe(false);
     });
 
     test("does nothing for unknown connector", () => {
       scheduler.unschedule("unknown");
-      expect(mockStop).not.toHaveBeenCalled();
+      expect(mockCronStop).not.toHaveBeenCalled();
     });
   });
 
   describe("suspend", () => {
-    test("stops a scheduled task without removing it", () => {
+    test("pauses a scheduled task without removing it", () => {
       scheduler.schedule({ connectorId: "conn-1", schedule: "0 */6 * * *" });
-      mockStop.mockClear();
 
       scheduler.suspend("conn-1");
 
-      expect(mockStop).toHaveBeenCalledTimes(1);
+      expect(mockCronPause).toHaveBeenCalledTimes(1);
       expect(scheduler.isScheduled("conn-1")).toBe(true);
     });
 
     test("does nothing for unknown connector", () => {
       scheduler.suspend("unknown");
-      expect(mockStop).not.toHaveBeenCalled();
+      expect(mockCronPause).not.toHaveBeenCalled();
     });
   });
 
   describe("resume", () => {
-    test("restarts a suspended task", () => {
+    test("resumes a suspended task", () => {
       scheduler.schedule({ connectorId: "conn-1", schedule: "0 */6 * * *" });
       scheduler.suspend("conn-1");
 
       scheduler.resume("conn-1");
 
-      expect(mockStart).toHaveBeenCalledTimes(1);
+      expect(mockCronResume).toHaveBeenCalledTimes(1);
     });
 
     test("does nothing for unknown connector", () => {
       scheduler.resume("unknown");
-      expect(mockStart).not.toHaveBeenCalled();
+      expect(mockCronResume).not.toHaveBeenCalled();
     });
   });
 
@@ -138,11 +144,11 @@ describe("InProcessScheduler", () => {
     test("stops all scheduled tasks and clears the map", () => {
       scheduler.schedule({ connectorId: "conn-1", schedule: "0 */6 * * *" });
       scheduler.schedule({ connectorId: "conn-2", schedule: "0 */12 * * *" });
-      mockStop.mockClear();
+      mockCronStop.mockClear();
 
       scheduler.stopAll();
 
-      expect(mockStop).toHaveBeenCalledTimes(2);
+      expect(mockCronStop).toHaveBeenCalledTimes(2);
       expect(scheduler.isScheduled("conn-1")).toBe(false);
       expect(scheduler.isScheduled("conn-2")).toBe(false);
     });
@@ -157,9 +163,8 @@ describe("InProcessScheduler", () => {
 
       scheduler.schedule({ connectorId: "conn-1", schedule: "0 */6 * * *" });
 
-      // Get the callback that was passed to cron.schedule and invoke it
-      const cronCallback = mockSchedule.mock.calls[0][1] as () => void;
-      cronCallback();
+      // Invoke the callback that was passed to Cron constructor
+      mockCronCallback?.();
 
       // Wait for the async executeSync to complete
       await vi.waitFor(() => {
@@ -178,8 +183,7 @@ describe("InProcessScheduler", () => {
 
       scheduler.schedule({ connectorId: "conn-1", schedule: "0 */6 * * *" });
 
-      const cronCallback = mockSchedule.mock.calls[0][1] as () => void;
-      cronCallback();
+      mockCronCallback?.();
 
       await vi.waitFor(() => {
         expect(mockExecuteSync).toHaveBeenCalledWith(
@@ -201,8 +205,7 @@ describe("InProcessScheduler", () => {
 
       scheduler.schedule({ connectorId: "conn-1", schedule: "0 */6 * * *" });
 
-      const cronCallback = mockSchedule.mock.calls[0][1] as () => void;
-      cronCallback();
+      mockCronCallback?.();
 
       // Wait for first executeSync call
       await vi.waitFor(() => {

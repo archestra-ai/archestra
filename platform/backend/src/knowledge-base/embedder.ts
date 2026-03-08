@@ -1,4 +1,4 @@
-import { schedule as cronSchedule } from "node-cron";
+import { Cron } from "croner";
 import OpenAI from "openai";
 import config from "@/config";
 import logger from "@/logging";
@@ -131,7 +131,7 @@ export function startEmbeddingCron(): void {
     return;
   }
 
-  cronSchedule("*/30 * * * * *", () => {
+  new Cron("*/30 * * * * *", () => {
     embeddingService.processPendingDocuments().catch((error) => {
       logger.error(
         { error: error instanceof Error ? error.message : String(error) },

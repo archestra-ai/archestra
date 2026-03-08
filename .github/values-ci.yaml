@@ -55,8 +55,6 @@ archestra:
     ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED: "true"
     ARCHESTRA_ENTERPRISE_LICENSE_FULL_WHITE_LABELING: "true"
     ARCHESTRA_ENTERPRISE_LICENSE_KNOWLEDGE_BASE_ACTIVATED: "true"
-    # Use default namespace for connector CronJobs in CI (avoids needing to create a separate namespace)
-    ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_K8S_CRONJOB_NAMESPACE: "default"
     # Enable test MCP server seeding
     ENABLE_TEST_MCP_SERVER: "true"
     # Disable better-auth rate limit for e2e tests

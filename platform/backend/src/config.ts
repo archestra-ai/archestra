@@ -776,7 +776,8 @@ const config = {
     ),
     connectorNamespace:
       process.env.ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_K8S_CRONJOB_NAMESPACE ||
-      "archestra-connectors",
+      process.env.ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE ||
+      "default",
     connectorImage: getConnectorImage(),
     connectorContinuationCount: Number.parseInt(
       process.env[CONNECTOR_CONTINUATION_COUNT_ENV_VAR] || "0",

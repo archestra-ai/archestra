@@ -13,7 +13,7 @@ Check ../docs_writer_prompt.md before changing this file.
 
 Connectors pull data from external tools on a cron schedule into knowledge bases. Each connector tracks a checkpoint for incremental sync -- only changes since the last run are processed. A connector can be assigned to multiple knowledge bases.
 
-In local development (no K8s), connector syncs run in-process. In production, each sync runs as a Kubernetes CronJob in a dedicated namespace (`archestra-connectors` by default, configurable via `ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_K8S_CRONJOB_NAMESPACE`).
+In local development (no K8s), connector syncs run in-process. In production, each sync runs as a Kubernetes CronJob in the Helm release namespace by default (configurable via `ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_K8S_CRONJOB_NAMESPACE`).
 
 For large data sources, sync runs are time-bounded. When a run exceeds 90% of the configured max duration (`ARCHESTRA_CONNECTOR_SYNC_MAX_DURATION_SECONDS`, default 55 minutes), it saves its checkpoint and triggers a continuation job to resume from where it left off. This repeats automatically (up to 50 continuations) until all data is synced. The UI shows progress with estimated total item counts where available.
 

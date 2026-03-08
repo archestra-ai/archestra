@@ -54,6 +54,6 @@ See [Knowledge Connectors](/docs/platform-knowledge-connectors) for supported co
 | Variable                                                   | Required | Description                                                            |
 | ---------------------------------------------------------- | -------- | ---------------------------------------------------------------------- |
 | `ARCHESTRA_KNOWLEDGE_BASE_EMBEDDING_API_KEY`               | Yes      | API key for generating text embeddings (OpenAI-compatible endpoint)    |
-| `ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_K8S_CRONJOB_NAMESPACE` | No       | K8s namespace for connector CronJobs (default: `archestra-connectors`) |
+| `ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_K8S_CRONJOB_NAMESPACE` | No       | K8s namespace for connector CronJobs (default: Helm release namespace) |
 
 See [Platform Deployment](/docs/platform-deployment) for the full environment variable reference.

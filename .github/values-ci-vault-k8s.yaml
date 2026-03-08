@@ -42,8 +42,6 @@ archestra:
     ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED: "true"
     ARCHESTRA_ENTERPRISE_LICENSE_FULL_WHITE_LABELING: "true"
     ARCHESTRA_ENTERPRISE_LICENSE_KNOWLEDGE_BASE_ACTIVATED: "true"
-    # Use default namespace for connector CronJobs in CI (avoids needing to create a separate namespace)
-    ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_K8S_CRONJOB_NAMESPACE: "default"
     ARCHESTRA_AUTH_RATE_LIMIT_DISABLED: "true"
     # Vault K8s auth configuration — secrets manager uses Vault for runtime secret lookups
     ARCHESTRA_SECRETS_MANAGER: "READONLY_VAULT"

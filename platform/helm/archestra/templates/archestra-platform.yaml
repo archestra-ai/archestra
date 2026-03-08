@@ -93,6 +93,29 @@ spec:
             - name: vault-secrets
               mountPath: /vault/secrets
         {{- end }}
+        {{- if .Values.postgresql.enabled }}
+        # Ensure the pgvector extension exists in the application database.
+        # Bitnami initdb scripts only run on first initialization, so this init container
+        # handles existing installations that were created before pgvector was required.
+        # Uses IF NOT EXISTS so it is safe to run on every pod start.
+        - name: setup-postgres-extensions
+          image: {{ printf "%s:%s" (.Values.postgresql.image.repository | default "bitnami/postgresql") (.Values.postgresql.image.tag | default "latest") }}
+          env:
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "archestra-platform.fullname" . }}-postgresql
+                  key: postgres-password
+          command:
+            - sh
+            - -c
+            - |
+              until pg_isready -h {{ include "archestra-platform.fullname" . }}-postgresql -U postgres; do
+                echo "Waiting for PostgreSQL..."
+                sleep 1
+              done
+              psql -h {{ include "archestra-platform.fullname" . }}-postgresql -U postgres -d {{ .Values.postgresql.auth.database }} -c "CREATE EXTENSION IF NOT EXISTS vector;"
+        {{- end }}
         - name: wait-for-postgres
           image: busybox:1.36
           env:

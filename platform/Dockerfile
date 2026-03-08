@@ -578,6 +578,15 @@ EOSQL
         su-exec postgres pg_ctl -D /var/lib/postgresql/data -m fast -w stop
 
         echo "PostgreSQL initialized successfully"
+    else
+        # Existing database — ensure pgvector extension exists (idempotent).
+        # On first init the extension is created above, but upgrades from older
+        # images need it created retroactively before Drizzle migrations run.
+        su-exec postgres pg_ctl -D /var/lib/postgresql/data -o "-c listen_addresses=''" -w start
+        psql -v ON_ERROR_STOP=1 --username postgres --dbname ${POSTGRES_DB} <<-EOSQL
+            CREATE EXTENSION IF NOT EXISTS vector;
+EOSQL
+        su-exec postgres pg_ctl -D /var/lib/postgresql/data -m fast -w stop
     fi
 else
     echo "Using external PostgreSQL database"

@@ -104,6 +104,10 @@ postgresql:
     username: archestra
     password: archestra_dev_password
   primary:
+    initdb:
+      scripts:
+        grant-superuser.sql: |
+          ALTER USER archestra WITH SUPERUSER;
     service:
       type: NodePort
       nodePorts:

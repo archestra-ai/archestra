@@ -83,6 +83,10 @@ postgresql:
     username: archestra
     password: vault_e2e_custom_pw
   primary:
+    initdb:
+      scripts:
+        grant-superuser.sql: |
+          ALTER USER archestra WITH SUPERUSER;
     service:
       type: NodePort
       nodePorts:

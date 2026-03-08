@@ -156,6 +156,13 @@ RUN apk --no-cache upgrade && \
     # Clean up
     rm -rf /tmp/*
 
+# Build and install pgvector extension for knowledge base vector search
+RUN apk add --no-cache --virtual .pgvector-build-deps build-base clang15 llvm15 postgresql17-dev git && \
+    git clone --branch v0.8.0 --depth 1 https://github.com/pgvector/pgvector.git /tmp/pgvector && \
+    cd /tmp/pgvector && make && make install && \
+    cd / && rm -rf /tmp/pgvector && \
+    apk del .pgvector-build-deps
+
 # Install KinD (Kubernetes in Docker) and docker-cli for embedded K8s cluster support
 # Both binaries are built from source in go-builder with Go 1.25.7 to fix CVE-2025-68121
 COPY --from=go-builder /docker-binary /usr/local/bin/docker
@@ -567,6 +574,11 @@ if [ "$USE_EXTERNAL_DB" = "false" ]; then
             CREATE USER ${POSTGRES_USER} WITH PASSWORD '${POSTGRES_PASSWORD}';
             CREATE DATABASE ${POSTGRES_DB} OWNER ${POSTGRES_USER};
             GRANT ALL PRIVILEGES ON DATABASE ${POSTGRES_DB} TO ${POSTGRES_USER};
+EOSQL
+
+        # Create pgvector extension as superuser (required for knowledge base feature)
+        psql -v ON_ERROR_STOP=1 --username postgres --dbname ${POSTGRES_DB} <<-EOSQL
+            CREATE EXTENSION IF NOT EXISTS vector;
 EOSQL
 
         # Stop PostgreSQL

@@ -7,6 +7,7 @@
 ## Implementation Progress
 
 ### Section 3: Enterprise Feature Flag
+
 - ✅ Restructure `GET /api/config` — `enterpriseFeatures: { core, knowledgeBase }` (merged via config cleanup PR #3159)
 - ✅ `useEnterpriseFeature()` hook reads from backend `/api/config` response
 - ✅ Conditional sidebar visibility — Knowledge Base section gated by `useEnterpriseFeature("knowledgeBase")`
@@ -14,12 +15,14 @@
 - ⬜ Remove `NEXT_PUBLIC_ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED` from frontend (deferred — colleague's white-labeling branch)
 
 ### Section 4: Embedding Configuration
+
 - ✅ `/settings/knowledge` page — embedding model selector (3-small, 3-large, ada-002) with save/cancel
 - ✅ `embeddingModel` column on organization table with `.$type<EmbeddingModel>()`
 - ✅ `EmbeddingModelSchema` + `UpdateOrganizationSchema` extended with `embeddingModel`
 - ⬜ `ARCHESTRA_KNOWLEDGE_BASE_EMBEDDING_API_KEY` env var — dedicated embedding API key (not yet wired)
 
 ### Section 5: Database Schema
+
 - ✅ `kb_documents` table — source-of-truth with content hash, ACL JSONB, embedding status, source metadata
 - ✅ `kb_chunks` table — pgvector `vector(1536)`, tsvector generated column, HNSW index
 - ✅ `agent_connector_assignments` table — direct agent-to-connector assignment
@@ -28,12 +31,14 @@
 - ✅ Drizzle-zod types and CRUD models (`kb-document.ts`, `kb-chunk.ts`)
 
 ### Section 6: Chunking & Embedding
+
 - ✅ Chunker (`backend/src/knowledge-base/chunker.ts`) — token-aware recursive splitting with tests
 - ✅ Embedder (`backend/src/knowledge-base/embedder.ts`) — OpenAI embedding with batching, tests
 - ⬜ Wire embedder to use organization's `embeddingModel` setting
 - ⬜ Wire embedder to use `ARCHESTRA_KNOWLEDGE_BASE_EMBEDDING_API_KEY` env var
 
 ### Section 7: Ingestion Pipeline
+
 - ✅ Connector sync refactored — connectors ingest into `kb_documents` directly (removed LightRAG delegation)
 - ✅ Jira connector
 - ✅ Confluence connector
@@ -43,21 +48,25 @@
 - ⬜ Chat file upload → `kb_documents` ingestion
 
 ### Section 8: Query Pipeline
+
 - ✅ Hybrid search with RRF (`backend/src/knowledge-base/query.ts`) — vector + full-text with tests
 - ⬜ ACL filtering via `?|` operator on GIN-indexed JSONB
 - ⬜ Visibility modes (org-wide, team-scoped, auto-sync)
 
 ### Section 9: Access Control
+
 - ⬜ ACL format (namespaced string arrays in JSONB)
 - ⬜ Connector permission extraction interface
 - ⬜ Connector permission sync
 
 ### Section 10: Citations
+
 - ✅ Structured chunk results with source metadata
 - ✅ MCP tool `archestra__query_knowledge_base` returns citation metadata
 - ✅ Frontend citation UI (replace mock data)
 
 ### Section 11: Migration Path
+
 - ✅ Phase 1: Infrastructure — tables, pgvector extension, models
 - ✅ Phase 2: Core RAG — chunker, embedder, query, connector refactor
 - ✅ Phase 3: New connectors (SharePoint, GitHub, GitLab)
@@ -65,6 +74,7 @@
 - ✅ Phase 5: Cleanup — remove LightRAG provider code
 
 ### Section 12: Documentation
+
 - ✅ New docs pages (knowledge base config, connectors)
 - ✅ Updates to existing docs (platform deployment env vars)
 
@@ -99,39 +109,39 @@ Connectors pull data from external sources and ingest into knowledge bases via t
 
 **`knowledge_bases`** table (`backend/src/database/schemas/knowledge-base.ts`):
 
-| Column | Type | Notes |
-|--------|------|-------|
-| `id` | `uuid` | PK |
-| `organization_id` | `text` | |
-| `name` | `text` | |
-| `description` | `text` | nullable |
-| `provider` | `text` | `KnowledgeBaseProviderType` — currently only `"lightrag"` |
-| `config` | `jsonb` | `LightragConfig` — `{ apiUrl, apiKey? }` |
-| `secret_id` | `uuid` | FK to `secrets` |
-| `visibility` | `text` | `"org-wide" | "team-scoped" | "auto-sync-permissions"` |
-| `team_ids` | `jsonb` | `string[]` |
-| `status` | `text` | default `"active"` |
-| `created_at` | `timestamp` | |
-| `updated_at` | `timestamp` | |
+| Column            | Type        | Notes                                                     |
+| ----------------- | ----------- | --------------------------------------------------------- | ------------- | ------------------------ |
+| `id`              | `uuid`      | PK                                                        |
+| `organization_id` | `text`      |                                                           |
+| `name`            | `text`      |                                                           |
+| `description`     | `text`      | nullable                                                  |
+| `provider`        | `text`      | `KnowledgeBaseProviderType` — currently only `"lightrag"` |
+| `config`          | `jsonb`     | `LightragConfig` — `{ apiUrl, apiKey? }`                  |
+| `secret_id`       | `uuid`      | FK to `secrets`                                           |
+| `visibility`      | `text`      | `"org-wide"                                               | "team-scoped" | "auto-sync-permissions"` |
+| `team_ids`        | `jsonb`     | `string[]`                                                |
+| `status`          | `text`      | default `"active"`                                        |
+| `created_at`      | `timestamp` |                                                           |
+| `updated_at`      | `timestamp` |                                                           |
 
 **`knowledge_base_connectors`** table (`backend/src/database/schemas/knowledge-base-connector.ts`):
 
-| Column | Type | Notes |
-|--------|------|-------|
-| `id` | `uuid` | PK |
-| `organization_id` | `text` | |
-| `name` | `text` | |
-| `connector_type` | `text` | `"jira" | "confluence"` |
-| `config` | `jsonb` | Discriminated union by `type` |
-| `secret_id` | `uuid` | FK to `secrets` |
-| `schedule` | `text` | Cron expression, default `"0 */6 * * *"` |
-| `enabled` | `boolean` | |
-| `last_sync_at` | `timestamp` | |
-| `last_sync_status` | `text` | |
-| `last_sync_error` | `text` | |
-| `checkpoint` | `jsonb` | Connector-specific checkpoint for incremental sync |
-| `created_at` | `timestamp` | |
-| `updated_at` | `timestamp` | |
+| Column             | Type        | Notes                                              |
+| ------------------ | ----------- | -------------------------------------------------- | ------------- |
+| `id`               | `uuid`      | PK                                                 |
+| `organization_id`  | `text`      |                                                    |
+| `name`             | `text`      |                                                    |
+| `connector_type`   | `text`      | `"jira"                                            | "confluence"` |
+| `config`           | `jsonb`     | Discriminated union by `type`                      |
+| `secret_id`        | `uuid`      | FK to `secrets`                                    |
+| `schedule`         | `text`      | Cron expression, default `"0 */6 * * *"`           |
+| `enabled`          | `boolean`   |                                                    |
+| `last_sync_at`     | `timestamp` |                                                    |
+| `last_sync_status` | `text`      |                                                    |
+| `last_sync_error`  | `text`      |                                                    |
+| `checkpoint`       | `jsonb`     | Connector-specific checkpoint for incremental sync |
+| `created_at`       | `timestamp` |                                                    |
+| `updated_at`       | `timestamp` |                                                    |
 
 **`knowledge_base_connector_assignment`** — Junction table (M:N between KBs and connectors).
 
@@ -207,6 +217,7 @@ enterpriseFeatures: z.strictObject({
 ```
 
 Response:
+
 ```json
 {
   "features": { ... },
@@ -238,7 +249,9 @@ enterpriseFeatures: {
 ```typescript
 import type { archestraApiTypes } from "@shared";
 
-type EnterpriseFeatures = NonNullable<archestraApiTypes.GetConfigResponses["200"]["enterpriseFeatures"]>;
+type EnterpriseFeatures = NonNullable<
+  archestraApiTypes.GetConfigResponses["200"]["enterpriseFeatures"]
+>;
 type EnterpriseFeatureKey = keyof EnterpriseFeatures;
 
 export function useEnterpriseFeature(feature: EnterpriseFeatureKey): boolean {
@@ -265,11 +278,11 @@ A new settings page for knowledge base configuration. Only visible when `enterpr
 
 **Embedding model selection** — Opinionated, small curated list:
 
-| Model | Provider | Dimensions | Notes |
-|-------|----------|------------|-------|
-| `text-embedding-3-small` | OpenAI | 1536 | Default. Best cost/quality ratio |
-| `text-embedding-3-large` | OpenAI | 3072 | Higher quality, 2x cost |
-| `text-embedding-ada-002` | OpenAI | 1536 | Legacy, for backward compat |
+| Model                    | Provider | Dimensions | Notes                            |
+| ------------------------ | -------- | ---------- | -------------------------------- |
+| `text-embedding-3-small` | OpenAI   | 1536       | Default. Best cost/quality ratio |
+| `text-embedding-3-large` | OpenAI   | 3072       | Higher quality, 2x cost          |
+| `text-embedding-ada-002` | OpenAI   | 1536       | Legacy, for backward compat      |
 
 **Settings stored at org level** — New columns on `organizations` table (or a new `knowledge_base_settings` table):
 
@@ -285,11 +298,11 @@ The API key is stored via the secrets manager (same pattern as connector credent
 
 For advanced/operational settings that don't need UI:
 
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `ARCHESTRA_KB_CHUNK_SIZE_TOKENS` | No | `512` | Maximum tokens per chunk |
-| `ARCHESTRA_KB_CHUNK_OVERLAP_TOKENS` | No | `50` | Token overlap between chunks |
-| `ARCHESTRA_KB_PROCESSING_CONCURRENCY` | No | `2` | Max concurrent document processing jobs |
+| Variable                                          | Required | Default | Description                             |
+| ------------------------------------------------- | -------- | ------- | --------------------------------------- |
+| `ARCHESTRA_KNOWLEDGE_BASE_CHUNK_SIZE_TOKENS`      | No       | `512`   | Maximum tokens per chunk                |
+| `ARCHESTRA_KNOWLEDGE_BASE_CHUNK_OVERLAP_TOKENS`   | No       | `50`    | Token overlap between chunks            |
+| `ARCHESTRA_KNOWLEDGE_BASE_PROCESSING_CONCURRENCY` | No       | `2`     | Max concurrent document processing jobs |
 
 ---
 
@@ -339,7 +352,15 @@ CREATE INDEX kb_documents_embedding_status_idx ON kb_documents(embedding_status)
 **Drizzle schema** (`backend/src/database/schemas/kb-document.ee.ts`):
 
 ```typescript
-import { index, integer, jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import {
+  index,
+  integer,
+  jsonb,
+  pgTable,
+  text,
+  timestamp,
+  uuid,
+} from "drizzle-orm/pg-core";
 import knowledgeBasesTable from "./knowledge-base";
 import knowledgeBaseConnectorsTable from "./knowledge-base-connector";
 
@@ -377,8 +398,15 @@ const kbDocumentsTable = pgTable(
   (table) => [
     index("kb_documents_kb_id_idx").on(table.knowledgeBaseId),
     index("kb_documents_org_id_idx").on(table.organizationId),
-    index("kb_documents_content_hash_idx").on(table.knowledgeBaseId, table.contentHash),
-    index("kb_documents_source_idx").on(table.knowledgeBaseId, table.sourceType, table.sourceId),
+    index("kb_documents_content_hash_idx").on(
+      table.knowledgeBaseId,
+      table.contentHash,
+    ),
+    index("kb_documents_source_idx").on(
+      table.knowledgeBaseId,
+      table.sourceType,
+      table.sourceId,
+    ),
   ],
 );
 
@@ -432,7 +460,15 @@ CREATE INDEX kb_chunks_kb_id_idx ON kb_chunks(knowledge_base_id);
 **Drizzle schema** (`backend/src/database/schemas/kb-chunk.ee.ts`):
 
 ```typescript
-import { index, integer, jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import {
+  index,
+  integer,
+  jsonb,
+  pgTable,
+  text,
+  timestamp,
+  uuid,
+} from "drizzle-orm/pg-core";
 import { customType } from "drizzle-orm/pg-core";
 import kbDocumentsTable from "./kb-document.ee";
 import knowledgeBasesTable from "./knowledge-base";
@@ -507,6 +543,7 @@ CREATE INDEX agent_connector_assignment_connector_idx ON agent_connector_assignm
 ```
 
 At query time, the system resolves all knowledge sources for an agent:
+
 1. If `knowledge_base_id` is set → query chunks from that KB
 2. If agent has direct connector assignments → query chunks from `kb_documents` where `connector_id` matches
 3. Both can be active simultaneously (results are merged via RRF)
@@ -526,8 +563,8 @@ At query time, the system resolves all knowledge sources for an agent:
 
 ```typescript
 interface ChunkingConfig {
-  maxTokens: number;       // 512
-  overlapTokens: number;   // 50
+  maxTokens: number; // 512
+  overlapTokens: number; // 50
   tokenizer: "cl100k_base"; // OpenAI tokenizer
 }
 
@@ -552,10 +589,10 @@ Use `tiktoken` (via `js-tiktoken`) for accurate token counting with the `cl100k_
 
 ```typescript
 interface EmbeddingConfig {
-  model: string;           // from org settings
-  dimensions: number;      // derived from model selection
+  model: string; // from org settings
+  dimensions: number; // derived from model selection
   batchSize: 100;
-  apiKey: string;          // from org settings (secrets manager)
+  apiKey: string; // from org settings (secrets manager)
 }
 ```
 
@@ -664,9 +701,9 @@ export interface ConnectorDocument {
   updatedAt?: Date;
   // NEW: Access control permissions from the source system
   permissions?: {
-    users?: string[];      // Email addresses
-    groups?: string[];     // Group names/IDs
-    isPublic?: boolean;    // Accessible to entire org
+    users?: string[]; // Email addresses
+    groups?: string[]; // Group names/IDs
+    isPublic?: boolean; // Accessible to entire org
   };
 }
 ```
@@ -774,10 +811,10 @@ function buildUserAcl(params: {
 
 The three existing visibility modes map to ACL behavior:
 
-| Mode | Document ACL | Query behavior |
-|------|-------------|----------------|
-| `org-wide` | `["org:*"]` | All org members can query all documents |
-| `team-scoped` | `["team:<teamId>", ...]` | Only members of assigned teams can query |
+| Mode                    | Document ACL                                            | Query behavior                                          |
+| ----------------------- | ------------------------------------------------------- | ------------------------------------------------------- |
+| `org-wide`              | `["org:*"]`                                             | All org members can query all documents                 |
+| `team-scoped`           | `["team:<teamId>", ...]`                                | Only members of assigned teams can query                |
 | `auto-sync-permissions` | `["user_email:alice@co.com", "group:engineering", ...]` | Permissions synced from source system (Jira/Confluence) |
 
 ---
@@ -795,6 +832,7 @@ ACLs are stored as arrays of namespaced strings in JSONB:
 ```
 
 **Namespace prefixes:**
+
 - `org:*` — Accessible to all organization members
 - `team:<uuid>` — Accessible to members of the specified team
 - `user_email:<email>` — Accessible to a specific user
@@ -857,13 +895,13 @@ The `archestra__query_knowledge_base` MCP tool returns structured chunk results 
 ```typescript
 interface ChunkResult {
   content: string;
-  score: number;           // RRF score
+  score: number; // RRF score
   chunkIndex: number;
   citation: {
-    title: string;         // From kb_documents.title
+    title: string; // From kb_documents.title
     sourceUrl: string | null; // From kb_documents.source_url
-    sourceType: string;    // From kb_documents.source_type ('connector', 'api')
-    documentId: string;    // For grouping chunks by document
+    sourceType: string; // From kb_documents.source_type ('connector', 'api')
+    documentId: string; // For grouping chunks by document
   };
 }
 ```
@@ -954,6 +992,7 @@ Replace the mock `MOCK_CITATIONS` array in `knowledge-graph-citations.tsx` with 
 Create a new **"Knowledge Bases"** category in `../docs/pages/`:
 
 **`platform-knowledge-bases-overview.md`** (rename/overhaul existing `platform-knowledge-bases.md`):
+
 ```yaml
 ---
 title: "Knowledge Bases Overview"
@@ -968,6 +1007,7 @@ Enterprise feature notice at top (matching existing pattern from `platform-ident
 > **Enterprise feature:** Please reach out to sales@archestra.ai for instructions about how to enable the feature.
 
 **`platform-knowledge-connectors.md`** (rename/overhaul existing `platform-adding-knowledge-connectors.md`):
+
 ```yaml
 ---
 title: "Knowledge Connectors"
@@ -999,13 +1039,13 @@ Knowledge Base env vars:
   - Set to `true` to enable
   - Knowledge Base sidebar section, settings, and API routes are only available when enabled
 
-- **`ARCHESTRA_KB_CHUNK_SIZE_TOKENS`** - Maximum tokens per chunk for document splitting.
+- **`ARCHESTRA_KNOWLEDGE_BASE_CHUNK_SIZE_TOKENS`** - Maximum tokens per chunk for document splitting.
   - Default: `512`
 
-- **`ARCHESTRA_KB_CHUNK_OVERLAP_TOKENS`** - Token overlap between consecutive chunks.
+- **`ARCHESTRA_KNOWLEDGE_BASE_CHUNK_OVERLAP_TOKENS`** - Token overlap between consecutive chunks.
   - Default: `50`
 
-- **`ARCHESTRA_KB_PROCESSING_CONCURRENCY`** - Maximum concurrent document processing jobs.
+- **`ARCHESTRA_KNOWLEDGE_BASE_PROCESSING_CONCURRENCY`** - Maximum concurrent document processing jobs.
   - Default: `2`
 
 - **`ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_K8S_CRONJOB_NAMESPACE`** - Kubernetes namespace where connector CronJobs run.
@@ -1021,68 +1061,68 @@ Knowledge Base env vars:
 
 All knowledge-related files use `.ee.ts` suffix per enterprise convention.
 
-| File | Purpose |
-|------|---------|
-| `backend/src/database/schemas/kb-document.ee.ts` | Drizzle schema for `kb_documents` table |
-| `backend/src/database/schemas/kb-chunk.ee.ts` | Drizzle schema for `kb_chunks` table |
-| `backend/src/database/schemas/agent-connector-assignment.ee.ts` | Junction table for agent → connector |
-| `backend/src/knowledge-base/chunker.ee.ts` | Token-aware recursive text splitting |
-| `backend/src/knowledge-base/chunker.ee.test.ts` | Chunker unit tests |
-| `backend/src/knowledge-base/embedder.ee.ts` | OpenAI embedding API client with batching |
-| `backend/src/knowledge-base/embedder.ee.test.ts` | Embedder unit tests |
-| `backend/src/knowledge-base/document-processor.ee.ts` | Async document processing queue (chunk → embed → store) |
-| `backend/src/knowledge-base/document-processor.ee.test.ts` | Document processor tests |
-| `backend/src/knowledge-base/query.ee.ts` | Hybrid search query builder (RRF SQL) |
-| `backend/src/knowledge-base/query.ee.test.ts` | Query pipeline tests |
-| `backend/src/knowledge-base/acl.ee.ts` | ACL construction helpers |
-| `backend/src/knowledge-base/acl.ee.test.ts` | ACL tests |
-| `backend/src/knowledge-base/connectors/sharepoint/sharepoint-connector.ee.ts` | SharePoint connector (Microsoft Graph API) |
-| `backend/src/knowledge-base/connectors/sharepoint/sharepoint-connector.ee.test.ts` | SharePoint connector tests |
-| `backend/src/knowledge-base/connectors/github/github-connector.ee.ts` | GitHub connector (REST + GraphQL API) |
-| `backend/src/knowledge-base/connectors/github/github-connector.ee.test.ts` | GitHub connector tests |
-| `backend/src/knowledge-base/connectors/gitlab/gitlab-connector.ee.ts` | GitLab connector (REST API v4) |
-| `backend/src/knowledge-base/connectors/gitlab/gitlab-connector.ee.test.ts` | GitLab connector tests |
-| `backend/src/models/kb-document.ee.ts` | Model for `kb_documents` CRUD |
-| `backend/src/models/kb-chunk.ee.ts` | Model for `kb_chunks` CRUD |
-| `backend/src/models/agent-connector-assignment.ee.ts` | Model for agent-connector junction |
-| `backend/src/types/kb-document.ee.ts` | Types derived from `kb_documents` schema via drizzle-zod |
-| `backend/src/types/kb-chunk.ee.ts` | Types derived from `kb_chunks` schema via drizzle-zod |
-| `frontend/src/lib/enterprise-features.hook.ts` | `useEnterpriseFeature()` hook (types derived from codegen'd API types) |
-| `frontend/src/app/settings/knowledge/page.tsx` | Knowledge settings page (embedding model, API key) |
-| `docs/pages/platform-knowledge-bases-overview.md` | Knowledge Bases overview doc |
-| `docs/pages/platform-knowledge-connectors.md` | Knowledge Connectors doc |
+| File                                                                               | Purpose                                                                |
+| ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| `backend/src/database/schemas/kb-document.ee.ts`                                   | Drizzle schema for `kb_documents` table                                |
+| `backend/src/database/schemas/kb-chunk.ee.ts`                                      | Drizzle schema for `kb_chunks` table                                   |
+| `backend/src/database/schemas/agent-connector-assignment.ee.ts`                    | Junction table for agent → connector                                   |
+| `backend/src/knowledge-base/chunker.ee.ts`                                         | Token-aware recursive text splitting                                   |
+| `backend/src/knowledge-base/chunker.ee.test.ts`                                    | Chunker unit tests                                                     |
+| `backend/src/knowledge-base/embedder.ee.ts`                                        | OpenAI embedding API client with batching                              |
+| `backend/src/knowledge-base/embedder.ee.test.ts`                                   | Embedder unit tests                                                    |
+| `backend/src/knowledge-base/document-processor.ee.ts`                              | Async document processing queue (chunk → embed → store)                |
+| `backend/src/knowledge-base/document-processor.ee.test.ts`                         | Document processor tests                                               |
+| `backend/src/knowledge-base/query.ee.ts`                                           | Hybrid search query builder (RRF SQL)                                  |
+| `backend/src/knowledge-base/query.ee.test.ts`                                      | Query pipeline tests                                                   |
+| `backend/src/knowledge-base/acl.ee.ts`                                             | ACL construction helpers                                               |
+| `backend/src/knowledge-base/acl.ee.test.ts`                                        | ACL tests                                                              |
+| `backend/src/knowledge-base/connectors/sharepoint/sharepoint-connector.ee.ts`      | SharePoint connector (Microsoft Graph API)                             |
+| `backend/src/knowledge-base/connectors/sharepoint/sharepoint-connector.ee.test.ts` | SharePoint connector tests                                             |
+| `backend/src/knowledge-base/connectors/github/github-connector.ee.ts`              | GitHub connector (REST + GraphQL API)                                  |
+| `backend/src/knowledge-base/connectors/github/github-connector.ee.test.ts`         | GitHub connector tests                                                 |
+| `backend/src/knowledge-base/connectors/gitlab/gitlab-connector.ee.ts`              | GitLab connector (REST API v4)                                         |
+| `backend/src/knowledge-base/connectors/gitlab/gitlab-connector.ee.test.ts`         | GitLab connector tests                                                 |
+| `backend/src/models/kb-document.ee.ts`                                             | Model for `kb_documents` CRUD                                          |
+| `backend/src/models/kb-chunk.ee.ts`                                                | Model for `kb_chunks` CRUD                                             |
+| `backend/src/models/agent-connector-assignment.ee.ts`                              | Model for agent-connector junction                                     |
+| `backend/src/types/kb-document.ee.ts`                                              | Types derived from `kb_documents` schema via drizzle-zod               |
+| `backend/src/types/kb-chunk.ee.ts`                                                 | Types derived from `kb_chunks` schema via drizzle-zod                  |
+| `frontend/src/lib/enterprise-features.hook.ts`                                     | `useEnterpriseFeature()` hook (types derived from codegen'd API types) |
+| `frontend/src/app/settings/knowledge/page.tsx`                                     | Knowledge settings page (embedding model, API key)                     |
+| `docs/pages/platform-knowledge-bases-overview.md`                                  | Knowledge Bases overview doc                                           |
+| `docs/pages/platform-knowledge-connectors.md`                                      | Knowledge Connectors doc                                               |
 
 ### Modified Files
 
-| File | Change |
-|------|--------|
-| `backend/src/database/schemas/index.ts` | Export new table schemas |
-| `backend/src/config.ts` | Add `enterpriseFeatures.knowledgeBase` from `ARCHESTRA_ENTERPRISE_LICENSE_KNOWLEDGE_BASE_ACTIVATED` |
-| `backend/src/routes/config.ts` | Add `enterpriseFeatures` object to response (replace flat `enterpriseLicenseActivated`) |
-| `backend/src/knowledge-base/index.ts` | Remove `createKnowledgeBaseProvider` factory, remove LightRAG |
-| `backend/src/knowledge-base/connector-sync.ts` | Write to `kb_documents` instead of `provider.insertDocument()` |
-| `backend/src/types/knowledge-base.ts` | Remove LightRAG types, add pgvector types |
-| `backend/src/types/knowledge-connector.ts` | Add `permissions` field to `ConnectorDocument`, add `sharepoint`, `github`, `gitlab` to `ConnectorTypeSchema` |
-| `backend/src/knowledge-base/connectors/registry.ts` | Register new SharePoint, GitHub, GitLab connectors |
-| `backend/src/routes/knowledge-base.ts` | Gate routes behind enterprise feature flag |
-| `backend/src/archestra-mcp-server.ts` | Update `archestra__query_knowledge_base` tool to use hybrid search |
-| `frontend/src/components/chat/knowledge-graph-citations.tsx` | Replace mock data with real citation rendering |
-| `frontend/src/lib/config.ts` | Remove `enterpriseLicenseActivated` getter |
-| `frontend/src/app/_parts/sidebar.tsx` | Use `useEnterpriseFeature("core")` instead of `config.enterpriseLicenseActivated`; conditionally show Knowledge section |
-| `frontend/src/app/settings/layout.tsx` | Add Knowledge tab (conditional on feature flag) |
-| `shared/access-control.ee.ts` | Add knowledge route permissions |
-| `Dockerfile` | Remove `NEXT_PUBLIC_ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED` from supervisord environment |
-| `docs/pages/platform-deployment.md` | Overhaul Knowledge Base Configuration section |
-| `docs/pages/platform-knowledge-bases.md` | Rename/overhaul to `platform-knowledge-bases-overview.md` |
-| `docs/pages/platform-adding-knowledge-connectors.md` | Rename/overhaul to `platform-knowledge-connectors.md` |
+| File                                                         | Change                                                                                                                  |
+| ------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------- |
+| `backend/src/database/schemas/index.ts`                      | Export new table schemas                                                                                                |
+| `backend/src/config.ts`                                      | Add `enterpriseFeatures.knowledgeBase` from `ARCHESTRA_ENTERPRISE_LICENSE_KNOWLEDGE_BASE_ACTIVATED`                     |
+| `backend/src/routes/config.ts`                               | Add `enterpriseFeatures` object to response (replace flat `enterpriseLicenseActivated`)                                 |
+| `backend/src/knowledge-base/index.ts`                        | Remove `createKnowledgeBaseProvider` factory, remove LightRAG                                                           |
+| `backend/src/knowledge-base/connector-sync.ts`               | Write to `kb_documents` instead of `provider.insertDocument()`                                                          |
+| `backend/src/types/knowledge-base.ts`                        | Remove LightRAG types, add pgvector types                                                                               |
+| `backend/src/types/knowledge-connector.ts`                   | Add `permissions` field to `ConnectorDocument`, add `sharepoint`, `github`, `gitlab` to `ConnectorTypeSchema`           |
+| `backend/src/knowledge-base/connectors/registry.ts`          | Register new SharePoint, GitHub, GitLab connectors                                                                      |
+| `backend/src/routes/knowledge-base.ts`                       | Gate routes behind enterprise feature flag                                                                              |
+| `backend/src/archestra-mcp-server.ts`                        | Update `archestra__query_knowledge_base` tool to use hybrid search                                                      |
+| `frontend/src/components/chat/knowledge-graph-citations.tsx` | Replace mock data with real citation rendering                                                                          |
+| `frontend/src/lib/config.ts`                                 | Remove `enterpriseLicenseActivated` getter                                                                              |
+| `frontend/src/app/_parts/sidebar.tsx`                        | Use `useEnterpriseFeature("core")` instead of `config.enterpriseLicenseActivated`; conditionally show Knowledge section |
+| `frontend/src/app/settings/layout.tsx`                       | Add Knowledge tab (conditional on feature flag)                                                                         |
+| `shared/access-control.ee.ts`                                | Add knowledge route permissions                                                                                         |
+| `Dockerfile`                                                 | Remove `NEXT_PUBLIC_ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED` from supervisord environment                                |
+| `docs/pages/platform-deployment.md`                          | Overhaul Knowledge Base Configuration section                                                                           |
+| `docs/pages/platform-knowledge-bases.md`                     | Rename/overhaul to `platform-knowledge-bases-overview.md`                                                               |
+| `docs/pages/platform-adding-knowledge-connectors.md`         | Rename/overhaul to `platform-knowledge-connectors.md`                                                                   |
 
 ### Files to Delete
 
-| File | Reason |
-|------|--------|
-| `backend/src/knowledge-base/lightrag-provider.ts` | Replaced by built-in pgvector |
-| `backend/src/knowledge-base/lightrag-provider.test.ts` | No longer needed |
-| `backend/src/knowledge-base/index.test.ts` | Tests for provider factory (removed) |
+| File                                                   | Reason                               |
+| ------------------------------------------------------ | ------------------------------------ |
+| `backend/src/knowledge-base/lightrag-provider.ts`      | Replaced by built-in pgvector        |
+| `backend/src/knowledge-base/lightrag-provider.test.ts` | No longer needed                     |
+| `backend/src/knowledge-base/index.test.ts`             | Tests for provider factory (removed) |
 
 ---
 

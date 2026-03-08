@@ -632,9 +632,6 @@ The following environment variables can be used to configure Archestra Platform.
   - Default: `info`
   - Supported values: `trace`, `debug`, `info`, `warn`, `error`, `fatal`
 
-- **`ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED`** - Activates enterprise features in Archestra.
-  - Please reach out to <sales@archestra.ai> to learn more about the license.
-
 ### Authentication & Security
 
 - **`ARCHESTRA_AUTH_SECRET`** - Secret key used for signing authentication tokens, encrypting secrets stored in the database, and encrypting JWKS private keys.
@@ -940,13 +937,9 @@ See [Slack](/docs/platform-slack) for setup instructions.
 
 ### Knowledge Base Configuration
 
-> **Enterprise feature:** Contact sales@archestra.ai for licensing information.
+> **Enterprise feature:** Requires `ARCHESTRA_ENTERPRISE_LICENSE_KNOWLEDGE_BASE_ACTIVATED=true`. See [Enterprise Licensing](#enterprise-licensing) below.
 
 These environment variables configure the [Knowledge Base](/docs/platform-knowledge-bases) enterprise feature. Knowledge bases use a built-in RAG stack powered by pgvector for document chunking, embedding, and hybrid search. Connectors sync external data into knowledge bases on a schedule. See [Knowledge Connectors](/docs/platform-adding-knowledge-connectors) for connector setup instructions.
-
-- **`ARCHESTRA_ENTERPRISE_LICENSE_KNOWLEDGE_BASE_ACTIVATED`** - Enables the Knowledge Base enterprise feature.
-  - Set to `true` to enable
-  - Requires the core enterprise license (`ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED=true`)
 
 - **`ARCHESTRA_KNOWLEDGE_BASE_EMBEDDING_API_KEY`** - API key for generating text embeddings (OpenAI-compatible endpoint).
   - Required for the chunking and embedding pipeline
@@ -961,6 +954,26 @@ These environment variables configure the [Knowledge Base](/docs/platform-knowle
   - Only applies to K8s CronJob runs. When a sync exceeds 90% of this budget, it stops and creates a continuation Job to resume from the last checkpoint.
   - Set to `0` to disable time-bounded runs.
 
+- **`ARCHESTRA_KNOWLEDGE_BASE_HYBRID_SEARCH_ENABLED`** - Enable or disable hybrid search (combines vector similarity with full-text search using Reciprocal Rank Fusion).
+  - Default: `true`
+  - Set to `false` to use vector similarity search only.
+
 - **`ARCHESTRA_KNOWLEDGE_BASE_RERANKER_ENABLED`** - Enable or disable the reranker for knowledge base search results.
   - Default: `true`
   - Set to `false` to disable reranking and use raw retrieval scores only.
+
+### Enterprise Licensing
+
+To learn more about enterprise licensing, please reach out to [sales@archestra.ai](mailto:sales@archestra.ai).
+
+- **`ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED`** - Activates enterprise features in Archestra.
+  - Set to `true` to enable the enterprise license
+  - Required as a prerequisite for all other enterprise feature flags
+
+- **`ARCHESTRA_ENTERPRISE_LICENSE_KNOWLEDGE_BASE_ACTIVATED`** - Enables the Knowledge Base enterprise feature.
+  - Set to `true` to enable
+  - Requires the core enterprise license (`ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED=true`)
+
+- **`ARCHESTRA_ENTERPRISE_FULL_WHITE_LABELING`** - Enables full white-labeling (removes "Powered by Archestra" attribution).
+  - Set to `true` to enable
+  - Requires the core enterprise license (`ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED=true`)

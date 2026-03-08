@@ -40,6 +40,8 @@ archestra:
     ARCHESTRA_FRONTEND_URL: "http://localhost:3000"
     ARCHESTRA_AUTH_SECRET: "e2e-auth-secret-must-be-32-chars-long"
     ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED: "true"
+    ARCHESTRA_ENTERPRISE_FULL_WHITE_LABELING: "true"
+    ARCHESTRA_ENTERPRISE_LICENSE_KNOWLEDGE_BASE_ACTIVATED: "true"
     ARCHESTRA_AUTH_RATE_LIMIT_DISABLED: "true"
     # Vault K8s auth configuration — secrets manager uses Vault for runtime secret lookups
     ARCHESTRA_SECRETS_MANAGER: "READONLY_VAULT"

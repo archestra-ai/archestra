@@ -765,7 +765,7 @@ const config = {
     embeddingApiKey:
       process.env.ARCHESTRA_KNOWLEDGE_BASE_EMBEDDING_API_KEY || "",
     hybridSearchEnabled:
-      process.env.ARCHESTRA_KB_HYBRID_SEARCH_ENABLED !== "false",
+      process.env.ARCHESTRA_KNOWLEDGE_BASE_HYBRID_SEARCH_ENABLED !== "false",
     rerankerEnabled:
       process.env.ARCHESTRA_KNOWLEDGE_BASE_RERANKER_ENABLED !== "false",
     connectorSyncMaxDurationSeconds: parseConnectorSyncMaxDuration(

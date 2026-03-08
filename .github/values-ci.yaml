@@ -53,6 +53,8 @@ archestra:
     ARCHESTRA_AUTH_SECRET: "e2e-auth-secret-must-be-32-chars-long"
     # Enable enterprise license for e2e tests (required for SSO tests)
     ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED: "true"
+    ARCHESTRA_ENTERPRISE_FULL_WHITE_LABELING: "true"
+    ARCHESTRA_ENTERPRISE_LICENSE_KNOWLEDGE_BASE_ACTIVATED: "true"
     # Enable test MCP server seeding
     ENABLE_TEST_MCP_SERVER: "true"
     # Disable better-auth rate limit for e2e tests

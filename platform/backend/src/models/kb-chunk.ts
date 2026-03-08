@@ -54,7 +54,10 @@ class KbChunkModel {
     const { connectorIds, queryEmbedding, limit = 10 } = params;
     if (connectorIds.length === 0) return [];
     const embeddingStr = `[${queryEmbedding.join(",")}]`;
-    const ids = sql.join(connectorIds.map((id) => sql`${id}`), sql`, `);
+    const ids = sql.join(
+      connectorIds.map((id) => sql`${id}`),
+      sql`, `,
+    );
 
     const rows = await db.execute(sql`
       SELECT
@@ -81,7 +84,10 @@ class KbChunkModel {
   }): Promise<VectorSearchResult[]> {
     const { connectorIds, queryText, limit = 10 } = params;
     if (connectorIds.length === 0) return [];
-    const ids = sql.join(connectorIds.map((id) => sql`${id}`), sql`, `);
+    const ids = sql.join(
+      connectorIds.map((id) => sql`${id}`),
+      sql`, `,
+    );
 
     const rows = await db.execute(sql`
       SELECT

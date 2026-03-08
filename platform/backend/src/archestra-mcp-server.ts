@@ -1804,9 +1804,7 @@ export async function executeArchestraTool(
       const hasKbs = agent?.knowledgeBaseIds?.length;
       const connectorAssignments =
         await AgentConnectorAssignmentModel.findByAgent(contextAgent.id);
-      const directConnectorIds = connectorAssignments.map(
-        (a) => a.connectorId,
-      );
+      const directConnectorIds = connectorAssignments.map((a) => a.connectorId);
 
       if (!hasKbs && directConnectorIds.length === 0) {
         return {

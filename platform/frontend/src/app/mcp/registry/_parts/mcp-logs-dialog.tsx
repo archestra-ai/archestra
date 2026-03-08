@@ -506,7 +506,9 @@ export function McpLogsContent({
                       </span>
                     )}
                     {status?.podAge && (
-                      <span className="flex-shrink-0">Age: {status.podAge}</span>
+                      <span className="flex-shrink-0">
+                        Age: {status.podAge}
+                      </span>
                     )}
                   </div>
                 )}

@@ -20,11 +20,6 @@ import { McpCatalogIcon, ToolChecklist } from "@/components/agent-tools-editor";
 import { PromptInputButton } from "@/components/ai-elements/prompt-input";
 import { TokenSelect } from "@/components/token-select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -37,6 +32,11 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useInternalAgents, useUpdateProfile } from "@/lib/agent.query";
 import { useInvalidateToolAssignmentQueries } from "@/lib/agent-tools.hook";
 import {
@@ -92,7 +92,8 @@ export function InitialAgentSelector({
   const filteredAgents = useMemo(() => {
     let result = allAgents.filter((a) => {
       const scope = (a as unknown as Record<string, unknown>).scope as string;
-      const authorId = (a as unknown as Record<string, unknown>).authorId as string;
+      const authorId = (a as unknown as Record<string, unknown>)
+        .authorId as string;
       if (scope === "personal") {
         if (authorId === userId) return scopeFilters.has("my");
         return scopeFilters.has("others");
@@ -116,7 +117,8 @@ export function InitialAgentSelector({
   }, [allAgents, search, scopeFilters, userId]);
 
   const currentAgent = useMemo(
-    () => allAgents.find((a) => a.id === currentAgentId) ?? allAgents[0] ?? null,
+    () =>
+      allAgents.find((a) => a.id === currentAgentId) ?? allAgents[0] ?? null,
     [allAgents, currentAgentId],
   );
 
@@ -188,7 +190,10 @@ export function InitialAgentSelector({
           <span className="truncate flex-1 text-left">
             {currentAgent?.name ?? "Select agent"}
           </span>
-          <ToolServerAvatarGroup catalogs={assignedCatalogs} subagents={triggerSubagents} />
+          <ToolServerAvatarGroup
+            catalogs={assignedCatalogs}
+            subagents={triggerSubagents}
+          />
         </PromptInputButton>
       </DialogTrigger>
       <DialogContent
@@ -230,7 +235,9 @@ export function InitialAgentSelector({
                   ).map((option) => (
                     <Button
                       key={option.value}
-                      variant={scopeFilters.has(option.value) ? "secondary" : "ghost"}
+                      variant={
+                        scopeFilters.has(option.value) ? "secondary" : "ghost"
+                      }
                       size="sm"
                       className="text-xs h-7 px-2.5"
                       onClick={() => {
@@ -466,9 +473,7 @@ function AgentSettingsView({
           </Alert>
         )}
         <div>
-          <Label className="mb-1.5">
-            Instructions
-          </Label>
+          <Label className="mb-1.5">Instructions</Label>
           <Textarea
             value={instructions}
             onChange={(e) => handleInstructionsChange(e.target.value)}
@@ -478,9 +483,7 @@ function AgentSettingsView({
         </div>
 
         <div>
-          <Label className="mb-1.5">
-            Tools and subagents
-          </Label>
+          <Label className="mb-1.5">Tools and subagents</Label>
           <AssignedToolsGrid
             agentId={agent.id}
             onAddTool={onAddTool}
@@ -959,7 +962,8 @@ function AddDelegationView({
     let result = allAgents.filter((a) => a.id !== agentId);
     result = result.filter((a) => {
       const scope = (a as unknown as Record<string, unknown>).scope as string;
-      const authorId = (a as unknown as Record<string, unknown>).authorId as string;
+      const authorId = (a as unknown as Record<string, unknown>)
+        .authorId as string;
       if (scope === "personal") {
         if (authorId === currentUserId) return scopeFilters.has("my");
         return scopeFilters.has("others");
@@ -992,7 +996,11 @@ function AddDelegationView({
     }
     syncDelegations.mutate(
       { agentId, targetAgentIds: [...newIds] },
-      { onSuccess: () => { if (isAdding) onDone(); } },
+      {
+        onSuccess: () => {
+          if (isAdding) onDone();
+        },
+      },
     );
   };
 
@@ -1182,11 +1190,18 @@ function AgentCard({
           className="text-[10px] px-1.5 py-0"
         />
         {agent.scope === "personal" &&
-          (agent as unknown as Record<string, unknown>).authorId !== currentUserId &&
-          (agent as unknown as Record<string, unknown>).authorName && (
-            <Badge variant="secondary" className="text-[10px] gap-1 px-1.5 py-0">
+          (agent as unknown as Record<string, unknown>).authorId !==
+            currentUserId &&
+          Boolean((agent as unknown as Record<string, unknown>).authorName) && (
+            <Badge
+              variant="secondary"
+              className="text-[10px] gap-1 px-1.5 py-0"
+            >
               <User className="h-2.5 w-2.5" />
-              {(agent as unknown as Record<string, unknown>).authorName as string}
+              {
+                (agent as unknown as Record<string, unknown>)
+                  .authorName as string
+              }
             </Badge>
           )}
         <div className="flex-1" />
@@ -1221,9 +1236,7 @@ function AgentToolAvatars({ agentId }: { agentId: string }) {
 
   if (catalogs.length === 0 && subagents.length === 0) return null;
 
-  return (
-    <ToolServerAvatarGroup catalogs={catalogs} subagents={subagents} />
-  );
+  return <ToolServerAvatarGroup catalogs={catalogs} subagents={subagents} />;
 }
 
 const MAX_VISIBLE_AVATARS = 3;
@@ -1296,10 +1309,7 @@ function ToolServerAvatarGroup({
           <Tooltip key={entry.item.id}>
             <TooltipTrigger asChild>
               <div className="flex size-5 shrink-0 items-center justify-center rounded-full bg-muted ring-1 ring-background overflow-hidden">
-                <AgentIcon
-                  icon={entry.item.icon as string | null}
-                  size={12}
-                />
+                <AgentIcon icon={entry.item.icon as string | null} size={12} />
               </div>
             </TooltipTrigger>
             <TooltipContent side="top">{entry.item.name}</TooltipContent>

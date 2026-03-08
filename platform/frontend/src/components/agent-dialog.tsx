@@ -1176,166 +1176,6 @@ export function AgentDialog({
                   </div>
                 </div>
               )}
-
-              {/* Visibility / Scope */}
-              {!isBuiltIn && (
-                <AccessLevelSelector
-                  scope={scope}
-                  onScopeChange={(newScope) => {
-                    setScope(newScope);
-                    if (newScope === "org") {
-                      setAssignedTeamIds([]);
-                    }
-                  }}
-                  isAdmin={!!isAdmin}
-                  isTeamAdmin={!!isTeamAdmin}
-                  initialScope={
-                    agent
-                      ? (((agent as Record<string, unknown>).scope as
-                          | "personal"
-                          | "team"
-                          | "org") ?? undefined)
-                      : undefined
-                  }
-                  agentType={agentType}
-                  teams={teams}
-                  assignedTeamIds={assignedTeamIds}
-                  onTeamIdsChange={setAssignedTeamIds}
-                  hasNoAvailableTeams={hasNoAvailableTeams}
-                  showTeamRequired={!isAdmin}
-                />
-              )}
-
-              {/* LLM Configuration (Agent and Built-in) */}
-              {(isInternalAgent || isBuiltIn) && (
-                <div className="space-y-2">
-                  <Label>LLM Configuration</Label>
-                  <p className="text-sm text-muted-foreground">
-                    {selectedApiKey && selectedApiKey.scope !== "org_wide"
-                      ? "Selected key will be available to everyone who has access to this agent."
-                      : null}
-                  </p>
-                  <div className="flex flex-wrap items-center gap-2">
-                    {/* Model Selector - uses the same Dialog-based ModelSelector as prompt input */}
-                    <ModelSelector
-                      selectedModel={llmModel || ""}
-                      onModelChange={(modelId) => handleLlmModelChange(modelId)}
-                      onClear={() => {
-                        setLlmModel(null);
-                        setLlmApiKeyId(null);
-                        lastAutoSelectedProviderRef.current = null;
-                      }}
-                      variant="outline"
-                    />
-
-                    {/* API Key Selector Pill */}
-                    <Popover
-                      open={apiKeySelectorOpen}
-                      onOpenChange={setApiKeySelectorOpen}
-                    >
-                      <PopoverTrigger asChild>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-8 px-3 gap-1.5 text-xs max-w-[250px]"
-                        >
-                          <Key className="h-3 w-3 shrink-0" />
-                          {selectedApiKey ? (
-                            <>
-                              <span className="h-2 w-2 rounded-full bg-green-500 shrink-0" />
-                              <span className="font-medium truncate">
-                                {selectedApiKey.name}
-                              </span>
-                            </>
-                          ) : (
-                            <span className="text-muted-foreground">
-                              Dynamic API key
-                            </span>
-                          )}
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-96 p-0" align="start">
-                        <Command>
-                          <CommandInput placeholder="Search API keys..." />
-                          <CommandList>
-                            <CommandEmpty>No API keys found.</CommandEmpty>
-                            <CommandGroup>
-                              <CommandItem
-                                onSelect={() => {
-                                  setLlmApiKeyId(null);
-                                  setLlmModel(null);
-                                  lastAutoSelectedProviderRef.current = null;
-                                  setApiKeySelectorOpen(false);
-                                }}
-                              >
-                                <span className="text-muted-foreground">
-                                  Dynamic API key (resolved at runtime: org-wide
-                                  → team → personal)
-                                </span>
-                                {!llmApiKeyId && (
-                                  <CheckIcon className="ml-auto h-4 w-4" />
-                                )}
-                              </CommandItem>
-                            </CommandGroup>
-                            {(
-                              Object.keys(
-                                apiKeysByProvider,
-                              ) as SupportedProvider[]
-                            ).map((provider) => (
-                              <CommandGroup
-                                key={provider}
-                                heading={
-                                  providerDisplayNames[provider] ?? provider
-                                }
-                              >
-                                {apiKeysByProvider[provider]?.map(
-                                  (
-                                    apiKey: (typeof availableApiKeys)[number],
-                                  ) => (
-                                    <CommandItem
-                                      key={apiKey.id}
-                                      value={`${provider} ${apiKey.name} ${apiKey.teamName || ""}`}
-                                      onSelect={() => {
-                                        handleLlmApiKeyChange(apiKey.id);
-                                        setApiKeySelectorOpen(false);
-                                      }}
-                                      className="cursor-pointer"
-                                    >
-                                      <div className="flex items-center gap-2 flex-1 min-w-0">
-                                        {apiKey.scope === "personal" && (
-                                          <User className="h-3 w-3 shrink-0" />
-                                        )}
-                                        {apiKey.scope === "team" && (
-                                          <Users className="h-3 w-3 shrink-0" />
-                                        )}
-                                        {apiKey.scope === "org_wide" && (
-                                          <Building2 className="h-3 w-3 shrink-0" />
-                                        )}
-                                        <span className="truncate">
-                                          {apiKey.name}
-                                        </span>
-                                        {apiKey.scope === "team" &&
-                                          apiKey.teamName && (
-                                            <span className="text-[10px] text-muted-foreground">
-                                              ({apiKey.teamName})
-                                            </span>
-                                          )}
-                                      </div>
-                                      {llmApiKeyId === apiKey.id && (
-                                        <CheckIcon className="ml-auto h-4 w-4 shrink-0" />
-                                      )}
-                                    </CommandItem>
-                                  ),
-                                )}
-                              </CommandGroup>
-                            ))}
-                          </CommandList>
-                        </Command>
-                      </PopoverContent>
-                    </Popover>
-                  </div>
-                </div>
-              )}
             </div>
 
             {/* Section 2: Instruction (Agent only) */}
@@ -1566,41 +1406,172 @@ export function AgentDialog({
               </div>
             )}
 
-            {/* Section 3: Prompts (Agent only) */}
-            {isInternalAgent && (
+            {/* Section 4: Access & LLM */}
+            {(!isBuiltIn || isInternalAgent) && (
               <div className="rounded-lg border bg-card p-4 space-y-4">
-                <h3 className="text-sm font-semibold">Prompts</h3>
-
-                {/* System Prompt (read-only for built-in) */}
-                <div className="space-y-2">
-                  <Label htmlFor="systemPrompt">System Prompt</Label>
-                  <Textarea
-                    id="systemPrompt"
-                    value={systemPrompt}
-                    onChange={(e) => setSystemPrompt(e.target.value)}
-                    placeholder="Enter system prompt (instructions for the LLM)"
-                    className="min-h-[150px] font-mono"
-                    disabled={isBuiltIn}
-                  />
-                </div>
-
-                {/* User Prompt (hidden for built-in) */}
+                {/* Visibility / Scope */}
                 {!isBuiltIn && (
+                  <AccessLevelSelector
+                    scope={scope}
+                    onScopeChange={(newScope) => {
+                      setScope(newScope);
+                      if (newScope === "org") {
+                        setAssignedTeamIds([]);
+                      }
+                    }}
+                    isAdmin={!!isAdmin}
+                    isTeamAdmin={!!isTeamAdmin}
+                    initialScope={
+                      agent
+                        ? (((agent as Record<string, unknown>).scope as
+                            | "personal"
+                            | "team"
+                            | "org") ?? undefined)
+                        : undefined
+                    }
+                    agentType={agentType}
+                    teams={teams}
+                    assignedTeamIds={assignedTeamIds}
+                    onTeamIdsChange={setAssignedTeamIds}
+                    hasNoAvailableTeams={hasNoAvailableTeams}
+                    showTeamRequired={!isAdmin}
+                  />
+                )}
+
+                {/* LLM Configuration (Agent and Built-in) */}
+                {(isInternalAgent || isBuiltIn) && (
                   <div className="space-y-2">
-                    <Label htmlFor="userPrompt">User Prompt</Label>
-                    <Textarea
-                      id="userPrompt"
-                      value={userPrompt}
-                      onChange={(e) => setUserPrompt(e.target.value)}
-                      placeholder="Enter user prompt (shown to user, sent to LLM)"
-                      className="min-h-[150px] font-mono"
-                    />
+                    <Label>LLM Configuration</Label>
+                    <p className="text-sm text-muted-foreground">
+                      {selectedApiKey && selectedApiKey.scope !== "org_wide"
+                        ? "Selected key will be available to everyone who has access to this agent."
+                        : null}
+                    </p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <ModelSelector
+                        selectedModel={llmModel || ""}
+                        onModelChange={(modelId) =>
+                          handleLlmModelChange(modelId)
+                        }
+                        onClear={() => {
+                          setLlmModel(null);
+                          setLlmApiKeyId(null);
+                          lastAutoSelectedProviderRef.current = null;
+                        }}
+                        variant="outline"
+                      />
+
+                      <Popover
+                        open={apiKeySelectorOpen}
+                        onOpenChange={setApiKeySelectorOpen}
+                      >
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-8 px-3 gap-1.5 text-xs max-w-[250px]"
+                          >
+                            <Key className="h-3 w-3 shrink-0" />
+                            {selectedApiKey ? (
+                              <>
+                                <span className="h-2 w-2 rounded-full bg-green-500 shrink-0" />
+                                <span className="font-medium truncate">
+                                  {selectedApiKey.name}
+                                </span>
+                              </>
+                            ) : (
+                              <span className="text-muted-foreground">
+                                Dynamic API key
+                              </span>
+                            )}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-96 p-0" align="start">
+                          <Command>
+                            <CommandInput placeholder="Search API keys..." />
+                            <CommandList>
+                              <CommandEmpty>No API keys found.</CommandEmpty>
+                              <CommandGroup>
+                                <CommandItem
+                                  onSelect={() => {
+                                    setLlmApiKeyId(null);
+                                    setLlmModel(null);
+                                    lastAutoSelectedProviderRef.current = null;
+                                    setApiKeySelectorOpen(false);
+                                  }}
+                                >
+                                  <span className="text-muted-foreground">
+                                    Dynamic API key (resolved at runtime:
+                                    org-wide → team → personal)
+                                  </span>
+                                  {!llmApiKeyId && (
+                                    <CheckIcon className="ml-auto h-4 w-4" />
+                                  )}
+                                </CommandItem>
+                              </CommandGroup>
+                              {(
+                                Object.keys(
+                                  apiKeysByProvider,
+                                ) as SupportedProvider[]
+                              ).map((provider) => (
+                                <CommandGroup
+                                  key={provider}
+                                  heading={
+                                    providerDisplayNames[provider] ?? provider
+                                  }
+                                >
+                                  {apiKeysByProvider[provider]?.map(
+                                    (
+                                      apiKey: (typeof availableApiKeys)[number],
+                                    ) => (
+                                      <CommandItem
+                                        key={apiKey.id}
+                                        value={`${provider} ${apiKey.name} ${apiKey.teamName || ""}`}
+                                        onSelect={() => {
+                                          handleLlmApiKeyChange(apiKey.id);
+                                          setApiKeySelectorOpen(false);
+                                        }}
+                                        className="cursor-pointer"
+                                      >
+                                        <div className="flex items-center gap-2 flex-1 min-w-0">
+                                          {apiKey.scope === "personal" && (
+                                            <User className="h-3 w-3 shrink-0" />
+                                          )}
+                                          {apiKey.scope === "team" && (
+                                            <Users className="h-3 w-3 shrink-0" />
+                                          )}
+                                          {apiKey.scope === "org_wide" && (
+                                            <Building2 className="h-3 w-3 shrink-0" />
+                                          )}
+                                          <span className="truncate">
+                                            {apiKey.name}
+                                          </span>
+                                          {apiKey.scope === "team" &&
+                                            apiKey.teamName && (
+                                              <span className="text-[10px] text-muted-foreground">
+                                                ({apiKey.teamName})
+                                              </span>
+                                            )}
+                                        </div>
+                                        {llmApiKeyId === apiKey.id && (
+                                          <CheckIcon className="ml-auto h-4 w-4 shrink-0" />
+                                        )}
+                                      </CommandItem>
+                                    ),
+                                  )}
+                                </CommandGroup>
+                              ))}
+                            </CommandList>
+                          </Command>
+                        </PopoverContent>
+                      </Popover>
+                    </div>
                   </div>
                 )}
               </div>
             )}
 
-            {/* Section 4: Advanced (collapsible) */}
+            {/* Section 5: Advanced (collapsible) */}
             {!isBuiltIn &&
               (showSecurity ||
                 (isInternalAgent && !isBuiltIn) ||

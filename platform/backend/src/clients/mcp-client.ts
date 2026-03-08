@@ -1683,6 +1683,58 @@ class McpClient {
   }
 
   /**
+   * Connect to a running MCP server and list tools or call a tool.
+   */
+  async inspectServer(params: {
+    catalogItem: InternalMcpCatalog;
+    mcpServerId: string;
+    secrets: Record<string, unknown>;
+    method: "tools/list" | "tools/call";
+    toolName?: string;
+    toolArguments?: Record<string, unknown>;
+  }): Promise<unknown> {
+    const { catalogItem, mcpServerId, secrets, method } = params;
+
+    const transport = await this.getTransport(
+      catalogItem,
+      mcpServerId,
+      secrets,
+    );
+
+    const client = new Client(
+      { name: "archestra-inspector", version: "1.0.0" },
+      { capabilities: {} },
+    );
+
+    try {
+      await Promise.race([
+        client.connect(transport),
+        this.createTimeout(30000, "Connection timeout after 30 seconds"),
+      ]);
+
+      if (method === "tools/list") {
+        return await Promise.race([
+          client.listTools(),
+          this.createTimeout(30000, "List tools timeout"),
+        ]);
+      }
+
+      if (!params.toolName) {
+        throw new Error("toolName is required for tools/call");
+      }
+      return await Promise.race([
+        client.callTool({
+          name: params.toolName,
+          arguments: params.toolArguments ?? {},
+        }),
+        this.createTimeout(60000, "Tool call timeout"),
+      ]);
+    } finally {
+      await client.close().catch(() => {});
+    }
+  }
+
+  /**
    * Disconnect from an MCP server
    */
   async disconnect(clientId: string): Promise<void> {

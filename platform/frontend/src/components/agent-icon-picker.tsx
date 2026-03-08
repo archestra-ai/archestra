@@ -82,7 +82,7 @@ export function AgentIconPicker({
   );
 
   const handleRemove = useCallback(
-    (e: React.MouseEvent) => {
+    (e: React.MouseEvent | React.KeyboardEvent) => {
       e.stopPropagation();
       onChange(null);
     },
@@ -118,13 +118,18 @@ export function AgentIconPicker({
             <Bot className="h-5 w-5 text-muted-foreground" />
           )}
           {value && (
-            <button
-              type="button"
+            // biome-ignore lint/a11y/useSemanticElements: can't use <button> here as it's nested inside PopoverTrigger's <button>
+            <div
+              role="button"
+              tabIndex={0}
               onClick={handleRemove}
-              className="absolute -top-1.5 -right-1.5 hidden group-hover:flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-destructive-foreground"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") handleRemove(e);
+              }}
+              className="absolute -top-1.5 -right-1.5 hidden group-hover:flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-destructive-foreground cursor-pointer"
             >
               <X className="h-2.5 w-2.5" />
-            </button>
+            </div>
           )}
         </button>
       </PopoverTrigger>

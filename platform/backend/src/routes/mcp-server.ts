@@ -2,6 +2,7 @@ import { isPlaywrightCatalogItem, RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { hasPermission } from "@/auth";
+import mcpClient from "@/clients/mcp-client";
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import logger from "@/logging";
 import {
@@ -1169,6 +1170,71 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         : [];
 
       return reply.send(tools);
+    },
+  );
+
+  fastify.post(
+    "/api/mcp_server/:id/inspect",
+    {
+      schema: {
+        operationId: RouteId.InspectMcpServer,
+        description: "Inspect a running MCP server (list tools or call a tool)",
+        tags: ["MCP Server"],
+        params: z.object({
+          id: UuidIdSchema,
+        }),
+        body: z.object({
+          method: z.enum(["tools/list", "tools/call"]),
+          toolName: z.string().optional(),
+          toolArguments: z.record(z.string(), z.unknown()).optional(),
+        }),
+        response: constructResponseSchema(z.record(z.string(), z.unknown())),
+      },
+    },
+    async ({ params: { id }, body }, reply) => {
+      const mcpServer = await McpServerModel.findById(id);
+      if (!mcpServer) {
+        throw new ApiError(404, "MCP server not found");
+      }
+
+      const catalogItem = mcpServer.catalogId
+        ? await InternalMcpCatalogModel.findById(mcpServer.catalogId)
+        : null;
+      if (!catalogItem) {
+        throw new ApiError(400, "No catalog item found for this MCP server");
+      }
+
+      let secrets: Record<string, unknown> = {};
+      if (mcpServer.secretId) {
+        const secretRecord = await secretManager().getSecret(
+          mcpServer.secretId,
+        );
+        if (secretRecord) {
+          secrets = secretRecord.secret;
+        }
+      }
+
+      try {
+        const result = await mcpClient.inspectServer({
+          catalogItem,
+          mcpServerId: mcpServer.id,
+          secrets,
+          method: body.method,
+          toolName: body.toolName,
+          toolArguments: body.toolArguments,
+        });
+
+        return reply.send(result as Record<string, unknown>);
+      } catch (error) {
+        logger.error(
+          { err: error },
+          `Failed to inspect MCP server ${mcpServer.name}`,
+        );
+        throw new ApiError(
+          502,
+          `Failed to inspect MCP server: ${error instanceof Error ? error.message : "Unknown error"}`,
+        );
+      }
     },
   );
 

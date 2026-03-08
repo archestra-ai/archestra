@@ -1,10 +1,15 @@
 "use client";
 
-import { E2eTestId, formatSecretStorageType } from "@shared";
+import {
+  E2eTestId,
+  formatSecretStorageType,
+  type McpDeploymentStatusEntry,
+} from "@shared";
 import { format } from "date-fns";
 import {
   AlertTriangle,
   ChevronDown,
+  PlugZap,
   Plus,
   RefreshCw,
   Trash,
@@ -27,6 +32,13 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+} from "@/components/ui/empty";
 import {
   Table,
   TableBody,
@@ -52,6 +64,7 @@ import {
   setOAuthState,
 } from "@/lib/oauth-session";
 import { useTeams } from "@/lib/team.query";
+import { type DeploymentState, DeploymentStatusDot } from "./deployment-status";
 
 interface ManageUsersDialogProps {
   isOpen: boolean;
@@ -62,6 +75,10 @@ interface ManageUsersDialogProps {
   onAddPersonalConnection?: () => void;
   /** Called when user wants to add a shared connection for a specific team */
   onAddSharedConnection?: (teamId: string) => void;
+  /** Deployment statuses keyed by server ID */
+  deploymentStatuses?: Record<string, McpDeploymentStatusEntry>;
+  /** Called when user clicks a pod name to open the debug dialog */
+  onOpenPodLogs?: (serverId: string) => void;
 }
 
 export function ManageUsersDialog({
@@ -71,7 +88,55 @@ export function ManageUsersDialog({
   catalogId,
   onAddPersonalConnection,
   onAddSharedConnection,
+  deploymentStatuses = {},
+  onOpenPodLogs,
 }: ManageUsersDialogProps) {
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent
+        className="max-w-5xl h-[85vh] flex flex-col"
+        data-testid={E2eTestId.ManageCredentialsDialog}
+      >
+        <ManageUsersContent
+          isActive={isOpen}
+          onClose={onClose}
+          label={label}
+          catalogId={catalogId}
+          onAddPersonalConnection={onAddPersonalConnection}
+          onAddSharedConnection={onAddSharedConnection}
+          deploymentStatuses={deploymentStatuses}
+          onOpenPodLogs={onOpenPodLogs}
+        />
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+interface ManageUsersContentProps {
+  isActive: boolean;
+  onClose: () => void;
+  label?: string;
+  catalogId: string;
+  onAddPersonalConnection?: () => void;
+  onAddSharedConnection?: (teamId: string) => void;
+  deploymentStatuses?: Record<string, McpDeploymentStatusEntry>;
+  onOpenPodLogs?: (serverId: string) => void;
+  hideHeader?: boolean;
+  variant?: "remote" | "local" | "builtin";
+}
+
+export function ManageUsersContent({
+  isActive,
+  onClose,
+  label,
+  catalogId,
+  onAddPersonalConnection,
+  onAddSharedConnection,
+  deploymentStatuses = {},
+  onOpenPodLogs,
+  hideHeader = false,
+  variant,
+}: ManageUsersContentProps) {
   // Subscribe to live mcp-servers query to get fresh data
   const { data: allServers = [], isFetched: serversFetched } = useMcpServers({
     catalogId,
@@ -206,10 +271,10 @@ export function ManageUsersDialog({
   // But keep dialog open if add callbacks are available
   const hasAddCallbacks = !!onAddPersonalConnection || !!onAddSharedConnection;
   useEffect(() => {
-    if (isOpen && serversFetched && !firstServer && !hasAddCallbacks) {
+    if (isActive && serversFetched && !firstServer && !hasAddCallbacks) {
       onClose();
     }
-  }, [isOpen, serversFetched, firstServer, onClose, hasAddCallbacks]);
+  }, [isActive, serversFetched, firstServer, onClose, hasAddCallbacks]);
 
   if (!firstServer && !hasAddCallbacks) {
     return null;
@@ -219,9 +284,10 @@ export function ManageUsersDialog({
   const teamsWithConnection = new Set(
     allServers?.filter((s) => s.teamId).map((s) => s.teamId),
   );
-  const hasPersonalConnection = allServers?.some(
-    (s) => s.ownerId === currentUserId && !s.teamId,
-  );
+  const myPersonalServer =
+    allServers?.find((s) => s.ownerId === currentUserId && !s.teamId) ?? null;
+  const otherPersonalServers =
+    allServers?.filter((s) => !s.teamId && s.ownerId !== currentUserId) ?? [];
   const availableTeamsForShared =
     userTeams?.filter((t) => !teamsWithConnection.has(t.id)) ?? [];
 
@@ -233,11 +299,8 @@ export function ManageUsersDialog({
       : mcpServer.ownerEmail || "Deleted user";
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent
-        className="sm:max-w-[800px]"
-        data-testid={E2eTestId.ManageCredentialsDialog}
-      >
+    <>
+      {!hideHeader && (
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <User className="h-5 w-5" />
@@ -250,80 +313,266 @@ export function ManageUsersDialog({
             Manage connections
           </DialogDescription>
         </DialogHeader>
+      )}
 
-        <div className="py-4 space-y-6">
-          {allServers?.length === 0 &&
-          !onAddPersonalConnection &&
-          !onAddSharedConnection ? (
-            <div className="text-center py-8 text-muted-foreground">
-              No connections available for this server.
-            </div>
-          ) : (
-            <>
-              <ConnectionsTable
-                title="Personal connections"
-                servers={allServers?.filter((s) => !s.teamId) ?? []}
-                isOAuthServer={isOAuthServer}
-                getCredentialOwnerName={getCredentialOwnerName}
-                canReauthenticate={canReauthenticate}
-                getReauthTooltip={getReauthTooltip}
-                canRevoke={canRevoke}
-                getRevokeTooltip={getRevokeTooltip}
-                handleReauthenticate={handleReauthenticate}
-                handleRevoke={handleRevoke}
-                isDeleting={deleteMcpServerMutation.isPending}
-                onAdd={
-                  onAddPersonalConnection
-                    ? () => {
-                        onClose();
-                        onAddPersonalConnection();
-                      }
-                    : undefined
-                }
-                addDisabled={!!hasPersonalConnection}
-                addDisabledReason="You already have a personal connection"
-              />
-              <ConnectionsTable
-                title="Shared connections"
-                servers={allServers?.filter((s) => !!s.teamId) ?? []}
-                isOAuthServer={isOAuthServer}
-                getCredentialOwnerName={getCredentialOwnerName}
-                canReauthenticate={canReauthenticate}
-                getReauthTooltip={getReauthTooltip}
-                canRevoke={canRevoke}
-                getRevokeTooltip={getRevokeTooltip}
-                handleReauthenticate={handleReauthenticate}
-                handleRevoke={handleRevoke}
-                isDeleting={deleteMcpServerMutation.isPending}
-                teamOptions={
-                  onAddSharedConnection ? availableTeamsForShared : undefined
-                }
-                onAddForTeam={
-                  onAddSharedConnection
-                    ? (teamId) => {
-                        onClose();
-                        onAddSharedConnection(teamId);
-                      }
-                    : undefined
-                }
-              />
-            </>
-          )}
-        </div>
+      <div className="py-4 space-y-6">
+        {allServers?.length === 0 &&
+        !onAddPersonalConnection &&
+        !onAddSharedConnection ? (
+          <Empty>
+            <EmptyHeader>
+              <EmptyMedia variant="icon">
+                <PlugZap />
+              </EmptyMedia>
+              <EmptyDescription>
+                No connections available for this server.
+              </EmptyDescription>
+            </EmptyHeader>
+          </Empty>
+        ) : (
+          <>
+            <YourPersonalConnection
+              server={myPersonalServer}
+              isOAuthServer={isOAuthServer}
+              canReauthenticate={canReauthenticate}
+              getReauthTooltip={getReauthTooltip}
+              canRevoke={canRevoke}
+              getRevokeTooltip={getRevokeTooltip}
+              handleReauthenticate={handleReauthenticate}
+              handleRevoke={handleRevoke}
+              isDeleting={deleteMcpServerMutation.isPending}
+              deploymentStatuses={deploymentStatuses}
+              onOpenPodLogs={onOpenPodLogs}
+              onInstall={
+                onAddPersonalConnection
+                  ? () => {
+                      onClose();
+                      onAddPersonalConnection();
+                    }
+                  : undefined
+              }
+              variant={variant}
+            />
+            <ConnectionsTable
+              title="Other personal connections"
+              servers={otherPersonalServers}
+              isOAuthServer={isOAuthServer}
+              getCredentialOwnerName={getCredentialOwnerName}
+              canReauthenticate={canReauthenticate}
+              getReauthTooltip={getReauthTooltip}
+              canRevoke={canRevoke}
+              getRevokeTooltip={getRevokeTooltip}
+              handleReauthenticate={handleReauthenticate}
+              handleRevoke={handleRevoke}
+              isDeleting={deleteMcpServerMutation.isPending}
+              deploymentStatuses={deploymentStatuses}
+              onOpenPodLogs={onOpenPodLogs}
+              alwaysShow
+            />
+            <ConnectionsTable
+              title="Shared connections"
+              servers={allServers?.filter((s) => !!s.teamId) ?? []}
+              isOAuthServer={isOAuthServer}
+              getCredentialOwnerName={getCredentialOwnerName}
+              canReauthenticate={canReauthenticate}
+              getReauthTooltip={getReauthTooltip}
+              canRevoke={canRevoke}
+              getRevokeTooltip={getRevokeTooltip}
+              handleReauthenticate={handleReauthenticate}
+              handleRevoke={handleRevoke}
+              isDeleting={deleteMcpServerMutation.isPending}
+              deploymentStatuses={deploymentStatuses}
+              onOpenPodLogs={onOpenPodLogs}
+              teamOptions={
+                onAddSharedConnection ? availableTeamsForShared : undefined
+              }
+              onAddForTeam={
+                onAddSharedConnection
+                  ? (teamId) => {
+                      onClose();
+                      onAddSharedConnection(teamId);
+                    }
+                  : undefined
+              }
+              alwaysShow
+            />
+          </>
+        )}
+      </div>
 
+      {!hideHeader && (
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>
             Close
           </Button>
         </DialogFooter>
-      </DialogContent>
-    </Dialog>
+      )}
+    </>
   );
 }
 
 type ServerEntry = NonNullable<
   ReturnType<typeof useMcpServers>["data"]
 >[number];
+
+function YourPersonalConnection({
+  server,
+  isOAuthServer,
+  canReauthenticate,
+  getReauthTooltip,
+  canRevoke,
+  getRevokeTooltip,
+  handleReauthenticate,
+  handleRevoke,
+  isDeleting,
+  deploymentStatuses = {},
+  onOpenPodLogs,
+  onInstall,
+  variant,
+}: {
+  server: ServerEntry | null;
+  isOAuthServer: boolean;
+  canReauthenticate: (s: ServerEntry) => boolean;
+  getReauthTooltip: (s: ServerEntry) => string;
+  canRevoke: (s: ServerEntry) => boolean;
+  getRevokeTooltip: (s: ServerEntry) => string;
+  handleReauthenticate: (s: ServerEntry) => void;
+  handleRevoke: (s: ServerEntry) => void;
+  isDeleting: boolean;
+  deploymentStatuses?: Record<string, McpDeploymentStatusEntry>;
+  onOpenPodLogs?: (serverId: string) => void;
+  onInstall?: () => void;
+  variant?: "remote" | "local" | "builtin";
+}) {
+  const isLocal = variant === "local";
+  const deploymentStatus = server ? deploymentStatuses[server.id] : undefined;
+
+  return (
+    <div>
+      <h4 className="text-sm font-medium mb-2">Your personal connection</h4>
+      {!server ? (
+        <Empty className="border rounded-md py-6 md:py-8">
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <PlugZap />
+            </EmptyMedia>
+            <EmptyDescription>
+              You don&apos;t have a personal connection yet.
+            </EmptyDescription>
+          </EmptyHeader>
+          {onInstall && (
+            <EmptyContent className="flex-row justify-center">
+              <Button onClick={onInstall}>
+                {variant === "remote" ? "Connect" : "Install"}
+              </Button>
+            </EmptyContent>
+          )}
+        </Empty>
+      ) : (
+        <div className="rounded-md border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                {isLocal && <TableHead>Pod</TableHead>}
+                <TableHead>Secret Storage</TableHead>
+                <TableHead>Created At</TableHead>
+                <TableHead>Action</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              <TableRow data-testid={E2eTestId.CredentialRow}>
+                {isLocal && (
+                  <TableCell>
+                    {deploymentStatus ? (
+                      <button
+                        type="button"
+                        onClick={() => onOpenPodLogs?.(server.id)}
+                        className="flex items-center gap-1.5 text-sm hover:underline cursor-pointer"
+                      >
+                        <DeploymentStatusDot
+                          state={
+                            (deploymentStatus.state === "not_created" ||
+                            deploymentStatus.state === "succeeded"
+                              ? "running"
+                              : deploymentStatus.state) as DeploymentState
+                          }
+                        />
+                        <span className="truncate max-w-[150px]">
+                          {server.name}
+                        </span>
+                      </button>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </TableCell>
+                )}
+                <TableCell className="text-muted-foreground">
+                  {formatSecretStorageType(server.secretStorageType)}
+                </TableCell>
+                <TableCell className="text-muted-foreground">
+                  {format(new Date(server.createdAt), "PPp")}
+                </TableCell>
+                <TableCell>
+                  <div className="flex flex-col gap-1">
+                    {isOAuthServer && server.oauthRefreshError && (
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="w-full">
+                              <Button
+                                onClick={() => handleReauthenticate(server)}
+                                disabled={!canReauthenticate(server)}
+                                size="sm"
+                                variant="outline"
+                                className="h-7 w-full text-xs"
+                              >
+                                <RefreshCw className="mr-1 h-3 w-3" />
+                                Re-authenticate
+                              </Button>
+                            </span>
+                          </TooltipTrigger>
+                          {!canReauthenticate(server) && (
+                            <TooltipContent>
+                              {getReauthTooltip(server)}
+                            </TooltipContent>
+                          )}
+                        </Tooltip>
+                      </TooltipProvider>
+                    )}
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="w-full">
+                            <Button
+                              onClick={() => handleRevoke(server)}
+                              disabled={isDeleting || !canRevoke(server)}
+                              size="sm"
+                              variant="outline"
+                              className="h-7 w-full text-xs"
+                              data-testid={`${E2eTestId.RevokeCredentialButton}-personal`}
+                            >
+                              <Trash className="mr-1 h-3 w-3" />
+                              Revoke
+                            </Button>
+                          </span>
+                        </TooltipTrigger>
+                        {!canRevoke(server) && (
+                          <TooltipContent>
+                            {getRevokeTooltip(server)}
+                          </TooltipContent>
+                        )}
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
+                </TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function ConnectionsTable({
   title,
@@ -337,11 +586,14 @@ function ConnectionsTable({
   handleReauthenticate,
   handleRevoke,
   isDeleting,
+  deploymentStatuses = {},
+  onOpenPodLogs,
   onAdd,
   addDisabled,
   addDisabledReason,
   teamOptions,
   onAddForTeam,
+  alwaysShow = false,
 }: {
   title: string;
   servers: ServerEntry[];
@@ -354,6 +606,8 @@ function ConnectionsTable({
   handleReauthenticate: (s: ServerEntry) => void;
   handleRevoke: (s: ServerEntry) => void;
   isDeleting: boolean;
+  deploymentStatuses?: Record<string, McpDeploymentStatusEntry>;
+  onOpenPodLogs?: (serverId: string) => void;
   /** Simple add button (for personal connections) */
   onAdd?: () => void;
   /** Disable the simple add button */
@@ -364,9 +618,12 @@ function ConnectionsTable({
   teamOptions?: Array<{ id: string; name: string }>;
   /** Called when a team is selected from the dropdown */
   onAddForTeam?: (teamId: string) => void;
+  /** Always show the section even when empty and no add button */
+  alwaysShow?: boolean;
 }) {
   const hasAddButton = onAdd || (teamOptions && onAddForTeam);
-  if (servers.length === 0 && !hasAddButton) return null;
+  if (servers.length === 0 && !hasAddButton && !alwaysShow) return null;
+  const hasDeploymentStatuses = servers.some((s) => deploymentStatuses[s.id]);
 
   return (
     <div>
@@ -409,7 +666,7 @@ function ConnectionsTable({
                         disabled={teamOptions.length === 0}
                       >
                         <Plus className="mr-1 h-3 w-3" />
-                        Add
+                        Add to team
                         <ChevronDown className="ml-1 h-3 w-3" />
                       </Button>
                     </DropdownMenuTrigger>
@@ -445,6 +702,7 @@ function ConnectionsTable({
             <TableHeader>
               <TableRow>
                 <TableHead className="w-[200px]">Owner</TableHead>
+                {hasDeploymentStatuses && <TableHead>Pod</TableHead>}
                 <TableHead>Secret Storage</TableHead>
                 <TableHead>Created At</TableHead>
                 <TableHead>Action</TableHead>
@@ -484,6 +742,36 @@ function ConnectionsTable({
                       </span>
                     )}
                   </TableCell>
+                  {hasDeploymentStatuses && (
+                    <TableCell>
+                      {deploymentStatuses[mcpServer.id] ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onOpenPodLogs?.(mcpServer.id);
+                          }}
+                          className="flex items-center gap-1.5 text-sm hover:underline cursor-pointer"
+                        >
+                          <DeploymentStatusDot
+                            state={
+                              (deploymentStatuses[mcpServer.id].state ===
+                                "not_created" ||
+                              deploymentStatuses[mcpServer.id].state ===
+                                "succeeded"
+                                ? "running"
+                                : deploymentStatuses[mcpServer.id]
+                                    .state) as DeploymentState
+                            }
+                          />
+                          <span className="truncate max-w-[150px]">
+                            {mcpServer.name}
+                          </span>
+                        </button>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+                  )}
                   <TableCell className="text-muted-foreground">
                     {formatSecretStorageType(mcpServer.secretStorageType)}
                   </TableCell>

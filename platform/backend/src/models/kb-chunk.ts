@@ -1,3 +1,4 @@
+import { EMBEDDING_DIMENSIONS } from "@shared";
 import { count, eq, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { InsertKbChunk, KbChunk } from "@/types";
@@ -56,18 +57,19 @@ class KbChunkModel {
     const embeddingStr = `[${queryEmbedding.join(",")}]`;
     const ids = sql.join(connectorIds.map((id) => sql`${id}`), sql`, `);
 
+    const vectorCast = sql.raw(`::vector(${EMBEDDING_DIMENSIONS})`);
     const rows = await db.execute(sql`
       SELECT
         c.id, c.content, c.chunk_index AS "chunkIndex", c.document_id AS "documentId",
         d.title, d.source_url AS "sourceUrl", d.metadata,
         kbc.connector_type AS "connectorType",
-        1 - (c.embedding <=> ${embeddingStr}::vector(1536)) AS score
+        1 - (c.embedding <=> ${embeddingStr}${vectorCast}) AS score
       FROM kb_chunks c
       JOIN kb_documents d ON d.id = c.document_id
       LEFT JOIN knowledge_base_connectors kbc ON kbc.id = d.connector_id
       WHERE d.connector_id IN (${ids})
         AND c.embedding IS NOT NULL
-      ORDER BY c.embedding <=> ${embeddingStr}::vector(1536)
+      ORDER BY c.embedding <=> ${embeddingStr}${vectorCast}
       LIMIT ${limit}
     `);
 
@@ -109,7 +111,7 @@ class KbChunkModel {
     const values = updates
       .map(
         (u) =>
-          `('${u.chunkId}'::uuid, '[${u.embedding.join(",")}]'::vector(1536))`,
+          `('${u.chunkId}'::uuid, '[${u.embedding.join(",")}]'::vector(${EMBEDDING_DIMENSIONS}))`,
       )
       .join(", ");
 

@@ -12,9 +12,10 @@ export const DATABASE_URL_VAULT_REF_ENV = "ARCHESTRA_DATABASE_URL_VAULT_REF";
  * This checks the env vars directly to avoid circular dependencies with @/secrets-manager.
  */
 export function isReadonlyVaultEnabled(): boolean {
-  const secretsManager =
-    process.env.ARCHESTRA_SECRETS_MANAGER?.toUpperCase() === "READONLY_VAULT";
-  return secretsManager && config.enterpriseFeatures.core;
+  return (
+    config.secretsManager.type === "READONLY_VAULT" &&
+    config.enterpriseFeatures.core
+  );
 }
 
 /**

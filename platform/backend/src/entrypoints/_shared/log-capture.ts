@@ -1,6 +1,7 @@
 import { Writable } from "node:stream";
 import pino from "pino";
 import pretty from "pino-pretty";
+import { LOG_LEVEL } from "@/logging";
 
 const MAX_LOG_SIZE = 1024 * 1024; // 1 MB
 
@@ -59,7 +60,7 @@ export function createCapturingLogger(): {
   prettyStream.pipe(captureStream);
 
   const logger = pino(
-    { level: process.env.ARCHESTRA_LOGGING_LEVEL?.toLowerCase() || "info" },
+    { level: LOG_LEVEL },
     pino.multistream([
       { level: "trace", stream: prettyStdout },
       { level: "trace", stream: prettyCaptureStream },

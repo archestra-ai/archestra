@@ -31,10 +31,7 @@ async function main(): Promise<void> {
       ? config.kb.connectorSyncMaxDurationSeconds * 1000
       : undefined;
 
-    const continuationCount = Number.parseInt(
-      process.env.ARCHESTRA_CONNECTOR_CONTINUATION_COUNT || "0",
-      10,
-    );
+    const continuationCount = config.kb.connectorContinuationCount;
 
     const result = await connectorSyncService.executeSync(connectorId, {
       logger,

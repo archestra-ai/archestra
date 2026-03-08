@@ -1,5 +1,5 @@
 import type * as k8s from "@kubernetes/client-node";
-import config from "@/config";
+import config, { CONNECTOR_CONTINUATION_COUNT_ENV_VAR } from "@/config";
 import { inProcessScheduler } from "@/k8s/cron-job/in-process-scheduler";
 import {
   createK8sClients,
@@ -166,10 +166,10 @@ class CronJobManager {
     const env = buildConnectorSyncEnv();
     // Override/add continuation count env var
     const filteredEnv = env.filter(
-      (e) => e.name !== "ARCHESTRA_CONNECTOR_CONTINUATION_COUNT",
+      (e) => e.name !== CONNECTOR_CONTINUATION_COUNT_ENV_VAR,
     );
     filteredEnv.push({
-      name: "ARCHESTRA_CONNECTOR_CONTINUATION_COUNT",
+      name: CONNECTOR_CONTINUATION_COUNT_ENV_VAR,
       value: String(params.continuationCount),
     });
 

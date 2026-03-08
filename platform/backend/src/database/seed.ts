@@ -12,7 +12,7 @@ import {
   testMcpServerCommand,
 } from "@shared";
 import { and, eq, inArray } from "drizzle-orm";
-import { getProviderEnvApiKey } from "@/config";
+import config, { getProviderEnvApiKey } from "@/config";
 import db, { schema } from "@/database";
 import logger from "@/logging";
 import {
@@ -300,10 +300,7 @@ async function seedPlaywrightCatalog(): Promise<void> {
  */
 async function seedTestMcpServer(): Promise<void> {
   // Only seed in development, or when ENABLE_TEST_MCP_SERVER is explicitly set (e.g., in CI e2e tests)
-  if (
-    process.env.NODE_ENV === "production" &&
-    process.env.ENABLE_TEST_MCP_SERVER !== "true"
-  ) {
+  if (config.production && !config.test.enableTestMcpServer) {
     return;
   }
 

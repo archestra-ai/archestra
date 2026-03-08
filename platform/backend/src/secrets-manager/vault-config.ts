@@ -1,3 +1,4 @@
+import config from "@/config";
 import type { VaultConfig, VaultKvVersion } from "@/types";
 
 export class SecretsManagerConfigurationError extends Error {
@@ -42,17 +43,15 @@ export function getVaultConfigFromEnv(): VaultConfig {
   const errors: string[] = [];
 
   // Parse KV version first (needed for default secret path)
-  const kvVersionEnv = process.env.ARCHESTRA_HASHICORP_VAULT_KV_VERSION;
+  const kvVersionEnv = config.secretsManager.vaultKvVersion;
   let kvVersion: VaultKvVersion = DEFAULT_KV_VERSION;
 
-  if (kvVersionEnv) {
-    if (kvVersionEnv === "1" || kvVersionEnv === "2") {
-      kvVersion = kvVersionEnv;
-    } else {
-      errors.push(
-        `Invalid ARCHESTRA_HASHICORP_VAULT_KV_VERSION="${kvVersionEnv}". Expected "1" or "2".`,
-      );
-    }
+  if (kvVersionEnv === "1" || kvVersionEnv === "2") {
+    kvVersion = kvVersionEnv;
+  } else {
+    errors.push(
+      `Invalid ARCHESTRA_HASHICORP_VAULT_KV_VERSION="${kvVersionEnv}". Expected "1" or "2".`,
+    );
   }
 
   // Get default secret path based on KV version

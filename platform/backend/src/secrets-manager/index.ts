@@ -146,7 +146,7 @@ export async function createSecretManager(
  * @returns SecretsManagerType based on ARCHESTRA_SECRETS_MANAGER env var, defaults to DB
  */
 export function getSecretsManagerTypeBasedOnEnvVars(): SecretsManagerType {
-  const envValue = process.env.ARCHESTRA_SECRETS_MANAGER?.toUpperCase();
+  const envValue = config.secretsManager.type;
 
   if (envValue === "VAULT") {
     return SecretsManagerType.Vault;
@@ -167,9 +167,9 @@ export function getByosVaultKvVersion(): VaultKvVersion | null {
   if (!isByosEnabled()) {
     return null;
   }
-  const kvVersionEnv = process.env.ARCHESTRA_HASHICORP_VAULT_KV_VERSION;
-  if (kvVersionEnv === "1" || kvVersionEnv === "2") {
-    return kvVersionEnv;
+  const kvVersion = config.secretsManager.vaultKvVersion;
+  if (kvVersion === "1" || kvVersion === "2") {
+    return kvVersion;
   }
   return "2";
 }

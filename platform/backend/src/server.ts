@@ -103,6 +103,7 @@ const {
     corsOrigins,
     apiKeyAuthorizationHeaderName,
   },
+  test: { enableE2eTestEndpoints, testValue },
   observability,
 } = config;
 
@@ -730,9 +731,9 @@ const start = async () => {
     registerHealthEndpoint(fastify);
     registerReadinessEndpoint(fastify);
 
-    if (process.env.ENABLE_E2E_TEST_ENDPOINTS === "true") {
+    if (enableE2eTestEndpoints) {
       fastify.get("/test", async () => ({
-        value: process.env.TEST_VALUE ?? null,
+        value: testValue,
       }));
     }
 

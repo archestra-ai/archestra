@@ -454,6 +454,9 @@ export const parseSampleRate = (
   return parsed;
 };
 
+export const CONNECTOR_CONTINUATION_COUNT_ENV_VAR =
+  "ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_CONTINUATION_COUNT";
+
 const config = {
   frontendBaseUrl,
   api: {
@@ -775,6 +778,19 @@ const config = {
       process.env.ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_K8S_CRONJOB_NAMESPACE ||
       "archestra-connectors",
     connectorImage: getConnectorImage(),
+    connectorContinuationCount: Number.parseInt(
+      process.env[CONNECTOR_CONTINUATION_COUNT_ENV_VAR] || "0",
+      10,
+    ),
+  },
+  secretsManager: {
+    type: process.env.ARCHESTRA_SECRETS_MANAGER?.toUpperCase() || "DB",
+    vaultKvVersion: process.env.ARCHESTRA_HASHICORP_VAULT_KV_VERSION || "2",
+  },
+  test: {
+    enableE2eTestEndpoints: process.env.ENABLE_E2E_TEST_ENDPOINTS === "true",
+    enableTestMcpServer: process.env.ENABLE_TEST_MCP_SERVER === "true",
+    testValue: process.env.TEST_VALUE ?? null,
   },
   authRateLimitDisabled:
     process.env.ARCHESTRA_AUTH_RATE_LIMIT_DISABLED === "true",

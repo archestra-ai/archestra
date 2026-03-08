@@ -2031,9 +2031,12 @@ tests:
     asserts:
       - lengthEqual:
           path: spec.template.spec.initContainers
-          count: 1
+          count: 2
       - equal:
           path: spec.template.spec.initContainers[0].name
+          value: setup-postgres-extensions
+      - equal:
+          path: spec.template.spec.initContainers[1].name
           value: wait-for-postgres
 
   - it: should have vault-secrets init container when enabled
@@ -2047,12 +2050,15 @@ tests:
     asserts:
       - lengthEqual:
           path: spec.template.spec.initContainers
-          count: 2
+          count: 3
       - equal:
           path: spec.template.spec.initContainers[0].name
           value: vault-secrets
       - equal:
           path: spec.template.spec.initContainers[1].name
+          value: setup-postgres-extensions
+      - equal:
+          path: spec.template.spec.initContainers[2].name
           value: wait-for-postgres
 
   - it: should use the main archestra platform image for vault-secrets init container
@@ -2159,10 +2165,10 @@ tests:
           key: url
     asserts:
       - equal:
-          path: spec.template.spec.initContainers[1].name
+          path: spec.template.spec.initContainers[2].name
           value: wait-for-postgres
       - contains:
-          path: spec.template.spec.initContainers[1].volumeMounts
+          path: spec.template.spec.initContainers[2].volumeMounts
           content:
             name: vault-secrets
             mountPath: /vault/secrets
@@ -2178,10 +2184,10 @@ tests:
           key: url
     asserts:
       - equal:
-          path: spec.template.spec.initContainers[1].name
+          path: spec.template.spec.initContainers[2].name
           value: wait-for-postgres
       - matchRegex:
-          path: spec.template.spec.initContainers[1].command[2]
+          path: spec.template.spec.initContainers[2].command[2]
           pattern: "/vault/secrets/env"
 
   - it: should create vault-secrets emptyDir volume with Memory medium when enabled

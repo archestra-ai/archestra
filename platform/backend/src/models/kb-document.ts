@@ -1,4 +1,4 @@
-import { and, count, desc, eq } from "drizzle-orm";
+import { and, count, desc, eq, inArray } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { InsertKbDocument, KbDocument, UpdateKbDocument } from "@/types";
 
@@ -10,6 +10,15 @@ class KbDocumentModel {
       .where(eq(schema.kbDocumentsTable.id, id));
 
     return result ?? null;
+  }
+
+  static async findByIds(ids: string[]): Promise<KbDocument[]> {
+    if (ids.length === 0) return [];
+
+    return await db
+      .select()
+      .from(schema.kbDocumentsTable)
+      .where(inArray(schema.kbDocumentsTable.id, ids));
   }
 
   static async findByKnowledgeBase(params: {

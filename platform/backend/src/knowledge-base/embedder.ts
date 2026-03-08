@@ -81,6 +81,123 @@ class EmbeddingService {
     }
   }
 
+  /**
+   * Embed multiple documents in a single pass, batching chunks across documents
+   * into groups of EMBEDDING_BATCH_SIZE for fewer OpenAI API calls.
+   * Per-document error isolation: if embedding fails, only the affected documents
+   * are marked as "failed"; the rest still complete.
+   */
+  async processDocuments(documentIds: string[]): Promise<void> {
+    // 1. Load all documents in one query, filter to pending, gather chunks
+    const documents = await KbDocumentModel.findByIds(documentIds);
+    const documentsById = new Map(documents.map((d) => [d.id, d]));
+
+    const docChunkMap: Array<{
+      documentId: string;
+      chunkIds: string[];
+      chunkCount: number;
+    }> = [];
+    const allChunks: Array<{ chunkId: string; text: string }> = [];
+
+    for (const documentId of documentIds) {
+      const document = documentsById.get(documentId);
+      if (!document) {
+        logger.warn({ documentId }, "[Embedder] Document not found");
+        continue;
+      }
+      if (document.embeddingStatus !== "pending") {
+        logger.debug(
+          { documentId, status: document.embeddingStatus },
+          "[Embedder] Document not pending, skipping",
+        );
+        continue;
+      }
+
+      await KbDocumentModel.update(documentId, {
+        embeddingStatus: "processing",
+      });
+
+      const chunks = await KbChunkModel.findByDocument(documentId);
+
+      if (chunks.length === 0) {
+        await KbDocumentModel.update(documentId, {
+          embeddingStatus: "completed",
+          chunkCount: 0,
+        });
+        continue;
+      }
+
+      const chunkIds = chunks.map((c) => c.id);
+      docChunkMap.push({ documentId, chunkIds, chunkCount: chunks.length });
+
+      for (const chunk of chunks) {
+        allChunks.push({ chunkId: chunk.id, text: chunk.content });
+      }
+    }
+
+    if (allChunks.length === 0) return;
+
+    // 2. Call OpenAI in batches of EMBEDDING_BATCH_SIZE across all chunks
+    const client = this.getOpenAIClient();
+    const embeddingResults = new Map<string, number[]>();
+    const failedChunkIds = new Set<string>();
+
+    for (let i = 0; i < allChunks.length; i += EMBEDDING_BATCH_SIZE) {
+      const batch = allChunks.slice(i, i + EMBEDDING_BATCH_SIZE);
+      try {
+        const response = await this.callEmbeddingApiWithRetry(
+          client,
+          batch.map((c) => c.text),
+        );
+        for (let j = 0; j < batch.length; j++) {
+          embeddingResults.set(batch[j].chunkId, response.data[j].embedding);
+        }
+      } catch (error) {
+        logger.error(
+          {
+            batchStart: i,
+            batchSize: batch.length,
+            error: error instanceof Error ? error.message : String(error),
+          },
+          "[Embedder] Batch embedding API call failed",
+        );
+        for (const chunk of batch) {
+          failedChunkIds.add(chunk.chunkId);
+        }
+      }
+    }
+
+    // 3. Write embeddings and update document statuses
+    const successfulUpdates = [...embeddingResults.entries()].map(
+      ([chunkId, embedding]) => ({ chunkId, embedding }),
+    );
+    if (successfulUpdates.length > 0) {
+      await KbChunkModel.updateEmbeddings(successfulUpdates);
+    }
+
+    for (const { documentId, chunkIds, chunkCount } of docChunkMap) {
+      const anyFailed = chunkIds.some((id) => failedChunkIds.has(id));
+      if (anyFailed) {
+        await KbDocumentModel.update(documentId, {
+          embeddingStatus: "failed",
+        });
+        logger.error(
+          { documentId },
+          "[Embedder] Failed to embed document (batch failure)",
+        );
+      } else {
+        await KbDocumentModel.update(documentId, {
+          embeddingStatus: "completed",
+          chunkCount,
+        });
+        logger.info(
+          { documentId, chunkCount },
+          "[Embedder] Document embeddings completed",
+        );
+      }
+    }
+  }
+
   private async callEmbeddingApiWithRetry(
     client: OpenAI,
     texts: string[],

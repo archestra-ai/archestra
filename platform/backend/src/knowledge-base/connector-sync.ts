@@ -368,19 +368,7 @@ class ConnectorSyncService {
       return;
     }
 
-    for (const documentId of params.documentIds) {
-      try {
-        await embeddingService.processDocument(documentId);
-      } catch (error) {
-        params.log.warn(
-          {
-            documentId,
-            error: error instanceof Error ? error.message : String(error),
-          },
-          "[ConnectorSync] Failed to embed document, continuing",
-        );
-      }
-    }
+    await embeddingService.processDocuments(params.documentIds);
   }
 
   private async chunkAndStore(params: {

@@ -1,6 +1,6 @@
 {
-  "id": "0170_curious_nekra",
-  "prevId": "0169_hot_flatman",
+  "id": "7ad47f6f-aba1-47df-aeec-58e5b594efd3",
+  "prevId": "9b9be104-adf0-4f51-b7ac-e737a504fc68",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -5911,34 +5911,7 @@
         }
       },
       "indexes": {},
-      "foreignKeys": {
-        "organization_embedding_chat_api_key_id_chat_api_keys_id_fk": {
-          "name": "organization_embedding_chat_api_key_id_chat_api_keys_id_fk",
-          "tableFrom": "organization",
-          "tableTo": "chat_api_keys",
-          "columnsFrom": [
-            "embedding_chat_api_key_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "organization_reranker_chat_api_key_id_chat_api_keys_id_fk": {
-          "name": "organization_reranker_chat_api_key_id_chat_api_keys_id_fk",
-          "tableFrom": "organization",
-          "tableTo": "chat_api_keys",
-          "columnsFrom": [
-            "reranker_chat_api_key_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        }
-      },
+      "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "organization_slug_unique": {

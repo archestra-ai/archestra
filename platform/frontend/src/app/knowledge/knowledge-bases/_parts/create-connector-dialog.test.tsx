@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CreateConnectorDialog } from "./create-connector-dialog";
@@ -244,13 +244,20 @@ describe("CreateConnectorDialog", () => {
       mockMutateAsync.mockResolvedValue({ id: "connector-1" });
       const { user } = await renderConfigureStep();
 
-      await user.type(screen.getByLabelText(/^Name$/), "Test Connector");
-      await user.type(
-        screen.getByLabelText(/^URL$/),
-        "https://example.atlassian.net",
-      );
-      await user.type(screen.getByLabelText(/^Email$/), "user@example.com");
-      await user.type(screen.getByLabelText(/^API Token$/), "my-secret-token");
+      // Use fireEvent.change instead of user.type to avoid timeout from
+      // simulating 77+ individual keystrokes across all fields.
+      fireEvent.change(screen.getByLabelText(/^Name$/), {
+        target: { value: "Test Connector" },
+      });
+      fireEvent.change(screen.getByLabelText(/^URL$/), {
+        target: { value: "https://example.atlassian.net" },
+      });
+      fireEvent.change(screen.getByLabelText(/^Email$/), {
+        target: { value: "user@example.com" },
+      });
+      fireEvent.change(screen.getByLabelText(/^API Token$/), {
+        target: { value: "my-secret-token" },
+      });
       await user.click(
         screen.getByRole("button", { name: "Create Connector" }),
       );

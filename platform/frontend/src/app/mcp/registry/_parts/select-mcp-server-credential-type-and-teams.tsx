@@ -61,7 +61,7 @@ export function SelectMcpServerCredentialTypeAndTeams({
   // Editors have this permission, members don't. This prevents members from installing
   // MCP servers that affect the whole team - only editors and admins can do that.
   const { data: hasMcpServerUpdate } = useHasPermissions({
-    mcpServer: ["update"],
+    mcpServerInstallation: ["update"],
   });
 
   // Compute existing installations for this catalog item

@@ -2,11 +2,7 @@ import { DEFAULT_THEME_ID, type OrganizationCustomFont } from "@shared";
 import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import logger from "@/logging";
-import type {
-  Organization,
-  PublicAppearance,
-  UpdateOrganization,
-} from "@/types";
+import type { Organization, PublicAppearance } from "@/types";
 
 class OrganizationModel {
   /**
@@ -67,7 +63,7 @@ class OrganizationModel {
    */
   static async patch(
     id: string,
-    data: Partial<UpdateOrganization>,
+    data: Partial<Organization>,
   ): Promise<Organization | null> {
     logger.debug(
       { id, dataKeys: Object.keys(data) },

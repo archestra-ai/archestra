@@ -187,7 +187,7 @@ export function McpServerCard({
   const session = authClient.useSession();
   const currentUserId = session.data?.user?.id;
   const { data: userIsMcpServerAdmin } = useHasPermissions({
-    mcpServer: ["admin"],
+    mcpServerInstallation: ["admin"],
   });
   const isLocalMcpEnabled = useFeatureFlag("orchestratorK8sRuntime");
 
@@ -563,7 +563,7 @@ export function McpServerCard({
         {chatButton}
         {!isInstalling && isCurrentUserAuthenticated && needsReinstall && (
           <PermissionButton
-            permissions={{ mcpServer: ["update"] }}
+            permissions={{ mcpServerInstallation: ["update"] }}
             onClick={onReinstall}
             size="sm"
             variant="outline"
@@ -592,7 +592,7 @@ export function McpServerCard({
             </Button>
           ) : (
             <PermissionButton
-              permissions={{ mcpServer: ["create"] }}
+              permissions={{ mcpServerInstallation: ["create"] }}
               onClick={onAddPersonalConnection ?? onInstallRemoteServer}
               size="sm"
               variant="outline"
@@ -612,7 +612,7 @@ export function McpServerCard({
         {chatButton}
         {!isInstalling && isCurrentUserAuthenticated && needsReinstall && (
           <PermissionButton
-            permissions={{ mcpServer: ["update"] }}
+            permissions={{ mcpServerInstallation: ["update"] }}
             onClick={onReinstall}
             size="sm"
             variant="outline"
@@ -645,7 +645,7 @@ export function McpServerCard({
                 <TooltipTrigger asChild>
                   <div className="flex-1">
                     <PermissionButton
-                      permissions={{ mcpServer: ["create"] }}
+                      permissions={{ mcpServerInstallation: ["create"] }}
                       onClick={onAddPersonalConnection ?? onInstallLocalServer}
                       disabled={!isLocalMcpEnabled}
                       size="sm"
@@ -676,7 +676,7 @@ export function McpServerCard({
         {chatButton}
         {!isInstalling && isCurrentUserAuthenticated && needsReinstall && (
           <PermissionButton
-            permissions={{ mcpServer: ["update"] }}
+            permissions={{ mcpServerInstallation: ["update"] }}
             onClick={onReinstall}
             size="sm"
             variant="outline"
@@ -709,7 +709,7 @@ export function McpServerCard({
                 <TooltipTrigger asChild>
                   <div className="flex-1">
                     <PermissionButton
-                      permissions={{ mcpServer: ["create"] }}
+                      permissions={{ mcpServerInstallation: ["create"] }}
                       onClick={onAddPersonalConnection ?? onInstallLocalServer}
                       disabled={!isLocalMcpEnabled}
                       size="sm"

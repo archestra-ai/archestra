@@ -60,7 +60,7 @@ export function PolicyDeniedTool({
                   size="sm"
                   variant="secondary"
                   className="mt-[-0.45em]"
-                  permissions={{ policy: ["update"] }}
+                  permissions={{ toolPolicy: ["update"] }}
                   onClick={() => setIsModalOpen(true)}
                 >
                   Edit policy

@@ -65,7 +65,7 @@ export function ArchestraCatalogTab({
   const { data: availableCategories = [] } = useMcpServerCategories();
 
   const { data: userIsMcpServerAdmin = false } = useHasPermissions({
-    mcpServer: ["admin"],
+    mcpServerInstallation: ["admin"],
   });
 
   // Use server-side search and category filtering

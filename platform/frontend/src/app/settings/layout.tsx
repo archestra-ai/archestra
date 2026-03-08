@@ -1,61 +1,19 @@
 "use client";
 
 import { PageLayout } from "@/components/page-layout";
-import { useHasPermissions } from "@/lib/auth.query";
-import config from "@/lib/config";
-import { useSecretsType } from "@/lib/secrets.query";
+import { useSettingsTabs } from "./settings-tabs";
 
 export default function SettingsLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const { data: userCanReadOrganization } = useHasPermissions({
-    organization: ["read"],
-  });
-
-  const { data: userCanReadIdentityProviders } = useHasPermissions({
-    identityProvider: ["read"],
-  });
-
-  const { data: secretsType } = useSecretsType();
-
-  const tabs = [
-    { label: "Your Account", href: "/settings/account" },
-    { label: "Dual LLM", href: "/settings/dual-llm" },
-    { label: "Security", href: "/settings/security" },
-    ...(userCanReadOrganization
-      ? [
-          { label: "Members", href: "/settings/members" },
-          { label: "Teams", href: "/settings/teams" },
-          { label: "Roles", href: "/settings/roles" },
-          /**
-           * Identity Providers tab is only shown when enterprise license is activated
-           * and the user has the permission to read identity providers.
-           */
-          ...(config.enterpriseFeatures.core && userCanReadIdentityProviders
-            ? [
-                {
-                  label: "Identity Providers",
-                  href: "/settings/identity-providers",
-                },
-              ]
-            : []),
-        ]
-      : []),
-    { label: "Appearance", href: "/settings/appearance" },
-    /**
-     * Secrets tab is only shown when using Vault storage (not DB).
-     */
-    ...(secretsType?.type === "Vault"
-      ? [{ label: "Secrets", href: "/settings/secrets" }]
-      : []),
-  ];
+  const tabs = useSettingsTabs();
 
   return (
     <PageLayout
       title="Settings"
-      description="Manage your account settings and preferences"
+      description="Configure your platform, teams, and integrations"
       tabs={tabs}
     >
       {children}

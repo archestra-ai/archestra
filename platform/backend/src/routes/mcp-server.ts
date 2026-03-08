@@ -42,7 +42,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async ({ user, headers, query }, reply) => {
       const { catalogId } = query;
       const { success: isMcpServerAdmin } = await hasPermission(
-        { mcpServer: ["admin"] },
+        { mcpServerInstallation: ["admin"] },
         headers,
       );
       let allServers = await McpServerModel.findAll(user.id, isMcpServerAdmin);
@@ -167,7 +167,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             // WHY: mcpServer:update distinguishes editors from members
             // Editors have this permission, members don't
             const { success: hasMcpServerUpdate } = await hasPermission(
-              { mcpServer: ["update"] },
+              { mcpServerInstallation: ["update"] },
               headers,
             );
 
@@ -762,7 +762,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Check mcpServer create permission (required for re-authentication)
       const { success: hasMcpServerCreatePermission } = await hasPermission(
-        { mcpServer: ["create"] },
+        { mcpServerInstallation: ["create"] },
         headers,
       );
 
@@ -795,7 +795,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // WHY: mcpServer:update distinguishes editors from members
           // Editors have this permission, members don't
           const { success: hasMcpServerUpdate } = await hasPermission(
-            { mcpServer: ["update"] },
+            { mcpServerInstallation: ["update"] },
             headers,
           );
 
@@ -1008,7 +1008,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Personal server: owner OR mcpServer:update permission
         if (mcpServer.ownerId !== user.id) {
           const { success: hasMcpServerUpdate } = await hasPermission(
-            { mcpServer: ["update"] },
+            { mcpServerInstallation: ["update"] },
             headers,
           );
           if (!hasMcpServerUpdate) {
@@ -1027,7 +1027,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         if (!isTeamAdmin) {
           const { success: hasMcpServerUpdate } = await hasPermission(
-            { mcpServer: ["update"] },
+            { mcpServerInstallation: ["update"] },
             headers,
           );
 
@@ -1302,7 +1302,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // WHY: mcpServer:update distinguishes editors from members
           // Editors have this permission, members don't
           const { success: hasMcpServerUpdate } = await hasPermission(
-            { mcpServer: ["update"] },
+            { mcpServerInstallation: ["update"] },
             headers,
           );
 

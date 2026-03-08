@@ -12,7 +12,6 @@ import {
 } from "lucide-react";
 import { useCallback, useState } from "react";
 import type { CatalogItem } from "@/app/mcp/registry/_parts/mcp-server-card";
-import { WithPermissions } from "@/components/roles/with-permissions";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -67,10 +66,7 @@ import {
   useLimits,
   useUpdateLimit,
 } from "@/lib/limits.query";
-import {
-  useOrganization,
-  useUpdateOrganization,
-} from "@/lib/organization.query";
+import { useOrganization } from "@/lib/organization.query";
 import { useTeams } from "@/lib/team.query";
 
 // Type aliases for better readability
@@ -83,6 +79,14 @@ type TokenPriceData = {
 };
 type TeamData = archestraApiTypes.GetTeamsResponses["200"][number];
 type UsageStatus = "safe" | "warning" | "danger";
+type LimitEntityType = CreateLimitData["entityType"];
+type CreateLimitData = archestraApiTypes.CreateLimitData["body"];
+
+const LIMIT_ENTITY_TYPE_LABELS: Record<LimitEntityType, string> = {
+  team: "Team",
+  organization: "The whole organization",
+  agent: "Agent",
+};
 type LimitType = Pick<LimitData, "limitType">["limitType"];
 type TokenCostLimitType = Extract<LimitType, "token_cost">;
 type McpServerCallsLimitType = Extract<LimitType, "mcp_server_calls">;
@@ -128,14 +132,13 @@ function LimitInlineForm({
   organizationId: string;
 }) {
   const [formData, setFormData] = useState<{
-    entityType: "organization" | "team" | "agent";
+    entityType: LimitEntityType;
     entityId: string;
     mcpServerName: string;
     limitValue: string;
     model: string[];
   }>({
-    entityType:
-      (initialData?.entityType as "organization" | "team" | "agent") || "team",
+    entityType: (initialData?.entityType as LimitEntityType) || "team",
     entityId: initialData?.entityId || "",
     mcpServerName: initialData?.mcpServerName || "",
     limitValue: initialData?.limitValue?.toString() || "",
@@ -179,10 +182,10 @@ function LimitInlineForm({
               </Label>
               <Select
                 value={formData.entityType}
-                onValueChange={(value) =>
+                onValueChange={(value: LimitEntityType) =>
                   setFormData({
                     ...formData,
-                    entityType: value as "agent" | "organization" | "team",
+                    entityType: value,
                     entityId: "",
                   })
                 }
@@ -191,10 +194,13 @@ function LimitInlineForm({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="team">Team</SelectItem>
-                  <SelectItem value="organization">
-                    The whole organization
-                  </SelectItem>
+                  {Object.entries(LIMIT_ENTITY_TYPE_LABELS).map(
+                    ([value, label]) => (
+                      <SelectItem key={value} value={value}>
+                        {label}
+                      </SelectItem>
+                    ),
+                  )}
                 </SelectContent>
               </Select>
             </div>
@@ -436,8 +442,6 @@ function LimitRow({
   tokenPrices,
   getEntityName,
   getUsageStatus,
-  hasOrganizationMcpLimit,
-  getTeamsWithMcpLimits,
   organizationId,
 }: {
   limit: LimitData;
@@ -465,8 +469,6 @@ function LimitRow({
     actualUsage: number;
     actualLimit: number;
   };
-  hasOrganizationMcpLimit?: (mcpServerName?: string) => boolean;
-  getTeamsWithMcpLimits?: (mcpServerName?: string) => string[];
   organizationId: string;
 }) {
   if (isEditing) {
@@ -481,8 +483,6 @@ function LimitRow({
         teams={teams}
         mcpServers={mcpServers}
         tokenPrices={tokenPrices}
-        hasOrganizationMcpLimit={hasOrganizationMcpLimit}
-        getTeamsWithMcpLimits={getTeamsWithMcpLimits}
         organizationId={organizationId}
       />
     );
@@ -562,7 +562,7 @@ function LimitRow({
       <td className="p-4">
         <div className="flex items-center gap-2">
           <PermissionButton
-            permissions={{ limit: ["update"] }}
+            permissions={{ llmLimit: ["update"] }}
             variant="ghost"
             size="sm"
             onClick={onEdit}
@@ -572,7 +572,7 @@ function LimitRow({
           <AlertDialog>
             <AlertDialogTrigger asChild>
               <PermissionButton
-                permissions={{ limit: ["delete"] }}
+                permissions={{ llmLimit: ["delete"] }}
                 variant="ghost"
                 size="sm"
                 className="text-destructive hover:text-destructive"
@@ -608,7 +608,6 @@ function LimitRow({
 export default function LimitsPage() {
   const [editingLimitId, setEditingLimitId] = useState<string | null>(null);
   const [isAddingLlmLimit, setIsAddingLlmLimit] = useState(false);
-  const [isAddingMcpLimit, setIsAddingMcpLimit] = useState(false);
 
   // Data fetching hooks
   const { data: limits = [], isLoading: limitsLoading } = useLimits();
@@ -623,52 +622,12 @@ export default function LimitsPage() {
     pricePerMillionOutput: m.capabilities?.pricePerMillionOutput ?? "0",
   }));
 
-  const updateCleanupInterval = useUpdateOrganization(
-    "Cleanup interval updated successfully",
-    "Failed to update cleanup interval",
-  );
   const deleteLimit = useDeleteLimit();
   const createLimit = useCreateLimit();
   const updateLimit = useUpdateLimit();
 
   // Filter limits by type
   const llmLimits = limits.filter((limit) => limit.limitType === "token_cost");
-  const mcpLimits = limits.filter(
-    (limit) => limit.limitType === "mcp_server_calls",
-  );
-
-  // Helper functions for MCP limit validation only
-  const hasOrganizationMcpLimit = useCallback(
-    (mcpServerName?: string) => {
-      return limits.some((limit) => {
-        if (
-          limit.limitType !== "mcp_server_calls" ||
-          limit.entityType !== "organization"
-        ) {
-          return false;
-        }
-        return limit.mcpServerName === mcpServerName;
-      });
-    },
-    [limits],
-  );
-
-  const getTeamsWithMcpLimits = useCallback(
-    (mcpServerName?: string) => {
-      return limits
-        .filter((limit) => {
-          if (
-            limit.limitType !== "mcp_server_calls" ||
-            limit.entityType !== "team"
-          ) {
-            return false;
-          }
-          return limit.mcpServerName === mcpServerName;
-        })
-        .map((limit) => limit.entityId);
-    },
-    [limits],
-  );
 
   // Helper function to get entity name
   const getEntityName = useCallback(
@@ -736,9 +695,8 @@ export default function LimitsPage() {
       try {
         await createLimit.mutateAsync(data);
         setIsAddingLlmLimit(false);
-        setIsAddingMcpLimit(false);
-      } catch (error) {
-        console.error("Failed to create limit:", error);
+      } catch {
+        // Error toast handled by mutation hook
       }
     },
     [createLimit],
@@ -749,8 +707,8 @@ export default function LimitsPage() {
       try {
         await updateLimit.mutateAsync({ id, ...data });
         setEditingLimitId(null);
-      } catch (error) {
-        console.error("Failed to update limit:", error);
+      } catch {
+        // Error toast handled by mutation hook
       }
     },
     [updateLimit],
@@ -759,48 +717,10 @@ export default function LimitsPage() {
   const handleCancelEdit = useCallback(() => {
     setEditingLimitId(null);
     setIsAddingLlmLimit(false);
-    setIsAddingMcpLimit(false);
   }, []);
 
   return (
     <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-lg">Auto-cleanup interval</CardTitle>
-            <WithPermissions
-              permissions={{ limit: ["update"] }}
-              noPermissionHandle="tooltip"
-            >
-              {({ hasPermission }) => (
-                <Select
-                  value={organizationDetails?.limitCleanupInterval || "1h"}
-                  onValueChange={(value) => {
-                    updateCleanupInterval.mutate({
-                      limitCleanupInterval: value as NonNullable<
-                        archestraApiTypes.UpdateOrganizationData["body"]
-                      >["limitCleanupInterval"],
-                    });
-                  }}
-                  disabled={updateCleanupInterval.isPending || !hasPermission}
-                >
-                  <SelectTrigger className="w-48">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="1h">Every hour</SelectItem>
-                    <SelectItem value="12h">Every 12 hours</SelectItem>
-                    <SelectItem value="24h">Every 24 hours</SelectItem>
-                    <SelectItem value="1w">Every week</SelectItem>
-                    <SelectItem value="1m">Every month</SelectItem>
-                  </SelectContent>
-                </Select>
-              )}
-            </WithPermissions>
-          </div>
-        </CardHeader>
-      </Card>
-
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
@@ -811,7 +731,7 @@ export default function LimitsPage() {
               </CardDescription>
             </div>
             <PermissionButton
-              permissions={{ limit: ["create"] }}
+              permissions={{ llmLimit: ["create"] }}
               onClick={() => setIsAddingLlmLimit(true)}
               size="sm"
               disabled={isAddingLlmLimit || editingLimitId !== null}
@@ -844,8 +764,6 @@ export default function LimitsPage() {
                     teams={teams}
                     mcpServers={mcpServers}
                     tokenPrices={tokenPrices}
-                    hasOrganizationMcpLimit={hasOrganizationMcpLimit}
-                    getTeamsWithMcpLimits={getTeamsWithMcpLimits}
                     organizationId={organizationDetails?.id || ""}
                   />
                 )}
@@ -877,8 +795,6 @@ export default function LimitsPage() {
                       tokenPrices={tokenPrices}
                       getEntityName={getEntityName}
                       getUsageStatus={getUsageStatus}
-                      hasOrganizationMcpLimit={hasOrganizationMcpLimit}
-                      getTeamsWithMcpLimits={getTeamsWithMcpLimits}
                       organizationId={organizationDetails?.id || ""}
                     />
                   ))
@@ -886,104 +802,6 @@ export default function LimitsPage() {
               </TableBody>
             </Table>
           )}
-        </CardContent>
-      </Card>
-
-      <Card className="relative">
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="text-xl">MCP Limits</CardTitle>
-              <CardDescription>
-                MCP server and tool call limits across teams and organization
-              </CardDescription>
-            </div>
-            <PermissionButton
-              permissions={{ limit: ["create"] }}
-              onClick={() => setIsAddingMcpLimit(true)}
-              size="sm"
-              disabled={true}
-            >
-              <Plus className="h-4 w-4 mr-1" />
-              Add MCP Limit
-            </PermissionButton>
-          </div>
-        </CardHeader>
-        <CardContent className="relative">
-          <div className="absolute inset-0 bg-background/80 backdrop-blur-sm rounded-lg flex items-center justify-center z-10">
-            <div className="text-center">
-              <p className="text-lg font-semibold text-muted-foreground">
-                Coming soon
-              </p>
-            </div>
-          </div>
-
-          <div className="opacity-30 pointer-events-none">
-            {limitsLoading ? (
-              <LoadingSkeleton count={3} prefix="mcp-limits" />
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Applied to</TableHead>
-                    <TableHead>MCP Server</TableHead>
-                    <TableHead>Usage</TableHead>
-                    <TableHead>Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {isAddingMcpLimit && (
-                    <LimitInlineForm
-                      limitType="mcp_server_calls"
-                      onSave={handleCreateLimit}
-                      onCancel={handleCancelEdit}
-                      teams={teams}
-                      mcpServers={mcpServers}
-                      tokenPrices={tokenPrices}
-                      hasOrganizationMcpLimit={hasOrganizationMcpLimit}
-                      getTeamsWithMcpLimits={getTeamsWithMcpLimits}
-                      organizationId={organizationDetails?.id || ""}
-                    />
-                  )}
-                  {mcpLimits.length === 0 && !isAddingMcpLimit ? (
-                    <TableRow>
-                      <TableCell
-                        colSpan={5}
-                        className="text-center py-8 text-muted-foreground"
-                      >
-                        <Settings className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                        <p>No MCP limits configured</p>
-                        <p className="text-sm">
-                          Click "Add MCP Limit" to get started
-                        </p>
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    mcpLimits.map((limit) => (
-                      <LimitRow
-                        key={limit.id}
-                        limit={limit}
-                        isEditing={editingLimitId === limit.id}
-                        onEdit={() => setEditingLimitId(limit.id)}
-                        onSave={(data) => handleUpdateLimit(limit.id, data)}
-                        onCancel={handleCancelEdit}
-                        onDelete={() => handleDeleteLimit(limit.id)}
-                        teams={teams}
-                        mcpServers={mcpServers}
-                        tokenPrices={tokenPrices}
-                        getEntityName={getEntityName}
-                        getUsageStatus={getUsageStatus}
-                        hasOrganizationMcpLimit={hasOrganizationMcpLimit}
-                        getTeamsWithMcpLimits={getTeamsWithMcpLimits}
-                        organizationId={organizationDetails?.id || ""}
-                      />
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            )}
-          </div>
         </CardContent>
       </Card>
     </div>

@@ -1,6 +1,11 @@
 "use client";
 
-import { type StatisticsTimeFrame, StatisticsTimeFrameSchema } from "@shared";
+import {
+  DocsPage,
+  getDocsUrl,
+  type StatisticsTimeFrame,
+  StatisticsTimeFrameSchema,
+} from "@shared";
 import { format } from "date-fns";
 import { Calendar as CalendarIcon, Clock, Info } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -149,7 +154,7 @@ export default function StatisticsPage() {
         params.set("timeframe", newTimeframe);
       }
 
-      router.push(`/llm/cost/statistics?${params.toString()}`, {
+      router.push(`/llm/costs?${params.toString()}`, {
         scroll: false,
       });
     },
@@ -461,7 +466,7 @@ export default function StatisticsPage() {
             </a>
           </p>
           <a
-            href="https://archestra.ai/docs/platform-observability"
+            href={getDocsUrl(DocsPage.PlatformObservability)}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"

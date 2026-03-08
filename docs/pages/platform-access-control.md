@@ -1,8 +1,8 @@
 ---
 title: "Access Control"
-category: Archestra Platform
+category: Administration
 description: "Role-based access control (RBAC) system for managing user permissions in Archestra"
-order: 4
+order: 1
 lastUpdated: 2026-03-07
 ---
 <!--
@@ -11,35 +11,74 @@ Check ../docs_writer_prompt.md before changing this file.
 This document is human-built, shouldn't be updated with AI. Don't change anything here.
 -->
 
-Archestra uses a role-based access control (RBAC) system to manage user permissions within organizations. This system provides both predefined roles for common use cases and the flexibility to create custom roles with specific permission combinations.
+Archestra uses a role-based access control (RBAC) system to manage user permissions. This system provides both predefined roles for common use cases and the flexibility to create custom roles with specific permission combinations.
 
 Permissions in Archestra are defined using a `resource:action` format, where:
 
-- **Resource**: The type of object or feature being accessed (e.g., `agent`, `tool`, `organization`)
+- **Resource**: The type of object or feature being accessed (e.g., `agent`, `mcpGateway`, `llmProxy`)
 - **Action**: The operation being performed (`create`, `read`, `update`, `delete`, `admin`)
 
-For example, the permission `agent:create` allows creating new automation agents, `mcpGateway:create` allows creating MCP gateways, `llmProxy:create` allows creating LLM proxies, and `organization:read` allows viewing organization information.
+For example, the permission `agent:create` allows creating new agents, `mcpGateway:update` allows updating MCP gateways, whereas `llmProxy:read` would allow reading LLM proxies.
 
 ## Predefined Roles
 
 The following roles are built into Archestra and cannot be modified or deleted:
 
-| Role | Description | Granted Permissions |
-|------|-------------|--------------------|
-| **admin** | Full administrative access to all organization resources | `organization:read`<br /><br />`organization:update`<br /><br />`organization:delete`<br /><br />`member:read`<br /><br />`member:create`<br /><br />`member:update`<br /><br />`member:delete`<br /><br />`invitation:create`<br /><br />`invitation:cancel`<br /><br />`team:create`<br /><br />`team:read`<br /><br />`team:update`<br /><br />`team:delete`<br /><br />`team:admin`<br /><br />`ac:create`<br /><br />`ac:read`<br /><br />`ac:update`<br /><br />`ac:delete`<br /><br />`agent:create`<br /><br />`agent:read`<br /><br />`agent:update`<br /><br />`agent:delete`<br /><br />`agent:team-admin`<br /><br />`agent:admin`<br /><br />`mcpGateway:create`<br /><br />`mcpGateway:read`<br /><br />`mcpGateway:update`<br /><br />`mcpGateway:delete`<br /><br />`mcpGateway:team-admin`<br /><br />`mcpGateway:admin`<br /><br />`llmProxy:create`<br /><br />`llmProxy:read`<br /><br />`llmProxy:update`<br /><br />`llmProxy:delete`<br /><br />`llmProxy:team-admin`<br /><br />`llmProxy:admin`<br /><br />`tool:create`<br /><br />`tool:read`<br /><br />`tool:update`<br /><br />`tool:delete`<br /><br />`policy:create`<br /><br />`policy:read`<br /><br />`policy:update`<br /><br />`policy:delete`<br /><br />`dualLlmConfig:create`<br /><br />`dualLlmConfig:read`<br /><br />`dualLlmConfig:update`<br /><br />`dualLlmConfig:delete`<br /><br />`dualLlmResult:create`<br /><br />`dualLlmResult:read`<br /><br />`dualLlmResult:update`<br /><br />`dualLlmResult:delete`<br /><br />`interaction:create`<br /><br />`interaction:read`<br /><br />`interaction:update`<br /><br />`interaction:delete`<br /><br />`identityProvider:create`<br /><br />`identityProvider:read`<br /><br />`identityProvider:update`<br /><br />`identityProvider:delete`<br /><br />`internalMcpCatalog:create`<br /><br />`internalMcpCatalog:read`<br /><br />`internalMcpCatalog:update`<br /><br />`internalMcpCatalog:delete`<br /><br />`mcpServer:create`<br /><br />`mcpServer:read`<br /><br />`mcpServer:update`<br /><br />`mcpServer:delete`<br /><br />`mcpServer:admin`<br /><br />`mcpServerInstallationRequest:create`<br /><br />`mcpServerInstallationRequest:read`<br /><br />`mcpServerInstallationRequest:update`<br /><br />`mcpServerInstallationRequest:delete`<br /><br />`mcpServerInstallationRequest:admin`<br /><br />`mcpToolCall:read`<br /><br />`conversation:create`<br /><br />`conversation:read`<br /><br />`conversation:update`<br /><br />`conversation:delete`<br /><br />`limit:create`<br /><br />`limit:read`<br /><br />`limit:update`<br /><br />`limit:delete`<br /><br />`llmModels:create`<br /><br />`llmModels:read`<br /><br />`llmModels:update`<br /><br />`llmModels:delete`<br /><br />`chatSettings:create`<br /><br />`chatSettings:read`<br /><br />`chatSettings:update`<br /><br />`chatSettings:delete` |
-| **editor** | Power user with full CRUD access to most resources but no admin privileges | `agent:create`<br /><br />`agent:read`<br /><br />`agent:update`<br /><br />`agent:delete`<br /><br />`agent:team-admin`<br /><br />`mcpGateway:create`<br /><br />`mcpGateway:read`<br /><br />`mcpGateway:update`<br /><br />`mcpGateway:delete`<br /><br />`mcpGateway:team-admin`<br /><br />`llmProxy:create`<br /><br />`llmProxy:read`<br /><br />`llmProxy:update`<br /><br />`llmProxy:delete`<br /><br />`llmProxy:team-admin`<br /><br />`tool:create`<br /><br />`tool:read`<br /><br />`tool:update`<br /><br />`tool:delete`<br /><br />`policy:create`<br /><br />`policy:read`<br /><br />`policy:update`<br /><br />`policy:delete`<br /><br />`interaction:create`<br /><br />`interaction:read`<br /><br />`interaction:update`<br /><br />`interaction:delete`<br /><br />`dualLlmConfig:read`<br /><br />`dualLlmResult:read`<br /><br />`internalMcpCatalog:create`<br /><br />`internalMcpCatalog:read`<br /><br />`internalMcpCatalog:update`<br /><br />`internalMcpCatalog:delete`<br /><br />`mcpServer:create`<br /><br />`mcpServer:read`<br /><br />`mcpServer:update`<br /><br />`mcpServer:delete`<br /><br />`mcpServerInstallationRequest:create`<br /><br />`mcpServerInstallationRequest:read`<br /><br />`mcpServerInstallationRequest:update`<br /><br />`mcpServerInstallationRequest:delete`<br /><br />`organization:read`<br /><br />`team:read`<br /><br />`mcpToolCall:read`<br /><br />`conversation:create`<br /><br />`conversation:read`<br /><br />`conversation:update`<br /><br />`conversation:delete`<br /><br />`limit:create`<br /><br />`limit:read`<br /><br />`limit:update`<br /><br />`limit:delete`<br /><br />`llmModels:create`<br /><br />`llmModels:read`<br /><br />`llmModels:update`<br /><br />`llmModels:delete`<br /><br />`chatSettings:create`<br /><br />`chatSettings:read`<br /><br />`chatSettings:update`<br /><br />`chatSettings:delete`<br /><br /><br /><br /><br /><br /><br /><br /> |
-| **member** | Standard user with limited access to organization resources | `agent:create`<br /><br />`agent:read`<br /><br />`agent:update`<br /><br />`agent:delete`<br /><br />`mcpGateway:create`<br /><br />`mcpGateway:read`<br /><br />`mcpGateway:update`<br /><br />`mcpGateway:delete`<br /><br />`llmProxy:create`<br /><br />`llmProxy:read`<br /><br />`llmProxy:update`<br /><br />`llmProxy:delete`<br /><br />`tool:create`<br /><br />`tool:read`<br /><br />`tool:update`<br /><br />`tool:delete`<br /><br />`policy:read`<br /><br />`interaction:create`<br /><br />`interaction:read`<br /><br />`interaction:update`<br /><br />`interaction:delete`<br /><br />`dualLlmConfig:read`<br /><br />`dualLlmResult:read`<br /><br />`internalMcpCatalog:create`<br /><br />`internalMcpCatalog:read`<br /><br />`internalMcpCatalog:update`<br /><br />`internalMcpCatalog:delete`<br /><br />`mcpServer:create`<br /><br />`mcpServer:read`<br /><br />`mcpServer:delete`<br /><br />`mcpServerInstallationRequest:create`<br /><br />`mcpServerInstallationRequest:read`<br /><br />`mcpServerInstallationRequest:update`<br /><br />`organization:read`<br /><br />`team:read`<br /><br />`mcpToolCall:read`<br /><br />`conversation:create`<br /><br />`conversation:read`<br /><br />`conversation:update`<br /><br />`conversation:delete`<br /><br />`limit:read`<br /><br />`llmModels:read`<br /><br />`chatSettings:read`<br /><br /><br /><br /><br /><br /><br /><br /> |
+### Admin
+
+Full access to all resources including user management, roles, and platform settings
+
+The admin role has **all permissions** on every resource.
+
+### Editor
+
+Full access to core resources and settings, but cannot manage users, roles, or identity providers
+
+| Resource | Actions |
+|----------|--------|
+| Agents | `read`, `create`, `update`, `delete`, `team-admin` |
+| MCP Gateways | `read`, `create`, `update`, `delete`, `team-admin` |
+| LLM Proxies | `read`, `create`, `update`, `delete`, `team-admin` |
+| Tools & Policies | `read`, `create`, `update`, `delete` |
+| Logs | `read` |
+| Chats | `read`, `create`, `update`, `delete` |
+| Agent Triggers | `read`, `create`, `update`, `delete` |
+| LLM Providers | `read`, `create`, `update`, `delete` |
+| LLM Limits | `read`, `create`, `update`, `delete` |
+| LLM Settings | `read`, `update` |
+| LLM Costs | `read` |
+| MCP Registry | `read`, `create`, `update`, `delete` |
+| MCP Server Installations | `read`, `create`, `update`, `delete` |
+| MCP Server Installation Requests | `read`, `create`, `update`, `delete` |
+| Dual LLM Configs | `read` |
+| Dual LLM Results | `read` |
+| Teams | `read` |
+| Secrets | `read` |
+| Appearance | `read`, `update` |
+| Security Settings | `read`, `update` |
+
+### Member
+
+Can manage agents, tools, and chat, with read-only access to most other resources
+
+| Resource | Actions |
+|----------|--------|
+| Agents | `read`, `create`, `update`, `delete` |
+| MCP Gateways | `read`, `create`, `update`, `delete` |
+| LLM Proxies | `read`, `create`, `update`, `delete` |
+| Tools & Policies | `read`, `create`, `update`, `delete` |
+| Chats | `read`, `create`, `update`, `delete` |
+| LLM Providers | `read` |
+| MCP Registry | `read` |
+| MCP Server Installations | `read`, `create`, `delete` |
+| MCP Server Installation Requests | `read`, `create`, `update` |
+| Dual LLM Results | `read` |
+| Teams | `read` |
 
 
 ## Custom Roles
 
-Organization administrators can create custom roles by selecting specific permission combinations. Custom roles allow fine-grained access control tailored to your organization's needs.
-
-### Permission Requirements
-
-- **Role Creation**: Only users with `organization:update` permission can create custom roles
-- **Permission Granting**: You can only grant permissions that you already possess
-- **Role Limits**: Up to 50 custom roles per organization
+Users with `ac:create` permission can create custom roles by selecting specific permission combinations. Custom roles allow fine-grained access control tailored to your needs. Note that you can only grant permissions that you already possess — this prevents privilege escalation.
 
 ### Available Permissions
 
@@ -47,130 +86,128 @@ The following table lists all available permissions that can be assigned to cust
 
 | Permission | Description |
 |------------|-------------|
-| `ac:create` | Create new RBAC roles |
-| `ac:read` | View and list RBAC roles |
-| `ac:update` | Modify existing RBAC roles |
-| `ac:delete` | Remove existing RBAC roles |
-| `agent:create` | Create new automation agents with prompts and configurations |
-| `agent:read` | View and list automation agents with prompts and configurations |
-| `agent:update` | Modify existing automation agents with prompts and configurations |
-| `agent:delete` | Remove existing automation agents with prompts and configurations |
-| `agent:team-admin` | Team-level administrative control over the resource automation agents with prompts and configurations |
-| `agent:admin` | Administrative control over automation agents with prompts and configurations |
-| `chatSettings:create` | Create new chat feature configuration and settings |
-| `chatSettings:read` | View and list chat feature configuration and settings |
-| `chatSettings:update` | Modify existing chat feature configuration and settings |
-| `chatSettings:delete` | Remove existing chat feature configuration and settings |
-| `conversation:create` | Create new chat conversations with automation experts |
-| `conversation:read` | View and list chat conversations with automation experts |
-| `conversation:update` | Modify existing chat conversations with automation experts |
-| `conversation:delete` | Remove existing chat conversations with automation experts |
-| `dualLlmConfig:create` | Create new dual llm security configuration settings |
-| `dualLlmConfig:read` | View and list dual llm security configuration settings |
-| `dualLlmConfig:update` | Modify existing dual llm security configuration settings |
-| `dualLlmConfig:delete` | Remove existing dual llm security configuration settings |
-| `dualLlmResult:create` | Create new results from dual llm security validation |
-| `dualLlmResult:read` | View and list results from dual llm security validation |
-| `dualLlmResult:update` | Modify existing results from dual llm security validation |
-| `dualLlmResult:delete` | Remove existing results from dual llm security validation |
-| `identityProvider:create` | Create new identity providers for authentication |
-| `identityProvider:read` | View and list identity providers for authentication |
-| `identityProvider:update` | Modify existing identity providers for authentication |
-| `identityProvider:delete` | Remove existing identity providers for authentication |
-| `interaction:create` | Create new conversation history and agent interactions |
-| `interaction:read` | View and list conversation history and agent interactions |
-| `interaction:update` | Modify existing conversation history and agent interactions |
-| `interaction:delete` | Remove existing conversation history and agent interactions |
-| `internalMcpCatalog:create` | Create new internal mcp server catalog management |
-| `internalMcpCatalog:read` | View and list internal mcp server catalog management |
-| `internalMcpCatalog:update` | Modify existing internal mcp server catalog management |
-| `internalMcpCatalog:delete` | Remove existing internal mcp server catalog management |
-| `invitation:create` | Create new member invitations and onboarding |
-| `invitation:cancel` | Cancel member invitations and onboarding |
-| `limit:create` | Create new usage limits and quotas |
-| `limit:read` | View and list usage limits and quotas |
-| `limit:update` | Modify existing usage limits and quotas |
-| `limit:delete` | Remove existing usage limits and quotas |
-| `llmModels:create` | Create new llm models and pricing configuration |
-| `llmModels:read` | View and list llm models and pricing configuration |
-| `llmModels:update` | Modify existing llm models and pricing configuration |
-| `llmModels:delete` | Remove existing llm models and pricing configuration |
-| `llmProxy:create` | Create new llm proxies for security, observability, and cost management |
-| `llmProxy:read` | View and list llm proxies for security, observability, and cost management |
-| `llmProxy:update` | Modify existing llm proxies for security, observability, and cost management |
-| `llmProxy:delete` | Remove existing llm proxies for security, observability, and cost management |
-| `llmProxy:team-admin` | Team-level administrative control over the resource llm proxies for security, observability, and cost management |
-| `llmProxy:admin` | Administrative control over llm proxies for security, observability, and cost management |
-| `mcpGateway:create` | Create new mcp gateways that provide unified mcp endpoints for tools |
-| `mcpGateway:read` | View and list mcp gateways that provide unified mcp endpoints for tools |
-| `mcpGateway:update` | Modify existing mcp gateways that provide unified mcp endpoints for tools |
-| `mcpGateway:delete` | Remove existing mcp gateways that provide unified mcp endpoints for tools |
-| `mcpGateway:team-admin` | Team-level administrative control over the resource mcp gateways that provide unified mcp endpoints for tools |
-| `mcpGateway:admin` | Administrative control over mcp gateways that provide unified mcp endpoints for tools |
-| `mcpServer:create` | Create new mcp servers for tool integration |
-| `mcpServer:read` | View and list mcp servers for tool integration |
-| `mcpServer:update` | Modify existing mcp servers for tool integration |
-| `mcpServer:delete` | Remove existing mcp servers for tool integration |
-| `mcpServer:admin` | Administrative control over mcp servers for tool integration |
-| `mcpServerInstallationRequest:create` | Create new requests for new mcp server installations |
-| `mcpServerInstallationRequest:read` | View and list requests for new mcp server installations |
-| `mcpServerInstallationRequest:update` | Modify existing requests for new mcp server installations |
-| `mcpServerInstallationRequest:delete` | Remove existing requests for new mcp server installations |
-| `mcpServerInstallationRequest:admin` | Administrative control over requests for new mcp server installations |
-| `mcpToolCall:read` | View and list tool execution logs and results |
-| `member:read` | View and list organization members and their roles |
-| `member:create` | Create new organization members and their roles |
-| `member:update` | Modify existing organization members and their roles |
-| `member:delete` | Remove existing organization members and their roles |
-| `organization:read` | View and list organization settings |
-| `organization:update` | Modify existing organization settings |
-| `organization:delete` | Remove existing organization settings |
-| `policy:create` | Create new tool invocation and trusted data policies for security |
-| `policy:read` | View and list tool invocation and trusted data policies for security |
-| `policy:update` | Modify existing tool invocation and trusted data policies for security |
-| `policy:delete` | Remove existing tool invocation and trusted data policies for security |
-| `team:create` | Create new teams for organizing members and access control |
-| `team:read` | View and list teams for organizing members and access control |
-| `team:update` | Modify existing teams for organizing members and access control |
-| `team:delete` | Remove existing teams for organizing members and access control |
-| `team:admin` | Administrative control over teams for organizing members and access control |
-| `tool:create` | Create new individual tools that can be assigned to agents |
-| `tool:read` | View and list individual tools that can be assigned to agents |
-| `tool:update` | Modify existing individual tools that can be assigned to agents |
-| `tool:delete` | Remove existing individual tools that can be assigned to agents |
+| `ac:read` | View custom roles and their permissions |
+| `ac:create` | Create new custom roles |
+| `ac:update` | Modify custom role permissions |
+| `ac:delete` | Delete custom roles |
+| `agent:read` | View and list agents |
+| `agent:create` | Create new agents |
+| `agent:update` | Modify agent configuration and settings |
+| `agent:delete` | Delete agents |
+| `agent:team-admin` | Manage team assignments for agents |
+| `agent:admin` | Full administrative control over all agents, bypassing team restrictions |
+| `agentTrigger:read` | View agent trigger configurations (Slack, MS Teams, email) |
+| `agentTrigger:create` | Set up new agent triggers |
+| `agentTrigger:update` | Modify agent trigger configurations |
+| `agentTrigger:delete` | Remove agent triggers |
+| `appearance:read` | View white-labeling settings (theme, logo, fonts) |
+| `appearance:update` | Customize theme, logo, and font settings |
+| `chat:read` | View and access chat conversations |
+| `chat:create` | Start new chat conversations |
+| `chat:update` | Edit chat messages and conversation settings |
+| `chat:delete` | Delete chat conversations |
+| `dualLlmConfig:read` | View dual LLM security configurations |
+| `dualLlmConfig:create` | Create new dual LLM configurations |
+| `dualLlmConfig:update` | Modify dual LLM configurations |
+| `dualLlmConfig:delete` | Remove dual LLM configurations |
+| `dualLlmResult:read` | View dual LLM security validation results |
+| `dualLlmResult:create` | Create dual LLM validation results |
+| `dualLlmResult:update` | Modify dual LLM validation results |
+| `dualLlmResult:delete` | Remove dual LLM validation results |
+| `identityProvider:read` | View identity provider configurations (SSO) |
+| `identityProvider:create` | Set up new identity providers |
+| `identityProvider:update` | Modify identity provider settings |
+| `identityProvider:delete` | Remove identity providers |
+| `invitation:create` | Send invitations to new users |
+| `invitation:cancel` | Cancel pending invitations |
+| `llmCost:read` | View LLM usage cost statistics and analytics |
+| `llmLimit:read` | View token usage limits |
+| `llmLimit:create` | Create new usage limits |
+| `llmLimit:update` | Modify existing usage limits |
+| `llmLimit:delete` | Remove usage limits |
+| `llmProvider:read` | View LLM provider API keys, virtual keys, and models |
+| `llmProvider:create` | Add new LLM provider API keys or virtual keys |
+| `llmProvider:update` | Modify LLM provider configuration and model pricing |
+| `llmProvider:delete` | Remove LLM provider API keys or virtual keys |
+| `llmProxy:read` | View and list LLM proxies |
+| `llmProxy:create` | Create new LLM proxies |
+| `llmProxy:update` | Modify LLM proxy configuration |
+| `llmProxy:delete` | Delete LLM proxies |
+| `llmProxy:team-admin` | Manage team assignments for LLM proxies |
+| `llmProxy:admin` | Full administrative control over all LLM proxies, bypassing team restrictions |
+| `llmSettings:read` | View LLM settings (compression, cleanup interval) |
+| `llmSettings:update` | Modify LLM settings |
+| `log:read` | View LLM proxy and MCP tool call logs |
+| `mcpGateway:read` | View and list MCP gateways |
+| `mcpGateway:create` | Create new MCP gateways |
+| `mcpGateway:update` | Modify MCP gateway configuration |
+| `mcpGateway:delete` | Delete MCP gateways |
+| `mcpGateway:team-admin` | Manage team assignments for MCP gateways |
+| `mcpGateway:admin` | Full administrative control over all MCP gateways, bypassing team restrictions |
+| `mcpRegistry:read` | Browse the MCP server registry |
+| `mcpRegistry:create` | Add servers to the MCP registry |
+| `mcpRegistry:update` | Modify MCP registry entries |
+| `mcpRegistry:delete` | Remove servers from the MCP registry |
+| `mcpServerInstallation:read` | View installed MCP servers and their status |
+| `mcpServerInstallation:create` | Install MCP servers from the registry |
+| `mcpServerInstallation:update` | Modify installed MCP server configuration |
+| `mcpServerInstallation:delete` | Uninstall MCP servers |
+| `mcpServerInstallation:admin` | Approve or manage all MCP server installations |
+| `mcpServerInstallationRequest:read` | View MCP server installation requests |
+| `mcpServerInstallationRequest:create` | Submit requests to install MCP servers |
+| `mcpServerInstallationRequest:update` | Add notes to installation requests |
+| `mcpServerInstallationRequest:delete` | Delete installation requests |
+| `mcpServerInstallationRequest:admin` | Approve or decline installation requests |
+| `member:read` | View organization members and their roles |
+| `member:create` | Add new members to the organization |
+| `member:update` | Change member roles and settings |
+| `member:delete` | Remove members from the organization |
+| `secret:read` | View secrets manager configuration |
+| `secret:update` | Modify secrets manager settings and test connectivity |
+| `securitySettings:read` | View security settings (tool policy, file uploads) |
+| `securitySettings:update` | Modify security settings |
+| `team:read` | View teams and their members |
+| `team:create` | Create new teams |
+| `team:update` | Modify team settings |
+| `team:delete` | Delete teams |
+| `team:admin` | Manage team membership (add/remove members) |
+| `toolPolicy:read` | View tools, tool invocation policies, and trusted data policies |
+| `toolPolicy:create` | Register tools and create security policies |
+| `toolPolicy:update` | Modify tools, tool configuration, and security policies |
+| `toolPolicy:delete` | Remove tools and security policies |
 
 
 ## Best Practices
 
 ### Principle of Least Privilege
 
-Grant users only the minimum permissions necessary for their role. Start with the member role and add specific permissions as needed.
+Grant users only the minimum permissions necessary for their role. Start with the "Member" role and add specific permissions as needed.
 
 ### Team-Based Organization
 
 Combine roles with team-based access control for fine-grained resource access:
 
 1. **Create teams** for different groups (e.g., "Data Scientists", "Developers")
-2. **Assign agents and MCP servers** to specific teams
-3. **Add members to teams** based on their role and responsibilities
+2. **Assign Agents, MCP Gateways, LLM Proxies, and MCP Servers** to specific teams
+3. **Add users to teams** based on their role and responsibilities
 
 #### Default Team
 
-New members are automatically added to the "Default Team" when they accept an invitation. This ensures all users have immediate access to Archestra resources assigned to this team.
+New users are automatically added to the "Default Team" when they accept an invitation. This ensures all users have immediate access to Archestra resources assigned to this team.
 
 #### Team Access Control Rules
 
-**For Agents (MCP Gateways, LLM Proxies, Automation Agents):**
+**For MCP Gateways, LLM Proxies, and Agents:**
 
-- Team members can only see agents assigned to teams they belong to
+- Users can only see agents assigned to teams they belong to
 - Exception: Users with `agent:admin` permission can see all agents
-- Exception: Agents with no team assignment are visible to all organization members
+- Exception: Agents with no team assignment are visible to all users
 
 **For MCP Servers:**
 
-- Team members can only access MCP servers assigned to teams they belong to
+- Users can only access MCP servers assigned to teams they belong to
 - Exception: Users with `mcpServer:admin` permission can access all MCP servers
-- Exception: MCP servers with no team assignment are accessible to all organization members
+- Exception: MCP servers with no team assignment are accessible to all users
 
 **Associated Artifacts:**
 
@@ -178,7 +215,7 @@ Team-based access extends to related resources like interaction logs, policies, 
 
 ### Regular Review
 
-Periodically review custom roles and member assignments to ensure they align with current organizational needs and security requirements.
+Periodically review custom roles and team membership assignments to ensure they align with current needs and security requirements.
 
 ### Role Naming
 

@@ -1,8 +1,8 @@
 ---
 title: "Identity Providers"
-category: Archestra Platform
+category: Administration
 description: "Configure Identity Providers for SSO authentication and MCP Gateway JWKS validation"
-order: 5
+order: 2
 lastUpdated: 2025-02-12
 ---
 

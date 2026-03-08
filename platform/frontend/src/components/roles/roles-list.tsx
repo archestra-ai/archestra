@@ -1,5 +1,6 @@
 "use client";
 
+import { DocsPage, getDocsUrl } from "@shared";
 import { EnterpriseLicenseRequired } from "@/components/enterprise-license-required";
 import { PredefinedRoles } from "@/components/roles/predefined-roles";
 import {
@@ -37,7 +38,7 @@ export function RolesList() {
             <br />
             See documentation{" "}
             <a
-              href="https://archestra.ai/docs/platform-access-control"
+              href={getDocsUrl(DocsPage.PlatformAccessControl)}
               target="_blank"
               rel="noopener noreferrer"
               className="text-blue-500 hover:underline inline-flex items-center gap-1 block"

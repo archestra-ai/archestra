@@ -63,7 +63,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       const { success: isAdmin } = await hasPermission(
-        { mcpServer: ["admin"] },
+        { mcpServerInstallation: ["admin"] },
         request.headers,
       );
       // Don't expand secrets for list view
@@ -109,7 +109,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Enforce scope restrictions
       const { success: isAdmin } = await hasPermission(
-        { mcpServer: ["admin"] },
+        { mcpServerInstallation: ["admin"] },
         request.headers,
       );
 
@@ -280,7 +280,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async (request, reply) => {
       const { id } = request.params;
       const { success: isAdmin } = await hasPermission(
-        { mcpServer: ["admin"] },
+        { mcpServerInstallation: ["admin"] },
         request.headers,
       );
       const catalogItem = await InternalMcpCatalogModel.findById(id, {
@@ -377,7 +377,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Enforce scope restrictions
       const { success: isAdmin } = await hasPermission(
-        { mcpServer: ["admin"] },
+        { mcpServerInstallation: ["admin"] },
         request.headers,
       );
 
@@ -717,7 +717,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Enforce ownership: non-admins can only delete own personal items
       const { success: isAdmin } = await hasPermission(
-        { mcpServer: ["admin"] },
+        { mcpServerInstallation: ["admin"] },
         request.headers,
       );
       if (
@@ -772,7 +772,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Enforce ownership: non-admins can only delete own personal items
       const { success: isAdmin } = await hasPermission(
-        { mcpServer: ["admin"] },
+        { mcpServerInstallation: ["admin"] },
         request.headers,
       );
       if (
@@ -965,7 +965,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async ({ user, headers }, reply) => {
       const { success: isMcpServerAdmin } = await hasPermission(
-        { mcpServer: ["admin"] },
+        { mcpServerInstallation: ["admin"] },
         headers,
       );
 

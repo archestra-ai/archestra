@@ -100,15 +100,26 @@ export const InsertOrganizationSchema = createInsertSchema(
   schema.organizationsTable,
   extendedFields,
 );
-export const UpdateOrganizationSchema = z.object({
-  ...extendedFields,
-  logo: Base64PngSchema,
-  logoDark: Base64PngSchema,
-  onboardingComplete: z.boolean(),
-  convertToolResultsToToon: z.boolean(),
-  compressionScope: OrganizationCompressionScopeSchema,
-  globalToolPolicy: GlobalToolPolicySchema,
-  allowChatFileUploads: z.boolean(),
+export const UpdateAppearanceSchema = z.object({
+  theme: OrganizationThemeSchema.optional(),
+  customFont: OrganizationCustomFontSchema.optional(),
+  logo: Base64PngSchema.optional(),
+  logoDark: Base64PngSchema.optional(),
+});
+
+export const UpdateSecuritySettingsSchema = z.object({
+  globalToolPolicy: GlobalToolPolicySchema.optional(),
+  allowChatFileUploads: z.boolean().optional(),
+});
+
+export const UpdateLlmSettingsSchema = z.object({
+  convertToolResultsToToon: z.boolean().optional(),
+  compressionScope: OrganizationCompressionScopeSchema.optional(),
+  limitCleanupInterval: OrganizationLimitCleanupIntervalSchema.optional(),
+});
+
+export const CompleteOnboardingSchema = z.object({
+  onboardingComplete: z.literal(true),
 });
 
 export type OrganizationLimitCleanupInterval = z.infer<
@@ -120,5 +131,4 @@ export type OrganizationCompressionScope = z.infer<
 export type GlobalToolPolicy = z.infer<typeof GlobalToolPolicySchema>;
 export type Organization = z.infer<typeof SelectOrganizationSchema>;
 export type InsertOrganization = z.infer<typeof InsertOrganizationSchema>;
-export type UpdateOrganization = z.infer<typeof UpdateOrganizationSchema>;
 export type PublicAppearance = z.infer<typeof PublicAppearanceSchema>;

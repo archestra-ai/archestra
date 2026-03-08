@@ -22,7 +22,7 @@ export function SidebarWarningsAccordion() {
     useDefaultCredentialsEnabled();
   const { data: features, isLoading: isLoadingFeatures } = useFeatures();
   const { data: canUpdateOrg } = useHasPermissions({
-    organization: ["update"],
+    securitySettings: ["update"],
   });
 
   const isPermissive = features?.globalToolPolicy === "permissive";
@@ -52,7 +52,7 @@ export function SidebarWarningsAccordion() {
             asChild
             className="text-destructive hover:text-destructive"
           >
-            <Link href="/settings">
+            <Link href="/settings/auth">
               <AlertTriangle className="shrink-0" />
               <span>Change default credentials</span>
             </Link>

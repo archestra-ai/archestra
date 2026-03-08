@@ -24,7 +24,7 @@ type PermissionButtonProps = ButtonProps & {
  *
  * @example
  * <PermissionButton
- *   permissions={{ tool: ["update"] }}
+ *   permissions={{ toolPolicy: ["update"] }}
  *   onClick={handleAction}
  *   size="sm"
  *   variant="outline"

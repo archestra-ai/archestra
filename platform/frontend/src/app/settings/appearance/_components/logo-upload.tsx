@@ -12,7 +12,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { PermissionButton } from "@/components/ui/permission-button";
-import { useUpdateOrganization } from "@/lib/organization.query";
+import { useUpdateAppearance } from "@/lib/organization.query";
 
 interface LogoUploadProps {
   currentLogo?: string | null;
@@ -71,11 +71,11 @@ function LogoSlot({
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [preview, setPreview] = useState<string | null>(currentLogo || null);
-  const uploadMutation = useUpdateOrganization(
+  const uploadMutation = useUpdateAppearance(
     "Logo uploaded successfully",
     "Failed to upload logo",
   );
-  const removeMutation = useUpdateOrganization(
+  const removeMutation = useUpdateAppearance(
     "Logo removed successfully",
     "Failed to remove logo",
   );
@@ -156,7 +156,7 @@ function LogoSlot({
       </div>
       <div className="flex gap-2">
         <PermissionButton
-          permissions={{ organization: ["update"] }}
+          permissions={{ appearance: ["update"] }}
           variant="outline"
           size="sm"
           onClick={() => fileInputRef.current?.click()}
@@ -168,7 +168,7 @@ function LogoSlot({
 
         {hasPreviewOrCurrentLogo && (
           <PermissionButton
-            permissions={{ organization: ["update"] }}
+            permissions={{ appearance: ["update"] }}
             variant="outline"
             size="sm"
             onClick={handleRemoveLogo}

@@ -1,7 +1,12 @@
 "use client";
 
-import type { archestraApiTypes } from "@shared";
-import { archestraApiSdk, E2eTestId } from "@shared";
+import {
+  archestraApiSdk,
+  type archestraApiTypes,
+  DocsPage,
+  E2eTestId,
+  getDocsUrl,
+} from "@shared";
 import { useQuery } from "@tanstack/react-query";
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
 import {
@@ -508,7 +513,7 @@ function McpGateways({
             MCP Gateways provide a unified MCP endpoint for your AI agents to
             access tools and subagents.{" "}
             <a
-              href="https://archestra.ai/docs/platform-mcp-gateway"
+              href={getDocsUrl(DocsPage.PlatformMcpGateway)}
               target="_blank"
               rel="noopener noreferrer"
               className="underline hover:text-foreground"

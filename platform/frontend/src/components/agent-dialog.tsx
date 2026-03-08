@@ -1,8 +1,10 @@
 "use client";
 
-import type { archestraApiTypes } from "@shared";
 import {
   archestraApiSdk,
+  type archestraApiTypes,
+  DocsPage,
+  getDocsUrl,
   getResourceForAgentType,
   providerDisplayNames,
   type SupportedProvider,
@@ -1058,7 +1060,7 @@ export function AgentDialog({
             <p className="text-sm text-muted-foreground">
               {agent.description}.{" "}
               <a
-                href="https://archestra.ai/docs/platform-built-in-agents-policy-config"
+                href={getDocsUrl(DocsPage.PlatformBuiltInAgentsPolicyConfig)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="underline"
@@ -1590,7 +1592,10 @@ export function AgentDialog({
                                 configured, MCP clients can authenticate using
                                 JWTs issued by this IdP.{" "}
                                 <a
-                                  href="https://archestra.ai/docs/mcp-authentication#external-idp-jwks"
+                                  href={getDocsUrl(
+                                    DocsPage.McpAuthentication,
+                                    "external-idp-jwks",
+                                  )}
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   className="underline"

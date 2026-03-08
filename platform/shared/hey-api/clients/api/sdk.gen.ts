@@ -1610,14 +1610,55 @@ export const updateRole = <ThrowOnError extends boolean = false>(options: Option
 export const getOrganization = <ThrowOnError extends boolean = false>(options?: Options<GetOrganizationData, ThrowOnError>) => (options?.client ?? client).get<GetOrganizationResponses, GetOrganizationErrors, ThrowOnError>({ url: '/api/organization', ...options });
 
 /**
- * Update organization details
+ * Get public appearance settings (theme, logo, font) for unauthenticated pages
  */
-export const updateOrganization = <ThrowOnError extends boolean = false>(options?: Options<UpdateOrganizationData, ThrowOnError>) => (options?.client ?? client).patch<UpdateOrganizationResponses, UpdateOrganizationErrors, ThrowOnError>({
-    url: '/api/organization',
+export const getPublicAppearance = <ThrowOnError extends boolean = false>(options?: Options<GetPublicAppearanceData, ThrowOnError>) => (options?.client ?? client).get<GetPublicAppearanceResponses, GetPublicAppearanceErrors, ThrowOnError>({ url: '/api/organization/appearance', ...options });
+
+/**
+ * Update appearance settings (theme, logo, fonts)
+ */
+export const updateAppearance = <ThrowOnError extends boolean = false>(options?: Options<UpdateAppearanceData, ThrowOnError>) => (options?.client ?? client).patch<UpdateAppearanceResponses, UpdateAppearanceErrors, ThrowOnError>({
+    url: '/api/organization/appearance',
     ...options,
     headers: {
         'Content-Type': 'application/json',
         ...options?.headers
+    }
+});
+
+/**
+ * Update security settings (global tool policy, chat file uploads)
+ */
+export const updateSecuritySettings = <ThrowOnError extends boolean = false>(options?: Options<UpdateSecuritySettingsData, ThrowOnError>) => (options?.client ?? client).patch<UpdateSecuritySettingsResponses, UpdateSecuritySettingsErrors, ThrowOnError>({
+    url: '/api/organization/security-settings',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options?.headers
+    }
+});
+
+/**
+ * Update LLM settings (TOON compression, compression scope, limit cleanup interval)
+ */
+export const updateLlmSettings = <ThrowOnError extends boolean = false>(options?: Options<UpdateLlmSettingsData, ThrowOnError>) => (options?.client ?? client).patch<UpdateLlmSettingsResponses, UpdateLlmSettingsErrors, ThrowOnError>({
+    url: '/api/organization/llm-settings',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options?.headers
+    }
+});
+
+/**
+ * Mark organization onboarding as complete
+ */
+export const completeOnboarding = <ThrowOnError extends boolean = false>(options: Options<CompleteOnboardingData, ThrowOnError>) => (options.client ?? client).post<CompleteOnboardingResponses, CompleteOnboardingErrors, ThrowOnError>({
+    url: '/api/organization/complete-onboarding',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
     }
 });
 
@@ -1640,11 +1681,6 @@ export const deletePendingSignupMember = <ThrowOnError extends boolean = false>(
  * Get all members of the organization
  */
 export const getOrganizationMembers = <ThrowOnError extends boolean = false>(options?: Options<GetOrganizationMembersData, ThrowOnError>) => (options?.client ?? client).get<GetOrganizationMembersResponses, GetOrganizationMembersErrors, ThrowOnError>({ url: '/api/organization/members', ...options });
-
-/**
- * Get public appearance settings (theme, logo, font) for unauthenticated pages
- */
-export const getPublicAppearance = <ThrowOnError extends boolean = false>(options?: Options<GetPublicAppearanceData, ThrowOnError>) => (options?.client ?? client).get<GetPublicAppearanceResponses, GetPublicAppearanceErrors, ThrowOnError>({ url: '/api/organization/appearance', ...options });
 
 /**
  * Create a chat completion with Perplexity (uses default agent). Note: Perplexity does not support external tool calling.

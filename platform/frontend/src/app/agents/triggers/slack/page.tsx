@@ -1,5 +1,6 @@
 "use client";
 
+import { type archestraApiTypes, DocsPage, getDocsUrl } from "@shared";
 import { AlertTriangle, ExternalLink, Info } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
@@ -34,7 +35,7 @@ const slackProviderConfig: ProviderConfig = {
   providerLabel: "Slack",
   providerIcon: "/icons/slack.png",
   webhookPath: "/api/webhooks/chatops/slack",
-  docsUrl: "https://archestra.ai/docs/platform-slack",
+  docsUrl: getDocsUrl(DocsPage.PlatformSlack),
   slashCommand: "/archestra-select-agent",
   buildDeepLink: (binding) => {
     if (binding.workspaceId) {
@@ -48,6 +49,12 @@ const slackProviderConfig: ProviderConfig = {
     return `slack://user?team=${teamId}&id=${botUserId}`;
   },
 };
+
+type SlackConnectionMode = NonNullable<
+  NonNullable<
+    archestraApiTypes.UpdateSlackChatOpsConfigData["body"]
+  >["connectionMode"]
+>;
 
 export default function SlackPage() {
   const publicBaseUrl = usePublicBaseUrl();
@@ -66,10 +73,9 @@ export default function SlackPage() {
 
   // Connection mode: use saved value if configured, otherwise default to "socket"
   const savedMode = slackCreds?.connectionMode as
-    | "socket"
-    | "webhook"
+    | SlackConnectionMode
     | undefined;
-  const [selectedMode, setSelectedMode] = useState<"socket" | "webhook">(
+  const [selectedMode, setSelectedMode] = useState<SlackConnectionMode>(
     savedMode ?? "socket",
   );
   // Sync local state when saved config loads or changes (e.g. after reset)
@@ -90,7 +96,7 @@ export default function SlackPage() {
         allStepsCompleted={allStepsCompleted}
         isLoading={setupDataLoading}
         providerLabel="Slack"
-        docsUrl="https://archestra.ai/docs/platform-slack"
+        docsUrl={getDocsUrl(DocsPage.PlatformSlack)}
       >
         <SetupStep
           title="Choose connection mode"
@@ -107,7 +113,7 @@ export default function SlackPage() {
         >
           <RadioGroup
             value={selectedMode}
-            onValueChange={(v) => setSelectedMode(v as "socket" | "webhook")}
+            onValueChange={(v: SlackConnectionMode) => setSelectedMode(v)}
             className="flex gap-6"
           >
             {/* biome-ignore lint/a11y/noLabelWithoutControl: RadioGroupItem renders an input */}

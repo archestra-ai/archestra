@@ -131,7 +131,7 @@ const PromptInputContent = ({
 
   // Check if user can update organization settings (to show settings link in tooltip)
   const { data: canUpdateOrganization } = useHasPermissions({
-    organization: ["update"],
+    securitySettings: ["update"],
   });
 
   const storageKey = conversationId

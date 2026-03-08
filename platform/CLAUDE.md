@@ -37,7 +37,6 @@ Check ./docs/docs_writer_prompt.md before changing docs files.
 - **LLM Proxy Logs**: <http://localhost:3000/llm/logs> (View LLM proxy request logs)
 - **MCP Gateway Logs**: <http://localhost:3000/mcp/logs> (View MCP tool call logs)
 - **Roles**: <http://localhost:3000/settings/roles> (Admin-only: manage custom RBAC roles)
-- **Cost**: <http://localhost:3000/llm/cost> (Redirects to /llm/cost/statistics)
 - **Cost Statistics**: <http://localhost:3000/llm/cost/statistics> (Usage analytics with time series charts and custom date ranges)
 - **Cost Limits**: <http://localhost:3000/llm/cost/limits> (Token usage limits management with per-profile configuration)
 - **Token Price**: <http://localhost:3000/llm/cost/token-price> (Model pricing configuration)
@@ -251,7 +250,7 @@ Tool invocation policies and trusted data policies are still enforced by the pro
 
 - **Better-Auth**: Session management with dynamic RBAC
 - **API Key Auth**: `Authorization: ${apiKey}` header (not Bearer)
-- **Custom Roles**: Up to 50 custom roles per organization
+- **Custom Roles**: Unlimited custom roles per organization
 - **Middleware**: Fastify plugin at `backend/src/auth/fastify-plugin/`
 - **Route Permissions**: Configure in `shared/access-control.ts`
 - **Request Context**: `request.user` and `request.organizationId`
@@ -432,7 +431,6 @@ pnpm rebuild <package-name>  # Enable scripts for specific package
 **Custom RBAC Roles**:
 
 - Extends predefined roles (admin, member)
-- Up to 50 custom roles per organization
 - 30 resources across 4 categories with CRUD permissions
 - Permission validation: can only grant what you have
 - Predefined roles are immutable

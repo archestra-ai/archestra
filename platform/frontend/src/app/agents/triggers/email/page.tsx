@@ -1,5 +1,6 @@
 "use client";
 
+import { DocsPage, getDocsUrl } from "@shared";
 import {
   AlertCircle,
   CheckCircle2,
@@ -52,7 +53,7 @@ export default function EmailPage() {
             <p className="text-sm text-muted-foreground">
               See the{" "}
               <Link
-                href="https://archestra.ai/docs/platform-agents#incoming-email"
+                href={getDocsUrl(DocsPage.PlatformAgentTriggersEmail)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1 text-primary hover:underline"
@@ -131,7 +132,7 @@ export default function EmailPage() {
           </p>
           <p className="mt-2">
             <Link
-              href="https://archestra.ai/docs/platform-agents#incoming-email"
+              href={getDocsUrl(DocsPage.PlatformAgentTriggersEmail)}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1 text-primary hover:underline"

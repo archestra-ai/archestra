@@ -7,7 +7,7 @@ import { PermissionButton } from "@/components/ui/permission-button";
 import { useOnUnmount } from "@/lib/lifecycle.hook";
 import {
   organizationKeys,
-  useUpdateOrganization,
+  useUpdateAppearance,
 } from "@/lib/organization.query";
 import { useOrgTheme } from "@/lib/theme.hook";
 import { LightDarkToggle } from "./_components/light-dark-toggle";
@@ -15,7 +15,7 @@ import { LogoUpload } from "./_components/logo-upload";
 import { ThemeSelector } from "./_components/theme-selector";
 
 export default function AppearanceSettingsPage() {
-  const updateAppearanceSettingsMutation = useUpdateOrganization(
+  const updateAppearanceSettingsMutation = useUpdateAppearance(
     "Appearance settings updated",
     "Failed to update appearance settings",
   );
@@ -79,7 +79,7 @@ export default function AppearanceSettingsPage() {
         {hasChanges && (
           <div className="flex gap-3 sticky bottom-0 bg-background p-4 rounded-lg border border-border shadow-lg">
             <PermissionButton
-              permissions={{ organization: ["update"] }}
+              permissions={{ appearance: ["update"] }}
               onClick={() => {
                 saveAppearance?.(currentUITheme || DEFAULT_THEME);
                 setHasChanges(false);

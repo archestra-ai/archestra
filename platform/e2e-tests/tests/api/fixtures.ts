@@ -55,7 +55,8 @@ export interface TestFixtures {
   syncModels: typeof syncModels;
   updateModelPricing: typeof updateModelPricing;
   getOrganization: typeof getOrganization;
-  updateOrganization: typeof updateOrganization;
+  updateLlmSettings: typeof updateLlmSettings;
+  updateSecuritySettings: typeof updateSecuritySettings;
   getInteractions: typeof getInteractions;
   getWiremockRequests: typeof getWiremockRequests;
   clearWiremockRequests: typeof clearWiremockRequests;
@@ -828,21 +829,39 @@ const getOrganization = async (request: APIRequestContext) =>
   });
 
 /**
- * Update organization settings
+ * Update LLM settings (compression, cleanup interval)
  * (authnz is handled by the authenticated session)
  */
-const updateOrganization = async (
+const updateLlmSettings = async (
   request: APIRequestContext,
   updates: {
     convertToolResultsToToon?: boolean;
     compressionScope?: "organization" | "team";
-    globalToolPolicy?: "permissive" | "restrictive";
+    limitCleanupInterval?: "1h" | "12h" | "24h" | "1w" | "1m";
   },
 ) =>
   makeApiRequest({
     request,
     method: "patch",
-    urlSuffix: "/api/organization",
+    urlSuffix: "/api/organization/llm-settings",
+    data: updates,
+  });
+
+/**
+ * Update security settings (global tool policy, chat file uploads)
+ * (authnz is handled by the authenticated session)
+ */
+const updateSecuritySettings = async (
+  request: APIRequestContext,
+  updates: {
+    globalToolPolicy?: "permissive" | "restrictive";
+    allowChatFileUploads?: boolean;
+  },
+) =>
+  makeApiRequest({
+    request,
+    method: "patch",
+    urlSuffix: "/api/organization/security-settings",
     data: updates,
   });
 
@@ -1054,8 +1073,11 @@ export const test = base.extend<TestFixtures>({
   getOrganization: async ({}, use) => {
     await use(getOrganization);
   },
-  updateOrganization: async ({}, use) => {
-    await use(updateOrganization);
+  updateLlmSettings: async ({}, use) => {
+    await use(updateLlmSettings);
+  },
+  updateSecuritySettings: async ({}, use) => {
+    await use(updateSecuritySettings);
   },
   getInteractions: async ({}, use) => {
     await use(getInteractions);

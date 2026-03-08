@@ -1,6 +1,11 @@
 "use client";
 
-import { DEFAULT_ADMIN_EMAIL, DEFAULT_ADMIN_PASSWORD } from "@shared";
+import {
+  DEFAULT_ADMIN_EMAIL,
+  DEFAULT_ADMIN_PASSWORD,
+  DocsPage,
+  getDocsUrl,
+} from "@shared";
 import { AlertTriangle } from "lucide-react";
 import { CopyButton } from "@/components/copy-button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -43,7 +48,10 @@ export function DefaultCredentialsWarning({
             Default credentials
             {" - "}
             <a
-              href="https://archestra.ai/docs/platform-deployment#authentication--security:~:text=ARCHESTRA_AUTH_ADMIN_EMAIL"
+              href={getDocsUrl(
+                DocsPage.PlatformDeployment,
+                "authentication--security:~:text=ARCHESTRA_AUTH_ADMIN_EMAIL",
+              )}
               target="_blank"
               rel="noopener noreferrer"
               className="underline font-medium"
@@ -84,7 +92,10 @@ export function DefaultCredentialsWarning({
         </div>
         <p className="mt-1">
           <a
-            href="https://archestra.ai/docs/platform-deployment#authentication--security"
+            href={getDocsUrl(
+              DocsPage.PlatformDeployment,
+              "authentication--security",
+            )}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center underline"
@@ -98,7 +109,7 @@ export function DefaultCredentialsWarning({
               {" "}
               or{" "}
               <a
-                href="/settings/account"
+                href="/settings/auth"
                 className="inline-flex items-center underline"
               >
                 Change

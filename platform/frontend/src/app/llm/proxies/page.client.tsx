@@ -1,7 +1,12 @@
 "use client";
 
-import type { archestraApiTypes } from "@shared";
-import { archestraApiSdk, E2eTestId } from "@shared";
+import {
+  archestraApiSdk,
+  type archestraApiTypes,
+  DocsPage,
+  E2eTestId,
+  getDocsUrl,
+} from "@shared";
 import { useQuery } from "@tanstack/react-query";
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
 import {
@@ -456,7 +461,7 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
             LLM Proxies provide security, observability, and cost management for
             your LLM API calls.{" "}
             <a
-              href="https://archestra.ai/docs/platform-llm-proxy"
+              href={getDocsUrl(DocsPage.PlatformLlmProxy)}
               target="_blank"
               rel="noopener noreferrer"
               className="underline hover:text-foreground"

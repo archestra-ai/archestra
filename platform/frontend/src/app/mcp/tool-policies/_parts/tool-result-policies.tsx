@@ -2,6 +2,8 @@ import {
   type archestraApiTypes,
   CONTEXT_EXTERNAL_AGENT_ID,
   CONTEXT_TEAM_IDS,
+  DocsPage,
+  getDocsUrl,
 } from "@shared";
 import { ArrowRightIcon, Plus } from "lucide-react";
 import { CodeText } from "@/components/code-text";
@@ -251,7 +253,7 @@ export function ToolResultPolicies({ tool }: { tool: ToolForPolicies }) {
             to mark tool results as &ldquo;trusted&rdquo; or
             &ldquo;untrusted&rdquo; to prevent agent acting on untrusted data.{" "}
             <a
-              href="https://archestra.ai/docs/platform-dynamic-tools"
+              href={getDocsUrl(DocsPage.PlatformDynamicTools)}
               target="_blank"
               rel="noopener noreferrer"
               className="underline hover:text-foreground"

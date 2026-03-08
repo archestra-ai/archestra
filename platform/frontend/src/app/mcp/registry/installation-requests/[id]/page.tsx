@@ -1,13 +1,6 @@
 "use client";
 
-import {
-  ArrowLeft,
-  CheckCircle,
-  Clock,
-  Loader2,
-  Send,
-  XCircle,
-} from "lucide-react";
+import { ArrowLeft, CheckCircle, Loader2, Send, XCircle } from "lucide-react";
 import Link from "next/link";
 import { use, useCallback, useState } from "react";
 import Divider from "@/components/divider";
@@ -25,6 +18,7 @@ import {
   useDeclineMcpServerInstallationRequest,
   useMcpServerInstallationRequest,
 } from "@/lib/mcp-server-installation-request.query";
+import { installationRequestStatusConfig } from "../status-config";
 
 export default function InstallationRequestDetailPage({
   params,
@@ -44,7 +38,7 @@ export default function InstallationRequestDetailPage({
   const [showDeclineForm, setShowDeclineForm] = useState(false);
 
   const { data: userIsMcpServerAdmin } = useHasPermissions({
-    mcpServer: ["admin"],
+    mcpServerInstallation: ["admin"],
   });
 
   const handleApprove = useCallback(async () => {
@@ -109,25 +103,7 @@ export default function InstallationRequestDetailPage({
     );
   }
 
-  const statusConfig = {
-    pending: {
-      icon: Clock,
-      color: "bg-yellow-500/10 text-yellow-500 border-yellow-500/20",
-      label: "Pending Review",
-    },
-    approved: {
-      icon: CheckCircle,
-      color: "bg-green-500/10 text-green-500 border-green-500/20",
-      label: "Approved",
-    },
-    declined: {
-      icon: XCircle,
-      color: "bg-red-500/10 text-red-500 border-red-500/20",
-      label: "Declined",
-    },
-  };
-
-  const status = statusConfig[request.status as keyof typeof statusConfig];
+  const status = installationRequestStatusConfig[request.status];
   const StatusIcon = status.icon;
   const isPending = request.status === "pending";
 

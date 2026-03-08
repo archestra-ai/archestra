@@ -21,6 +21,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { useHasPermissions } from "@/lib/auth.query";
 
 import { useChatOpsStatus } from "@/lib/chatops.query";
 import config from "@/lib/config";
@@ -41,14 +42,14 @@ function MembersSettingsContent() {
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
 
-  const hasPermissionTodo = "TODO:";
+  const { data: canInvite } = useHasPermissions({ invitation: ["create"] });
   const invitationsEnabled = !config.disableInvitations;
   const pendingSignupMembers = signupStatus?.pendingSignupMembers ?? [];
   const pendingUserIds = new Set(pendingSignupMembers.map((m) => m.userId));
 
   const members = activeOrg ? (
     <div className="space-y-6">
-      {invitationsEnabled && activeMemberRole && hasPermissionTodo && (
+      {invitationsEnabled && activeMemberRole && canInvite && (
         <Dialog
           open={inviteDialogOpen}
           onOpenChange={(open) => {
@@ -62,7 +63,7 @@ function MembersSettingsContent() {
         >
           <DialogContent className="sm:max-w-[500px]">
             <DialogHeader>
-              <DialogTitle>Invite Member</DialogTitle>
+              <DialogTitle>Invite User</DialogTitle>
             </DialogHeader>
             <InviteByLinkCard
               organizationId={activeOrg.id}
@@ -72,6 +73,12 @@ function MembersSettingsContent() {
         </Dialog>
       )}
       <OrganizationMembersCard
+        localization={{
+          MEMBERS: "Users",
+          MEMBERS_DESCRIPTION: "Add or remove users and manage their roles.",
+          MEMBERS_INSTRUCTIONS: "Invite new users to your organization.",
+          INVITE_MEMBER: "Invite User",
+        }}
         {...(!invitationsEnabled && {
           actionLabel: null,
           instructions: null,

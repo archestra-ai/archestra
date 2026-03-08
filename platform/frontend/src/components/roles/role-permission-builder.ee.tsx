@@ -4,6 +4,8 @@ import {
   type Action,
   type Permissions,
   type Resource,
+  resourceCategories,
+  resourceDescriptions,
   resourceLabels,
 } from "@shared";
 import { Check, ChevronDown, ChevronRight } from "lucide-react";
@@ -19,37 +21,6 @@ interface RolePermissionBuilderProps {
   onChange: (permission: Permissions) => void;
   userPermissions: Permissions;
 }
-
-// Group resources by category for better organization
-const resourceCategories: Record<string, Resource[]> = {
-  "Core Resources": [
-    "agent",
-    "mcpGateway",
-    "llmProxy",
-    "tool",
-    "policy",
-    "interaction",
-    "conversation",
-  ],
-  "MCP & Integrations": [
-    "mcpServer",
-    "mcpServerInstallationRequest",
-    "mcpToolCall",
-    "internalMcpCatalog",
-  ],
-  "Dual LLM": ["dualLlmConfig", "dualLlmResult"],
-  Organization: [
-    "organization",
-    "member",
-    "ac",
-    "team",
-    "invitation",
-    "limit",
-    "llmModels",
-    "chatSettings",
-    "identityProvider",
-  ],
-};
 
 // Human-readable labels for actions
 const actionLabels: Record<Action, string> = {
@@ -68,7 +39,7 @@ export function RolePermissionBuilder({
   userPermissions,
 }: RolePermissionBuilderProps) {
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(
-    new Set(Object.keys(resourceCategories)),
+    new Set(),
   );
 
   const toggleCategory = useCallback(
@@ -240,7 +211,7 @@ export function RolePermissionBuilder({
           const isCategorySelected = isCategoryFullySelected(category);
 
           return (
-            <Card key={category} className="p-3">
+            <Card key={category} className="gap-0 p-3">
               <div className="flex w-full items-center gap-2">
                 <button
                   className="flex items-center text-left"
@@ -277,7 +248,7 @@ export function RolePermissionBuilder({
               </div>
 
               {expandedCategories.has(category) && (
-                <div className="mt-3 space-y-2">
+                <div className="mt-2 space-y-2">
                   {resources
                     .filter((resource) => userPermissions[resource]) // Only show resources user has permission for
                     .map((resource) => {
@@ -308,17 +279,24 @@ export function RolePermissionBuilder({
                                   isPartiallySelected ? "opacity-50" : ""
                                 }
                               />
-                              <Label
-                                htmlFor={`${resource}-all`}
-                                className="font-medium cursor-pointer"
-                              >
-                                {resourceLabels[resource] || resource}
-                              </Label>
-                              {isPartiallySelected && (
-                                <span className="text-xs text-muted-foreground">
-                                  (Partial)
-                                </span>
-                              )}
+                              <div>
+                                <Label
+                                  htmlFor={`${resource}-all`}
+                                  className="font-medium cursor-pointer"
+                                >
+                                  {resourceLabels[resource] || resource}
+                                  {isPartiallySelected && (
+                                    <span className="text-xs text-muted-foreground ml-1">
+                                      (Partial)
+                                    </span>
+                                  )}
+                                </Label>
+                                {resourceDescriptions[resource] && (
+                                  <p className="text-xs text-muted-foreground mt-1">
+                                    {resourceDescriptions[resource]}
+                                  </p>
+                                )}
+                              </div>
                             </div>
                             {selectedActions.length > 0 && (
                               <span className="text-xs text-muted-foreground">
@@ -328,9 +306,9 @@ export function RolePermissionBuilder({
                             )}
                           </div>
 
-                          <Separator className="my-2" />
+                          <Separator className="my-3" />
 
-                          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                          <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
                             {availableActions.map((action) => {
                               const isSelected =
                                 selectedActions.includes(action);

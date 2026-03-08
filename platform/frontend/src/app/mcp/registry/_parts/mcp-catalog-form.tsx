@@ -2,14 +2,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import type { archestraApiTypes } from "@shared";
-import {
-  Info,
-  ChevronRight,
-  Globe,
-  Plus,
-  Server,
-  Trash2,
-} from "lucide-react";
+import { ChevronRight, Globe, Info, Plus, Server, Trash2 } from "lucide-react";
 import { lazy, useEffect, useRef, useState } from "react";
 import { useFieldArray, useForm } from "react-hook-form";
 import { AgentIconPicker } from "@/components/agent-icon-picker";
@@ -76,7 +69,9 @@ interface McpCatalogFormProps {
   mode: "create" | "edit";
   initialValues?: archestraApiTypes.GetInternalMcpCatalogResponses["200"][number];
   onSubmit: (values: McpCatalogFormValues) => void;
-  footer?: React.ReactNode | ((opts: { isDirty: boolean }) => React.ReactNode);
+  footer?:
+    | React.ReactNode
+    | ((opts: { isDirty: boolean; onReset: () => void }) => React.ReactNode);
   nameDisabled?: boolean;
   catalogButton?: React.ReactNode;
   formValues?: McpCatalogFormValues;
@@ -284,7 +279,9 @@ export function McpCatalogForm({
         <div className="border rounded-lg p-5 space-y-4">
           <AgentIconPicker
             value={form.watch("icon") ?? null}
-            onChange={(icon) => form.setValue("icon", icon, { shouldDirty: true })}
+            onChange={(icon) =>
+              form.setValue("icon", icon, { shouldDirty: true })
+            }
             showLogos
           />
           <FormField
@@ -1062,7 +1059,10 @@ export function McpCatalogForm({
         </div>
 
         {typeof footer === "function"
-          ? footer({ isDirty: form.formState.isDirty })
+          ? footer({
+              isDirty: form.formState.isDirty,
+              onReset: () => form.reset(),
+            })
           : footer}
       </form>
     </Form>

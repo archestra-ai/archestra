@@ -1695,7 +1695,11 @@ class McpClient {
   }): Promise<unknown> {
     const { catalogItem, mcpServerId, secrets, method } = params;
 
-    const transport = await this.getTransport(catalogItem, mcpServerId, secrets);
+    const transport = await this.getTransport(
+      catalogItem,
+      mcpServerId,
+      secrets,
+    );
 
     const client = new Client(
       { name: "archestra-inspector", version: "1.0.0" },

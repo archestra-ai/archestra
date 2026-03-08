@@ -19,19 +19,18 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import {
-  Empty,
-  EmptyContent,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from "@/components/ui/empty";
-import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+} from "@/components/ui/empty";
 import { cn } from "@/lib/utils";
 import {
   computeDeploymentStatusSummary,
@@ -40,7 +39,7 @@ import {
 } from "./deployment-status";
 import { EditCatalogContent } from "./edit-catalog-dialog";
 import { ManageUsersContent } from "./manage-users-dialog";
-import { type McpLogsTab, McpLogsContent } from "./mcp-logs-dialog";
+import { McpLogsContent, type McpLogsTab } from "./mcp-logs-dialog";
 import type { CatalogItemWithOptionalLabel } from "./mcp-server-card";
 import { YamlConfigContent } from "./yaml-config-dialog";
 
@@ -69,8 +68,6 @@ interface McpServerSettingsDialogProps {
   showDebug: boolean;
   showInspector: boolean;
   showYaml: boolean;
-  // Edit / Configuration
-  onEditClose?: () => void;
   // Connections
   onAddPersonalConnection?: () => void;
   onAddSharedConnection?: (teamId: string) => void;
@@ -167,7 +164,6 @@ export function McpServerSettingsDialog({
   showDebug,
   showInspector,
   showYaml,
-  onEditClose,
   onAddPersonalConnection,
   onAddSharedConnection,
   installs,
@@ -219,7 +215,7 @@ export function McpServerSettingsDialog({
   // Ensure active page is valid
   const validPage = navItems.some((n) => n.id === activePage)
     ? activePage
-    : navItems[0]?.id ?? "configuration";
+    : (navItems[0]?.id ?? "configuration");
 
   const isDebugPage = validPage.startsWith("debug-");
 
@@ -248,11 +244,6 @@ export function McpServerSettingsDialog({
 
   const handleClose = () => onOpenChange(false);
 
-  const handleEditClose = () => {
-    onOpenChange(false);
-    onEditClose?.();
-  };
-
   // Deployment summary for sidebar header
   const summary = computeDeploymentStatusSummary(
     deploymentServerIds,
@@ -261,252 +252,256 @@ export function McpServerSettingsDialog({
 
   return (
     <>
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        className="max-w-6xl h-[85vh] flex flex-row p-0 gap-0 overflow-hidden"
-        showCloseButton={false}
-      >
-        <DialogTitle className="sr-only">
-          {item.label || item.name} Settings
-        </DialogTitle>
-        <DialogDescription className="sr-only">
-          Server settings and configuration
-        </DialogDescription>
-        {/* Sidebar */}
-        <nav className="w-[220px] border-r flex flex-col shrink-0">
-          {/* Server header */}
-          <div className="p-4 pb-3 border-b">
-            <div className="flex items-center gap-2.5">
-              <SidebarIcon icon={item.icon} catalogId={item.id} />
-              <div className="min-w-0 flex-1">
-                <div className="font-semibold text-sm truncate">
-                  {item.label || item.name}
-                </div>
-                {summary && (
-                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-0.5">
-                    <DeploymentStatusDot state={summary.overallState} />
-                    <span>
-                      {summary.running}{" "}
-                      {getDeploymentLabel(
-                        summary.overallState,
-                      ).toLowerCase()}
-                    </span>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent
+          className="max-w-6xl h-[85vh] flex flex-row p-0 gap-0 overflow-hidden"
+          showCloseButton={false}
+        >
+          <DialogTitle className="sr-only">
+            {item.label || item.name} Settings
+          </DialogTitle>
+          <DialogDescription className="sr-only">
+            Server settings and configuration
+          </DialogDescription>
+          {/* Sidebar */}
+          <nav className="w-[220px] border-r flex flex-col shrink-0">
+            {/* Server header */}
+            <div className="p-4 pb-3 border-b">
+              <div className="flex items-center gap-2.5">
+                <SidebarIcon icon={item.icon} catalogId={item.id} />
+                <div className="min-w-0 flex-1">
+                  <div className="font-semibold text-sm truncate">
+                    {item.label || item.name}
                   </div>
-                )}
+                  {summary && (
+                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-0.5">
+                      <DeploymentStatusDot state={summary.overallState} />
+                      <span>
+                        {summary.running}{" "}
+                        {getDeploymentLabel(summary.overallState).toLowerCase()}
+                      </span>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
-          </div>
 
-          {/* Nav items */}
-          <div className="flex flex-col gap-0.5 px-2 py-3 flex-1">
-            {navItems.map((navItem) => (
+            {/* Nav items */}
+            <div className="flex flex-col gap-0.5 px-2 py-3 flex-1">
+              {navItems.map((navItem) => (
+                <Button
+                  key={navItem.id}
+                  variant="ghost"
+                  className={cn(
+                    "justify-start h-9 px-3 font-normal w-full",
+                    validPage === navItem.id &&
+                      "bg-accent text-accent-foreground font-medium",
+                  )}
+                  onClick={() => navigateTo(navItem.id)}
+                >
+                  {navItem.label}
+                  {navItem.badge != null && navItem.badge > 0 && (
+                    <span className="ml-auto text-xs text-muted-foreground">
+                      {navItem.badge}
+                    </span>
+                  )}
+                </Button>
+              ))}
+            </div>
+
+            {/* Footer actions */}
+            <div className="px-2 pb-3 flex flex-col gap-1.5">
+              {!hasPersonalConnection && onConnect && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full justify-start"
+                  onClick={() =>
+                    guardDirty(() => {
+                      onConnect();
+                    })
+                  }
+                >
+                  {variant === "remote" ? "Connect" : "Install"}
+                </Button>
+              )}
+              {needsReinstall && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full justify-start gap-2"
+                  onClick={() => onReinstall()}
+                >
+                  <RefreshCw className="h-4 w-4" />
+                  Reinstall
+                </Button>
+              )}
+              {onDelete && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-full justify-start gap-2 text-destructive hover:text-destructive hover:bg-destructive/10"
+                  onClick={() => {
+                    handleClose();
+                    onDelete();
+                  }}
+                >
+                  Delete
+                </Button>
+              )}
+            </div>
+          </nav>
+
+          {/* Content */}
+          <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+            {/* Content header */}
+            <div className="flex items-center justify-between px-6 py-4 shrink-0">
+              <h2 className="text-lg font-semibold">
+                {PAGE_TITLES[validPage]}
+              </h2>
               <Button
-                key={navItem.id}
                 variant="ghost"
-                className={cn(
-                  "justify-start h-9 px-3 font-normal w-full",
-                  validPage === navItem.id &&
-                    "bg-accent text-accent-foreground font-medium",
-                )}
-                onClick={() => navigateTo(navItem.id)}
+                size="icon"
+                className="h-8 w-8 rounded-xs opacity-70 hover:opacity-100"
+                onClick={handleClose}
               >
-                {navItem.label}
-                {navItem.badge != null && navItem.badge > 0 && (
-                  <span className="ml-auto text-xs text-muted-foreground">
-                    {navItem.badge}
-                  </span>
-                )}
+                <XIcon className="h-4 w-4" />
+                <span className="sr-only">Close</span>
               </Button>
-            ))}
-          </div>
+            </div>
 
-          {/* Footer actions */}
-          <div className="px-2 pb-3 flex flex-col gap-1.5">
-            {!hasPersonalConnection && onConnect && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="w-full justify-start"
-                onClick={() =>
-                  guardDirty(() => {
-                    onConnect();
-                  })
-                }
-              >
-                {variant === "remote" ? "Connect" : "Install"}
-              </Button>
-            )}
-            {needsReinstall && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="w-full justify-start gap-2"
-                onClick={() => onReinstall()}
-              >
-                <RefreshCw className="h-4 w-4" />
-                Reinstall
-              </Button>
-            )}
-            {onDelete && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="w-full justify-start gap-2 text-destructive hover:text-destructive hover:bg-destructive/10"
-                onClick={() => {
-                  handleClose();
-                  onDelete();
-                }}
-              >
-                Delete
-              </Button>
-            )}
-          </div>
-        </nav>
-
-        {/* Content */}
-        <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-          {/* Content header */}
-          <div className="flex items-center justify-between px-6 py-4 shrink-0">
-            <h2 className="text-lg font-semibold">
-              {PAGE_TITLES[validPage]}
-            </h2>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 rounded-xs opacity-70 hover:opacity-100"
-              onClick={handleClose}
+            {/* Content body */}
+            <div
+              className={cn(
+                "flex-1 flex flex-col min-h-0",
+                isDebugPage ? "overflow-hidden px-6" : "overflow-y-auto p-6",
+              )}
             >
-              <XIcon className="h-4 w-4" />
-              <span className="sr-only">Close</span>
-            </Button>
-          </div>
+              {validPage === "configuration" && !isBuiltin && (
+                <EditCatalogContent
+                  item={item}
+                  onClose={handleClose}
+                  keepOpenOnSave
+                  onDirtyChange={setIsConfigDirty}
+                  submitRef={configSubmitRef}
+                />
+              )}
 
-          {/* Content body */}
-          <div className={cn(
-            "flex-1 flex flex-col min-h-0",
-            isDebugPage ? "overflow-hidden px-6 pb-6" : "overflow-y-auto p-6",
-          )}>
-            {validPage === "configuration" && !isBuiltin && (
-              <EditCatalogContent
-                item={item}
-                onClose={handleEditClose}
-                keepOpenOnSave
-                onDirtyChange={setIsConfigDirty}
-                submitRef={configSubmitRef}
-              />
-            )}
-
-            {validPage === "connections" && showConnections && (
-              <ManageUsersContent
-                isActive={open && validPage === "connections"}
-                onClose={handleClose}
-                label={item.label || item.name}
-                catalogId={item.id}
-                onAddPersonalConnection={onAddPersonalConnection}
-                onAddSharedConnection={onAddSharedConnection}
-                deploymentStatuses={deploymentStatuses}
-                hideHeader
-                variant={variant}
-                onOpenPodLogs={
-                  showDebug
-                    ? () => {
-                        setActivePage("debug-logs");
-                      }
-                    : undefined
-                }
-              />
-            )}
-
-            {isDebugPage &&
-              (showDebug || showInspector) &&
-              (installs.length > 0 ? (
-                <McpLogsContent
-                  isActive={open && isDebugPage}
-                  serverName={item.label || item.name}
-                  installs={installs}
+              {validPage === "connections" && showConnections && (
+                <ManageUsersContent
+                  isActive={open && validPage === "connections"}
+                  onClose={handleClose}
+                  label={item.label || item.name}
+                  catalogId={item.id}
+                  onAddPersonalConnection={onAddPersonalConnection}
+                  onAddSharedConnection={onAddSharedConnection}
                   deploymentStatuses={deploymentStatuses}
                   hideHeader
-                  hideTabBar
-                  controlledTab={DEBUG_TAB_MAP[validPage]}
-                  onReinstall={() => onReinstall()}
-                  initialServerId={logsInitialServerId}
+                  variant={variant}
+                  onOpenPodLogs={
+                    showDebug
+                      ? () => {
+                          setActivePage("debug-logs");
+                        }
+                      : undefined
+                  }
                 />
-              ) : (
-                <Empty className="justify-start pt-16">
-                  <EmptyHeader>
-                    <EmptyMedia variant="icon">
-                      <PlugZap />
-                    </EmptyMedia>
-                    <EmptyDescription>
-                      {variant === "remote" ? "Connect" : "Install"} this
-                      server to open the{" "}
-                      {PAGE_TITLES[validPage].toLowerCase()}.
-                    </EmptyDescription>
-                  </EmptyHeader>
-                  {onConnect && (
-                    <EmptyContent className="flex-row justify-center">
-                      <Button
-                        onClick={() => onConnect()}
-                      >
-                        {variant === "remote" ? "Connect" : "Install"}
-                      </Button>
-                    </EmptyContent>
-                  )}
-                </Empty>
-              ))}
+              )}
 
-            {validPage === "yaml" && showYaml && (
-              <YamlConfigContent item={item} onClose={handleClose} />
-            )}
+              {isDebugPage &&
+                (showDebug || showInspector) &&
+                (installs.length > 0 ? (
+                  <div className="flex flex-col flex-1 min-h-0">
+                    <McpLogsContent
+                      isActive={open && isDebugPage}
+                      serverName={item.label || item.name}
+                      installs={installs}
+                      deploymentStatuses={deploymentStatuses}
+                      hideHeader
+                      hideTabBar
+                      controlledTab={DEBUG_TAB_MAP[validPage]}
+                      onReinstall={() => onReinstall()}
+                      initialServerId={logsInitialServerId}
+                    />
+                  </div>
+                ) : (
+                  <Empty className="justify-start pt-16">
+                    <EmptyHeader>
+                      <EmptyMedia variant="icon">
+                        <PlugZap />
+                      </EmptyMedia>
+                      <EmptyDescription>
+                        {variant === "remote" ? "Connect" : "Install"} this
+                        server to open the{" "}
+                        {PAGE_TITLES[validPage].toLowerCase()}.
+                      </EmptyDescription>
+                    </EmptyHeader>
+                    {onConnect && (
+                      <EmptyContent className="flex-row justify-center">
+                        <Button onClick={() => onConnect()}>
+                          {variant === "remote" ? "Connect" : "Install"}
+                        </Button>
+                      </EmptyContent>
+                    )}
+                  </Empty>
+                ))}
+
+              {validPage === "yaml" && showYaml && (
+                <YamlConfigContent
+                  item={item}
+                  onClose={handleClose}
+                  hideHeader
+                />
+              )}
+            </div>
           </div>
-        </div>
-      </DialogContent>
-    </Dialog>
+        </DialogContent>
+      </Dialog>
 
-    <AlertDialog
-      open={pendingAction !== null}
-      onOpenChange={(open) => {
-        if (!open) setPendingAction(null);
-      }}
-    >
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle className="flex items-center gap-2">
-            <AlertCircle className="h-5 w-5 text-amber-500" />
-            Unsaved changes
-          </AlertDialogTitle>
-          <AlertDialogDescription>
-            You have unsaved configuration changes. What would you like to do?
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel>Go back</AlertDialogCancel>
-          <Button
-            variant="outline"
-            className="text-destructive hover:text-destructive hover:bg-destructive/10"
-            onClick={() => {
-              pendingAction?.();
-              setIsConfigDirty(false);
-              setPendingAction(null);
-            }}
-          >
-            Discard
-          </Button>
-          <AlertDialogAction
-            onClick={async () => {
-              if (configSubmitRef.current) {
-                await configSubmitRef.current();
-              }
-              pendingAction?.();
-              setIsConfigDirty(false);
-              setPendingAction(null);
-            }}
-          >
-            Save first
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+      <AlertDialog
+        open={pendingAction !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingAction(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertCircle className="h-5 w-5 text-amber-500" />
+              Unsaved changes
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              You have unsaved configuration changes. What would you like to do?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Go back</AlertDialogCancel>
+            <Button
+              variant="outline"
+              className="text-destructive hover:text-destructive hover:bg-destructive/10"
+              onClick={() => {
+                pendingAction?.();
+                setIsConfigDirty(false);
+                setPendingAction(null);
+              }}
+            >
+              Discard
+            </Button>
+            <AlertDialogAction
+              onClick={async () => {
+                if (configSubmitRef.current) {
+                  await configSubmitRef.current();
+                }
+                pendingAction?.();
+                setIsConfigDirty(false);
+                setPendingAction(null);
+              }}
+            >
+              Save first
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }

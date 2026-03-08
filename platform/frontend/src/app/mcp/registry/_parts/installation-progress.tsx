@@ -5,7 +5,6 @@ import { FileText } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { McpLogsDialog } from "./mcp-logs-dialog";
 
 type InstallationStatus =
   | "idle"
@@ -17,8 +16,8 @@ type InstallationStatus =
 interface InstallationProgressProps {
   status: InstallationStatus;
   serverId?: string;
-  serverName?: string;
   deploymentStatuses?: Record<string, McpDeploymentStatusEntry>;
+  onMoreDetails?: () => void;
 }
 
 const PHASES = {
@@ -95,11 +94,9 @@ function useAnimatedProgress(targetProgress: number, isActive: boolean) {
 export function InstallationProgress({
   status,
   serverId,
-  serverName,
   deploymentStatuses = {},
+  onMoreDetails,
 }: InstallationProgressProps) {
-  const [isLogsDialogOpen, setIsLogsDialogOpen] = useState(false);
-
   const phaseInfo = useMemo(() => {
     if (!status || status === "idle") return null;
     return PHASES[status as keyof typeof PHASES] ?? null;
@@ -132,10 +129,6 @@ export function InstallationProgress({
     return null;
   }
 
-  const installs = serverId
-    ? [{ id: serverId, name: serverName || "Installation" }]
-    : [];
-
   return (
     <div className="w-full space-y-2">
       <Progress
@@ -152,29 +145,18 @@ export function InstallationProgress({
         >
           {description}
         </span>
-        {serverId && (
+        {serverId && onMoreDetails && (
           <Button
             variant="link"
             size="sm"
             className="h-auto p-0 text-xs"
-            onClick={() => setIsLogsDialogOpen(true)}
+            onClick={onMoreDetails}
           >
             <FileText className="h-3 w-3 mr-1" />
             More details
           </Button>
         )}
       </div>
-
-      {serverId && (
-        <McpLogsDialog
-          open={isLogsDialogOpen}
-          onOpenChange={setIsLogsDialogOpen}
-          serverName={serverName || "MCP Server"}
-          installs={installs}
-          deploymentStatuses={deploymentStatuses}
-          hideInstallationSelector
-        />
-      )}
     </div>
   );
 }

@@ -1178,8 +1178,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.InspectMcpServer,
-        description:
-          "Inspect a running MCP server (list tools or call a tool)",
+        description: "Inspect a running MCP server (list tools or call a tool)",
         tags: ["MCP Server"],
         params: z.object({
           id: UuidIdSchema,

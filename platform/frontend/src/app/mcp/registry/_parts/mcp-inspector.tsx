@@ -122,7 +122,7 @@ export function McpInspector({ serverId, isActive }: McpInspectorProps) {
       logIdRef.current = 0;
       loadTools();
     }
-  }, [isActive, serverId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isActive, serverId, loadTools]);
 
   const handleSelectTool = useCallback((tool: McpTool) => {
     setSelectedTool(tool);
@@ -254,9 +254,7 @@ export function McpInspector({ serverId, isActive }: McpInspectorProps) {
             {selectedTool ? (
               <div className="p-4 space-y-5">
                 <div>
-                  <h3 className="text-lg font-semibold">
-                    {selectedTool.name}
-                  </h3>
+                  <h3 className="text-lg font-semibold">{selectedTool.name}</h3>
                   {selectedTool.description && (
                     <p className="text-sm text-muted-foreground mt-1">
                       {selectedTool.description}
@@ -275,9 +273,7 @@ export function McpInspector({ serverId, isActive }: McpInspectorProps) {
                           <Label className="text-sm">
                             {name}
                             {isRequired && (
-                              <span className="text-destructive ml-0.5">
-                                *
-                              </span>
+                              <span className="text-destructive ml-0.5">*</span>
                             )}
                             {prop.type && (
                               <span className="text-muted-foreground font-normal ml-1.5">

@@ -14,7 +14,6 @@ import {
   Plus,
   RefreshCw,
   Server,
-  Trash2,
   User,
   Wrench,
 } from "lucide-react";
@@ -161,7 +160,7 @@ export function McpServerCard({
   onInstallLocalServer,
   onReinstall,
   onDetails: _onDetails,
-  onEdit,
+  onEdit: _onEdit,
   onDelete,
   onCancelInstallation,
   onAddPersonalConnection,
@@ -760,7 +759,6 @@ export function McpServerCard({
         showDebug={isLogsAvailable}
         showInspector
         showYaml={variant === "local"}
-        onEditClose={onEdit}
         onAddPersonalConnection={onAddPersonalConnection}
         onAddSharedConnection={onAddSharedConnection}
         installs={allInstalls}
@@ -826,8 +824,14 @@ export function McpServerCard({
                       : (installationStatus ?? null)
                   }
                   serverId={installedServer?.id}
-                  serverName={item.label || item.name}
                   deploymentStatuses={deploymentStatuses}
+                  onMoreDetails={() => {
+                    setSettingsInitialPage("debug-logs");
+                    if (installedServer?.id) {
+                      setLogsInitialServerId(installedServer.id);
+                    }
+                    setSettingsDialogOpen(true);
+                  }}
                 />
               </div>
             ) : isCurrentUserAuthenticated &&

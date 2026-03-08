@@ -1,13 +1,6 @@
 import { type archestraApiTypes, isPlaywrightCatalogItem } from "@shared";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogFooter } from "@/components/ui/dialog";
 import { useUpdateInternalMcpCatalogItem } from "@/lib/internal-mcp-catalog.query";
 import { McpCatalogForm } from "./mcp-catalog-form";
 import type { McpCatalogFormValues } from "./mcp-catalog-form.types";
@@ -69,7 +62,7 @@ export function EditCatalogContent({
       nameDisabled={isPlaywrightCatalogItem(item.id)}
       onDirtyChange={onDirtyChange}
       submitRef={submitRef}
-      footer={({ isDirty }) =>
+      footer={({ isDirty, onReset }) =>
         keepOpenOnSave && !isDirty ? null : (
           <DialogFooter
             className={
@@ -78,9 +71,15 @@ export function EditCatalogContent({
                 : undefined
             }
           >
-            <Button variant="outline" onClick={onClose} type="button">
-              Cancel
-            </Button>
+            {keepOpenOnSave ? (
+              <Button variant="outline" onClick={onReset} type="button">
+                Discard changes
+              </Button>
+            ) : (
+              <Button variant="outline" onClick={onClose} type="button">
+                Cancel
+              </Button>
+            )}
             <Button
               type="submit"
               disabled={updateMutation.isPending || !isDirty}

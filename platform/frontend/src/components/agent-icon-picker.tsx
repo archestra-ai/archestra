@@ -118,6 +118,7 @@ export function AgentIconPicker({
             <Bot className="h-5 w-5 text-muted-foreground" />
           )}
           {value && (
+            // biome-ignore lint/a11y/useSemanticElements: can't use <button> here as it's nested inside PopoverTrigger's <button>
             <div
               role="button"
               tabIndex={0}

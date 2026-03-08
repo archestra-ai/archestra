@@ -135,8 +135,8 @@ ENV ARCHESTRA_SENTRY_ENVIRONMENT=""
 ENV NODE_EXTRA_CA_CERTS="/etc/ssl/certs/cloud-database-ca-bundle.pem"
 
 RUN apk --no-cache upgrade && \
-    # Install PostgreSQL 17 (pin 17.8-r0 for CVE-2026-2004..2007), supervisord, and wget
-    apk add --no-cache postgresql17=17.8-r0 postgresql17-contrib=17.8-r0 su-exec wget && \
+    # Install PostgreSQL 17 (pin 17.8-r0 for CVE-2026-2004..2007), pgvector, supervisord, and wget
+    apk add --no-cache postgresql17=17.8-r0 postgresql17-contrib=17.8-r0 postgresql-pgvector su-exec wget && \
     # Download cloud database CA bundles for SSL certificate validation
     # AWS RDS global CA bundle
     wget -qO /tmp/aws-rds-ca.pem https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem && \
@@ -155,13 +155,6 @@ RUN apk --no-cache upgrade && \
     mkdir -p /var/log/supervisor && \
     # Clean up
     rm -rf /tmp/*
-
-# Build and install pgvector extension for knowledge base vector search
-RUN apk add --no-cache --virtual .pgvector-build-deps build-base clang16 llvm16-dev postgresql17-dev git && \
-    git clone --branch v0.8.0 --depth 1 https://github.com/pgvector/pgvector.git /tmp/pgvector && \
-    cd /tmp/pgvector && make && make install && \
-    cd / && rm -rf /tmp/pgvector && \
-    apk del .pgvector-build-deps
 
 # Install KinD (Kubernetes in Docker) and docker-cli for embedded K8s cluster support
 # Both binaries are built from source in go-builder with Go 1.25.7 to fix CVE-2025-68121

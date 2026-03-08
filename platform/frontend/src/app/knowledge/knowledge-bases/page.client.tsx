@@ -17,10 +17,10 @@ import {
 import Link from "next/link";
 import { useCallback, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
+import { KnowledgePageLayout } from "@/app/knowledge/_parts/knowledge-page-layout";
 import { ConnectorStatusDot } from "@/app/knowledge/knowledge-bases/_parts/connector-enabled-dot";
 import { ConnectorStatusBadge } from "@/app/knowledge/knowledge-bases/_parts/connector-status-badge";
-import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
-import { PageLayout } from "@/components/page-layout";
+import { LoadingSpinner } from "@/components/loading";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -32,7 +32,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { PermissionButton } from "@/components/ui/permission-button";
 import {
   Table,
   TableBody,
@@ -97,61 +96,53 @@ function KnowledgeBasesList() {
   const items = knowledgeBases?.data ?? [];
 
   return (
-    <LoadingWrapper isPending={isPending} loadingFallback={<LoadingSpinner />}>
-      <PageLayout
-        title="Knowledge Bases"
-        description="Manage knowledge bases and their data connectors."
-        actionButton={
-          <PermissionButton
-            permissions={{ knowledgeBase: ["create"] }}
-            onClick={() => setIsCreateDialogOpen(true)}
-          >
-            <Plus className="mr-2 h-4 w-4" />
-            Create Knowledge Base
-          </PermissionButton>
-        }
-      >
-        <div>
-          {items.length === 0 ? (
-            <div className="text-muted-foreground">
-              No knowledge bases found. Create one to get started.
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {items.map((kb) => (
-                <KnowledgeBaseCard
-                  key={kb.id}
-                  kb={kb}
-                  onEdit={() => setEditingItem(kb)}
-                  onDelete={() => setDeletingId(kb.id)}
-                />
-              ))}
-            </div>
-          )}
+    <KnowledgePageLayout
+      title="Knowledge Bases"
+      description="Manage knowledge bases and their data connectors."
+      createLabel="Create Knowledge Base"
+      onCreateClick={() => setIsCreateDialogOpen(true)}
+      isPending={isPending}
+    >
+      <div>
+        {items.length === 0 ? (
+          <div className="text-muted-foreground">
+            No knowledge bases found. Create one to get started.
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {items.map((kb) => (
+              <KnowledgeBaseCard
+                key={kb.id}
+                kb={kb}
+                onEdit={() => setEditingItem(kb)}
+                onDelete={() => setDeletingId(kb.id)}
+              />
+            ))}
+          </div>
+        )}
 
-          <CreateKnowledgeBaseDialog
-            open={isCreateDialogOpen}
-            onOpenChange={setIsCreateDialogOpen}
+        <CreateKnowledgeBaseDialog
+          open={isCreateDialogOpen}
+          onOpenChange={setIsCreateDialogOpen}
+        />
+
+        {editingItem && (
+          <EditKnowledgeBaseDialog
+            knowledgeBase={editingItem}
+            open={!!editingItem}
+            onOpenChange={(open) => !open && setEditingItem(null)}
           />
+        )}
 
-          {editingItem && (
-            <EditKnowledgeBaseDialog
-              knowledgeBase={editingItem}
-              open={!!editingItem}
-              onOpenChange={(open) => !open && setEditingItem(null)}
-            />
-          )}
-
-          {deletingId && (
-            <DeleteKnowledgeBaseDialog
-              knowledgeBaseId={deletingId}
-              open={!!deletingId}
-              onOpenChange={(open) => !open && setDeletingId(null)}
-            />
-          )}
-        </div>
-      </PageLayout>
-    </LoadingWrapper>
+        {deletingId && (
+          <DeleteKnowledgeBaseDialog
+            knowledgeBaseId={deletingId}
+            open={!!deletingId}
+            onOpenChange={(open) => !open && setDeletingId(null)}
+          />
+        )}
+      </div>
+    </KnowledgePageLayout>
   );
 }
 

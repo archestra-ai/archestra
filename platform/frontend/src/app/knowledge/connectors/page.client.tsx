@@ -2,18 +2,17 @@
 
 import type { archestraApiTypes } from "@shared";
 import { formatDistanceToNow } from "date-fns";
-import { Database, Pencil, Plus, Trash2, Users } from "lucide-react";
+import { Database, Pencil, Trash2, Users } from "lucide-react";
 import Link from "next/link";
 import type React from "react";
 import { useCallback, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
+import { KnowledgePageLayout } from "@/app/knowledge/_parts/knowledge-page-layout";
 import { ConnectorStatusDot } from "@/app/knowledge/knowledge-bases/_parts/connector-enabled-dot";
 import { ConnectorTypeIcon } from "@/app/knowledge/knowledge-bases/_parts/connector-icons";
 import { ConnectorStatusBadge } from "@/app/knowledge/knowledge-bases/_parts/connector-status-badge";
 import { CreateConnectorDialog } from "@/app/knowledge/knowledge-bases/_parts/create-connector-dialog";
 import { EditConnectorDialog } from "@/app/knowledge/knowledge-bases/_parts/edit-connector-dialog";
-import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
-import { PageLayout } from "@/components/page-layout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -26,7 +25,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { PermissionButton } from "@/components/ui/permission-button";
 import {
   Tooltip,
   TooltipContent,
@@ -71,62 +69,54 @@ function ConnectorsList() {
   const items = connectors?.data ?? [];
 
   return (
-    <LoadingWrapper isPending={isPending} loadingFallback={<LoadingSpinner />}>
-      <PageLayout
-        title="Connectors"
-        description="Manage data connectors that feed into your knowledge bases."
-        actionButton={
-          <PermissionButton
-            permissions={{ knowledgeBase: ["create"] }}
-            onClick={() => setIsCreateDialogOpen(true)}
-          >
-            <Plus className="mr-2 h-4 w-4" />
-            Create Connector
-          </PermissionButton>
-        }
-      >
-        <div>
-          {items.length === 0 ? (
-            <div className="text-muted-foreground">
-              No connectors found. Create one to start syncing data into
-              knowledge bases.
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {items.map((connector) => (
-                <ConnectorCard
-                  key={connector.id}
-                  connector={connector}
-                  onEdit={() => setEditingConnector(connector)}
-                  onDelete={() => setDeletingConnectorId(connector.id)}
-                />
-              ))}
-            </div>
-          )}
+    <KnowledgePageLayout
+      title="Connectors"
+      description="Manage data connectors that feed into your knowledge bases."
+      createLabel="Create Connector"
+      onCreateClick={() => setIsCreateDialogOpen(true)}
+      isPending={isPending}
+    >
+      <div>
+        {items.length === 0 ? (
+          <div className="text-muted-foreground">
+            No connectors found. Create one to start syncing data into knowledge
+            bases.
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {items.map((connector) => (
+              <ConnectorCard
+                key={connector.id}
+                connector={connector}
+                onEdit={() => setEditingConnector(connector)}
+                onDelete={() => setDeletingConnectorId(connector.id)}
+              />
+            ))}
+          </div>
+        )}
 
-          <CreateConnectorDialog
-            open={isCreateDialogOpen}
-            onOpenChange={setIsCreateDialogOpen}
+        <CreateConnectorDialog
+          open={isCreateDialogOpen}
+          onOpenChange={setIsCreateDialogOpen}
+        />
+
+        {editingConnector && (
+          <EditConnectorDialog
+            connector={editingConnector}
+            open={!!editingConnector}
+            onOpenChange={(open) => !open && setEditingConnector(null)}
           />
+        )}
 
-          {editingConnector && (
-            <EditConnectorDialog
-              connector={editingConnector}
-              open={!!editingConnector}
-              onOpenChange={(open) => !open && setEditingConnector(null)}
-            />
-          )}
-
-          {deletingConnectorId && (
-            <DeleteConnectorDialog
-              connectorId={deletingConnectorId}
-              open={!!deletingConnectorId}
-              onOpenChange={(open) => !open && setDeletingConnectorId(null)}
-            />
-          )}
-        </div>
-      </PageLayout>
-    </LoadingWrapper>
+        {deletingConnectorId && (
+          <DeleteConnectorDialog
+            connectorId={deletingConnectorId}
+            open={!!deletingConnectorId}
+            onOpenChange={(open) => !open && setDeletingConnectorId(null)}
+          />
+        )}
+      </div>
+    </KnowledgePageLayout>
   );
 }
 

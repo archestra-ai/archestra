@@ -22,8 +22,8 @@ export function SettingsBlock({
   return (
     <Card>
       <CardHeader>
-        <div className="flex items-center justify-between">
-          <div>
+        <div className="flex items-center justify-between gap-4">
+          <div className="min-w-0 flex-1">
             <h3 className="text-lg font-semibold leading-none tracking-tight">
               {title}
             </h3>
@@ -33,7 +33,7 @@ export function SettingsBlock({
               </p>
             )}
           </div>
-          {control}
+          <div className="shrink-0">{control}</div>
         </div>
         {notice && <div className="text-sm mt-2">{notice}</div>}
       </CardHeader>
@@ -62,11 +62,12 @@ export function SettingsSaveBar({
   if (!hasChanges) return null;
 
   return (
-    <div className="flex gap-3 sticky bottom-0 bg-background p-4 rounded-lg border border-border shadow-lg">
+    <div className="flex gap-3 sticky bottom-4 bg-background p-4 rounded-lg border border-border shadow-lg">
       <PermissionButton
         permissions={permissions}
         onClick={onSave}
         disabled={isSaving}
+        className="animate-pulse"
       >
         {isSaving ? "Saving..." : "Save"}
       </PermissionButton>

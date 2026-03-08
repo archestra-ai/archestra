@@ -14,7 +14,7 @@ import {
   Plus,
   Settings,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import {
@@ -56,8 +56,7 @@ import {
   useOrganization,
   useUpdateKnowledgeSettings,
 } from "@/lib/organization.query";
-
-const EMBEDDING_MODEL_NAMES = Object.keys(EMBEDDING_MODELS).join(", ");
+import { cn } from "@/lib/utils";
 
 const DEFAULT_FORM_VALUES: ChatApiKeyFormValues = {
   name: "",
@@ -206,27 +205,43 @@ function ApiKeySelector({
   disabled,
   filterProvider,
   label,
+  pulse,
+  onAutoSelected,
 }: {
   value: string | null;
   onChange: (value: string | null) => void;
   disabled: boolean;
   filterProvider?: string;
   label: string;
+  pulse?: boolean;
+  onAutoSelected?: () => void;
 }) {
   const { data: apiKeys, isPending } = useAvailableChatApiKeys();
   const [showAddDialog, setShowAddDialog] = useState(false);
-
-  if (isPending) {
-    return <LoadingSpinner />;
-  }
+  const prevSelectableCountRef = useRef<number | null>(null);
 
   const keys = apiKeys ?? [];
   const openaiKeys = keys.filter((k) => k.provider === "openai");
   const otherKeys = keys.filter((k) => k.provider !== "openai");
   const isEmbeddingSelector = filterProvider === "openai";
-  const hasSelectableKeys = isEmbeddingSelector
-    ? openaiKeys.length > 0
-    : keys.length > 0;
+  const selectableKeys = isEmbeddingSelector ? openaiKeys : keys;
+  const hasSelectableKeys = selectableKeys.length > 0;
+
+  // Auto-select the first key when transitioning from 0 → N selectable keys
+  useEffect(() => {
+    if (isPending) return;
+    const prevCount = prevSelectableCountRef.current;
+    prevSelectableCountRef.current = selectableKeys.length;
+
+    if (prevCount === 0 && selectableKeys.length > 0 && !value) {
+      onChange(selectableKeys[0].id);
+      onAutoSelected?.();
+    }
+  }, [selectableKeys, value, onChange, onAutoSelected, isPending]);
+
+  if (isPending) {
+    return <LoadingSpinner />;
+  }
 
   if (!hasSelectableKeys) {
     return (
@@ -237,6 +252,7 @@ function ApiKeySelector({
               type="button"
               variant="outline"
               size="sm"
+              className={cn(pulse && "animate-pulse ring-2 ring-primary/40")}
               onClick={() => setShowAddDialog(true)}
             >
               <Plus className="h-3 w-3 mr-1" />
@@ -260,7 +276,12 @@ function ApiKeySelector({
         onValueChange={(v) => onChange(v || null)}
         disabled={disabled}
       >
-        <SelectTrigger className="w-80">
+        <SelectTrigger
+          className={cn(
+            "w-80",
+            pulse && "animate-pulse ring-2 ring-primary/40",
+          )}
+        >
           <SelectValue placeholder={`Select ${label}...`}>
             {value
               ? (keys.find((k) => k.id === value)?.name ?? "Selected key")
@@ -372,7 +393,8 @@ function RerankerModelSelector({
       <SelectContent>
         {models.length === 0 ? (
           <div className="px-2 py-3 text-sm text-muted-foreground text-center">
-            No models found for this provider
+            No models found for this provider. Try syncing models from the LLM
+            settings page.
           </div>
         ) : (
           models.map((model) => (
@@ -386,15 +408,35 @@ function RerankerModelSelector({
   );
 }
 
+/**
+ * Determine which embedding setup step needs attention.
+ * Returns the step that should pulse, or null if setup is complete.
+ */
+function useEmbeddingSetupStep({
+  embeddingChatApiKeyId,
+  embeddingModel,
+  hasOpenAiKeys,
+}: {
+  embeddingChatApiKeyId: string | null;
+  embeddingModel: EmbeddingModel | null;
+  hasOpenAiKeys: boolean;
+}): "add-key" | "select-key" | "select-model" | null {
+  if (!hasOpenAiKeys) return "add-key";
+  if (!embeddingChatApiKeyId) return "select-key";
+  if (!embeddingModel) return "select-model";
+  return null;
+}
+
 function KnowledgeSettingsContent() {
   const { data: organization, isPending } = useOrganization();
+  const { data: apiKeys } = useAvailableChatApiKeys();
   const updateKnowledgeSettings = useUpdateKnowledgeSettings(
     "Knowledge settings updated",
     "Failed to update knowledge settings",
   );
 
-  const [embeddingModel, setEmbeddingModel] = useState<EmbeddingModel>(
-    "text-embedding-3-small",
+  const [embeddingModel, setEmbeddingModel] = useState<EmbeddingModel | null>(
+    null,
   );
   const [embeddingChatApiKeyId, setEmbeddingChatApiKeyId] = useState<
     string | null
@@ -403,57 +445,56 @@ function KnowledgeSettingsContent() {
     string | null
   >(null);
   const [rerankerModel, setRerankerModel] = useState<string | null>(null);
+  const [embeddingModelOpen, setEmbeddingModelOpen] = useState(false);
 
   useEffect(() => {
     if (organization) {
+      // Only set embedding model if user has explicitly configured a key
+      // (otherwise the database default is not a user choice)
+      const hasEmbeddingKey = !!organization.embeddingChatApiKeyId;
       setEmbeddingModel(
-        (organization.embeddingModel as EmbeddingModel | null) ??
-          "text-embedding-3-small",
+        hasEmbeddingKey
+          ? ((organization.embeddingModel as EmbeddingModel) ?? null)
+          : null,
       );
-      setEmbeddingChatApiKeyId(
-        (organization as Record<string, unknown>).embeddingChatApiKeyId as
-          | string
-          | null,
-      );
-      setRerankerChatApiKeyId(
-        (organization as Record<string, unknown>).rerankerChatApiKeyId as
-          | string
-          | null,
-      );
-      setRerankerModel(
-        (organization as Record<string, unknown>).rerankerModel as
-          | string
-          | null,
-      );
+      setEmbeddingChatApiKeyId(organization.embeddingChatApiKeyId ?? null);
+      setRerankerChatApiKeyId(organization.rerankerChatApiKeyId ?? null);
+      setRerankerModel(organization.rerankerModel ?? null);
     }
   }, [organization]);
 
-  const serverEmbeddingModel =
-    (organization?.embeddingModel as EmbeddingModel | null) ??
-    "text-embedding-3-small";
-  const serverEmbeddingKeyId = (
-    organization as Record<string, unknown> | undefined
-  )?.embeddingChatApiKeyId as string | null | undefined;
-  const serverRerankerKeyId = (
-    organization as Record<string, unknown> | undefined
-  )?.rerankerChatApiKeyId as string | null | undefined;
-  const serverRerankerModel = (
-    organization as Record<string, unknown> | undefined
-  )?.rerankerModel as string | null | undefined;
+  const serverEmbeddingKeyId = organization?.embeddingChatApiKeyId ?? null;
+  const serverEmbeddingModel = serverEmbeddingKeyId
+    ? ((organization?.embeddingModel as EmbeddingModel | null) ?? null)
+    : null;
+  const serverRerankerKeyId = organization?.rerankerChatApiKeyId ?? null;
+  const serverRerankerModel = organization?.rerankerModel ?? null;
 
   const hasChanges =
     embeddingModel !== serverEmbeddingModel ||
-    embeddingChatApiKeyId !== (serverEmbeddingKeyId ?? null) ||
-    rerankerChatApiKeyId !== (serverRerankerKeyId ?? null) ||
-    rerankerModel !== (serverRerankerModel ?? null);
+    embeddingChatApiKeyId !== serverEmbeddingKeyId ||
+    rerankerChatApiKeyId !== serverRerankerKeyId ||
+    rerankerModel !== serverRerankerModel;
 
-  // Embedding model is locked once it's been set and an API key is configured
+  // Embedding model is locked once both key and model have been saved
   const isEmbeddingModelLocked =
-    !!serverEmbeddingKeyId && !!organization?.embeddingModel;
+    !!serverEmbeddingKeyId && !!serverEmbeddingModel;
+
+  // Check if OpenAI keys exist for pulsing logic
+  const hasOpenAiKeys = useMemo(
+    () => (apiKeys ?? []).some((k) => k.provider === "openai"),
+    [apiKeys],
+  );
+
+  const setupStep = useEmbeddingSetupStep({
+    embeddingChatApiKeyId,
+    embeddingModel,
+    hasOpenAiKeys,
+  });
 
   const handleSave = async () => {
     await updateKnowledgeSettings.mutateAsync({
-      embeddingModel,
+      embeddingModel: embeddingModel ?? undefined,
       embeddingChatApiKeyId: embeddingChatApiKeyId ?? null,
       rerankerChatApiKeyId: rerankerChatApiKeyId ?? null,
       rerankerModel: rerankerModel ?? null,
@@ -462,9 +503,9 @@ function KnowledgeSettingsContent() {
 
   const handleCancel = () => {
     setEmbeddingModel(serverEmbeddingModel);
-    setEmbeddingChatApiKeyId(serverEmbeddingKeyId ?? null);
-    setRerankerChatApiKeyId(serverRerankerKeyId ?? null);
-    setRerankerModel(serverRerankerModel ?? null);
+    setEmbeddingChatApiKeyId(serverEmbeddingKeyId);
+    setRerankerChatApiKeyId(serverRerankerKeyId);
+    setRerankerModel(serverRerankerModel);
   };
 
   // Clear reranker model when switching provider keys
@@ -478,6 +519,16 @@ function KnowledgeSettingsContent() {
   return (
     <LoadingWrapper isPending={isPending} loadingFallback={<LoadingSpinner />}>
       <div className="space-y-8">
+        {!embeddingChatApiKeyId && (
+          <Alert variant="warning">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription>
+              An embedding API key and model must be configured before knowledge
+              bases and connectors can be used.
+            </AlertDescription>
+          </Alert>
+        )}
+
         {/* Embedding Configuration */}
         <div className="space-y-4">
           <div className="flex items-center gap-2">
@@ -492,7 +543,7 @@ function KnowledgeSettingsContent() {
 
           <SettingsBlock
             title="LLM Provider API Key"
-            description={`Select an OpenAI API key for generating embeddings. The selected key must have access to at least one of: ${EMBEDDING_MODEL_NAMES}.`}
+            description="Select an OpenAI API key for generating embeddings."
             control={
               <WithPermissions
                 permissions={{ knowledgeSettings: ["update"] }}
@@ -505,6 +556,10 @@ function KnowledgeSettingsContent() {
                     disabled={!hasPermission}
                     filterProvider="openai"
                     label="embedding API key"
+                    pulse={
+                      setupStep === "add-key" || setupStep === "select-key"
+                    }
+                    onAutoSelected={() => setEmbeddingModelOpen(true)}
                   />
                 )}
               </WithPermissions>
@@ -515,8 +570,8 @@ function KnowledgeSettingsContent() {
             title="Embedding Model"
             description={
               isEmbeddingModelLocked
-                ? "The embedding model cannot be changed after documents have been embedded. Support for changing the embedding model after initial selection is coming soon."
-                : "Select the model used to generate vector embeddings. This choice is permanent once documents are embedded."
+                ? "The embedding model cannot be changed after it has been saved. Changing models requires re-embedding all documents."
+                : "Select the model used to generate vector embeddings. This choice is permanent once saved."
             }
             control={
               <WithPermissions
@@ -524,22 +579,38 @@ function KnowledgeSettingsContent() {
                 noPermissionHandle="tooltip"
               >
                 {({ hasPermission }) => (
-                  <div className="space-y-2">
+                  <div className="space-y-2 w-80">
                     <Select
-                      value={embeddingModel}
+                      value={embeddingModel ?? ""}
                       onValueChange={(v) =>
                         setEmbeddingModel(v as EmbeddingModel)
                       }
-                      disabled={!hasPermission || isEmbeddingModelLocked}
+                      disabled={
+                        !hasPermission ||
+                        isEmbeddingModelLocked ||
+                        !embeddingChatApiKeyId
+                      }
+                      open={embeddingModelOpen}
+                      onOpenChange={setEmbeddingModelOpen}
                     >
-                      <SelectTrigger className="w-80">
-                        <SelectValue placeholder="Select model">
-                          <div className="flex items-center gap-2">
-                            {isEmbeddingModelLocked && (
-                              <Lock className="h-3 w-3" />
-                            )}
-                            {embeddingModel}
-                          </div>
+                      <SelectTrigger
+                        className={cn(
+                          "w-80",
+                          setupStep === "select-model" &&
+                            "animate-pulse ring-2 ring-primary/40",
+                        )}
+                      >
+                        <SelectValue placeholder="Select embedding model...">
+                          {embeddingModel ? (
+                            <div className="flex items-center gap-2">
+                              {isEmbeddingModelLocked && (
+                                <Lock className="h-3 w-3" />
+                              )}
+                              {embeddingModel}
+                            </div>
+                          ) : (
+                            "Select embedding model..."
+                          )}
                         </SelectValue>
                       </SelectTrigger>
                       <SelectContent>
@@ -558,13 +629,16 @@ function KnowledgeSettingsContent() {
                       </SelectContent>
                     </Select>
                     {isEmbeddingModelLocked && (
-                      <Alert variant="default" className="py-2">
-                        <Info className="h-4 w-4" />
-                        <AlertDescription className="text-xs">
-                          Changing the embedding model requires re-embedding all
-                          documents. This feature is coming soon.
-                        </AlertDescription>
-                      </Alert>
+                      <p className="text-xs text-muted-foreground">
+                        <Lock className="h-3 w-3 inline mr-1" />
+                        Locked — changing the embedding model requires
+                        re-embedding all documents.
+                      </p>
+                    )}
+                    {!embeddingChatApiKeyId && !isEmbeddingModelLocked && (
+                      <p className="text-xs text-muted-foreground">
+                        Select an embedding API key first.
+                      </p>
                     )}
                   </div>
                 )}
@@ -577,11 +651,18 @@ function KnowledgeSettingsContent() {
         <div className="space-y-4">
           <div className="flex items-center gap-2">
             <Settings className="h-5 w-5 text-muted-foreground" />
-            <h3 className="text-lg font-semibold">Reranking Configuration</h3>
+            <h3 className="text-lg font-semibold">
+              Reranking Configuration{" "}
+              <span className="text-sm font-normal text-muted-foreground">
+                (optional)
+              </span>
+            </h3>
           </div>
           <p className="text-sm text-muted-foreground">
             Configure the LLM used to rerank knowledge base search results for
             improved relevance. Any LLM provider and model can be used.
+            Reranking is optional — if not configured, search results are
+            returned without LLM-based reranking.
           </p>
 
           <SettingsBlock
@@ -624,16 +705,6 @@ function KnowledgeSettingsContent() {
             }
           />
         </div>
-
-        {!embeddingChatApiKeyId && !rerankerChatApiKeyId && (
-          <Alert>
-            <AlertTriangle className="h-4 w-4" />
-            <AlertDescription>
-              Knowledge base requires LLM provider API keys to be configured.
-              Select existing keys above or add a new one.
-            </AlertDescription>
-          </Alert>
-        )}
 
         <SettingsSaveBar
           hasChanges={hasChanges}

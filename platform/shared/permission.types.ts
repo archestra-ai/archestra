@@ -118,8 +118,10 @@ export const resourceDescriptions: Record<Resource, string> = {
   secret: "Secrets manager configuration and connectivity",
   appearance: "White-labeling settings (theme, logo, fonts)",
   securitySettings: "Security settings (tool policy, chat file uploads)",
-  knowledgeBase: "Knowledge bases for RAG-based document retrieval",
-  knowledgeSettings: "Knowledge settings (embedding model configuration)",
+  knowledgeBase:
+    "Knowledge bases and connectors for RAG-based document retrieval",
+  knowledgeSettings:
+    "Knowledge settings (embedding and reranking models configuration)",
   organization: "Organization (internal, used by authentication system)",
 };
 

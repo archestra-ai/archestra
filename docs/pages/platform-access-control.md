@@ -3,7 +3,7 @@ title: "Access Control"
 category: Administration
 description: "Role-based access control (RBAC) system for managing user permissions in Archestra"
 order: 1
-lastUpdated: 2026-03-07
+lastUpdated: 2026-03-08
 ---
 <!--
 Check ../docs_writer_prompt.md before changing this file.
@@ -127,8 +127,8 @@ The following table lists all available permissions that can be assigned to cust
 | `knowledgeBase:create` | Create knowledge bases and connectors |
 | `knowledgeBase:update` | Modify knowledge bases and connectors |
 | `knowledgeBase:delete` | Delete knowledge bases and connectors |
-| `knowledgeSettings:read` | View knowledge settings (embedding model) |
-| `knowledgeSettings:update` | Modify knowledge settings |
+| `knowledgeSettings:read` | View knowledge settings (embedding and reranking models) |
+| `knowledgeSettings:update` | Modify knowledge settings (embedding and reranking models) |
 | `llmCost:read` | View LLM usage cost statistics and analytics |
 | `llmLimit:read` | View token usage limits |
 | `llmLimit:create` | Create new usage limits |

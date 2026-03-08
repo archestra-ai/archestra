@@ -286,8 +286,10 @@ export const permissionDescriptions: Record<string, string> = {
   "knowledgeBase:create": "Create knowledge bases and connectors",
   "knowledgeBase:update": "Modify knowledge bases and connectors",
   "knowledgeBase:delete": "Delete knowledge bases and connectors",
-  "knowledgeSettings:read": "View knowledge settings (embedding model)",
-  "knowledgeSettings:update": "Modify knowledge settings",
+  "knowledgeSettings:read":
+    "View knowledge settings (embedding and reranking models)",
+  "knowledgeSettings:update":
+    "Modify knowledge settings (embedding and reranking models)",
 };
 
 /**

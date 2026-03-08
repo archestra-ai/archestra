@@ -217,6 +217,23 @@ class KnowledgeBaseConnectorModel {
 
     return results.map((r) => r.knowledgeBaseId);
   }
+
+  static async getConnectorIds(knowledgeBaseId: string): Promise<string[]> {
+    const results = await db
+      .select({
+        connectorId:
+          schema.knowledgeBaseConnectorAssignmentsTable.connectorId,
+      })
+      .from(schema.knowledgeBaseConnectorAssignmentsTable)
+      .where(
+        eq(
+          schema.knowledgeBaseConnectorAssignmentsTable.knowledgeBaseId,
+          knowledgeBaseId,
+        ),
+      );
+
+    return results.map((r) => r.connectorId);
+  }
 }
 
 export default KnowledgeBaseConnectorModel;

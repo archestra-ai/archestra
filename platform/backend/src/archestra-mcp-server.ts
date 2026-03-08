@@ -19,6 +19,7 @@ import {
   AgentTeamModel,
   ConversationModel,
   InternalMcpCatalogModel,
+  KnowledgeBaseConnectorModel,
   KnowledgeBaseModel,
   LimitModel,
   McpServerModel,
@@ -1803,9 +1804,11 @@ export async function executeArchestraTool(
       const hasKbs = agent?.knowledgeBaseIds?.length;
       const connectorAssignments =
         await AgentConnectorAssignmentModel.findByAgent(contextAgent.id);
-      const connectorIds = connectorAssignments.map((a) => a.connectorId);
+      const directConnectorIds = connectorAssignments.map(
+        (a) => a.connectorId,
+      );
 
-      if (!hasKbs && connectorIds.length === 0) {
+      if (!hasKbs && directConnectorIds.length === 0) {
         return {
           content: [
             {
@@ -1817,15 +1820,40 @@ export async function executeArchestraTool(
         };
       }
 
-      // Query all assigned knowledge bases and merge results
-      const kbs = hasKbs
+      // Resolve KB assignments to connector IDs and merge with direct assignments
+      const kbConnectorIdArrays = hasKbs
         ? await Promise.all(
-            agent.knowledgeBaseIds.map((id) => KnowledgeBaseModel.findById(id)),
+            agent.knowledgeBaseIds.map((kbId) =>
+              KnowledgeBaseConnectorModel.getConnectorIds(kbId),
+            ),
           )
         : [];
-      const validKbs = kbs.filter(
-        (kb): kb is NonNullable<typeof kb> => kb !== null,
-      );
+      const connectorIds = [
+        ...new Set([...kbConnectorIdArrays.flat(), ...directConnectorIds]),
+      ];
+
+      if (connectorIds.length === 0) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: "No connectors found for the assigned knowledge bases or agent. Add connectors to enable knowledge search.",
+            },
+          ],
+          isError: true,
+        };
+      }
+
+      // Build user ACL from assigned knowledge bases
+      const validKbs = hasKbs
+        ? (
+            await Promise.all(
+              agent.knowledgeBaseIds.map((id) =>
+                KnowledgeBaseModel.findById(id),
+              ),
+            )
+          ).filter((kb): kb is NonNullable<typeof kb> => kb !== null)
+        : [];
 
       let userAcl: AclEntry[] = ["org:*"];
       if (context.userId) {
@@ -1834,7 +1862,6 @@ export async function executeArchestraTool(
           TeamModel.getUserTeamIds(context.userId),
         ]);
         if (user?.email) {
-          // Use the broadest visibility among all assigned KBs
           const visibility = validKbs.some((kb) => kb.visibility === "org-wide")
             ? "org-wide"
             : validKbs.some((kb) => kb.visibility === "team-scoped")
@@ -1848,52 +1875,12 @@ export async function executeArchestraTool(
         }
       }
 
-      // Search knowledge bases
-      const kbResultsPromise =
-        validKbs.length > 0
-          ? Promise.all(
-              validKbs.map((kb) =>
-                queryService.query({
-                  knowledgeBaseId: kb.id,
-                  queryText: query,
-                  userAcl,
-                  limit: 10,
-                }),
-              ),
-            )
-          : Promise.resolve([]);
-
-      // Search connectors directly assigned to the agent
-      const connectorResultsPromise =
-        connectorIds.length > 0
-          ? Promise.all(
-              connectorIds.map((cId) =>
-                queryService.queryByConnector({
-                  connectorId: cId,
-                  queryText: query,
-                  userAcl,
-                  limit: 10,
-                }),
-              ),
-            )
-          : Promise.resolve([]);
-
-      const [kbResults, connectorResults] = await Promise.all([
-        kbResultsPromise,
-        connectorResultsPromise,
-      ]);
-
-      // Merge, deduplicate by documentId, sort by score
-      const allFlat = [...kbResults.flat(), ...connectorResults.flat()];
-      const seen = new Set<string>();
-      const deduped = allFlat.filter((r) => {
-        if (seen.has(r.citation.documentId)) return false;
-        seen.add(r.citation.documentId);
-        return true;
+      const results = await queryService.query({
+        connectorIds,
+        queryText: query,
+        userAcl,
+        limit: 10,
       });
-      const results = deduped
-        .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
-        .slice(0, 10);
 
       return {
         content: [

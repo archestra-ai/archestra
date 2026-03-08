@@ -95,7 +95,7 @@ describe("QueryService", () => {
     });
 
     const results = await queryService.query({
-      knowledgeBaseId: kb.id,
+      connectorIds: [connector.id],
       queryText: "TypeScript",
       userAcl: ["org:*"],
     });
@@ -122,9 +122,11 @@ describe("QueryService", () => {
   test("returns empty array when no chunks exist", async ({
     makeOrganization,
     makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
   }) => {
     const org = await makeOrganization();
     const kb = await makeKnowledgeBase(org.id);
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
 
     const queryEmb = makeFakeEmbedding(1);
     mockEmbeddingsCreate.mockResolvedValueOnce({
@@ -132,7 +134,7 @@ describe("QueryService", () => {
     });
 
     const results = await queryService.query({
-      knowledgeBaseId: kb.id,
+      connectorIds: [connector.id],
       queryText: "anything",
       userAcl: ["org:*"],
     });
@@ -172,7 +174,7 @@ describe("QueryService", () => {
     });
 
     const results = await queryService.query({
-      knowledgeBaseId: kb.id,
+      connectorIds: [connector.id],
       queryText: "test",
       userAcl: ["org:*"],
     });
@@ -219,7 +221,7 @@ describe("QueryService", () => {
     });
 
     const results = await queryService.query({
-      knowledgeBaseId: kb.id,
+      connectorIds: [connector.id],
       queryText: "test",
       userAcl: ["org:*"],
       limit: 2,
@@ -228,13 +230,7 @@ describe("QueryService", () => {
     expect(results).toHaveLength(2);
   });
 
-  test("hybrid search merges vector and full-text results without duplicates", async ({
-    makeOrganization,
-    makeKnowledgeBase,
-  }) => {
-    const org = await makeOrganization();
-    const kb = await makeKnowledgeBase(org.id);
-
+  test("hybrid search merges vector and full-text results without duplicates", async () => {
     const vectorOnly: VectorSearchResult = {
       id: "vec-1",
       content: "Vector only result",
@@ -284,7 +280,7 @@ describe("QueryService", () => {
     });
 
     const results = await queryService.query({
-      knowledgeBaseId: kb.id,
+      connectorIds: ["any-connector-id"],
       queryText: "test query",
       userAcl: ["org:*"],
     });
@@ -300,13 +296,7 @@ describe("QueryService", () => {
     fullTextSearchSpy.mockRestore();
   });
 
-  test("falls back gracefully when full-text returns no results", async ({
-    makeOrganization,
-    makeKnowledgeBase,
-  }) => {
-    const org = await makeOrganization();
-    const kb = await makeKnowledgeBase(org.id);
-
+  test("falls back gracefully when full-text returns no results", async () => {
     const vectorResult: VectorSearchResult = {
       id: "vec-1",
       content: "Semantic match",
@@ -332,7 +322,7 @@ describe("QueryService", () => {
     });
 
     const results = await queryService.query({
-      knowledgeBaseId: kb.id,
+      connectorIds: ["any-connector-id"],
       queryText: "semantic meaning only",
       userAcl: ["org:*"],
     });
@@ -344,14 +334,8 @@ describe("QueryService", () => {
     fullTextSearchSpy.mockRestore();
   });
 
-  test("calls reranker after fusion when rerankerEnabled is true", async ({
-    makeOrganization,
-    makeKnowledgeBase,
-  }) => {
+  test("calls reranker after fusion when rerankerEnabled is true", async () => {
     config.kb.rerankerEnabled = true;
-
-    const org = await makeOrganization();
-    const kb = await makeKnowledgeBase(org.id);
 
     const chunk1: VectorSearchResult = {
       id: "r-1",
@@ -393,7 +377,7 @@ describe("QueryService", () => {
     mockRerank.mockResolvedValueOnce([chunk2, chunk1]);
 
     const results = await queryService.query({
-      knowledgeBaseId: kb.id,
+      connectorIds: ["any-connector-id"],
       queryText: "test query",
       userAcl: ["org:*"],
       limit: 2,
@@ -412,14 +396,8 @@ describe("QueryService", () => {
     fullTextSearchSpy.mockRestore();
   });
 
-  test("skips reranker when rerankerEnabled is false", async ({
-    makeOrganization,
-    makeKnowledgeBase,
-  }) => {
+  test("skips reranker when rerankerEnabled is false", async () => {
     config.kb.rerankerEnabled = false;
-
-    const org = await makeOrganization();
-    const kb = await makeKnowledgeBase(org.id);
 
     const chunk1: VectorSearchResult = {
       id: "s-1",
@@ -446,7 +424,7 @@ describe("QueryService", () => {
     });
 
     await queryService.query({
-      knowledgeBaseId: kb.id,
+      connectorIds: ["any-connector-id"],
       queryText: "test",
       userAcl: ["org:*"],
     });

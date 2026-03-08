@@ -23,12 +23,14 @@ class QueryService {
   private openai: OpenAI | null = null;
 
   async query(params: {
-    knowledgeBaseId: string;
+    connectorIds: string[];
     queryText: string;
     userAcl: AclEntry[];
     limit?: number;
   }): Promise<ChunkResult[]> {
-    const { knowledgeBaseId, queryText, limit = 10 } = params;
+    const { connectorIds, queryText, limit = 10 } = params;
+    if (connectorIds.length === 0) return [];
+
     const hybridEnabled = config.kb.hybridSearchEnabled;
     const overFetchLimit = hybridEnabled ? limit * 2 : limit;
 
@@ -39,7 +41,7 @@ class QueryService {
 
     const fullTextPromise = hybridEnabled
       ? KbChunkModel.fullTextSearch({
-          knowledgeBaseId,
+          connectorIds,
           queryText,
           limit: overFetchLimit,
         })
@@ -53,25 +55,19 @@ class QueryService {
     const queryEmbedding = embeddingResponse.data[0].embedding;
 
     const vectorRows = await KbChunkModel.vectorSearch({
-      knowledgeBaseId,
+      connectorIds,
       queryEmbedding,
       limit: overFetchLimit,
     });
 
     logger.info(
       {
-        knowledgeBaseId,
+        connectorIds,
         queryText,
         vectorCount: vectorRows.length,
         fullTextCount: fullTextRows.length,
         hybridEnabled,
         rerankerEnabled: config.kb.rerankerEnabled,
-        vectorTopScores: vectorRows
-          .slice(0, 5)
-          .map((r) => ({ id: r.id, score: r.score, title: r.title })),
-        fullTextTopScores: fullTextRows
-          .slice(0, 5)
-          .map((r) => ({ id: r.id, score: r.score, title: r.title })),
       },
       "[QueryService] Search candidates retrieved",
     );
@@ -86,46 +82,21 @@ class QueryService {
         0,
         config.kb.rerankerEnabled ? overFetchLimit : limit,
       );
-
-      logger.info(
-        {
-          knowledgeBaseId,
-          fusedCount: topResults.length,
-          fusedTop: topResults
-            .slice(0, 5)
-            .map((r) => ({ id: r.id, score: r.score, title: r.title })),
-        },
-        "[QueryService] RRF fusion completed",
-      );
     } else {
       topResults = vectorRows;
     }
 
     if (config.kb.rerankerEnabled) {
-      const beforeRerank = topResults.map((r) => r.id);
       topResults = await rerank({
         queryText,
         chunks: topResults,
         openaiApiKey: config.kb.embeddingApiKey,
       });
       topResults = topResults.slice(0, limit);
-
-      logger.info(
-        {
-          knowledgeBaseId,
-          beforeRerank,
-          afterRerank: topResults.map((r) => ({
-            id: r.id,
-            title: r.title,
-          })),
-        },
-        "[QueryService] Reranker completed",
-      );
     }
 
     logger.info(
       {
-        knowledgeBaseId,
         resultCount: topResults.length,
         results: topResults.map((r) => ({
           id: r.id,
@@ -136,78 +107,6 @@ class QueryService {
       },
       "[QueryService] Final results",
     );
-
-    return this.mapResults(topResults);
-  }
-
-  async queryByConnector(params: {
-    connectorId: string;
-    queryText: string;
-    userAcl: AclEntry[];
-    limit?: number;
-  }): Promise<ChunkResult[]> {
-    const { connectorId, queryText, limit = 10 } = params;
-    const hybridEnabled = config.kb.hybridSearchEnabled;
-    const overFetchLimit = hybridEnabled ? limit * 2 : limit;
-
-    const embeddingPromise = this.getOpenAIClient().embeddings.create({
-      model: "text-embedding-3-small",
-      input: queryText,
-    });
-
-    const fullTextPromise = hybridEnabled
-      ? KbChunkModel.fullTextSearchByConnector({
-          connectorId,
-          queryText,
-          limit: overFetchLimit,
-        })
-      : Promise.resolve([] as VectorSearchResult[]);
-
-    const [embeddingResponse, fullTextRows] = await Promise.all([
-      embeddingPromise,
-      fullTextPromise,
-    ]);
-
-    const queryEmbedding = embeddingResponse.data[0].embedding;
-
-    const vectorRows = await KbChunkModel.vectorSearchByConnector({
-      connectorId,
-      queryEmbedding,
-      limit: overFetchLimit,
-    });
-
-    logger.info(
-      {
-        connectorId,
-        queryText,
-        vectorCount: vectorRows.length,
-        fullTextCount: fullTextRows.length,
-      },
-      "[QueryService] Connector search candidates retrieved",
-    );
-
-    let topResults: VectorSearchResult[];
-    if (hybridEnabled) {
-      const fused = reciprocalRankFusion<VectorSearchResult>({
-        rankings: [vectorRows, fullTextRows],
-        idExtractor: (row) => row.id,
-      });
-      topResults = fused.slice(
-        0,
-        config.kb.rerankerEnabled ? overFetchLimit : limit,
-      );
-    } else {
-      topResults = vectorRows;
-    }
-
-    if (config.kb.rerankerEnabled) {
-      topResults = await rerank({
-        queryText,
-        chunks: topResults,
-        openaiApiKey: config.kb.embeddingApiKey,
-      });
-      topResults = topResults.slice(0, limit);
-    }
 
     return this.mapResults(topResults);
   }

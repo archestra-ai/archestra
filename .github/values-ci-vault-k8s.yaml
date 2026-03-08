@@ -82,13 +82,7 @@ postgresql:
     database: archestra_dev
     username: archestra
     password: vault_e2e_custom_pw
-  # Grant superuser to the archestra user so migrations can create extensions (e.g., pgvector).
-  # Bitnami initdb scripts run as postgres superuser during DB initialization.
   primary:
-    initdb:
-      scripts:
-        grant-superuser.sql: |
-          ALTER USER archestra WITH SUPERUSER;
     service:
       type: NodePort
       nodePorts:

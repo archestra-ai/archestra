@@ -118,9 +118,7 @@ describe("CreateConnectorDialog", () => {
       expect(
         screen.getByRole("button", { name: "Create Connector" }),
       ).toBeInTheDocument();
-      expect(
-        screen.getByRole("button", { name: "Back" }),
-      ).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Back" })).toBeInTheDocument();
     });
 
     it("renders the Advanced section collapsed by default", async () => {

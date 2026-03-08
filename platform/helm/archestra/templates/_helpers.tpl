@@ -119,7 +119,7 @@ If ARCHESTRA_AUTH_SECRET env variable is explicitly set, it will override the au
   value: {{ .Values.archestra.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster | quote }}
 {{- if not (hasKey .Values.archestra.env "ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_K8S_CRONJOB_NAMESPACE") }}
 - name: ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_K8S_CRONJOB_NAMESPACE
-  value: {{ .Release.Namespace | quote }}
+  value: {{ include "archestra-platform.connectorNamespace" . | quote }}
 {{- end }}
 {{- range $key, $value := .Values.archestra.env }}
 {{/* Check if env var is in the explicit sensitive list OR matches ARCHESTRA_CHAT_*_API_KEY pattern */}}
@@ -167,6 +167,14 @@ ServiceAccount name for the Archestra Platform
 {{- else }}
 {{- default "default" .Values.archestra.orchestrator.kubernetes.serviceAccount.name }}
 {{- end }}
+{{- end }}
+
+{{/*
+Connector CronJob namespace.
+Defaults to the release namespace unless explicitly overridden via archestra.env.
+*/}}
+{{- define "archestra-platform.connectorNamespace" -}}
+{{- default .Release.Namespace (index .Values.archestra.env "ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_K8S_CRONJOB_NAMESPACE") -}}
 {{- end }}
 
 {{/*

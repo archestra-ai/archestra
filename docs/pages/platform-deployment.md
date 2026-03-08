@@ -946,7 +946,7 @@ These environment variables configure the [Knowledge Base](/docs/platform-knowle
   - Used by the embedder to call the OpenAI embeddings API (default model: `text-embedding-3-small`)
 
 - **`ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_K8S_CRONJOB_NAMESPACE`** - Kubernetes namespace where connector sync CronJobs run.
-  - Default: Helm release namespace (same as `ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE`)
+  - Default: Helm release namespace
   - Requires K8s runtime to be configured (`ARCHESTRA_ORCHESTRATOR_KUBECONFIG` or `ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER`)
 
 - **`ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_SYNC_MAX_DURATION_SECONDS`** - Maximum duration for a single connector sync run before it stops and triggers a continuation.

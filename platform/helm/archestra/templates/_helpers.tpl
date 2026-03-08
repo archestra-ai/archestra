@@ -105,8 +105,10 @@ If ARCHESTRA_AUTH_SECRET env variable is explicitly set, it will override the au
       name: {{ include "archestra-platform.authSecretName" . }}
       key: auth-secret
 {{- end }}
+{{- if not (hasKey .Values.archestra.env "ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE") }}
 - name: ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE
   value: {{ default .Release.Namespace .Values.archestra.orchestrator.kubernetes.namespace | quote }}
+{{- end }}
 {{- if .Values.archestra.orchestrator.baseImage }}
 - name: ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE
   value: {{ .Values.archestra.orchestrator.baseImage | quote }}

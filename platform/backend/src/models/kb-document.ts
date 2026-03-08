@@ -1,4 +1,4 @@
-import { and, count, desc, eq } from "drizzle-orm";
+import { and, count, desc, eq, inArray } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { InsertKbDocument, KbDocument, UpdateKbDocument } from "@/types";
 
@@ -10,6 +10,15 @@ class KbDocumentModel {
       .where(eq(schema.kbDocumentsTable.id, id));
 
     return result ?? null;
+  }
+
+  static async findByIds(ids: string[]): Promise<KbDocument[]> {
+    if (ids.length === 0) return [];
+
+    return await db
+      .select()
+      .from(schema.kbDocumentsTable)
+      .where(inArray(schema.kbDocumentsTable.id, ids));
   }
 
   static async findByKnowledgeBase(params: {
@@ -108,6 +117,15 @@ class KbDocumentModel {
     return result.rowCount !== null && result.rowCount > 0;
   }
 
+  static async findPending(params: { limit?: number }): Promise<KbDocument[]> {
+    return await db
+      .select()
+      .from(schema.kbDocumentsTable)
+      .where(eq(schema.kbDocumentsTable.embeddingStatus, "pending"))
+      .orderBy(schema.kbDocumentsTable.createdAt)
+      .limit(params.limit ?? 10);
+  }
+
   static async countByKnowledgeBase(knowledgeBaseId: string): Promise<number> {
     const [result] = await db
       .select({ count: count() })
@@ -127,15 +145,6 @@ class KbDocumentModel {
       );
 
     return result?.count ?? 0;
-  }
-
-  static async findPending(params: { limit?: number }): Promise<KbDocument[]> {
-    return await db
-      .select()
-      .from(schema.kbDocumentsTable)
-      .where(eq(schema.kbDocumentsTable.embeddingStatus, "pending"))
-      .orderBy(schema.kbDocumentsTable.createdAt)
-      .limit(params.limit ?? 10);
   }
 }
 

@@ -8,6 +8,13 @@ const mockEmbeddingsCreate = vi.hoisted(() =>
 
 vi.mock("openai", () => {
   class MockOpenAI {
+    static APIError = class APIError extends Error {
+      status: number;
+      constructor(status: number, message: string) {
+        super(message);
+        this.status = status;
+      }
+    };
     embeddings = { create: mockEmbeddingsCreate };
   }
   return { default: MockOpenAI };
@@ -179,7 +186,103 @@ describe("EmbeddingService", () => {
     expect(mockEmbeddingsCreate).not.toHaveBeenCalled();
   });
 
-  test("processPendingDocuments processes multiple documents", async ({
+  test("retries on 429 rate limit and succeeds", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+
+    const doc = await KbDocumentModel.create({
+      connectorId: connector.id,
+      organizationId: org.id,
+      title: "Retry Doc",
+      content: "Retry content",
+      contentHash: "hash-retry",
+      embeddingStatus: "pending",
+    });
+
+    await KbChunkModel.insertMany([
+      {
+        documentId: doc.id,
+        content: "Chunk to retry",
+        chunkIndex: 0,
+      },
+    ]);
+
+    const emb = makeFakeEmbedding(10);
+
+    // Create a retryable error that matches the isRetryableError check
+    const rateLimitError = Object.assign(new Error("Rate limited"), {
+      status: 429,
+    });
+    // Make it pass the instanceof check in the actual OpenAI module
+    const OpenAIMod = (await import("openai")).default;
+    Object.setPrototypeOf(rateLimitError, OpenAIMod.APIError.prototype);
+
+    // First call fails with 429, second succeeds
+    mockEmbeddingsCreate
+      .mockRejectedValueOnce(rateLimitError)
+      .mockResolvedValueOnce({
+        data: [{ embedding: emb }],
+      });
+
+    await embeddingService.processDocument(doc.id, makeEmbeddingContext());
+
+    const updated = await KbDocumentModel.findById(doc.id);
+    expect(updated?.embeddingStatus).toBe("completed");
+    expect(mockEmbeddingsCreate).toHaveBeenCalledTimes(2);
+  });
+
+  test("fails after exhausting retries", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+
+    const doc = await KbDocumentModel.create({
+      connectorId: connector.id,
+      organizationId: org.id,
+      title: "Exhaust Retry Doc",
+      content: "Content",
+      contentHash: "hash-exhaust",
+      embeddingStatus: "pending",
+    });
+
+    await KbChunkModel.insertMany([
+      {
+        documentId: doc.id,
+        content: "Chunk",
+        chunkIndex: 0,
+      },
+    ]);
+
+    const OpenAIMod2 = (await import("openai")).default;
+    const makeServerError = () => {
+      const err = Object.assign(new Error("Server error"), { status: 500 });
+      Object.setPrototypeOf(err, OpenAIMod2.APIError.prototype);
+      return err;
+    };
+
+    // Fail all 3 attempts
+    mockEmbeddingsCreate
+      .mockRejectedValueOnce(makeServerError())
+      .mockRejectedValueOnce(makeServerError())
+      .mockRejectedValueOnce(makeServerError());
+
+    await embeddingService.processDocument(doc.id, makeEmbeddingContext());
+
+    const updated = await KbDocumentModel.findById(doc.id);
+    expect(updated?.embeddingStatus).toBe("failed");
+    expect(mockEmbeddingsCreate).toHaveBeenCalledTimes(3);
+  });
+
+  test("processDocuments batches chunks from multiple documents into single API call", async ({
     makeOrganization,
     makeKnowledgeBase,
     makeKnowledgeBaseConnector,
@@ -196,31 +299,63 @@ describe("EmbeddingService", () => {
     const doc1 = await KbDocumentModel.create({
       connectorId: connector.id,
       organizationId: org.id,
-      title: "Doc 1",
+      title: "Batch Doc 1",
       content: "Content 1",
-      contentHash: "hash5",
+      contentHash: "hash-batch1",
       embeddingStatus: "pending",
     });
 
     const doc2 = await KbDocumentModel.create({
       connectorId: connector.id,
       organizationId: org.id,
-      title: "Doc 2",
+      title: "Batch Doc 2",
       content: "Content 2",
-      contentHash: "hash6",
+      contentHash: "hash-batch2",
       embeddingStatus: "pending",
     });
 
-    // Both docs have no chunks, so they'll complete with chunkCount 0
-    await embeddingService.processPendingDocuments();
+    await KbChunkModel.insertMany([
+      { documentId: doc1.id, content: "Doc1 Chunk A", chunkIndex: 0 },
+      { documentId: doc1.id, content: "Doc1 Chunk B", chunkIndex: 1 },
+      { documentId: doc2.id, content: "Doc2 Chunk A", chunkIndex: 0 },
+    ]);
+
+    const emb0 = makeFakeEmbedding(1);
+    const emb1 = makeFakeEmbedding(2);
+    const emb2 = makeFakeEmbedding(3);
+
+    // All 3 chunks should arrive in a single API call
+    mockEmbeddingsCreate.mockResolvedValueOnce({
+      data: [{ embedding: emb0 }, { embedding: emb1 }, { embedding: emb2 }],
+    });
+
+    await embeddingService.processDocuments([doc1.id, doc2.id]);
+
+    // Only 1 OpenAI API call for all 3 chunks
+    expect(mockEmbeddingsCreate).toHaveBeenCalledTimes(1);
+    expect(mockEmbeddingsCreate).toHaveBeenCalledWith({
+      model: "text-embedding-3-small",
+      input: ["Doc1 Chunk A", "Doc1 Chunk B", "Doc2 Chunk A"],
+      dimensions: 1536,
+    });
 
     const updated1 = await KbDocumentModel.findById(doc1.id);
-    const updated2 = await KbDocumentModel.findById(doc2.id);
     expect(updated1?.embeddingStatus).toBe("completed");
+    expect(updated1?.chunkCount).toBe(2);
+
+    const updated2 = await KbDocumentModel.findById(doc2.id);
     expect(updated2?.embeddingStatus).toBe("completed");
+    expect(updated2?.chunkCount).toBe(1);
+
+    const chunks1 = await KbChunkModel.findByDocument(doc1.id);
+    expect(chunks1[0].embedding).toHaveLength(1536);
+    expect(chunks1[1].embedding).toHaveLength(1536);
+
+    const chunks2 = await KbChunkModel.findByDocument(doc2.id);
+    expect(chunks2[0].embedding).toHaveLength(1536);
   });
 
-  test("concurrency guard prevents double processing", async ({
+  test("processDocuments marks only affected documents as failed on partial API failure", async ({
     makeOrganization,
     makeKnowledgeBase,
     makeKnowledgeBaseConnector,
@@ -234,45 +369,40 @@ describe("EmbeddingService", () => {
       config: makeEmbeddingContext(),
     });
 
-    await KbDocumentModel.create({
+    const doc1 = await KbDocumentModel.create({
       connectorId: connector.id,
       organizationId: org.id,
-      title: "Slow Doc",
-      content: "Slow content",
-      contentHash: "hash7",
+      title: "Will Fail Doc",
+      content: "Content",
+      contentHash: "hash-fail-batch",
       embeddingStatus: "pending",
     });
 
-    // Simulate slow processing by making the first call block
-    let resolveFirst: (() => void) | undefined;
-    const firstCallPromise = new Promise<void>((r) => {
-      resolveFirst = r;
+    const doc2 = await KbDocumentModel.create({
+      connectorId: connector.id,
+      organizationId: org.id,
+      title: "No Chunks Doc",
+      content: "Content",
+      contentHash: "hash-nochunks-batch",
+      embeddingStatus: "pending",
     });
 
-    const originalFindPending = KbDocumentModel.findPending;
-    let callCount = 0;
-    vi.spyOn(KbDocumentModel, "findPending").mockImplementation(
-      async (params) => {
-        callCount++;
-        if (callCount === 1) {
-          await firstCallPromise;
-        }
-        return originalFindPending.call(KbDocumentModel, params);
-      },
-    );
+    await KbChunkModel.insertMany([
+      { documentId: doc1.id, content: "Chunk", chunkIndex: 0 },
+    ]);
+    // doc2 has no chunks → should complete with chunkCount 0
 
-    // Start first processing (will block on findPending)
-    const first = embeddingService.processPendingDocuments();
-    // Immediately start second processing — should be skipped due to guard
-    const second = embeddingService.processPendingDocuments();
+    mockEmbeddingsCreate.mockRejectedValueOnce(new Error("API down"));
 
-    // Unblock the first call
-    resolveFirst?.();
+    await embeddingService.processDocuments([doc1.id, doc2.id]);
 
-    await Promise.all([first, second]);
+    const updated1 = await KbDocumentModel.findById(doc1.id);
+    expect(updated1?.embeddingStatus).toBe("failed");
 
-    // findPending should only have been called once (the second call was skipped)
-    expect(callCount).toBe(1);
+    // doc2 had no chunks, so it completes regardless
+    const updated2 = await KbDocumentModel.findById(doc2.id);
+    expect(updated2?.embeddingStatus).toBe("completed");
+    expect(updated2?.chunkCount).toBe(0);
   });
 
   test("processPendingDocuments skips when no embedding config available", async ({

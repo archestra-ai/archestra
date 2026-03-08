@@ -10,6 +10,7 @@ import {
   Loader2,
   Plus,
   Search,
+  User,
   XIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -24,6 +25,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -53,7 +55,7 @@ import {
 import { useMcpServersGroupedByCatalog } from "@/lib/mcp-server.query";
 import { cn } from "@/lib/utils";
 
-type ScopeFilter = "all" | "personal" | "team" | "org";
+type ScopeFilter = "my" | "others" | "team" | "org";
 type DialogView =
   | "settings"
   | "change"
@@ -78,27 +80,25 @@ export function InitialAgentSelector({
   const [open, setOpen] = useState(false);
   const [view, setView] = useState<DialogView>("settings");
   const [search, setSearch] = useState("");
-  const [scopeFilter, setScopeFilter] = useState<ScopeFilter>("all");
+  const [scopeFilters, setScopeFilters] = useState<Set<ScopeFilter>>(
+    () => new Set<ScopeFilter>(["my", "team", "org"]),
+  );
   const [selectedCatalog, setSelectedCatalog] = useState<CatalogItem | null>(
     null,
   );
 
-  const agents = useMemo(() => {
-    const userId = session?.user?.id;
-    return allAgents.filter(
-      (a) =>
-        (a as unknown as Record<string, unknown>).scope !== "personal" ||
-        (a as unknown as Record<string, unknown>).authorId === userId,
-    );
-  }, [allAgents, session?.user?.id]);
+  const userId = session?.user?.id;
 
   const filteredAgents = useMemo(() => {
-    let result = agents;
-    if (scopeFilter !== "all") {
-      result = result.filter(
-        (a) => (a as unknown as Record<string, unknown>).scope === scopeFilter,
-      );
-    }
+    let result = allAgents.filter((a) => {
+      const scope = (a as unknown as Record<string, unknown>).scope as string;
+      const authorId = (a as unknown as Record<string, unknown>).authorId as string;
+      if (scope === "personal") {
+        if (authorId === userId) return scopeFilters.has("my");
+        return scopeFilters.has("others");
+      }
+      return scopeFilters.has(scope as ScopeFilter);
+    });
     if (search) {
       const lower = search.toLowerCase();
       result = result.filter(
@@ -113,11 +113,11 @@ export function InitialAgentSelector({
       const sb = (b as unknown as Record<string, unknown>).scope as string;
       return (scopeOrder[sa] ?? 3) - (scopeOrder[sb] ?? 3);
     });
-  }, [agents, search, scopeFilter]);
+  }, [allAgents, search, scopeFilters, userId]);
 
   const currentAgent = useMemo(
-    () => agents.find((a) => a.id === currentAgentId) ?? agents[0] ?? null,
-    [agents, currentAgentId],
+    () => allAgents.find((a) => a.id === currentAgentId) ?? allAgents[0] ?? null,
+    [allAgents, currentAgentId],
   );
 
   const effectiveAgentId = currentAgent?.id ?? currentAgentId;
@@ -141,20 +141,20 @@ export function InitialAgentSelector({
   );
   const triggerSubagents = useMemo(() => {
     const targetIds = new Set(triggerDelegations.map((d) => d.id));
-    return agents.filter((a) => targetIds.has(a.id));
-  }, [agents, triggerDelegations]);
+    return allAgents.filter((a) => targetIds.has(a.id));
+  }, [allAgents, triggerDelegations]);
 
   const handleAgentSelect = (agentId: string) => {
     onAgentChange(agentId);
     setView("settings");
     setSearch("");
-    setScopeFilter("all");
+    setScopeFilters(new Set(["my", "team", "org"]));
   };
 
   const resetToSettings = useCallback(() => {
     setView("settings");
     setSearch("");
-    setScopeFilter("all");
+    setScopeFilters(new Set(["my", "team", "org"]));
     setSelectedCatalog(null);
   }, []);
 
@@ -222,18 +222,28 @@ export function InitialAgentSelector({
                 <div className="flex items-center gap-1">
                   {(
                     [
-                      { value: "all", label: "All" },
-                      { value: "personal", label: "Personal" },
+                      { value: "my", label: "My Personal" },
                       { value: "team", label: "Team" },
                       { value: "org", label: "Organization" },
+                      { value: "others", label: "Others' Personal" },
                     ] as const
                   ).map((option) => (
                     <Button
                       key={option.value}
-                      variant={scopeFilter === option.value ? "secondary" : "ghost"}
+                      variant={scopeFilters.has(option.value) ? "secondary" : "ghost"}
                       size="sm"
                       className="text-xs h-7 px-2.5"
-                      onClick={() => setScopeFilter(option.value)}
+                      onClick={() => {
+                        setScopeFilters((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(option.value)) {
+                            next.delete(option.value);
+                          } else {
+                            next.add(option.value);
+                          }
+                          return next;
+                        });
+                      }}
                     >
                       {option.label}
                     </Button>
@@ -266,8 +276,18 @@ export function InitialAgentSelector({
                       agent={agent}
                       isSelected={currentAgentId === agent.id}
                       onSelect={() => handleAgentSelect(agent.id)}
+                      currentUserId={userId}
                     />
                   ))}
+                  <a
+                    href="/agents?create=true"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex h-full min-h-[120px] flex-col items-center justify-center gap-2 rounded-lg border border-dashed p-4 text-center transition-colors hover:bg-accent cursor-pointer text-muted-foreground"
+                  >
+                    <ExternalLink className="size-5" />
+                    <span className="text-xs font-medium">Create Agent</span>
+                  </a>
                 </div>
               )}
             </div>
@@ -918,18 +938,46 @@ function AddDelegationView({
   onBack: () => void;
 }) {
   const { data: allAgents = [] } = useInternalAgents();
+  const { data: session } = authClient.useSession();
   const { data: delegations = [] } = useAgentDelegations(agentId);
   const syncDelegations = useSyncAgentDelegations();
+  const [scopeFilters, setScopeFilters] = useState<Set<ScopeFilter>>(
+    () => new Set<ScopeFilter>(["my", "team", "org"]),
+  );
+  const [search, setSearch] = useState("");
+  const currentUserId = session?.user?.id;
 
   const delegatedIds = useMemo(
     () => new Set(delegations.map((d) => d.id)),
     [delegations],
   );
 
-  const availableAgents = useMemo(
-    () => allAgents.filter((a) => a.id !== agentId),
-    [allAgents, agentId],
-  );
+  const filteredAgents = useMemo(() => {
+    let result = allAgents.filter((a) => a.id !== agentId);
+    result = result.filter((a) => {
+      const scope = (a as unknown as Record<string, unknown>).scope as string;
+      const authorId = (a as unknown as Record<string, unknown>).authorId as string;
+      if (scope === "personal") {
+        if (authorId === currentUserId) return scopeFilters.has("my");
+        return scopeFilters.has("others");
+      }
+      return scopeFilters.has(scope as ScopeFilter);
+    });
+    if (search) {
+      const lower = search.toLowerCase();
+      result = result.filter(
+        (a) =>
+          a.name.toLowerCase().includes(lower) ||
+          a.description?.toLowerCase().includes(lower),
+      );
+    }
+    const scopeOrder: Record<string, number> = { personal: 0, team: 1, org: 2 };
+    return [...result].sort((a, b) => {
+      const sa = (a as unknown as Record<string, unknown>).scope as string;
+      const sb = (b as unknown as Record<string, unknown>).scope as string;
+      return (scopeOrder[sa] ?? 3) - (scopeOrder[sb] ?? 3);
+    });
+  }, [allAgents, agentId, search, scopeFilters, currentUserId]);
 
   const handleToggle = (targetAgentId: string) => {
     const newIds = new Set(delegatedIds);
@@ -946,21 +994,68 @@ function AddDelegationView({
 
   return (
     <div className="flex flex-col h-full">
-      <DialogHeader title="Call an Agent" onBack={onBack} />
+      <DialogHeader
+        title="Call an Agent"
+        onBack={onBack}
+        extra={
+          <div className="flex items-center gap-1">
+            {(
+              [
+                { value: "my", label: "My Personal" },
+                { value: "team", label: "Team" },
+                { value: "org", label: "Organization" },
+                { value: "others", label: "Others' Personal" },
+              ] as const
+            ).map((option) => (
+              <Button
+                key={option.value}
+                variant={scopeFilters.has(option.value) ? "secondary" : "ghost"}
+                size="sm"
+                className="text-xs h-7 px-2.5"
+                onClick={() => {
+                  setScopeFilters((prev) => {
+                    const next = new Set(prev);
+                    if (next.has(option.value)) {
+                      next.delete(option.value);
+                    } else {
+                      next.add(option.value);
+                    }
+                    return next;
+                  });
+                }}
+              >
+                {option.label}
+              </Button>
+            ))}
+          </div>
+        }
+      />
+      <div className="px-4 pt-4 shrink-0">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Search agents..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-9"
+            autoFocus
+          />
+        </div>
+      </div>
       <div className="px-4 pt-4 pb-4 flex-1 min-h-0 overflow-y-auto">
-        {availableAgents.length === 0 ? (
+        {filteredAgents.length === 0 ? (
           <p className="text-sm text-muted-foreground text-center py-8">
-            No other agents available.
+            No agents found.
           </p>
         ) : (
           <div className="grid grid-cols-3 gap-3">
-            {availableAgents.map((agent) => (
+            {filteredAgents.map((agent) => (
               <button
                 key={agent.id}
                 type="button"
                 onClick={() => handleToggle(agent.id)}
                 className={cn(
-                  "flex h-full flex-col items-start gap-2 rounded-lg border p-4 text-left transition-colors hover:bg-accent cursor-pointer",
+                  "flex h-full min-h-[120px] flex-col items-start gap-2 rounded-lg border p-4 text-left transition-colors hover:bg-accent cursor-pointer",
                   delegatedIds.has(agent.id) && "border-primary bg-accent",
                 )}
               >
@@ -987,14 +1082,26 @@ function AddDelegationView({
                     {agent.description}
                   </p>
                 )}
-                <AgentToolAvatars agentId={agent.id} />
+                <div className="flex items-center gap-2 w-full mt-auto">
+                  <AgentBadge
+                    type={
+                      (agent as unknown as Record<string, unknown>).scope as
+                        | "personal"
+                        | "team"
+                        | "org"
+                    }
+                    className="text-[10px] px-1.5 py-0"
+                  />
+                  <div className="flex-1" />
+                  <AgentToolAvatars agentId={agent.id} />
+                </div>
               </button>
             ))}
             <a
               href="/agents?create=true"
               target="_blank"
               rel="noopener noreferrer"
-              className="flex h-full flex-col items-center justify-center gap-2 rounded-lg border border-dashed p-4 text-center transition-colors hover:bg-accent cursor-pointer text-muted-foreground"
+              className="flex h-full min-h-[120px] flex-col items-center justify-center gap-2 rounded-lg border border-dashed p-4 text-center transition-colors hover:bg-accent cursor-pointer text-muted-foreground"
             >
               <ExternalLink className="size-5" />
               <span className="text-xs font-medium">Create Agent</span>
@@ -1014,6 +1121,7 @@ function AgentCard({
   agent,
   isSelected,
   onSelect,
+  currentUserId,
 }: {
   agent: {
     id: string;
@@ -1023,13 +1131,14 @@ function AgentCard({
   };
   isSelected: boolean;
   onSelect: () => void;
+  currentUserId?: string;
 }) {
   return (
     <button
       type="button"
       onClick={onSelect}
       className={cn(
-        "flex h-full flex-col items-start gap-2 rounded-lg border p-4 text-left transition-colors hover:bg-accent cursor-pointer",
+        "flex h-full min-h-[120px] flex-col items-start gap-2 rounded-lg border p-4 text-left transition-colors hover:bg-accent cursor-pointer",
         isSelected && "border-primary bg-accent",
       )}
     >
@@ -1059,6 +1168,16 @@ function AgentCard({
           type={agent.scope as "personal" | "team" | "org"}
           className="text-[10px] px-1.5 py-0"
         />
+        {agent.scope === "personal" &&
+          (agent as unknown as Record<string, unknown>).authorId !== currentUserId &&
+          (agent as unknown as Record<string, unknown>).authorName && (
+            <Badge variant="secondary" className="text-[10px] gap-1 px-1.5 py-0">
+              <User className="h-2.5 w-2.5" />
+              {(agent as unknown as Record<string, unknown>).authorName as string}
+            </Badge>
+          )}
+        <div className="flex-1" />
+        <AgentToolAvatars agentId={agent.id} />
       </div>
     </button>
   );
@@ -1090,9 +1209,7 @@ function AgentToolAvatars({ agentId }: { agentId: string }) {
   if (catalogs.length === 0 && subagents.length === 0) return null;
 
   return (
-    <div className="mt-auto w-full flex justify-center">
-      <ToolServerAvatarGroup catalogs={catalogs} subagents={subagents} />
-    </div>
+    <ToolServerAvatarGroup catalogs={catalogs} subagents={subagents} />
   );
 }
 

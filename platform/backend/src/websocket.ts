@@ -643,6 +643,7 @@ class WebSocketService {
             error: deploymentStatus.error,
             restartCount: deploymentStatus.restartCount,
             podAge: deploymentStatus.podAge,
+            podName: deploymentStatus.podName,
           };
         } else {
           result[serverId] = {

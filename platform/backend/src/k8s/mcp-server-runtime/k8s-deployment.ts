@@ -216,6 +216,7 @@ export default class K8sDeployment {
   private errorMessage: string | null = null;
   private cachedRestartCount = 0;
   private cachedPodCreationTime: Date | null = null;
+  private cachedPodName: string | null = null;
   private catalogItem?: InternalMcpCatalog | null;
   private userConfigValues?: Record<string, string>;
   private environmentValues?: Record<string, string>;
@@ -2500,6 +2501,7 @@ export default class K8sDeployment {
         this.cachedPodCreationTime = anyPod.metadata?.creationTimestamp
           ? new Date(anyPod.metadata.creationTimestamp)
           : null;
+        this.cachedPodName = anyPod.metadata?.name ?? null;
       }
 
       // Don't re-evaluate state for terminal failed (user must reinstall)
@@ -2567,6 +2569,7 @@ export default class K8sDeployment {
       podAge: this.cachedPodCreationTime
         ? K8sDeployment.formatAge(this.cachedPodCreationTime)
         : undefined,
+      podName: this.cachedPodName ?? undefined,
     };
   }
 

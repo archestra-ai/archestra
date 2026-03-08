@@ -340,6 +340,7 @@ export type McpDeploymentStatusEntry = {
   error: string | null;
   restartCount?: number;
   podAge?: string; // e.g. "24m", "2h", "3d"
+  podName?: string;
 };
 
 export type McpDeploymentStatusesMessage = {

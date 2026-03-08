@@ -610,7 +610,15 @@ export function McpLogsContent({
                 </div>
               )}
               <div className="flex items-center justify-between flex-shrink-0">
-                <h3 className="text-sm font-semibold">Deployment Logs</h3>
+                <h3 className="text-sm font-semibold">
+                  Pod Logs
+                  {currentDeploymentStatus?.podName && (
+                    <span className="font-normal text-muted-foreground">
+                      {" "}
+                      for {currentDeploymentStatus.podName}
+                    </span>
+                  )}
+                </h3>
                 {!autoScroll && (
                   <Button
                     variant="outline"

@@ -21,6 +21,9 @@ export function useSettingsTabs() {
     ...(permissionMap?.["/settings/llm"]
       ? [{ label: "LLM", href: "/settings/llm" }]
       : []),
+    ...(knowledgeBaseEnabled && permissionMap?.["/settings/knowledge"]
+      ? [{ label: "Knowledge", href: "/settings/knowledge" }]
+      : []),
     ...(permissionMap?.["/settings/users"]
       ? [{ label: "Users", href: "/settings/users" }]
       : []),
@@ -36,9 +39,6 @@ export function useSettingsTabs() {
       : []),
     ...(secretsType?.type === "Vault" && permissionMap?.["/settings/secrets"]
       ? [{ label: "Secrets", href: "/settings/secrets" }]
-      : []),
-    ...(knowledgeBaseEnabled && permissionMap?.["/settings/knowledge"]
-      ? [{ label: "Knowledge", href: "/settings/knowledge" }]
       : []),
     ...(permissionMap?.["/settings/appearance"]
       ? [{ label: "Appearance", href: "/settings/appearance" }]

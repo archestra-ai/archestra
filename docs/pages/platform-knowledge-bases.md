@@ -17,23 +17,59 @@ Knowledge bases provide built-in retrieval augmented generation (RAG) powered by
 
 ## Architecture
 
-The RAG stack runs entirely within PostgreSQL with zero external dependencies:
+```mermaid
+flowchart TB
+    subgraph Ingestion["Ingestion (async)"]
+        direction TB
+        C[Connectors] -->|cron schedule| D[Documents]
+        D --> CH[Chunking]
+        CH -->|OpenAI API| E[Embedding]
+        E --> PG[(PostgreSQL + pgvector)]
+    end
 
-- **Hybrid search** -- Combines dense vector similarity (pgvector) with BM-25 full-text search via Reciprocal Rank Fusion for high-quality retrieval
-- **Access control** -- Per-document ACL filtering ensures users only see documents they have access to
-- **Async embedding** -- Documents are chunked and embedded in the background using OpenAI-compatible embedding models
+    subgraph Query["Query (runtime)"]
+        direction TB
+        Q[query_knowledge_base] -->|OpenAI API| QE[Query Embedding]
+        QE --> VS[Vector Search]
+        QE --> FTS["Full-Text Search<br/>(configurable)"]
+        VS --> RRF[Reciprocal Rank Fusion]
+        FTS --> RRF
+        RRF --> RR["Reranking<br/>(configurable)"]
+        RR --> ACL[ACL Filtering]
+        ACL --> R[Results]
+    end
 
-### Ingestion Pipeline
+    PG --- VS
+    PG --- FTS
+```
 
-1. Connectors fetch documents from external sources on a cron schedule
-2. Documents are split into chunks using a token-based splitter
-3. Chunks are embedded asynchronously and indexed for retrieval
+The RAG stack runs entirely within PostgreSQL — no external vector database required. Full-text search (hybrid mode) and LLM reranking can each be independently enabled or disabled.
+
+See [Platform Deployment — Knowledge Base Configuration](/docs/platform-deployment#knowledge-base-configuration) for full configuration reference.
+
+## LLM Provider Configuration
+
+Embedding and reranking require LLM provider API keys. These are configured in **Settings > Knowledge** by selecting existing LLM Provider Keys -- no environment variables are needed.
+
+### Embedding
+
+Only OpenAI embedding models are supported. The selected API key must have access to the configured embedding model (`text-embedding-3-small` or `text-embedding-3-large`; both models are reduced to 1536 dimensions for the `pgvector` index).
+
+The embedding model is locked after documents have been embedded, and is not currently supported (as changing models requires re-embedding all documents).
+
+### Reranking
+
+The reranker uses an LLM to score and reorder search results by relevance. Any LLM provider and model can be used -- the model should support structured output.
+
+## Connectors
+
+Connectors pull data from external tools (Jira, Confluence, etc.) on a schedule. Each connector tracks a checkpoint for incremental sync -- only changes since the last run are processed. A connector can be assigned to multiple knowledge bases.
+
+See [Knowledge Connectors](/docs/platform-knowledge-connectors) for supported connector types, configuration, and management.
 
 ## Assigning Knowledge Bases
 
-Knowledge bases can be assigned to both Agents and MCP Gateways. The relationship is many-to-many -- an agent can have multiple knowledge bases, and a knowledge base can be shared across agents.
-
-Assign knowledge bases in the agent or MCP gateway dialog under the "Knowledge Base" section. Once assigned, the `query_knowledge_base` tool becomes available.
+Knowledge bases can be assigned to Agents and MCP Gateways. An Agent can have multiple knowledge bases, and a knowledge base can be shared across agents.
 
 ### Visibility Modes
 
@@ -42,18 +78,3 @@ Assign knowledge bases in the agent or MCP gateway dialog under the "Knowledge B
 | **Org-wide**              | All documents accessible to all users in the organization       |
 | **Team-scoped**           | Documents accessible only to members of the assigned teams      |
 | **Auto-sync permissions** | ACL entries synced from the source system (user emails, groups) |
-
-## Connectors
-
-Connectors pull data from external tools (Jira, Confluence, etc.) on a cron schedule. Each connector tracks a checkpoint for incremental sync -- only changes since the last run are processed. A connector can be assigned to multiple knowledge bases.
-
-See [Knowledge Connectors](/docs/platform-knowledge-connectors) for supported connector types, configuration, and management.
-
-## Environment Variables
-
-| Variable                                                   | Required | Description                                                            |
-| ---------------------------------------------------------- | -------- | ---------------------------------------------------------------------- |
-| `ARCHESTRA_KNOWLEDGE_BASE_EMBEDDING_API_KEY`               | Yes      | API key for generating text embeddings (OpenAI-compatible endpoint)    |
-| `ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_K8S_CRONJOB_NAMESPACE` | No       | K8s namespace for connector CronJobs (default: Helm release namespace) |
-
-See [Platform Deployment](/docs/platform-deployment) for the full environment variable reference.

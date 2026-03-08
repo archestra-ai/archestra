@@ -14,7 +14,7 @@ import {
   Plus,
   Settings,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import {
@@ -39,7 +39,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -47,6 +46,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useChatModels } from "@/lib/chat-models.query";
 import {
   useAvailableChatApiKeys,
   useCreateChatApiKey,
@@ -56,6 +56,8 @@ import {
   useOrganization,
   useUpdateKnowledgeSettings,
 } from "@/lib/organization.query";
+
+const EMBEDDING_MODEL_NAMES = Object.keys(EMBEDDING_MODELS).join(", ");
 
 const DEFAULT_FORM_VALUES: ChatApiKeyFormValues = {
   name: "",
@@ -69,26 +71,37 @@ const DEFAULT_FORM_VALUES: ChatApiKeyFormValues = {
   isPrimary: true,
 };
 
+const EMBEDDING_DEFAULT_FORM_VALUES: ChatApiKeyFormValues = {
+  ...DEFAULT_FORM_VALUES,
+  provider: "openai",
+};
+
 function AddApiKeyDialog({
   open,
   onOpenChange,
+  forEmbedding = false,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  forEmbedding?: boolean;
 }) {
   const createMutation = useCreateChatApiKey();
   const byosEnabled = useFeature("byosEnabled");
   const geminiVertexAiEnabled = useFeature("geminiVertexAiEnabled");
 
+  const defaults = forEmbedding
+    ? EMBEDDING_DEFAULT_FORM_VALUES
+    : DEFAULT_FORM_VALUES;
+
   const form = useForm<ChatApiKeyFormValues>({
-    defaultValues: DEFAULT_FORM_VALUES,
+    defaultValues: defaults,
   });
 
   useEffect(() => {
     if (open) {
-      form.reset(DEFAULT_FORM_VALUES);
+      form.reset(defaults);
     }
-  }, [open, form]);
+  }, [open, form, defaults]);
 
   const formValues = form.watch();
   const isValid =
@@ -132,10 +145,25 @@ function AddApiKeyDialog({
         <DialogHeader>
           <DialogTitle>Add LLM Provider Key</DialogTitle>
           <DialogDescription>
-            Add an LLM provider API key for knowledge base embedding and
-            reranking
+            {forEmbedding
+              ? "Add an OpenAI API key for knowledge base embeddings."
+              : "Add an LLM provider API key for knowledge base reranking."}
           </DialogDescription>
         </DialogHeader>
+        {forEmbedding && (
+          <Alert variant="default" className="py-2">
+            <Info className="h-4 w-4" />
+            <AlertDescription className="text-xs">
+              Only OpenAI is currently supported for embeddings. The key must
+              have access to at least one of the following models:
+              <ul className="list-disc list-inside mt-1">
+                {Object.keys(EMBEDDING_MODELS).map((model) => (
+                  <li key={model}>{model}</li>
+                ))}
+              </ul>
+            </AlertDescription>
+          </Alert>
+        )}
         <DialogForm onSubmit={handleCreate}>
           <div className="py-2">
             <ChatApiKeyForm
@@ -144,6 +172,8 @@ function AddApiKeyDialog({
               form={form}
               isPending={createMutation.isPending}
               geminiVertexAiEnabled={geminiVertexAiEnabled}
+              disableProvider={forEmbedding}
+              hideScopeAndPrimary
             />
           </div>
           <DialogFooter>
@@ -194,6 +224,34 @@ function ApiKeySelector({
   const openaiKeys = keys.filter((k) => k.provider === "openai");
   const otherKeys = keys.filter((k) => k.provider !== "openai");
   const isEmbeddingSelector = filterProvider === "openai";
+  const hasSelectableKeys = isEmbeddingSelector
+    ? openaiKeys.length > 0
+    : keys.length > 0;
+
+  if (!hasSelectableKeys) {
+    return (
+      <div className="space-y-2">
+        {!disabled && (
+          <>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setShowAddDialog(true)}
+            >
+              <Plus className="h-3 w-3 mr-1" />
+              Add LLM Provider Key
+            </Button>
+            <AddApiKeyDialog
+              open={showAddDialog}
+              onOpenChange={setShowAddDialog}
+              forEmbedding={isEmbeddingSelector}
+            />
+          </>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-2">
@@ -210,11 +268,6 @@ function ApiKeySelector({
           </SelectValue>
         </SelectTrigger>
         <SelectContent>
-          {keys.length === 0 && (
-            <div className="px-2 py-3 text-sm text-muted-foreground text-center">
-              No LLM provider keys available
-            </div>
-          )}
           {isEmbeddingSelector ? (
             <>
               {openaiKeys.map((key) => (
@@ -262,25 +315,74 @@ function ApiKeySelector({
           )}
         </SelectContent>
       </Select>
-
-      {!disabled && (
-        <>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => setShowAddDialog(true)}
-          >
-            <Plus className="h-3 w-3 mr-1" />
-            Add LLM Provider Key
-          </Button>
-          <AddApiKeyDialog
-            open={showAddDialog}
-            onOpenChange={setShowAddDialog}
-          />
-        </>
-      )}
     </div>
+  );
+}
+
+function RerankerModelSelector({
+  value,
+  onChange,
+  disabled,
+  selectedKeyId,
+}: {
+  value: string | null;
+  onChange: (value: string | null) => void;
+  disabled: boolean;
+  selectedKeyId: string | null;
+}) {
+  const { data: apiKeys } = useAvailableChatApiKeys();
+  const { data: allModels, isPending: modelsLoading } = useChatModels();
+
+  const selectedProvider = useMemo(() => {
+    if (!selectedKeyId || !apiKeys) return null;
+    return apiKeys.find((k) => k.id === selectedKeyId)?.provider ?? null;
+  }, [selectedKeyId, apiKeys]);
+
+  const models = useMemo(() => {
+    if (!allModels || !selectedProvider) return [];
+    return allModels.filter((m) => m.provider === selectedProvider);
+  }, [allModels, selectedProvider]);
+
+  if (!selectedKeyId) {
+    return (
+      <Select disabled>
+        <SelectTrigger className="w-80">
+          <SelectValue placeholder="Select a reranker API key first..." />
+        </SelectTrigger>
+        <SelectContent />
+      </Select>
+    );
+  }
+
+  if (modelsLoading) {
+    return <LoadingSpinner />;
+  }
+
+  return (
+    <Select
+      value={value ?? ""}
+      onValueChange={(v) => onChange(v || null)}
+      disabled={disabled}
+    >
+      <SelectTrigger className="w-80">
+        <SelectValue placeholder="Select reranking model...">
+          {value ?? "Select reranking model..."}
+        </SelectValue>
+      </SelectTrigger>
+      <SelectContent>
+        {models.length === 0 ? (
+          <div className="px-2 py-3 text-sm text-muted-foreground text-center">
+            No models found for this provider
+          </div>
+        ) : (
+          models.map((model) => (
+            <SelectItem key={model.id} value={model.id}>
+              {model.displayName ?? model.id}
+            </SelectItem>
+          ))
+        )}
+      </SelectContent>
+    </Select>
   );
 }
 
@@ -365,6 +467,14 @@ function KnowledgeSettingsContent() {
     setRerankerModel(serverRerankerModel ?? null);
   };
 
+  // Clear reranker model when switching provider keys
+  const handleRerankerKeyChange = (keyId: string | null) => {
+    setRerankerChatApiKeyId(keyId);
+    if (keyId !== rerankerChatApiKeyId) {
+      setRerankerModel(null);
+    }
+  };
+
   return (
     <LoadingWrapper isPending={isPending} loadingFallback={<LoadingSpinner />}>
       <div className="space-y-8">
@@ -376,12 +486,13 @@ function KnowledgeSettingsContent() {
           </div>
           <p className="text-sm text-muted-foreground">
             Configure the API key and model used to generate vector embeddings
-            for knowledge base documents.
+            for knowledge base documents. Only OpenAI embedding models are
+            currently supported.
           </p>
 
           <SettingsBlock
             title="LLM Provider API Key"
-            description="Select an OpenAI API key for generating embeddings. Only OpenAI embedding models are currently supported."
+            description={`Select an OpenAI API key for generating embeddings. The selected key must have access to at least one of: ${EMBEDDING_MODEL_NAMES}.`}
             control={
               <WithPermissions
                 permissions={{ knowledgeSettings: ["update"] }}
@@ -484,7 +595,7 @@ function KnowledgeSettingsContent() {
                 {({ hasPermission }) => (
                   <ApiKeySelector
                     value={rerankerChatApiKeyId}
-                    onChange={setRerankerChatApiKeyId}
+                    onChange={handleRerankerKeyChange}
                     disabled={!hasPermission}
                     label="reranker API key"
                   />
@@ -502,12 +613,11 @@ function KnowledgeSettingsContent() {
                 noPermissionHandle="tooltip"
               >
                 {({ hasPermission }) => (
-                  <Input
-                    className="w-80"
-                    placeholder="e.g. gpt-4o"
-                    value={rerankerModel ?? ""}
-                    onChange={(e) => setRerankerModel(e.target.value || null)}
+                  <RerankerModelSelector
+                    value={rerankerModel}
+                    onChange={setRerankerModel}
                     disabled={!hasPermission}
+                    selectedKeyId={rerankerChatApiKeyId}
                   />
                 )}
               </WithPermissions>

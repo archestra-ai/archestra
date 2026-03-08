@@ -80,7 +80,7 @@ import {
 } from "@/components/ui/empty";
 import { TypingText } from "@/components/ui/typing-text";
 import { Version } from "@/components/version";
-import { useInternalAgents } from "@/lib/agent.query";
+import { useDefaultAgentId, useInternalAgents } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth.query";
 import { useRecentlyGeneratedTitles } from "@/lib/chat.hook";
 import {
@@ -190,6 +190,7 @@ export default function ChatPage() {
   // Fetch internal agents for dialog editing
   const { data: internalAgents = [], isPending: isLoadingAgents } =
     useInternalAgents();
+  const { data: defaultAgentId } = useDefaultAgentId();
 
   // Fetch profiles and models for initial chat (no conversation)
   const { modelsByProvider, isPending: isModelsLoading } =
@@ -230,7 +231,7 @@ export default function ChatPage() {
       }
     }
 
-    // Try to restore from localStorage, then default to first internal agent
+    // Try to restore from localStorage, then member's default agent, then first internal agent
     if (!initialAgentId) {
       const savedAgentId = localStorage.getItem("selected-chat-agent");
       const savedAgent = internalAgents.find((a) => a.id === savedAgentId);
@@ -239,10 +240,21 @@ export default function ChatPage() {
         resolvedAgentRef.current = savedAgent;
         return;
       }
+      // Try member's default agent
+      if (defaultAgentId) {
+        const defaultAgent = internalAgents.find(
+          (a) => a.id === defaultAgentId,
+        );
+        if (defaultAgent) {
+          setInitialAgentId(defaultAgentId);
+          resolvedAgentRef.current = defaultAgent;
+          return;
+        }
+      }
       setInitialAgentId(internalAgents[0].id);
       resolvedAgentRef.current = internalAgents[0];
     }
-  }, [initialAgentId, searchParams, internalAgents]);
+  }, [initialAgentId, searchParams, internalAgents, defaultAgentId]);
 
   // Initialize model and API key once agent is resolved.
   // Priority: agent config > localStorage > first available model.

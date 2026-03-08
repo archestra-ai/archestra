@@ -1198,6 +1198,13 @@
       "when": 1773008603612,
       "tag": "0170_smiling_leopardon",
       "breakpoints": true
+    },
+    {
+      "idx": 171,
+      "version": "7",
+      "when": 1773009523777,
+      "tag": "0171_shallow_cerise",
+      "breakpoints": true
     }
   ]
 }

@@ -20,6 +20,7 @@ const {
   getLabelValues,
   getAgentVersions,
   rollbackAgent,
+  getMemberDefaultAgent,
 } = archestraApiSdk;
 
 // Returns all agents as an array
@@ -258,6 +259,19 @@ export function useLabelValues(params?: { key?: string }) {
  * Get internal agents only (agents with prompts).
  * Non-suspense version for components that need loading states.
  */
+/**
+ * Get the current user's default agent ID.
+ */
+export function useDefaultAgentId() {
+  return useQuery({
+    queryKey: ["member-default-agent"],
+    queryFn: async () => {
+      const response = await getMemberDefaultAgent();
+      return response.data?.defaultAgentId ?? null;
+    },
+  });
+}
+
 export function useInternalAgents() {
   return useQuery({
     queryKey: ["agents", "all", { agentType: "agent", excludeBuiltIn: true }],

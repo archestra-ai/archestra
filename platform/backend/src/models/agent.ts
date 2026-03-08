@@ -23,6 +23,7 @@ import {
   createPaginatedResult,
   type PaginatedResult,
 } from "@/database/utils/pagination";
+import logger from "@/logging";
 import type {
   Agent,
   AgentHistoryEntry,
@@ -36,6 +37,7 @@ import AgentConnectorAssignmentModel from "./agent-connector-assignment";
 import AgentKnowledgeBaseModel from "./agent-knowledge-base";
 import AgentLabelModel from "./agent-label";
 import AgentTeamModel from "./agent-team";
+import MemberModel from "./member";
 import ToolModel from "./tool";
 
 class AgentModel {
@@ -1340,6 +1342,42 @@ class AgentModel {
       )
       .limit(1);
     return rows.length > 0;
+  }
+
+  /**
+   * Ensure a personal default chat agent exists for a member.
+   * Idempotent: skips if member already has a defaultAgentId set.
+   */
+  static async ensurePersonalChatAgent(params: {
+    userId: string;
+    organizationId: string;
+  }): Promise<void> {
+    const { userId, organizationId } = params;
+
+    const existingDefault = await MemberModel.getDefaultAgentId(
+      userId,
+      organizationId,
+    );
+    if (existingDefault !== null) return;
+
+    const agent = await AgentModel.create(
+      {
+        organizationId,
+        name: "My Assistant",
+        agentType: "agent",
+        scope: "personal",
+        description: "Your personal chat assistant",
+      },
+      userId,
+    );
+
+    await ToolModel.assignDefaultArchestraToolsToAgent(agent.id);
+    await MemberModel.setDefaultAgent(userId, organizationId, agent.id);
+
+    logger.info(
+      { userId, organizationId, agentId: agent.id },
+      "Created personal default chat agent",
+    );
   }
 }
 

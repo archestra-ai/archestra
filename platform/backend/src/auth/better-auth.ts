@@ -30,6 +30,7 @@ import config from "@/config";
 import db, { schema } from "@/database";
 import logger from "@/logging";
 // Import directly from files to avoid circular dependency through barrel export
+import AgentModel from "@/models/agent";
 import InvitationModel from "@/models/invitation";
 import MemberModel from "@/models/member";
 import SessionModel from "@/models/session";
@@ -715,6 +716,24 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
         }
       } catch (error) {
         logger.error({ err: error }, "❌ Failed to set active organization:");
+      }
+
+      // Ensure user has a personal default chat agent (idempotent)
+      const orgId =
+        newSession.session.activeOrganizationId ||
+        (await MemberModel.getFirstMembershipForUser(userId))?.organizationId;
+      if (orgId) {
+        try {
+          await AgentModel.ensurePersonalChatAgent({
+            userId,
+            organizationId: orgId,
+          });
+        } catch (error) {
+          logger.error(
+            { err: error },
+            "Failed to ensure personal chat agent on sign-in",
+          );
+        }
       }
 
       // SSO Role & Team Sync: Synchronize role and team memberships based on SSO claims

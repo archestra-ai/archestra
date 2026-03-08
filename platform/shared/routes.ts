@@ -304,6 +304,10 @@ export const RouteId = {
   DeleteIdentityProvider: "deleteIdentityProvider",
   GetIdentityProviderIdpLogoutUrl: "getIdentityProviderIdpLogoutUrl",
 
+  // Member Routes
+  UpdateMemberDefaultAgent: "updateMemberDefaultAgent",
+  GetMemberDefaultAgent: "getMemberDefaultAgent",
+
   // User Routes
   GetUserPermissions: "getUserPermissions",
 

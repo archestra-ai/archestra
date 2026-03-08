@@ -11,6 +11,7 @@ import {
   AgentModel,
   KnowledgeBaseConnectorModel,
   KnowledgeBaseModel,
+  MemberModel,
   TeamModel,
 } from "@/models";
 import { metrics } from "@/observability";
@@ -668,6 +669,15 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(403, "Built-in agents cannot be deleted");
       }
 
+      // Prevent deletion of an agent that is any member's default
+      const isDefault = await MemberModel.isAgentDefault(id);
+      if (isDefault) {
+        throw new ApiError(
+          403,
+          "Cannot delete a default agent. Set another agent as default first.",
+        );
+      }
+
       const success = await AgentModel.delete(id);
 
       if (!success) {
@@ -838,6 +848,47 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           ? await AgentLabelModel.getValuesByKey(key)
           : await AgentLabelModel.getAllValues(),
       );
+    },
+  );
+  fastify.get(
+    "/api/members/default-agent",
+    {
+      schema: {
+        operationId: RouteId.GetMemberDefaultAgent,
+        description: "Get the current user's default agent ID",
+        tags: ["Members"],
+        response: constructResponseSchema(
+          z.object({ defaultAgentId: z.string().uuid().nullable() }),
+        ),
+      },
+    },
+    async ({ user, organizationId }, reply) => {
+      const defaultAgentId = await MemberModel.getDefaultAgentId(
+        user.id,
+        organizationId,
+      );
+      return reply.send({ defaultAgentId });
+    },
+  );
+
+  fastify.put(
+    "/api/members/default-agent",
+    {
+      schema: {
+        operationId: RouteId.UpdateMemberDefaultAgent,
+        description: "Update the current user's default agent",
+        tags: ["Members"],
+        body: z.object({ agentId: z.string().uuid() }),
+        response: constructResponseSchema(z.object({ success: z.boolean() })),
+      },
+    },
+    async ({ body, user, organizationId }, reply) => {
+      const agent = await AgentModel.findById(body.agentId, user.id, true);
+      if (!agent) {
+        throw new ApiError(404, "Agent not found");
+      }
+      await MemberModel.setDefaultAgent(user.id, organizationId, body.agentId);
+      return reply.send({ success: true });
     },
   );
 };

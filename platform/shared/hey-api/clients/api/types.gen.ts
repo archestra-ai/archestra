@@ -13337,6 +13337,162 @@ export type GetLabelValuesResponses = {
 
 export type GetLabelValuesResponse = GetLabelValuesResponses[keyof GetLabelValuesResponses];
 
+export type GetMemberDefaultAgentData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/members/default-agent';
+};
+
+export type GetMemberDefaultAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetMemberDefaultAgentError = GetMemberDefaultAgentErrors[keyof GetMemberDefaultAgentErrors];
+
+export type GetMemberDefaultAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        defaultAgentId: string | null;
+    };
+};
+
+export type GetMemberDefaultAgentResponse = GetMemberDefaultAgentResponses[keyof GetMemberDefaultAgentResponses];
+
+export type UpdateMemberDefaultAgentData = {
+    body: {
+        agentId: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/members/default-agent';
+};
+
+export type UpdateMemberDefaultAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type UpdateMemberDefaultAgentError = UpdateMemberDefaultAgentErrors[keyof UpdateMemberDefaultAgentErrors];
+
+export type UpdateMemberDefaultAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type UpdateMemberDefaultAgentResponse = UpdateMemberDefaultAgentResponses[keyof UpdateMemberDefaultAgentResponses];
+
 export type GetAllAgentToolsData = {
     body?: never;
     path?: never;

@@ -224,6 +224,55 @@ class MemberModel {
     );
     return deleted[0];
   }
+  /**
+   * Set the default agent for a member
+   */
+  static async setDefaultAgent(
+    userId: string,
+    organizationId: string,
+    agentId: string | null,
+  ) {
+    await db
+      .update(schema.membersTable)
+      .set({ defaultAgentId: agentId })
+      .where(
+        and(
+          eq(schema.membersTable.userId, userId),
+          eq(schema.membersTable.organizationId, organizationId),
+        ),
+      );
+  }
+
+  /**
+   * Get the default agent ID for a member
+   */
+  static async getDefaultAgentId(
+    userId: string,
+    organizationId: string,
+  ): Promise<string | null> {
+    const [member] = await db
+      .select({ defaultAgentId: schema.membersTable.defaultAgentId })
+      .from(schema.membersTable)
+      .where(
+        and(
+          eq(schema.membersTable.userId, userId),
+          eq(schema.membersTable.organizationId, organizationId),
+        ),
+      )
+      .limit(1);
+    return member?.defaultAgentId ?? null;
+  }
+
+  /**
+   * Check if any member references the given agent as their default
+   */
+  static async isAgentDefault(agentId: string): Promise<boolean> {
+    const [result] = await db
+      .select({ count: count() })
+      .from(schema.membersTable)
+      .where(eq(schema.membersTable.defaultAgentId, agentId));
+    return (result?.count ?? 0) > 0;
+  }
 }
 
 export default MemberModel;

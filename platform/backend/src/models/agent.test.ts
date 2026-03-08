@@ -7,6 +7,7 @@ import {
 } from "@shared";
 import { describe, expect, test } from "@/test";
 import AgentModel from "./agent";
+import MemberModel from "./member";
 import TeamModel from "./team";
 
 describe("AgentModel", () => {
@@ -1890,6 +1891,200 @@ describe("AgentModel", () => {
       );
       expect(nonAdminResults.data).toHaveLength(1);
       expect(nonAdminResults.data[0].name).toBe("Regular Agent");
+    });
+  });
+
+  describe("ensurePersonalChatAgent", () => {
+    test("creates personal agent and sets member defaultAgentId", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      await makeMember(user.id, org.id);
+
+      await AgentModel.ensurePersonalChatAgent({
+        userId: user.id,
+        organizationId: org.id,
+      });
+
+      const defaultAgentId = await MemberModel.getDefaultAgentId(
+        user.id,
+        org.id,
+      );
+      expect(defaultAgentId).not.toBeNull();
+
+      const agent = await AgentModel.findById(defaultAgentId!, user.id, true);
+      expect(agent).not.toBeNull();
+      expect(agent?.name).toBe("My Assistant");
+      expect(agent?.scope).toBe("personal");
+      expect(agent?.agentType).toBe("agent");
+      expect(agent?.authorId).toBe(user.id);
+    });
+
+    test("is idempotent - second call does not create duplicate", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      await makeMember(user.id, org.id);
+
+      await AgentModel.ensurePersonalChatAgent({
+        userId: user.id,
+        organizationId: org.id,
+      });
+      const firstDefault = await MemberModel.getDefaultAgentId(user.id, org.id);
+
+      await AgentModel.ensurePersonalChatAgent({
+        userId: user.id,
+        organizationId: org.id,
+      });
+      const secondDefault = await MemberModel.getDefaultAgentId(
+        user.id,
+        org.id,
+      );
+
+      expect(firstDefault).toBe(secondDefault);
+
+      // Should only have 1 agent total
+      const agents = await AgentModel.findAll(user.id, true);
+      const personalAgents = agents.filter(
+        (a) => a.name === "My Assistant" && a.authorId === user.id,
+      );
+      expect(personalAgents).toHaveLength(1);
+    });
+
+    test("does not recreate if user changed default to another agent", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      await makeMember(user.id, org.id);
+
+      await AgentModel.ensurePersonalChatAgent({
+        userId: user.id,
+        organizationId: org.id,
+      });
+
+      // User changes default to another agent
+      const otherAgent = await AgentModel.create({
+        name: "Other Agent",
+        agentType: "agent",
+        scope: "personal",
+        organizationId: org.id,
+      });
+      await MemberModel.setDefaultAgent(user.id, org.id, otherAgent.id);
+
+      // Call again - should NOT create new agent since defaultAgentId is set
+      await AgentModel.ensurePersonalChatAgent({
+        userId: user.id,
+        organizationId: org.id,
+      });
+
+      const currentDefault = await MemberModel.getDefaultAgentId(
+        user.id,
+        org.id,
+      );
+      expect(currentDefault).toBe(otherAgent.id);
+    });
+
+    test("creates separate agents per organization for multi-org users", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+    }) => {
+      const user = await makeUser();
+      const org1 = await makeOrganization();
+      const org2 = await makeOrganization();
+      await makeMember(user.id, org1.id);
+      await makeMember(user.id, org2.id);
+
+      await AgentModel.ensurePersonalChatAgent({
+        userId: user.id,
+        organizationId: org1.id,
+      });
+      await AgentModel.ensurePersonalChatAgent({
+        userId: user.id,
+        organizationId: org2.id,
+      });
+
+      const default1 = await MemberModel.getDefaultAgentId(user.id, org1.id);
+      const default2 = await MemberModel.getDefaultAgentId(user.id, org2.id);
+
+      expect(default1).not.toBeNull();
+      expect(default2).not.toBeNull();
+      expect(default1).not.toBe(default2);
+    });
+  });
+
+  describe("isAgentDefault / deletion guard", () => {
+    test("isAgentDefault returns true for a default agent", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      await makeMember(user.id, org.id);
+
+      await AgentModel.ensurePersonalChatAgent({
+        userId: user.id,
+        organizationId: org.id,
+      });
+
+      const defaultAgentId = await MemberModel.getDefaultAgentId(
+        user.id,
+        org.id,
+      );
+      expect(await MemberModel.isAgentDefault(defaultAgentId!)).toBe(true);
+    });
+
+    test("isAgentDefault returns false for non-default agents", async () => {
+      const agent = await AgentModel.create({
+        name: "Regular Agent",
+        teams: [],
+        scope: "org",
+      });
+      expect(await MemberModel.isAgentDefault(agent.id)).toBe(false);
+    });
+
+    test("changing default removes agent from being default", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      await makeMember(user.id, org.id);
+
+      await AgentModel.ensurePersonalChatAgent({
+        userId: user.id,
+        organizationId: org.id,
+      });
+      const originalDefault = await MemberModel.getDefaultAgentId(
+        user.id,
+        org.id,
+      );
+      expect(await MemberModel.isAgentDefault(originalDefault!)).toBe(true);
+
+      // Change default to another agent
+      const otherAgent = await AgentModel.create({
+        name: "Other Agent",
+        agentType: "agent",
+        scope: "personal",
+        organizationId: org.id,
+      });
+      await MemberModel.setDefaultAgent(user.id, org.id, otherAgent.id);
+
+      // Original agent is no longer default
+      expect(await MemberModel.isAgentDefault(originalDefault!)).toBe(false);
+      // New agent is now default
+      expect(await MemberModel.isAgentDefault(otherAgent.id)).toBe(true);
     });
   });
 });

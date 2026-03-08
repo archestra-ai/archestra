@@ -791,6 +791,10 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.DeletePendingSignupMember]: { member: ["delete"] }, // Delete auto-provisioned member who hasn't signed up
   [RouteId.GetUserPermissions]: {}, // User permissions route - available to all authenticated users (no specific permissions required)
 
+  // Member default agent routes - available to all authenticated users (manages their own default agent)
+  [RouteId.UpdateMemberDefaultAgent]: {},
+  [RouteId.GetMemberDefaultAgent]: {},
+
   // User token routes - available to all authenticated users (manages their own personal token)
   [RouteId.GetUserToken]: {},
   [RouteId.GetUserTokenValue]: {},

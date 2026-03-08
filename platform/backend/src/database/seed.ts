@@ -11,7 +11,7 @@ import {
   SupportedProviders,
   testMcpServerCommand,
 } from "@shared";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 import config, { getProviderEnvApiKey } from "@/config";
 import db, { schema } from "@/database";
 import logger from "@/logging";
@@ -568,6 +568,49 @@ async function seedPolicyConfigAgent(): Promise<void> {
   logger.info("Seeded Policy Configuration Subagent built-in agent");
 }
 
+/**
+ * Ensures all existing members have a personal default chat agent.
+ * Runs on startup to backfill members created before this feature.
+ */
+async function ensureExistingUsersHavePersonalChatAgents(): Promise<void> {
+  const membersWithoutDefault = await db
+    .select({
+      userId: schema.membersTable.userId,
+      organizationId: schema.membersTable.organizationId,
+    })
+    .from(schema.membersTable)
+    .where(isNull(schema.membersTable.defaultAgentId));
+
+  if (membersWithoutDefault.length === 0) return;
+
+  let created = 0;
+  for (const member of membersWithoutDefault) {
+    try {
+      await AgentModel.ensurePersonalChatAgent({
+        userId: member.userId,
+        organizationId: member.organizationId,
+      });
+      created++;
+    } catch (error) {
+      logger.error(
+        {
+          err: error,
+          userId: member.userId,
+          organizationId: member.organizationId,
+        },
+        "Failed to create personal chat agent for existing member",
+      );
+    }
+  }
+
+  if (created > 0) {
+    logger.info(
+      { count: created },
+      "Created personal chat agents for existing members",
+    );
+  }
+}
+
 export async function seedRequiredStartingData(): Promise<void> {
   ensureEncryptionKeyAvailable();
   await migrateSecretsToEncrypted();
@@ -584,6 +627,8 @@ export async function seedRequiredStartingData(): Promise<void> {
   await seedTestMcpServer();
   await seedTeamTokens();
   await seedChatApiKeysFromEnv();
+  // Ensure all existing members have a personal default chat agent
+  await ensureExistingUsersHavePersonalChatAgents();
   // Clean up orphaned MCP HTTP sessions (older than 24h)
   await McpHttpSessionModel.deleteExpired();
 }

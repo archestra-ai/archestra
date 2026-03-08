@@ -432,16 +432,18 @@ function KnowledgeSettingsContent() {
                         </SelectValue>
                       </SelectTrigger>
                       <SelectContent>
-                        {EMBEDDING_MODELS.map((model) => (
-                          <SelectItem key={model.value} value={model.value}>
-                            <div className="flex flex-col">
-                              <span>{model.label}</span>
-                              <span className="text-xs text-muted-foreground">
-                                {model.description}
-                              </span>
-                            </div>
-                          </SelectItem>
-                        ))}
+                        {Object.entries(EMBEDDING_MODELS).map(
+                          ([value, model]) => (
+                            <SelectItem key={value} value={value}>
+                              <div className="flex flex-col">
+                                <span>{model.label}</span>
+                                <span className="text-xs text-muted-foreground">
+                                  {model.description}
+                                </span>
+                              </div>
+                            </SelectItem>
+                          ),
+                        )}
                       </SelectContent>
                     </Select>
                     {isEmbeddingModelLocked && (

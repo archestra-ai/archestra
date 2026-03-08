@@ -157,7 +157,7 @@ RUN apk --no-cache upgrade && \
     rm -rf /tmp/*
 
 # Build and install pgvector extension for knowledge base vector search
-RUN apk add --no-cache --virtual .pgvector-build-deps build-base clang15 llvm15 postgresql17-dev git && \
+RUN apk add --no-cache --virtual .pgvector-build-deps build-base clang16 llvm16-dev postgresql17-dev git && \
     git clone --branch v0.8.0 --depth 1 https://github.com/pgvector/pgvector.git /tmp/pgvector && \
     cd /tmp/pgvector && make && make install && \
     cd / && rm -rf /tmp/pgvector && \

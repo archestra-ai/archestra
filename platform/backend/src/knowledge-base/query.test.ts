@@ -13,7 +13,9 @@ vi.mock("openai", () => {
   return { default: MockOpenAI };
 });
 
-const mockRerank = vi.hoisted(() => vi.fn());
+const mockRerank = vi.hoisted(() =>
+  vi.fn().mockImplementation(({ chunks }: { chunks: unknown[] }) => chunks),
+);
 
 vi.mock("./reranker", () => ({
   default: mockRerank,

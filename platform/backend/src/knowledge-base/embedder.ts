@@ -1,6 +1,5 @@
 import type { EmbeddingModel } from "@shared";
 import { EMBEDDING_BATCH_SIZE } from "@shared";
-import { Cron } from "croner";
 import OpenAI from "openai";
 import logger from "@/logging";
 import { KbChunkModel, KbDocumentModel } from "@/models";
@@ -16,8 +15,6 @@ interface EmbeddingContext {
 }
 
 class EmbeddingService {
-  private processing = false;
-
   async processDocument(
     documentId: string,
     ctx: EmbeddingContext,
@@ -218,43 +215,6 @@ class EmbeddingService {
     }
   }
 
-  async processPendingDocuments(): Promise<void> {
-    if (this.processing) return;
-    this.processing = true;
-
-    try {
-      const documents = await KbDocumentModel.findPending({ limit: 10 });
-
-      if (documents.length === 0) {
-        return;
-      }
-
-      const orgConfig = await getDefaultOrgEmbeddingConfig();
-      if (!orgConfig) {
-        logger.debug(
-          "[Embedder] No embedding API key configured, skipping pending documents",
-        );
-        return;
-      }
-
-      for (const doc of documents) {
-        try {
-          await this.processDocument(doc.id, orgConfig.config);
-        } catch (error) {
-          logger.error(
-            {
-              documentId: doc.id,
-              error: error instanceof Error ? error.message : String(error),
-            },
-            "[Embedder] Error processing document",
-          );
-        }
-      }
-    } finally {
-      this.processing = false;
-    }
-  }
-
   private async callEmbeddingApiWithRetry(
     ctx: EmbeddingContext,
     texts: string[],
@@ -302,16 +262,3 @@ class EmbeddingService {
 }
 
 export const embeddingService = new EmbeddingService();
-
-export function startEmbeddingCron(): void {
-  new Cron("*/30 * * * * *", () => {
-    embeddingService.processPendingDocuments().catch((error) => {
-      logger.error(
-        { error: error instanceof Error ? error.message : String(error) },
-        "[Embedder] Cron tick failed",
-      );
-    });
-  });
-
-  logger.info("[Embedder] Embedding cron started (every 30s)");
-}

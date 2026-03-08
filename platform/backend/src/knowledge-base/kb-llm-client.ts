@@ -1,5 +1,5 @@
 import type { EmbeddingModel } from "@shared";
-import { DEFAULT_RERANKER_MODEL, getEmbeddingDimensions } from "@shared";
+import { getEmbeddingDimensions } from "@shared";
 import OpenAI from "openai";
 import { createDirectLLMModel, type LLMModel } from "@/clients/llm-client";
 import logger from "@/logging";
@@ -57,7 +57,7 @@ export async function resolveRerankerConfig(
   organizationId: string,
 ): Promise<RerankerConfig | null> {
   const org = await OrganizationModel.getById(organizationId);
-  if (!org?.rerankerChatApiKeyId) {
+  if (!org?.rerankerChatApiKeyId || !org.rerankerModel) {
     return null;
   }
 
@@ -75,7 +75,7 @@ export async function resolveRerankerConfig(
     return null;
   }
 
-  const modelName = org.rerankerModel ?? DEFAULT_RERANKER_MODEL;
+  const modelName = org.rerankerModel;
 
   return {
     llmModel: createDirectLLMModel({

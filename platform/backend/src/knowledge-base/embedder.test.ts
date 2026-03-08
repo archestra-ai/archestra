@@ -404,49 +404,4 @@ describe("EmbeddingService", () => {
     expect(updated2?.embeddingStatus).toBe("completed");
     expect(updated2?.chunkCount).toBe(0);
   });
-
-  test("processPendingDocuments skips when no embedding config available", async ({
-    makeOrganization,
-    makeKnowledgeBase,
-    makeKnowledgeBaseConnector,
-  }) => {
-    const org = await makeOrganization();
-    const kb = await makeKnowledgeBase(org.id);
-    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
-
-    mockGetDefaultOrgEmbeddingConfig.mockResolvedValue(null);
-
-    const doc = await KbDocumentModel.create({
-      connectorId: connector.id,
-      organizationId: org.id,
-      title: "No Config Doc",
-      content: "Content",
-      contentHash: "hash8",
-      embeddingStatus: "pending",
-    });
-
-    await embeddingService.processPendingDocuments();
-
-    // Document should remain pending — not processed
-    const updated = await KbDocumentModel.findById(doc.id);
-    expect(updated?.embeddingStatus).toBe("pending");
-    expect(mockEmbeddingsCreate).not.toHaveBeenCalled();
-  });
-
-  test("startEmbeddingCron schedules cron that calls processPendingDocuments", async () => {
-    const spy = vi
-      .spyOn(embeddingService, "processPendingDocuments")
-      .mockResolvedValue();
-
-    // Import startEmbeddingCron
-    const { startEmbeddingCron } = await import("./embedder");
-    startEmbeddingCron();
-
-    // Croner fires on the next 30s boundary; trigger manually by waiting briefly
-    // Instead, verify the cron was created by checking the spy gets called
-    // We can't easily test cron timing, but we can verify the function exists and is callable
-    expect(typeof startEmbeddingCron).toBe("function");
-
-    spy.mockRestore();
-  });
 });

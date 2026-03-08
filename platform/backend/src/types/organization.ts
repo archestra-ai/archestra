@@ -88,9 +88,6 @@ export const OrganizationCompressionScopeSchema = z.enum([
 
 export const GlobalToolPolicySchema = z.enum(["permissive", "restrictive"]);
 
-// Re-export EmbeddingModelSchema from @shared for local use
-export { EmbeddingModelSchema } from "@shared";
-
 const extendedFields = {
   theme: OrganizationThemeSchema,
   customFont: OrganizationCustomFontSchema,
@@ -147,4 +144,3 @@ export type GlobalToolPolicy = z.infer<typeof GlobalToolPolicySchema>;
 export type Organization = z.infer<typeof SelectOrganizationSchema>;
 export type InsertOrganization = z.infer<typeof InsertOrganizationSchema>;
 export type PublicAppearance = z.infer<typeof PublicAppearanceSchema>;
-export type { EmbeddingModel } from "@shared";

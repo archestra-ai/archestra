@@ -1772,7 +1772,7 @@ export default class K8sDeployment {
     message: string;
   }> {
     try {
-      const sanitizedId = K8sDeployment.sanitizeLabelValue(this.mcpServer.id);
+      const sanitizedId = sanitizeLabelValue(this.mcpServer.id);
       const pods = await this.k8sApi.listNamespacedPod({
         namespace: this.namespace,
         labelSelector: `mcp-server-id=${sanitizedId}`,
@@ -2536,7 +2536,7 @@ export default class K8sDeployment {
         this.errorMessage = null;
       }
     } catch (error) {
-      if (!isK8s404Error(error)) {
+      if (!isK8sNotFoundError(error)) {
         logger.error(
           { err: error },
           `Failed to refresh state for ${this.deploymentName}`,

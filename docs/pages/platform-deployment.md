@@ -941,7 +941,7 @@ See [Slack](/docs/platform-slack) for setup instructions.
 
 These environment variables configure the [Knowledge Base](/docs/platform-knowledge-bases) enterprise feature. Knowledge bases use a built-in RAG stack powered by pgvector for document chunking, embedding, and hybrid search. Connectors sync external data into knowledge bases on a schedule. See [Knowledge Connectors](/docs/platform-adding-knowledge-connectors) for connector setup instructions.
 
-- **Embedding and reranker API keys** are configured via LLM Provider Keys in **Settings > Knowledge**. No environment variable is needed — select an existing LLM Provider Key (OpenAI only for embeddings, any provider for the reranker).
+- **Embedding and reranker API keys** are configured via LLM Provider Keys in **Settings > Knowledge**. No environment variable is needed — select an existing LLM Provider Key (OpenAI only for embeddings, any provider for the reranker). Both must be configured before knowledge bases and connectors can be used.
 
 - **`ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_K8S_CRONJOB_NAMESPACE`** - Kubernetes namespace where connector sync CronJobs run.
   - Default: Helm release namespace (if relevant) or `default`
@@ -956,9 +956,6 @@ These environment variables configure the [Knowledge Base](/docs/platform-knowle
   - Default: `true`
   - Set to `false` to use vector similarity search only.
 
-- **`ARCHESTRA_KNOWLEDGE_BASE_RERANKER_ENABLED`** - Enable or disable the reranker for knowledge base search results.
-  - Default: `true`
-  - Set to `false` to disable reranking and use raw retrieval scores only.
 
 ### Enterprise Licensing
 

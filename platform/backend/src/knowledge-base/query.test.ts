@@ -32,14 +32,12 @@ vi.mock("@/config", async (importOriginal) => {
       ...original.default,
       kb: {
         hybridSearchEnabled: true,
-        rerankerEnabled: false,
       },
     },
   };
 });
 
 import OpenAI from "openai";
-import config from "@/config";
 import { KbChunkModel, KbDocumentModel } from "@/models";
 import type { VectorSearchResult } from "@/models/kb-chunk";
 import { describe, expect, test } from "@/test";
@@ -377,13 +375,11 @@ describe("QueryService", () => {
     fullTextSearchSpy.mockRestore();
   });
 
-  test("calls reranker after fusion when rerankerEnabled is true", async ({
+  test("calls reranker after fusion", async ({
     makeOrganization,
     makeKnowledgeBase,
     makeKnowledgeBaseConnector,
   }) => {
-    config.kb.rerankerEnabled = true;
-
     const org = await makeOrganization();
     const kb = await makeKnowledgeBase(org.id);
     const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
@@ -443,56 +439,6 @@ describe("QueryService", () => {
     });
     expect(results[0].content).toBe("Second result");
     expect(results[1].content).toBe("First result");
-
-    config.kb.rerankerEnabled = false;
-    vectorSearchSpy.mockRestore();
-    fullTextSearchSpy.mockRestore();
-  });
-
-  test("skips reranker when rerankerEnabled is false", async ({
-    makeOrganization,
-    makeKnowledgeBase,
-    makeKnowledgeBaseConnector,
-  }) => {
-    config.kb.rerankerEnabled = false;
-
-    const org = await makeOrganization();
-    const kb = await makeKnowledgeBase(org.id);
-    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
-    setupEmbeddingConfig();
-
-    const chunk1: VectorSearchResult = {
-      id: "s-1",
-      content: "First",
-      chunkIndex: 0,
-      documentId: "doc-1",
-      title: "Doc 1",
-      sourceUrl: null,
-      metadata: null,
-      connectorType: null,
-      score: 0.9,
-    };
-
-    const vectorSearchSpy = vi
-      .spyOn(KbChunkModel, "vectorSearch")
-      .mockResolvedValueOnce([chunk1]);
-
-    const fullTextSearchSpy = vi
-      .spyOn(KbChunkModel, "fullTextSearch")
-      .mockResolvedValueOnce([]);
-
-    mockEmbeddingsCreate.mockResolvedValueOnce({
-      data: [{ embedding: makeFakeEmbedding(1) }],
-    });
-
-    await queryService.query({
-      connectorIds: [connector.id],
-      organizationId: org.id,
-      queryText: "test",
-      userAcl: ["org:*"],
-    });
-
-    expect(mockRerank).not.toHaveBeenCalled();
 
     vectorSearchSpy.mockRestore();
     fullTextSearchSpy.mockRestore();

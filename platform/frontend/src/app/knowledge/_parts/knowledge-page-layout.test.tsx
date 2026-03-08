@@ -1,10 +1,13 @@
 import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-let mockIsEmbeddingConfigured = false;
+let mockIsKnowledgeBaseConfigured = false;
 
-vi.mock("@/lib/organization.query", () => ({
-  useIsEmbeddingConfigured: () => mockIsEmbeddingConfigured,
+let mockConfigStatus = { embedding: false, reranker: false };
+
+vi.mock("@/lib/knowledge-base.query", () => ({
+  useIsKnowledgeBaseConfigured: () => mockIsKnowledgeBaseConfigured,
+  useKnowledgeBaseConfigStatus: () => mockConfigStatus,
 }));
 
 vi.mock("@/lib/auth.query", () => ({
@@ -42,16 +45,17 @@ function renderLayout(isPending = false) {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mockIsEmbeddingConfigured = false;
+  mockIsKnowledgeBaseConfigured = false;
+  mockConfigStatus = { embedding: false, reranker: false };
 });
 
 describe("KnowledgePageLayout", () => {
   describe("when embedding is NOT configured", () => {
-    it("shows the embedding required placeholder", () => {
+    it("shows the setup required placeholder", () => {
       renderLayout();
 
       expect(
-        screen.getByText("Embedding configuration required"),
+        screen.getByText("Knowledge base setup required"),
       ).toBeInTheDocument();
     });
 
@@ -81,7 +85,8 @@ describe("KnowledgePageLayout", () => {
 
   describe("when embedding IS configured", () => {
     it("shows the children content", () => {
-      mockIsEmbeddingConfigured = true;
+      mockIsKnowledgeBaseConfigured = true;
+      mockConfigStatus = { embedding: true, reranker: true };
       renderLayout();
 
       expect(screen.getByTestId("content")).toBeInTheDocument();
@@ -90,17 +95,19 @@ describe("KnowledgePageLayout", () => {
       ).toBeInTheDocument();
     });
 
-    it("does not show the embedding required placeholder", () => {
-      mockIsEmbeddingConfigured = true;
+    it("does not show the setup required placeholder", () => {
+      mockIsKnowledgeBaseConfigured = true;
+      mockConfigStatus = { embedding: true, reranker: true };
       renderLayout();
 
       expect(
-        screen.queryByText("Embedding configuration required"),
+        screen.queryByText("Knowledge base setup required"),
       ).not.toBeInTheDocument();
     });
 
     it("enables the create button", () => {
-      mockIsEmbeddingConfigured = true;
+      mockIsKnowledgeBaseConfigured = true;
+      mockConfigStatus = { embedding: true, reranker: true };
       renderLayout();
 
       const createButton = screen.getByRole("button", {

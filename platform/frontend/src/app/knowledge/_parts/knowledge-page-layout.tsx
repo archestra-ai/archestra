@@ -4,7 +4,7 @@ import { Plus } from "lucide-react";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
 import { PermissionButton } from "@/components/ui/permission-button";
-import { useIsEmbeddingConfigured } from "@/lib/organization.query";
+import { useIsKnowledgeBaseConfigured } from "@/lib/knowledge-base.query";
 import { EmbeddingRequiredPlaceholder } from "./embedding-required-placeholder";
 
 export function KnowledgePageLayout({
@@ -22,7 +22,7 @@ export function KnowledgePageLayout({
   isPending: boolean;
   children: React.ReactNode;
 }) {
-  const isEmbeddingConfigured = useIsEmbeddingConfigured();
+  const isKnowledgeBaseConfigured = useIsKnowledgeBaseConfigured();
 
   return (
     <LoadingWrapper isPending={isPending} loadingFallback={<LoadingSpinner />}>
@@ -33,10 +33,10 @@ export function KnowledgePageLayout({
           <PermissionButton
             permissions={{ knowledgeBase: ["create"] }}
             onClick={onCreateClick}
-            disabled={!isEmbeddingConfigured}
+            disabled={!isKnowledgeBaseConfigured}
             tooltip={
-              !isEmbeddingConfigured
-                ? `Configure an embedding API key and model in Settings > Knowledge before creating ${title.toLowerCase()}.`
+              !isKnowledgeBaseConfigured
+                ? `Configure embedding and reranking API key and model in Settings > Knowledge before creating ${title.toLowerCase()}.`
                 : undefined
             }
           >
@@ -45,7 +45,11 @@ export function KnowledgePageLayout({
           </PermissionButton>
         }
       >
-        {!isEmbeddingConfigured ? <EmbeddingRequiredPlaceholder /> : children}
+        {!isKnowledgeBaseConfigured ? (
+          <EmbeddingRequiredPlaceholder />
+        ) : (
+          children
+        )}
       </PageLayout>
     </LoadingWrapper>
   );

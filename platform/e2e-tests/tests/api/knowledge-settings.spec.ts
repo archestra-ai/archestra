@@ -47,6 +47,161 @@ test.describe("Knowledge Settings API", () => {
     expect(org.rerankerModel).toBe("gpt-4o-mini");
   });
 
+  test("should reject changing embedding model once locked (key + model configured)", async ({
+    request,
+    makeApiRequest,
+    updateKnowledgeSettings,
+  }) => {
+    // Create a chat API key to use as the embedding key
+    const createKeyResponse = await makeApiRequest({
+      request,
+      method: "post",
+      urlSuffix: "/api/chat-api-keys",
+      data: {
+        name: "Embedding Lock Test Key",
+        provider: "openai",
+        apiKey: "sk-openai-embedding-lock-test",
+        scope: "org_wide",
+      },
+    });
+    const chatApiKey = await createKeyResponse.json();
+
+    // Set both embedding key and model — this locks the model
+    await updateKnowledgeSettings(request, {
+      embeddingChatApiKeyId: chatApiKey.id,
+      embeddingModel: "text-embedding-3-small",
+    });
+
+    // Attempt to change the embedding model — should be rejected
+    const changeResponse = await makeApiRequest({
+      request,
+      method: "patch",
+      urlSuffix: "/api/organization/knowledge-settings",
+      data: { embeddingModel: "text-embedding-3-large" },
+      ignoreStatusCheck: true,
+    });
+    expect(changeResponse.status()).toBe(400);
+
+    const errorBody = await changeResponse.json();
+    expect(errorBody.error.message).toContain(
+      "Embedding model cannot be changed once configured",
+    );
+
+    // Setting the same model value should still be allowed
+    const sameModelResponse = await updateKnowledgeSettings(request, {
+      embeddingModel: "text-embedding-3-small",
+    });
+    expect(sameModelResponse.ok()).toBe(true);
+
+    // Cleanup: clear the key reference first (unlocks), then reset model
+    await updateKnowledgeSettings(request, {
+      embeddingChatApiKeyId: null,
+    });
+
+    await makeApiRequest({
+      request,
+      method: "delete",
+      urlSuffix: `/api/chat-api-keys/${chatApiKey.id}`,
+    });
+  });
+
+  test("should prevent deleting an API key used for embedding", async ({
+    request,
+    makeApiRequest,
+    updateKnowledgeSettings,
+  }) => {
+    // Create a chat API key
+    const createKeyResponse = await makeApiRequest({
+      request,
+      method: "post",
+      urlSuffix: "/api/chat-api-keys",
+      data: {
+        name: "Embedding Delete Protection Key",
+        provider: "openai",
+        apiKey: "sk-openai-delete-protection-test",
+        scope: "org_wide",
+      },
+    });
+    const chatApiKey = await createKeyResponse.json();
+
+    // Assign it as the embedding key
+    await updateKnowledgeSettings(request, {
+      embeddingChatApiKeyId: chatApiKey.id,
+    });
+
+    // Attempt to delete — should be rejected
+    const deleteResponse = await makeApiRequest({
+      request,
+      method: "delete",
+      urlSuffix: `/api/chat-api-keys/${chatApiKey.id}`,
+      ignoreStatusCheck: true,
+    });
+    expect(deleteResponse.status()).toBe(400);
+
+    const errorBody = await deleteResponse.json();
+    expect(errorBody.error.message).toContain("embedding");
+    expect(errorBody.error.message).toContain(
+      "Remove it from Settings > Knowledge before deleting",
+    );
+
+    // Cleanup: unassign the key, then delete it
+    await updateKnowledgeSettings(request, {
+      embeddingChatApiKeyId: null,
+    });
+    await makeApiRequest({
+      request,
+      method: "delete",
+      urlSuffix: `/api/chat-api-keys/${chatApiKey.id}`,
+    });
+  });
+
+  test("should prevent deleting an API key used for reranking", async ({
+    request,
+    makeApiRequest,
+    updateKnowledgeSettings,
+  }) => {
+    // Create a chat API key
+    const createKeyResponse = await makeApiRequest({
+      request,
+      method: "post",
+      urlSuffix: "/api/chat-api-keys",
+      data: {
+        name: "Reranker Delete Protection Key",
+        provider: "openai",
+        apiKey: "sk-openai-reranker-delete-test",
+        scope: "org_wide",
+      },
+    });
+    const chatApiKey = await createKeyResponse.json();
+
+    // Assign it as the reranker key
+    await updateKnowledgeSettings(request, {
+      rerankerChatApiKeyId: chatApiKey.id,
+    });
+
+    // Attempt to delete — should be rejected
+    const deleteResponse = await makeApiRequest({
+      request,
+      method: "delete",
+      urlSuffix: `/api/chat-api-keys/${chatApiKey.id}`,
+      ignoreStatusCheck: true,
+    });
+    expect(deleteResponse.status()).toBe(400);
+
+    const errorBody = await deleteResponse.json();
+    expect(errorBody.error.message).toContain("reranking");
+
+    // Cleanup: unassign the key, then delete it
+    await updateKnowledgeSettings(request, {
+      rerankerChatApiKeyId: null,
+    });
+    await makeApiRequest({
+      request,
+      method: "delete",
+      urlSuffix: `/api/chat-api-keys/${chatApiKey.id}`,
+    });
+  });
+
   // Clean up: reset to default
   test("cleanup: reset knowledge settings to defaults", async ({
     request,
@@ -54,7 +209,9 @@ test.describe("Knowledge Settings API", () => {
   }) => {
     await updateKnowledgeSettings(request, {
       embeddingModel: "text-embedding-3-small",
+      embeddingChatApiKeyId: null,
       rerankerModel: null,
+      rerankerChatApiKeyId: null,
     });
   });
 });

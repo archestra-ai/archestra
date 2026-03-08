@@ -56,6 +56,7 @@ import {
   useUpdateChatApiKey,
 } from "@/lib/chat-settings.query";
 import { useFeature } from "@/lib/config.query";
+import { useOrganization } from "@/lib/organization.query";
 
 const SCOPE_ICONS: Record<ChatApiKeyScope, React.ReactNode> = {
   personal: <User className="h-3 w-3" />,
@@ -77,11 +78,26 @@ const DEFAULT_FORM_VALUES: ChatApiKeyFormValues = {
 
 export function ProviderSettingsApiKeys() {
   const { data: apiKeys = [], isPending } = useChatApiKeys();
+  const { data: organization } = useOrganization();
   const createMutation = useCreateChatApiKey();
   const updateMutation = useUpdateChatApiKey();
   const deleteMutation = useDeleteChatApiKey();
   const byosEnabled = useFeature("byosEnabled");
   const geminiVertexAiEnabled = useFeature("geminiVertexAiEnabled");
+
+  const getKeyUsage = useCallback(
+    (keyId: string): string | null => {
+      if (!organization) return null;
+      const usages: string[] = [];
+      if (organization.embeddingChatApiKeyId === keyId)
+        usages.push("embedding");
+      if (organization.rerankerChatApiKeyId === keyId) usages.push("reranking");
+      return usages.length > 0
+        ? `Used for knowledge base ${usages.join(" and ")}`
+        : null;
+    },
+    [organization],
+  );
 
   // Dialog states
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
@@ -347,6 +363,8 @@ export function ProviderSettingsApiKeys() {
         header: "Actions",
         cell: ({ row }) => {
           const isSystem = row.original.isSystem;
+          const keyUsage = getKeyUsage(row.original.id);
+          const isInUse = !!keyUsage;
           return (
             <ButtonGroup>
               <PermissionButton
@@ -378,7 +396,12 @@ export function ProviderSettingsApiKeys() {
                 aria-label="Delete"
                 variant="outline"
                 size="icon-sm"
-                disabled={isSystem}
+                disabled={isSystem || isInUse}
+                tooltip={
+                  isInUse
+                    ? `${keyUsage}. Remove it from Settings > Knowledge before deleting.`
+                    : undefined
+                }
                 data-testid={`${E2eTestId.DeleteChatApiKeyButton}-${row.original.name}`}
                 onClick={(e) => {
                   e.stopPropagation();
@@ -392,7 +415,7 @@ export function ProviderSettingsApiKeys() {
         },
       },
     ],
-    [openEditDialog, openDeleteDialog],
+    [openEditDialog, openDeleteDialog, getKeyUsage],
   );
 
   return (

@@ -233,16 +233,6 @@ export function useOrganization(enabled = true) {
 }
 
 /**
- * Check if embedding is configured (API key + model) for the organization
- */
-export function useIsEmbeddingConfigured() {
-  const { data: organization } = useOrganization();
-  return (
-    !!organization?.embeddingChatApiKeyId && !!organization?.embeddingModel
-  );
-}
-
-/**
  * Check if organization onboarding is complete
  * Only polls when enabled
  */

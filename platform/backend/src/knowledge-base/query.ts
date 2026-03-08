@@ -76,7 +76,6 @@ class QueryService {
         vectorCount: vectorRows.length,
         fullTextCount: fullTextRows.length,
         hybridEnabled,
-        rerankerEnabled: config.kb.rerankerEnabled,
       },
       "[QueryService] Search candidates retrieved",
     );
@@ -87,22 +86,17 @@ class QueryService {
         rankings: [vectorRows, fullTextRows],
         idExtractor: (row) => row.id,
       });
-      topResults = fused.slice(
-        0,
-        config.kb.rerankerEnabled ? overFetchLimit : limit,
-      );
+      topResults = fused.slice(0, overFetchLimit);
     } else {
       topResults = vectorRows;
     }
 
-    if (config.kb.rerankerEnabled) {
-      topResults = await rerank({
-        queryText,
-        chunks: topResults,
-        organizationId,
-      });
-      topResults = topResults.slice(0, limit);
-    }
+    topResults = await rerank({
+      queryText,
+      chunks: topResults,
+      organizationId,
+    });
+    topResults = topResults.slice(0, limit);
 
     logger.info(
       {

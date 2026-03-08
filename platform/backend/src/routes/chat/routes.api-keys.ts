@@ -15,6 +15,7 @@ import {
   ApiKeyModelModel,
   ChatApiKeyModel,
   ModelModel,
+  OrganizationModel,
   TeamModel,
   VirtualApiKeyModel,
 } from "@/models";
@@ -550,6 +551,20 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
         headers,
       });
+
+      // Prevent deletion if the key is used for knowledge base embedding or reranking
+      const org = await OrganizationModel.getById(organizationId);
+      if (org) {
+        const usages: string[] = [];
+        if (org.embeddingChatApiKeyId === params.id) usages.push("embedding");
+        if (org.rerankerChatApiKeyId === params.id) usages.push("reranking");
+        if (usages.length > 0) {
+          throw new ApiError(
+            400,
+            `This API key is used for knowledge base ${usages.join(" and ")}. Remove it from Settings > Knowledge before deleting.`,
+          );
+        }
+      }
 
       // Delete virtual key secrets before deleting the parent API key.
       // The DB cascades the virtual key rows, but their secrets in the

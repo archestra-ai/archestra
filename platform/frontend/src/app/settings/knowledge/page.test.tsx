@@ -84,7 +84,14 @@ vi.mock("@/lib/chat-settings.query", () => ({
 
 vi.mock("@/lib/chat-models.query", () => ({
   useChatModels: () => ({
-    data: [],
+    data: [
+      { id: "gpt-4o", provider: "openai", displayName: "GPT-4o" },
+      {
+        id: "claude-3-opus",
+        provider: "anthropic",
+        displayName: "Claude 3 Opus",
+      },
+    ],
     isPending: false,
   }),
 }));
@@ -143,12 +150,36 @@ describe("KnowledgeSettingsPage", () => {
 
       expect(
         screen.getByText(
-          /An embedding API key and model must be configured before knowledge bases and connectors can be used/,
+          /An embedding and reranking API key and model must be configured before knowledge bases and connectors can be used/,
         ),
       ).toBeInTheDocument();
     });
 
-    it("hides warning alert when embedding API key is configured", () => {
+    it("shows warning alert when embedding key is set but model is not", () => {
+      mockOrganization = {
+        embeddingChatApiKeyId: "key-1",
+        embeddingModel: null,
+        rerankerChatApiKeyId: null,
+        rerankerModel: null,
+      };
+      mockApiKeys = [
+        {
+          id: "key-1",
+          name: "OpenAI Key",
+          provider: "openai",
+          scope: "org_wide",
+        },
+      ];
+      renderPage();
+
+      expect(
+        screen.getByText(
+          /An embedding and reranking API key and model must be configured/,
+        ),
+      ).toBeInTheDocument();
+    });
+
+    it("shows warning alert when only embedding is configured but reranker is not", () => {
       mockOrganization = {
         embeddingChatApiKeyId: "key-1",
         embeddingModel: "text-embedding-3-small",
@@ -166,7 +197,33 @@ describe("KnowledgeSettingsPage", () => {
       renderPage();
 
       expect(
-        screen.queryByText(/An embedding API key and model must be configured/),
+        screen.getByText(
+          /An embedding and reranking API key and model must be configured/,
+        ),
+      ).toBeInTheDocument();
+    });
+
+    it("hides warning alert when both embedding and reranker are configured", () => {
+      mockOrganization = {
+        embeddingChatApiKeyId: "key-1",
+        embeddingModel: "text-embedding-3-small",
+        rerankerChatApiKeyId: "key-1",
+        rerankerModel: "gpt-4o",
+      };
+      mockApiKeys = [
+        {
+          id: "key-1",
+          name: "OpenAI Key",
+          provider: "openai",
+          scope: "org_wide",
+        },
+      ];
+      renderPage();
+
+      expect(
+        screen.queryByText(
+          /An embedding and reranking API key and model must be configured/,
+        ),
       ).not.toBeInTheDocument();
     });
   });
@@ -301,15 +358,12 @@ describe("KnowledgeSettingsPage", () => {
       mockApiKeys = []; // no keys at all
       renderPage();
 
-      // There are two "Add LLM Provider Key" buttons (embedding + reranker)
-      // The first one (embedding) should have pulse classes
       const addButtons = screen.getAllByRole("button", {
         name: /Add LLM Provider Key/,
       });
-      expect(addButtons.length).toBeGreaterThanOrEqual(1);
-      const embeddingAddButton = addButtons[0];
-      expect(embeddingAddButton.className).toContain("animate-pulse");
-      expect(embeddingAddButton.className).toContain("ring-primary/40");
+      // First Add button is the embedding one
+      expect(addButtons[0].className).toContain("animate-pulse");
+      expect(addButtons[0].className).toContain("ring-primary/40");
     });
 
     it("pulses key selector dropdown when OpenAI keys exist but none selected", () => {
@@ -354,7 +408,6 @@ describe("KnowledgeSettingsPage", () => {
       renderPage();
 
       // The embedding model dropdown trigger should have pulse classes
-      // Find by the "Select embedding model..." text within a trigger
       const modelTrigger = screen
         .getAllByRole("combobox")
         .find((el) => el.textContent?.includes("Select embedding model"));
@@ -367,8 +420,8 @@ describe("KnowledgeSettingsPage", () => {
       mockOrganization = {
         embeddingChatApiKeyId: "key-1",
         embeddingModel: "text-embedding-3-small",
-        rerankerChatApiKeyId: null,
-        rerankerModel: null,
+        rerankerChatApiKeyId: "key-1",
+        rerankerModel: "gpt-4o",
       };
       mockApiKeys = [
         {
@@ -387,7 +440,7 @@ describe("KnowledgeSettingsPage", () => {
   });
 
   describe("reranking section", () => {
-    it("shows (optional) label in reranking section title", () => {
+    it("shows reranking configuration section", () => {
       mockOrganization = {
         embeddingChatApiKeyId: null,
         embeddingModel: null,
@@ -396,16 +449,24 @@ describe("KnowledgeSettingsPage", () => {
       };
       renderPage();
 
-      expect(screen.getByText("(optional)")).toBeInTheDocument();
+      expect(screen.getByText("Reranking Configuration")).toBeInTheDocument();
     });
 
-    it("shows 'Select a reranker API key first...' when no reranker key selected", () => {
+    it("shows 'Select a reranker API key first...' when no key selected", () => {
       mockOrganization = {
         embeddingChatApiKeyId: null,
         embeddingModel: null,
         rerankerChatApiKeyId: null,
         rerankerModel: null,
       };
+      mockApiKeys = [
+        {
+          id: "key-1",
+          name: "OpenAI Key",
+          provider: "openai",
+          scope: "org_wide",
+        },
+      ];
       renderPage();
 
       expect(

@@ -34,7 +34,7 @@ flowchart TB
         QE --> FTS["Full-Text Search<br/>(configurable)"]
         VS --> RRF[Reciprocal Rank Fusion]
         FTS --> RRF
-        RRF --> RR["Reranking<br/>(configurable)"]
+        RRF --> RR[Reranking]
         RR --> ACL[ACL Filtering]
         ACL --> R[Results]
     end
@@ -43,19 +43,19 @@ flowchart TB
     PG --- FTS
 ```
 
-The RAG stack runs entirely within PostgreSQL — no external vector database required. Full-text search (hybrid mode) and LLM reranking can each be independently enabled or disabled.
+The RAG stack runs entirely within PostgreSQL — no external vector database required. Full-text search (hybrid mode) can be enabled or disabled.
 
 See [Platform Deployment — Knowledge Base Configuration](/docs/platform-deployment#knowledge-base-configuration) for full configuration reference.
 
 ## LLM Provider Configuration
 
-Embedding and reranking require LLM provider API keys. These are configured in **Settings > Knowledge** by selecting existing LLM Provider Keys -- no environment variables are needed.
+Embedding and reranking require LLM provider API keys. These are configured in **Settings > Knowledge** by selecting existing LLM Provider Keys -- no environment variables are needed. Both must be configured before knowledge bases and connectors can be used.
 
 ### Embedding
 
 Only OpenAI embedding models are supported. The selected API key must have access to the configured embedding model (`text-embedding-3-small` or `text-embedding-3-large`; both models are reduced to 1536 dimensions for the `pgvector` index).
 
-The embedding model is locked after documents have been embedded, and is not currently supported (as changing models requires re-embedding all documents).
+The embedding model is locked after documents have been embedded, and changing it is not currently supported (as changing models requires re-embedding all documents).
 
 ### Reranking
 

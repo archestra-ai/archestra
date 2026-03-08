@@ -345,11 +345,13 @@ function RerankerModelSelector({
   onChange,
   disabled,
   selectedKeyId,
+  pulse,
 }: {
   value: string | null;
   onChange: (value: string | null) => void;
   disabled: boolean;
   selectedKeyId: string | null;
+  pulse?: boolean;
 }) {
   const { data: apiKeys } = useAvailableChatApiKeys();
   const { data: allModels, isPending: modelsLoading } = useChatModels();
@@ -385,7 +387,9 @@ function RerankerModelSelector({
       onValueChange={(v) => onChange(v || null)}
       disabled={disabled}
     >
-      <SelectTrigger className="w-80">
+      <SelectTrigger
+        className={cn("w-80", pulse && "animate-pulse ring-2 ring-primary/40")}
+      >
         <SelectValue placeholder="Select reranking model...">
           {value ?? "Select reranking model..."}
         </SelectValue>
@@ -409,21 +413,21 @@ function RerankerModelSelector({
 }
 
 /**
- * Determine which embedding setup step needs attention.
+ * Determine which setup step needs attention for a section.
  * Returns the step that should pulse, or null if setup is complete.
  */
-function useEmbeddingSetupStep({
-  embeddingChatApiKeyId,
-  embeddingModel,
-  hasOpenAiKeys,
+function useSetupStep({
+  selectedKeyId,
+  selectedModel,
+  hasSelectableKeys,
 }: {
-  embeddingChatApiKeyId: string | null;
-  embeddingModel: EmbeddingModel | null;
-  hasOpenAiKeys: boolean;
+  selectedKeyId: string | null;
+  selectedModel: string | null;
+  hasSelectableKeys: boolean;
 }): "add-key" | "select-key" | "select-model" | null {
-  if (!hasOpenAiKeys) return "add-key";
-  if (!embeddingChatApiKeyId) return "select-key";
-  if (!embeddingModel) return "select-model";
+  if (!hasSelectableKeys) return "add-key";
+  if (!selectedKeyId) return "select-key";
+  if (!selectedModel) return "select-model";
   return null;
 }
 
@@ -480,17 +484,26 @@ function KnowledgeSettingsContent() {
   const isEmbeddingModelLocked =
     !!serverEmbeddingKeyId && !!serverEmbeddingModel;
 
-  // Check if OpenAI keys exist for pulsing logic
+  // Check if keys exist for pulsing logic
   const hasOpenAiKeys = useMemo(
     () => (apiKeys ?? []).some((k) => k.provider === "openai"),
     [apiKeys],
   );
+  const hasAnyKeys = useMemo(() => (apiKeys ?? []).length > 0, [apiKeys]);
 
-  const setupStep = useEmbeddingSetupStep({
-    embeddingChatApiKeyId,
-    embeddingModel,
-    hasOpenAiKeys,
+  const embeddingSetupStep = useSetupStep({
+    selectedKeyId: embeddingChatApiKeyId,
+    selectedModel: embeddingModel,
+    hasSelectableKeys: hasOpenAiKeys,
   });
+
+  const rerankerSetupStep = useSetupStep({
+    selectedKeyId: rerankerChatApiKeyId,
+    selectedModel: rerankerModel,
+    hasSelectableKeys: hasAnyKeys,
+  });
+
+  const isFullyConfigured = !embeddingSetupStep && !rerankerSetupStep;
 
   const handleSave = async () => {
     await updateKnowledgeSettings.mutateAsync({
@@ -519,12 +532,12 @@ function KnowledgeSettingsContent() {
   return (
     <LoadingWrapper isPending={isPending} loadingFallback={<LoadingSpinner />}>
       <div className="space-y-8">
-        {!embeddingChatApiKeyId && (
+        {!isFullyConfigured && (
           <Alert variant="warning">
             <AlertTriangle className="h-4 w-4" />
             <AlertDescription>
-              An embedding API key and model must be configured before knowledge
-              bases and connectors can be used.
+              An embedding and reranking API key and model must be configured
+              before knowledge bases and connectors can be used.
             </AlertDescription>
           </Alert>
         )}
@@ -557,7 +570,8 @@ function KnowledgeSettingsContent() {
                     filterProvider="openai"
                     label="embedding API key"
                     pulse={
-                      setupStep === "add-key" || setupStep === "select-key"
+                      embeddingSetupStep === "add-key" ||
+                      embeddingSetupStep === "select-key"
                     }
                     onAutoSelected={() => setEmbeddingModelOpen(true)}
                   />
@@ -596,7 +610,7 @@ function KnowledgeSettingsContent() {
                       <SelectTrigger
                         className={cn(
                           "w-80",
-                          setupStep === "select-model" &&
+                          embeddingSetupStep === "select-model" &&
                             "animate-pulse ring-2 ring-primary/40",
                         )}
                       >
@@ -651,18 +665,11 @@ function KnowledgeSettingsContent() {
         <div className="space-y-4">
           <div className="flex items-center gap-2">
             <Settings className="h-5 w-5 text-muted-foreground" />
-            <h3 className="text-lg font-semibold">
-              Reranking Configuration{" "}
-              <span className="text-sm font-normal text-muted-foreground">
-                (optional)
-              </span>
-            </h3>
+            <h3 className="text-lg font-semibold">Reranking Configuration</h3>
           </div>
           <p className="text-sm text-muted-foreground">
             Configure the LLM used to rerank knowledge base search results for
             improved relevance. Any LLM provider and model can be used.
-            Reranking is optional — if not configured, search results are
-            returned without LLM-based reranking.
           </p>
 
           <SettingsBlock
@@ -679,6 +686,11 @@ function KnowledgeSettingsContent() {
                     onChange={handleRerankerKeyChange}
                     disabled={!hasPermission}
                     label="reranker API key"
+                    pulse={
+                      !embeddingSetupStep &&
+                      (rerankerSetupStep === "add-key" ||
+                        rerankerSetupStep === "select-key")
+                    }
                   />
                 )}
               </WithPermissions>
@@ -699,6 +711,10 @@ function KnowledgeSettingsContent() {
                     onChange={setRerankerModel}
                     disabled={!hasPermission}
                     selectedKeyId={rerankerChatApiKeyId}
+                    pulse={
+                      !embeddingSetupStep &&
+                      rerankerSetupStep === "select-model"
+                    }
                   />
                 )}
               </WithPermissions>

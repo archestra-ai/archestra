@@ -1,6 +1,7 @@
 import { archestraApiSdk, type archestraApiTypes } from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { useOrganization } from "./organization.query";
 import { handleApiError } from "./utils";
 
 const {
@@ -11,6 +12,24 @@ const {
   updateKnowledgeBase,
   deleteKnowledgeBase,
 } = archestraApiSdk;
+
+/**
+ * Check if knowledge base prerequisites are configured.
+ * Returns a boolean (all configured) and details about which parts are ready.
+ */
+export function useIsKnowledgeBaseConfigured(): boolean {
+  const status = useKnowledgeBaseConfigStatus();
+  return status.embedding && status.reranker;
+}
+
+export function useKnowledgeBaseConfigStatus() {
+  const { data: organization } = useOrganization();
+  const embedding =
+    !!organization?.embeddingChatApiKeyId && !!organization?.embeddingModel;
+  const reranker =
+    !!organization?.rerankerChatApiKeyId && !!organization?.rerankerModel;
+  return { embedding, reranker };
+}
 
 // ===== Query hooks =====
 

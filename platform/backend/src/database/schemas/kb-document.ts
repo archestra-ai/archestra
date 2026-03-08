@@ -5,6 +5,7 @@ import {
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 import type { EmbeddingStatus, KbDocumentMetadata } from "@/types/kb-document";
@@ -40,7 +41,7 @@ const kbDocumentsTable = pgTable(
   },
   (table) => [
     index("kb_documents_org_id_idx").on(table.organizationId),
-    index("kb_documents_source_idx").on(table.connectorId, table.sourceId),
+    uniqueIndex("kb_documents_source_idx").on(table.connectorId, table.sourceId),
   ],
 );
 

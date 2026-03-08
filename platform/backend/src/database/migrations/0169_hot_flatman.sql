@@ -7,7 +7,7 @@ DROP INDEX "kb_documents_content_hash_idx";--> statement-breakpoint
 DROP INDEX "kb_documents_source_idx";--> statement-breakpoint
 ALTER TABLE "kb_documents" ALTER COLUMN "connector_id" SET NOT NULL;--> statement-breakpoint
 ALTER TABLE "kb_documents" ADD CONSTRAINT "kb_documents_connector_id_knowledge_base_connectors_id_fk" FOREIGN KEY ("connector_id") REFERENCES "public"."knowledge_base_connectors"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-CREATE INDEX "kb_documents_source_idx" ON "kb_documents" USING btree ("connector_id","source_id");--> statement-breakpoint
+CREATE UNIQUE INDEX "kb_documents_source_idx" ON "kb_documents" USING btree ("connector_id","source_id");--> statement-breakpoint
 -- Data migration: deduplicate documents with same connector_id + source_id, keep the newest
 DELETE FROM kb_documents d1
 USING kb_documents d2

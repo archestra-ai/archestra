@@ -128,15 +128,6 @@ class KbDocumentModel {
 
     return result?.count ?? 0;
   }
-
-  static async findPending(params: { limit?: number }): Promise<KbDocument[]> {
-    return await db
-      .select()
-      .from(schema.kbDocumentsTable)
-      .where(eq(schema.kbDocumentsTable.embeddingStatus, "pending"))
-      .orderBy(schema.kbDocumentsTable.createdAt)
-      .limit(params.limit ?? 10);
-  }
 }
 
 export default KbDocumentModel;

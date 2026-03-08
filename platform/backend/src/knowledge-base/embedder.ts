@@ -1,4 +1,3 @@
-import { Cron } from "croner";
 import OpenAI from "openai";
 import config from "@/config";
 import logger from "@/logging";
@@ -6,9 +5,10 @@ import { KbChunkModel, KbDocumentModel } from "@/models";
 
 const EMBEDDING_MODEL = "text-embedding-3-small";
 const EMBEDDING_BATCH_SIZE = 100;
+const RETRY_MAX_ATTEMPTS = 3;
+const RETRY_BASE_DELAY_MS = 1000;
 
 class EmbeddingService {
-  private processing = false;
   private openai: OpenAI | null = null;
 
   async processDocument(documentId: string): Promise<void> {
@@ -46,10 +46,7 @@ class EmbeddingService {
         const batch = chunks.slice(i, i + EMBEDDING_BATCH_SIZE);
         const texts = batch.map((c) => c.content);
 
-        const response = await client.embeddings.create({
-          model: EMBEDDING_MODEL,
-          input: texts,
-        });
+        const response = await this.callEmbeddingApiWithRetry(client, texts);
 
         for (let j = 0; j < batch.length; j++) {
           allUpdates.push({
@@ -84,33 +81,48 @@ class EmbeddingService {
     }
   }
 
-  async processPendingDocuments(params?: { limit?: number }): Promise<void> {
-    if (this.processing) {
-      return;
-    }
-
-    this.processing = true;
-    try {
-      const documents = await KbDocumentModel.findPending({
-        limit: params?.limit ?? 10,
-      });
-
-      for (const doc of documents) {
-        try {
-          await this.processDocument(doc.id);
-        } catch (error) {
-          logger.error(
-            {
-              documentId: doc.id,
-              error: error instanceof Error ? error.message : String(error),
-            },
-            "[Embedder] Error processing document",
-          );
+  private async callEmbeddingApiWithRetry(
+    client: OpenAI,
+    texts: string[],
+  ): Promise<OpenAI.Embeddings.CreateEmbeddingResponse> {
+    for (let attempt = 1; attempt <= RETRY_MAX_ATTEMPTS; attempt++) {
+      try {
+        return await client.embeddings.create({
+          model: EMBEDDING_MODEL,
+          input: texts,
+        });
+      } catch (error) {
+        const isLastAttempt = attempt === RETRY_MAX_ATTEMPTS;
+        if (isLastAttempt || !this.isRetryableError(error)) {
+          throw error;
         }
+
+        const delayMs = RETRY_BASE_DELAY_MS * 2 ** (attempt - 1);
+        logger.warn(
+          {
+            attempt,
+            delayMs,
+            error: error instanceof Error ? error.message : String(error),
+          },
+          "[Embedder] Retryable embedding error, backing off",
+        );
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
       }
-    } finally {
-      this.processing = false;
     }
+
+    // Unreachable, but satisfies TypeScript
+    throw new Error("Retry loop exited unexpectedly");
+  }
+
+  private isRetryableError(error: unknown): boolean {
+    if (error instanceof OpenAI.APIError) {
+      return error.status === 429 || (error.status ?? 0) >= 500;
+    }
+    // Network-level errors (ECONNRESET, ETIMEDOUT, etc.)
+    if (error instanceof Error && "code" in error) {
+      return true;
+    }
+    return false;
   }
 
   private getOpenAIClient(): OpenAI {
@@ -122,23 +134,3 @@ class EmbeddingService {
 }
 
 export const embeddingService = new EmbeddingService();
-
-export function startEmbeddingCron(): void {
-  if (!config.kb.embeddingApiKey) {
-    logger.info(
-      "[Embedder] ARCHESTRA_KNOWLEDGE_BASE_EMBEDDING_API_KEY not set, embedding cron disabled",
-    );
-    return;
-  }
-
-  new Cron("*/30 * * * * *", () => {
-    embeddingService.processPendingDocuments().catch((error) => {
-      logger.error(
-        { error: error instanceof Error ? error.message : String(error) },
-        "[Embedder] Cron tick failed",
-      );
-    });
-  });
-
-  logger.info("[Embedder] Embedding cron started (every 30s)");
-}

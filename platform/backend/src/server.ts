@@ -47,10 +47,7 @@ import config from "@/config";
 import { initializeDatabase, isDatabaseHealthy } from "@/database";
 import { seedRequiredStartingData } from "@/database/seed";
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
-import {
-  reconcileConnectorCronJobs,
-  startEmbeddingCron,
-} from "@/knowledge-base";
+import { reconcileConnectorCronJobs } from "@/knowledge-base";
 import logger from "@/logging";
 import { enterpriseLicenseMiddleware } from "@/middleware";
 import AgentLabelModel from "@/models/agent-label";
@@ -649,9 +646,6 @@ const start = async () => {
     // Initialize chatops providers (MS Teams, Slack, etc.)
     // Seeds DB from env vars on first run, then loads config from DB.
     await chatOpsManager.initialize();
-
-    // Start embedding cron to process pending document embeddings
-    startEmbeddingCron();
 
     // Reconcile CronJobs for knowledge base connectors
     // Ensures CronJobs exist for all enabled connectors (e.g., if a CronJob was deleted)

@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type pino from "pino";
+import config from "@/config";
 import defaultLogger from "@/logging";
 import {
   ConnectorRunModel,
@@ -15,6 +16,7 @@ import type {
 } from "@/types/knowledge-connector";
 import { chunkDocument } from "./chunker";
 import { getConnector } from "./connectors/registry";
+import { embeddingService } from "./embedder";
 
 /**
  * Service that orchestrates the sync of data from external connectors
@@ -105,18 +107,22 @@ class ConnectorSyncService {
       });
 
       for await (const batch of syncGenerator) {
+        const ingestedDocumentIds: string[] = [];
         for (const doc of batch.documents) {
           documentsProcessed++;
           try {
-            const ingested = await this.ingestDocument({
+            const result = await this.ingestDocument({
               doc,
               connectorId,
               connectorType: connector.connectorType,
               organizationId: connector.organizationId,
               log: runLog,
             });
-            if (ingested) {
+            if (result.ingested) {
               documentsIngested++;
+            }
+            if (result.ingested && result.documentId) {
+              ingestedDocumentIds.push(result.documentId);
             }
           } catch (docError) {
             runLog.warn(
@@ -128,6 +134,23 @@ class ConnectorSyncService {
                     : String(docError),
               },
               "[ConnectorSync] Failed to ingest document",
+            );
+          }
+        }
+
+        // Embed inline — wrapped in try/catch so embedding failures never fail the sync
+        if (ingestedDocumentIds.length > 0) {
+          try {
+            await this.embedBatchDocuments({
+              documentIds: ingestedDocumentIds,
+              log: runLog,
+            });
+          } catch (error) {
+            runLog.warn(
+              {
+                error: error instanceof Error ? error.message : String(error),
+              },
+              "[ConnectorSync] Batch embedding failed, documents saved without embeddings",
             );
           }
         }
@@ -244,7 +267,7 @@ class ConnectorSyncService {
     connectorType: string;
     organizationId: string;
     log: pino.Logger;
-  }): Promise<boolean> {
+  }): Promise<{ ingested: boolean; documentId: string | null }> {
     const { doc, connectorId, connectorType, organizationId, log } = params;
 
     const contentHash = createHash("sha256").update(doc.content).digest("hex");
@@ -265,7 +288,7 @@ class ConnectorSyncService {
           },
           "[ConnectorSync] Document unchanged, skipping",
         );
-        return false;
+        return { ingested: false, documentId: null };
       }
 
       // Content has changed — update existing document
@@ -298,7 +321,7 @@ class ConnectorSyncService {
         },
         "[ConnectorSync] Updated existing document with new content",
       );
-      return true;
+      return { ingested: true, documentId: existing.id };
     }
 
     // Create new document
@@ -331,7 +354,33 @@ class ConnectorSyncService {
       },
       "[ConnectorSync] Document ingested into kb_documents",
     );
-    return true;
+    return { ingested: true, documentId: created.id };
+  }
+
+  private async embedBatchDocuments(params: {
+    documentIds: string[];
+    log: pino.Logger;
+  }): Promise<void> {
+    if (!config.kb.embeddingApiKey) {
+      params.log.debug(
+        "[ConnectorSync] Embedding API key not set, skipping inline embedding",
+      );
+      return;
+    }
+
+    for (const documentId of params.documentIds) {
+      try {
+        await embeddingService.processDocument(documentId);
+      } catch (error) {
+        params.log.warn(
+          {
+            documentId,
+            error: error instanceof Error ? error.message : String(error),
+          },
+          "[ConnectorSync] Failed to embed document, continuing",
+        );
+      }
+    }
   }
 
   private async chunkAndStore(params: {

@@ -33,6 +33,21 @@ interface YamlConfigDialogProps {
 }
 
 export function YamlConfigDialog({ item, onClose }: YamlConfigDialogProps) {
+  return (
+    <Dialog open={!!item} onOpenChange={onClose}>
+      <DialogContent className="max-w-5xl h-[85vh] flex flex-col overflow-y-auto">
+        {item && <YamlConfigContent item={item} onClose={onClose} />}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+interface YamlConfigContentProps {
+  item: CatalogItem;
+  onClose: () => void;
+}
+
+export function YamlConfigContent({ item, onClose }: YamlConfigContentProps) {
   const updateMutation = useUpdateInternalMcpCatalogItem();
 
   // Fetch the deployment YAML preview (generates default if not stored)
@@ -86,9 +101,8 @@ export function YamlConfigDialog({ item, onClose }: YamlConfigDialogProps) {
   const isLocalServer = item?.serverType === "local";
 
   return (
-    <Dialog open={!!item} onOpenChange={handleClose}>
-      <DialogContent className="max-w-5xl h-[85vh] flex flex-col overflow-y-auto">
-        <DialogHeader>
+    <>
+      <DialogHeader>
           <DialogTitle>Edit K8s Deployment YAML</DialogTitle>
           <DialogDescription asChild>
             <div className="space-y-2 text-sm text-muted-foreground">
@@ -204,7 +218,6 @@ export function YamlConfigDialog({ item, onClose }: YamlConfigDialogProps) {
             </Button>
           </DialogFooter>
         </DialogForm>
-      </DialogContent>
-    </Dialog>
+    </>
   );
 }

@@ -9,14 +9,11 @@ import {
 } from "@shared";
 import {
   AlertTriangle,
-  Code,
   MessageSquare,
-  MoreVertical,
   Pencil,
   Plus,
   RefreshCw,
   Server,
-  Terminal,
   Trash2,
   User,
   Wrench,
@@ -34,12 +31,6 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { PermissionButton } from "@/components/ui/permission-button";
 import {
   Tooltip,
@@ -61,12 +52,11 @@ import {
   DeploymentStatusDot,
 } from "./deployment-status";
 import { InstallationProgress } from "./installation-progress";
-import { ManageUsersDialog } from "./manage-users-dialog";
-
-import { McpLogsDialog } from "./mcp-logs-dialog";
-
+import {
+  McpServerSettingsDialog,
+  type SettingsPage,
+} from "./mcp-server-settings-dialog";
 import { UninstallServerDialog } from "./uninstall-server-dialog";
-import { YamlConfigDialog } from "./yaml-config-dialog";
 
 export type CatalogItem =
   archestraApiTypes.GetInternalMcpCatalogResponses["200"][number];
@@ -238,16 +228,22 @@ export function McpServerCard({
   })();
 
   // Dialog state
-  const [isManageUsersDialogOpen, setIsManageUsersDialogOpen] = useState(false);
-  const [isLogsDialogOpen, setIsLogsDialogOpen] = useState(false);
+  const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
+  const [settingsInitialPage, setSettingsInitialPage] = useState<
+    SettingsPage | undefined
+  >(undefined);
   const [logsInitialServerId, setLogsInitialServerId] = useState<string | null>(
     null,
   );
-  const [isYamlConfigDialogOpen, setIsYamlConfigDialogOpen] = useState(false);
   const [uninstallingServer, setUninstallingServer] = useState<{
     id: string;
     name: string;
   } | null>(null);
+
+  const openSettingsPage = (page: SettingsPage) => {
+    setSettingsInitialPage(page);
+    setSettingsDialogOpen(true);
+  };
 
   const handleChatWithMcpServer = async () => {
     setIsChatCreating(true);
@@ -322,6 +318,15 @@ export function McpServerCard({
       });
   }
 
+  // All installations for this catalog item (local + remote, for Inspector)
+  const allInstalls: NonNullable<typeof allMcpServers> =
+    localInstalls.length > 0
+      ? localInstalls
+      : (mcpServerOfCurrentCatalogItem ?? []).sort(
+          (a, b) =>
+            new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+        );
+
   const needsReinstall = installedServer?.reinstallRequired;
 
   // Check if the K8s deployment has failed (e.g. CrashLoopBackOff) even while installation is "pending"
@@ -358,8 +363,7 @@ export function McpServerCard({
   const isBuiltinVariant = variant === "builtin";
 
   // Check if logs are available (local variant with at least one installation)
-  const hasLocalInstallations = localInstalls.length > 0;
-  const isLogsAvailable = variant === "local" && hasLocalInstallations;
+  const isLogsAvailable = variant === "local";
 
   // Collect server IDs for deployment status indicator
   const deploymentServerIds = (allMcpServers ?? [])
@@ -384,49 +388,15 @@ export function McpServerCard({
       </Button>
     ) : null;
 
-  const manageCatalogItemDropdownMenu = (
-    <div className="flex flex-wrap gap-1 items-center flex-shrink-0">
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="icon" className="h-8 w-8">
-            <MoreVertical className="h-4 w-4" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          {!isBuiltinVariant && (
-            <DropdownMenuItem
-              onClick={() => setIsManageUsersDialogOpen(true)}
-              data-testid={`${E2eTestId.ManageCredentialsButton}-${installedServer?.catalogName}`}
-            >
-              <User className="mr-2 h-4 w-4" />
-              Manage Connections
-            </DropdownMenuItem>
-          )}
-          <DropdownMenuItem onClick={onEdit}>
-            <Pencil className="mr-2 h-4 w-4" />
-            Edit
-          </DropdownMenuItem>
-          {isLogsAvailable && (
-            <DropdownMenuItem onClick={() => setIsLogsDialogOpen(true)}>
-              <Terminal className="mr-2 h-4 w-4" />
-              Debug
-            </DropdownMenuItem>
-          )}
-          {variant === "local" && (
-            <DropdownMenuItem onClick={() => setIsYamlConfigDialogOpen(true)}>
-              <Code className="mr-2 h-4 w-4" />
-              Edit K8s Deployment YAML
-            </DropdownMenuItem>
-          )}
-          {!isPlaywrightVariant && (
-            <DropdownMenuItem onClick={onDelete} className="text-destructive">
-              <Trash2 className="mr-2 h-4 w-4" />
-              Delete
-            </DropdownMenuItem>
-          )}
-        </DropdownMenuContent>
-      </DropdownMenu>
-    </div>
+  const settingsButton = (
+    <Button
+      variant="ghost"
+      size="icon"
+      className="h-8 w-8"
+      onClick={() => openSettingsPage("configuration")}
+    >
+      <Pencil className="h-4 w-4" />
+    </Button>
   );
 
   const MAX_AVATARS = 4;
@@ -491,7 +461,7 @@ export function McpServerCard({
           {deploymentSummary ? (
             <button
               type="button"
-              onClick={() => setIsLogsDialogOpen(true)}
+              onClick={() => openSettingsPage("debug-logs")}
               className="flex items-center gap-1.5 cursor-pointer hover:text-foreground transition-colors"
             >
               <DeploymentStatusDot state={deploymentSummary.overallState} />
@@ -555,7 +525,7 @@ export function McpServerCard({
                 <TooltipTrigger asChild>
                   <Avatar
                     className="size-6 border-2 border-background cursor-pointer hover:opacity-80 transition-opacity"
-                    onClick={() => setIsManageUsersDialogOpen(true)}
+                    onClick={() => openSettingsPage("connections")}
                   >
                     <AvatarFallback className="text-muted-foreground bg-muted">
                       <Plus className="h-3 w-3" />
@@ -773,32 +743,38 @@ export function McpServerCard({
 
   const dialogs = (
     <>
-      <McpLogsDialog
-        open={isLogsDialogOpen}
+      <McpServerSettingsDialog
+        open={settingsDialogOpen}
         onOpenChange={(open) => {
-          setIsLogsDialogOpen(open);
-          if (!open) setLogsInitialServerId(null);
+          setSettingsDialogOpen(open);
+          if (!open) {
+            setLogsInitialServerId(null);
+            setSettingsInitialPage(undefined);
+          }
         }}
-        serverName={item.label || item.name}
-        installs={localInstalls}
-        deploymentStatuses={deploymentStatuses}
-        onReinstall={() => onReinstall()}
-        initialServerId={logsInitialServerId}
-      />
-
-      <ManageUsersDialog
-        catalogId={item.id}
-        isOpen={isManageUsersDialogOpen}
-        onClose={() => setIsManageUsersDialogOpen(false)}
-        label={item.label || item.name}
+        initialPage={settingsInitialPage}
+        item={item}
+        variant={variant}
+        showConnections={!isBuiltinVariant}
+        connectionCount={mcpServerOfCurrentCatalogItem?.length ?? 0}
+        showDebug={isLogsAvailable}
+        showInspector
+        showYaml={variant === "local"}
+        onEditClose={onEdit}
         onAddPersonalConnection={onAddPersonalConnection}
         onAddSharedConnection={onAddSharedConnection}
+        installs={allInstalls}
         deploymentStatuses={deploymentStatuses}
-        onOpenPodLogs={(sid) => {
-          setIsManageUsersDialogOpen(false);
-          setLogsInitialServerId(sid);
-          setIsLogsDialogOpen(true);
-        }}
+        deploymentServerIds={deploymentServerIds}
+        onReinstall={() => onReinstall()}
+        logsInitialServerId={logsInitialServerId}
+        hasPersonalConnection={hasPersonalConnection}
+        onConnect={
+          onAddPersonalConnection ??
+          (variant === "local" ? onInstallLocalServer : onInstallRemoteServer)
+        }
+        needsReinstall={!!needsReinstall && !isInstalling}
+        onDelete={!isPlaywrightVariant ? onDelete : undefined}
       />
 
       <UninstallServerDialog
@@ -806,11 +782,6 @@ export function McpServerCard({
         onClose={() => setUninstallingServer(null)}
         isCancelingInstallation={isInstalling}
         onCancelInstallation={onCancelInstallation}
-      />
-
-      <YamlConfigDialog
-        item={isYamlConfigDialogOpen ? item : null}
-        onClose={() => setIsYamlConfigDialogOpen(false)}
       />
     </>
   );
@@ -840,7 +811,7 @@ export function McpServerCard({
           </div>
           {(userIsMcpServerAdmin ||
             (item.scope === "personal" && item.authorId === currentUserId)) &&
-            manageCatalogItemDropdownMenu}
+            settingsButton}
         </div>
       </CardHeader>
       <CardContent className="flex flex-col gap-4 flex-grow">
@@ -870,7 +841,7 @@ export function McpServerCard({
                   Failed to start MCP server,{" "}
                   <button
                     type="button"
-                    onClick={() => setIsLogsDialogOpen(true)}
+                    onClick={() => openSettingsPage("debug-logs")}
                     className="text-primary hover:underline cursor-pointer"
                     data-testid={`${E2eTestId.McpLogsViewButton}-${item.name}`}
                   >
@@ -879,7 +850,7 @@ export function McpServerCard({
                   or{" "}
                   <button
                     type="button"
-                    onClick={onEdit}
+                    onClick={() => openSettingsPage("configuration")}
                     className="text-primary hover:underline cursor-pointer"
                     data-testid={`${E2eTestId.McpLogsEditConfigButton}-${item.name}`}
                   >

@@ -73,9 +73,60 @@ export function McpLogsDialog({
   onReinstall,
   initialServerId = null,
 }: McpLogsDialogProps) {
-  const [activeTab, setActiveTab] = useState<"logs" | "debug" | "inspector">(
-    "logs",
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent
+        className="max-w-5xl h-[85vh] flex flex-col p-8"
+        data-testid={E2eTestId.McpLogsDialog}
+      >
+        <McpLogsContent
+          isActive={open}
+          serverName={serverName}
+          installs={installs}
+          deploymentStatuses={deploymentStatuses}
+          hideInstallationSelector={hideInstallationSelector}
+          onReinstall={onReinstall}
+          initialServerId={initialServerId}
+        />
+      </DialogContent>
+    </Dialog>
   );
+}
+
+export type McpLogsTab = "logs" | "debug" | "inspector";
+
+interface McpLogsContentProps {
+  isActive: boolean;
+  serverName: string;
+  installs: McpLogsDialogProps["installs"];
+  deploymentStatuses: Record<string, McpDeploymentStatusEntry>;
+  hideInstallationSelector?: boolean;
+  hideHeader?: boolean;
+  /** When set, controls the active tab externally */
+  controlledTab?: McpLogsTab;
+  /** When true, hides the tab bar (use with controlledTab) */
+  hideTabBar?: boolean;
+  onReinstall?: (serverId: string) => void | Promise<void>;
+  initialServerId?: string | null;
+}
+
+export function McpLogsContent({
+  isActive,
+  serverName,
+  installs,
+  deploymentStatuses,
+  hideInstallationSelector = false,
+  hideHeader = false,
+  controlledTab,
+  hideTabBar = false,
+  onReinstall,
+  initialServerId = null,
+}: McpLogsContentProps) {
+  const [internalTab, setInternalTab] = useState<McpLogsTab>("logs");
+  const activeTab = controlledTab ?? internalTab;
+  const setActiveTab = (tab: McpLogsTab) => {
+    if (!controlledTab) setInternalTab(tab);
+  };
   const [copied, setCopied] = useState(false);
   const [commandCopied, setCommandCopied] = useState(false);
   const [streamedLogs, setStreamedLogs] = useState("");
@@ -99,14 +150,14 @@ export function McpLogsDialog({
 
   // Default to initialServerId or first installation when dialog opens
   useEffect(() => {
-    if (open && installs.length > 0 && !serverId) {
+    if (isActive && installs.length > 0 && !serverId) {
       const initial =
         initialServerId && installs.some((i) => i.id === initialServerId)
           ? initialServerId
           : installs[0].id;
       setServerId(initial);
     }
-  }, [open, installs, serverId, initialServerId]);
+  }, [isActive, installs, serverId, initialServerId]);
 
   const currentDeploymentStatus = serverId
     ? deploymentStatuses[serverId]
@@ -279,14 +330,14 @@ export function McpLogsDialog({
 
   // Auto-start streaming when dialog opens or serverId changes
   useEffect(() => {
-    if (open && serverId) {
+    if (isActive && serverId) {
       startStreaming(serverId);
     }
-  }, [open, serverId, startStreaming]);
+  }, [isActive, serverId, startStreaming]);
 
   // Clean up when dialog closes
   useEffect(() => {
-    if (!open) {
+    if (!isActive) {
       stopStreaming();
       setStreamedLogs("");
       setStreamError(null);
@@ -295,7 +346,7 @@ export function McpLogsDialog({
       setServerId(null); // Reset selection so it picks first on reopen
       setActiveTab("logs");
     }
-  }, [open, stopStreaming]);
+  }, [isActive, stopStreaming]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -359,11 +410,8 @@ export function McpLogsDialog({
   const isDebugDisabled = currentDeploymentStatus?.state !== "running";
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        className="max-w-5xl h-[85vh] flex flex-col p-8"
-        data-testid={E2eTestId.McpLogsDialog}
-      >
+    <>
+      {!hideHeader && (
         <DialogHeader className="flex-shrink-0">
           <div className="min-w-0">
             <DialogTitle className="flex items-center gap-2 overflow-hidden">
@@ -372,6 +420,7 @@ export function McpLogsDialog({
             </DialogTitle>
           </div>
         </DialogHeader>
+      )}
 
         {/* Pod selector cards */}
         {!hideInstallationSelector && installs.length >= 1 && (
@@ -473,51 +522,53 @@ export function McpLogsDialog({
           }
           className="flex flex-col flex-1 min-h-0"
         >
-          <TabsList className="w-fit bg-slate-100 dark:bg-slate-800 border h-9 p-1 flex-shrink-0">
-            <TabsTrigger
-              value="logs"
-              data-testid={E2eTestId.McpLogsTab}
-              className="px-6"
-            >
-              Logs
-            </TabsTrigger>
-            {isDebugDisabled ? (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span>
-                    <TabsTrigger value="inspector" disabled className="px-6">
-                      Inspector
-                    </TabsTrigger>
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent>
-                  Pod must be running to inspect tools
-                </TooltipContent>
-              </Tooltip>
-            ) : (
-              <TabsTrigger value="inspector" className="px-6">
-                Inspector
+          {!hideTabBar && (
+            <TabsList className="w-fit bg-slate-100 dark:bg-slate-800 border h-9 p-1 flex-shrink-0">
+              <TabsTrigger
+                value="logs"
+                data-testid={E2eTestId.McpLogsTab}
+                className="px-6"
+              >
+                Logs
               </TabsTrigger>
-            )}
-            {isDebugDisabled ? (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span>
-                    <TabsTrigger value="debug" disabled className="px-6">
-                      Shell
-                    </TabsTrigger>
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent>
-                  Pod must be running to start a shell session
-                </TooltipContent>
-              </Tooltip>
-            ) : (
-              <TabsTrigger value="debug" className="px-6">
-                Shell
-              </TabsTrigger>
-            )}
-          </TabsList>
+              {isDebugDisabled ? (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span>
+                      <TabsTrigger value="inspector" disabled className="px-6">
+                        Inspector
+                      </TabsTrigger>
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    Pod must be running to inspect tools
+                  </TooltipContent>
+                </Tooltip>
+              ) : (
+                <TabsTrigger value="inspector" className="px-6">
+                  Inspector
+                </TabsTrigger>
+              )}
+              {isDebugDisabled ? (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span>
+                      <TabsTrigger value="debug" disabled className="px-6">
+                        Shell
+                      </TabsTrigger>
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    Pod must be running to start a shell session
+                  </TooltipContent>
+                </Tooltip>
+              ) : (
+                <TabsTrigger value="debug" className="px-6">
+                  Shell
+                </TabsTrigger>
+              )}
+            </TabsList>
+          )}
 
           <TabsContent
             value="logs"
@@ -676,7 +727,7 @@ export function McpLogsDialog({
             {serverId && (
               <McpInspector
                 serverId={serverId}
-                isActive={activeTab === "inspector" && open}
+                isActive={activeTab === "inspector" && isActive}
               />
             )}
           </TabsContent>
@@ -688,12 +739,11 @@ export function McpLogsDialog({
             {serverId && (
               <McpExecTerminal
                 serverId={serverId}
-                isActive={activeTab === "debug" && open}
+                isActive={activeTab === "debug" && isActive}
               />
             )}
           </TabsContent>
         </Tabs>
-      </DialogContent>
-    </Dialog>
+    </>
   );
 }

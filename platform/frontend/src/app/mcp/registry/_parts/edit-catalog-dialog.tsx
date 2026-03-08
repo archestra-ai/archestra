@@ -19,59 +19,77 @@ interface EditCatalogDialogProps {
 }
 
 export function EditCatalogDialog({ item, onClose }: EditCatalogDialogProps) {
+  return (
+    <Dialog open={!!item} onOpenChange={onClose}>
+      <DialogContent className="max-w-5xl h-[85vh] flex flex-col overflow-y-auto">
+        {item && <EditCatalogContent item={item} onClose={onClose} />}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+interface EditCatalogContentProps {
+  item: NonNullable<EditCatalogDialogProps["item"]>;
+  onClose: () => void;
+  /** When true, save does not close the dialog */
+  keepOpenOnSave?: boolean;
+  /** Called when form dirty state changes */
+  onDirtyChange?: (isDirty: boolean) => void;
+  /** Ref to imperatively trigger form submission */
+  submitRef?: React.MutableRefObject<(() => Promise<void>) | null>;
+}
+
+export function EditCatalogContent({
+  item,
+  onClose,
+  keepOpenOnSave = false,
+  onDirtyChange,
+  submitRef,
+}: EditCatalogContentProps) {
   const updateMutation = useUpdateInternalMcpCatalogItem();
 
-  const handleClose = () => {
-    onClose();
-  };
-
   const onSubmit = async (values: McpCatalogFormValues) => {
-    if (!item) return;
-
     const apiData = transformFormToApiData(values);
 
-    // Update the catalog item
     await updateMutation.mutateAsync({
       id: item.id,
       data: apiData,
     });
 
-    // Close the edit dialog
-    handleClose();
-
-    // Note: The backend sets reinstallRequired flag on all installations when critical fields change
-    // Users will see "Reinstall Required" button on their installed servers automatically
+    if (!keepOpenOnSave) {
+      onClose();
+    }
   };
 
   return (
-    <Dialog open={!!item} onOpenChange={handleClose}>
-      <DialogContent className="max-w-5xl h-[85vh] flex flex-col overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Edit MCP Server</DialogTitle>
-          <DialogDescription>
-            Update the configuration for this MCP server.
-          </DialogDescription>
-        </DialogHeader>
-
-        {item && (
-          <McpCatalogForm
-            mode="edit"
-            initialValues={item}
-            onSubmit={onSubmit}
-            nameDisabled={isPlaywrightCatalogItem(item.id)}
-            footer={
-              <DialogFooter>
-                <Button variant="outline" onClick={handleClose} type="button">
-                  Cancel
-                </Button>
-                <Button type="submit" disabled={updateMutation.isPending}>
-                  {updateMutation.isPending ? "Saving..." : "Save Changes"}
-                </Button>
-              </DialogFooter>
+    <McpCatalogForm
+      mode="edit"
+      initialValues={item}
+      onSubmit={onSubmit}
+      nameDisabled={isPlaywrightCatalogItem(item.id)}
+      onDirtyChange={onDirtyChange}
+      submitRef={submitRef}
+      footer={({ isDirty }) =>
+        keepOpenOnSave && !isDirty ? null : (
+          <DialogFooter
+            className={
+              keepOpenOnSave
+                ? "sticky bottom-[-24px] bg-background pt-4 pb-6 -mx-6 px-6 border-t mt-6"
+                : undefined
             }
-          />
-        )}
-      </DialogContent>
-    </Dialog>
+          >
+            <Button variant="outline" onClick={onClose} type="button">
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              disabled={updateMutation.isPending || !isDirty}
+            >
+              {updateMutation.isPending ? "Saving..." : "Save Changes"}
+            </Button>
+          </DialogFooter>
+        )
+      }
+    />
   );
 }

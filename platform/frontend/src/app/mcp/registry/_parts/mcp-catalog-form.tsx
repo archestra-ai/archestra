@@ -3,7 +3,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import type { archestraApiTypes } from "@shared";
 import {
-  AlertCircle,
+  Info,
   ChevronRight,
   Globe,
   Plus,
@@ -76,10 +76,14 @@ interface McpCatalogFormProps {
   mode: "create" | "edit";
   initialValues?: archestraApiTypes.GetInternalMcpCatalogResponses["200"][number];
   onSubmit: (values: McpCatalogFormValues) => void;
-  footer?: React.ReactNode;
+  footer?: React.ReactNode | ((opts: { isDirty: boolean }) => React.ReactNode);
   nameDisabled?: boolean;
   catalogButton?: React.ReactNode;
   formValues?: McpCatalogFormValues;
+  /** Called when form dirty state changes */
+  onDirtyChange?: (isDirty: boolean) => void;
+  /** Ref to imperatively trigger form submission */
+  submitRef?: React.MutableRefObject<(() => Promise<void>) | null>;
 }
 
 export function McpCatalogForm({
@@ -90,6 +94,8 @@ export function McpCatalogForm({
   footer,
   catalogButton,
   formValues,
+  onDirtyChange,
+  submitRef,
 }: McpCatalogFormProps) {
   // Fetch local config secret if it exists
   const { data: localConfigSecret } = useGetSecret(
@@ -138,6 +144,22 @@ export function McpCatalogForm({
           teams: [],
         }),
   });
+
+  // Report dirty state to parent
+  const { isDirty } = form.formState;
+  useEffect(() => {
+    onDirtyChange?.(isDirty);
+  }, [isDirty, onDirtyChange]);
+
+  // Expose imperative submit to parent
+  useEffect(() => {
+    if (submitRef) {
+      submitRef.current = form.handleSubmit(onSubmit) as () => Promise<void>;
+    }
+    return () => {
+      if (submitRef) submitRef.current = null;
+    };
+  }, [submitRef, form, onSubmit]);
 
   const authMethod = form.watch("authMethod");
   const currentServerType = form.watch("serverType");
@@ -247,8 +269,8 @@ export function McpCatalogForm({
     <Form {...form}>
       <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-6">
         {mode === "edit" && (
-          <Alert>
-            <AlertCircle className="h-4 w-4" />
+          <Alert variant="info">
+            <Info className="h-4 w-4" />
             <AlertDescription>
               Changes to {nameDisabled ? "" : "Name, "}Server URL or
               Authentication will require reinstalling the server for the
@@ -262,7 +284,7 @@ export function McpCatalogForm({
         <div className="border rounded-lg p-5 space-y-4">
           <AgentIconPicker
             value={form.watch("icon") ?? null}
-            onChange={(icon) => form.setValue("icon", icon)}
+            onChange={(icon) => form.setValue("icon", icon, { shouldDirty: true })}
             showLogos
           />
           <FormField
@@ -1039,7 +1061,9 @@ export function McpCatalogForm({
           </Collapsible>
         </div>
 
-        {footer}
+        {typeof footer === "function"
+          ? footer({ isDirty: form.formState.isDirty })
+          : footer}
       </form>
     </Form>
   );

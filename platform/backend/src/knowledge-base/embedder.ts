@@ -108,6 +108,9 @@ class EmbeddingService {
 
       const orgConfig = await getDefaultOrgEmbeddingConfig();
       if (!orgConfig) {
+        logger.debug(
+          "[Embedder] No embedding API key configured, skipping pending documents",
+        );
         return;
       }
 

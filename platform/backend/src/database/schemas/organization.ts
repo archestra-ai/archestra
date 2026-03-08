@@ -64,14 +64,14 @@ const organizationsTable = pgTable("organization", {
 
   /**
    * Chat API key used for generating embeddings (must be an OpenAI provider key).
-   * FK to chat_api_keys(id) ON DELETE SET NULL — enforced by migration, not Drizzle schema
-   * (avoiding direct import of chatApiKeysTable to prevent TypeScript circular type inference).
+   * FK to chat_api_keys(id) ON DELETE SET NULL — enforced by migration only
+   * (Drizzle .references() causes TS circular inference: organization → chat-api-key → team → organization).
    */
   embeddingChatApiKeyId: uuid("embedding_chat_api_key_id"),
 
   /**
    * Chat API key used for reranking search results.
-   * FK to chat_api_keys(id) ON DELETE SET NULL — enforced by migration, not Drizzle schema.
+   * FK to chat_api_keys(id) ON DELETE SET NULL — enforced by migration only (same circular issue).
    */
   rerankerChatApiKeyId: uuid("reranker_chat_api_key_id"),
 

@@ -306,6 +306,7 @@ export function InitialAgentSelector({
           <AddDelegationView
             agentId={currentAgent.id}
             onBack={() => setView("add-tool")}
+            onDone={resetToSettings}
           />
         )}
 
@@ -933,9 +934,11 @@ function ConfigureToolView({
 function AddDelegationView({
   agentId,
   onBack,
+  onDone,
 }: {
   agentId: string;
   onBack: () => void;
+  onDone: () => void;
 }) {
   const { data: allAgents = [] } = useInternalAgents();
   const { data: session } = authClient.useSession();
@@ -980,16 +983,17 @@ function AddDelegationView({
   }, [allAgents, agentId, search, scopeFilters, currentUserId]);
 
   const handleToggle = (targetAgentId: string) => {
+    const isAdding = !delegatedIds.has(targetAgentId);
     const newIds = new Set(delegatedIds);
-    if (newIds.has(targetAgentId)) {
-      newIds.delete(targetAgentId);
-    } else {
+    if (isAdding) {
       newIds.add(targetAgentId);
+    } else {
+      newIds.delete(targetAgentId);
     }
-    syncDelegations.mutate({
-      agentId,
-      targetAgentIds: [...newIds],
-    });
+    syncDelegations.mutate(
+      { agentId, targetAgentIds: [...newIds] },
+      { onSuccess: () => { if (isAdding) onDone(); } },
+    );
   };
 
   return (
@@ -1042,7 +1046,16 @@ function AddDelegationView({
           />
         </div>
       </div>
-      <div className="px-4 pt-4 pb-4 flex-1 min-h-0 overflow-y-auto">
+      <div className="px-4 pt-2 shrink-0">
+        <Alert variant="info" className="border-0 py-2 text-xs">
+          <Info className="size-3.5" />
+          <AlertDescription className="text-xs">
+            Adding a subagent makes its tools and capabilities available to all
+            users of this agent during conversations
+          </AlertDescription>
+        </Alert>
+      </div>
+      <div className="px-4 pt-2 pb-4 flex-1 min-h-0 overflow-y-auto">
         {filteredAgents.length === 0 ? (
           <p className="text-sm text-muted-foreground text-center py-8">
             No agents found.

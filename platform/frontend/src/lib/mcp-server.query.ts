@@ -9,7 +9,7 @@ import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { invalidateToolAssignmentQueries } from "./agent-tools.hook";
 import { authClient } from "./clients/auth/auth-client";
-import { useFeatureFlag } from "./features.hook";
+import { useFeature } from "./config.query";
 import { handleApiError } from "./utils";
 import websocketService from "./websocket";
 
@@ -305,7 +305,7 @@ export function useMcpDeploymentStatuses(): Record<
   const [statuses, setStatuses] = useState<
     Record<string, McpDeploymentStatusEntry>
   >({});
-  const isK8sEnabled = useFeatureFlag("orchestratorK8sRuntime");
+  const isK8sEnabled = useFeature("orchestratorK8sRuntime");
 
   useEffect(() => {
     if (!isK8sEnabled) return;

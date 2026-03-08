@@ -1,7 +1,7 @@
 import { requiredPagePermissionsMap } from "@shared/access-control";
 import { usePermissionMap } from "@/lib/auth.query";
 import config from "@/lib/config";
-import { useEnterpriseFeature } from "@/lib/features.hook";
+import { useEnterpriseFeature } from "@/lib/config.query";
 import { useSecretsType } from "@/lib/secrets.query";
 
 export function useSettingsTabs() {

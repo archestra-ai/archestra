@@ -20,7 +20,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useChatApiKeys, useCreateChatApiKey } from "@/lib/chat-settings.query";
-import { useFeatureFlag } from "@/lib/features.hook";
+import { useFeature } from "@/lib/config.query";
 import { SetupStep } from "./setup-step";
 
 const DEFAULT_FORM_VALUES: ChatApiKeyFormValues = {
@@ -39,8 +39,8 @@ export function LlmKeySetupStep() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const { data: chatApiKeys = [] } = useChatApiKeys();
   const createMutation = useCreateChatApiKey();
-  const byosEnabled = useFeatureFlag("byosEnabled");
-  const geminiVertexAiEnabled = useFeatureFlag("geminiVertexAiEnabled");
+  const byosEnabled = useFeature("byosEnabled");
+  const geminiVertexAiEnabled = useFeature("geminiVertexAiEnabled");
 
   const hasAnyApiKey = chatApiKeys.length > 0;
 

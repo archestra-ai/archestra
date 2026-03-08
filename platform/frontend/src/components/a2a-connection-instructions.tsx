@@ -20,7 +20,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { useHasPermissions } from "@/lib/auth.query";
 import config from "@/lib/config";
-import { useFeatures } from "@/lib/config.query";
+import { useFeature } from "@/lib/config.query";
 import { useAgentEmailAddress } from "@/lib/incoming-email.query";
 import { useFetchTeamTokenValue, useTokens } from "@/lib/team-token.query";
 import { useFetchUserTokenValue, useUserToken } from "@/lib/user-token.query";
@@ -46,7 +46,7 @@ export function A2AConnectionInstructions({
   const { data: hasAdminPermission } = useHasPermissions({
     agent: ["admin"],
   });
-  const { data: features } = useFeatures();
+  const incomingEmail = useFeature("incomingEmail");
 
   const tokens = tokensData?.tokens;
   const [copiedChatLink, setCopiedChatLink] = useState(false);
@@ -60,7 +60,7 @@ export function A2AConnectionInstructions({
   const fetchTeamTokenMutation = useFetchTeamTokenValue();
 
   // Email invocation - check both global feature AND agent-level setting
-  const globalEmailEnabled = features?.incomingEmail?.enabled ?? false;
+  const globalEmailEnabled = incomingEmail?.enabled ?? false;
   const agentEmailEnabled = agent.incomingEmailEnabled ?? false;
   const emailEnabled = globalEmailEnabled && agentEmailEnabled;
 

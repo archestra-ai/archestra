@@ -37,7 +37,7 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
-import { useFeatureFlag } from "@/lib/features.hook";
+import { useFeature } from "@/lib/config.query";
 import { useTeamsWithVaultFolders } from "@/lib/team.query";
 import { SelectMcpServerCredentialTypeAndTeams } from "./select-mcp-server-credential-type-and-teams";
 import { ServiceAccountField } from "./service-account-field";
@@ -162,7 +162,7 @@ export function LocalServerInstallDialog({
     Record<string, { path: string | null; key: string | null }>
   >({});
 
-  const byosEnabled = useFeatureFlag("byosEnabled");
+  const byosEnabled = useFeature("byosEnabled");
   const { data: teamsWithVault } = useTeamsWithVaultFolders();
   const vaultTeams = teamsWithVault?.filter((t) => t.vaultPath);
 

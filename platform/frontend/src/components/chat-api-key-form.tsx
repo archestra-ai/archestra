@@ -24,8 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { useProviderBaseUrls } from "@/lib/config.query";
-import { useFeatureFlag } from "@/lib/features.hook";
+import { useFeature, useProviderBaseUrls } from "@/lib/config.query";
 import { useTeams } from "@/lib/team.query";
 import { WithPermissions } from "./roles/with-permissions";
 
@@ -257,7 +256,7 @@ export function ChatApiKeyForm({
   isPending = false,
   geminiVertexAiEnabled = false,
 }: ChatApiKeyFormProps) {
-  const byosEnabled = useFeatureFlag("byosEnabled");
+  const byosEnabled = useFeature("byosEnabled");
   const { data: providerBaseUrls } = useProviderBaseUrls();
   const isEditMode = Boolean(existingKey);
 

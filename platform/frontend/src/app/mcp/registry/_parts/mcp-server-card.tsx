@@ -42,7 +42,7 @@ import { useCreateProfile } from "@/lib/agent.query";
 import { useBulkAssignTools } from "@/lib/agent-tools.query";
 import { useHasPermissions } from "@/lib/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
-import { useFeatureFlag } from "@/lib/features.hook";
+import { useFeature } from "@/lib/config.query";
 import { useCatalogTools } from "@/lib/internal-mcp-catalog.query";
 import { useMcpServers, useMcpServerTools } from "@/lib/mcp-server.query";
 import { useTeams } from "@/lib/team.query";
@@ -183,13 +183,13 @@ export function McpServerCard({
   const bulkAssignTools = useBulkAssignTools();
   const [isChatCreating, setIsChatCreating] = useState(false);
 
-  const isByosEnabled = useFeatureFlag("byosEnabled");
+  const isByosEnabled = useFeature("byosEnabled");
   const session = authClient.useSession();
   const currentUserId = session.data?.user?.id;
   const { data: userIsMcpServerAdmin } = useHasPermissions({
     mcpServerInstallation: ["admin"],
   });
-  const isLocalMcpEnabled = useFeatureFlag("orchestratorK8sRuntime");
+  const isLocalMcpEnabled = useFeature("orchestratorK8sRuntime");
 
   // Fetch all MCP servers to get installations for logs dropdown
   const { data: allMcpServers } = useMcpServers();

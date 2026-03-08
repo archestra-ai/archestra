@@ -20,8 +20,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useChatOpsStatus } from "@/lib/chatops.query";
 import { useUpdateSlackChatOpsConfig } from "@/lib/chatops-config.query";
 import config from "@/lib/config";
-import { useFeatures } from "@/lib/config.query";
-import { usePublicBaseUrl } from "@/lib/features.hook";
+import { useConfig, usePublicBaseUrl } from "@/lib/config.query";
 import { ChannelsSection } from "../_components/channels-section";
 import { CollapsibleSetupSection } from "../_components/collapsible-setup-section";
 import { CredentialField } from "../_components/credential-field";
@@ -61,11 +60,11 @@ export default function SlackPage() {
   const [slackSetupOpen, setSlackSetupOpen] = useState(false);
   const [ngrokDialogOpen, setNgrokDialogOpen] = useState(false);
 
-  const { data: features, isLoading: featuresLoading } = useFeatures();
+  const { data: configData, isLoading: featuresLoading } = useConfig();
   const { data: chatOpsProviders, isLoading: statusLoading } =
     useChatOpsStatus();
 
-  const ngrokDomain = features?.ngrokDomain;
+  const ngrokDomain = configData?.features.ngrokDomain;
   const slack = chatOpsProviders?.find((p) => p.id === "slack");
   const slackCreds = slack?.credentials as Record<string, string> | undefined;
 
@@ -87,7 +86,7 @@ export default function SlackPage() {
 
   const setupDataLoading = featuresLoading || statusLoading;
   const isLocalDev =
-    features?.isQuickstart || config.environment === "development";
+    configData?.features.isQuickstart || config.environment === "development";
   const { slack: allStepsCompleted } = useTriggerStatuses();
 
   return (

@@ -102,9 +102,8 @@ import {
   conversationStorageKeys,
   getConversationDisplayTitle,
 } from "@/lib/chat-utils";
-import { useFeatures } from "@/lib/config.query";
+import { useConfig, useFeature } from "@/lib/config.query";
 import { useDialogs } from "@/lib/dialog.hook";
-import { useFeatureFlag } from "@/lib/features.hook";
 import { useChatSession } from "@/lib/global-chat.context";
 import { useOrganization } from "@/lib/organization.query";
 import {
@@ -354,7 +353,7 @@ export default function ChatPage() {
 
   const chatSession = useChatSession(conversationId);
 
-  const { isLoading: isLoadingFeatures } = useFeatures();
+  const { isLoading: isLoadingFeatures } = useConfig();
   const { data: organization } = useOrganization();
   const { data: chatModels = [] } = useChatModels();
   // Check if user has any API keys (including system keys for keyless providers
@@ -1668,8 +1667,8 @@ function NoApiKeySetup() {
   const router = useRouter();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const createMutation = useCreateChatApiKey();
-  const byosEnabled = useFeatureFlag("byosEnabled");
-  const geminiVertexAiEnabled = useFeatureFlag("geminiVertexAiEnabled");
+  const byosEnabled = useFeature("byosEnabled");
+  const geminiVertexAiEnabled = useFeature("geminiVertexAiEnabled");
 
   const form = useForm<ChatApiKeyFormValues>({
     defaultValues: DEFAULT_FORM_VALUES,

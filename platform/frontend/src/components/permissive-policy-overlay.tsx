@@ -4,7 +4,7 @@ import { ShieldOff } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { useHasPermissions } from "@/lib/auth.query";
-import { useFeatures } from "@/lib/config.query";
+import { useFeature } from "@/lib/config.query";
 
 interface PermissivePolicyOverlayProps {
   children: ReactNode;
@@ -13,13 +13,12 @@ interface PermissivePolicyOverlayProps {
 export function PermissivePolicyOverlay({
   children,
 }: PermissivePolicyOverlayProps) {
-  const { data: features, isLoading } = useFeatures();
+  const globalToolPolicy = useFeature("globalToolPolicy");
   const { data: userCanUpdateOrganization } = useHasPermissions({
     securitySettings: ["update"],
   });
 
-  const isPermissive =
-    !isLoading && features?.globalToolPolicy === "permissive";
+  const isPermissive = globalToolPolicy === "permissive";
 
   return (
     <div className="relative">

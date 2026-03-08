@@ -1,22 +1,22 @@
 import { useChatApiKeys } from "@/lib/chat-settings.query";
 import { useChatOpsStatus } from "@/lib/chatops.query";
 import config from "@/lib/config";
-import { useFeatures } from "@/lib/config.query";
+import { useConfig } from "@/lib/config.query";
 import { useIncomingEmailStatus } from "@/lib/incoming-email.query";
 
 export function useTriggerStatuses() {
   const { data: chatOpsProviders, isLoading: chatOpsLoading } =
     useChatOpsStatus();
-  const { data: features, isLoading: featuresLoading } = useFeatures();
+  const { data: configData, isLoading: featuresLoading } = useConfig();
   const { data: emailStatus, isLoading: emailLoading } =
     useIncomingEmailStatus();
   const { data: chatApiKeys = [], isLoading: apiKeysLoading } =
     useChatApiKeys();
 
   const hasLlmKey = chatApiKeys.length > 0;
-  const ngrokDomain = features?.ngrokDomain;
+  const ngrokDomain = configData?.features.ngrokDomain;
   const isLocalDev =
-    features?.isQuickstart || config.environment === "development";
+    configData?.features.isQuickstart || config.environment === "development";
 
   const msTeams = chatOpsProviders?.find((p) => p.id === "ms-teams");
   const msTeamsActive = isLocalDev
@@ -33,7 +33,7 @@ export function useTriggerStatuses() {
       : hasLlmKey && !!slack?.configured;
 
   const emailActive =
-    !!features?.incomingEmail?.enabled && !!emailStatus?.isActive;
+    !!configData?.features.incomingEmail?.enabled && !!emailStatus?.isActive;
 
   const triggers = [
     { active: msTeamsActive, href: "/agents/triggers/ms-teams" },

@@ -25,7 +25,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useFeatureFlag } from "@/lib/features.hook";
+import { useFeature } from "@/lib/config.query";
 import { useTeamsWithVaultFolders } from "@/lib/team.query";
 import { SelectMcpServerCredentialTypeAndTeams } from "./select-mcp-server-credential-type-and-teams";
 
@@ -104,7 +104,7 @@ export function RemoteServerInstallDialog({
     Record<string, { path: string | null; key: string | null }>
   >({});
 
-  const byosEnabled = useFeatureFlag("byosEnabled");
+  const byosEnabled = useFeature("byosEnabled");
   const { data: teamsWithVault } = useTeamsWithVaultFolders();
   const vaultTeams = teamsWithVault?.filter((t) => t.vaultPath);
 

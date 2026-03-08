@@ -55,7 +55,7 @@ import {
   useDeleteChatApiKey,
   useUpdateChatApiKey,
 } from "@/lib/chat-settings.query";
-import { useFeatureFlag } from "@/lib/features.hook";
+import { useFeature } from "@/lib/config.query";
 
 const SCOPE_ICONS: Record<ChatApiKeyScope, React.ReactNode> = {
   personal: <User className="h-3 w-3" />,
@@ -80,8 +80,8 @@ export function ProviderSettingsApiKeys() {
   const createMutation = useCreateChatApiKey();
   const updateMutation = useUpdateChatApiKey();
   const deleteMutation = useDeleteChatApiKey();
-  const byosEnabled = useFeatureFlag("byosEnabled");
-  const geminiVertexAiEnabled = useFeatureFlag("geminiVertexAiEnabled");
+  const byosEnabled = useFeature("byosEnabled");
+  const geminiVertexAiEnabled = useFeature("geminiVertexAiEnabled");
 
   // Dialog states
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);

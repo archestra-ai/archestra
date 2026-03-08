@@ -17,7 +17,7 @@ import {
   useAllVirtualApiKeys,
   useChatApiKeys,
 } from "@/lib/chat-settings.query";
-import { useFeatureValue } from "@/lib/features.hook";
+import { useFeature } from "@/lib/config.query";
 import { CreateVirtualKeyDialog } from "./create-virtual-key-dialog";
 import { DeleteVirtualKeyDialog } from "./delete-virtual-key-dialog";
 
@@ -49,7 +49,7 @@ export function ProviderSettingsVirtualKeys() {
   const paginationMeta = response?.pagination;
 
   const { data: apiKeys = [] } = useChatApiKeys();
-  const defaultExpirationSeconds = useFeatureValue(
+  const defaultExpirationSeconds = useFeature(
     "virtualKeyDefaultExpirationSeconds",
   );
 
@@ -222,7 +222,7 @@ export function ProviderSettingsVirtualKeys() {
           open={isCreateDialogOpen}
           onOpenChange={setIsCreateDialogOpen}
           parentableKeys={parentableKeys}
-          defaultExpirationSeconds={defaultExpirationSeconds}
+          defaultExpirationSeconds={defaultExpirationSeconds ?? null}
         />
 
         <DeleteVirtualKeyDialog

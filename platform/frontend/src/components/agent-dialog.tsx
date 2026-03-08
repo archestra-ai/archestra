@@ -107,7 +107,7 @@ import { useChatProfileMcpTools } from "@/lib/chat.query";
 import { useModelsByProvider } from "@/lib/chat-models.query";
 import { useAvailableChatApiKeys } from "@/lib/chat-settings.query";
 import config from "@/lib/config";
-import { useFeatures } from "@/lib/config.query";
+import { useFeature } from "@/lib/config.query";
 import { useConnectors } from "@/lib/connector.query";
 import { useKnowledgeBases } from "@/lib/knowledge-base.query";
 import { cn } from "@/lib/utils";
@@ -577,7 +577,7 @@ export function AgentDialog({
   const { data: currentDelegations = [] } = useAgentDelegations(
     agentType !== "llm_proxy" ? agent?.id : undefined,
   );
-  const { data: features } = useFeatures();
+  const incomingEmail = useFeature("incomingEmail");
   const { data: identityProviders = [] } = useIdentityProviders();
   const { data: knowledgeBasesData } = useKnowledgeBases();
   const knowledgeBases = knowledgeBasesData?.data ?? [];
@@ -1653,7 +1653,7 @@ export function AgentDialog({
                         {isInternalAgent && !isBuiltIn && (
                           <div className="space-y-4">
                             {/* Email */}
-                            {features?.incomingEmail?.enabled ? (
+                            {incomingEmail?.enabled ? (
                               <div className="space-y-3">
                                 <div className="flex items-center justify-between">
                                   <div className="space-y-0.5">

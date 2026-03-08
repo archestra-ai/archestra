@@ -49,7 +49,7 @@ import {
 } from "@/components/ui/tooltip";
 import { LOCAL_MCP_DISABLED_MESSAGE } from "@/consts";
 import { useHasPermissions } from "@/lib/auth.query";
-import { useFeatureFlag, useFeatureValue } from "@/lib/features.hook";
+import { useFeature } from "@/lib/config.query";
 import { useK8sImagePullSecrets } from "@/lib/internal-mcp-catalog.query";
 import { useGetSecret } from "@/lib/secrets.query";
 import { useTeams } from "@/lib/team.query";
@@ -98,9 +98,9 @@ export function McpCatalogForm({
   );
 
   // Get MCP server base image from backend features endpoint
-  const mcpServerBaseImage = useFeatureValue("mcpServerBaseImage") ?? "";
+  const mcpServerBaseImage = useFeature("mcpServerBaseImage") ?? "";
 
-  const isLocalMcpEnabled = useFeatureFlag("orchestratorK8sRuntime");
+  const isLocalMcpEnabled = useFeature("orchestratorK8sRuntime");
 
   const form = useForm<McpCatalogFormValues>({
     // biome-ignore lint/suspicious/noExplicitAny: Version mismatch between @hookform/resolvers and Zod
@@ -183,7 +183,7 @@ export function McpCatalogForm({
   const currentScope = form.watch("scope");
 
   // Check if BYOS feature is available (enterprise license)
-  const showByosOption = useFeatureFlag("byosEnabled");
+  const showByosOption = useFeature("byosEnabled");
 
   // Use field array for environment variables
   const { fields, append, remove } = useFieldArray({

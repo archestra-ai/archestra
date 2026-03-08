@@ -15,7 +15,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { useFeatureFlag } from "@/lib/features.hook";
+import { useFeature } from "@/lib/config.query";
 
 export interface OAuthInstallResult {
   /** Team ID to assign the MCP server to (null for personal) */
@@ -48,7 +48,7 @@ export function OAuthConfirmationDialog({
 }: OAuthConfirmationDialogProps) {
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
   const [canInstall, setCanInstall] = useState(true);
-  const byosEnabled = useFeatureFlag("byosEnabled");
+  const byosEnabled = useFeature("byosEnabled");
 
   const handleConfirm = () => {
     onConfirm({ teamId: selectedTeamId });

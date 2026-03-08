@@ -13,7 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useChatOpsStatus } from "@/lib/chatops.query";
 import { useUpdateChatOpsConfigInQuickstart } from "@/lib/chatops-config.query";
-import { usePublicBaseUrl } from "@/lib/features.hook";
+import { usePublicBaseUrl } from "@/lib/config.query";
 
 interface MsTeamsSetupDialogProps {
   open: boolean;

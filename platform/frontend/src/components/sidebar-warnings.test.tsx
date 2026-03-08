@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mockUseSession = vi.fn();
 const mockUseDefaultCredentialsEnabled = vi.fn();
 const mockUseHasPermissions = vi.fn();
-const mockUseFeatures = vi.fn();
+const mockUseFeature = vi.fn();
 
 vi.mock("@/lib/clients/auth/auth-client", () => ({
   authClient: {
@@ -20,7 +20,7 @@ vi.mock("@/lib/auth.query", () => ({
 }));
 
 vi.mock("@/lib/config.query", () => ({
-  useFeatures: (...args: unknown[]) => mockUseFeatures(...args),
+  useFeature: (...args: unknown[]) => mockUseFeature(...args),
 }));
 
 const mockConfig = {
@@ -66,10 +66,7 @@ describe("SidebarWarnings", () => {
       data: false,
       isLoading: false,
     });
-    mockUseFeatures.mockReturnValue({
-      data: { globalToolPolicy: "strict" },
-      isLoading: false,
-    });
+    mockUseFeature.mockReturnValue("strict");
     mockUseHasPermissions.mockReturnValue({ data: true });
   });
 
@@ -91,7 +88,7 @@ describe("SidebarWarnings", () => {
     mockUseSession.mockReturnValue({
       data: { user: { email: "admin@example.com" } },
     });
-    mockUseFeatures.mockReturnValue({ data: undefined, isLoading: true });
+    mockUseFeature.mockReturnValue(undefined);
     const { container } = render(<SidebarWarnings />);
     expect(container.firstChild).toBeNull();
   });
@@ -101,10 +98,7 @@ describe("SidebarWarnings", () => {
       mockUseSession.mockReturnValue({
         data: { user: { email: "other@example.com" } },
       });
-      mockUseFeatures.mockReturnValue({
-        data: { globalToolPolicy: "permissive" },
-        isLoading: false,
-      });
+      mockUseFeature.mockReturnValue("permissive");
 
       render(<SidebarWarnings />);
 
@@ -117,10 +111,7 @@ describe("SidebarWarnings", () => {
 
     it("does not show when no session exists", () => {
       mockUseSession.mockReturnValue({ data: null });
-      mockUseFeatures.mockReturnValue({
-        data: { globalToolPolicy: "permissive" },
-        isLoading: false,
-      });
+      mockUseFeature.mockReturnValue("permissive");
 
       const { container } = render(<SidebarWarnings />);
       expect(container.firstChild).toBeNull();
@@ -130,10 +121,7 @@ describe("SidebarWarnings", () => {
       mockUseSession.mockReturnValue({
         data: { user: { email: "user@example.com" } },
       });
-      mockUseFeatures.mockReturnValue({
-        data: { globalToolPolicy: "strict" },
-        isLoading: false,
-      });
+      mockUseFeature.mockReturnValue("strict");
 
       const { container } = render(<SidebarWarnings />);
       expect(container.firstChild).toBeNull();
@@ -209,10 +197,7 @@ describe("SidebarWarnings", () => {
         data: true,
         isLoading: false,
       });
-      mockUseFeatures.mockReturnValue({
-        data: { globalToolPolicy: "permissive" },
-        isLoading: false,
-      });
+      mockUseFeature.mockReturnValue("permissive");
 
       render(<SidebarWarnings />);
 
@@ -248,10 +233,7 @@ describe("SidebarWarnings", () => {
       mockUseSession.mockReturnValue({
         data: { user: { email: "other@example.com" } },
       });
-      mockUseFeatures.mockReturnValue({
-        data: { globalToolPolicy: "permissive" },
-        isLoading: false,
-      });
+      mockUseFeature.mockReturnValue("permissive");
       mockUseHasPermissions.mockReturnValue({ data: false });
 
       const { container } = render(<SidebarWarnings />);
@@ -267,10 +249,7 @@ describe("SidebarWarnings", () => {
         data: true,
         isLoading: false,
       });
-      mockUseFeatures.mockReturnValue({
-        data: { globalToolPolicy: "permissive" },
-        isLoading: false,
-      });
+      mockUseFeature.mockReturnValue("permissive");
       mockUseHasPermissions.mockReturnValue({ data: false });
 
       const { container } = render(<SidebarWarnings />);

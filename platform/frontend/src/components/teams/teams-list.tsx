@@ -33,7 +33,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import config from "@/lib/config";
-import { useFeatureFlag } from "@/lib/features.hook";
+import { useFeature } from "@/lib/config.query";
 import { type TeamToken, useTokens } from "@/lib/team-token.query";
 import { WithPermissions } from "../roles/with-permissions";
 import { TeamMembersDialog } from "./team-members-dialog";
@@ -56,7 +56,7 @@ const { TeamExternalGroupsDialog } = config.enterpriseFeatures.core
 
 export function TeamsList() {
   const queryClient = useQueryClient();
-  const byosEnabled = useFeatureFlag("byosEnabled");
+  const byosEnabled = useFeature("byosEnabled");
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
   const [membersDialogOpen, setMembersDialogOpen] = useState(false);

@@ -13,26 +13,21 @@ import {
   useHasPermissions,
 } from "@/lib/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
-import { useFeatures } from "@/lib/config.query";
+import { useFeature } from "@/lib/config.query";
 
 export function SidebarWarningsAccordion() {
   const { data: session } = authClient.useSession();
   const userEmail = session?.user?.email;
   const { data: defaultCredentialsEnabled, isLoading: isLoadingCreds } =
     useDefaultCredentialsEnabled();
-  const { data: features, isLoading: isLoadingFeatures } = useFeatures();
+  const globalToolPolicy = useFeature("globalToolPolicy");
   const { data: canUpdateOrg } = useHasPermissions({
     securitySettings: ["update"],
   });
 
-  const isPermissive = features?.globalToolPolicy === "permissive";
+  const isPermissive = globalToolPolicy === "permissive";
 
-  const showSecurityEngineWarning =
-    !!session &&
-    canUpdateOrg &&
-    !isLoadingFeatures &&
-    features !== undefined &&
-    isPermissive;
+  const showSecurityEngineWarning = !!session && canUpdateOrg && isPermissive;
   const showDefaultCredsWarning =
     canUpdateOrg &&
     !isLoadingCreds &&

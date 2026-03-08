@@ -49,7 +49,7 @@ import {
 import { useIsAuthenticated } from "@/lib/auth.hook";
 import { usePermissionMap } from "@/lib/auth.query";
 import config from "@/lib/config";
-import { useEnterpriseFeature } from "@/lib/features.hook";
+import { useEnterpriseFeature } from "@/lib/config.query";
 import { useGithubStars } from "@/lib/github.query";
 
 interface NavSubItem {

@@ -16,7 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useFeatures } from "@/lib/config.query";
+import { useConfig } from "@/lib/config.query";
 import {
   useDeleteIncomingEmailSubscription,
   useIncomingEmailStatus,
@@ -25,7 +25,7 @@ import {
 } from "@/lib/incoming-email.query";
 
 export default function EmailPage() {
-  const { data: features, isLoading: featuresLoading } = useFeatures();
+  const { data: configData, isLoading: featuresLoading } = useConfig();
   const { data: status, isLoading: statusLoading } = useIncomingEmailStatus();
   const setupMutation = useSetupIncomingEmailWebhook();
   const renewMutation = useRenewIncomingEmailSubscription();
@@ -43,7 +43,7 @@ export default function EmailPage() {
     );
   }
 
-  const emailInfo = features?.incomingEmail;
+  const emailInfo = configData?.features.incomingEmail;
   if (!emailInfo?.enabled) {
     return (
       <Card>

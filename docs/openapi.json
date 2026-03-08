@@ -118732,15 +118732,24 @@
                       "type": "string",
                       "enum": [
                         "text-embedding-3-small",
-                        "text-embedding-3-large",
-                        "text-embedding-ada-002"
+                        "text-embedding-3-large"
                       ]
                     },
-                    "embeddingApiKeySecretId": {
+                    "embeddingChatApiKeyId": {
                       "nullable": true,
                       "type": "string",
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "rerankerChatApiKeyId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "rerankerModel": {
+                      "nullable": true,
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -118760,7 +118769,9 @@
                     "globalToolPolicy",
                     "allowChatFileUploads",
                     "embeddingModel",
-                    "embeddingApiKeySecretId"
+                    "embeddingChatApiKeyId",
+                    "rerankerChatApiKeyId",
+                    "rerankerModel"
                   ],
                   "additionalProperties": false
                 }
@@ -119158,15 +119169,24 @@
                       "type": "string",
                       "enum": [
                         "text-embedding-3-small",
-                        "text-embedding-3-large",
-                        "text-embedding-ada-002"
+                        "text-embedding-3-large"
                       ]
                     },
-                    "embeddingApiKeySecretId": {
+                    "embeddingChatApiKeyId": {
                       "nullable": true,
                       "type": "string",
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "rerankerChatApiKeyId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "rerankerModel": {
+                      "nullable": true,
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -119186,7 +119206,9 @@
                     "globalToolPolicy",
                     "allowChatFileUploads",
                     "embeddingModel",
-                    "embeddingApiKeySecretId"
+                    "embeddingChatApiKeyId",
+                    "rerankerChatApiKeyId",
+                    "rerankerModel"
                   ],
                   "additionalProperties": false
                 }
@@ -119832,15 +119854,24 @@
                       "type": "string",
                       "enum": [
                         "text-embedding-3-small",
-                        "text-embedding-3-large",
-                        "text-embedding-ada-002"
+                        "text-embedding-3-large"
                       ]
                     },
-                    "embeddingApiKeySecretId": {
+                    "embeddingChatApiKeyId": {
                       "nullable": true,
                       "type": "string",
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "rerankerChatApiKeyId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "rerankerModel": {
+                      "nullable": true,
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -119860,7 +119891,9 @@
                     "globalToolPolicy",
                     "allowChatFileUploads",
                     "embeddingModel",
-                    "embeddingApiKeySecretId"
+                    "embeddingChatApiKeyId",
+                    "rerankerChatApiKeyId",
+                    "rerankerModel"
                   ],
                   "additionalProperties": false
                 }
@@ -120231,15 +120264,24 @@
                       "type": "string",
                       "enum": [
                         "text-embedding-3-small",
-                        "text-embedding-3-large",
-                        "text-embedding-ada-002"
+                        "text-embedding-3-large"
                       ]
                     },
-                    "embeddingApiKeySecretId": {
+                    "embeddingChatApiKeyId": {
                       "nullable": true,
                       "type": "string",
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "rerankerChatApiKeyId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "rerankerModel": {
+                      "nullable": true,
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -120259,7 +120301,9 @@
                     "globalToolPolicy",
                     "allowChatFileUploads",
                     "embeddingModel",
-                    "embeddingApiKeySecretId"
+                    "embeddingChatApiKeyId",
+                    "rerankerChatApiKeyId",
+                    "rerankerModel"
                   ],
                   "additionalProperties": false
                 }
@@ -120496,9 +120540,24 @@
                     "type": "string",
                     "enum": [
                       "text-embedding-3-small",
-                      "text-embedding-3-large",
-                      "text-embedding-ada-002"
+                      "text-embedding-3-large"
                     ]
+                  },
+                  "embeddingChatApiKeyId": {
+                    "nullable": true,
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "rerankerChatApiKeyId": {
+                    "nullable": true,
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "rerankerModel": {
+                    "nullable": true,
+                    "type": "string"
                   }
                 }
               }
@@ -120617,15 +120676,24 @@
                       "type": "string",
                       "enum": [
                         "text-embedding-3-small",
-                        "text-embedding-3-large",
-                        "text-embedding-ada-002"
+                        "text-embedding-3-large"
                       ]
                     },
-                    "embeddingApiKeySecretId": {
+                    "embeddingChatApiKeyId": {
                       "nullable": true,
                       "type": "string",
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "rerankerChatApiKeyId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "rerankerModel": {
+                      "nullable": true,
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -120645,7 +120713,9 @@
                     "globalToolPolicy",
                     "allowChatFileUploads",
                     "embeddingModel",
-                    "embeddingApiKeySecretId"
+                    "embeddingChatApiKeyId",
+                    "rerankerChatApiKeyId",
+                    "rerankerModel"
                   ],
                   "additionalProperties": false
                 }
@@ -121005,15 +121075,24 @@
                       "type": "string",
                       "enum": [
                         "text-embedding-3-small",
-                        "text-embedding-3-large",
-                        "text-embedding-ada-002"
+                        "text-embedding-3-large"
                       ]
                     },
-                    "embeddingApiKeySecretId": {
+                    "embeddingChatApiKeyId": {
                       "nullable": true,
                       "type": "string",
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "rerankerChatApiKeyId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "rerankerModel": {
+                      "nullable": true,
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -121033,7 +121112,9 @@
                     "globalToolPolicy",
                     "allowChatFileUploads",
                     "embeddingModel",
-                    "embeddingApiKeySecretId"
+                    "embeddingChatApiKeyId",
+                    "rerankerChatApiKeyId",
+                    "rerankerModel"
                   ],
                   "additionalProperties": false
                 }

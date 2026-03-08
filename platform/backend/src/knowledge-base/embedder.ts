@@ -1,17 +1,24 @@
+import type { EmbeddingModel } from "@shared";
+import { EMBEDDING_BATCH_SIZE } from "@shared";
 import { Cron } from "croner";
-import OpenAI from "openai";
-import config from "@/config";
+import type OpenAI from "openai";
 import logger from "@/logging";
 import { KbChunkModel, KbDocumentModel } from "@/models";
+import { getDefaultOrgEmbeddingConfig } from "./kb-llm-client";
 
-const EMBEDDING_MODEL = "text-embedding-3-small";
-const EMBEDDING_BATCH_SIZE = 100;
+interface EmbeddingContext {
+  client: OpenAI;
+  model: EmbeddingModel;
+  dimensions: number;
+}
 
 class EmbeddingService {
   private processing = false;
-  private openai: OpenAI | null = null;
 
-  async processDocument(documentId: string): Promise<void> {
+  async processDocument(
+    documentId: string,
+    ctx: EmbeddingContext,
+  ): Promise<void> {
     const document = await KbDocumentModel.findById(documentId);
     if (!document) {
       logger.warn({ documentId }, "[Embedder] Document not found");
@@ -39,16 +46,16 @@ class EmbeddingService {
         return;
       }
 
-      const client = this.getOpenAIClient();
       const allUpdates: Array<{ chunkId: string; embedding: number[] }> = [];
 
       for (let i = 0; i < chunks.length; i += EMBEDDING_BATCH_SIZE) {
         const batch = chunks.slice(i, i + EMBEDDING_BATCH_SIZE);
         const texts = batch.map((c) => c.content);
 
-        const response = await client.embeddings.create({
-          model: EMBEDDING_MODEL,
+        const response = await ctx.client.embeddings.create({
+          model: ctx.model,
           input: texts,
+          dimensions: ctx.dimensions,
         });
 
         for (let j = 0; j < batch.length; j++) {
@@ -95,9 +102,18 @@ class EmbeddingService {
         limit: params?.limit ?? 10,
       });
 
+      if (documents.length === 0) {
+        return;
+      }
+
+      const orgConfig = await getDefaultOrgEmbeddingConfig();
+      if (!orgConfig) {
+        return;
+      }
+
       for (const doc of documents) {
         try {
-          await this.processDocument(doc.id);
+          await this.processDocument(doc.id, orgConfig.config);
         } catch (error) {
           logger.error(
             {
@@ -112,25 +128,11 @@ class EmbeddingService {
       this.processing = false;
     }
   }
-
-  private getOpenAIClient(): OpenAI {
-    if (!this.openai) {
-      this.openai = new OpenAI({ apiKey: config.kb.embeddingApiKey });
-    }
-    return this.openai;
-  }
 }
 
 export const embeddingService = new EmbeddingService();
 
 export function startEmbeddingCron(): void {
-  if (!config.kb.embeddingApiKey) {
-    logger.info(
-      "[Embedder] ARCHESTRA_KNOWLEDGE_BASE_EMBEDDING_API_KEY not set, embedding cron disabled",
-    );
-    return;
-  }
-
   new Cron("*/30 * * * * *", () => {
     embeddingService.processPendingDocuments().catch((error) => {
       logger.error(

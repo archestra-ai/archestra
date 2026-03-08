@@ -1877,6 +1877,7 @@ export async function executeArchestraTool(
 
       const results = await queryService.query({
         connectorIds,
+        organizationId: organizationId!,
         queryText: query,
         userAcl,
         limit: 10,

@@ -33684,8 +33684,10 @@ export type GetOrganizationResponses = {
         compressionScope: 'organization' | 'team';
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
-        embeddingModel: 'text-embedding-3-small' | 'text-embedding-3-large' | 'text-embedding-ada-002';
-        embeddingApiKeySecretId: string | null;
+        embeddingModel: 'text-embedding-3-small' | 'text-embedding-3-large';
+        embeddingChatApiKeyId: string | null;
+        rerankerChatApiKeyId: string | null;
+        rerankerModel: string | null;
     };
 };
 
@@ -33862,8 +33864,10 @@ export type UpdateAppearanceResponses = {
         compressionScope: 'organization' | 'team';
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
-        embeddingModel: 'text-embedding-3-small' | 'text-embedding-3-large' | 'text-embedding-ada-002';
-        embeddingApiKeySecretId: string | null;
+        embeddingModel: 'text-embedding-3-small' | 'text-embedding-3-large';
+        embeddingChatApiKeyId: string | null;
+        rerankerChatApiKeyId: string | null;
+        rerankerModel: string | null;
     };
 };
 
@@ -33958,8 +33962,10 @@ export type UpdateSecuritySettingsResponses = {
         compressionScope: 'organization' | 'team';
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
-        embeddingModel: 'text-embedding-3-small' | 'text-embedding-3-large' | 'text-embedding-ada-002';
-        embeddingApiKeySecretId: string | null;
+        embeddingModel: 'text-embedding-3-small' | 'text-embedding-3-large';
+        embeddingChatApiKeyId: string | null;
+        rerankerChatApiKeyId: string | null;
+        rerankerModel: string | null;
     };
 };
 
@@ -34055,8 +34061,10 @@ export type UpdateLlmSettingsResponses = {
         compressionScope: 'organization' | 'team';
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
-        embeddingModel: 'text-embedding-3-small' | 'text-embedding-3-large' | 'text-embedding-ada-002';
-        embeddingApiKeySecretId: string | null;
+        embeddingModel: 'text-embedding-3-small' | 'text-embedding-3-large';
+        embeddingChatApiKeyId: string | null;
+        rerankerChatApiKeyId: string | null;
+        rerankerModel: string | null;
     };
 };
 
@@ -34064,7 +34072,10 @@ export type UpdateLlmSettingsResponse = UpdateLlmSettingsResponses[keyof UpdateL
 
 export type UpdateKnowledgeSettingsData = {
     body?: {
-        embeddingModel?: 'text-embedding-3-small' | 'text-embedding-3-large' | 'text-embedding-ada-002';
+        embeddingModel?: 'text-embedding-3-small' | 'text-embedding-3-large';
+        embeddingChatApiKeyId?: string | null;
+        rerankerChatApiKeyId?: string | null;
+        rerankerModel?: string | null;
     };
     path?: never;
     query?: never;
@@ -34150,8 +34161,10 @@ export type UpdateKnowledgeSettingsResponses = {
         compressionScope: 'organization' | 'team';
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
-        embeddingModel: 'text-embedding-3-small' | 'text-embedding-3-large' | 'text-embedding-ada-002';
-        embeddingApiKeySecretId: string | null;
+        embeddingModel: 'text-embedding-3-small' | 'text-embedding-3-large';
+        embeddingChatApiKeyId: string | null;
+        rerankerChatApiKeyId: string | null;
+        rerankerModel: string | null;
     };
 };
 
@@ -34245,8 +34258,10 @@ export type CompleteOnboardingResponses = {
         compressionScope: 'organization' | 'team';
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
-        embeddingModel: 'text-embedding-3-small' | 'text-embedding-3-large' | 'text-embedding-ada-002';
-        embeddingApiKeySecretId: string | null;
+        embeddingModel: 'text-embedding-3-small' | 'text-embedding-3-large';
+        embeddingChatApiKeyId: string | null;
+        rerankerChatApiKeyId: string | null;
+        rerankerModel: string | null;
     };
 };
 

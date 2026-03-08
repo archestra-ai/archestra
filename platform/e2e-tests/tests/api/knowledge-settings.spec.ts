@@ -16,18 +16,6 @@ test.describe("Knowledge Settings API", () => {
     expect(org.embeddingModel).toBe("text-embedding-3-large");
   });
 
-  test("should update embedding model to text-embedding-ada-002", async ({
-    request,
-    updateKnowledgeSettings,
-  }) => {
-    const response = await updateKnowledgeSettings(request, {
-      embeddingModel: "text-embedding-ada-002",
-    });
-
-    const org = await response.json();
-    expect(org.embeddingModel).toBe("text-embedding-ada-002");
-  });
-
   test("should read back embedding model after update", async ({
     request,
     makeApiRequest,
@@ -47,6 +35,18 @@ test.describe("Knowledge Settings API", () => {
     expect(org.embeddingModel).toBe("text-embedding-3-large");
   });
 
+  test("should update reranker model", async ({
+    request,
+    updateKnowledgeSettings,
+  }) => {
+    const response = await updateKnowledgeSettings(request, {
+      rerankerModel: "gpt-4o-mini",
+    });
+
+    const org = await response.json();
+    expect(org.rerankerModel).toBe("gpt-4o-mini");
+  });
+
   // Clean up: reset to default
   test("cleanup: reset knowledge settings to defaults", async ({
     request,
@@ -54,6 +54,7 @@ test.describe("Knowledge Settings API", () => {
   }) => {
     await updateKnowledgeSettings(request, {
       embeddingModel: "text-embedding-3-small",
+      rerankerModel: null,
     });
   });
 });

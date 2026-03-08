@@ -871,16 +871,16 @@ const updateSecuritySettings = async (
   });
 
 /**
- * Update knowledge settings (embedding model)
+ * Update knowledge settings (embedding model, API keys, reranker)
  * (authnz is handled by the authenticated session)
  */
 const updateKnowledgeSettings = async (
   request: APIRequestContext,
   updates: {
-    embeddingModel?:
-      | "text-embedding-3-small"
-      | "text-embedding-3-large"
-      | "text-embedding-ada-002";
+    embeddingModel?: "text-embedding-3-small" | "text-embedding-3-large";
+    embeddingChatApiKeyId?: string | null;
+    rerankerChatApiKeyId?: string | null;
+    rerankerModel?: string | null;
   },
 ) =>
   makeApiRequest({

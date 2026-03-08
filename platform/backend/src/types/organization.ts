@@ -1,4 +1,8 @@
-import { OrganizationCustomFontSchema, OrganizationThemeSchema } from "@shared";
+import {
+  EmbeddingModelSchema,
+  OrganizationCustomFontSchema,
+  OrganizationThemeSchema,
+} from "@shared";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
@@ -84,11 +88,8 @@ export const OrganizationCompressionScopeSchema = z.enum([
 
 export const GlobalToolPolicySchema = z.enum(["permissive", "restrictive"]);
 
-export const EmbeddingModelSchema = z.enum([
-  "text-embedding-3-small",
-  "text-embedding-3-large",
-  "text-embedding-ada-002",
-]);
+// Re-export EmbeddingModelSchema from @shared for local use
+export { EmbeddingModelSchema } from "@shared";
 
 const extendedFields = {
   theme: OrganizationThemeSchema,
@@ -127,6 +128,9 @@ export const UpdateLlmSettingsSchema = z.object({
 
 export const UpdateKnowledgeSettingsSchema = z.object({
   embeddingModel: EmbeddingModelSchema.optional(),
+  embeddingChatApiKeyId: z.string().uuid().nullable().optional(),
+  rerankerChatApiKeyId: z.string().uuid().nullable().optional(),
+  rerankerModel: z.string().nullable().optional(),
 });
 
 export const CompleteOnboardingSchema = z.object({
@@ -143,4 +147,4 @@ export type GlobalToolPolicy = z.infer<typeof GlobalToolPolicySchema>;
 export type Organization = z.infer<typeof SelectOrganizationSchema>;
 export type InsertOrganization = z.infer<typeof InsertOrganizationSchema>;
 export type PublicAppearance = z.infer<typeof PublicAppearanceSchema>;
-export type EmbeddingModel = z.infer<typeof EmbeddingModelSchema>;
+export type { EmbeddingModel } from "@shared";

@@ -1,4 +1,8 @@
-import type { OrganizationCustomFont, OrganizationTheme } from "@shared";
+import type {
+  EmbeddingModel,
+  OrganizationCustomFont,
+  OrganizationTheme,
+} from "@shared";
 import {
   boolean,
   pgTable,
@@ -8,12 +12,10 @@ import {
   varchar,
 } from "drizzle-orm/pg-core";
 import type {
-  EmbeddingModel,
   GlobalToolPolicy,
   OrganizationCompressionScope,
   OrganizationLimitCleanupInterval,
 } from "@/types";
-import secretTable from "./secret";
 
 const organizationsTable = pgTable("organization", {
   id: text("id").primaryKey(),
@@ -55,16 +57,26 @@ const organizationsTable = pgTable("organization", {
     .notNull()
     .default(true),
 
-  /** Embedding model for knowledge base RAG (enterprise feature) */
+  /** Embedding model for knowledge base RAG */
   embeddingModel: text("embedding_model")
     .$type<EmbeddingModel>()
     .default("text-embedding-3-small"),
 
-  /** Secret ID storing the embedding API key (enterprise feature) */
-  embeddingApiKeySecretId: uuid("embedding_api_key_secret_id").references(
-    () => secretTable.id,
-    { onDelete: "set null" },
-  ),
+  /**
+   * Chat API key used for generating embeddings (must be an OpenAI provider key).
+   * FK to chat_api_keys(id) ON DELETE SET NULL — enforced by migration, not Drizzle schema
+   * (avoiding direct import of chatApiKeysTable to prevent TypeScript circular type inference).
+   */
+  embeddingChatApiKeyId: uuid("embedding_chat_api_key_id"),
+
+  /**
+   * Chat API key used for reranking search results.
+   * FK to chat_api_keys(id) ON DELETE SET NULL — enforced by migration, not Drizzle schema.
+   */
+  rerankerChatApiKeyId: uuid("reranker_chat_api_key_id"),
+
+  /** LLM model used for reranking (e.g. "gpt-4o") */
+  rerankerModel: text("reranker_model"),
 });
 
 export default organizationsTable;

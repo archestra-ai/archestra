@@ -765,8 +765,6 @@ const config = {
     mockMode: process.env.BENCHMARK_MOCK_MODE === "true",
   },
   kb: {
-    embeddingApiKey:
-      process.env.ARCHESTRA_KNOWLEDGE_BASE_EMBEDDING_API_KEY || "",
     hybridSearchEnabled:
       process.env.ARCHESTRA_KNOWLEDGE_BASE_HYBRID_SEARCH_ENABLED !== "false",
     rerankerEnabled:

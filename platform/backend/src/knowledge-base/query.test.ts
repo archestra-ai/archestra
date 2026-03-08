@@ -19,6 +19,11 @@ vi.mock("./reranker", () => ({
   default: mockRerank,
 }));
 
+const mockResolveEmbeddingConfig = vi.hoisted(() => vi.fn());
+vi.mock("./kb-llm-client", () => ({
+  resolveEmbeddingConfig: mockResolveEmbeddingConfig,
+}));
+
 vi.mock("@/config", async (importOriginal) => {
   const original = await importOriginal<typeof import("@/config")>();
   return {
@@ -26,7 +31,6 @@ vi.mock("@/config", async (importOriginal) => {
     default: {
       ...original.default,
       kb: {
-        embeddingApiKey: "test-api-key",
         hybridSearchEnabled: true,
         rerankerEnabled: false,
       },
@@ -34,6 +38,7 @@ vi.mock("@/config", async (importOriginal) => {
   };
 });
 
+import OpenAI from "openai";
 import config from "@/config";
 import { KbChunkModel, KbDocumentModel } from "@/models";
 import type { VectorSearchResult } from "@/models/kb-chunk";
@@ -45,6 +50,15 @@ function makeFakeEmbedding(seed: number): number[] {
   return Array.from({ length: 1536 }, (_, i) => Math.cos(seed + i * 0.01));
 }
 
+function setupEmbeddingConfig() {
+  const client = new OpenAI({ apiKey: "test-key" });
+  mockResolveEmbeddingConfig.mockResolvedValue({
+    client,
+    model: "text-embedding-3-small",
+    dimensions: 1536,
+  });
+}
+
 describe("QueryService", () => {
   test("returns ranked results with citations", async ({
     makeOrganization,
@@ -54,6 +68,7 @@ describe("QueryService", () => {
     const org = await makeOrganization();
     const kb = await makeKnowledgeBase(org.id);
     const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+    setupEmbeddingConfig();
 
     const doc = await KbDocumentModel.create({
       connectorId: connector.id,
@@ -96,6 +111,7 @@ describe("QueryService", () => {
 
     const results = await queryService.query({
       connectorIds: [connector.id],
+      organizationId: org.id,
       queryText: "TypeScript",
       userAcl: ["org:*"],
     });
@@ -116,6 +132,7 @@ describe("QueryService", () => {
     expect(mockEmbeddingsCreate).toHaveBeenCalledWith({
       model: "text-embedding-3-small",
       input: "TypeScript",
+      dimensions: 1536,
     });
   });
 
@@ -127,6 +144,7 @@ describe("QueryService", () => {
     const org = await makeOrganization();
     const kb = await makeKnowledgeBase(org.id);
     const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+    setupEmbeddingConfig();
 
     const queryEmb = makeFakeEmbedding(1);
     mockEmbeddingsCreate.mockResolvedValueOnce({
@@ -135,6 +153,7 @@ describe("QueryService", () => {
 
     const results = await queryService.query({
       connectorIds: [connector.id],
+      organizationId: org.id,
       queryText: "anything",
       userAcl: ["org:*"],
     });
@@ -150,6 +169,7 @@ describe("QueryService", () => {
     const org = await makeOrganization();
     const kb = await makeKnowledgeBase(org.id);
     const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+    setupEmbeddingConfig();
 
     const doc = await KbDocumentModel.create({
       connectorId: connector.id,
@@ -175,6 +195,7 @@ describe("QueryService", () => {
 
     const results = await queryService.query({
       connectorIds: [connector.id],
+      organizationId: org.id,
       queryText: "test",
       userAcl: ["org:*"],
     });
@@ -190,6 +211,7 @@ describe("QueryService", () => {
     const org = await makeOrganization();
     const kb = await makeKnowledgeBase(org.id);
     const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+    setupEmbeddingConfig();
 
     const doc = await KbDocumentModel.create({
       connectorId: connector.id,
@@ -222,6 +244,7 @@ describe("QueryService", () => {
 
     const results = await queryService.query({
       connectorIds: [connector.id],
+      organizationId: org.id,
       queryText: "test",
       userAcl: ["org:*"],
       limit: 2,
@@ -230,7 +253,16 @@ describe("QueryService", () => {
     expect(results).toHaveLength(2);
   });
 
-  test("hybrid search merges vector and full-text results without duplicates", async () => {
+  test("hybrid search merges vector and full-text results without duplicates", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+    setupEmbeddingConfig();
+
     const vectorOnly: VectorSearchResult = {
       id: "vec-1",
       content: "Vector only result",
@@ -280,7 +312,8 @@ describe("QueryService", () => {
     });
 
     const results = await queryService.query({
-      connectorIds: ["any-connector-id"],
+      connectorIds: [connector.id],
+      organizationId: org.id,
       queryText: "test query",
       userAcl: ["org:*"],
     });
@@ -296,7 +329,16 @@ describe("QueryService", () => {
     fullTextSearchSpy.mockRestore();
   });
 
-  test("falls back gracefully when full-text returns no results", async () => {
+  test("falls back gracefully when full-text returns no results", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+    setupEmbeddingConfig();
+
     const vectorResult: VectorSearchResult = {
       id: "vec-1",
       content: "Semantic match",
@@ -322,7 +364,8 @@ describe("QueryService", () => {
     });
 
     const results = await queryService.query({
-      connectorIds: ["any-connector-id"],
+      connectorIds: [connector.id],
+      organizationId: org.id,
       queryText: "semantic meaning only",
       userAcl: ["org:*"],
     });
@@ -334,8 +377,17 @@ describe("QueryService", () => {
     fullTextSearchSpy.mockRestore();
   });
 
-  test("calls reranker after fusion when rerankerEnabled is true", async () => {
+  test("calls reranker after fusion when rerankerEnabled is true", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
     config.kb.rerankerEnabled = true;
+
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+    setupEmbeddingConfig();
 
     const chunk1: VectorSearchResult = {
       id: "r-1",
@@ -377,7 +429,8 @@ describe("QueryService", () => {
     mockRerank.mockResolvedValueOnce([chunk2, chunk1]);
 
     const results = await queryService.query({
-      connectorIds: ["any-connector-id"],
+      connectorIds: [connector.id],
+      organizationId: org.id,
       queryText: "test query",
       userAcl: ["org:*"],
       limit: 2,
@@ -386,7 +439,7 @@ describe("QueryService", () => {
     expect(mockRerank).toHaveBeenCalledWith({
       queryText: "test query",
       chunks: expect.any(Array),
-      openaiApiKey: "test-api-key",
+      organizationId: org.id,
     });
     expect(results[0].content).toBe("Second result");
     expect(results[1].content).toBe("First result");
@@ -396,8 +449,17 @@ describe("QueryService", () => {
     fullTextSearchSpy.mockRestore();
   });
 
-  test("skips reranker when rerankerEnabled is false", async () => {
+  test("skips reranker when rerankerEnabled is false", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
     config.kb.rerankerEnabled = false;
+
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+    setupEmbeddingConfig();
 
     const chunk1: VectorSearchResult = {
       id: "s-1",
@@ -424,7 +486,8 @@ describe("QueryService", () => {
     });
 
     await queryService.query({
-      connectorIds: ["any-connector-id"],
+      connectorIds: [connector.id],
+      organizationId: org.id,
       queryText: "test",
       userAcl: ["org:*"],
     });

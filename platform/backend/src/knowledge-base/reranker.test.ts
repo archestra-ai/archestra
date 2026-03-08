@@ -2,10 +2,9 @@ import { describe, expect, it, vi } from "vitest";
 import type { VectorSearchResult } from "@/models/kb-chunk";
 import rerank from "./reranker";
 
-vi.mock("@ai-sdk/openai", () => ({
-  createOpenAI: () => ({
-    chat: () => "mock-model",
-  }),
+const mockResolveRerankerConfig = vi.hoisted(() => vi.fn());
+vi.mock("./kb-llm-client", () => ({
+  resolveRerankerConfig: mockResolveRerankerConfig,
 }));
 
 const mockGenerateObject = vi.hoisted(() => vi.fn());
@@ -28,8 +27,16 @@ function makeChunk(id: string, content: string): VectorSearchResult {
   };
 }
 
+function setupRerankerConfig() {
+  mockResolveRerankerConfig.mockResolvedValue({
+    llmModel: "mock-model",
+    modelName: "gpt-4o",
+  });
+}
+
 describe("rerank", () => {
   it("reorders chunks based on LLM scores", async () => {
+    setupRerankerConfig();
     const chunks = [
       makeChunk("a", "low relevance"),
       makeChunk("b", "high relevance"),
@@ -49,13 +56,14 @@ describe("rerank", () => {
     const result = await rerank({
       queryText: "test query",
       chunks,
-      openaiApiKey: "test-key",
+      organizationId: "test-org-id",
     });
 
     expect(result.map((r) => r.id)).toEqual(["b", "c", "a"]);
   });
 
   it("filters out chunks below minimum relevance score", async () => {
+    setupRerankerConfig();
     const chunks = [
       makeChunk("a", "irrelevant"),
       makeChunk("b", "relevant"),
@@ -75,13 +83,14 @@ describe("rerank", () => {
     const result = await rerank({
       queryText: "test query",
       chunks,
-      openaiApiKey: "test-key",
+      organizationId: "test-org-id",
     });
 
     expect(result.map((r) => r.id)).toEqual(["b"]);
   });
 
   it("returns original order on LLM error (graceful degradation)", async () => {
+    setupRerankerConfig();
     const chunks = [makeChunk("a", "first"), makeChunk("b", "second")];
 
     mockGenerateObject.mockRejectedValueOnce(new Error("API error"));
@@ -89,7 +98,7 @@ describe("rerank", () => {
     const result = await rerank({
       queryText: "test query",
       chunks,
-      openaiApiKey: "test-key",
+      organizationId: "test-org-id",
     });
 
     expect(result.map((r) => r.id)).toEqual(["a", "b"]);
@@ -99,10 +108,24 @@ describe("rerank", () => {
     const result = await rerank({
       queryText: "test query",
       chunks: [],
-      openaiApiKey: "test-key",
+      organizationId: "test-org-id",
     });
 
     expect(result).toEqual([]);
+    expect(mockGenerateObject).not.toHaveBeenCalled();
+  });
+
+  it("returns original order when no reranker config is available", async () => {
+    mockResolveRerankerConfig.mockResolvedValue(null);
+    const chunks = [makeChunk("a", "first"), makeChunk("b", "second")];
+
+    const result = await rerank({
+      queryText: "test query",
+      chunks,
+      organizationId: "test-org-id",
+    });
+
+    expect(result.map((r) => r.id)).toEqual(["a", "b"]);
     expect(mockGenerateObject).not.toHaveBeenCalled();
   });
 });

@@ -3,6 +3,7 @@ export * from "./chat";
 export * from "./chat-error";
 export * from "./consts";
 export * from "./docs";
+export * from "./knowledge-base";
 export { client as archestraApiClient } from "./hey-api/clients/api/client.gen";
 export * as archestraApiSdk from "./hey-api/clients/api/sdk.gen";
 export * as archestraApiTypes from "./hey-api/clients/api/types.gen";

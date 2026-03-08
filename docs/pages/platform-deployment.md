@@ -941,9 +941,7 @@ See [Slack](/docs/platform-slack) for setup instructions.
 
 These environment variables configure the [Knowledge Base](/docs/platform-knowledge-bases) enterprise feature. Knowledge bases use a built-in RAG stack powered by pgvector for document chunking, embedding, and hybrid search. Connectors sync external data into knowledge bases on a schedule. See [Knowledge Connectors](/docs/platform-adding-knowledge-connectors) for connector setup instructions.
 
-- **`ARCHESTRA_KNOWLEDGE_BASE_EMBEDDING_API_KEY`** - API key for generating text embeddings (OpenAI-compatible endpoint).
-  - Required for the chunking and embedding pipeline
-  - Used by the embedder to call the OpenAI embeddings API (default model: `text-embedding-3-small`)
+- **Embedding and reranker API keys** are configured via LLM Provider Keys in **Settings > Knowledge**. No environment variable is needed — select an existing LLM Provider Key (OpenAI only for embeddings, any provider for the reranker).
 
 - **`ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_K8S_CRONJOB_NAMESPACE`** - Kubernetes namespace where connector sync CronJobs run.
   - Default: Helm release namespace (if relevant) or `default`

@@ -14,10 +14,14 @@ import {
   XIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { LocalServerInstallDialog } from "@/app/mcp/registry/_parts/local-server-install-dialog";
+import { NoAuthInstallDialog } from "@/app/mcp/registry/_parts/no-auth-install-dialog";
+import { RemoteServerInstallDialog } from "@/app/mcp/registry/_parts/remote-server-install-dialog";
 import { AgentBadge } from "@/components/agent-badge";
 import { AgentIcon } from "@/components/agent-icon";
 import { McpCatalogIcon, ToolChecklist } from "@/components/agent-tools-editor";
 import { PromptInputButton } from "@/components/ai-elements/prompt-input";
+import { OAuthConfirmationDialog } from "@/components/oauth-confirmation-dialog";
 import { TokenSelect } from "@/components/token-select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -52,7 +56,11 @@ import {
   useCatalogTools,
   useInternalMcpCatalog,
 } from "@/lib/internal-mcp-catalog.query";
-import { useMcpServersGroupedByCatalog } from "@/lib/mcp-server.query";
+import { useMcpInstallOrchestrator } from "@/lib/mcp-install-orchestrator.hook";
+import {
+  useMcpServers,
+  useMcpServersGroupedByCatalog,
+} from "@/lib/mcp-server.query";
 import { cn } from "@/lib/utils";
 
 type ScopeFilter = "my" | "others" | "team" | "org";
@@ -659,6 +667,23 @@ function AddToolView({
   const allCredentials = useMcpServersGroupedByCatalog();
   const [search, setSearch] = useState("");
 
+  const installer = useMcpInstallOrchestrator();
+
+  // Detect servers that are still being installed (local servers with pending status)
+  const hasInstallingServers = useMemo(() => {
+    if (!allCredentials) return false;
+    return Object.values(allCredentials).some((servers) =>
+      servers.some(
+        (s) =>
+          s.localInstallationStatus === "pending" ||
+          s.localInstallationStatus === "discovering-tools",
+      ),
+    );
+  }, [allCredentials]);
+
+  // Enable polling while servers are installing
+  useMcpServers({ hasInstallingServers });
+
   const filteredCatalogs = useMemo(() => {
     if (!search) return catalogItems;
     const lower = search.toLowerCase();
@@ -712,18 +737,28 @@ function AddToolView({
               </button>
             )}
             {filteredCatalogs.map((catalog) => {
+              const servers = allCredentials?.[catalog.id] ?? [];
               const hasCredentials =
-                catalog.serverType === "builtin" ||
-                (allCredentials?.[catalog.id]?.length ?? 0) > 0;
+                catalog.serverType === "builtin" || servers.length > 0;
+              const isServerInstalling = servers.some(
+                (s) =>
+                  s.localInstallationStatus === "pending" ||
+                  s.localInstallationStatus === "discovering-tools",
+              );
+              const isReady = hasCredentials && !isServerInstalling;
               return (
                 <button
                   key={catalog.id}
                   type="button"
-                  disabled={!hasCredentials}
-                  onClick={() => onSelectCatalog(catalog)}
+                  disabled={isServerInstalling}
+                  onClick={() =>
+                    isReady
+                      ? onSelectCatalog(catalog)
+                      : installer.triggerInstallByCatalogId(catalog.id)
+                  }
                   className={cn(
                     "flex flex-col items-center gap-2 rounded-lg border p-4 text-center transition-colors cursor-pointer hover:bg-accent",
-                    !hasCredentials && "opacity-40 cursor-not-allowed",
+                    isServerInstalling && "opacity-60 cursor-wait",
                   )}
                 >
                   <McpCatalogIcon
@@ -739,10 +774,19 @@ function AddToolView({
                       {catalog.description}
                     </p>
                   )}
-                  {!hasCredentials && (
-                    <span className="text-[10px] text-muted-foreground">
-                      Not installed
+                  {isServerInstalling && (
+                    <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      Installing...
                     </span>
+                  )}
+                  {!hasCredentials && !isServerInstalling && (
+                    <Badge
+                      variant="outline"
+                      className="text-[10px] px-1.5 py-0"
+                    >
+                      Install
+                    </Badge>
                   )}
                 </button>
               );
@@ -750,6 +794,45 @@ function AddToolView({
           </div>
         )}
       </div>
+
+      <RemoteServerInstallDialog
+        isOpen={installer.isDialogOpened("remote-install")}
+        onClose={installer.closeRemoteInstall}
+        onConfirm={installer.handleRemoteServerInstallConfirm}
+        catalogItem={installer.selectedCatalogItem}
+        isInstalling={installer.isInstalling}
+        isReauth={installer.isReauth}
+      />
+
+      <OAuthConfirmationDialog
+        open={installer.isDialogOpened("oauth")}
+        onOpenChange={(open) => {
+          if (!open) installer.closeOAuth();
+        }}
+        serverName={installer.selectedCatalogItem?.name || ""}
+        onConfirm={installer.handleOAuthConfirm}
+        onCancel={installer.closeOAuth}
+        catalogId={installer.selectedCatalogItem?.id}
+      />
+
+      <NoAuthInstallDialog
+        isOpen={installer.isDialogOpened("no-auth")}
+        onClose={installer.closeNoAuth}
+        onInstall={installer.handleNoAuthConfirm}
+        catalogItem={installer.noAuthCatalogItem}
+        isInstalling={installer.isInstalling}
+      />
+
+      {installer.localServerCatalogItem && (
+        <LocalServerInstallDialog
+          isOpen={installer.isDialogOpened("local-install")}
+          onClose={installer.closeLocalInstall}
+          onConfirm={installer.handleLocalServerInstallConfirm}
+          catalogItem={installer.localServerCatalogItem}
+          isInstalling={installer.isInstalling}
+          isReauth={installer.isReauth}
+        />
+      )}
     </div>
   );
 }

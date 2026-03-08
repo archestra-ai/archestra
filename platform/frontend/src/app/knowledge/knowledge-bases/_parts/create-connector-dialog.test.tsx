@@ -76,35 +76,55 @@ function renderDialog(open = true) {
   return { onOpenChange };
 }
 
+/** Renders the dialog and selects Jira to advance to the configure step. */
+async function renderConfigureStep() {
+  const user = userEvent.setup();
+  const result = renderDialog();
+  await user.click(screen.getByText("Jira"));
+  await waitFor(() => {
+    expect(screen.getByLabelText(/^Name$/)).toBeInTheDocument();
+  });
+  return { ...result, user };
+}
+
 describe("CreateConnectorDialog", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   describe("rendering", () => {
-    it("renders all required fields visible by default", () => {
+    it("renders connector type selection on first step", () => {
       renderDialog();
 
+      expect(screen.getByText("Add Connector")).toBeInTheDocument();
+      expect(screen.getByText("Jira")).toBeInTheDocument();
+      expect(screen.getByText("Confluence")).toBeInTheDocument();
+      expect(screen.getByText("GitHub")).toBeInTheDocument();
+      expect(screen.getByText("GitLab")).toBeInTheDocument();
+    });
+
+    it("renders all required fields after selecting a connector type", async () => {
+      await renderConfigureStep();
+
       expect(screen.getByLabelText(/^Name$/)).toBeInTheDocument();
-      expect(screen.getByText("Connector Type")).toBeInTheDocument();
       expect(screen.getByLabelText(/^URL$/)).toBeInTheDocument();
       expect(screen.getByLabelText(/^Email$/)).toBeInTheDocument();
       expect(screen.getByLabelText(/^API Token$/)).toBeInTheDocument();
-      expect(screen.getByText("Schedule")).toBeInTheDocument();
     });
 
-    it("renders as a single-step dialog without step indicators", () => {
-      renderDialog();
+    it("renders Create Connector and Back buttons in configure step", async () => {
+      await renderConfigureStep();
 
-      expect(screen.queryByText("Next")).not.toBeInTheDocument();
-      expect(screen.queryByText("Back")).not.toBeInTheDocument();
       expect(
         screen.getByRole("button", { name: "Create Connector" }),
       ).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "Back" }),
+      ).toBeInTheDocument();
     });
 
-    it("renders the Advanced section collapsed by default", () => {
-      renderDialog();
+    it("renders the Advanced section collapsed by default", async () => {
+      await renderConfigureStep();
 
       expect(
         screen.getByRole("button", { name: /Advanced/ }),
@@ -116,8 +136,7 @@ describe("CreateConnectorDialog", () => {
 
   describe("Advanced section", () => {
     it("shows Jira-specific fields when expanded with Jira selected", async () => {
-      const user = userEvent.setup();
-      renderDialog();
+      const { user } = await renderConfigureStep();
 
       await user.click(screen.getByRole("button", { name: /Advanced/ }));
 
@@ -129,8 +148,7 @@ describe("CreateConnectorDialog", () => {
     });
 
     it("hides advanced fields when collapsed", async () => {
-      const user = userEvent.setup();
-      renderDialog();
+      const { user } = await renderConfigureStep();
 
       // Expand
       await user.click(screen.getByRole("button", { name: /Advanced/ }));
@@ -146,8 +164,7 @@ describe("CreateConnectorDialog", () => {
     });
 
     it("does not duplicate the URL field inside Advanced section", async () => {
-      const user = userEvent.setup();
-      renderDialog();
+      const { user } = await renderConfigureStep();
 
       await user.click(screen.getByRole("button", { name: /Advanced/ }));
 
@@ -162,8 +179,7 @@ describe("CreateConnectorDialog", () => {
 
   describe("form validation", () => {
     it("shows validation error when name is empty", async () => {
-      const user = userEvent.setup();
-      renderDialog();
+      const { user } = await renderConfigureStep();
 
       await user.click(
         screen.getByRole("button", { name: "Create Connector" }),
@@ -176,8 +192,7 @@ describe("CreateConnectorDialog", () => {
     });
 
     it("shows validation error when URL is empty", async () => {
-      const user = userEvent.setup();
-      renderDialog();
+      const { user } = await renderConfigureStep();
 
       await user.type(screen.getByLabelText(/^Name$/), "Test Connector");
       await user.click(
@@ -191,8 +206,7 @@ describe("CreateConnectorDialog", () => {
     });
 
     it("shows validation error when email is empty", async () => {
-      const user = userEvent.setup();
-      renderDialog();
+      const { user } = await renderConfigureStep();
 
       await user.type(screen.getByLabelText(/^Name$/), "Test Connector");
       await user.type(
@@ -210,8 +224,7 @@ describe("CreateConnectorDialog", () => {
     });
 
     it("shows validation error when API token is empty", async () => {
-      const user = userEvent.setup();
-      renderDialog();
+      const { user } = await renderConfigureStep();
 
       await user.type(screen.getByLabelText(/^Name$/), "Test Connector");
       await user.type(
@@ -230,9 +243,8 @@ describe("CreateConnectorDialog", () => {
     });
 
     it("submits the form with all required fields filled", async () => {
-      const user = userEvent.setup();
       mockMutateAsync.mockResolvedValue({ id: "connector-1" });
-      renderDialog();
+      const { user } = await renderConfigureStep();
 
       await user.type(screen.getByLabelText(/^Name$/), "Test Connector");
       await user.type(

@@ -82,13 +82,13 @@ postgresql:
     database: archestra_dev
     username: archestra
     password: vault_e2e_custom_pw
-  # Pre-create pgvector extension as superuser during DB init.
-  # The migration user (archestra) lacks superuser privileges for CREATE EXTENSION.
+  # Grant superuser to the archestra user so migrations can create extensions (e.g., pgvector).
+  # Bitnami initdb scripts run as postgres superuser during DB initialization.
   primary:
     initdb:
       scripts:
-        create-vector-extension.sql: |
-          CREATE EXTENSION IF NOT EXISTS vector;
+        grant-superuser.sql: |
+          ALTER USER archestra WITH SUPERUSER;
     service:
       type: NodePort
       nodePorts:

@@ -527,12 +527,12 @@ postgresql:
   # Resource configuration for PostgreSQL
   # See: https://artifacthub.io/packages/helm/bitnami/postgresql for all options
   primary:
-    # Pre-create pgvector extension as superuser during DB init.
-    # The default 'archestra' user lacks superuser privileges for CREATE EXTENSION.
+    # Grant superuser to the archestra user so migrations can create extensions (e.g., pgvector).
+    # Bitnami initdb scripts run as postgres superuser during DB initialization.
     initdb:
       scripts:
-        create-vector-extension.sql: |
-          CREATE EXTENSION IF NOT EXISTS vector;
+        grant-superuser.sql: |
+          ALTER USER archestra WITH SUPERUSER;
     resources:
       requests:
         cpu: "1000m"

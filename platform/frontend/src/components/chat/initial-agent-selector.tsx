@@ -162,11 +162,11 @@ export function InitialAgentSelector({
   // Knowledge base data for connector icons in avatar group
   const { data: knowledgeBasesData } = useKnowledgeBases();
   const { data: connectorsData } = useConnectors();
+
   const allKnowledgeBases = knowledgeBasesData?.data ?? [];
   const allConnectors = connectorsData?.data ?? [];
-
-  const knowledgeBaseIds = currentAgent.knowledgeBaseIds;
-  const connectorIds = currentAgent.connectorIds;
+  const knowledgeBaseIds = currentAgent?.knowledgeBaseIds ?? [];
+  const connectorIds = currentAgent?.connectorIds ?? [];
 
   // Match knowledge bases and connectors for the current agent
   const matchedKbs = useMemo(

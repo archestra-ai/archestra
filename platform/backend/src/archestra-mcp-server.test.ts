@@ -1360,6 +1360,7 @@ describe("executeArchestraTool", () => {
       const gateway = await makeAgent({
         name: "Grafana Export Gateway",
         agentType: "mcp_gateway",
+        scope: "personal",
       });
 
       const result = await executeArchestraTool(
@@ -1382,6 +1383,7 @@ describe("executeArchestraTool", () => {
       const agent = await makeAgent({
         name: "Prompt Router Agent",
         agentType: "agent",
+        scope: "personal",
       });
 
       const result = await executeArchestraTool(
@@ -1404,6 +1406,7 @@ describe("executeArchestraTool", () => {
       const llmProxy = await makeAgent({
         name: "Shared LLM Proxy",
         agentType: "llm_proxy",
+        scope: "personal",
       });
 
       const result = await executeArchestraTool(

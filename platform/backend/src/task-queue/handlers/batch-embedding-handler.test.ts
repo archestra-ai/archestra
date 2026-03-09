@@ -53,6 +53,7 @@ describe("handleBatchEmbedding", () => {
       connectorId: "conn-1",
       completedBatches: 3,
       totalBatches: 3,
+      status: "success",
     });
 
     await handleBatchEmbedding({

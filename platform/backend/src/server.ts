@@ -782,12 +782,21 @@ const startWorker = async () => {
 
     const gracefulShutdown = async (signal: string) => {
       logger.info(`Worker received ${signal}, shutting down...`);
+
+      // Force exit if cleanup takes too long (e.g., long-running task doesn't respect cancellation)
+      const forceExitTimeout = setTimeout(() => {
+        logger.warn("Worker shutdown timed out, forcing exit");
+        process.exit(1);
+      }, SHUTDOWN_CLEANUP_TIMEOUT_MS);
+
       try {
         await healthServer.close();
         cacheManager.shutdown();
         await taskQueueService.stopWorker();
+        clearTimeout(forceExitTimeout);
         process.exit(0);
       } catch (error) {
+        clearTimeout(forceExitTimeout);
         logger.error({ error }, "Worker shutdown error");
         process.exit(1);
       }
@@ -806,10 +815,9 @@ const startWorker = async () => {
  * This allows other scripts to import helper functions without starting the server
  */
 if (isMainModule) {
-  if (shouldRunWebServer) {
-    startWebServer();
-  }
   if (shouldRunWorker && !shouldRunWebServer) {
     startWorker();
+  } else if (shouldRunWebServer) {
+    startWebServer();
   }
 }

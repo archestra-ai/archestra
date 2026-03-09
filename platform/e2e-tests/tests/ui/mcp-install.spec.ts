@@ -34,7 +34,11 @@ test.describe("MCP Install", () => {
       });
       await adminPage.waitForLoadState("domcontentloaded");
 
-      // Search for context7
+      // Browse online catalog to search for context7
+      await adminPage
+        .getByRole("button", { name: "Select from Online Catalog" })
+        .click();
+      await adminPage.waitForLoadState("domcontentloaded");
       await adminPage
         .getByRole("textbox", { name: "Search servers by name..." })
         .fill("context7");
@@ -42,16 +46,22 @@ test.describe("MCP Install", () => {
       // Timeout needed so filter is applied on UI
       await adminPage.waitForTimeout(3_000);
 
-      // wait for the server to be visible and add to registry
+      // wait for the server to be visible in the catalog
       await adminPage
         .getByLabel("Add MCP Server to the Private")
         .getByText(CONTEXT7_CATALOG_ITEM_NAME)
         .waitFor({ state: "visible", timeout: 30000 });
       await adminPage.waitForLoadState("domcontentloaded");
+
+      // Click "Use as Template" to pre-fill the create form
       await adminPage
         .getByTestId(E2eTestId.AddCatalogItemButton)
         .first()
         .click();
+      await adminPage.waitForLoadState("domcontentloaded");
+
+      // Submit the pre-filled form to add server to registry
+      await clickButton({ page: adminPage, options: { name: "Add Server" } });
       await adminPage.waitForLoadState("domcontentloaded");
 
       // Install dialog opens automatically after adding to registry
@@ -114,7 +124,7 @@ test.describe("MCP Install", () => {
 
       // Open form and fill details
       await adminPage
-        .getByRole("button", { name: "Remote (orchestrated not by Archestra)" })
+        .getByRole("button", { name: /^Remote/ })
         .click();
       await adminPage
         .getByRole("textbox", { name: "Name *" })
@@ -169,7 +179,7 @@ test.describe("MCP Install", () => {
 
       // Open form and fill details
       await adminPage
-        .getByRole("button", { name: "Remote (orchestrated not by Archestra)" })
+        .getByRole("button", { name: /^Remote/ })
         .click();
       await adminPage
         .getByRole("textbox", { name: "Name *" })
@@ -251,7 +261,7 @@ test.describe("MCP Install", () => {
       .getByRole("textbox", { name: "Name *" })
       .fill(CATALOG_ITEM_NAME);
     await adminPage
-      .getByRole("textbox", { name: "Docker Image" })
+      .getByRole("textbox", { name: "Image (optional)" })
       .fill(BOGUS_IMAGE);
     await adminPage.getByRole("textbox", { name: "Command" }).fill("sleep");
     await adminPage
@@ -337,7 +347,7 @@ test.describe("MCP Install", () => {
 
     // Update the config to a valid MCP server that should start successfully
     const dockerImageInput = editDialog.getByRole("textbox", {
-      name: "Docker Image",
+      name: "Image (optional)",
     });
     await dockerImageInput.clear();
     await dockerImageInput.fill("");

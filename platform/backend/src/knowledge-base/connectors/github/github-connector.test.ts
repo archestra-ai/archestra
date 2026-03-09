@@ -491,10 +491,9 @@ describe("GithubConnector", () => {
         repos: ["no-issues-repo", "normal-repo"],
       };
 
-      const notFoundError = Object.assign(
-        new Error("Not Found"),
-        { status: 404 },
-      );
+      const notFoundError = Object.assign(new Error("Not Found"), {
+        status: 404,
+      });
 
       // no-issues-repo: issues pass returns 404
       mockListForRepo.mockRejectedValueOnce(notFoundError);

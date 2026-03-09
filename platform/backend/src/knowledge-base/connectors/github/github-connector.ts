@@ -157,7 +157,7 @@ export class GithubConnector extends BaseConnector {
     while (pageHasMore) {
       await this.rateLimit();
 
-      let response;
+      let response: Awaited<ReturnType<typeof octokit.rest.issues.listForRepo>>;
       try {
         response = await octokit.rest.issues.listForRepo({
           owner: repo.owner,
@@ -175,7 +175,7 @@ export class GithubConnector extends BaseConnector {
         if (
           err instanceof Error &&
           "status" in err &&
-          (err as any).status === 404
+          (err as Record<string, unknown>).status === 404
         ) {
           // Repo has issues disabled or doesn't exist — skip it
           break;

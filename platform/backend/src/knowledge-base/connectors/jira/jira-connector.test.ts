@@ -1,7 +1,11 @@
 import { vi } from "vitest";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { ConnectorSyncBatch } from "@/types/knowledge-connector";
-import { extractTextFromAdf, JiraConnector } from "./jira-connector";
+import {
+  extractTextFromAdf,
+  formatJiraLocalDate,
+  JiraConnector,
+} from "./jira-connector";
 
 // Mock jira.js SDK
 const mockGetCurrentUser = vi.fn();
@@ -251,7 +255,7 @@ describe("JiraConnector", () => {
       );
     });
 
-    test("incremental sync uses checkpoint timestamp", async () => {
+    test("incremental sync with old checkpoint (no lastRawUpdatedAt) applies 14-hour safety buffer", async () => {
       mockEnhancedSearchPost.mockResolvedValueOnce({
         issues: [],
         nextPageToken: null,
@@ -266,8 +270,33 @@ describe("JiraConnector", () => {
         batches.push(batch);
       }
 
+      // 2024-01-10T00:00Z minus 14 hours = 2024-01-09T10:00Z
       const callArgs = mockEnhancedSearchPost.mock.calls[0][0];
-      expect(callArgs.jql).toContain('updated >= "2024/01/10 00:00"');
+      expect(callArgs.jql).toContain('updated >= "2024/01/09 10:00"');
+    });
+
+    test("incremental sync with lastRawUpdatedAt uses local date extraction", async () => {
+      mockEnhancedSearchPost.mockResolvedValueOnce({
+        issues: [],
+        nextPageToken: null,
+      });
+
+      const batches = [];
+      for await (const batch of connector.sync({
+        config: validConfig,
+        credentials,
+        checkpoint: {
+          type: "jira",
+          lastSyncedAt: "2024-06-20T15:30:00.000Z",
+          lastRawUpdatedAt: "2024-06-20T11:30:00.774-0400",
+        },
+      })) {
+        batches.push(batch);
+      }
+
+      // Should extract local components from raw timestamp (11:30 EDT), NOT convert from UTC
+      const callArgs = mockEnhancedSearchPost.mock.calls[0][0];
+      expect(callArgs.jql).toContain('updated >= "2024/06/20 11:30"');
     });
 
     test("skips issues with labels in labelsToSkip", async () => {
@@ -389,14 +418,14 @@ describe("JiraConnector", () => {
       expect(metadata.issueType).toBe("Task");
     });
 
-    test("checkpoint uses last issue updated timestamp instead of current time", async () => {
+    test("checkpoint stores lastRawUpdatedAt and lastIssueKey from last issue", async () => {
       const issues = [
         makeIssue("PROJ-1", "First issue"),
         {
           ...makeIssue("PROJ-2", "Second issue"),
           fields: {
             ...makeIssue("PROJ-2", "Second issue").fields,
-            updated: "2024-06-20T15:30:00.000Z",
+            updated: "2024-06-20T11:30:00.774-0400",
           },
         },
       ];
@@ -418,10 +447,13 @@ describe("JiraConnector", () => {
       const checkpoint = batches[0].checkpoint as {
         lastSyncedAt?: string;
         lastIssueKey?: string;
+        lastRawUpdatedAt?: string;
       };
-      // Should use the last issue's updated timestamp, not new Date()
-      expect(checkpoint.lastSyncedAt).toBe("2024-06-20T15:30:00.000Z");
+      // lastSyncedAt is the UTC conversion of the raw timestamp
+      expect(checkpoint.lastSyncedAt).toBe("2024-06-20T15:30:00.774Z");
       expect(checkpoint.lastIssueKey).toBe("PROJ-2");
+      // Raw timestamp preserved for correct JQL date formatting
+      expect(checkpoint.lastRawUpdatedAt).toBe("2024-06-20T11:30:00.774-0400");
     });
 
     test("checkpoint preserves previous value when batch has no issues", async () => {
@@ -616,6 +648,31 @@ describe("JiraConnector", () => {
       expect(batchesWithSlash[0].documents[0].sourceUrl).toBe(
         batchesWithoutSlash[0].documents[0].sourceUrl,
       );
+    });
+  });
+
+  describe("formatJiraLocalDate", () => {
+    test("extracts local date/time from timestamp with negative offset", () => {
+      expect(formatJiraLocalDate("2026-03-09T11:05:52.774-0400")).toBe(
+        "2026/03/09 11:05",
+      );
+    });
+
+    test("extracts local date/time from timestamp with positive offset", () => {
+      expect(formatJiraLocalDate("2026-03-09T23:30:00.000+0530")).toBe(
+        "2026/03/09 23:30",
+      );
+    });
+
+    test("extracts local date/time from UTC timestamp (Z suffix)", () => {
+      expect(formatJiraLocalDate("2024-06-20T15:30:00.000Z")).toBe(
+        "2024/06/20 15:30",
+      );
+    });
+
+    test("falls back to UTC formatting for date-only strings", () => {
+      // "2024-06-20" doesn't match the local-extraction regex (no T), so falls back to formatJiraDate
+      expect(formatJiraLocalDate("2024-06-20")).toBe("2024/06/20 00:00");
     });
   });
 

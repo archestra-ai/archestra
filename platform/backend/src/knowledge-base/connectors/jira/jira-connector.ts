@@ -262,14 +262,18 @@ function buildBatch(
   hasMore: boolean,
 ): ConnectorSyncBatch {
   const lastIssue = issues.length > 0 ? issues[issues.length - 1] : null;
+  const rawUpdatedAt: string | undefined = lastIssue?.fields?.updated;
 
   return {
     documents,
     checkpoint: buildCheckpoint({
       type: "jira",
-      itemUpdatedAt: lastIssue?.fields?.updated,
+      itemUpdatedAt: rawUpdatedAt,
       previousLastSyncedAt: checkpoint.lastSyncedAt,
-      extra: { lastIssueKey: lastIssue?.key ?? checkpoint.lastIssueKey },
+      extra: {
+        lastIssueKey: lastIssue?.key ?? checkpoint.lastIssueKey,
+        lastRawUpdatedAt: rawUpdatedAt ?? checkpoint.lastRawUpdatedAt,
+      },
     }),
     hasMore,
   };
@@ -295,10 +299,20 @@ function buildJql(
     clauses.push(`(${config.jqlQuery})`);
   }
 
-  const syncFrom = checkpoint.lastSyncedAt ?? startTime?.toISOString();
-  if (syncFrom) {
-    const jiraDate = formatJiraDate(syncFrom);
+  // Prefer the raw Jira timestamp (includes timezone offset) so the JQL date
+  // is formatted in the Jira user's local timezone.  Fall back to the UTC
+  // `lastSyncedAt` for backward compatibility with old checkpoints — subtract
+  // a safety buffer to account for unknown timezone offsets (max ±14 hours).
+  const rawTimestamp = checkpoint.lastRawUpdatedAt;
+  if (rawTimestamp) {
+    const jiraDate = formatJiraLocalDate(rawTimestamp);
     clauses.push(`updated >= "${jiraDate}"`);
+  } else {
+    const syncFrom = checkpoint.lastSyncedAt ?? startTime?.toISOString();
+    if (syncFrom) {
+      const jiraDate = formatJiraDateWithSafetyBuffer(syncFrom);
+      clauses.push(`updated >= "${jiraDate}"`);
+    }
   }
 
   // Enhanced search requires at least one restriction (bounded query)
@@ -318,6 +332,33 @@ function shouldSkipIssue(issue: any, labelsToSkip?: string[]): boolean {
   if (!labelsToSkip || labelsToSkip.length === 0) return false;
   const issueLabels: string[] = issue.fields?.labels ?? [];
   return issueLabels.some((label: string) => labelsToSkip.includes(label));
+}
+
+/**
+ * Format an ISO 8601 timestamp with timezone offset (e.g. "2026-03-09T11:05:52.774-0400")
+ * by extracting the LOCAL date/time components.  Jira JQL interprets date literals in the
+ * authenticating user's timezone, so we must use the local time, not UTC.
+ */
+export function formatJiraLocalDate(rawTimestamp: string): string {
+  const match = rawTimestamp.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+  if (match) {
+    return `${match[1]}/${match[2]}/${match[3]} ${match[4]}:${match[5]}`;
+  }
+  // Fallback: treat as UTC (old behavior for plain ISO strings like "2026-03-09T15:05:52.774Z")
+  return formatJiraDate(rawTimestamp);
+}
+
+/**
+ * Format a UTC ISO timestamp for JQL, subtracting 14 hours to account for
+ * the worst-case timezone offset (UTC+14). This ensures no issues are missed
+ * when the user's Jira timezone is unknown. Already-synced issues will be
+ * skipped by the content hash check.
+ * Used only for old checkpoints that lack `lastRawUpdatedAt`.
+ */
+function formatJiraDateWithSafetyBuffer(isoDate: string): string {
+  const d = new Date(isoDate);
+  d.setUTCHours(d.getUTCHours() - 14);
+  return formatJiraDate(d.toISOString());
 }
 
 function formatJiraDate(isoDate: string): string {

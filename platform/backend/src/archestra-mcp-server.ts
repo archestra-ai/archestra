@@ -1711,8 +1711,28 @@ export async function executeArchestraTool(
 
       let record: Agent | null | undefined;
 
-      if (id) {
+      const UUID_REGEX =
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+      if (id && UUID_REGEX.test(id)) {
         record = await AgentModel.findById(id);
+      } else if (id && !UUID_REGEX.test(id)) {
+        // id looks like a name — fall through to name search
+        const results = await AgentModel.findAllPaginated(
+          { limit: 1, offset: 0 },
+          undefined,
+          {
+            name: id,
+            agentType: expectedType,
+            scope: "personal",
+            authorIds: context.userId ? [context.userId] : [],
+          },
+          context.userId,
+          true,
+        );
+        if (results.data.length > 0) {
+          record = results.data[0];
+        }
       } else if (name) {
         // Search by name, only matching personal agents owned by the current user
         const results = await AgentModel.findAllPaginated(

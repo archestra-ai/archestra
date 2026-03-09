@@ -4,6 +4,7 @@ import * as k8s from "@kubernetes/client-node";
 import { vi } from "vitest";
 import type * as originalConfigModule from "@/config";
 import { beforeEach, describe, expect, test } from "@/test";
+import type { McpServer } from "@/types";
 
 // Mock fs module first
 vi.mock("node:fs");
@@ -68,21 +69,66 @@ vi.mock("@/config", async (importOriginal) => {
   };
 });
 
+// Track K8sDeployment constructor calls and method invocations
+const mockCreateK8sSecret = vi.fn().mockResolvedValue(undefined);
+const mockStartOrCreateDeployment = vi.fn().mockResolvedValue(undefined);
+const mockCreateDockerRegistrySecrets = vi.fn().mockResolvedValue([]);
+const mockK8sDeploymentInstances: Array<{
+  options: Record<string, unknown>;
+  createK8sSecret: ReturnType<typeof vi.fn>;
+}> = [];
+
 vi.mock("@/models/internal-mcp-catalog", () => ({
-  default: {},
+  default: {
+    findById: vi.fn(),
+  },
 }));
 
 vi.mock("@/models/mcp-server", () => ({
   default: {},
 }));
 
-vi.mock("./k8s-deployment", () => ({
-  default: class MockK8sDeployment {
-    static sanitizeLabelValue(value: string): string {
-      return value;
-    }
+vi.mock("@/models/mcp-http-session", () => ({
+  default: {
+    deleteByMcpServerId: vi.fn().mockResolvedValue(undefined),
   },
 }));
+
+vi.mock("@/secrets-manager", () => ({
+  secretManager: vi.fn(() => ({
+    getSecret: vi.fn(),
+  })),
+}));
+
+vi.mock("./k8s-deployment", () => {
+  return {
+    default: class MockK8sDeployment {
+      options: Record<string, unknown>;
+      createK8sSecret: ReturnType<typeof vi.fn>;
+      startOrCreateDeployment: ReturnType<typeof vi.fn>;
+      createDockerRegistrySecrets: ReturnType<typeof vi.fn>;
+
+      constructor(options: Record<string, unknown>) {
+        this.options = options;
+        this.createK8sSecret = mockCreateK8sSecret;
+        this.startOrCreateDeployment = mockStartOrCreateDeployment;
+        this.createDockerRegistrySecrets = mockCreateDockerRegistrySecrets;
+        mockK8sDeploymentInstances.push({
+          options,
+          createK8sSecret: this.createK8sSecret,
+        });
+      }
+      static sanitizeLabelValue(value: string): string {
+        return value;
+      }
+      static collectImagePullSecretNames(): string[] {
+        return [];
+      }
+    },
+    fetchPlatformPodNodeSelector: vi.fn().mockResolvedValue(undefined),
+    fetchPlatformPodTolerations: vi.fn().mockResolvedValue(undefined),
+  };
+});
 
 describe("validateKubeconfig", () => {
   beforeEach(() => {
@@ -479,79 +525,152 @@ describe("McpServerRuntimeManager", () => {
     });
   });
 
-  describe("startServer - secret key filtering (cross-server isolation)", () => {
-    // These tests reproduce the original issue from #3148:
-    // When multiple MCP servers share a vault path, the secret object
-    // contains keys for ALL servers. Without filtering, every server's
-    // pod gets every other server's env vars injected.
+  describe("startServer - cross-server secret isolation (#3148)", () => {
+    // These tests reproduce the original issue from #3148 / #3191:
+    // When multiple MCP servers share a vault path, secretManager().getSecret()
+    // returns ALL keys from that path. Without filtering, every server's pod
+    // gets every other server's env vars/secrets injected via K8s Secret.
 
-    test("filters secretData to only keys defined in catalog environment config", () => {
-      // Reproduces #3148: vault secret contains keys for multiple servers
-      const vaultSecret: Record<string, unknown> = {
-        SLACK_TOKEN: "xoxb-slack-token",
-        GITHUB_TOKEN: "ghp_github_token",
-        JIRA_API_KEY: "jira-key-123",
-      };
+    function createMcpServer(overrides: Partial<McpServer> = {}): McpServer {
+      return {
+        id: "server-1",
+        name: "test-server",
+        catalogId: "catalog-1",
+        secretId: "shared-vault-secret-id",
+        ownerId: null,
+        reinstallRequired: false,
+        localInstallationStatus: "idle",
+        localInstallationError: null,
+        oauthRefreshError: null,
+        oauthRefreshFailedAt: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        serverType: "local",
+        teamId: null,
+        ...overrides,
+      } as McpServer;
+    }
 
-      // This server only needs SLACK_TOKEN
-      const catalogEnvironment = [
-        { key: "SLACK_TOKEN", type: "secret" as const },
-      ];
+    async function setupStartServerTest(options: {
+      vaultSecret: Record<string, unknown>;
+      catalogEnvironment: Array<{
+        key: string;
+        type: string;
+        promptOnInstallation?: boolean;
+        value?: string;
+      }>;
+      catalogLocalConfigSecretId?: string;
+      catalogSecretData?: Record<string, unknown>;
+      mcpServerOverrides?: Partial<McpServer>;
+    }) {
+      const {
+        vaultSecret,
+        catalogEnvironment,
+        catalogLocalConfigSecretId,
+        catalogSecretData,
+        mcpServerOverrides,
+      } = options;
 
-      // Apply the filtering logic from the fix
-      const expectedKeys = new Set(
-        catalogEnvironment
-          .filter((e) => e.type === "secret")
-          .map((e) => e.key),
-      );
+      // Reset tracking
+      mockCreateK8sSecret.mockClear();
+      mockStartOrCreateDeployment.mockClear();
+      mockCreateDockerRegistrySecrets.mockClear();
+      mockK8sDeploymentInstances.length = 0;
 
-      const secretData: Record<string, string> = {};
-      for (const [key, value] of Object.entries(vaultSecret)) {
-        if (!expectedKeys.size || expectedKeys.has(key)) {
-          secretData[key] = String(value);
+      // Mock secretManager to return the shared vault secret
+      const mockGetSecret = vi.fn().mockImplementation((secretId: string) => {
+        if (secretId === "shared-vault-secret-id") {
+          return { secret: vaultSecret };
         }
-      }
+        if (
+          catalogLocalConfigSecretId &&
+          secretId === catalogLocalConfigSecretId
+        ) {
+          return { secret: catalogSecretData ?? {} };
+        }
+        return null;
+      });
 
-      // Only SLACK_TOKEN should be present — not GITHUB_TOKEN or JIRA_API_KEY
-      expect(secretData).toEqual({
+      const { secretManager } = await import("@/secrets-manager");
+      vi.mocked(secretManager).mockReturnValue({
+        getSecret: mockGetSecret,
+      } as unknown as ReturnType<typeof secretManager>);
+
+      // Mock InternalMcpCatalogModel.findById to return catalog with environment config
+      const InternalMcpCatalogModel = (
+        await import("@/models/internal-mcp-catalog")
+      ).default;
+      vi.mocked(InternalMcpCatalogModel.findById).mockResolvedValue({
+        id: "catalog-1",
+        serverType: "local",
+        localConfig: {
+          environment: catalogEnvironment,
+        },
+        localConfigSecretId: catalogLocalConfigSecretId ?? null,
+      } as unknown as Awaited<
+        ReturnType<typeof InternalMcpCatalogModel.findById>
+      >);
+
+      // Set up the manager with mock K8s clients
+      const mockLoadFromDefault = vi
+        .spyOn(k8s.KubeConfig.prototype, "loadFromDefault")
+        .mockImplementation(() => {});
+      const mockMakeApiClient = vi
+        .spyOn(k8s.KubeConfig.prototype, "makeApiClient")
+        .mockReturnValue({} as k8s.CoreV1Api);
+
+      const { McpServerRuntimeManager } = await import("./manager");
+      const manager = new McpServerRuntimeManager();
+
+      // Inject mock K8s clients that startServer checks for
+      const managerAny = manager as unknown as {
+        k8sAttach: unknown;
+        k8sLog: unknown;
+        k8sExec: unknown;
+      };
+      managerAny.k8sAttach = {};
+      managerAny.k8sLog = {};
+      managerAny.k8sExec = {};
+
+      const mcpServer = createMcpServer(mcpServerOverrides);
+
+      return {
+        manager,
+        mcpServer,
+        cleanup: () => {
+          mockLoadFromDefault.mockRestore();
+          mockMakeApiClient.mockRestore();
+        },
+      };
+    }
+
+    test("filters vault secrets to only keys declared in server's catalog environment", async () => {
+      // Reproduces #3148: vault path contains secrets for 3 different servers
+      // (Slack, GitHub, Jira), but this server only needs SLACK_TOKEN
+      const { manager, mcpServer, cleanup } = await setupStartServerTest({
+        vaultSecret: {
+          SLACK_TOKEN: "xoxb-slack-token",
+          GITHUB_TOKEN: "ghp_github_token",
+          JIRA_API_KEY: "jira-key-123",
+        },
+        catalogEnvironment: [{ key: "SLACK_TOKEN", type: "secret" }],
+      });
+
+      await manager.startServer(mcpServer);
+
+      // createK8sSecret should only receive SLACK_TOKEN, not GITHUB_TOKEN or JIRA_API_KEY
+      expect(mockCreateK8sSecret).toHaveBeenCalledWith({
         SLACK_TOKEN: "xoxb-slack-token",
       });
-      expect(secretData).not.toHaveProperty("GITHUB_TOKEN");
-      expect(secretData).not.toHaveProperty("JIRA_API_KEY");
+
+      cleanup();
     });
 
-    test("passes all keys through when catalog has no environment config", () => {
-      // Edge case: no catalog environment defined (e.g. BYOS server)
-      const vaultSecret: Record<string, unknown> = {
-        SOME_KEY: "some-value",
-        OTHER_KEY: "other-value",
-      };
-
-      const catalogEnvironment: Array<{ key: string; type: string }> = [];
-
-      const expectedKeys = new Set(
-        catalogEnvironment
-          .filter((e) => e.type === "secret")
-          .map((e) => e.key),
-      );
-
-      const secretData: Record<string, string> = {};
-      for (const [key, value] of Object.entries(vaultSecret)) {
-        if (!expectedKeys.size || expectedKeys.has(key)) {
-          secretData[key] = String(value);
-        }
-      }
-
-      // When no catalog env config exists, all keys pass through (backwards compat)
-      expect(secretData).toEqual({
-        SOME_KEY: "some-value",
-        OTHER_KEY: "other-value",
-      });
-    });
-
-    test("excludes keys not in catalog even when vault has many entries", () => {
-      // Simulates a shared BYOS vault path with secrets for 3 different servers
-      const sharedVaultSecret: Record<string, unknown> = {
+    test("prevents cross-server secret leakage with shared vault path (3 servers)", async () => {
+      // Full reproduction of the reported scenario:
+      // One shared vault path with secrets for Outlook, Slack, and Jira servers.
+      // Server B (Slack) should only see its own 2 keys.
+      const sharedVault = {
         OUTLOOK_CLIENT_ID: "outlook-id",
         OUTLOOK_CLIENT_SECRET: "outlook-secret",
         SLACK_BOT_TOKEN: "slack-bot",
@@ -560,307 +679,165 @@ describe("McpServerRuntimeManager", () => {
         JIRA_BASE_URL: "https://jira.example.com",
       };
 
-      // Server B only needs Slack keys
-      const serverBCatalogEnv = [
-        { key: "SLACK_BOT_TOKEN", type: "secret" as const },
-        { key: "SLACK_SIGNING_SECRET", type: "secret" as const },
-      ];
+      const { manager, mcpServer, cleanup } = await setupStartServerTest({
+        vaultSecret: sharedVault,
+        catalogEnvironment: [
+          { key: "SLACK_BOT_TOKEN", type: "secret" },
+          { key: "SLACK_SIGNING_SECRET", type: "secret" },
+        ],
+      });
 
-      const expectedKeys = new Set(
-        serverBCatalogEnv
-          .filter((e) => e.type === "secret")
-          .map((e) => e.key),
-      );
+      await manager.startServer(mcpServer);
 
-      const secretData: Record<string, string> = {};
-      for (const [key, value] of Object.entries(sharedVaultSecret)) {
-        if (!expectedKeys.size || expectedKeys.has(key)) {
-          secretData[key] = String(value);
-        }
-      }
-
-      expect(secretData).toEqual({
+      // Only Slack keys should be passed to createK8sSecret
+      expect(mockCreateK8sSecret).toHaveBeenCalledWith({
         SLACK_BOT_TOKEN: "slack-bot",
         SLACK_SIGNING_SECRET: "slack-sign",
       });
-      // Outlook and Jira keys must NOT leak into Slack server
-      expect(Object.keys(secretData)).toHaveLength(2);
-    });
-  });
 
-  describe("startServer - non-prompted secrets merging logic", () => {
-    // These tests verify the non-prompted secret merging logic
-    // by testing the helper function behavior patterns
+      // Verify none of the other servers' secrets leaked
+      const passedSecretData = mockCreateK8sSecret.mock.calls[0][0] as Record<
+        string,
+        string
+      >;
+      expect(Object.keys(passedSecretData)).toHaveLength(2);
+      expect(passedSecretData).not.toHaveProperty("OUTLOOK_CLIENT_ID");
+      expect(passedSecretData).not.toHaveProperty("OUTLOOK_CLIENT_SECRET");
+      expect(passedSecretData).not.toHaveProperty("JIRA_API_TOKEN");
+      expect(passedSecretData).not.toHaveProperty("JIRA_BASE_URL");
 
-    test("merges non-prompted secrets from catalog environment into secretData", () => {
-      // Test the merging logic that's in startServer
-      // Given: secretData from mcpServer.secretId
-      const secretData: Record<string, string> = {
-        prompted_secret: "prompted-value",
-        context7_api_key: "api-key-value",
-      };
-
-      // And: catalog environment with non-prompted secrets
-      const catalogEnvironment = [
-        {
-          key: "prompted_secret",
-          type: "secret" as const,
-          promptOnInstallation: true,
-          value: "prompted-value",
-        },
-        {
-          key: "static_secret",
-          type: "secret" as const,
-          promptOnInstallation: false,
-          value: "static-secret-value", // Non-prompted secret from catalog
-        },
-        {
-          key: "context7_api_key",
-          type: "secret" as const,
-          promptOnInstallation: true,
-          value: "api-key-value",
-        },
-        {
-          key: "plain_env_var",
-          type: "plain_text" as const,
-          promptOnInstallation: false,
-          value: "plain-value", // Not a secret, should be ignored
-        },
-      ];
-
-      // When: we apply the merging logic from startServer
-      for (const envDef of catalogEnvironment) {
-        if (
-          envDef.type === "secret" &&
-          !envDef.promptOnInstallation &&
-          envDef.value
-        ) {
-          if (!(envDef.key in secretData)) {
-            secretData[envDef.key] = envDef.value;
-          }
-        }
-      }
-
-      // Then: secretData should include the non-prompted secret
-      expect(secretData).toEqual({
-        prompted_secret: "prompted-value",
-        context7_api_key: "api-key-value",
-        static_secret: "static-secret-value", // Merged from catalog
-      });
+      cleanup();
     });
 
-    test("does not overwrite existing secrets from mcpServer.secretId with catalog values", () => {
-      // Given: secretData already has 'some_key'
-      const secretData: Record<string, string> = {
-        some_key: "server-secret-value",
-      };
-
-      // And: catalog also has 'some_key' as non-prompted secret with different value
-      const catalogEnvironment = [
-        {
-          key: "some_key",
-          type: "secret" as const,
-          promptOnInstallation: false,
-          value: "catalog-secret-value", // Different value from catalog
+    test("passes all keys through when catalog has no environment config (backward compat)", async () => {
+      // For servers without catalog environment config (e.g., BYOS with no defined env schema),
+      // all vault keys should pass through to maintain backward compatibility
+      const { manager, mcpServer, cleanup } = await setupStartServerTest({
+        vaultSecret: {
+          SOME_KEY: "some-value",
+          OTHER_KEY: "other-value",
         },
-      ];
-
-      // When: we apply the merging logic
-      for (const envDef of catalogEnvironment) {
-        if (
-          envDef.type === "secret" &&
-          !envDef.promptOnInstallation &&
-          envDef.value
-        ) {
-          if (!(envDef.key in secretData)) {
-            secretData[envDef.key] = envDef.value;
-          }
-        }
-      }
-
-      // Then: existing value should NOT be overwritten
-      expect(secretData).toEqual({
-        some_key: "server-secret-value", // Original value preserved
-      });
-    });
-
-    test("handles empty secretData by creating new object", () => {
-      // Given: no secretData yet
-      let secretData: Record<string, string> | undefined;
-
-      // And: catalog has non-prompted secrets
-      const catalogEnvironment = [
-        {
-          key: "static_secret",
-          type: "secret" as const,
-          promptOnInstallation: false,
-          value: "static-value",
-        },
-      ];
-
-      // When: we apply the merging logic
-      for (const envDef of catalogEnvironment) {
-        if (
-          envDef.type === "secret" &&
-          !envDef.promptOnInstallation &&
-          envDef.value
-        ) {
-          if (!secretData) {
-            secretData = {};
-          }
-          if (!(envDef.key in secretData)) {
-            secretData[envDef.key] = envDef.value;
-          }
-        }
-      }
-
-      // Then: secretData should be created with the non-prompted secret
-      expect(secretData).toEqual({
-        static_secret: "static-value",
-      });
-    });
-
-    test("ignores secrets with promptOnInstallation=true", () => {
-      // Given: empty secretData
-      const secretData: Record<string, string> = {};
-
-      // And: catalog has only prompted secrets
-      const catalogEnvironment = [
-        {
-          key: "prompted_secret",
-          type: "secret" as const,
-          promptOnInstallation: true,
-          value: "prompted-value",
-        },
-      ];
-
-      // When: we apply the merging logic
-      for (const envDef of catalogEnvironment) {
-        if (
-          envDef.type === "secret" &&
-          !envDef.promptOnInstallation &&
-          envDef.value
-        ) {
-          if (!(envDef.key in secretData)) {
-            secretData[envDef.key] = envDef.value;
-          }
-        }
-      }
-
-      // Then: secretData should be empty (prompted secrets are already in mcpServer.secretId)
-      expect(secretData).toEqual({});
-    });
-
-    test("ignores non-secret environment variables", () => {
-      // Given: empty secretData
-      const secretData: Record<string, string> = {};
-
-      // And: catalog has plain text environment variables
-      // Use explicit type to match the structure from LocalConfig
-      type EnvDef = {
-        key: string;
-        type: "plain_text" | "secret" | "boolean" | "number";
-        promptOnInstallation: boolean;
-        value?: string;
-      };
-      const catalogEnvironment: EnvDef[] = [
-        {
-          key: "plain_env_var",
-          type: "plain_text",
-          promptOnInstallation: false,
-          value: "plain-value",
-        },
-        {
-          key: "boolean_env_var",
-          type: "boolean",
-          promptOnInstallation: false,
-          value: "true",
-        },
-      ];
-
-      // When: we apply the merging logic
-      for (const envDef of catalogEnvironment) {
-        if (
-          envDef.type === "secret" &&
-          !envDef.promptOnInstallation &&
-          envDef.value
-        ) {
-          if (!(envDef.key in secretData)) {
-            secretData[envDef.key] = envDef.value;
-          }
-        }
-      }
-
-      // Then: secretData should be empty (non-secrets not added)
-      expect(secretData).toEqual({});
-    });
-
-    test("regcred passwords come from catalog localConfigSecretId, not per-user secretData", () => {
-      // This test verifies the fix for the bug where createDockerRegistrySecrets
-      // was passed per-user secretData (mcpServer.secretId), but regcred passwords
-      // are stored in catalog's localConfigSecretId.
-
-      // Given: per-user secret data (from mcpServer.secretId) with user-prompted values
-      const perUserSecretData: Record<string, string> = {
-        API_KEY: "user-api-key",
-      };
-
-      // And: catalog secret data (from localConfigSecretId) with regcred passwords
-      const catalogSecretData: Record<string, string> = {
-        STATIC_SECRET: "static-value",
-        "__regcred_password:quay.io:myuser": "registry-password",
-        "__regcred_password:ghcr.io:bot": "ghcr-password",
-      };
-
-      // When: we extract only __regcred_password:* keys from catalog secret
-      const regcredSecretData: Record<string, string> = {};
-      for (const [key, value] of Object.entries(catalogSecretData)) {
-        if (key.startsWith("__regcred_password:")) {
-          regcredSecretData[key] = value;
-        }
-      }
-
-      // Then: regcred data should contain only password keys, not env vars
-      expect(regcredSecretData).toEqual({
-        "__regcred_password:quay.io:myuser": "registry-password",
-        "__regcred_password:ghcr.io:bot": "ghcr-password",
+        catalogEnvironment: [], // No environment config
       });
 
-      // And: per-user data should NOT contain regcred keys
-      expect(perUserSecretData).not.toHaveProperty(
-        "__regcred_password:quay.io:myuser",
-      );
+      await manager.startServer(mcpServer);
+
+      // All keys should pass through
+      expect(mockCreateK8sSecret).toHaveBeenCalledWith({
+        SOME_KEY: "some-value",
+        OTHER_KEY: "other-value",
+      });
+
+      cleanup();
     });
 
-    test("ignores secrets without value", () => {
-      // Given: empty secretData
-      const secretData: Record<string, string> = {};
+    test("does not create K8s secret when server has no secretId", async () => {
+      mockCreateK8sSecret.mockClear();
+      mockStartOrCreateDeployment.mockClear();
+      mockCreateDockerRegistrySecrets.mockClear();
+      mockK8sDeploymentInstances.length = 0;
 
-      // And: catalog has secret without value
-      const catalogEnvironment = [
-        {
-          key: "empty_secret",
-          type: "secret" as const,
-          promptOnInstallation: false,
-          value: undefined,
+      const InternalMcpCatalogModel = (
+        await import("@/models/internal-mcp-catalog")
+      ).default;
+      vi.mocked(InternalMcpCatalogModel.findById).mockResolvedValue({
+        id: "catalog-1",
+        serverType: "local",
+        localConfig: { environment: [] },
+        localConfigSecretId: null,
+      } as unknown as Awaited<
+        ReturnType<typeof InternalMcpCatalogModel.findById>
+      >);
+
+      const mockLoadFromDefault = vi
+        .spyOn(k8s.KubeConfig.prototype, "loadFromDefault")
+        .mockImplementation(() => {});
+      const mockMakeApiClient = vi
+        .spyOn(k8s.KubeConfig.prototype, "makeApiClient")
+        .mockReturnValue({} as k8s.CoreV1Api);
+
+      const { McpServerRuntimeManager } = await import("./manager");
+      const manager = new McpServerRuntimeManager();
+      const managerAny = manager as unknown as {
+        k8sAttach: unknown;
+        k8sLog: unknown;
+        k8sExec: unknown;
+      };
+      managerAny.k8sAttach = {};
+      managerAny.k8sLog = {};
+      managerAny.k8sExec = {};
+
+      const mcpServer = createMcpServer({ secretId: null });
+      await manager.startServer(mcpServer);
+
+      // createK8sSecret should NOT be called when there's no secret data
+      expect(mockCreateK8sSecret).not.toHaveBeenCalled();
+
+      mockLoadFromDefault.mockRestore();
+      mockMakeApiClient.mockRestore();
+    });
+
+    test("merges non-prompted catalog secrets into secretData without overwriting existing keys", async () => {
+      const { manager, mcpServer, cleanup } = await setupStartServerTest({
+        vaultSecret: {
+          USER_API_KEY: "user-provided-value",
         },
-      ];
+        catalogEnvironment: [
+          {
+            key: "USER_API_KEY",
+            type: "secret",
+            promptOnInstallation: true,
+            value: "user-provided-value",
+          },
+          {
+            key: "STATIC_SECRET",
+            type: "secret",
+            promptOnInstallation: false,
+            value: "catalog-static-value",
+          },
+          {
+            key: "PLAIN_VAR",
+            type: "plain_text",
+            promptOnInstallation: false,
+            value: "should-be-ignored",
+          },
+        ],
+      });
 
-      // When: we apply the merging logic
-      for (const envDef of catalogEnvironment) {
-        if (
-          envDef.type === "secret" &&
-          !envDef.promptOnInstallation &&
-          envDef.value
-        ) {
-          if (!(envDef.key in secretData)) {
-            secretData[envDef.key] = envDef.value;
-          }
-        }
-      }
+      await manager.startServer(mcpServer);
 
-      // Then: secretData should be empty (secrets without value not added)
-      expect(secretData).toEqual({});
+      // createK8sSecret should include the vault key + the non-prompted catalog secret
+      expect(mockCreateK8sSecret).toHaveBeenCalledWith({
+        USER_API_KEY: "user-provided-value",
+        STATIC_SECRET: "catalog-static-value",
+      });
+
+      cleanup();
+    });
+
+    test("non-prompted catalog secret does not overwrite user-provided secret with same key", async () => {
+      const { manager, mcpServer, cleanup } = await setupStartServerTest({
+        vaultSecret: {
+          SHARED_KEY: "user-vault-value",
+        },
+        catalogEnvironment: [
+          {
+            key: "SHARED_KEY",
+            type: "secret",
+            promptOnInstallation: false,
+            value: "catalog-value",
+          },
+        ],
+      });
+
+      await manager.startServer(mcpServer);
+
+      // User-provided value from vault should win over catalog value
+      expect(mockCreateK8sSecret).toHaveBeenCalledWith({
+        SHARED_KEY: "user-vault-value",
+      });
+
+      cleanup();
     });
   });
 });

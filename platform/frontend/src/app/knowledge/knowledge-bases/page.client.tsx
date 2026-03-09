@@ -163,8 +163,8 @@ function KnowledgeBaseCard({
   const isAutoSync = kb.visibility === "auto-sync-permissions";
   const VisibilityIcon = isAutoSync ? RefreshCw : isOrgWide ? Globe : Users;
   const totalConnectors = kb.connectors.length;
-  const teamNames = isTeamScoped
-    ? (teams ?? []).filter((t) => kb.teamIds.includes(t.id)).map((t) => t.name)
+  const matchedTeams = isTeamScoped
+    ? (teams ?? []).filter((t) => kb.teamIds.includes(t.id))
     : [];
 
   return (
@@ -185,7 +185,7 @@ function KnowledgeBaseCard({
           <StatItem
             label="Visibility"
             value={
-              isTeamScoped && teamNames.length > 0 ? (
+              isTeamScoped && matchedTeams.length > 0 ? (
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>
@@ -199,9 +199,9 @@ function KnowledgeBaseCard({
                     </TooltipTrigger>
                     <TooltipContent side="bottom">
                       <div className="space-y-0.5">
-                        {teamNames.map((name) => (
-                          <div key={name} className="text-xs">
-                            {name}
+                        {matchedTeams.map((team) => (
+                          <div key={team.id} className="text-xs">
+                            {team.name}
                           </div>
                         ))}
                       </div>

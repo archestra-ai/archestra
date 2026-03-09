@@ -166,31 +166,34 @@ export function InitialAgentSelector({
   const allConnectors = connectorsData?.data ?? [];
 
   // Get knowledge base and connector IDs from current agent
-  const knowledgeBaseIds =
-    ((currentAgent as Record<string, unknown> | null)?.knowledgeBaseIds as
-      | string[]
-      | undefined) ?? [];
-  const connectorIds =
-    ((currentAgent as Record<string, unknown> | null)?.connectorIds as
-      | string[]
-      | undefined) ?? [];
+  const knowledgeBaseIds = useMemo(
+    () => currentAgent?.knowledgeBaseIds ?? [],
+    [currentAgent],
+  );
+  const connectorIds = useMemo(
+    () => currentAgent?.connectorIds ?? [],
+    [currentAgent],
+  );
+
+  // Match knowledge bases and connectors for the current agent
+  const matchedKbs = useMemo(
+    () => allKnowledgeBases.filter((k) => knowledgeBaseIds.includes(k.id)),
+    [allKnowledgeBases, knowledgeBaseIds],
+  );
+  const matchedConnectors = useMemo(
+    () => allConnectors.filter((c) => connectorIds.includes(c.id)),
+    [allConnectors, connectorIds],
+  );
 
   // Compute unique connector types from matched knowledge bases and connectors
   const agentConnectorTypes = useMemo(() => {
-    const matchedKbs = allKnowledgeBases.filter((k) =>
-      knowledgeBaseIds.includes(k.id),
-    );
-    const matchedConnectors = allConnectors.filter((c) =>
-      connectorIds.includes(c.id),
-    );
-
     const kbConnectorTypes = matchedKbs.flatMap(
       (kb) => kb.connectors?.map((c) => c.connectorType) ?? [],
     );
     const directConnectorTypes = matchedConnectors.map((c) => c.connectorType);
 
     return [...new Set([...kbConnectorTypes, ...directConnectorTypes])];
-  }, [allKnowledgeBases, allConnectors, knowledgeBaseIds, connectorIds]);
+  }, [matchedKbs, matchedConnectors]);
 
   const handleAgentSelect = (agentId: string) => {
     onAgentChange(agentId);
@@ -263,8 +266,8 @@ export function InitialAgentSelector({
             onChangeAgent={() => setView("change")}
             onAddTool={() => setView("add-tool")}
             onEditTool={handleSelectCatalog}
-            knowledgeBaseIds={knowledgeBaseIds}
-            connectorIds={connectorIds}
+            matchedKnowledgeBases={matchedKbs}
+            matchedConnectors={matchedConnectors}
           />
         )}
 
@@ -422,8 +425,8 @@ function AgentSettingsView({
   onChangeAgent,
   onAddTool,
   onEditTool,
-  knowledgeBaseIds,
-  connectorIds,
+  matchedKnowledgeBases: matchedKbs,
+  matchedConnectors,
 }: {
   agent: {
     id: string;
@@ -436,24 +439,12 @@ function AgentSettingsView({
   onChangeAgent: () => void;
   onAddTool: () => void;
   onEditTool: (catalog: CatalogItem) => void;
-  knowledgeBaseIds: string[];
-  connectorIds: string[];
+  matchedKnowledgeBases: archestraApiTypes.GetKnowledgeBasesResponses["200"]["data"];
+  matchedConnectors: archestraApiTypes.GetConnectorsResponses["200"]["data"];
 }) {
   const updateProfile = useUpdateProfile();
   const { data: canReadAgents } = useHasPermissions({ agent: ["read"] });
 
-  // Knowledge base data for knowledge sources section
-  const { data: knowledgeBasesData } = useKnowledgeBases();
-  const { data: connectorsData } = useConnectors();
-  const allKnowledgeBases = knowledgeBasesData?.data ?? [];
-  const allConnectors = connectorsData?.data ?? [];
-
-  const matchedKbs = allKnowledgeBases.filter((k) =>
-    knowledgeBaseIds.includes(k.id),
-  );
-  const matchedConnectors = allConnectors.filter((c) =>
-    connectorIds.includes(c.id),
-  );
   const hasKnowledgeSources =
     matchedKbs.length > 0 || matchedConnectors.length > 0;
   const [instructions, setInstructions] = useState(agent?.systemPrompt ?? "");

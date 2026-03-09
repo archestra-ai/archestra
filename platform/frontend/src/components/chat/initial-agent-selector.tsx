@@ -1,6 +1,6 @@
 "use client";
 
-import type { archestraApiTypes } from "@shared";
+import { type archestraApiTypes, isBuiltInCatalogId } from "@shared";
 import {
   ArrowLeft,
   Bot,
@@ -51,6 +51,7 @@ import {
   useSyncAgentDelegations,
   useUnassignTool,
 } from "@/lib/agent-tools.query";
+import { useHasPermissions } from "@/lib/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import {
   useCatalogTools,
@@ -201,6 +202,7 @@ export function InitialAgentSelector({
           <ToolServerAvatarGroup
             catalogs={assignedCatalogs}
             subagents={triggerSubagents}
+            showAddButton
           />
         </PromptInputButton>
       </DialogTrigger>
@@ -311,6 +313,7 @@ export function InitialAgentSelector({
 
         {view === "add-tool" && currentAgent && (
           <AddToolView
+            agentId={currentAgent.id}
             onBack={resetToSettings}
             onSelectCatalog={handleSelectCatalog}
             onAddDelegation={() => setView("add-delegation")}
@@ -393,6 +396,7 @@ function AgentSettingsView({
   onEditTool: (catalog: CatalogItem) => void;
 }) {
   const updateProfile = useUpdateProfile();
+  const { data: canReadAgents } = useHasPermissions({ agent: ["read"] });
   const [instructions, setInstructions] = useState(agent?.systemPrompt ?? "");
   const [isSaving, setIsSaving] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -499,6 +503,17 @@ function AgentSettingsView({
           />
         </div>
       </div>
+
+      {canReadAgents && (
+        <div className="border-t px-4 py-3 shrink-0">
+          <a
+            href={`/agents?edit=${agent.id}`}
+            className="text-sm text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1.5"
+          >
+            Full configuration →
+          </a>
+        </div>
+      )}
     </div>
   );
 }
@@ -655,10 +670,12 @@ function AssignedToolsGrid({
 // ============================================================================
 
 function AddToolView({
+  agentId,
   onBack,
   onSelectCatalog,
   onAddDelegation,
 }: {
+  agentId: string;
   onBack: () => void;
   onSelectCatalog: (catalog: CatalogItem) => void;
   onAddDelegation: () => void;
@@ -668,6 +685,20 @@ function AddToolView({
   const [search, setSearch] = useState("");
 
   const installer = useMcpInstallOrchestrator();
+
+  const { data: assignedToolsData } = useAllProfileTools({
+    filters: { agentId },
+    skipPagination: true,
+    enabled: !!agentId,
+  });
+
+  const assignedCatalogIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const at of assignedToolsData?.data ?? []) {
+      if (at.tool.catalogId) ids.add(at.tool.catalogId);
+    }
+    return ids;
+  }, [assignedToolsData]);
 
   // Detect servers that are still being installed (local servers with pending status)
   const hasInstallingServers = useMemo(() => {
@@ -685,14 +716,21 @@ function AddToolView({
   useMcpServers({ hasInstallingServers });
 
   const filteredCatalogs = useMemo(() => {
-    if (!search) return catalogItems;
-    const lower = search.toLowerCase();
-    return catalogItems.filter(
-      (c) =>
-        c.name.toLowerCase().includes(lower) ||
-        c.description?.toLowerCase().includes(lower),
-    );
-  }, [catalogItems, search]);
+    let items = catalogItems;
+    if (search) {
+      const lower = search.toLowerCase();
+      items = items.filter(
+        (c) =>
+          c.name.toLowerCase().includes(lower) ||
+          c.description?.toLowerCase().includes(lower),
+      );
+    }
+    return [...items].sort((a, b) => {
+      const aAssigned = assignedCatalogIds.has(a.id) ? 1 : 0;
+      const bAssigned = assignedCatalogIds.has(b.id) ? 1 : 0;
+      return aAssigned - bAssigned;
+    });
+  }, [catalogItems, search, assignedCatalogIds]);
 
   return (
     <div className="flex flex-col h-full">
@@ -746,21 +784,32 @@ function AddToolView({
                   s.localInstallationStatus === "discovering-tools",
               );
               const isReady = hasCredentials && !isServerInstalling;
+              const isAssigned = assignedCatalogIds.has(catalog.id);
               return (
                 <button
                   key={catalog.id}
                   type="button"
-                  disabled={isServerInstalling}
+                  disabled={isAssigned || isServerInstalling}
                   onClick={() =>
-                    isReady
-                      ? onSelectCatalog(catalog)
-                      : installer.triggerInstallByCatalogId(catalog.id)
+                    isAssigned
+                      ? undefined
+                      : isReady
+                        ? onSelectCatalog(catalog)
+                        : installer.triggerInstallByCatalogId(catalog.id)
                   }
                   className={cn(
-                    "flex flex-col items-center gap-2 rounded-lg border p-4 text-center transition-colors cursor-pointer hover:bg-accent",
+                    "relative flex flex-col items-center gap-2 rounded-lg border p-4 text-center transition-colors",
+                    isAssigned
+                      ? "opacity-50 cursor-default border-primary/30"
+                      : "cursor-pointer hover:bg-accent",
                     isServerInstalling && "opacity-60 cursor-wait",
                   )}
                 >
+                  {isAssigned && (
+                    <div className="absolute top-2 right-2">
+                      <Check className="h-4 w-4 text-primary" />
+                    </div>
+                  )}
                   <McpCatalogIcon
                     icon={catalog.icon}
                     catalogId={catalog.id}
@@ -780,7 +829,7 @@ function AddToolView({
                       Installing...
                     </span>
                   )}
-                  {!hasCredentials && !isServerInstalling && (
+                  {!isAssigned && !hasCredentials && !isServerInstalling && (
                     <Badge
                       variant="outline"
                       className="text-[10px] px-1.5 py-0"
@@ -791,6 +840,17 @@ function AddToolView({
                 </button>
               );
             })}
+            {!search && (
+              <a
+                href="/mcp/registry"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex flex-col items-center justify-center gap-2 rounded-lg border bg-accent/50 p-4 text-center transition-colors cursor-pointer hover:bg-accent"
+              >
+                <ExternalLink className="size-7 text-muted-foreground" />
+                <span className="text-sm font-medium">Add New Server</span>
+              </a>
+            )}
           </div>
         )}
       </div>
@@ -958,6 +1018,10 @@ function ConfigureToolView({
 
   const isEditing = assignedToolIds.size > 0;
 
+  const newToolCount = useMemo(() => {
+    return [...selectedToolIds].filter((id) => !assignedToolIds.has(id)).length;
+  }, [selectedToolIds, assignedToolIds]);
+
   return (
     <div className="flex flex-col h-full">
       <DialogHeader title={catalog.name} onBack={onBack} />
@@ -1000,12 +1064,18 @@ function ConfigureToolView({
           <Button
             className="w-full"
             onClick={handleSave}
-            disabled={(!hasChanges && isEditing) || isSaving}
+            disabled={
+              (!hasChanges && isEditing) ||
+              (!isEditing && newToolCount === 0) ||
+              isSaving
+            }
           >
             {isSaving ? <Loader2 className="size-4 animate-spin mr-2" /> : null}
             {isEditing
               ? `Save (${selectedToolIds.size} tool${selectedToolIds.size !== 1 ? "s" : ""})`
-              : `Add ${selectedToolIds.size} tool${selectedToolIds.size !== 1 ? "s" : ""}`}
+              : newToolCount === 0
+                ? "Add"
+                : `Add ${newToolCount} tool${newToolCount !== 1 ? "s" : ""}`}
           </Button>
         </div>
       </div>
@@ -1333,12 +1403,18 @@ type SubagentItem = {
 function ToolServerAvatarGroup({
   catalogs,
   subagents = [],
+  showAddButton = false,
 }: {
   catalogs: CatalogItem[];
   subagents?: SubagentItem[];
+  showAddButton?: boolean;
 }) {
+  const hasNonBuiltInTools =
+    subagents.length > 0 || catalogs.some((c) => !isBuiltInCatalogId(c.id));
   const totalCount = catalogs.length + subagents.length;
+
   if (totalCount === 0) {
+    if (!showAddButton) return null;
     return (
       <Tooltip>
         <TooltipTrigger asChild>
@@ -1407,6 +1483,16 @@ function ToolServerAvatarGroup({
             </div>
           </TooltipTrigger>
           <TooltipContent side="top">{hiddenText}</TooltipContent>
+        </Tooltip>
+      )}
+      {showAddButton && !hasNonBuiltInTools && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <div className="flex size-5 shrink-0 items-center justify-center rounded-full bg-muted ring-1 ring-background ml-0.5">
+              <Plus className="size-3 text-muted-foreground" />
+            </div>
+          </TooltipTrigger>
+          <TooltipContent side="top">Add tools</TooltipContent>
         </Tooltip>
       )}
     </div>

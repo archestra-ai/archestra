@@ -214,6 +214,11 @@ export default class K8sDeployment {
   private deploymentName: string; // Used for deployment name
   private state: McpDeploymentState = "not_created";
   private errorMessage: string | null = null;
+  /** Count of consecutive polls where a running deployment appeared unavailable.
+   *  We only downgrade to "pending" after multiple misses to avoid flickering
+   *  caused by transient K8s API lag. */
+  private runningMissCount = 0;
+  private static readonly RUNNING_MISS_THRESHOLD = 3;
   private cachedRestartCount = 0;
   private cachedPodCreationTime: Date | null = null;
   private cachedPodName: string | null = null;
@@ -2524,6 +2529,7 @@ export default class K8sDeployment {
         if (pod) {
           this.state = "running";
           this.errorMessage = null;
+          this.runningMissCount = 0;
           return;
         }
       }
@@ -2533,9 +2539,16 @@ export default class K8sDeployment {
       if (failureCheck.hasFailed) {
         this.state = "failed";
         this.errorMessage = failureCheck.message;
+        this.runningMissCount = 0;
       } else if (this.state === "running") {
-        this.state = "pending";
-        this.errorMessage = null;
+        // Debounce: only downgrade to "pending" after several consecutive
+        // misses to avoid flickering from transient K8s API inconsistencies.
+        this.runningMissCount++;
+        if (this.runningMissCount >= K8sDeployment.RUNNING_MISS_THRESHOLD) {
+          this.state = "pending";
+          this.errorMessage = null;
+          this.runningMissCount = 0;
+        }
       }
     } catch (error) {
       if (!isK8sNotFoundError(error)) {

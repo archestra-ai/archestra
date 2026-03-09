@@ -48,6 +48,7 @@ import {
 } from "@/components/ui/tooltip";
 import {
   useDeleteProfile,
+  useProfile,
   useProfiles,
   useProfilesPaginated,
 } from "@/lib/agent.query";
@@ -279,6 +280,25 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
       router.replace(`${pathname}?${newParams.toString()}`);
     }
   }, [searchParams, pathname, router]);
+
+  // Handle 'edit' URL parameter to open the Edit Agent dialog
+  const editAgentId = searchParams.get("edit");
+  const { data: editAgentData } = useProfile(editAgentId ?? undefined);
+  useEffect(() => {
+    if (editAgentId && editAgentData && !editingAgent) {
+      setEditingAgent(editAgentData as AgentData);
+      const newParams = new URLSearchParams(searchParams);
+      newParams.delete("edit");
+      router.replace(`${pathname}?${newParams.toString()}`);
+    }
+  }, [
+    editAgentId,
+    editAgentData,
+    editingAgent,
+    searchParams,
+    pathname,
+    router,
+  ]);
 
   // Update URL when sorting changes
   const handleSortingChange = useCallback(

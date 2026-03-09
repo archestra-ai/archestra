@@ -771,7 +771,9 @@ export function McpServerCard({
           onAddPersonalConnection ??
           (variant === "local" ? onInstallLocalServer : onInstallRemoteServer)
         }
-        needsReinstall={!!needsReinstall && !isInstalling}
+        needsReinstall={
+          !!needsReinstall && !isInstalling && isCurrentUserAuthenticated
+        }
         onDelete={!isPlaywrightVariant ? onDelete : undefined}
       />
 

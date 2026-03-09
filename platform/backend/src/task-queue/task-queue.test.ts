@@ -237,9 +237,9 @@ describe("TaskQueueService", () => {
 
     test("stopWorker waits for in-flight tasks to drain", async () => {
       let resolveHandler!: () => void;
-      const handlerPromise = new Promise<void>(
-        (resolve) => (resolveHandler = resolve),
-      );
+      const handlerPromise = new Promise<void>((resolve) => {
+        resolveHandler = resolve;
+      });
       const handler = vi.fn().mockReturnValue(handlerPromise);
 
       const task = fakeTask({ id: "drain-task-1" });

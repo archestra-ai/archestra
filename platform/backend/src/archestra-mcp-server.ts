@@ -86,6 +86,12 @@ function slugify(name: string): string {
     .replace(/^_+|_+$/g, "");
 }
 
+function isUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+    value,
+  );
+}
+
 // Construct fully-qualified tool names
 const TOOL_WHOAMI_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_WHOAMI_NAME}`;
 const TOOL_SEARCH_PRIVATE_MCP_REGISTRY_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_SEARCH_PRIVATE_MCP_REGISTRY_NAME}`;
@@ -1711,15 +1717,17 @@ export async function executeArchestraTool(
 
       let record: Agent | null | undefined;
 
-      if (id) {
+      if (id && isUuid(id)) {
         record = await AgentModel.findById(id);
-      } else if (name) {
+      } else if (id || name) {
+        const searchName = (name ?? id) as string;
+
         // Search by name, only matching personal agents owned by the current user
         const results = await AgentModel.findAllPaginated(
           { limit: 1, offset: 0 },
           undefined,
           {
-            name,
+            name: searchName,
             agentType: expectedType,
             scope: "personal",
             authorIds: context.userId ? [context.userId] : [],

@@ -163,6 +163,7 @@ describe("executeArchestraTool", () => {
         id: testAgent.id,
         name: testAgent.name,
       },
+      userId: testAgent.authorId ?? undefined,
     };
   });
 
@@ -1349,6 +1350,74 @@ describe("executeArchestraTool", () => {
         code: -32601,
         message: "Tool 'unknown_tool' not found",
       });
+    });
+  });
+
+  describe("get_* tools", () => {
+    test("should fall back to name search when get_mcp_gateway receives a name in id", async ({
+      makeAgent,
+    }) => {
+      const gateway = await makeAgent({
+        name: "Grafana Export Gateway",
+        agentType: "mcp_gateway",
+      });
+
+      const result = await executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}get_mcp_gateway`,
+        { id: gateway.name },
+        {
+          ...mockContext,
+          userId: gateway.authorId ?? mockContext.userId,
+        },
+      );
+
+      expect(result.isError).toBe(false);
+      expect((result.content[0] as any).text).toContain(gateway.id);
+      expect((result.content[0] as any).text).toContain(gateway.name);
+    });
+
+    test("should fall back to name search when get_agent receives a name in id", async ({
+      makeAgent,
+    }) => {
+      const agent = await makeAgent({
+        name: "Prompt Router Agent",
+        agentType: "agent",
+      });
+
+      const result = await executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}get_agent`,
+        { id: agent.name },
+        {
+          ...mockContext,
+          userId: agent.authorId ?? mockContext.userId,
+        },
+      );
+
+      expect(result.isError).toBe(false);
+      expect((result.content[0] as any).text).toContain(agent.id);
+      expect((result.content[0] as any).text).toContain(agent.name);
+    });
+
+    test("should fall back to name search when get_llm_proxy receives a name in id", async ({
+      makeAgent,
+    }) => {
+      const llmProxy = await makeAgent({
+        name: "Shared LLM Proxy",
+        agentType: "llm_proxy",
+      });
+
+      const result = await executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}get_llm_proxy`,
+        { id: llmProxy.name },
+        {
+          ...mockContext,
+          userId: llmProxy.authorId ?? mockContext.userId,
+        },
+      );
+
+      expect(result.isError).toBe(false);
+      expect((result.content[0] as any).text).toContain(llmProxy.id);
+      expect((result.content[0] as any).text).toContain(llmProxy.name);
     });
   });
 });

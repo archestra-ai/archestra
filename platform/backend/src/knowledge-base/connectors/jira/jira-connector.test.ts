@@ -389,6 +389,135 @@ describe("JiraConnector", () => {
       expect(metadata.issueType).toBe("Task");
     });
 
+    test("checkpoint uses last issue updated timestamp instead of current time", async () => {
+      const issues = [
+        makeIssue("PROJ-1", "First issue"),
+        {
+          ...makeIssue("PROJ-2", "Second issue"),
+          fields: {
+            ...makeIssue("PROJ-2", "Second issue").fields,
+            updated: "2024-06-20T15:30:00.000Z",
+          },
+        },
+      ];
+
+      mockEnhancedSearchPost.mockResolvedValueOnce({
+        issues,
+        nextPageToken: null,
+      });
+
+      const batches: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: validConfig,
+        credentials,
+        checkpoint: null,
+      })) {
+        batches.push(batch);
+      }
+
+      const checkpoint = batches[0].checkpoint as {
+        lastSyncedAt?: string;
+        lastIssueKey?: string;
+      };
+      // Should use the last issue's updated timestamp, not new Date()
+      expect(checkpoint.lastSyncedAt).toBe("2024-06-20T15:30:00.000Z");
+      expect(checkpoint.lastIssueKey).toBe("PROJ-2");
+    });
+
+    test("checkpoint preserves previous value when batch has no issues", async () => {
+      mockEnhancedSearchPost.mockResolvedValueOnce({
+        issues: [],
+        nextPageToken: null,
+      });
+
+      const batches: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: validConfig,
+        credentials,
+        checkpoint: {
+          type: "jira",
+          lastSyncedAt: "2024-01-10T00:00:00.000Z",
+          lastIssueKey: "PROJ-99",
+        },
+      })) {
+        batches.push(batch);
+      }
+
+      const checkpoint = batches[0].checkpoint as {
+        lastSyncedAt?: string;
+        lastIssueKey?: string;
+      };
+      expect(checkpoint.lastSyncedAt).toBe("2024-01-10T00:00:00.000Z");
+      expect(checkpoint.lastIssueKey).toBe("PROJ-99");
+    });
+
+    test("incremental sync picks up issues updated after checkpoint", async () => {
+      // First sync: returns 2 issues, last one updated at a specific time
+      const firstSyncIssues = [
+        {
+          ...makeIssue("PROJ-1", "Issue 1"),
+          fields: {
+            ...makeIssue("PROJ-1", "Issue 1").fields,
+            updated: "2024-06-20T10:00:00.000Z",
+          },
+        },
+        {
+          ...makeIssue("PROJ-2", "Issue 2"),
+          fields: {
+            ...makeIssue("PROJ-2", "Issue 2").fields,
+            updated: "2024-06-20T12:00:00.000Z",
+          },
+        },
+      ];
+
+      mockEnhancedSearchPost.mockResolvedValueOnce({
+        issues: firstSyncIssues,
+        nextPageToken: null,
+      });
+
+      const firstBatches: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: validConfig,
+        credentials,
+        checkpoint: null,
+      })) {
+        firstBatches.push(batch);
+      }
+
+      const savedCheckpoint = firstBatches[0].checkpoint;
+
+      // Second sync: an issue was updated at 12:05 (after last issue's 12:00 timestamp)
+      const updatedIssue = {
+        ...makeIssue("PROJ-1", "Issue 1 - updated"),
+        fields: {
+          ...makeIssue("PROJ-1", "Issue 1 - updated").fields,
+          updated: "2024-06-20T12:05:00.000Z",
+        },
+      };
+
+      mockEnhancedSearchPost.mockResolvedValueOnce({
+        issues: [updatedIssue],
+        nextPageToken: null,
+      });
+
+      const secondBatches: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: validConfig,
+        credentials,
+        checkpoint: savedCheckpoint,
+      })) {
+        secondBatches.push(batch);
+      }
+
+      // The JQL should use the last issue's updated timestamp
+      const jql = mockEnhancedSearchPost.mock.calls[1][0].jql;
+      expect(jql).toContain('updated >= "2024/06/20 12:00"');
+
+      // Should find the updated issue
+      expect(secondBatches[0].documents).toHaveLength(1);
+      expect(secondBatches[0].documents[0].title).toBe("Issue 1 - updated");
+    });
+
     test("throws on search API error", async () => {
       mockEnhancedSearchPost.mockRejectedValueOnce(
         new Error("Request failed with status code 400"),

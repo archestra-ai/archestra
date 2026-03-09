@@ -185,9 +185,12 @@ export class GithubConnector extends BaseConnector {
       pageHasMore = response.data.length >= BATCH_SIZE;
       page++;
 
+      const lastItem = items.length > 0 ? items[items.length - 1] : null;
       const newCheckpoint: GithubCheckpoint = {
         type: "github",
-        lastSyncedAt: new Date().toISOString(),
+        lastSyncedAt: lastItem?.updated_at
+          ? new Date(lastItem.updated_at).toISOString()
+          : checkpoint.lastSyncedAt,
       };
 
       yield {

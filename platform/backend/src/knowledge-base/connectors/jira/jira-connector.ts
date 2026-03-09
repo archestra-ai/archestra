@@ -261,13 +261,13 @@ function buildBatch(
   checkpoint: JiraCheckpoint,
   hasMore: boolean,
 ): ConnectorSyncBatch {
+  const lastIssue = issues.length > 0 ? issues[issues.length - 1] : null;
   const newCheckpoint: JiraCheckpoint = {
     type: "jira",
-    lastSyncedAt: new Date().toISOString(),
-    lastIssueKey:
-      issues.length > 0
-        ? issues[issues.length - 1].key
-        : checkpoint.lastIssueKey,
+    lastSyncedAt: lastIssue?.fields?.updated
+      ? new Date(lastIssue.fields.updated).toISOString()
+      : checkpoint.lastSyncedAt,
+    lastIssueKey: lastIssue?.key ?? checkpoint.lastIssueKey,
   };
 
   return {

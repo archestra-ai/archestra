@@ -491,11 +491,19 @@ describe("GithubConnector", () => {
       );
     });
 
-    test("updates checkpoint with current timestamp", async () => {
-      mockListForRepo.mockResolvedValueOnce({
-        data: [makeIssue(1, "Test")],
-      });
-      mockListComments.mockResolvedValueOnce({ data: [] });
+    test("checkpoint uses last item updated_at timestamp instead of current time", async () => {
+      const issues = [
+        makeIssue(1, "First issue"),
+        {
+          ...makeIssue(2, "Second issue"),
+          updated_at: "2024-06-20T15:30:00.000Z",
+        },
+      ];
+
+      mockListForRepo.mockResolvedValueOnce({ data: issues });
+      mockListComments
+        .mockResolvedValueOnce({ data: [] })
+        .mockResolvedValueOnce({ data: [] });
       // PR pass
       mockListForRepo.mockResolvedValueOnce({ data: [] });
 
@@ -508,10 +516,36 @@ describe("GithubConnector", () => {
         batches.push(batch);
       }
 
-      expect(batches[0].checkpoint.type).toBe("github");
-      expect(
-        (batches[0].checkpoint as { lastSyncedAt?: string }).lastSyncedAt,
-      ).toBeDefined();
+      const checkpoint = batches[0].checkpoint as {
+        type: string;
+        lastSyncedAt?: string;
+      };
+      expect(checkpoint.type).toBe("github");
+      expect(checkpoint.lastSyncedAt).toBe("2024-06-20T15:30:00.000Z");
+    });
+
+    test("checkpoint preserves previous value when batch has no items", async () => {
+      // Issues pass - empty
+      mockListForRepo.mockResolvedValueOnce({ data: [] });
+      // PR pass - empty
+      mockListForRepo.mockResolvedValueOnce({ data: [] });
+
+      const batches: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: validConfig,
+        credentials,
+        checkpoint: {
+          type: "github",
+          lastSyncedAt: "2024-01-10T00:00:00.000Z",
+        },
+      })) {
+        batches.push(batch);
+      }
+
+      const checkpoint = batches[0].checkpoint as {
+        lastSyncedAt?: string;
+      };
+      expect(checkpoint.lastSyncedAt).toBe("2024-01-10T00:00:00.000Z");
     });
   });
 

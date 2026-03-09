@@ -186,11 +186,14 @@ export class GitlabConnector extends BaseConnector {
       pageHasMore = issues.length >= BATCH_SIZE;
       page++;
 
+      const lastIssue = filtered.length > 0 ? filtered[filtered.length - 1] : null;
       yield {
         documents,
         checkpoint: {
           type: "gitlab",
-          lastSyncedAt: new Date().toISOString(),
+          lastSyncedAt: lastIssue?.updated_at
+            ? new Date(lastIssue.updated_at).toISOString()
+            : checkpoint.lastSyncedAt,
         },
         hasMore: pageHasMore || !isLastGroup,
       };
@@ -238,11 +241,14 @@ export class GitlabConnector extends BaseConnector {
       pageHasMore = mergeRequests.length >= BATCH_SIZE;
       page++;
 
+      const lastMr = filtered.length > 0 ? filtered[filtered.length - 1] : null;
       yield {
         documents,
         checkpoint: {
           type: "gitlab",
-          lastSyncedAt: new Date().toISOString(),
+          lastSyncedAt: lastMr?.updated_at
+            ? new Date(lastMr.updated_at).toISOString()
+            : checkpoint.lastSyncedAt,
         },
         hasMore: pageHasMore || !isLastGroup,
       };

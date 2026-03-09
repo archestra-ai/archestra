@@ -143,7 +143,9 @@ export class ConfluenceConnector extends BaseConnector {
       const lastPage = results[results.length - 1];
       const newCheckpoint: ConfluenceCheckpoint = {
         type: "confluence",
-        lastSyncedAt: new Date().toISOString(),
+        lastSyncedAt: lastPage?.version?.when
+          ? new Date(lastPage.version.when).toISOString()
+          : checkpoint.lastSyncedAt,
         lastPageId: lastPage?.id ?? checkpoint.lastPageId,
       };
 

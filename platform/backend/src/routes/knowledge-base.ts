@@ -554,6 +554,14 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async ({ params: { id }, organizationId }, reply) => {
       await findConnectorOrThrow(id, organizationId);
 
+      const hasActiveRun = await ConnectorRunModel.hasActiveRun(id);
+      if (hasActiveRun) {
+        throw new ApiError(
+          409,
+          "A sync is already in progress for this connector",
+        );
+      }
+
       const taskId = await taskQueueService.enqueue({
         taskType: "connector_sync",
         payload: { connectorId: id },

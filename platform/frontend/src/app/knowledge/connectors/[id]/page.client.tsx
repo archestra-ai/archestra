@@ -227,10 +227,16 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
             variant="outline"
             size="sm"
             onClick={handleSync}
-            disabled={syncConnector.isPending}
+            disabled={
+              syncConnector.isPending || connector.lastSyncStatus === "running"
+            }
           >
             <Play className="mr-2 h-4 w-4" />
-            {syncConnector.isPending ? "Starting..." : "Sync Now"}
+            {syncConnector.isPending
+              ? "Starting..."
+              : connector.lastSyncStatus === "running"
+                ? "Syncing..."
+                : "Sync Now"}
           </Button>
           <Button
             variant="outline"

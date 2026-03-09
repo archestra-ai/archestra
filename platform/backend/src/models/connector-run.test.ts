@@ -305,6 +305,72 @@ describe("ConnectorRunModel", () => {
     });
   });
 
+  describe("hasActiveRun", () => {
+    test("returns true when connector has a running run", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+      makeConnectorRun,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+      await makeConnectorRun(connector.id, { status: "running" });
+
+      const result = await ConnectorRunModel.hasActiveRun(connector.id);
+
+      expect(result).toBe(true);
+    });
+
+    test("returns false when connector has no running runs", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+      makeConnectorRun,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+      await makeConnectorRun(connector.id, { status: "success" });
+      await makeConnectorRun(connector.id, { status: "failed" });
+
+      const result = await ConnectorRunModel.hasActiveRun(connector.id);
+
+      expect(result).toBe(false);
+    });
+
+    test("returns false when connector has no runs", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+
+      const result = await ConnectorRunModel.hasActiveRun(connector.id);
+
+      expect(result).toBe(false);
+    });
+
+    test("does not consider runs from other connectors", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+      makeConnectorRun,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const connector1 = await makeKnowledgeBaseConnector(kb.id, org.id);
+      const connector2 = await makeKnowledgeBaseConnector(kb.id, org.id);
+      await makeConnectorRun(connector2.id, { status: "running" });
+
+      const result = await ConnectorRunModel.hasActiveRun(connector1.id);
+
+      expect(result).toBe(false);
+    });
+  });
+
   describe("sumDocsIngestedByKnowledgeBaseIds", () => {
     test("returns sum of documentsIngested per knowledge base", async ({
       makeOrganization,

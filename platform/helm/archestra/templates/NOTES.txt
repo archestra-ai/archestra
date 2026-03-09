@@ -13,6 +13,16 @@ Then visit:
   - Backend API: http://localhost:9000
   - Frontend: {{ $frontendUrl | default "http://localhost:3000" }}
 
+{{- if .Values.archestra.worker.enabled }}
+
+Background worker:
+  Replicas: {{ .Values.archestra.worker.replicaCount }}
+  Process type: worker-only (separate Deployment)
+{{- else }}
+
+Background worker: running in-process (worker Deployment disabled)
+{{- end }}
+
 {{- if .Values.postgresql.external_database_url }}
 
 Using external PostgreSQL database: {{ .Values.postgresql.external_database_url }}

@@ -56,6 +56,7 @@ import {
   useDeleteKnowledgeBase,
   useKnowledgeBases,
 } from "@/lib/knowledge-base.query";
+import { useTeams } from "@/lib/team.query";
 import { cn, formatDate } from "@/lib/utils";
 import { ConnectorTypeIcon } from "./_parts/connector-icons";
 import { CreateConnectorDialog } from "./_parts/create-connector-dialog";
@@ -156,10 +157,17 @@ function KnowledgeBaseCard({
   onDelete: () => void;
 }) {
   const [isAddConnectorOpen, setIsAddConnectorOpen] = useState(false);
+  const { data: teams } = useTeams();
   const isOrgWide = kb.visibility === "org-wide";
+  const isTeamScoped = kb.visibility === "team-scoped";
   const isAutoSync = kb.visibility === "auto-sync-permissions";
   const VisibilityIcon = isAutoSync ? RefreshCw : isOrgWide ? Globe : Users;
   const totalConnectors = kb.connectors.length;
+  const teamNames = isTeamScoped
+    ? (teams ?? [])
+        .filter((t) => kb.teamIds.includes(t.id))
+        .map((t) => t.name)
+    : [];
 
   return (
     <div className="rounded-lg border">
@@ -179,14 +187,39 @@ function KnowledgeBaseCard({
           <StatItem
             label="Visibility"
             value={
-              <Badge variant="outline" className="gap-1.5">
-                <VisibilityIcon className="h-3.5 w-3.5" />
-                {isAutoSync
-                  ? "Auto Sync"
-                  : isOrgWide
-                    ? "Org-wide"
-                    : "Team-scoped"}
-              </Badge>
+              isTeamScoped && teamNames.length > 0 ? (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Badge
+                        variant="outline"
+                        className="gap-1.5 cursor-default"
+                      >
+                        <VisibilityIcon className="h-3.5 w-3.5" />
+                        Team-scoped
+                      </Badge>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom">
+                      <div className="space-y-0.5">
+                        {teamNames.map((name) => (
+                          <div key={name} className="text-xs">
+                            {name}
+                          </div>
+                        ))}
+                      </div>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              ) : (
+                <Badge variant="outline" className="gap-1.5">
+                  <VisibilityIcon className="h-3.5 w-3.5" />
+                  {isAutoSync
+                    ? "Auto Sync"
+                    : isOrgWide
+                      ? "Org-wide"
+                      : "Team-scoped"}
+                </Badge>
+              )
             }
           />
           <StatItem

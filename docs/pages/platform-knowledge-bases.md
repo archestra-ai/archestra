@@ -77,4 +77,4 @@ Knowledge bases can be assigned to Agents and MCP Gateways. An Agent can have mu
 | ------------------------- | --------------------------------------------------------------- |
 | **Org-wide**              | All documents accessible to all users in the organization       |
 | **Team-scoped**           | Documents accessible only to members of the assigned teams      |
-| **Auto-sync permissions** | ACL entries synced from the source system (user emails, groups) |
+| **Auto-sync permissions** | ACL entries synced from the source system (user emails, groups). *Coming soon — see [#3218](https://github.com/archestra-ai/archestra/issues/3218).* |

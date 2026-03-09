@@ -1,6 +1,10 @@
 import { Cron } from "croner";
 import logger from "@/logging";
-import { KnowledgeBaseConnectorModel, TaskModel } from "@/models";
+import {
+  ConnectorRunModel,
+  KnowledgeBaseConnectorModel,
+  TaskModel,
+} from "@/models";
 import { taskQueueService } from "@/task-queue";
 
 export async function handleCheckDueConnectors(): Promise<void> {
@@ -37,6 +41,43 @@ export async function handleCheckDueConnectors(): Promise<void> {
           error: error instanceof Error ? error.message : String(error),
         },
         "[TaskQueue] Failed to evaluate connector schedule",
+      );
+    }
+  }
+
+  await cleanupOrphanedRunningStatuses();
+}
+
+async function cleanupOrphanedRunningStatuses(): Promise<void> {
+  const stuckConnectors =
+    await KnowledgeBaseConnectorModel.findAllWithStatus("running");
+
+  for (const connector of stuckConnectors) {
+    try {
+      const hasPendingTask = await TaskModel.hasPendingOrProcessing(
+        "connector_sync",
+        connector.id,
+      );
+      if (hasPendingTask) continue;
+
+      const hasRun = await ConnectorRunModel.hasActiveRun(connector.id);
+      if (hasRun) continue;
+
+      await KnowledgeBaseConnectorModel.update(connector.id, {
+        lastSyncStatus: "failed",
+        lastSyncError: "Sync task was lost",
+      });
+      logger.warn(
+        { connectorId: connector.id },
+        "[TaskQueue] Reset orphaned running status to failed",
+      );
+    } catch (error) {
+      logger.warn(
+        {
+          connectorId: connector.id,
+          error: error instanceof Error ? error.message : String(error),
+        },
+        "[TaskQueue] Failed to cleanup orphaned running status",
       );
     }
   }

@@ -558,6 +558,12 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         taskType: "connector_sync",
         payload: { connectorId: id },
       });
+
+      // Set status immediately so the UI can react before the worker picks up the task
+      await KnowledgeBaseConnectorModel.update(id, {
+        lastSyncStatus: "running",
+      });
+
       return reply.send({ taskId, status: "enqueued" });
     },
   );

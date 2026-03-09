@@ -1,12 +1,20 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
 const mockFindAllEnabled = vi.hoisted(() => vi.fn().mockResolvedValue([]));
+const mockFindAllWithStatus = vi.hoisted(() => vi.fn().mockResolvedValue([]));
+const mockConnectorUpdate = vi.hoisted(() => vi.fn().mockResolvedValue(null));
 const mockHasPendingOrProcessing = vi.hoisted(() =>
   vi.fn().mockResolvedValue(false),
 );
+const mockHasActiveRun = vi.hoisted(() => vi.fn().mockResolvedValue(false));
 vi.mock("@/models", () => ({
-  KnowledgeBaseConnectorModel: { findAllEnabled: mockFindAllEnabled },
+  KnowledgeBaseConnectorModel: {
+    findAllEnabled: mockFindAllEnabled,
+    findAllWithStatus: mockFindAllWithStatus,
+    update: mockConnectorUpdate,
+  },
   TaskModel: { hasPendingOrProcessing: mockHasPendingOrProcessing },
+  ConnectorRunModel: { hasActiveRun: mockHasActiveRun },
 }));
 
 const mockEnqueue = vi.hoisted(() => vi.fn().mockResolvedValue("task-id"));
@@ -106,5 +114,37 @@ describe("handleCheckDueConnectors", () => {
       taskType: "connector_sync",
       payload: { connectorId: "conn-good" },
     });
+  });
+
+  test("resets orphaned running status to failed when no task or run exists", async () => {
+    mockFindAllWithStatus.mockResolvedValue([{ id: "conn-orphan" }]);
+    mockHasPendingOrProcessing.mockResolvedValue(false);
+    mockHasActiveRun.mockResolvedValue(false);
+
+    await handleCheckDueConnectors();
+
+    expect(mockConnectorUpdate).toHaveBeenCalledWith("conn-orphan", {
+      lastSyncStatus: "failed",
+      lastSyncError: "Sync task was lost",
+    });
+  });
+
+  test("does not reset running status when a pending task exists", async () => {
+    mockFindAllWithStatus.mockResolvedValue([{ id: "conn-pending" }]);
+    mockHasPendingOrProcessing.mockResolvedValue(true);
+
+    await handleCheckDueConnectors();
+
+    expect(mockConnectorUpdate).not.toHaveBeenCalled();
+  });
+
+  test("does not reset running status when an active run exists", async () => {
+    mockFindAllWithStatus.mockResolvedValue([{ id: "conn-active" }]);
+    mockHasPendingOrProcessing.mockResolvedValue(false);
+    mockHasActiveRun.mockResolvedValue(true);
+
+    await handleCheckDueConnectors();
+
+    expect(mockConnectorUpdate).not.toHaveBeenCalled();
   });
 });

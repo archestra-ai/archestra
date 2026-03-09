@@ -161,6 +161,15 @@ class KnowledgeBaseConnectorModel {
       .where(eq(schema.knowledgeBaseConnectorsTable.enabled, true));
   }
 
+  static async findAllWithStatus(
+    status: string,
+  ): Promise<KnowledgeBaseConnector[]> {
+    return await db
+      .select()
+      .from(schema.knowledgeBaseConnectorsTable)
+      .where(eq(schema.knowledgeBaseConnectorsTable.lastSyncStatus, status));
+  }
+
   static async delete(id: string): Promise<boolean> {
     const result = await db
       .delete(schema.knowledgeBaseConnectorsTable)

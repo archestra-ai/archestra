@@ -91,7 +91,7 @@ export function MultiSelectCombobox({
   }, [open]);
 
   return (
-    <Popover open={disabled ? false : open}>
+    <Popover open={disabled || options.length === 0 ? false : open}>
       <PopoverAnchor asChild>
         <div
           ref={containerRef}

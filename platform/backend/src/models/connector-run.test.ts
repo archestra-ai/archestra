@@ -707,8 +707,7 @@ describe("ConnectorRunModel", () => {
         completedBatches: 2,
       });
 
-      const result =
-        await ConnectorRunModel.finalizeBatchesIfComplete(run.id);
+      const result = await ConnectorRunModel.finalizeBatchesIfComplete(run.id);
 
       expect(result?.status).toBe("success");
       expect(result?.completedAt).not.toBeNull();
@@ -732,8 +731,7 @@ describe("ConnectorRunModel", () => {
         itemErrors: 3,
       });
 
-      const result =
-        await ConnectorRunModel.finalizeBatchesIfComplete(run.id);
+      const result = await ConnectorRunModel.finalizeBatchesIfComplete(run.id);
 
       expect(result?.status).toBe("completed_with_errors");
       expect(result?.completedAt).not.toBeNull();
@@ -756,8 +754,7 @@ describe("ConnectorRunModel", () => {
         completedBatches: 1,
       });
 
-      const result =
-        await ConnectorRunModel.finalizeBatchesIfComplete(run.id);
+      const result = await ConnectorRunModel.finalizeBatchesIfComplete(run.id);
 
       expect(result?.status).toBe("running");
       expect(result?.completedAt).toBeNull();
@@ -786,8 +783,7 @@ describe("ConnectorRunModel", () => {
         error: "Superseded by new sync run",
       });
 
-      const result =
-        await ConnectorRunModel.finalizeBatchesIfComplete(run.id);
+      const result = await ConnectorRunModel.finalizeBatchesIfComplete(run.id);
 
       expect(result?.status).toBe("failed");
     });

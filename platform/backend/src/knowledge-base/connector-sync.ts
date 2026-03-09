@@ -254,8 +254,9 @@ class ConnectorSyncService {
 
         // Handle edge case: all batches may have completed before totalBatches was set.
         // finalizeBatchesIfComplete atomically checks and transitions if ready.
-        const finalizedRun =
-          await ConnectorRunModel.finalizeBatchesIfComplete(run.id);
+        const finalizedRun = await ConnectorRunModel.finalizeBatchesIfComplete(
+          run.id,
+        );
         if (
           finalizedRun &&
           (finalizedRun.status === "success" ||

@@ -65,7 +65,7 @@ export function CreateCatalogDialog({
   };
 
   const footer = (
-    <DialogFooter className="sticky bottom-0 bg-background pt-4 pb-2 border-t mt-6 -mx-1 px-1">
+    <DialogFooter className="sticky bottom-[-24px] bg-background pt-4 pb-6 border-t mt-6 -mx-6 px-6">
       <Button variant="outline" onClick={handleClose} type="button">
         Cancel
       </Button>

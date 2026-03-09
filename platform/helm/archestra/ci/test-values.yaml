@@ -1,0 +1,4 @@
+# Minimal values for helm-unittest
+postgresql:
+  enabled: false
+  external_database_url: "postgresql://user:pass@host:5432/db"

@@ -1022,6 +1022,28 @@ describe("parseProcessType", () => {
     expect(parseProcessType("both")).toBe("all");
     expect(parseProcessType("api")).toBe("all");
   });
+
+  test.each([
+    { input: undefined, processType: "all", webServer: true, worker: true },
+    { input: "", processType: "all", webServer: true, worker: true },
+    { input: "all", processType: "all", webServer: true, worker: true },
+    { input: "web", processType: "web", webServer: true, worker: false },
+    { input: "WEB", processType: "web", webServer: true, worker: false },
+    { input: "worker", processType: "worker", webServer: false, worker: true },
+    { input: "WORKER", processType: "worker", webServer: false, worker: true },
+    { input: "unknown", processType: "all", webServer: true, worker: true },
+  ])("input=$input → shouldRunWebServer=$webServer, shouldRunWorker=$worker", ({
+    input,
+    processType,
+    webServer,
+    worker,
+  }) => {
+    const result = parseProcessType(input);
+    expect(result).toBe(processType);
+    // These match the derivation: shouldRunWebServer = processType !== "worker", shouldRunWorker = processType !== "web"
+    expect(result !== "worker").toBe(webServer);
+    expect(result !== "web").toBe(worker);
+  });
 });
 
 describe("parseSampleRate", () => {

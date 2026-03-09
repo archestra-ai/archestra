@@ -18,6 +18,8 @@ import {
 } from "@/types/email-provider-type";
 import packageJson from "../../package.json";
 
+type ProcessType = "web" | "worker" | "all";
+
 /**
  * Load .env from platform root
  *
@@ -780,6 +782,9 @@ const config = {
   processType: parseProcessType(process.env.ARCHESTRA_PROCESS_TYPE),
 };
 
+export const shouldRunWebServer = config.processType !== "worker";
+export const shouldRunWorker = config.processType !== "web";
+
 export default config;
 
 // ===== Internal helpers =====
@@ -806,8 +811,6 @@ export function getProviderEnvApiKey(
   }
   return undefined;
 }
-
-type ProcessType = "web" | "worker" | "all";
 
 export function parseProcessType(value: string | undefined): ProcessType {
   const normalized = value?.toLowerCase();

@@ -65,6 +65,7 @@ spec:
     metadata:
       labels:
         {{- include "archestra-platform.labels" . | nindent 8 }}
+        app.kubernetes.io/component: web
       {{- with .Values.archestra.podAnnotations }}
       annotations:
         {{- toYaml . | nindent 8 }}

@@ -360,6 +360,8 @@ tests:
               value: "true"
             - name: ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_K8S_CRONJOB_NAMESPACE
               value: NAMESPACE
+            - name: ARCHESTRA_PROCESS_TYPE
+              value: "web"
 
   - it: should add custom environment variables when archestra.env is set
     documentIndex: 1

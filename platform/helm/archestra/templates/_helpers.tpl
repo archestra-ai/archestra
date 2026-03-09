@@ -40,6 +40,7 @@ helm.sh/chart: {{ include "archestra-platform.chart" . }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 {{- end }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
+app.kubernetes.io/part-of: archestra
 {{- end }}
 
 {{/*
@@ -185,6 +186,7 @@ Worker selector labels
 {{- define "archestra-platform.workerSelectorLabels" -}}
 app.kubernetes.io/name: {{ include "archestra-platform.name" . }}-worker
 app.kubernetes.io/instance: {{ .Release.Name }}
+app.kubernetes.io/component: worker
 {{- end }}
 
 {{/*
@@ -197,6 +199,7 @@ helm.sh/chart: {{ include "archestra-platform.chart" . }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 {{- end }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
+app.kubernetes.io/part-of: archestra
 {{- end }}
 
 {{/*

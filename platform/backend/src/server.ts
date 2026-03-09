@@ -43,8 +43,8 @@ import {
 } from "@/agents/incoming-email";
 import { fastifyAuthPlugin } from "@/auth";
 import { cacheManager } from "@/cache-manager";
-import config from "@/config";
-import { initializeDatabase } from "@/database";
+import config, { shouldRunWebServer, shouldRunWorker } from "@/config";
+import { initializeDatabase, isDatabaseHealthy } from "@/database";
 import { seedRequiredStartingData } from "@/database/seed";
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import logger from "@/logging";
@@ -459,7 +459,7 @@ const startMcpServerRuntime = async (
   }
 };
 
-const start = async () => {
+const startWebServer = async () => {
   const fastify = createFastifyInstance();
 
   /**
@@ -576,7 +576,7 @@ const start = async () => {
 
     // Start task queue worker for knowledge base connector syncs and embeddings
     // In "web" mode, a separate worker Deployment handles background jobs
-    if (config.processType !== "web") {
+    if (shouldRunWorker) {
       registerTaskHandlers(taskQueueService);
       await taskQueueService.seedPeriodicTasks();
       taskQueueService.startWorker();
@@ -696,7 +696,7 @@ const start = async () => {
         cacheManager.shutdown();
 
         // Stop task queue worker (waits for in-flight tasks to drain)
-        if (config.processType !== "web") {
+        if (shouldRunWorker) {
           await taskQueueService.stopWorker();
         }
 
@@ -755,7 +755,7 @@ const start = async () => {
  * Processes background jobs from the postgres queue without starting the HTTP API server.
  * Used in Helm deployments where the worker runs as a separate Deployment.
  */
-const startWorkerOnly = async () => {
+const startWorker = async () => {
   logger.info("Starting in worker-only mode (ARCHESTRA_PROCESS_TYPE=worker)");
 
   try {
@@ -770,7 +770,13 @@ const startWorkerOnly = async () => {
     // Minimal health server for Kubernetes probes
     const healthServer = Fastify();
     healthServer.get("/health", async () => ({ status: "ok" }));
-    healthServer.get("/ready", async () => ({ status: "ok" }));
+    healthServer.get("/ready", async (_request, reply) => {
+      const dbHealthy = await isDatabaseHealthy();
+      if (!dbHealthy) {
+        return reply.status(503).send({ status: "error", reason: "database" });
+      }
+      return { status: "ok" };
+    });
     await healthServer.listen({ port: port, host });
     logger.info(`Worker health server started on port ${port}`);
 
@@ -800,9 +806,10 @@ const startWorkerOnly = async () => {
  * This allows other scripts to import helper functions without starting the server
  */
 if (isMainModule) {
-  if (config.processType === "worker") {
-    startWorkerOnly();
-  } else {
-    start();
+  if (shouldRunWebServer) {
+    startWebServer();
+  }
+  if (shouldRunWorker && !shouldRunWebServer) {
+    startWorker();
   }
 }

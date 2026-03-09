@@ -99419,7 +99419,7 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "runId": {
+                    "taskId": {
                       "type": "string"
                     },
                     "status": {
@@ -99427,7 +99427,7 @@
                     }
                   },
                   "required": [
-                    "runId",
+                    "taskId",
                     "status"
                   ],
                   "additionalProperties": false
@@ -100834,6 +100834,18 @@
                             "minimum": -2147483648,
                             "maximum": 2147483647
                           },
+                          "totalBatches": {
+                            "nullable": true,
+                            "type": "integer",
+                            "minimum": -2147483648,
+                            "maximum": 2147483647
+                          },
+                          "completedBatches": {
+                            "nullable": true,
+                            "type": "integer",
+                            "minimum": -2147483648,
+                            "maximum": 2147483647
+                          },
                           "error": {
                             "nullable": true,
                             "type": "string"
@@ -100885,6 +100897,8 @@
                           "documentsProcessed",
                           "documentsIngested",
                           "totalItems",
+                          "totalBatches",
+                          "completedBatches",
                           "error",
                           "checkpoint",
                           "createdAt"
@@ -101234,6 +101248,18 @@
                       "minimum": -2147483648,
                       "maximum": 2147483647
                     },
+                    "totalBatches": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -2147483648,
+                      "maximum": 2147483647
+                    },
+                    "completedBatches": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -2147483648,
+                      "maximum": 2147483647
+                    },
                     "error": {
                       "nullable": true,
                       "type": "string"
@@ -101289,6 +101315,8 @@
                     "documentsProcessed",
                     "documentsIngested",
                     "totalItems",
+                    "totalBatches",
+                    "completedBatches",
                     "error",
                     "logs",
                     "checkpoint",

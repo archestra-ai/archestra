@@ -28327,7 +28327,7 @@ export type SyncConnectorResponses = {
      * Default Response
      */
     200: {
-        runId: string;
+        taskId: string;
         status: string;
     };
 };
@@ -28749,6 +28749,8 @@ export type GetConnectorRunsResponses = {
             documentsProcessed: number | null;
             documentsIngested: number | null;
             totalItems: number | null;
+            totalBatches: number | null;
+            completedBatches: number | null;
             error: string | null;
             checkpoint: string | number | boolean | null | {
                 [key: string]: unknown;
@@ -28850,6 +28852,8 @@ export type GetConnectorRunResponses = {
         documentsProcessed: number | null;
         documentsIngested: number | null;
         totalItems: number | null;
+        totalBatches: number | null;
+        completedBatches: number | null;
         error: string | null;
         logs: string | null;
         checkpoint: string | number | boolean | null | {

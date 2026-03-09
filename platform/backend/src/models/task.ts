@@ -38,6 +38,7 @@ class TaskModel {
         tasks.started_at AS "startedAt",
         tasks.completed_at AS "completedAt",
         tasks.last_error AS "lastError",
+        tasks.periodic,
         tasks.created_at AS "createdAt"
     `);
     return rows[0] ?? null;

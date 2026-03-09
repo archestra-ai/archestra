@@ -136,7 +136,7 @@ function ConnectorCard({
 
   return (
     <Link href={`/knowledge/connectors/${connector.id}`} className="group">
-      <Card className="cursor-pointer transition-all hover:border-foreground/30 hover:shadow-md group-hover:bg-accent/30">
+      <Card className="h-full flex flex-col cursor-pointer transition-all hover:border-foreground/30 hover:shadow-md group-hover:bg-accent/30">
         <CardHeader className="pb-3">
           <div className="flex items-start justify-between">
             <div className="flex items-center gap-2.5">
@@ -177,7 +177,7 @@ function ConnectorCard({
             </div>
           </div>
         </CardHeader>
-        <CardContent className="space-y-3">
+        <CardContent className="space-y-3 mt-auto">
           <div className="flex items-center gap-2">
             {connector.lastSyncAt ? (
               <>

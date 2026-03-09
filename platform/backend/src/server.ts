@@ -692,8 +692,8 @@ const start = async () => {
         // Stop cache manager's background cleanup
         cacheManager.shutdown();
 
-        // Stop task queue worker
-        taskQueueService.stopWorker();
+        // Stop task queue worker (waits for in-flight tasks to drain)
+        await taskQueueService.stopWorker();
 
         // Track which cleanup operations have completed
         const completedCleanups = new Set<"emailProvider" | "chatOps">();

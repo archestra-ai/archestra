@@ -1,7 +1,11 @@
 import { vi } from "vitest";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { ConnectorSyncBatch } from "@/types/knowledge-connector";
-import { ConfluenceConnector, stripHtmlTags } from "./confluence-connector";
+import {
+  ConfluenceConnector,
+  formatCqlLocalDate,
+  stripHtmlTags,
+} from "./confluence-connector";
 
 // Mock confluence.js SDK
 const mockGetSpaces = vi.fn();
@@ -231,7 +235,7 @@ describe("ConfluenceConnector", () => {
       );
     });
 
-    test("incremental sync uses checkpoint timestamp", async () => {
+    test("incremental sync with old checkpoint (no lastRawModifiedAt) applies 1-day safety buffer", async () => {
       mockSearchContentByCQL.mockResolvedValueOnce({
         results: [],
         size: 0,
@@ -246,8 +250,33 @@ describe("ConfluenceConnector", () => {
         batches.push(batch);
       }
 
+      // 2024-01-10 minus 1 day = 2024-01-09
       const callArgs = mockSearchContentByCQL.mock.calls[0][0];
-      expect(callArgs.cql).toContain('lastModified >= "2024-01-10"');
+      expect(callArgs.cql).toContain('lastModified >= "2024-01-09"');
+    });
+
+    test("incremental sync with lastRawModifiedAt uses local date extraction", async () => {
+      mockSearchContentByCQL.mockResolvedValueOnce({
+        results: [],
+        size: 0,
+      });
+
+      const batches = [];
+      for await (const batch of connector.sync({
+        config: validConfig,
+        credentials,
+        checkpoint: {
+          type: "confluence",
+          lastSyncedAt: "2024-06-20T15:30:00.000Z",
+          lastRawModifiedAt: "2024-06-20T11:30:00.774-0400",
+        },
+      })) {
+        batches.push(batch);
+      }
+
+      // Should extract local date from raw timestamp (2024-06-20), NOT convert from UTC
+      const callArgs = mockSearchContentByCQL.mock.calls[0][0];
+      expect(callArgs.cql).toContain('lastModified >= "2024-06-20"');
     });
 
     test("skips pages with labels in labelsToSkip", async () => {
@@ -348,12 +377,12 @@ describe("ConfluenceConnector", () => {
       expect(metadata.status).toBe("current");
     });
 
-    test("checkpoint uses last page version timestamp instead of current time", async () => {
+    test("checkpoint stores lastRawModifiedAt and lastPageId from last page", async () => {
       const pages = [
         makePage("123", "First Page"),
         {
           ...makePage("456", "Second Page"),
-          version: { when: "2024-06-20T15:30:00.000Z" },
+          version: { when: "2024-06-20T11:30:00.774-0400" },
         },
       ];
 
@@ -374,9 +403,13 @@ describe("ConfluenceConnector", () => {
       const checkpoint = batches[0].checkpoint as {
         lastSyncedAt?: string;
         lastPageId?: string;
+        lastRawModifiedAt?: string;
       };
-      expect(checkpoint.lastSyncedAt).toBe("2024-06-20T15:30:00.000Z");
+      // lastSyncedAt is the UTC conversion of the raw timestamp
+      expect(checkpoint.lastSyncedAt).toBe("2024-06-20T15:30:00.774Z");
       expect(checkpoint.lastPageId).toBe("456");
+      // Raw timestamp preserved for correct CQL date formatting
+      expect(checkpoint.lastRawModifiedAt).toBe("2024-06-20T11:30:00.774-0400");
     });
 
     test("checkpoint preserves previous value when batch has no pages", async () => {
@@ -518,6 +551,28 @@ describe("ConfluenceConnector", () => {
       expect(batchesWithSlash[0].documents[0].sourceUrl).toBe(
         batchesWithoutSlash[0].documents[0].sourceUrl,
       );
+    });
+  });
+
+  describe("formatCqlLocalDate", () => {
+    test("extracts local date from timestamp with negative offset", () => {
+      expect(formatCqlLocalDate("2026-03-09T11:05:52.774-0400")).toBe(
+        "2026-03-09",
+      );
+    });
+
+    test("extracts local date from timestamp with positive offset", () => {
+      expect(formatCqlLocalDate("2026-03-09T23:30:00.000+0530")).toBe(
+        "2026-03-09",
+      );
+    });
+
+    test("extracts local date from UTC timestamp (Z suffix)", () => {
+      expect(formatCqlLocalDate("2024-06-20T15:30:00.000Z")).toBe("2024-06-20");
+    });
+
+    test("falls back to UTC formatting for non-ISO strings", () => {
+      expect(formatCqlLocalDate("June 20, 2024")).toBe("2024-06-20");
     });
   });
 

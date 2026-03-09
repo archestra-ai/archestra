@@ -50,6 +50,8 @@ export const JiraCheckpointSchema = z.object({
   type: JIRA,
   lastSyncedAt: z.string().optional(),
   lastIssueKey: z.string().optional(),
+  /** Raw Jira timestamp with timezone offset (e.g. "2026-03-09T11:05:52.774-0400") for correct JQL date formatting. */
+  lastRawUpdatedAt: z.string().optional(),
 });
 export type JiraCheckpoint = z.infer<typeof JiraCheckpointSchema>;
 
@@ -71,6 +73,8 @@ export const ConfluenceCheckpointSchema = z.object({
   type: CONFLUENCE,
   lastSyncedAt: z.string().optional(),
   lastPageId: z.string().optional(),
+  /** Raw Confluence timestamp with timezone offset for correct CQL date formatting. */
+  lastRawModifiedAt: z.string().optional(),
 });
 export type ConfluenceCheckpoint = z.infer<typeof ConfluenceCheckpointSchema>;
 

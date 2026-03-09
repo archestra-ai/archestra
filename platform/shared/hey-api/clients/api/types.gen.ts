@@ -11632,6 +11632,10 @@ export type GetAgentsData = {
          */
         authorIds?: Array<string>;
         /**
+         * Exclude agents by author user IDs (comma-separated). Admin-only, only used when scope=personal.
+         */
+        excludeAuthorIds?: Array<string>;
+        /**
          * Filter by labels. Format: key1:val1,val2;key2:val3. AND across keys, OR within values.
          */
         labels?: string;

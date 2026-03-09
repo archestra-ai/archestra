@@ -89,7 +89,7 @@ export function CreateCatalogDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="max-w-5xl h-[90vh] flex flex-col">
+      <DialogContent className="max-w-5xl h-[90vh] flex flex-col overflow-x-hidden">
         <DialogHeader>
           <DialogTitle>Add MCP Server to the Private Registry</DialogTitle>
           <DialogDescription>

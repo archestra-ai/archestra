@@ -122,8 +122,7 @@ export function CreateConnectorDialog({
     const result = await createConnector.mutateAsync({
       name: values.name,
       connectorType: values.connectorType,
-      config:
-        config as archestraApiTypes.CreateConnectorData["body"]["config"],
+      config: config as archestraApiTypes.CreateConnectorData["body"]["config"],
       credentials: {
         email: values.email,
         apiToken: values.apiToken,

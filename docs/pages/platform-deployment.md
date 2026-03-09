@@ -408,7 +408,7 @@ See the Kubernetes documentation for more details:
 
 #### Background Worker Configuration
 
-The Helm chart deploys a separate worker Deployment for processing background jobs from the postgres queue (e.g., knowledge base connector syncs, batch embeddings). When enabled, the main platform pods run as web-only and the worker pods handle all background job processing.
+The Helm chart deploys a separate worker `Deployment` for processing background jobs from the postgres queue. When enabled, the main platform pods run as web-only and the worker pods handle all background job processing.
 
 **Worker Settings**:
 
@@ -420,25 +420,7 @@ The Helm chart deploys a separate worker Deployment for processing background jo
 - `archestra.worker.nodeSelector` - Node selector (inherits from `archestra.nodeSelector` if not set)
 - `archestra.worker.tolerations` - Tolerations (inherits from `archestra.tolerations` if not set)
 
-**Example configuration**:
-
-```yaml
-archestra:
-  worker:
-    enabled: true
-    replicaCount: 2
-    resources:
-      requests:
-        memory: "2Gi"
-      limits:
-        memory: "4Gi"
-    nodeSelector:
-      workload-type: background-processing
-```
-
-When the worker is disabled (`archestra.worker.enabled: false`), background jobs run in-process within the main platform pods (the default behavior for Docker/quickstart deployments).
-
-> **Note**: The task queue uses PostgreSQL with `FOR UPDATE SKIP LOCKED` for safe concurrent processing. Multiple worker replicas can safely process jobs in parallel without duplicating work.
+When the worker is disabled (`archestra.worker.enabled: false`), background jobs run in-process within the main platform pods.
 
 #### Database Configuration
 
@@ -665,14 +647,6 @@ The following environment variables can be used to configure Archestra Platform.
 - **`ARCHESTRA_LOGGING_LEVEL`** - Log level for Archestra
   - Default: `info`
   - Supported values: `trace`, `debug`, `info`, `warn`, `error`, `fatal`
-
-- **`ARCHESTRA_PROCESS_TYPE`** - Controls which components run in the process.
-  - Default: `all`
-  - Values: `all`, `web`, `worker`
-  - `all`: Runs both the web server and the background job worker in a single process (default for Docker/quickstart)
-  - `web`: Runs only the web server (API + frontend). Background job processing is handled by a separate worker Deployment.
-  - `worker`: Runs only the background job worker. Processes tasks from the postgres queue without starting the full API server.
-  - **Note:** In Helm deployments, this is automatically set by the chart. The main platform Deployment uses `web` and the worker Deployment uses `worker` when `archestra.worker.enabled` is true.
 
 ### Authentication & Security
 
@@ -997,7 +971,6 @@ These environment variables configure the [Knowledge Base](/docs/platform-knowle
 - **`ARCHESTRA_KNOWLEDGE_BASE_HYBRID_SEARCH_ENABLED`** - Enable or disable hybrid search (combines vector similarity with full-text search using Reciprocal Rank Fusion).
   - Default: `true`
   - Set to `false` to use vector similarity search only.
-
 
 ### Enterprise Licensing
 

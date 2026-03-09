@@ -141,14 +141,18 @@ export class ConfluenceConnector extends BaseConnector {
       hasMore = results.length >= batchSize && !!cursor;
 
       const lastPage = results[results.length - 1];
+      const rawModifiedAt: string | undefined = lastPage?.version?.when;
 
       yield {
         documents,
         checkpoint: buildCheckpoint({
           type: "confluence",
-          itemUpdatedAt: lastPage?.version?.when,
+          itemUpdatedAt: rawModifiedAt,
           previousLastSyncedAt: checkpoint.lastSyncedAt,
-          extra: { lastPageId: lastPage?.id ?? checkpoint.lastPageId },
+          extra: {
+            lastPageId: lastPage?.id ?? checkpoint.lastPageId,
+            lastRawModifiedAt: rawModifiedAt ?? checkpoint.lastRawModifiedAt,
+          },
         }),
         hasMore,
       };
@@ -206,13 +210,46 @@ function buildCql(
     clauses.push(`(${config.cqlQuery})`);
   }
 
-  const syncFrom = checkpoint.lastSyncedAt ?? startTime?.toISOString();
-  if (syncFrom) {
-    const cqlDate = formatCqlDate(syncFrom);
+  // Prefer the raw Confluence timestamp (includes timezone offset) so the CQL date
+  // is formatted in the user's local timezone.  Fall back to UTC lastSyncedAt for
+  // backward compatibility with old checkpoints — subtract 1 day as safety buffer
+  // to account for unknown timezone offsets (CQL uses day-level precision).
+  const rawTimestamp = checkpoint.lastRawModifiedAt;
+  if (rawTimestamp) {
+    const cqlDate = formatCqlLocalDate(rawTimestamp);
     clauses.push(`lastModified >= "${cqlDate}"`);
+  } else {
+    const syncFrom = checkpoint.lastSyncedAt ?? startTime?.toISOString();
+    if (syncFrom) {
+      const cqlDate = formatCqlDateWithSafetyBuffer(syncFrom);
+      clauses.push(`lastModified >= "${cqlDate}"`);
+    }
   }
 
   return `${clauses.join(" AND ")} ORDER BY lastModified ASC`;
+}
+
+/**
+ * Extract the LOCAL date from an ISO 8601 timestamp with timezone offset.
+ * CQL interprets date literals in the authenticating user's timezone.
+ */
+export function formatCqlLocalDate(rawTimestamp: string): string {
+  const match = rawTimestamp.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (match) {
+    return `${match[1]}-${match[2]}-${match[3]}`;
+  }
+  return formatCqlDate(rawTimestamp);
+}
+
+/**
+ * Format a UTC ISO timestamp for CQL, subtracting 1 day to account for
+ * timezone offsets. CQL uses day precision so 1 day buffer is sufficient.
+ * Used only for old checkpoints that lack `lastRawModifiedAt`.
+ */
+function formatCqlDateWithSafetyBuffer(isoDate: string): string {
+  const d = new Date(isoDate);
+  d.setUTCDate(d.getUTCDate() - 1);
+  return formatCqlDate(d.toISOString());
 }
 
 function formatCqlDate(isoDate: string): string {

@@ -250,6 +250,7 @@ export function ActiveFilterBadges() {
 
   const teamIdsParam = searchParams.get("teamIds");
   const authorIdsParam = searchParams.get("authorIds");
+  const excludeAuthorIdsParam = searchParams.get("excludeAuthorIds");
   const labelsParam = searchParams.get("labels");
   const scopeParam = searchParams.get("scope");
   const { data: session } = useSession();
@@ -257,13 +258,17 @@ export function ActiveFilterBadges() {
   const { data: teams } = useTeams();
   const { data: isAdmin } = useHasPermissions({ member: ["read"] });
 
-  // Determine if this is "others' personal" (not just current user's own filter)
+  // Determine if this is "others' personal" — mirrors uiScope derivation in AgentScopeFilter
   const isOthersPersonal = useMemo(() => {
     if (scopeParam !== "personal") return false;
-    if (!authorIdsParam || !currentUserId) return true;
-    const ids = authorIdsParam.split(",");
-    return !(ids.length === 1 && ids[0] === currentUserId);
-  }, [scopeParam, authorIdsParam, currentUserId]);
+    if (excludeAuthorIdsParam) return true;
+    if (!authorIdsParam) return false;
+    if (currentUserId) {
+      const ids = authorIdsParam.split(",");
+      if (ids.length === 1 && ids[0] === currentUserId) return false;
+    }
+    return true;
+  }, [scopeParam, authorIdsParam, excludeAuthorIdsParam, currentUserId]);
 
   const { data: members } = useOrganizationMembers(
     !!isAdmin && isOthersPersonal,

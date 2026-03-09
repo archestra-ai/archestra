@@ -7,7 +7,11 @@ import type {
   GithubConfig,
 } from "@/types/knowledge-connector";
 import { GithubConfigSchema } from "@/types/knowledge-connector";
-import { BaseConnector, buildCheckpoint } from "../base-connector";
+import {
+  BaseConnector,
+  buildCheckpoint,
+  REQUEST_TIMEOUT_MS,
+} from "../base-connector";
 
 const BATCH_SIZE = 50;
 
@@ -227,9 +231,17 @@ function createOctokit(
   config: GithubConfig,
   credentials: ConnectorCredentials,
 ): Octokit {
+  const nativeFetch = globalThis.fetch;
   return new Octokit({
     auth: credentials.apiToken,
     baseUrl: config.githubUrl.replace(/\/+$/, ""),
+    request: {
+      fetch: (url: string | URL | Request, init?: RequestInit) =>
+        nativeFetch(url, {
+          ...init,
+          signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+        }),
+    },
   });
 }
 

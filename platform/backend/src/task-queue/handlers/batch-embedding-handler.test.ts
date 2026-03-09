@@ -83,6 +83,22 @@ describe("handleBatchEmbedding", () => {
     );
   });
 
+  test("does not update connector status when run was superseded", async () => {
+    mockCompleteBatch.mockResolvedValue({
+      connectorId: "conn-1",
+      completedBatches: 3,
+      totalBatches: 3,
+      status: "failed",
+    });
+
+    await handleBatchEmbedding({
+      documentIds: ["doc-1"],
+      connectorRunId: "run-1",
+    });
+
+    expect(mockUpdateConnector).not.toHaveBeenCalled();
+  });
+
   test("propagates embedding errors", async () => {
     mockProcessDocuments.mockRejectedValue(new Error("Embedding failed"));
 

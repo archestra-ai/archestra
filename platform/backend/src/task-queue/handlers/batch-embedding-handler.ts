@@ -19,11 +19,14 @@ export async function handleBatchEmbedding(
   const updatedRun = await ConnectorRunModel.completeBatch(connectorRunId);
 
   // If all batches are done, update the connector's sync status
+  // Skip if run was superseded/failed — a newer run owns the connector status
   if (
     updatedRun &&
     updatedRun.completedBatches !== null &&
     updatedRun.totalBatches !== null &&
-    updatedRun.completedBatches >= updatedRun.totalBatches
+    updatedRun.completedBatches >= updatedRun.totalBatches &&
+    (updatedRun.status === "success" ||
+      updatedRun.status === "completed_with_errors")
   ) {
     const now = new Date();
     await KnowledgeBaseConnectorModel.update(updatedRun.connectorId, {

@@ -505,4 +505,165 @@ describe("ConnectorRunModel", () => {
       expect(result.get(kb.id)).toBe(40);
     });
   });
+
+  describe("interruptActiveRuns", () => {
+    test("marks running runs as failed with superseded message", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+      makeConnectorRun,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+      const run = await makeConnectorRun(connector.id, { status: "running" });
+
+      const count =
+        await ConnectorRunModel.interruptActiveRuns(connector.id);
+
+      expect(count).toBe(1);
+      const updated = await ConnectorRunModel.findById(run.id);
+      expect(updated?.status).toBe("failed");
+      expect(updated?.error).toBe("Superseded by new sync run");
+      expect(updated?.completedAt).not.toBeNull();
+    });
+
+    test("interrupts multiple running runs", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+      makeConnectorRun,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+      await makeConnectorRun(connector.id, { status: "running" });
+      await makeConnectorRun(connector.id, { status: "running" });
+
+      const count =
+        await ConnectorRunModel.interruptActiveRuns(connector.id);
+
+      expect(count).toBe(2);
+    });
+
+    test("does not affect non-running runs", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+      makeConnectorRun,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+      const successRun = await makeConnectorRun(connector.id, {
+        status: "success",
+      });
+      const failedRun = await makeConnectorRun(connector.id, {
+        status: "failed",
+      });
+
+      const count =
+        await ConnectorRunModel.interruptActiveRuns(connector.id);
+
+      expect(count).toBe(0);
+      const s = await ConnectorRunModel.findById(successRun.id);
+      expect(s?.status).toBe("success");
+      const f = await ConnectorRunModel.findById(failedRun.id);
+      expect(f?.status).toBe("failed");
+    });
+
+    test("does not affect runs from other connectors", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+      makeConnectorRun,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const connector1 = await makeKnowledgeBaseConnector(kb.id, org.id);
+      const connector2 = await makeKnowledgeBaseConnector(kb.id, org.id);
+      const otherRun = await makeConnectorRun(connector2.id, {
+        status: "running",
+      });
+
+      await ConnectorRunModel.interruptActiveRuns(connector1.id);
+
+      const other = await ConnectorRunModel.findById(otherRun.id);
+      expect(other?.status).toBe("running");
+    });
+
+    test("returns 0 when no running runs exist", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+
+      const count =
+        await ConnectorRunModel.interruptActiveRuns(connector.id);
+
+      expect(count).toBe(0);
+    });
+  });
+
+  describe("completeBatch", () => {
+    test("does not overwrite status of a failed/superseded run", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+
+      // Create a run that looks like it was superseded (failed, with batches remaining)
+      const run = await ConnectorRunModel.create({
+        connectorId: connector.id,
+        status: "running",
+        startedAt: new Date(),
+        totalBatches: 1,
+        completedBatches: 0,
+      });
+
+      // Simulate interruption
+      await ConnectorRunModel.update(run.id, {
+        status: "failed",
+        error: "Superseded by new sync run",
+      });
+
+      // Now a late batch_embedding task completes
+      const result = await ConnectorRunModel.completeBatch(run.id);
+
+      expect(result).not.toBeNull();
+      // Status should remain "failed", not get overwritten to "success"
+      expect(result?.status).toBe("failed");
+      expect(result?.completedBatches).toBe(1);
+    });
+
+    test("transitions running run to success when last batch completes", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+
+      const run = await ConnectorRunModel.create({
+        connectorId: connector.id,
+        status: "running",
+        startedAt: new Date(),
+        totalBatches: 1,
+        completedBatches: 0,
+      });
+
+      const result = await ConnectorRunModel.completeBatch(run.id);
+
+      expect(result?.status).toBe("success");
+      expect(result?.completedBatches).toBe(1);
+      expect(result?.completedAt).not.toBeNull();
+    });
+  });
 });

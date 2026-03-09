@@ -37,7 +37,7 @@ const MAX_RETRIES = 3;
 const RETRY_BASE_DELAY_MS = 1000;
 const RETRY_MAX_DELAY_MS = 10000;
 const DEFAULT_RATE_LIMIT_DELAY_MS = 100;
-const REQUEST_TIMEOUT_MS = 30000;
+export const REQUEST_TIMEOUT_MS = 30000;
 
 export abstract class BaseConnector implements Connector {
   abstract type: ConnectorType;

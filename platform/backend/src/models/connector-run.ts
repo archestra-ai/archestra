@@ -118,6 +118,7 @@ class ConnectorRunModel {
       .set({
         completedBatches: sql`${t.completedBatches} + 1`,
         status: sql`CASE
+          WHEN ${t.status} != 'running' THEN ${t.status}
           WHEN ${t.completedBatches} + 1 >= ${t.totalBatches} AND ${t.itemErrors} > 0 THEN 'completed_with_errors'
           WHEN ${t.completedBatches} + 1 >= ${t.totalBatches} THEN 'success'
           ELSE ${t.status}
@@ -127,6 +128,20 @@ class ConnectorRunModel {
       .where(eq(t.id, runId))
       .returning();
     return result ?? null;
+  }
+
+  static async interruptActiveRuns(connectorId: string): Promise<number> {
+    const t = schema.connectorRunsTable;
+    const results = await db
+      .update(t)
+      .set({
+        status: "failed",
+        error: "Superseded by new sync run",
+        completedAt: sql`NOW()`,
+      })
+      .where(and(eq(t.connectorId, connectorId), eq(t.status, "running")))
+      .returning({ id: t.id });
+    return results.length;
   }
 
   static async hasActiveRun(connectorId: string): Promise<boolean> {

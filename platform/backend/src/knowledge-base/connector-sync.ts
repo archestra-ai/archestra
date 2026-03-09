@@ -55,6 +55,16 @@ class ConnectorSyncService {
     // Get the connector implementation
     const connectorImpl = getConnector(connector.connectorType);
 
+    // Interrupt any stale "running" runs left by previous attempts
+    const interrupted =
+      await ConnectorRunModel.interruptActiveRuns(connectorId);
+    if (interrupted > 0) {
+      log.info(
+        { connectorId, interrupted },
+        "[ConnectorSync] Interrupted stale running runs",
+      );
+    }
+
     // Create a connector run record
     const run = await ConnectorRunModel.create({
       connectorId,

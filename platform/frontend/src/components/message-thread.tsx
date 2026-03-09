@@ -160,13 +160,22 @@ const MessageThread = ({
                             />
                           );
                         }
-                        const isLastTextPart =
+                        const isLastAssistantMessage =
                           message.role === "assistant" &&
+                          idx ===
+                            messages.length -
+                              1 -
+                              [...messages]
+                                .reverse()
+                                .findIndex((m) => m.role === "assistant");
+                        const isLastTextPartInMessage =
+                          isLastAssistantMessage &&
                           message.parts
                             .slice(i + 1)
                             .every((p) => p.type !== "text");
                         const showCitations =
-                          isLastTextPart && hasKnowledgeBaseToolCall(allParts);
+                          isLastTextPartInMessage &&
+                          hasKnowledgeBaseToolCall(allParts);
 
                         return (
                           <Fragment key={`${message.id}-${i}`}>

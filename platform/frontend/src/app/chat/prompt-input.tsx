@@ -19,7 +19,6 @@ import {
   PromptInputBody,
   PromptInputButton,
   PromptInputFooter,
-  PromptInputHeader,
   type PromptInputMessage,
   PromptInputProvider,
   PromptInputSpeechButton,
@@ -214,14 +213,6 @@ const PromptInputContent = ({
       onSubmit={handleWrappedSubmit}
       accept={acceptedFileTypes}
     >
-      {agentId && hasKnowledgeSources && (
-        <PromptInputHeader>
-          <KnowledgeBaseIndicator
-            knowledgeBaseIds={knowledgeBaseIds}
-            connectorIds={connectorIds}
-          />
-        </PromptInputHeader>
-      )}
       {/* File attachments display - shown inline above textarea */}
       <PromptInputAttachments className="px-3 pt-2 pb-0">
         {(attachment) => <PromptInputAttachment data={attachment} />}
@@ -301,6 +292,12 @@ const PromptInputContent = ({
                 )}
               </TooltipContent>
             </Tooltip>
+          )}
+          {agentId && hasKnowledgeSources && (
+            <KnowledgeBaseIndicator
+              knowledgeBaseIds={knowledgeBaseIds}
+              connectorIds={connectorIds}
+            />
           )}
           {selectorAgentId !== undefined && onAgentChange && (
             <InitialAgentSelector

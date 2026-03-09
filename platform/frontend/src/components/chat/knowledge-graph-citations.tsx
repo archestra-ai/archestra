@@ -68,6 +68,19 @@ export function extractCitations(
         typeof part.output === "string" ? JSON.parse(part.output) : part.output;
       if (Array.isArray(parsed?.results)) {
         results = parsed.results;
+      } else if (typeof parsed?.tool_result === "string") {
+        // MCP Gateway wraps results as: "name: <tool>\ncontent: \"<json>\""
+        const contentMatch = parsed.tool_result.match(
+          /content: "((?:[^"\\]|\\.)*)"/,
+        );
+        if (contentMatch) {
+          const inner = JSON.parse(
+            contentMatch[1].replace(/\\"/g, '"').replace(/\\\\/g, "\\"),
+          );
+          if (Array.isArray(inner?.results)) {
+            results = inner.results;
+          }
+        }
       }
     } catch {
       continue;

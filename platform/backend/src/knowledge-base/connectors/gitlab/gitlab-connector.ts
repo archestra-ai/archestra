@@ -186,7 +186,8 @@ export class GitlabConnector extends BaseConnector {
       pageHasMore = issues.length >= BATCH_SIZE;
       page++;
 
-      const lastIssue = filtered.length > 0 ? filtered[filtered.length - 1] : null;
+      const lastIssue =
+        filtered.length > 0 ? filtered[filtered.length - 1] : null;
       yield {
         documents,
         checkpoint: buildCheckpoint({

@@ -518,9 +518,7 @@ describe("GitlabConnector", () => {
       ];
 
       mockIssuesAll.mockResolvedValueOnce(issues);
-      mockIssueNotesAll
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([]);
+      mockIssueNotesAll.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
       mockMergeRequestsAll.mockResolvedValueOnce([]);
 
       const batches: ConnectorSyncBatch[] = [];

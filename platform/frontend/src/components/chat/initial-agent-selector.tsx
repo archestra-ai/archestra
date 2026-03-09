@@ -35,6 +35,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { OverlappedIcons } from "@/components/ui/overlapped-icons";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Tooltip,
@@ -1427,64 +1428,36 @@ function ToolServerAvatarGroup({
     );
   }
 
-  // Build a unified list of avatar items
-  const allItems: Array<
-    | { type: "catalog"; item: CatalogItem }
-    | { type: "subagent"; item: SubagentItem }
-  > = [
-    ...subagents.map((a) => ({ type: "subagent" as const, item: a })),
-    ...catalogs.map((c) => ({ type: "catalog" as const, item: c })),
+  const icons = [
+    ...subagents.map((a) => ({
+      key: a.id,
+      icon: <AgentIcon icon={a.icon as string | null} size={12} />,
+      tooltip: a.name,
+    })),
+    ...catalogs.map((c) => ({
+      key: c.id,
+      icon: <McpCatalogIcon icon={c.icon} catalogId={c.id} size={12} />,
+      tooltip: c.name,
+    })),
   ];
 
-  const visible = allItems.slice(0, MAX_VISIBLE_AVATARS);
-  const remaining = totalCount - MAX_VISIBLE_AVATARS;
-
-  const hiddenItems = allItems.slice(MAX_VISIBLE_AVATARS);
-  const hiddenText =
+  // Build custom overflow tooltip (showing up to 5 names)
+  const hiddenItems = icons.slice(MAX_VISIBLE_AVATARS);
+  const overflowTooltip =
     hiddenItems.length <= 5
-      ? hiddenItems.map((i) => i.item.name).join(", ")
+      ? hiddenItems.map((i) => i.tooltip).join(", ")
       : `${hiddenItems
           .slice(0, 5)
-          .map((i) => i.item.name)
+          .map((i) => i.tooltip)
           .join(", ")} and ${hiddenItems.length - 5} more`;
 
   return (
-    <div className="flex -space-x-1.5 items-center ml-1">
-      {visible.map((entry) =>
-        entry.type === "catalog" ? (
-          <Tooltip key={entry.item.id}>
-            <TooltipTrigger asChild>
-              <div className="flex size-5 shrink-0 items-center justify-center rounded-full bg-muted ring-1 ring-background overflow-hidden">
-                <McpCatalogIcon
-                  icon={entry.item.icon}
-                  catalogId={entry.item.id}
-                  size={12}
-                />
-              </div>
-            </TooltipTrigger>
-            <TooltipContent side="top">{entry.item.name}</TooltipContent>
-          </Tooltip>
-        ) : (
-          <Tooltip key={entry.item.id}>
-            <TooltipTrigger asChild>
-              <div className="flex size-5 shrink-0 items-center justify-center rounded-full bg-muted ring-1 ring-background overflow-hidden">
-                <AgentIcon icon={entry.item.icon as string | null} size={12} />
-              </div>
-            </TooltipTrigger>
-            <TooltipContent side="top">{entry.item.name}</TooltipContent>
-          </Tooltip>
-        ),
-      )}
-      {remaining > 0 && (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <div className="flex size-5 shrink-0 items-center justify-center rounded-full bg-muted ring-1 ring-background text-[9px] font-medium text-muted-foreground">
-              +{remaining}
-            </div>
-          </TooltipTrigger>
-          <TooltipContent side="top">{hiddenText}</TooltipContent>
-        </Tooltip>
-      )}
+    <div className="flex items-center ml-1">
+      <OverlappedIcons
+        icons={icons}
+        maxVisible={MAX_VISIBLE_AVATARS}
+        overflowTooltip={overflowTooltip}
+      />
       {showAddButton && !hasNonBuiltInTools && (
         <Tooltip>
           <TooltipTrigger asChild>

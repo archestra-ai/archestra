@@ -220,6 +220,32 @@ describe("extractCitations", () => {
     expect(citations[0].documentId).toBe("doc-legacy");
   });
 
+  it("extracts citations from MCP Gateway wrapped tool_result format", () => {
+    const innerJson = JSON.stringify({
+      results: [
+        {
+          content: "some content",
+          citation: {
+            title: "Wrapped Doc",
+            sourceUrl: "https://example.com/wrapped",
+            connectorType: "jira",
+            documentId: "doc-wrapped",
+          },
+        },
+      ],
+    });
+    const toolResult = `name: archestra__query_knowledge_base\ncontent: "${innerJson.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+    const output = { tool_result: toolResult };
+    const citations = extractCitations([makeKbPart(output)]);
+    expect(citations).toHaveLength(1);
+    expect(citations[0]).toEqual({
+      title: "Wrapped Doc",
+      sourceUrl: "https://example.com/wrapped",
+      connectorType: "jira",
+      documentId: "doc-wrapped",
+    });
+  });
+
   it("extracts citations across multiple KB tool parts", () => {
     const part1 = makeKbPart({
       results: [

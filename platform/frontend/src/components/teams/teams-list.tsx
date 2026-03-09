@@ -398,7 +398,7 @@ export function TeamsList() {
       </Dialog>
 
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <DialogContent className="max-w-3xl">
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Delete Team</DialogTitle>
             <DialogDescription>

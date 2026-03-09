@@ -1422,6 +1422,29 @@ describe("executeArchestraTool", () => {
       expect((result.content[0] as any).text).toContain(llmProxy.id);
       expect((result.content[0] as any).text).toContain(llmProxy.name);
     });
+
+    test("should fall back to name search when get_agent receives a missing UUID id and a valid name", async ({
+      makeAgent,
+    }) => {
+      const agent = await makeAgent({
+        name: "Fallback Search Agent",
+        agentType: "agent",
+        scope: "personal",
+      });
+
+      const result = await executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}get_agent`,
+        { id: crypto.randomUUID(), name: agent.name },
+        {
+          ...mockContext,
+          userId: agent.authorId ?? mockContext.userId,
+        },
+      );
+
+      expect(result.isError).toBe(false);
+      expect((result.content[0] as any).text).toContain(agent.id);
+      expect((result.content[0] as any).text).toContain(agent.name);
+    });
   });
 });
 

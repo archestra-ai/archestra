@@ -1719,7 +1719,9 @@ export async function executeArchestraTool(
 
       if (id && isUuid(id)) {
         record = await AgentModel.findById(id);
-      } else if (id || name) {
+      }
+
+      if (!record && (name || (id && !isUuid(id)))) {
         const searchName = (name ?? id) as string;
 
         // Search by name, only matching personal agents owned by the current user

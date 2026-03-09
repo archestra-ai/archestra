@@ -157,16 +157,31 @@ export class GithubConnector extends BaseConnector {
     while (pageHasMore) {
       await this.rateLimit();
 
-      const response = await octokit.rest.issues.listForRepo({
-        owner: repo.owner,
-        repo: repo.name,
-        state: "all",
-        per_page: BATCH_SIZE,
-        page,
-        sort: "updated",
-        direction: "asc",
-        ...(checkpoint.lastSyncedAt ? { since: checkpoint.lastSyncedAt } : {}),
-      });
+      let response;
+      try {
+        response = await octokit.rest.issues.listForRepo({
+          owner: repo.owner,
+          repo: repo.name,
+          state: "all",
+          per_page: BATCH_SIZE,
+          page,
+          sort: "updated",
+          direction: "asc",
+          ...(checkpoint.lastSyncedAt
+            ? { since: checkpoint.lastSyncedAt }
+            : {}),
+        });
+      } catch (err) {
+        if (
+          err instanceof Error &&
+          "status" in err &&
+          (err as any).status === 404
+        ) {
+          // Repo has issues disabled or doesn't exist — skip it
+          break;
+        }
+        throw err;
+      }
 
       const items = response.data.filter((item) => {
         const isPr = !!item.pull_request;

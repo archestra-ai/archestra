@@ -12,7 +12,7 @@ import type {
   JiraConfig,
 } from "@/types/knowledge-connector";
 import { JiraConfigSchema } from "@/types/knowledge-connector";
-import { BaseConnector } from "../base-connector";
+import { BaseConnector, buildCheckpoint } from "../base-connector";
 
 const BATCH_SIZE = 50;
 const SEARCH_FIELDS = [
@@ -262,17 +262,15 @@ function buildBatch(
   hasMore: boolean,
 ): ConnectorSyncBatch {
   const lastIssue = issues.length > 0 ? issues[issues.length - 1] : null;
-  const newCheckpoint: JiraCheckpoint = {
-    type: "jira",
-    lastSyncedAt: lastIssue?.fields?.updated
-      ? new Date(lastIssue.fields.updated).toISOString()
-      : checkpoint.lastSyncedAt,
-    lastIssueKey: lastIssue?.key ?? checkpoint.lastIssueKey,
-  };
 
   return {
     documents,
-    checkpoint: newCheckpoint,
+    checkpoint: buildCheckpoint({
+      type: "jira",
+      itemUpdatedAt: lastIssue?.fields?.updated,
+      previousLastSyncedAt: checkpoint.lastSyncedAt,
+      extra: { lastIssueKey: lastIssue?.key ?? checkpoint.lastIssueKey },
+    }),
     hasMore,
   };
 }

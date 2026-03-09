@@ -639,9 +639,12 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async ({ params: { id }, organizationId }, reply) => {
       await findConnectorOrThrow(id, organizationId);
 
-      const { runId, status } = await connectorSyncService.startSync(id);
-
-      return reply.send({ runId, status });
+      const { logger: capturingLogger, getLogOutput } = createCapturingLogger();
+      const result = await connectorSyncService.executeSync(id, {
+        logger: capturingLogger,
+        getLogOutput,
+      });
+      return reply.send(result);
     },
   );
 

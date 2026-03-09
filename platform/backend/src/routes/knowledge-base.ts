@@ -555,8 +555,10 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async ({ params: { id }, organizationId }, reply) => {
       await findConnectorOrThrow(id, organizationId);
 
-      const hasPendingOrProcessing =
-        await TaskModel.hasPendingOrProcessing("connector_sync", id);
+      const hasPendingOrProcessing = await TaskModel.hasPendingOrProcessing(
+        "connector_sync",
+        id,
+      );
       if (hasPendingOrProcessing) {
         throw new ApiError(
           409,

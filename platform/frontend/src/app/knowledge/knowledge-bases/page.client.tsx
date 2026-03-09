@@ -164,9 +164,7 @@ function KnowledgeBaseCard({
   const VisibilityIcon = isAutoSync ? RefreshCw : isOrgWide ? Globe : Users;
   const totalConnectors = kb.connectors.length;
   const teamNames = isTeamScoped
-    ? (teams ?? [])
-        .filter((t) => kb.teamIds.includes(t.id))
-        .map((t) => t.name)
+    ? (teams ?? []).filter((t) => kb.teamIds.includes(t.id)).map((t) => t.name)
     : [];
 
   return (

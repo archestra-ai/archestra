@@ -47,13 +47,14 @@ import config from "@/config";
 import { initializeDatabase, isDatabaseHealthy } from "@/database";
 import { seedRequiredStartingData } from "@/database/seed";
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
-import { reconcileConnectorCronJobs } from "@/knowledge-base";
 import logger from "@/logging";
 import { enterpriseLicenseMiddleware } from "@/middleware";
 import AgentLabelModel from "@/models/agent-label";
 import OrganizationModel from "@/models/organization";
 import { metrics } from "@/observability";
 import { systemKeyManager } from "@/services/system-key-manager";
+import { taskQueueService } from "@/task-queue";
+import { registerTaskHandlers } from "@/task-queue/handlers";
 import {
   Anthropic,
   ApiError,
@@ -647,14 +648,9 @@ const start = async () => {
     // Seeds DB from env vars on first run, then loads config from DB.
     await chatOpsManager.initialize();
 
-    // Reconcile CronJobs for knowledge base connectors
-    // Ensures CronJobs exist for all enabled connectors (e.g., if a CronJob was deleted)
-    reconcileConnectorCronJobs().catch((error) => {
-      logger.error(
-        { error: error instanceof Error ? error.message : String(error) },
-        "Failed to reconcile connector CronJobs on startup",
-      );
-    });
+    // Start task queue worker for knowledge base connector syncs and embeddings
+    registerTaskHandlers(taskQueueService);
+    taskQueueService.startWorker();
 
     // Background job to renew email subscriptions before they expire
     const emailRenewalIntervalId = setInterval(() => {
@@ -770,6 +766,9 @@ const start = async () => {
 
         // Stop cache manager's background cleanup
         cacheManager.shutdown();
+
+        // Stop task queue worker
+        taskQueueService.stopWorker();
 
         // Track which cleanup operations have completed
         const completedCleanups = new Set<"emailProvider" | "chatOps">();

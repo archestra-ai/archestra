@@ -39,6 +39,7 @@ export * from "./secret";
 export * from "./secrets-manager";
 export * from "./session";
 export * from "./statistics";
+export * from "./task";
 export * from "./team";
 export * from "./team-token";
 export * from "./tool";

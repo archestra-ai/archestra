@@ -1,9 +1,6 @@
 import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { createCapturingLogger } from "@/entrypoints/_shared/log-capture";
-import { cronJobManager } from "@/k8s/cron-job";
-import { connectorSyncService } from "@/knowledge-base";
 import { getConnector } from "@/knowledge-base/connectors/registry";
 import logger from "@/logging";
 import {
@@ -15,6 +12,7 @@ import {
   KnowledgeBaseModel,
 } from "@/models";
 import { secretManager } from "@/secrets-manager";
+import { taskQueueService } from "@/task-queue";
 import {
   ApiError,
   constructResponseSchema,
@@ -239,23 +237,6 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async ({ params: { id }, organizationId }, reply) => {
       await findKnowledgeBaseOrThrow(id, organizationId);
 
-      // Delete CronJobs for all connectors assigned to this KB
-      const connectors =
-        await KnowledgeBaseConnectorModel.findByKnowledgeBaseId(id);
-      for (const connector of connectors) {
-        try {
-          await cronJobManager.deleteCronJob(connector.id);
-        } catch (error) {
-          logger.warn(
-            {
-              connectorId: connector.id,
-              error: error instanceof Error ? error.message : String(error),
-            },
-            "[KnowledgeBase] Failed to delete CronJob during KG deletion",
-          );
-        }
-      }
-
       const success = await KnowledgeBaseModel.delete(id);
       if (!success) {
         throw new ApiError(404, "Knowledge graph not found");
@@ -466,22 +447,6 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
-      // Create CronJob if K8s is configured
-      try {
-        await cronJobManager.createOrUpdateCronJob({
-          connectorId: connector.id,
-          schedule: connector.schedule,
-        });
-      } catch (error) {
-        logger.warn(
-          {
-            connectorId: connector.id,
-            error: error instanceof Error ? error.message : String(error),
-          },
-          "[Connector] Failed to create CronJob (K8s may not be configured)",
-        );
-      }
-
       return reply.send(connector);
     },
   );
@@ -521,48 +486,11 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id }, body, organizationId }, reply) => {
-      const existing = await findConnectorOrThrow(id, organizationId);
+      await findConnectorOrThrow(id, organizationId);
 
       const updated = await KnowledgeBaseConnectorModel.update(id, body);
       if (!updated) {
         throw new ApiError(404, "Connector not found");
-      }
-
-      // Update CronJob if schedule changed
-      if (body.schedule && body.schedule !== existing.schedule) {
-        try {
-          await cronJobManager.createOrUpdateCronJob({
-            connectorId: id,
-            schedule: body.schedule,
-          });
-        } catch (error) {
-          logger.warn(
-            {
-              connectorId: id,
-              error: error instanceof Error ? error.message : String(error),
-            },
-            "[Connector] Failed to update CronJob",
-          );
-        }
-      }
-
-      // Suspend/resume CronJob if enabled changed
-      if (body.enabled !== undefined && body.enabled !== existing.enabled) {
-        try {
-          if (body.enabled) {
-            await cronJobManager.resumeCronJob(id);
-          } else {
-            await cronJobManager.suspendCronJob(id);
-          }
-        } catch (error) {
-          logger.warn(
-            {
-              connectorId: id,
-              error: error instanceof Error ? error.message : String(error),
-            },
-            "[Connector] Failed to suspend/resume CronJob",
-          );
-        }
       }
 
       return reply.send(updated);
@@ -582,19 +510,6 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async ({ params: { id }, organizationId }, reply) => {
       const connector = await findConnectorOrThrow(id, organizationId);
-
-      // Delete the CronJob
-      try {
-        await cronJobManager.deleteCronJob(id);
-      } catch (error) {
-        logger.warn(
-          {
-            connectorId: id,
-            error: error instanceof Error ? error.message : String(error),
-          },
-          "[Connector] Failed to delete CronJob",
-        );
-      }
 
       // Delete the secret
       if (connector.secretId) {
@@ -630,7 +545,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({ id: z.string() }),
         response: constructResponseSchema(
           z.object({
-            runId: z.string(),
+            taskId: z.string(),
             status: z.string(),
           }),
         ),
@@ -639,12 +554,11 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async ({ params: { id }, organizationId }, reply) => {
       await findConnectorOrThrow(id, organizationId);
 
-      const { logger: capturingLogger, getLogOutput } = createCapturingLogger();
-      const result = await connectorSyncService.executeSync(id, {
-        logger: capturingLogger,
-        getLogOutput,
+      const taskId = await taskQueueService.enqueue({
+        taskType: "connector_sync",
+        payload: { connectorId: id },
       });
-      return reply.send(result);
+      return reply.send({ taskId, status: "enqueued" });
     },
   );
 

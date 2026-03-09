@@ -426,24 +426,6 @@ const parsePositiveInt = (
   return !Number.isNaN(parsed) && parsed > 0 ? parsed : defaultValue;
 };
 
-/**
- * Resolve the connector CronJob image.
- *
- * When running inside a K8s cluster, auto-detect to `archestra/platform:<version>`.
- * Otherwise (local dev with a kubeconfig file) return empty string so
- * connector syncs run in-process via InProcessScheduler.
- */
-export const getConnectorImage = (): string => {
-  const runningInsideCluster =
-    process.env.ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER ===
-    "true";
-
-  if (runningInsideCluster) {
-    return `archestra/platform:${packageJsonVersion}`;
-  }
-  return "";
-};
-
 export const parseSampleRate = (
   envValue: string | undefined,
   defaultRate: number,
@@ -453,9 +435,6 @@ export const parseSampleRate = (
   if (Number.isNaN(parsed) || parsed < 0 || parsed > 1) return defaultRate;
   return parsed;
 };
-
-export const CONNECTOR_CONTINUATION_COUNT_ENV_VAR =
-  "ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_CONTINUATION_COUNT";
 
 const config = {
   frontendBaseUrl,
@@ -770,12 +749,13 @@ const config = {
     connectorSyncMaxDurationSeconds: parseConnectorSyncMaxDuration(
       process.env.ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_SYNC_MAX_DURATION_SECONDS,
     ),
-    connectorNamespace:
-      process.env.ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_K8S_CRONJOB_NAMESPACE ||
-      "default",
-    connectorImage: getConnectorImage(),
-    connectorContinuationCount: Number.parseInt(
-      process.env[CONNECTOR_CONTINUATION_COUNT_ENV_VAR] || "0",
+    taskWorkerPollIntervalSeconds: Number.parseInt(
+      process.env.ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_POLL_INTERVAL_SECONDS ||
+        "5",
+      10,
+    ),
+    taskWorkerMaxConcurrent: Number.parseInt(
+      process.env.ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_MAX_CONCURRENT || "2",
       10,
     ),
   },

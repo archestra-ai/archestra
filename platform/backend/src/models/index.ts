@@ -46,6 +46,7 @@ export { default as ProcessedEmailModel } from "./processed-email";
 export { default as SecretModel } from "./secret";
 export { default as SessionModel } from "./session";
 export { default as StatisticsModel } from "./statistics";
+export { default as TaskModel } from "./task";
 export { default as TeamModel } from "./team";
 export {
   default as TeamTokenModel,

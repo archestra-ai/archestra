@@ -8,6 +8,7 @@ import {
   KnowledgeBaseConnectorModel,
 } from "@/models";
 import { secretManager } from "@/secrets-manager";
+import { taskQueueService } from "@/task-queue";
 import type { AclEntry } from "@/types/kb-document";
 import type {
   ConnectorCredentials,
@@ -15,7 +16,6 @@ import type {
 } from "@/types/knowledge-connector";
 import { chunkDocument } from "./chunker";
 import { getConnector } from "./connectors/registry";
-import { embeddingService } from "./embedder";
 
 /**
  * Service that orchestrates the sync of data from external connectors
@@ -95,6 +95,7 @@ class ConnectorSyncService {
 
     let documentsProcessed = 0;
     let documentsIngested = 0;
+    let batchCount = 0;
     const startTime = Date.now();
     let stoppedEarly = false;
 
@@ -137,21 +138,16 @@ class ConnectorSyncService {
           }
         }
 
-        // Embed inline — wrapped in try/catch so embedding failures never fail the sync
+        // Enqueue embedding as a separate task
         if (ingestedDocumentIds.length > 0) {
-          try {
-            await this.embedBatchDocuments({
+          batchCount++;
+          await taskQueueService.enqueue({
+            taskType: "batch_embedding",
+            payload: {
               documentIds: ingestedDocumentIds,
-              log: runLog,
-            });
-          } catch (error) {
-            runLog.warn(
-              {
-                error: error instanceof Error ? error.message : String(error),
-              },
-              "[ConnectorSync] Batch embedding failed, documents saved without embeddings",
-            );
-          }
+              connectorRunId: run.id,
+            },
+          });
         }
 
         // Update run progress + flush logs after each batch
@@ -184,6 +180,11 @@ class ConnectorSyncService {
         }
       }
 
+      // Set totalBatches so batch_embedding handlers can coordinate
+      if (batchCount > 0) {
+        await ConnectorRunModel.update(run.id, { totalBatches: batchCount });
+      }
+
       if (stoppedEarly) {
         // Partial completion — will be continued by a follow-up run
         await ConnectorRunModel.update(run.id, {
@@ -206,26 +207,37 @@ class ConnectorSyncService {
         return { runId: run.id, status: "partial" };
       }
 
-      // On success
-      const now = new Date();
-      await ConnectorRunModel.update(run.id, {
-        status: "success",
-        completedAt: now,
-        documentsProcessed,
-        documentsIngested,
-        logs: options?.getLogOutput?.() ?? null,
-      });
+      if (batchCount === 0) {
+        // No documents ingested — finalize immediately
+        const now = new Date();
+        await ConnectorRunModel.update(run.id, {
+          status: "success",
+          completedAt: now,
+          documentsProcessed,
+          documentsIngested,
+          logs: options?.getLogOutput?.() ?? null,
+        });
 
-      await KnowledgeBaseConnectorModel.update(connectorId, {
-        lastSyncStatus: "success",
-        lastSyncAt: now,
-        lastSyncError: null,
-      });
+        await KnowledgeBaseConnectorModel.update(connectorId, {
+          lastSyncStatus: "success",
+          lastSyncAt: now,
+          lastSyncError: null,
+        });
+      } else {
+        // Batches were enqueued — update progress but leave status as "running"
+        // The last batch_embedding task will finalize the run
+        await ConnectorRunModel.update(run.id, {
+          documentsProcessed,
+          documentsIngested,
+          logs: options?.getLogOutput?.() ?? null,
+        });
+      }
 
       runLog.info(
         {
           documentsProcessed,
           documentsIngested,
+          batchCount,
         },
         "[ConnectorSync] Sync completed successfully",
       );
@@ -354,13 +366,6 @@ class ConnectorSyncService {
       "[ConnectorSync] Document ingested into kb_documents",
     );
     return { ingested: true, documentId: created.id };
-  }
-
-  private async embedBatchDocuments(params: {
-    documentIds: string[];
-    log: pino.Logger;
-  }): Promise<void> {
-    await embeddingService.processDocuments(params.documentIds);
   }
 
   private async chunkAndStore(params: {

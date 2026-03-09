@@ -12,12 +12,10 @@ vi.mock("@/secrets-manager", () => ({
   }),
 }));
 
-const mockProcessDocuments = vi.hoisted(() =>
-  vi.fn().mockResolvedValue(undefined),
-);
-vi.mock("./embedder", () => ({
-  embeddingService: {
-    processDocuments: mockProcessDocuments,
+const mockEnqueue = vi.hoisted(() => vi.fn().mockResolvedValue("task-id-123"));
+vi.mock("@/task-queue", () => ({
+  taskQueueService: {
+    enqueue: mockEnqueue,
   },
 }));
 
@@ -106,16 +104,16 @@ describe("ConnectorSyncService", () => {
 
     expect(result.status).toBe("success");
 
-    // Verify run was created and completed
+    // Run stays "running" until batch_embedding tasks finalize it
     const run = await ConnectorRunModel.findById(result.runId);
-    expect(run?.status).toBe("success");
+    expect(run?.status).toBe("running");
     expect(run?.documentsProcessed).toBe(2);
     expect(run?.documentsIngested).toBe(2);
+    expect(run?.totalBatches).toBe(1);
 
-    // Verify connector was updated
+    // Connector stays "running" — the last batch_embedding task sets "success"
     const updated = await KnowledgeBaseConnectorModel.findById(connector.id);
-    expect(updated?.lastSyncStatus).toBe("success");
-    expect(updated?.lastSyncAt).not.toBeNull();
+    expect(updated?.lastSyncStatus).toBe("running");
   });
 
   test("executeSync throws when connector not found", async () => {
@@ -271,7 +269,7 @@ describe("ConnectorSyncService", () => {
     expect(updated?.lastSyncError).toContain("Connection failed");
   });
 
-  test("executeSync does not fail when embedding fails", async ({
+  test("executeSync enqueues embedding tasks for ingested documents", async ({
     makeOrganization,
     makeKnowledgeBase,
     makeKnowledgeBaseConnector,
@@ -289,16 +287,23 @@ describe("ConnectorSyncService", () => {
     ]);
     mockGetConnector.mockReturnValue(mockImpl);
 
-    // Make embedding fail
-    mockProcessDocuments.mockRejectedValueOnce(new Error("Embedding API down"));
-
     const result = await connectorSyncService.executeSync(connector.id);
 
-    // Sync should still succeed even though embedding failed
     expect(result.status).toBe("success");
+
+    // Verify embedding was enqueued as a task
+    expect(mockEnqueue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        taskType: "batch_embedding",
+        payload: expect.objectContaining({
+          connectorRunId: result.runId,
+        }),
+      }),
+    );
 
     const run = await ConnectorRunModel.findById(result.runId);
     expect(run?.documentsIngested).toBe(1);
+    expect(run?.totalBatches).toBe(1);
   });
 
   test("executeSync stops early when time budget exceeded", async ({

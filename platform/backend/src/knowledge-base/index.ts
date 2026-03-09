@@ -7,4 +7,3 @@ export {
   resolveRerankerConfig,
 } from "./kb-llm-client";
 export { queryService } from "./query";
-export { reconcileConnectorCronJobs } from "./reconcile-connector-cron-jobs";

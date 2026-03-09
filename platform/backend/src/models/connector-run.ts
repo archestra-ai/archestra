@@ -1,4 +1,4 @@
-import { count, desc, eq, inArray, sum } from "drizzle-orm";
+import { count, desc, eq, inArray, sql, sum } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type {
   ConnectorRun,
@@ -27,6 +27,8 @@ class ConnectorRunModel {
         documentsProcessed: t.documentsProcessed,
         documentsIngested: t.documentsIngested,
         totalItems: t.totalItems,
+        totalBatches: t.totalBatches,
+        completedBatches: t.completedBatches,
         error: t.error,
         checkpoint: t.checkpoint,
         createdAt: t.createdAt,
@@ -105,6 +107,20 @@ class ConnectorRunModel {
       .where(eq(schema.connectorRunsTable.id, id))
       .returning();
 
+    return result ?? null;
+  }
+
+  static async completeBatch(runId: string): Promise<ConnectorRun | null> {
+    const t = schema.connectorRunsTable;
+    const [result] = await db
+      .update(t)
+      .set({
+        completedBatches: sql`${t.completedBatches} + 1`,
+        status: sql`CASE WHEN ${t.completedBatches} + 1 >= ${t.totalBatches} THEN 'success' ELSE ${t.status} END`,
+        completedAt: sql`CASE WHEN ${t.completedBatches} + 1 >= ${t.totalBatches} THEN NOW() ELSE ${t.completedAt} END`,
+      })
+      .where(eq(t.id, runId))
+      .returning();
     return result ?? null;
   }
 

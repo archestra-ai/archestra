@@ -122,7 +122,6 @@ export default defineConfig((options: UserConfig) => {
     entry: [
       "src/server.ts",
       "src/standalone-scripts/vault-env-injector.ee.ts",
-      "src/entrypoints/connector-sync.ts",
     ],
 
     // Copy SQL migrations and other assets that need to exist at runtime

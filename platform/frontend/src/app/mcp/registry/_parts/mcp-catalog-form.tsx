@@ -377,7 +377,9 @@ export function McpCatalogForm({
                   })) ?? []
                 }
                 value={form.watch("teams") ?? []}
-                onChange={(ids) => form.setValue("teams", ids, { shouldDirty: true })}
+                onChange={(ids) =>
+                  form.setValue("teams", ids, { shouldDirty: true })
+                }
                 placeholder="Select teams..."
                 emptyMessage="No teams found"
               />

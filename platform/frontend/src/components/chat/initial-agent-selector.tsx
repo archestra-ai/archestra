@@ -165,15 +165,8 @@ export function InitialAgentSelector({
   const allKnowledgeBases = knowledgeBasesData?.data ?? [];
   const allConnectors = connectorsData?.data ?? [];
 
-  // Get knowledge base and connector IDs from current agent
-  const knowledgeBaseIds = useMemo(
-    () => currentAgent?.knowledgeBaseIds ?? [],
-    [currentAgent],
-  );
-  const connectorIds = useMemo(
-    () => currentAgent?.connectorIds ?? [],
-    [currentAgent],
-  );
+  const knowledgeBaseIds = currentAgent.knowledgeBaseIds;
+  const connectorIds = currentAgent.connectorIds;
 
   // Match knowledge bases and connectors for the current agent
   const matchedKbs = useMemo(

@@ -53,10 +53,13 @@ describe("handleConnectorSync", () => {
 
     await handleConnectorSync({ connectorId: "conn-1" });
 
-    expect(mockExecuteSync).toHaveBeenCalledWith("conn-1", expect.objectContaining({
-      logger: expect.any(Object),
-      getLogOutput: expect.any(Function),
-    }));
+    expect(mockExecuteSync).toHaveBeenCalledWith(
+      "conn-1",
+      expect.objectContaining({
+        logger: expect.any(Object),
+        getLogOutput: expect.any(Function),
+      }),
+    );
   });
 
   test("enqueues continuation with incremented count on partial result", async () => {

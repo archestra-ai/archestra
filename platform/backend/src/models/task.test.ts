@@ -34,10 +34,10 @@ describe("TaskModel", () => {
       const dequeued = await TaskModel.dequeue();
 
       expect(dequeued).not.toBeNull();
-      expect(dequeued!.id).toBe(created.id);
-      expect(dequeued!.status).toBe("processing");
-      expect(dequeued!.attempt).toBe(1);
-      expect(dequeued!.startedAt).not.toBeNull();
+      expect(dequeued?.id).toBe(created.id);
+      expect(dequeued?.status).toBe("processing");
+      expect(dequeued?.attempt).toBe(1);
+      expect(dequeued?.startedAt).not.toBeNull();
     });
 
     test("returns null when no tasks are pending", async () => {
@@ -68,8 +68,8 @@ describe("TaskModel", () => {
       const completed = await TaskModel.complete(task.id);
 
       expect(completed).not.toBeNull();
-      expect(completed!.status).toBe("completed");
-      expect(completed!.completedAt).toBeInstanceOf(Date);
+      expect(completed?.status).toBe("completed");
+      expect(completed?.completedAt).toBeInstanceOf(Date);
     });
   });
 
@@ -89,9 +89,9 @@ describe("TaskModel", () => {
       });
 
       expect(failed).not.toBeNull();
-      expect(failed!.status).toBe("pending");
-      expect(failed!.lastError).toBe("Something went wrong");
-      expect(failed!.scheduledFor.getTime()).toBeGreaterThan(Date.now());
+      expect(failed?.status).toBe("pending");
+      expect(failed?.lastError).toBe("Something went wrong");
+      expect(failed?.scheduledFor.getTime()).toBeGreaterThan(Date.now());
     });
 
     test("sets status to dead when attempt >= maxAttempts", async () => {
@@ -109,9 +109,9 @@ describe("TaskModel", () => {
       });
 
       expect(failed).not.toBeNull();
-      expect(failed!.status).toBe("dead");
-      expect(failed!.lastError).toBe("Final failure");
-      expect(failed!.completedAt).toBeInstanceOf(Date);
+      expect(failed?.status).toBe("dead");
+      expect(failed?.lastError).toBe("Final failure");
+      expect(failed?.completedAt).toBeInstanceOf(Date);
     });
   });
 

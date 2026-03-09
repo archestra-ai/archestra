@@ -80,6 +80,15 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
               .describe(
                 "Filter by author user IDs (comma-separated). Admin-only, only used when scope=personal.",
               ),
+            excludeAuthorIds: z
+              .preprocess(
+                (val) => (typeof val === "string" ? val.split(",") : val),
+                z.array(z.string()),
+              )
+              .optional()
+              .describe(
+                "Exclude agents by author user IDs (comma-separated). Admin-only, only used when scope=personal.",
+              ),
             labels: z
               .string()
               .optional()
@@ -111,6 +120,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           scope,
           teamIds,
           authorIds,
+          excludeAuthorIds,
           labels,
           limit,
           offset,
@@ -159,8 +169,9 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
             agentTypes,
             scope,
             teamIds,
-            // authorIds is admin-only
+            // authorIds and excludeAuthorIds are admin-only
             authorIds: isAdmin ? authorIds : undefined,
+            excludeAuthorIds: isAdmin ? excludeAuthorIds : undefined,
             labels: parseLabelsParam(labels),
           },
           user.id,

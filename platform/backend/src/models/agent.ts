@@ -11,8 +11,10 @@ import {
   eq,
   ilike,
   inArray,
+  isNull,
   min,
   ne,
+  notInArray,
   or,
   type SQL,
   sql,
@@ -500,6 +502,7 @@ class AgentModel {
       scope?: "personal" | "team" | "org" | "built_in";
       teamIds?: string[];
       authorIds?: string[];
+      excludeAuthorIds?: string[];
       labels?: Record<string, string[]>;
     },
     userId?: string,
@@ -569,6 +572,17 @@ class AgentModel {
       whereConditions.push(
         inArray(schema.agentsTable.authorId, filters.authorIds),
       );
+    }
+
+    // Exclude specific authors if provided
+    if (filters?.excludeAuthorIds && filters.excludeAuthorIds.length > 0) {
+      const condition = or(
+        isNull(schema.agentsTable.authorId),
+        notInArray(schema.agentsTable.authorId, filters.excludeAuthorIds),
+      );
+      if (condition) {
+        whereConditions.push(condition);
+      }
     }
 
     // Add label filters if provided (AND across keys, OR within values)

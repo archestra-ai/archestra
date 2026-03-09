@@ -204,6 +204,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     | null;
   const teamIdsFromUrl = searchParams.get("teamIds");
   const authorIdsFromUrl = searchParams.get("authorIds");
+  const excludeAuthorIdsFromUrl = searchParams.get("excludeAuthorIds");
   const labelsFromUrl = searchParams.get("labels");
 
   const pageIndex = Number(pageFromUrl || "1") - 1;
@@ -225,6 +226,9 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     scope: scopeFromUrl || undefined,
     teamIds: teamIdsFromUrl ? teamIdsFromUrl.split(",") : undefined,
     authorIds: authorIdsFromUrl ? authorIdsFromUrl.split(",") : undefined,
+    excludeAuthorIds: excludeAuthorIdsFromUrl
+      ? excludeAuthorIdsFromUrl.split(",")
+      : undefined,
     labels: labelsFromUrl || undefined,
   });
 

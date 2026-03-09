@@ -36592,6 +36592,18 @@
           },
           {
             "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "in": "query",
+            "name": "excludeAuthorIds",
+            "required": false,
+            "description": "Exclude agents by author user IDs (comma-separated). Admin-only, only used when scope=personal."
+          },
+          {
+            "schema": {
               "type": "string"
             },
             "in": "query",

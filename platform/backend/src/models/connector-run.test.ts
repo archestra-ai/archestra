@@ -518,8 +518,7 @@ describe("ConnectorRunModel", () => {
       const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
       const run = await makeConnectorRun(connector.id, { status: "running" });
 
-      const count =
-        await ConnectorRunModel.interruptActiveRuns(connector.id);
+      const count = await ConnectorRunModel.interruptActiveRuns(connector.id);
 
       expect(count).toBe(1);
       const updated = await ConnectorRunModel.findById(run.id);
@@ -540,8 +539,7 @@ describe("ConnectorRunModel", () => {
       await makeConnectorRun(connector.id, { status: "running" });
       await makeConnectorRun(connector.id, { status: "running" });
 
-      const count =
-        await ConnectorRunModel.interruptActiveRuns(connector.id);
+      const count = await ConnectorRunModel.interruptActiveRuns(connector.id);
 
       expect(count).toBe(2);
     });
@@ -562,8 +560,7 @@ describe("ConnectorRunModel", () => {
         status: "failed",
       });
 
-      const count =
-        await ConnectorRunModel.interruptActiveRuns(connector.id);
+      const count = await ConnectorRunModel.interruptActiveRuns(connector.id);
 
       expect(count).toBe(0);
       const s = await ConnectorRunModel.findById(successRun.id);
@@ -601,8 +598,7 @@ describe("ConnectorRunModel", () => {
       const kb = await makeKnowledgeBase(org.id);
       const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
 
-      const count =
-        await ConnectorRunModel.interruptActiveRuns(connector.id);
+      const count = await ConnectorRunModel.interruptActiveRuns(connector.id);
 
       expect(count).toBe(0);
     });

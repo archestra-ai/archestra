@@ -32,7 +32,6 @@ import {
 import { ChatApiKeySelector } from "@/components/chat/chat-api-key-selector";
 import { ContextIndicator } from "@/components/chat/context-indicator";
 import { InitialAgentSelector } from "@/components/chat/initial-agent-selector";
-import { KnowledgeBaseIndicator } from "@/components/chat/knowledge-base-indicator";
 import { KnowledgeBaseUploadIndicator } from "@/components/chat/knowledge-base-upload-indicator";
 import { ModelSelector } from "@/components/chat/model-selector";
 import { PlaywrightInstallInline } from "@/components/chat/playwright-install-dialog";
@@ -261,18 +260,6 @@ const PromptInputContent = ({
               </PopoverTrigger>
               <PopoverContent side="top" align="start" className="w-auto p-3">
                 <div className="flex flex-col gap-3">
-                  {agentId && hasKnowledgeSources && (
-                    <div>
-                      <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1">
-                        Knowledge Sources
-                      </p>
-                      <KnowledgeBaseIndicator
-                        knowledgeBaseIds={knowledgeBaseIds}
-                        connectorIds={connectorIds}
-                        static
-                      />
-                    </div>
-                  )}
                   {selectorAgentId !== undefined && onAgentChange && (
                     <div>
                       <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1">
@@ -391,12 +378,6 @@ const PromptInputContent = ({
           {/* Desktop: inline toolbar items */}
           {!isMobile && (
             <>
-              {agentId && hasKnowledgeSources && (
-                <KnowledgeBaseIndicator
-                  knowledgeBaseIds={knowledgeBaseIds}
-                  connectorIds={connectorIds}
-                />
-              )}
               {selectorAgentId !== undefined && onAgentChange && (
                 <InitialAgentSelector
                   currentAgentId={selectorAgentId}

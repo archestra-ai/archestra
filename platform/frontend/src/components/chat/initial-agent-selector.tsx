@@ -14,6 +14,7 @@ import {
   XIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ConnectorTypeIcon } from "@/app/knowledge/knowledge-bases/_parts/connector-icons";
 import { LocalServerInstallDialog } from "@/app/mcp/registry/_parts/local-server-install-dialog";
 import { NoAuthInstallDialog } from "@/app/mcp/registry/_parts/no-auth-install-dialog";
 import { RemoteServerInstallDialog } from "@/app/mcp/registry/_parts/remote-server-install-dialog";
@@ -54,10 +55,12 @@ import {
 } from "@/lib/agent-tools.query";
 import { useHasPermissions } from "@/lib/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
+import { useConnectors } from "@/lib/connector.query";
 import {
   useCatalogTools,
   useInternalMcpCatalog,
 } from "@/lib/internal-mcp-catalog.query";
+import { useKnowledgeBases } from "@/lib/knowledge-base.query";
 import { useMcpInstallOrchestrator } from "@/lib/mcp-install-orchestrator.hook";
 import {
   useMcpServers,
@@ -156,6 +159,39 @@ export function InitialAgentSelector({
     return allAgents.filter((a) => targetIds.has(a.id));
   }, [allAgents, triggerDelegations]);
 
+  // Knowledge base data for connector icons in avatar group
+  const { data: knowledgeBasesData } = useKnowledgeBases();
+  const { data: connectorsData } = useConnectors();
+  const allKnowledgeBases = knowledgeBasesData?.data ?? [];
+  const allConnectors = connectorsData?.data ?? [];
+
+  // Get knowledge base and connector IDs from current agent
+  const knowledgeBaseIds =
+    ((currentAgent as Record<string, unknown> | null)?.knowledgeBaseIds as
+      | string[]
+      | undefined) ?? [];
+  const connectorIds =
+    ((currentAgent as Record<string, unknown> | null)?.connectorIds as
+      | string[]
+      | undefined) ?? [];
+
+  // Compute unique connector types from matched knowledge bases and connectors
+  const agentConnectorTypes = useMemo(() => {
+    const matchedKbs = allKnowledgeBases.filter((k) =>
+      knowledgeBaseIds.includes(k.id),
+    );
+    const matchedConnectors = allConnectors.filter((c) =>
+      connectorIds.includes(c.id),
+    );
+
+    const kbConnectorTypes = matchedKbs.flatMap(
+      (kb) => kb.connectors?.map((c) => c.connectorType) ?? [],
+    );
+    const directConnectorTypes = matchedConnectors.map((c) => c.connectorType);
+
+    return [...new Set([...kbConnectorTypes, ...directConnectorTypes])];
+  }, [allKnowledgeBases, allConnectors, knowledgeBaseIds, connectorIds]);
+
   const handleAgentSelect = (agentId: string) => {
     onAgentChange(agentId);
     setView("settings");
@@ -203,6 +239,7 @@ export function InitialAgentSelector({
           <ToolServerAvatarGroup
             catalogs={assignedCatalogs}
             subagents={triggerSubagents}
+            connectorTypes={agentConnectorTypes}
             showAddButton
           />
         </PromptInputButton>
@@ -226,6 +263,8 @@ export function InitialAgentSelector({
             onChangeAgent={() => setView("change")}
             onAddTool={() => setView("add-tool")}
             onEditTool={handleSelectCatalog}
+            knowledgeBaseIds={knowledgeBaseIds}
+            connectorIds={connectorIds}
           />
         )}
 
@@ -383,6 +422,8 @@ function AgentSettingsView({
   onChangeAgent,
   onAddTool,
   onEditTool,
+  knowledgeBaseIds,
+  connectorIds,
 }: {
   agent: {
     id: string;
@@ -395,9 +436,26 @@ function AgentSettingsView({
   onChangeAgent: () => void;
   onAddTool: () => void;
   onEditTool: (catalog: CatalogItem) => void;
+  knowledgeBaseIds: string[];
+  connectorIds: string[];
 }) {
   const updateProfile = useUpdateProfile();
   const { data: canReadAgents } = useHasPermissions({ agent: ["read"] });
+
+  // Knowledge base data for knowledge sources section
+  const { data: knowledgeBasesData } = useKnowledgeBases();
+  const { data: connectorsData } = useConnectors();
+  const allKnowledgeBases = knowledgeBasesData?.data ?? [];
+  const allConnectors = connectorsData?.data ?? [];
+
+  const matchedKbs = allKnowledgeBases.filter((k) =>
+    knowledgeBaseIds.includes(k.id),
+  );
+  const matchedConnectors = allConnectors.filter((c) =>
+    connectorIds.includes(c.id),
+  );
+  const hasKnowledgeSources =
+    matchedKbs.length > 0 || matchedConnectors.length > 0;
   const [instructions, setInstructions] = useState(agent?.systemPrompt ?? "");
   const [isSaving, setIsSaving] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -503,6 +561,58 @@ function AgentSettingsView({
             onEditTool={onEditTool}
           />
         </div>
+
+        {hasKnowledgeSources && (
+          <div>
+            <Label className="mb-1.5">Knowledge sources</Label>
+            <div className="space-y-2">
+              {matchedKbs.map((kb) => {
+                const connectors = kb.connectors ?? [];
+                const connectorTypes = [
+                  ...new Set(connectors.map((c) => c.connectorType)),
+                ];
+                return (
+                  <div
+                    key={kb.id}
+                    className="flex items-center justify-between gap-2 rounded-lg border bg-muted/30 p-3"
+                  >
+                    <span className="text-sm font-medium truncate">
+                      {kb.name}
+                    </span>
+                    {connectorTypes.length > 0 && (
+                      <OverlappedIcons
+                        icons={connectorTypes.map((type) => ({
+                          key: type,
+                          icon: (
+                            <ConnectorTypeIcon
+                              type={type}
+                              className="h-full w-full"
+                            />
+                          ),
+                          tooltip: type,
+                        }))}
+                        maxVisible={3}
+                        size="sm"
+                      />
+                    )}
+                  </div>
+                );
+              })}
+              {matchedConnectors.map((connector) => (
+                <div
+                  key={connector.id}
+                  className="flex items-center gap-2 rounded-lg border bg-muted/30 p-3 text-sm"
+                >
+                  <ConnectorTypeIcon
+                    type={connector.connectorType}
+                    className="h-4 w-4 shrink-0"
+                  />
+                  <span className="truncate">{connector.name}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {canReadAgents && (
@@ -1404,15 +1514,17 @@ type SubagentItem = {
 function ToolServerAvatarGroup({
   catalogs,
   subagents = [],
+  connectorTypes = [],
   showAddButton = false,
 }: {
   catalogs: CatalogItem[];
   subagents?: SubagentItem[];
+  connectorTypes?: string[];
   showAddButton?: boolean;
 }) {
   const hasNonBuiltInTools =
     subagents.length > 0 || catalogs.some((c) => !isBuiltInCatalogId(c.id));
-  const totalCount = catalogs.length + subagents.length;
+  const totalCount = catalogs.length + subagents.length + connectorTypes.length;
 
   if (totalCount === 0) {
     if (!showAddButton) return null;
@@ -1438,6 +1550,11 @@ function ToolServerAvatarGroup({
       key: c.id,
       icon: <McpCatalogIcon icon={c.icon} catalogId={c.id} size={12} />,
       tooltip: c.name,
+    })),
+    ...connectorTypes.map((type) => ({
+      key: `connector-${type}`,
+      icon: <ConnectorTypeIcon type={type} className="h-3 w-3" />,
+      tooltip: type,
     })),
   ];
 

@@ -1,3 +1,4 @@
+import assert from "node:assert";
 import {
   BUILT_IN_AGENT_IDS,
   BUILT_IN_AGENT_NAMES,
@@ -1914,8 +1915,9 @@ describe("AgentModel", () => {
         org.id,
       );
       expect(defaultAgentId).not.toBeNull();
+      assert(defaultAgentId !== null);
 
-      const agent = await AgentModel.findById(defaultAgentId!, user.id, true);
+      const agent = await AgentModel.findById(defaultAgentId, user.id, true);
       expect(agent).not.toBeNull();
       expect(agent?.name).toBe("My Assistant");
       expect(agent?.scope).toBe("personal");
@@ -2041,7 +2043,8 @@ describe("AgentModel", () => {
         user.id,
         org.id,
       );
-      expect(await MemberModel.isAgentDefault(defaultAgentId!)).toBe(true);
+      assert(defaultAgentId !== null);
+      expect(await MemberModel.isAgentDefault(defaultAgentId)).toBe(true);
     });
 
     test("isAgentDefault returns false for non-default agents", async () => {
@@ -2070,7 +2073,8 @@ describe("AgentModel", () => {
         user.id,
         org.id,
       );
-      expect(await MemberModel.isAgentDefault(originalDefault!)).toBe(true);
+      assert(originalDefault !== null);
+      expect(await MemberModel.isAgentDefault(originalDefault)).toBe(true);
 
       // Change default to another agent
       const otherAgent = await AgentModel.create({
@@ -2082,7 +2086,7 @@ describe("AgentModel", () => {
       await MemberModel.setDefaultAgent(user.id, org.id, otherAgent.id);
 
       // Original agent is no longer default
-      expect(await MemberModel.isAgentDefault(originalDefault!)).toBe(false);
+      expect(await MemberModel.isAgentDefault(originalDefault)).toBe(false);
       // New agent is now default
       expect(await MemberModel.isAgentDefault(otherAgent.id)).toBe(true);
     });

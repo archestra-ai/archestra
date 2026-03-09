@@ -17,35 +17,35 @@ Knowledge bases provide built-in retrieval augmented generation (RAG) powered by
 
 ## Architecture
 
+The RAG stack runs entirely within PostgreSQL — no external vector database required. See [Platform Deployment — Knowledge Base Configuration](/docs/platform-deployment#knowledge-base-configuration) for full configuration reference.
+
+### Ingestion
+
+Connectors run on a cron schedule, pulling documents that are chunked and embedded into PostgreSQL with pgvector.
+
 ```mermaid
 flowchart LR
-    subgraph Ingestion["Ingestion (async)"]
-        direction LR
-        C[Connectors] -->|cron schedule| D[Documents]
-        D --> CH[Chunking]
-        CH -->|OpenAI API| E[Embedding]
-        E --> PG[(PostgreSQL + pgvector)]
-    end
-
-    subgraph Query["Query (runtime)"]
-        direction LR
-        Q[query_knowledge_base] -->|OpenAI API| QE[Query Embedding]
-        QE --> VS[Vector Search]
-        QE --> FTS["Full-Text Search (configurable)"]
-        VS --> RRF[Reciprocal Rank Fusion]
-        FTS --> RRF
-        RRF --> RR[Reranking]
-        RR --> ACL[ACL Filtering]
-        ACL --> R[Results]
-    end
-
-    PG --- VS
-    PG --- FTS
+    C[Connectors] -->|cron schedule| D[Documents]
+    D --> CH[Chunking]
+    CH -->|OpenAI API| E[Embedding]
+    E --> PG[(PostgreSQL + pgvector)]
 ```
 
-The RAG stack runs entirely within PostgreSQL — no external vector database required. Full-text search (hybrid mode) can be enabled or disabled.
+### Querying
 
-See [Platform Deployment — Knowledge Base Configuration](/docs/platform-deployment#knowledge-base-configuration) for full configuration reference.
+At runtime, the `query_knowledge_base` tool embeds the query, runs vector and optional full-text search in parallel, then fuses, reranks, and filters results.
+
+```mermaid
+flowchart LR
+    Q[query_knowledge_base] -->|OpenAI API| QE[Query Embedding]
+    QE --> VS[Vector Search]
+    QE --> FTS["Full-Text Search (configurable)"]
+    VS --> RRF[Reciprocal Rank Fusion]
+    FTS --> RRF
+    RRF --> RR[Reranking]
+    RR --> ACL[ACL Filtering]
+    ACL --> R[Results]
+```
 
 ## LLM Provider Configuration
 

@@ -31,7 +31,7 @@ const environment = process.env.NODE_ENV?.toLowerCase() ?? "";
 const isProduction = ["production", "prod"].includes(environment);
 const isDevelopment = !isProduction;
 
-const packageJsonVersion = packageJson.version;
+const appVersion = process.env.ARCHESTRA_VERSION || packageJson.version;
 
 const frontendBaseUrl =
   process.env.ARCHESTRA_FRONTEND_URL?.trim() || "http://localhost:3000";
@@ -439,7 +439,7 @@ export const getConnectorImage = (): string => {
     "true";
 
   if (runningInsideCluster) {
-    return `archestra/platform:${packageJsonVersion}`;
+    return `archestra/platform:${appVersion}`;
   }
   return "";
 };
@@ -463,7 +463,7 @@ const config = {
     host: isDevelopment ? "127.0.0.1" : "0.0.0.0",
     port: getPortFromUrl(),
     name: "Archestra",
-    version: process.env.ARCHESTRA_VERSION || packageJsonVersion,
+    version: appVersion,
     corsOrigins: getCorsOrigins(),
     apiKeyAuthorizationHeaderName: "Authorization",
     /**
@@ -694,7 +694,7 @@ const config = {
   orchestrator: {
     mcpServerBaseImage:
       process.env.ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE ||
-      `europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:${packageJsonVersion}`,
+      `europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:${appVersion}`,
     kubernetes: {
       namespace: process.env.ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE || "default",
       kubeconfig: process.env.ARCHESTRA_ORCHESTRATOR_KUBECONFIG,

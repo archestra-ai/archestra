@@ -916,6 +916,7 @@ describe("getConnectorImage (config.kb.connectorImage)", () => {
     delete process.env.ARCHESTRA_ORCHESTRATOR_KUBECONFIG;
     delete process.env
       .ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER;
+    delete process.env.ARCHESTRA_VERSION;
   });
 
   afterEach(() => {
@@ -930,6 +931,15 @@ describe("getConnectorImage (config.kb.connectorImage)", () => {
     expect(cfg.kb.connectorImage).toMatch(
       /^archestra\/platform:\d+\.\d+\.\d+$/,
     );
+  });
+
+  test("should use ARCHESTRA_VERSION for connector image tag when set", async () => {
+    process.env.ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER =
+      "true";
+    process.env.ARCHESTRA_VERSION = "abc123sha";
+
+    const { default: cfg } = await import("./config");
+    expect(cfg.kb.connectorImage).toBe("archestra/platform:abc123sha");
   });
 
   test("should return empty string when using local kubeconfig (local dev)", async () => {

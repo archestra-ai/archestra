@@ -11514,26 +11514,6 @@ export type XaiChatCompletionResponse = {
     } | undefined;
 };
 
-export type GetHealthData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/health';
-};
-
-export type GetHealthResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        name: string;
-        status: string;
-        version: string;
-    };
-};
-
-export type GetHealthResponse = GetHealthResponses[keyof GetHealthResponses];
-
 export type GetV1A2aByAgentIdWellKnownAgentJsonData = {
     body?: never;
     path: {
@@ -22782,6 +22762,61 @@ export type GroqChatCompletionsWithAgentResponses = {
 };
 
 export type GroqChatCompletionsWithAgentResponse = GroqChatCompletionsWithAgentResponses[keyof GroqChatCompletionsWithAgentResponses];
+
+export type GetHealthData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/health';
+};
+
+export type GetHealthResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        name: string;
+        status: string;
+        version: string;
+    };
+};
+
+export type GetHealthResponse = GetHealthResponses[keyof GetHealthResponses];
+
+export type GetReadyData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/ready';
+};
+
+export type GetReadyErrors = {
+    /**
+     * Default Response
+     */
+    503: {
+        name: string;
+        status: string;
+        version: string;
+        database: string;
+    };
+};
+
+export type GetReadyError = GetReadyErrors[keyof GetReadyErrors];
+
+export type GetReadyResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        name: string;
+        status: string;
+        version: string;
+        database: string;
+    };
+};
+
+export type GetReadyResponse = GetReadyResponses[keyof GetReadyResponses];
 
 export type PostApiWebhooksIncomingEmailData = {
     body?: unknown;

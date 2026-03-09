@@ -579,36 +579,31 @@ function KnowledgeSettingsContent() {
               >
                 {({ hasPermission }) => (
                   <div className="space-y-2 w-80">
-                    <div className="relative">
-                      <SearchableSelect
-                        value={embeddingModel ?? ""}
-                        onValueChange={(v) =>
-                          setEmbeddingModel(v as EmbeddingModel)
-                        }
-                        placeholder="Select embedding model..."
-                        searchPlaceholder="Search models..."
-                        items={Object.entries(EMBEDDING_MODELS).map(
-                          ([value, model]) => ({
-                            value,
-                            label: model.label,
-                            description: model.description,
-                          }),
-                        )}
-                        className={cn(
-                          "w-80",
-                          embeddingSetupStep === "select-model" &&
-                            "animate-pulse ring-2 ring-primary/40",
-                        )}
-                        disabled={
-                          !hasPermission ||
-                          isEmbeddingModelLocked ||
-                          !embeddingChatApiKeyId
-                        }
-                      />
-                      {isEmbeddingModelLocked && embeddingModel && (
-                        <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-3 w-3 pointer-events-none" />
+                    <SearchableSelect
+                      value={embeddingModel ?? ""}
+                      onValueChange={(v) =>
+                        setEmbeddingModel(v as EmbeddingModel)
+                      }
+                      placeholder="Select embedding model..."
+                      searchPlaceholder="Search models..."
+                      items={Object.entries(EMBEDDING_MODELS).map(
+                        ([value, model]) => ({
+                          value,
+                          label: model.label,
+                          description: model.description,
+                        }),
                       )}
-                    </div>
+                      className={cn(
+                        "w-80",
+                        embeddingSetupStep === "select-model" &&
+                          "animate-pulse ring-2 ring-primary/40",
+                      )}
+                      disabled={
+                        !hasPermission ||
+                        isEmbeddingModelLocked ||
+                        !embeddingChatApiKeyId
+                      }
+                    />
                     {isEmbeddingModelLocked && (
                       <p className="text-xs text-muted-foreground">
                         <Lock className="h-3 w-3 inline mr-1" />

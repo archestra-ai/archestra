@@ -44,7 +44,7 @@ import {
 import { fastifyAuthPlugin } from "@/auth";
 import { cacheManager } from "@/cache-manager";
 import config from "@/config";
-import { initializeDatabase, isDatabaseHealthy } from "@/database";
+import { initializeDatabase } from "@/database";
 import { seedRequiredStartingData } from "@/database/seed";
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import { reconcileConnectorCronJobs } from "@/knowledge-base";
@@ -225,80 +225,6 @@ export async function registerSwaggerPlugin(fastify: FastifyInstanceWithZod) {
     transform: jsonSchemaTransform,
     transformObject: jsonSchemaTransformObject,
   });
-}
-
-/**
- * Register the health endpoint on a Fastify instance.
- * This is a lightweight endpoint for liveness checks - it only verifies the HTTP server is running.
- */
-export function registerHealthEndpoint(fastify: FastifyInstanceWithZod) {
-  fastify.get(
-    HEALTH_PATH,
-    {
-      schema: {
-        tags: ["health"],
-        response: {
-          200: z.object({
-            name: z.string(),
-            status: z.string(),
-            version: z.string(),
-          }),
-        },
-      },
-    },
-    async () => ({
-      name,
-      status: "ok",
-      version,
-    }),
-  );
-}
-
-/**
- * Register the readiness endpoint on a Fastify instance.
- * This endpoint checks database connectivity and should be used for readiness probes.
- * Returns 200 if the application is ready to receive traffic, 503 otherwise.
- */
-export function registerReadinessEndpoint(fastify: FastifyInstanceWithZod) {
-  fastify.get(
-    READY_PATH,
-    {
-      schema: {
-        tags: ["health"],
-        response: {
-          200: z.object({
-            name: z.string(),
-            status: z.string(),
-            version: z.string(),
-            database: z.string(),
-          }),
-          503: z.object({
-            name: z.string(),
-            status: z.string(),
-            version: z.string(),
-            database: z.string(),
-          }),
-        },
-      },
-    },
-    async (request, reply) => {
-      const dbHealthy = await isDatabaseHealthy();
-
-      const response = {
-        name,
-        status: dbHealthy ? "ok" : "degraded",
-        version,
-        database: dbHealthy ? "connected" : "disconnected",
-      };
-
-      if (!dbHealthy) {
-        request.log.warn("Database health check failed for readiness probe");
-        return reply.status(503).send(response);
-      }
-
-      return reply.send(response);
-    },
-  );
 }
 
 /**
@@ -722,8 +648,6 @@ const start = async () => {
 
     // Register routes
     fastify.get("/openapi.json", async () => fastify.swagger());
-    registerHealthEndpoint(fastify);
-    registerReadinessEndpoint(fastify);
 
     if (enableE2eTestEndpoints) {
       fastify.get("/test", async () => ({

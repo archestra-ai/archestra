@@ -3,6 +3,14 @@
 import { useCallback, useRef, useState } from "react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./tooltip";
 
+function hasOverflow(node: HTMLElement): boolean {
+  if (node.scrollWidth > node.clientWidth) return true;
+  for (const child of node.children) {
+    if (child instanceof HTMLElement && hasOverflow(child)) return true;
+  }
+  return false;
+}
+
 /**
  * Wraps children in a tooltip that only appears when the text is
  * CSS-truncated (i.e. the element's scrollWidth exceeds its clientWidth).
@@ -14,29 +22,38 @@ export function TruncatedTooltip({
   children: React.ReactNode;
   content: React.ReactNode;
 }) {
-  const [isTruncated, setIsTruncated] = useState(false);
+  const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const truncatedRef = useRef(false);
 
-  const checkTruncation = useCallback(() => {
+  const handleMouseEnter = useCallback(() => {
     const el = triggerRef.current;
-    if (el) {
-      // Check the trigger element itself, or its first child if it's used with asChild
-      const target =
-        el.scrollWidth > el.clientWidth ? el : (el.firstElementChild as HTMLElement | null);
-      setIsTruncated(
-        el.scrollWidth > el.clientWidth ||
-          (target ? target.scrollWidth > target.clientWidth : false),
-      );
+    truncatedRef.current = !!el && hasOverflow(el);
+    if (truncatedRef.current) {
+      setOpen(true);
     }
   }, []);
 
+  const handleMouseLeave = useCallback(() => {
+    setOpen(false);
+    truncatedRef.current = false;
+  }, []);
+
+  const handleOpenChange = useCallback((value: boolean) => {
+    // Only allow opening if text is actually truncated
+    if (value && !truncatedRef.current) return;
+    setOpen(value);
+  }, []);
+
   return (
-    <Tooltip open={isTruncated ? undefined : false}>
+    <Tooltip open={open} onOpenChange={handleOpenChange}>
       <TooltipTrigger
         asChild
         ref={triggerRef}
-        onMouseEnter={checkTruncation}
-        onFocus={checkTruncation}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
+        onFocus={handleMouseEnter}
+        onBlur={handleMouseLeave}
       >
         {children}
       </TooltipTrigger>

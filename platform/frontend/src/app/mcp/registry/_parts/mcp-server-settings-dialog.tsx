@@ -377,7 +377,9 @@ export function McpServerSettingsDialog({
             <div
               className={cn(
                 "flex-1 flex flex-col min-h-0",
-                isDebugPage ? "overflow-hidden px-6" : "overflow-y-auto p-6",
+                isDebugPage
+                  ? "overflow-hidden px-6 pb-6"
+                  : "overflow-y-auto p-6",
               )}
             >
               {validPage === "configuration" && !isBuiltin && (

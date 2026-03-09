@@ -37,12 +37,16 @@ import {
   ToolInput,
   ToolOutput,
 } from "@/components/ai-elements/tool";
+import {
+  hasKnowledgeBaseToolCall,
+  KnowledgeGraphCitations,
+} from "@/components/chat/knowledge-graph-citations";
+import { PolicyDeniedTool } from "@/components/chat/policy-denied-tool";
+import Divider from "@/components/divider";
 import { Button } from "@/components/ui/button";
 import { preserveNewlines } from "@/lib/chat-utils";
 import { parsePolicyDenied } from "@/lib/llmProviders/common";
 import { cn } from "@/lib/utils";
-import { PolicyDeniedTool } from "./chat/policy-denied-tool";
-import Divider from "./divider";
 
 const ChatBotDemo = ({
   messages,
@@ -155,6 +159,15 @@ const ChatBotDemo = ({
                             />
                           );
                         }
+                        const isLastTextPart =
+                          message.role === "assistant" &&
+                          message.parts
+                            .slice(i + 1)
+                            .every((p) => p.type !== "text");
+                        const showCitations =
+                          isLastTextPart &&
+                          hasKnowledgeBaseToolCall(message.parts);
+
                         return (
                           <Fragment key={`${message.id}-${i}`}>
                             <Message from={message.role}>
@@ -169,6 +182,11 @@ const ChatBotDemo = ({
                                     ? preserveNewlines(part.text)
                                     : part.text}
                                 </Response>
+                                {showCitations && (
+                                  <KnowledgeGraphCitations
+                                    parts={message.parts}
+                                  />
+                                )}
                               </MessageContent>
                             </Message>
                             {message.role === "assistant" &&

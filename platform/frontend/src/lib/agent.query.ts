@@ -205,6 +205,9 @@ export function useUpdateProfile() {
     },
     onSuccess: (data, variables) => {
       if (!data) return;
+      // Immediately update the specific agent's cache so navigating to
+      // chat (or any other page using useProfile) shows fresh data
+      queryClient.setQueryData(["agents", variables.id], data);
       queryClient.invalidateQueries({ queryKey: ["agents"] });
       // Invalidate profile tokens when teams change (tokens are auto-created/deleted)
       queryClient.invalidateQueries({

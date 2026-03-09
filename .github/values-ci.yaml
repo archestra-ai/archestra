@@ -10,6 +10,9 @@ archestra:
   # when replicas is > 1
   replicaCount: 3
 
+  worker:
+    replicaCount: 2
+
   # Environment variables for e2e testing
   env:
     ARCHESTRA_ANALYTICS: disabled

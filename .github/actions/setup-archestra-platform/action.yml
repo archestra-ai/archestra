@@ -265,6 +265,9 @@ runs:
         echo "=== Archestra Platform Logs ==="
         kubectl logs -l app.kubernetes.io/name=archestra-platform --tail=50
 
+        echo "=== Archestra Worker Logs ==="
+        kubectl logs -l app.kubernetes.io/name=archestra-platform-worker --tail=50 || echo "No worker logs"
+
     - name: Wait for services to be healthy
       shell: bash
       env:
@@ -326,6 +329,9 @@ runs:
 
         echo "=== Archestra Platform Logs ==="
         kubectl logs -l app.kubernetes.io/name=archestra-platform --tail=200
+
+        echo "=== Archestra Worker Logs ==="
+        kubectl logs -l app.kubernetes.io/name=archestra-platform-worker --tail=200 || echo "No worker logs"
 
         echo "=== PostgreSQL Logs ==="
         kubectl logs -l app.kubernetes.io/name=postgresql --tail=200 || echo "No PostgreSQL logs"

@@ -10,6 +10,9 @@ archestra:
   # Single replica is sufficient for this test
   replicaCount: 1
 
+  worker:
+    replicaCount: 2
+
   # Environment variables for Vault K8s e2e testing
   env:
     ENABLE_E2E_TEST_ENDPOINTS: "true"

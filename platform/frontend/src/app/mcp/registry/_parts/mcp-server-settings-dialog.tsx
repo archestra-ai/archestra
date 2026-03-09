@@ -31,6 +31,7 @@ import {
   EmptyHeader,
   EmptyMedia,
 } from "@/components/ui/empty";
+import { TruncatedTooltip } from "@/components/ui/truncated-tooltip";
 import { cn } from "@/lib/utils";
 import {
   computeDeploymentStatusSummary,
@@ -270,9 +271,11 @@ export function McpServerSettingsDialog({
               <div className="flex items-center gap-2.5">
                 <SidebarIcon icon={item.icon} catalogId={item.id} />
                 <div className="min-w-0 flex-1">
-                  <div className="font-semibold text-sm truncate">
-                    {item.label || item.name}
-                  </div>
+                  <TruncatedTooltip content={item.label || item.name}>
+                    <div className="font-semibold text-sm truncate">
+                      {item.label || item.name}
+                    </div>
+                  </TruncatedTooltip>
                   {summary && (
                     <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-0.5">
                       <DeploymentStatusDot state={summary.overallState} />
@@ -374,7 +377,9 @@ export function McpServerSettingsDialog({
             <div
               className={cn(
                 "flex-1 flex flex-col min-h-0",
-                isDebugPage ? "overflow-hidden px-6" : "overflow-y-auto p-6",
+                isDebugPage
+                  ? "overflow-hidden px-6 pb-6"
+                  : "overflow-y-auto p-6",
               )}
             >
               {validPage === "configuration" && !isBuiltin && (

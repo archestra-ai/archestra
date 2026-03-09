@@ -1,4 +1,3 @@
-import assert from "node:assert";
 import {
   BUILT_IN_AGENT_IDS,
   BUILT_IN_AGENT_NAMES,
@@ -1914,8 +1913,7 @@ describe("AgentModel", () => {
         user.id,
         org.id,
       );
-      expect(defaultAgentId).not.toBeNull();
-      assert(defaultAgentId !== null);
+      if (!defaultAgentId) throw new Error("expected default agent");
 
       const agent = await AgentModel.findById(defaultAgentId, user.id, true);
       expect(agent).not.toBeNull();
@@ -2043,7 +2041,7 @@ describe("AgentModel", () => {
         user.id,
         org.id,
       );
-      assert(defaultAgentId !== null);
+      if (!defaultAgentId) throw new Error("expected default agent");
       expect(await MemberModel.isAgentDefault(defaultAgentId)).toBe(true);
     });
 
@@ -2073,7 +2071,7 @@ describe("AgentModel", () => {
         user.id,
         org.id,
       );
-      assert(originalDefault !== null);
+      if (!originalDefault) throw new Error("expected default agent");
       expect(await MemberModel.isAgentDefault(originalDefault)).toBe(true);
 
       // Change default to another agent

@@ -220,10 +220,15 @@ export function createDirectLLMModel({
   if (cfg.apiKeyRequiredMessage && !apiKey) {
     throw new ApiError(400, cfg.apiKeyRequiredMessage);
   }
+  const resolvedBaseUrl = baseUrl ?? cfg.defaultBaseUrl;
+  const baseURL =
+    resolvedBaseUrl && cfg.proxiedPathSuffix
+      ? `${resolvedBaseUrl}${cfg.proxiedPathSuffix}`
+      : resolvedBaseUrl;
   return cfg.createModel({
     apiKey,
     modelName,
-    baseURL: baseUrl ?? cfg.defaultBaseUrl,
+    baseURL,
   });
 }
 

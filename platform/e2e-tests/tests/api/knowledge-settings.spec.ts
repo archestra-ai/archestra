@@ -205,7 +205,6 @@ test.describe("Knowledge Settings API", () => {
   test("should reject non-OpenAI API key for embedding", async ({
     request,
     makeApiRequest,
-    updateKnowledgeSettings,
   }) => {
     // Create a non-OpenAI chat API key (e.g. anthropic)
     const createKeyResponse = await makeApiRequest({

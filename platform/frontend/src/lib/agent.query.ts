@@ -56,6 +56,7 @@ export function useProfilesPaginated(params?: {
   scope?: "personal" | "team" | "org" | "built_in";
   teamIds?: string[];
   authorIds?: string[];
+  excludeAuthorIds?: string[];
   labels?: string;
 }) {
   const {
@@ -69,6 +70,7 @@ export function useProfilesPaginated(params?: {
     scope,
     teamIds,
     authorIds,
+    excludeAuthorIds,
     labels,
   } = params || {};
 
@@ -84,6 +86,7 @@ export function useProfilesPaginated(params?: {
     scope === undefined &&
     teamIds === undefined &&
     authorIds === undefined &&
+    excludeAuthorIds === undefined &&
     labels === undefined &&
     (limit === undefined || limit === DEFAULT_AGENTS_PAGE_SIZE);
 
@@ -100,6 +103,7 @@ export function useProfilesPaginated(params?: {
         scope,
         teamIds,
         authorIds,
+        excludeAuthorIds,
         labels,
       },
     ],
@@ -116,6 +120,7 @@ export function useProfilesPaginated(params?: {
             scope,
             teamIds,
             authorIds,
+            excludeAuthorIds,
             labels,
           },
         })

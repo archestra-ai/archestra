@@ -9,6 +9,7 @@ const mockResetStuckTasks = vi.hoisted(() => vi.fn().mockResolvedValue(0));
 const mockHasPendingOrProcessingByType = vi.hoisted(() =>
   vi.fn().mockResolvedValue(false),
 );
+const mockReleaseToQueue = vi.hoisted(() => vi.fn().mockResolvedValue(0));
 vi.mock("@/models", () => ({
   TaskModel: {
     create: mockCreate,
@@ -17,6 +18,7 @@ vi.mock("@/models", () => ({
     fail: mockFail,
     resetStuckTasks: mockResetStuckTasks,
     hasPendingOrProcessingByType: mockHasPendingOrProcessingByType,
+    releaseToQueue: mockReleaseToQueue,
   },
 }));
 
@@ -26,6 +28,7 @@ vi.mock("@/config", () => ({
     kb: {
       taskWorkerPollIntervalSeconds: 1,
       taskWorkerMaxConcurrent: 2,
+      taskWorkerShutdownTimeoutSeconds: 5,
     },
   },
 }));
@@ -70,8 +73,8 @@ describe("TaskQueueService", () => {
     vi.useFakeTimers();
   });
 
-  afterEach(() => {
-    taskQueueService.stopWorker();
+  afterEach(async () => {
+    await taskQueueService.stopWorker();
     vi.useRealTimers();
   });
 
@@ -210,15 +213,75 @@ describe("TaskQueueService", () => {
       await vi.advanceTimersByTimeAsync(1000);
       expect(mockDequeue).toHaveBeenCalledTimes(1);
 
-      taskQueueService.stopWorker();
+      await taskQueueService.stopWorker();
 
       // Further time advances should not trigger more polls
       await vi.advanceTimersByTimeAsync(5000);
       expect(mockDequeue).toHaveBeenCalledTimes(1);
     });
 
-    test("stopWorker is safe to call when worker is not started", () => {
-      expect(() => taskQueueService.stopWorker()).not.toThrow();
+    test("stopWorker is safe to call when worker is not started", async () => {
+      await expect(taskQueueService.stopWorker()).resolves.toBeUndefined();
+    });
+
+    test("stopWorker resolves immediately when no in-flight tasks", async () => {
+      mockDequeue.mockResolvedValue(null);
+      taskQueueService.startWorker();
+
+      await vi.advanceTimersByTimeAsync(1000);
+
+      await taskQueueService.stopWorker();
+
+      expect(mockReleaseToQueue).not.toHaveBeenCalled();
+    });
+
+    test("stopWorker waits for in-flight tasks to drain", async () => {
+      let resolveHandler!: () => void;
+      const handlerPromise = new Promise<void>((resolve) => {
+        resolveHandler = resolve;
+      });
+      const handler = vi.fn().mockReturnValue(handlerPromise);
+
+      const task = fakeTask({ id: "drain-task-1" });
+      mockDequeue.mockResolvedValueOnce(task);
+      mockComplete.mockResolvedValue(undefined);
+
+      taskQueueService.registerHandler("connector_sync", handler);
+      taskQueueService.startWorker();
+
+      // Trigger poll to pick up the task
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(handler).toHaveBeenCalled();
+
+      // Start stopping — should not resolve yet
+      const stopPromise = taskQueueService.stopWorker();
+
+      // Complete the handler — should allow drain to finish
+      resolveHandler();
+      await stopPromise;
+
+      expect(mockReleaseToQueue).not.toHaveBeenCalled();
+    });
+
+    test("stopWorker releases tasks when drain times out", async () => {
+      const handler = vi.fn().mockReturnValue(new Promise(() => {})); // never resolves
+
+      const task = fakeTask({ id: "timeout-task-1" });
+      mockDequeue.mockResolvedValueOnce(task);
+
+      taskQueueService.registerHandler("connector_sync", handler);
+      taskQueueService.startWorker();
+
+      // Trigger poll to pick up the task
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(handler).toHaveBeenCalled();
+
+      // Start stopping and advance past the timeout (5s configured in mock)
+      const stopPromise = taskQueueService.stopWorker();
+      await vi.advanceTimersByTimeAsync(5000);
+      await stopPromise;
+
+      expect(mockReleaseToQueue).toHaveBeenCalledWith(["timeout-task-1"]);
     });
   });
 

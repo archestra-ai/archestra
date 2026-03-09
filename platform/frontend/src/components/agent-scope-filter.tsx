@@ -20,12 +20,18 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useLabelKeys, useLabelValues } from "@/lib/agent.query";
-import { useHasPermissions } from "@/lib/auth.query";
+import { useHasPermissions, useSession } from "@/lib/auth.query";
 import { useOrganizationMembers } from "@/lib/organization.query";
 import { useTeams } from "@/lib/team.query";
 import { cn } from "@/lib/utils";
 
-type ScopeValue = "personal" | "team" | "org" | "built_in";
+type ScopeValue =
+  | "personal"
+  | "my_personal"
+  | "others_personal"
+  | "team"
+  | "org"
+  | "built_in";
 
 export function AgentScopeFilter({
   showBuiltIn = false,
@@ -42,6 +48,25 @@ export function AgentScopeFilter({
   const teamIdsParam = searchParams.get("teamIds");
   const authorIdsParam = searchParams.get("authorIds");
 
+  const excludeAuthorIdsParam = searchParams.get("excludeAuthorIds");
+
+  const { data: session } = useSession();
+  const currentUserId = session?.user?.id;
+
+  // Derive the UI scope from URL params
+  const uiScope: ScopeValue | undefined = useMemo(() => {
+    if (scope !== "personal") return scope;
+    if (excludeAuthorIdsParam) return "others_personal";
+    if (!authorIdsParam) return "my_personal";
+    if (currentUserId) {
+      const ids = authorIdsParam.split(",");
+      if (ids.length === 1 && ids[0] === currentUserId) {
+        return "my_personal";
+      }
+    }
+    return "others_personal";
+  }, [scope, authorIdsParam, excludeAuthorIdsParam, currentUserId]);
+
   const selectedTeamIds = useMemo(
     () => (teamIdsParam ? teamIdsParam.split(",") : []),
     [teamIdsParam],
@@ -57,6 +82,7 @@ export function AgentScopeFilter({
     scope ||
     teamIdsParam ||
     authorIdsParam ||
+    excludeAuthorIdsParam ||
     nameFilter ||
     labelsParam
   );
@@ -64,7 +90,7 @@ export function AgentScopeFilter({
   const { data: isAdmin } = useHasPermissions({ member: ["read"] });
   const { data: teams } = useTeams();
   const { data: members } = useOrganizationMembers(
-    !!isAdmin && scope === "personal",
+    !!isAdmin && uiScope === "others_personal",
   );
 
   const updateUrlParams = useCallback(
@@ -85,13 +111,30 @@ export function AgentScopeFilter({
 
   const handleScopeChange = useCallback(
     (value: string) => {
-      updateUrlParams({
-        scope: value === "all" ? null : value,
-        teamIds: null,
-        authorIds: null,
-      });
+      if (value === "my_personal") {
+        updateUrlParams({
+          scope: "personal",
+          teamIds: null,
+          authorIds: currentUserId ?? null,
+          excludeAuthorIds: null,
+        });
+      } else if (value === "others_personal") {
+        updateUrlParams({
+          scope: "personal",
+          teamIds: null,
+          authorIds: null,
+          excludeAuthorIds: currentUserId ?? null,
+        });
+      } else {
+        updateUrlParams({
+          scope: value === "all" ? null : value,
+          teamIds: null,
+          authorIds: null,
+          excludeAuthorIds: null,
+        });
+      }
     },
-    [updateUrlParams],
+    [updateUrlParams, currentUserId],
   );
 
   const handleTeamIdsChange = useCallback(
@@ -118,6 +161,7 @@ export function AgentScopeFilter({
       scope: null,
       teamIds: null,
       authorIds: null,
+      excludeAuthorIds: null,
       name: null,
       labels: null,
     });
@@ -130,22 +174,27 @@ export function AgentScopeFilter({
 
   const memberItems = useMemo(
     () =>
-      (members ?? []).map((m) => ({
-        value: m.id,
-        label: m.name || m.email,
-      })),
-    [members],
+      (members ?? [])
+        .filter((m) => m.id !== currentUserId)
+        .map((m) => ({
+          value: m.id,
+          label: m.name || m.email,
+        })),
+    [members, currentUserId],
   );
 
   return (
     <div className="flex items-center gap-2">
-      <Select value={scope ?? "all"} onValueChange={handleScopeChange}>
-        <SelectTrigger className="w-[160px]">
+      <Select value={uiScope ?? "all"} onValueChange={handleScopeChange}>
+        <SelectTrigger className="w-[180px]">
           <SelectValue />
         </SelectTrigger>
         <SelectContent position="popper" side="bottom" align="start">
           <SelectItem value="all">All types</SelectItem>
-          <SelectItem value="personal">Personal</SelectItem>
+          <SelectItem value="my_personal">My Personal</SelectItem>
+          {isAdmin && (
+            <SelectItem value="others_personal">Others' Personal</SelectItem>
+          )}
           <SelectItem value="team">Team</SelectItem>
           <SelectItem value="org">Organization</SelectItem>
           {showBuiltIn && isAdmin && (
@@ -167,7 +216,7 @@ export function AgentScopeFilter({
           selectedSuffix={(n) => `${n === 1 ? "team" : "teams"} selected`}
         />
       )}
-      {scope === "personal" && isAdmin && (
+      {uiScope === "others_personal" && isAdmin && (
         <MultiSelect
           value={selectedAuthorIds}
           onValueChange={handleAuthorIdsChange}
@@ -201,12 +250,28 @@ export function ActiveFilterBadges() {
 
   const teamIdsParam = searchParams.get("teamIds");
   const authorIdsParam = searchParams.get("authorIds");
+  const excludeAuthorIdsParam = searchParams.get("excludeAuthorIds");
   const labelsParam = searchParams.get("labels");
   const scopeParam = searchParams.get("scope");
+  const { data: session } = useSession();
+  const currentUserId = session?.user?.id;
   const { data: teams } = useTeams();
   const { data: isAdmin } = useHasPermissions({ member: ["read"] });
+
+  // Determine if this is "others' personal" — mirrors uiScope derivation in AgentScopeFilter
+  const isOthersPersonal = useMemo(() => {
+    if (scopeParam !== "personal") return false;
+    if (excludeAuthorIdsParam) return true;
+    if (!authorIdsParam) return false;
+    if (currentUserId) {
+      const ids = authorIdsParam.split(",");
+      if (ids.length === 1 && ids[0] === currentUserId) return false;
+    }
+    return true;
+  }, [scopeParam, authorIdsParam, excludeAuthorIdsParam, currentUserId]);
+
   const { data: members } = useOrganizationMembers(
-    !!isAdmin && scopeParam === "personal",
+    !!isAdmin && isOthersPersonal,
   );
 
   const selectedTeams = useMemo(() => {
@@ -280,7 +345,7 @@ export function ActiveFilterBadges() {
   );
 
   const hasTeams = selectedTeams.length > 0;
-  const hasUsers = selectedUsers.length > 0;
+  const hasUsers = isOthersPersonal && selectedUsers.length > 0;
   const hasLabels = parsedLabels && Object.keys(parsedLabels).length > 0;
 
   if (!hasTeams && !hasUsers && !hasLabels) return null;

@@ -18,9 +18,9 @@ Knowledge bases provide built-in retrieval augmented generation (RAG) powered by
 ## Architecture
 
 ```mermaid
-flowchart TB
+flowchart LR
     subgraph Ingestion["Ingestion (async)"]
-        direction TB
+        direction LR
         C[Connectors] -->|cron schedule| D[Documents]
         D --> CH[Chunking]
         CH -->|OpenAI API| E[Embedding]
@@ -28,10 +28,10 @@ flowchart TB
     end
 
     subgraph Query["Query (runtime)"]
-        direction TB
+        direction LR
         Q[query_knowledge_base] -->|OpenAI API| QE[Query Embedding]
         QE --> VS[Vector Search]
-        QE --> FTS["Full-Text Search<br/>(configurable)"]
+        QE --> FTS["Full-Text Search (configurable)"]
         VS --> RRF[Reciprocal Rank Fusion]
         FTS --> RRF
         RRF --> RR[Reranking]

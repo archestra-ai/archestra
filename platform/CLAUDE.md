@@ -9,15 +9,13 @@
 ## Important Rules
 
 1. **Use pnpm** for package management
-2. **Use Biome for formatting and linting** - Run `pnpm lint` before committing
-3. **TypeScript strict mode** - Ensure code passes `pnpm type-check` before completion
-4. **Use Tilt for development** - `tilt up` to start the full environment
-5. **Use shadcn/ui components** - Add with `npx shadcn@latest add <component>`
-6. **Documentation Updates** - For any feature or system changes, audit `../docs/pages` to determine if existing content needs modification/updates or if new documentation should be added. Follow the writing guidelines in `../docs/docs_writer_prompt.md`
-7. **Always Add Tests** - When working on any feature, ALWAYS add or modify appropriate test cases (unit tests, integration tests, or e2e tests under `platform/e2e-tests/tests`)
-8. **Enterprise Edition Imports** - NEVER directly import from `.ee.ts` files unless the importing file is itself an `.ee.ts` file. Use runtime conditional logic with `config.enterpriseFeatures.core` checks instead to avoid bundling enterprise code into free builds
-9. **No Auto Commits** - Never commit or push changes without explicit user approval. Always ask before running git commit or git push
-10. **No Database Modifications Without Approval** - NEVER run INSERT, UPDATE, DELETE, or any data-modifying SQL queries without explicit user approval. SELECT queries for reading data are allowed. Always ask before modifying database data directly.
+2. **Use Tilt for development** - `tilt up` to start the full environment
+3. **Use shadcn/ui components** - Add with `npx shadcn@latest add <component>`
+4. **Documentation Updates** - For any feature or system changes, audit `../docs/pages` to determine if existing content needs modification/updates or if new documentation should be added. Follow the writing guidelines in `../docs/docs_writer_prompt.md`
+5. **Always Add Tests** - When working on any feature, ALWAYS add or modify appropriate test cases (unit tests, integration tests, or e2e tests under `platform/e2e-tests/tests`)
+6. **Enterprise Edition Imports** - NEVER directly import from `.ee.ts` files unless the importing file is itself an `.ee.ts` file. Use runtime conditional logic with `config.enterpriseFeatures.core` checks instead to avoid bundling enterprise code into free builds
+7. **No Auto Commits** - Never commit or push changes without explicit user approval. Always ask before running git commit or git push
+8. **No Database Modifications Without Approval** - NEVER run INSERT, UPDATE, DELETE, or any data-modifying SQL queries without explicit user approval. SELECT queries for reading data are allowed. Always ask before modifying database data directly.
 
 ## Docs
 
@@ -111,7 +109,7 @@ ARCHESTRA_ANTHROPIC_BASE_URL=http://localhost:9092
 ARCHESTRA_GEMINI_BASE_URL=http://localhost:9092
 
 # Orlando WireMock (project-specific)
-tilt trigger orlando-wiremock 
+tilt trigger orlando-wiremock
 
 ARCHESTRA_OPENAI_BASE_URL=http://localhost:9091/v1
 ARCHESTRA_ANTHROPIC_BASE_URL=http://localhost:9091
@@ -136,6 +134,7 @@ docker compose -f dev/docker-compose.observability.yml up -d  # Alternative: Sta
 **Naming Convention**: All env vars MUST follow the pattern `ARCHESTRA_<PRODUCT_AREA>_<THING>` (e.g., `ARCHESTRA_LLM_PROXY_MAX_VIRTUAL_KEYS`, `ARCHESTRA_OTEL_VERBOSE_TRACING`).
 
 **Adding New Env Vars**:
+
 1. **Consume in `backend/src/config.ts`** - Parse and validate the env var here. If a custom parse/validation function is needed, export it and add tests in `backend/src/config.test.ts`
 2. **Document in `../docs/pages/platform-deployment.md`** - All new env vars MUST be documented in the Environment Variables section. Use best judgement on whether it warrants a new subsection
 3. **Frontend access via `/api/config`** - If the frontend needs to reference an env var value, expose it through `backend/src/routes/config.ts` response and consume via the `useFeature()` hook
@@ -283,6 +282,7 @@ pnpm rebuild <package-name>  # Enable scripts for specific package
 **General**:
 
 - **Prefer Classes for Stateful Modules**: When encapsulating functionality that involves state (cached values, intervals, connections, etc.), prefer creating a class over standalone module functions. Export a singleton instance. This improves encapsulation, testability, and makes state management explicit.
+
   ```typescript
   // Good - class with singleton
   class ChatOpsManager {
@@ -300,6 +300,7 @@ pnpm rebuild <package-name>  # Enable scripts for specific package
   ```
 
 - **Private Methods at Bottom**: In classes, mark methods as `private` if they are only used within the class. Place all private methods at the bottom of the class, after public methods. This keeps the "public interface" visible at the top.
+
   ```typescript
   class MyService {
     // Public methods first
@@ -314,6 +315,7 @@ pnpm rebuild <package-name>  # Enable scripts for specific package
   ```
 
 - **No Premature Exports**: Only export what is actually used outside the module. If a function, constant, or type is only used within the module, do NOT export it. This is critical for maintaining clean module boundaries.
+
   ```typescript
   // Good - only export what's needed externally
   export const myService = new MyService();
@@ -324,6 +326,7 @@ pnpm rebuild <package-name>  # Enable scripts for specific package
   ```
 
 - **Module Code Order**: Structure modules so the "public interface" appears at the top. Internal/private functions and constants should be placed at the bottom of the file. This makes it immediately clear what the module exposes.
+
   ```typescript
   // 1. Imports
   import { something } from "somewhere";
@@ -348,6 +351,7 @@ pnpm rebuild <package-name>  # Enable scripts for specific package
   ```
 
 - **Function Parameters**: If a function accepts more than 2 parameters, use a single object parameter instead of multiple positional parameters. This improves readability, makes parameters self-documenting, and allows for easier future extension.
+
   ```typescript
   // Good
   async function validateScope(params: {
@@ -405,19 +409,29 @@ pnpm rebuild <package-name>  # Enable scripts for specific package
 - **Pagination**: Use `PaginationQuerySchema` and `createPaginatedResponseSchema` for consistent pagination across APIs
 - **Sorting**: Use `SortingQuerySchema` or `createSortingQuerySchema` for standardized sorting parameters
 - **Database Types via drizzle-zod**: Never manually define TypeScript interfaces for database entities. Use `drizzle-zod` to generate Zod schemas from Drizzle table definitions, then infer types with `z.infer<>`. This keeps types in sync with the schema automatically:
+
   ```typescript
   // In types/<entity>.ts
-  import { createSelectSchema, createInsertSchema, createUpdateSchema } from "drizzle-zod";
+  import {
+    createSelectSchema,
+    createInsertSchema,
+    createUpdateSchema,
+  } from "drizzle-zod";
   import { schema } from "@/database";
 
   export const SelectEntitySchema = createSelectSchema(schema.entityTable);
-  export const InsertEntitySchema = createInsertSchema(schema.entityTable).omit({ id: true, createdAt: true, updatedAt: true });
-  export const UpdateEntitySchema = createUpdateSchema(schema.entityTable).pick({ fieldToUpdate: true });
+  export const InsertEntitySchema = createInsertSchema(schema.entityTable).omit(
+    { id: true, createdAt: true, updatedAt: true },
+  );
+  export const UpdateEntitySchema = createUpdateSchema(schema.entityTable).pick(
+    { fieldToUpdate: true },
+  );
 
   export type Entity = z.infer<typeof SelectEntitySchema>;
   export type InsertEntity = z.infer<typeof InsertEntitySchema>;
   export type UpdateEntity = z.infer<typeof UpdateEntitySchema>;
   ```
+
 - **Schema `$type<>` reuse**: In `database/schemas/*.ts`, never use inline literal union types for `.$type<>()` (e.g. `$type<"pending" | "completed">()`). Instead, define the type as a `z.enum()` in the corresponding `types/*.ts` file, infer the TS type, and reference it via `import type` in the schema: `.$type<EmbeddingStatus>()`. This keeps the type definition in one place and avoids drift between schema and types.
 
 **Team-based Access Control**:
@@ -585,6 +599,7 @@ test("API example", async ({ request, createAgent, deleteAgent }) => {
 **Playwright Locator Best Practices**:
 
 Prefer Playwright's recommended locators over raw `locator()` calls. In priority order:
+
 1. `page.getByRole()` - Accessible elements by ARIA role (buttons, links, headings, etc.)
 2. `page.getByText()` - Find by text content
 3. `page.getByLabel()` - Form controls by label
@@ -592,11 +607,13 @@ Prefer Playwright's recommended locators over raw `locator()` calls. In priority
 5. `page.getByTestId()` - Custom test IDs (use `E2eTestId` constants from `@shared`)
 
 Avoid:
+
 - Raw CSS selectors: `page.locator('.my-class')` or `page.locator('#my-id')`
 - XPath selectors
 - Arbitrary timeouts - use Playwright's auto-waiting instead
 
 Example:
+
 ```typescript
 // Good
 await page.getByRole("button", { name: /Submit/i }).click();
@@ -604,8 +621,8 @@ await page.getByLabel(/Email/i).fill("test@example.com");
 await page.getByTestId(E2eTestId.CreateAgentButton).click();
 
 // Avoid
-await page.locator('.submit-btn').click();
-await page.locator('#email-input').fill("test@example.com");
+await page.locator(".submit-btn").click();
+await page.locator("#email-input").fill("test@example.com");
 await page.waitForTimeout(1000); // Use auto-waiting instead
 ```
 

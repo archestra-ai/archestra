@@ -1,5 +1,5 @@
 import type { SupportedProvider } from "@shared";
-import type { PartialUIMessage } from "@/components/chatbot-demo";
+import type { PartialUIMessage } from "@/components/message-thread";
 import AnthropicMessagesInteraction from "./llmProviders/anthropic";
 import BedrockConverseInteraction from "./llmProviders/bedrock";
 import CerebrasChatCompletionInteraction from "./llmProviders/cerebras";

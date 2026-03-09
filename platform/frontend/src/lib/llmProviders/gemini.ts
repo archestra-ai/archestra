@@ -1,5 +1,5 @@
 import type { archestraApiTypes } from "@shared";
-import type { PartialUIMessage } from "@/components/chatbot-demo";
+import type { PartialUIMessage } from "@/components/message-thread";
 import type { DualLlmResult, Interaction, InteractionUtils } from "./common";
 
 // Define more precise types for Gemini parts since the generated types use union discrimination
@@ -460,7 +460,7 @@ class GeminiGenerateContentInteraction implements InteractionUtils {
                   // Add function result part
                   toolCallParts.push({
                     type: "dynamic-tool",
-                    toolName: "tool-result",
+                    toolName: functionCallName || "tool-result",
                     toolCallId: functionCallId || `gemini-${Date.now()}`,
                     state: "output-available",
                     input: {},

@@ -9,7 +9,7 @@ import {
   ShieldCheck,
   TriangleAlert,
 } from "lucide-react";
-import { Fragment } from "react";
+import { Fragment, useMemo } from "react";
 import { Action, Actions } from "@/components/ai-elements/actions";
 import {
   Conversation,
@@ -48,7 +48,7 @@ import { preserveNewlines } from "@/lib/chat-utils";
 import { parsePolicyDenied } from "@/lib/llmProviders/common";
 import { cn } from "@/lib/utils";
 
-const ChatBotDemo = ({
+const MessageThread = ({
   messages,
   reload,
   isEnded,
@@ -66,6 +66,7 @@ const ChatBotDemo = ({
   profileId?: string;
 }) => {
   const status: ChatStatus = "streaming" as ChatStatus;
+  const allParts = useMemo(() => messages.flatMap((m) => m.parts), [messages]);
 
   return (
     <div
@@ -165,8 +166,7 @@ const ChatBotDemo = ({
                             .slice(i + 1)
                             .every((p) => p.type !== "text");
                         const showCitations =
-                          isLastTextPart &&
-                          hasKnowledgeBaseToolCall(message.parts);
+                          isLastTextPart && hasKnowledgeBaseToolCall(allParts);
 
                         return (
                           <Fragment key={`${message.id}-${i}`}>
@@ -183,9 +183,7 @@ const ChatBotDemo = ({
                                     : part.text}
                                 </Response>
                                 {showCitations && (
-                                  <KnowledgeGraphCitations
-                                    parts={message.parts}
-                                  />
+                                  <KnowledgeGraphCitations parts={allParts} />
                                 )}
                               </MessageContent>
                             </Message>
@@ -657,4 +655,4 @@ function _isBlockedToolPart(part: unknown): part is BlockedToolPart {
   );
 }
 
-export default ChatBotDemo;
+export default MessageThread;

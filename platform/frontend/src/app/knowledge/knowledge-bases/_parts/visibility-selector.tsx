@@ -5,12 +5,6 @@ import { CheckIcon, ChevronDown, Globe, RefreshCw, Users } from "lucide-react";
 import { useState } from "react";
 import { Label } from "@/components/ui/label";
 import { MultiSelectCombobox } from "@/components/ui/multi-select-combobox";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { useTeams } from "@/lib/team.query";
 
 export type KnowledgeBaseVisibility = NonNullable<
@@ -132,17 +126,6 @@ export function VisibilitySelector({
                   </div>
                 </button>
               );
-
-              if (isDisabled) {
-                return (
-                  <TooltipProvider key={value}>
-                    <Tooltip>
-                      <TooltipTrigger asChild>{button}</TooltipTrigger>
-                      <TooltipContent>Coming Soon</TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                );
-              }
 
               return button;
             })}

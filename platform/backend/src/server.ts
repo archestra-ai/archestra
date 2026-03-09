@@ -760,7 +760,6 @@ const startWorker = async () => {
 
   try {
     await initializeDatabase();
-    await seedRequiredStartingData();
     cacheManager.start();
 
     registerTaskHandlers(taskQueueService);

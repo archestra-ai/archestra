@@ -57,7 +57,8 @@ export function AgentScopeFilter({
   const uiScope: ScopeValue | undefined = useMemo(() => {
     if (scope !== "personal") return scope;
     if (excludeAuthorIdsParam) return "others_personal";
-    if (authorIdsParam && currentUserId) {
+    if (!authorIdsParam) return "my_personal";
+    if (currentUserId) {
       const ids = authorIdsParam.split(",");
       if (ids.length === 1 && ids[0] === currentUserId) {
         return "my_personal";

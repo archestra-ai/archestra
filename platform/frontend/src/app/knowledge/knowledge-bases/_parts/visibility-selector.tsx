@@ -70,7 +70,10 @@ export function VisibilitySelector({
               const isSelected = visibility === value;
               // TODO: Enable when ACL support is implemented
               // https://github.com/archestra-ai/archestra/issues/3218
-              const isDisabled = value === "auto-sync-permissions";
+              const noTeamsAvailable =
+                value === "team-scoped" && (teams ?? []).length === 0;
+              const isDisabled =
+                value === "auto-sync-permissions" || noTeamsAvailable;
 
               const button = (
                 <button
@@ -101,7 +104,9 @@ export function VisibilitySelector({
                       {option.label}
                       {isDisabled && (
                         <span className="ml-2 text-xs font-normal text-muted-foreground">
-                          Coming Soon
+                          {noTeamsAvailable
+                            ? "No teams available"
+                            : "Coming Soon"}
                         </span>
                       )}
                     </div>

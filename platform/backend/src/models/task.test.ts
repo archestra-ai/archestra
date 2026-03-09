@@ -164,4 +164,38 @@ describe("TaskModel", () => {
       expect(result).toBe(false);
     });
   });
+
+  describe("hasPendingOrProcessingByType", () => {
+    test("returns true when a pending task of that type exists", async () => {
+      await TaskModel.create({
+        taskType: "check_due_connectors",
+        payload: {},
+      });
+
+      const result = await TaskModel.hasPendingOrProcessingByType(
+        "check_due_connectors",
+      );
+      expect(result).toBe(true);
+    });
+
+    test("returns false when no task of that type exists", async () => {
+      const result = await TaskModel.hasPendingOrProcessingByType(
+        "check_due_connectors",
+      );
+      expect(result).toBe(false);
+    });
+
+    test("returns false when task of that type is completed", async () => {
+      const task = await TaskModel.create({
+        taskType: "check_due_connectors",
+        payload: {},
+      });
+      await TaskModel.complete(task.id);
+
+      const result = await TaskModel.hasPendingOrProcessingByType(
+        "check_due_connectors",
+      );
+      expect(result).toBe(false);
+    });
+  });
 });

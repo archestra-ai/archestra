@@ -1,10 +1,13 @@
+import { sql } from "drizzle-orm";
 import {
+  boolean,
   index,
   integer,
   jsonb,
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 import type { TaskStatus, TaskType } from "@/types/task";
@@ -27,6 +30,7 @@ const tasksTable = pgTable(
     startedAt: timestamp("started_at", { mode: "date" }),
     completedAt: timestamp("completed_at", { mode: "date" }),
     lastError: text("last_error"),
+    periodic: boolean("periodic").notNull().default(false),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   },
   (table) => [
@@ -35,6 +39,11 @@ const tasksTable = pgTable(
       table.status,
       table.scheduledFor,
     ),
+    uniqueIndex("tasks_unique_periodic_idx")
+      .on(table.taskType)
+      .where(
+        sql`${table.periodic} = true AND ${table.status} IN ('pending', 'processing')`,
+      ),
   ],
 );
 

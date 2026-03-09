@@ -14,7 +14,11 @@ export const TaskStatusSchema = z.enum([
 ]);
 export type TaskStatus = z.infer<typeof TaskStatusSchema>;
 
-export const TaskTypeSchema = z.enum(["connector_sync", "batch_embedding"]);
+export const TaskTypeSchema = z.enum([
+  "connector_sync",
+  "batch_embedding",
+  "check_due_connectors",
+]);
 export type TaskType = z.infer<typeof TaskTypeSchema>;
 
 export type ConnectorSyncPayload = {

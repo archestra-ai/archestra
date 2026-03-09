@@ -6,6 +6,9 @@ const mockDequeue = vi.hoisted(() => vi.fn());
 const mockComplete = vi.hoisted(() => vi.fn());
 const mockFail = vi.hoisted(() => vi.fn());
 const mockResetStuckTasks = vi.hoisted(() => vi.fn().mockResolvedValue(0));
+const mockHasPendingOrProcessingByType = vi.hoisted(() =>
+  vi.fn().mockResolvedValue(false),
+);
 vi.mock("@/models", () => ({
   TaskModel: {
     create: mockCreate,
@@ -13,9 +16,7 @@ vi.mock("@/models", () => ({
     complete: mockComplete,
     fail: mockFail,
     resetStuckTasks: mockResetStuckTasks,
-  },
-  KnowledgeBaseConnectorModel: {
-    findAllEnabled: vi.fn().mockResolvedValue([]),
+    hasPendingOrProcessingByType: mockHasPendingOrProcessingByType,
   },
 }));
 
@@ -54,6 +55,7 @@ function fakeTask(overrides: Partial<Task> = {}): Task {
     attempt: 1,
     maxAttempts: 5,
     lastError: null,
+    periodic: false,
     scheduledFor: new Date(),
     startedAt: new Date(),
     completedAt: null,
@@ -229,7 +231,7 @@ describe("TaskQueueService", () => {
 
       await vi.advanceTimersByTimeAsync(1000);
 
-      expect(mockResetStuckTasks).toHaveBeenCalledWith(10 * 60 * 1000);
+      expect(mockResetStuckTasks).toHaveBeenCalledWith(60 * 60 * 1000);
     });
 
     test("does nothing when no tasks are available", async () => {
@@ -242,6 +244,152 @@ describe("TaskQueueService", () => {
       expect(mockDequeue).toHaveBeenCalled();
       expect(mockComplete).not.toHaveBeenCalled();
       expect(mockFail).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("seedPeriodicTasks", () => {
+    test("seeds periodic tasks when none exist", async () => {
+      mockHasPendingOrProcessingByType.mockResolvedValue(false);
+      mockCreate.mockResolvedValue({ id: "periodic-1" });
+
+      await taskQueueService.seedPeriodicTasks();
+
+      expect(mockHasPendingOrProcessingByType).toHaveBeenCalledWith(
+        "check_due_connectors",
+      );
+      expect(mockCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          taskType: "check_due_connectors",
+          payload: {},
+          maxAttempts: 1,
+          periodic: true,
+        }),
+      );
+    });
+
+    test("skips seeding when periodic task already exists", async () => {
+      mockHasPendingOrProcessingByType.mockResolvedValue(true);
+
+      await taskQueueService.seedPeriodicTasks();
+
+      expect(mockCreate).not.toHaveBeenCalled();
+    });
+
+    test("catches unique constraint violation during seeding", async () => {
+      mockHasPendingOrProcessingByType.mockResolvedValue(false);
+      const uniqueError = Object.assign(new Error("unique violation"), {
+        code: "23505",
+      });
+      mockCreate.mockRejectedValue(uniqueError);
+
+      // Should not throw
+      await expect(
+        taskQueueService.seedPeriodicTasks(),
+      ).resolves.toBeUndefined();
+    });
+  });
+
+  describe("rescheduleIfPeriodic", () => {
+    test("reschedules periodic task after completion", async () => {
+      const handler = vi.fn().mockResolvedValue(undefined);
+      const task = fakeTask({
+        taskType: "check_due_connectors",
+        periodic: true,
+        maxAttempts: 1,
+        payload: {},
+      });
+      mockDequeue.mockResolvedValueOnce(task);
+      mockComplete.mockResolvedValue(undefined);
+      // First call for reschedule
+      mockCreate.mockResolvedValue({ id: "rescheduled-1" });
+
+      taskQueueService.registerHandler("check_due_connectors", handler);
+      taskQueueService.startWorker();
+
+      await vi.advanceTimersByTimeAsync(1000);
+
+      expect(mockComplete).toHaveBeenCalledWith(task.id);
+      // Verify reschedule was called with periodic: true and a future scheduledFor
+      expect(mockCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          taskType: "check_due_connectors",
+          payload: {},
+          maxAttempts: 1,
+          periodic: true,
+          scheduledFor: expect.any(Date),
+        }),
+      );
+    });
+
+    test("reschedules periodic task after terminal failure (dead)", async () => {
+      const handler = vi
+        .fn()
+        .mockRejectedValue(new Error("periodic task failed"));
+      const task = fakeTask({
+        taskType: "check_due_connectors",
+        periodic: true,
+        attempt: 1,
+        maxAttempts: 1,
+        payload: {},
+      });
+      mockDequeue.mockResolvedValueOnce(task);
+      mockFail.mockResolvedValue({ ...task, status: "dead" });
+      mockCreate.mockResolvedValue({ id: "rescheduled-2" });
+
+      taskQueueService.registerHandler("check_due_connectors", handler);
+      taskQueueService.startWorker();
+
+      await vi.advanceTimersByTimeAsync(1000);
+
+      expect(mockFail).toHaveBeenCalled();
+      expect(mockCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          taskType: "check_due_connectors",
+          periodic: true,
+        }),
+      );
+    });
+
+    test("does not reschedule non-periodic tasks", async () => {
+      const handler = vi.fn().mockResolvedValue(undefined);
+      const task = fakeTask({
+        taskType: "connector_sync",
+        payload: { connectorId: "conn-1" },
+      });
+      mockDequeue.mockResolvedValueOnce(task);
+      mockComplete.mockResolvedValue(undefined);
+
+      taskQueueService.registerHandler("connector_sync", handler);
+      taskQueueService.startWorker();
+
+      await vi.advanceTimersByTimeAsync(1000);
+
+      expect(mockComplete).toHaveBeenCalledWith(task.id);
+      // mockCreate should not have been called for rescheduling
+      expect(mockCreate).not.toHaveBeenCalled();
+    });
+
+    test("catches unique constraint violation during rescheduling", async () => {
+      const handler = vi.fn().mockResolvedValue(undefined);
+      const task = fakeTask({
+        taskType: "check_due_connectors",
+        periodic: true,
+        payload: {},
+      });
+      mockDequeue.mockResolvedValueOnce(task);
+      mockComplete.mockResolvedValue(undefined);
+      const uniqueError = Object.assign(new Error("unique violation"), {
+        code: "23505",
+      });
+      mockCreate.mockRejectedValue(uniqueError);
+
+      taskQueueService.registerHandler("check_due_connectors", handler);
+      taskQueueService.startWorker();
+
+      // Should not throw
+      await vi.advanceTimersByTimeAsync(1000);
+
+      expect(mockComplete).toHaveBeenCalledWith(task.id);
     });
   });
 });

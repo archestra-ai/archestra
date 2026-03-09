@@ -1212,6 +1212,13 @@
       "when": 1773058710238,
       "tag": "0172_reflective_gabe_jones",
       "breakpoints": true
+    },
+    {
+      "idx": 173,
+      "version": "7",
+      "when": 1773064802202,
+      "tag": "0173_heavy_marvel_boy",
+      "breakpoints": true
     }
   ]
 }

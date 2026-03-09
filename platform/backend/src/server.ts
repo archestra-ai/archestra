@@ -650,6 +650,7 @@ const start = async () => {
 
     // Start task queue worker for knowledge base connector syncs and embeddings
     registerTaskHandlers(taskQueueService);
+    await taskQueueService.seedPeriodicTasks();
     taskQueueService.startWorker();
 
     // Background job to renew email subscriptions before they expire

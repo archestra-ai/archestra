@@ -344,6 +344,48 @@ archestra:
         #       name: custom-binding-name  # Optional: override the auto-generated binding name
         additionalRoleBindings: []
 
+  # Background worker configuration
+  # Deploys a separate Deployment for processing background jobs from the postgres queue
+  # (e.g., knowledge base connector syncs, batch embeddings).
+  #
+  # When enabled, the main platform pods run as web-only (ARCHESTRA_PROCESS_TYPE=web)
+  # and the worker pods handle all background job processing (ARCHESTRA_PROCESS_TYPE=worker).
+  # When disabled, the main platform pods run both the web server and the worker in-process.
+  worker:
+    # Enable or disable the separate worker Deployment
+    enabled: true
+
+    # Number of worker pod replicas
+    replicaCount: 1
+
+    # Resource requests and limits for worker pods
+    # If not set, inherits from archestra.resources
+    # Workers typically need less memory than the web server
+    resources:
+      requests:
+        memory: "1Gi"
+      limits:
+        memory: "2Gi"
+
+    # Deployment strategy for the worker Deployment
+    deploymentStrategy:
+      type: RollingUpdate
+      rollingUpdate:
+        maxUnavailable: 0
+        maxSurge: 1
+
+    # Pod annotations for worker pods
+    # If not set, inherits from archestra.podAnnotations
+    podAnnotations: {}
+
+    # Node selector for worker pods
+    # If not set, inherits from archestra.nodeSelector
+    nodeSelector: {}
+
+    # Tolerations for worker pods
+    # If not set, inherits from archestra.tolerations
+    tolerations: []
+
   # Service configuration
   service:
     # Service type - ClusterIP, NodePort, or LoadBalancer

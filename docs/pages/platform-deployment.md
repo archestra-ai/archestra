@@ -406,6 +406,40 @@ See the Kubernetes documentation for more details:
 - [HorizontalPodAutoscaler](https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/)
 - [PodDisruptionBudget](https://kubernetes.io/docs/tasks/run-application/configure-pdb/)
 
+#### Background Worker Configuration
+
+The Helm chart deploys a separate worker Deployment for processing background jobs from the postgres queue (e.g., knowledge base connector syncs, batch embeddings). When enabled, the main platform pods run as web-only and the worker pods handle all background job processing.
+
+**Worker Settings**:
+
+- `archestra.worker.enabled` - Deploy a separate worker Deployment (default: true)
+- `archestra.worker.replicaCount` - Number of worker pod replicas (default: 1)
+- `archestra.worker.resources` - Resource requests/limits for worker pods (default: 1Gi request, 2Gi limit)
+- `archestra.worker.deploymentStrategy` - Deployment strategy (default: RollingUpdate)
+- `archestra.worker.podAnnotations` - Pod annotations (inherits from `archestra.podAnnotations` if not set)
+- `archestra.worker.nodeSelector` - Node selector (inherits from `archestra.nodeSelector` if not set)
+- `archestra.worker.tolerations` - Tolerations (inherits from `archestra.tolerations` if not set)
+
+**Example configuration**:
+
+```yaml
+archestra:
+  worker:
+    enabled: true
+    replicaCount: 2
+    resources:
+      requests:
+        memory: "2Gi"
+      limits:
+        memory: "4Gi"
+    nodeSelector:
+      workload-type: background-processing
+```
+
+When the worker is disabled (`archestra.worker.enabled: false`), background jobs run in-process within the main platform pods (the default behavior for Docker/quickstart deployments).
+
+> **Note**: The task queue uses PostgreSQL with `FOR UPDATE SKIP LOCKED` for safe concurrent processing. Multiple worker replicas can safely process jobs in parallel without duplicating work.
+
 #### Database Configuration
 
 **PostgreSQL Settings**:
@@ -631,6 +665,14 @@ The following environment variables can be used to configure Archestra Platform.
 - **`ARCHESTRA_LOGGING_LEVEL`** - Log level for Archestra
   - Default: `info`
   - Supported values: `trace`, `debug`, `info`, `warn`, `error`, `fatal`
+
+- **`ARCHESTRA_PROCESS_TYPE`** - Controls which components run in the process.
+  - Default: `all`
+  - Values: `all`, `web`, `worker`
+  - `all`: Runs both the web server and the background job worker in a single process (default for Docker/quickstart)
+  - `web`: Runs only the web server (API + frontend). Background job processing is handled by a separate worker Deployment.
+  - `worker`: Runs only the background job worker. Processes tasks from the postgres queue without starting the full API server.
+  - **Note:** In Helm deployments, this is automatically set by the chart. The main platform Deployment uses `web` and the worker Deployment uses `worker` when `archestra.worker.enabled` is true.
 
 ### Authentication & Security
 

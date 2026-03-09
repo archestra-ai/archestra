@@ -1,0 +1,88 @@
+{{- if .Values.archestra.worker.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "archestra-platform.fullname" . }}-worker
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "archestra-platform.workerLabels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.archestra.worker.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "archestra-platform.workerSelectorLabels" . | nindent 6 }}
+  {{- with .Values.archestra.worker.deploymentStrategy }}
+  strategy:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  template:
+    metadata:
+      labels:
+        {{- include "archestra-platform.workerLabels" . | nindent 8 }}
+      {{- with (.Values.archestra.worker.podAnnotations | default .Values.archestra.podAnnotations) }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      serviceAccountName: {{ include "archestra-platform.serviceAccountName" . }}
+      initContainers:
+        {{- include "archestra-platform.initContainers" . | nindent 8 }}
+      containers:
+        - name: {{ .Chart.Name }}-worker
+          image: {{ include "archestra-platform.image" . }}
+          imagePullPolicy: {{ .Values.archestra.imagePullPolicy | default "IfNotPresent" }}
+          workingDir: /app/backend
+          {{- if .Values.archestra.initContainers.vaultSecrets.enabled }}
+          {{- include "archestra-platform.vaultSecretsCommand" "node --enable-source-maps dist/server.mjs" | nindent 10 }}
+          {{- else }}
+          command: ["node", "--enable-source-maps", "dist/server.mjs"]
+          {{- end }}
+          ports:
+            - name: backend
+              containerPort: 9000
+              protocol: TCP
+          env:
+            {{- include "archestra-platform.env" . | nindent 12 }}
+            - name: ARCHESTRA_PROCESS_TYPE
+              value: "worker"
+          {{- with .Values.archestra.envFrom }}
+          envFrom:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with (.Values.archestra.worker.resources | default .Values.archestra.resources) }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          startupProbe:
+            httpGet:
+              path: /health
+              port: backend
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 30
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: backend
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: backend
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          {{- include "archestra-platform.volumeMounts" . | nindent 10 }}
+      {{- with (.Values.archestra.worker.nodeSelector | default .Values.archestra.nodeSelector) }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with (.Values.archestra.worker.tolerations | default .Values.archestra.tolerations) }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- include "archestra-platform.volumes" . | nindent 6 }}
+{{- end }}

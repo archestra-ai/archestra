@@ -777,6 +777,7 @@ const config = {
     process.env.ARCHESTRA_AUTH_RATE_LIMIT_DISABLED === "true",
   isQuickstart: process.env.ARCHESTRA_QUICKSTART === "true",
   ngrokDomain: process.env.ARCHESTRA_NGROK_DOMAIN || "",
+  processType: parseProcessType(process.env.ARCHESTRA_PROCESS_TYPE),
 };
 
 export default config;
@@ -804,4 +805,12 @@ export function getProviderEnvApiKey(
     return entry.apiKey || undefined;
   }
   return undefined;
+}
+
+type ProcessType = "web" | "worker" | "all";
+
+export function parseProcessType(value: string | undefined): ProcessType {
+  const normalized = value?.toLowerCase();
+  if (normalized === "web" || normalized === "worker") return normalized;
+  return "all";
 }

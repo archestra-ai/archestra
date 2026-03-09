@@ -575,9 +575,12 @@ const start = async () => {
     await chatOpsManager.initialize();
 
     // Start task queue worker for knowledge base connector syncs and embeddings
-    registerTaskHandlers(taskQueueService);
-    await taskQueueService.seedPeriodicTasks();
-    taskQueueService.startWorker();
+    // In "web" mode, a separate worker Deployment handles background jobs
+    if (config.processType !== "web") {
+      registerTaskHandlers(taskQueueService);
+      await taskQueueService.seedPeriodicTasks();
+      taskQueueService.startWorker();
+    }
 
     // Background job to renew email subscriptions before they expire
     const emailRenewalIntervalId = setInterval(() => {
@@ -693,7 +696,9 @@ const start = async () => {
         cacheManager.shutdown();
 
         // Stop task queue worker (waits for in-flight tasks to drain)
-        await taskQueueService.stopWorker();
+        if (config.processType !== "web") {
+          await taskQueueService.stopWorker();
+        }
 
         // Track which cleanup operations have completed
         const completedCleanups = new Set<"emailProvider" | "chatOps">();
@@ -746,9 +751,58 @@ const start = async () => {
 };
 
 /**
+ * Starts the process in worker-only mode.
+ * Processes background jobs from the postgres queue without starting the HTTP API server.
+ * Used in Helm deployments where the worker runs as a separate Deployment.
+ */
+const startWorkerOnly = async () => {
+  logger.info("Starting in worker-only mode (ARCHESTRA_PROCESS_TYPE=worker)");
+
+  try {
+    await initializeDatabase();
+    await seedRequiredStartingData();
+    cacheManager.start();
+
+    registerTaskHandlers(taskQueueService);
+    await taskQueueService.seedPeriodicTasks();
+    taskQueueService.startWorker();
+
+    // Minimal health server for Kubernetes probes
+    const healthServer = Fastify();
+    healthServer.get("/health", async () => ({ status: "ok" }));
+    healthServer.get("/ready", async () => ({ status: "ok" }));
+    await healthServer.listen({ port: port, host });
+    logger.info(`Worker health server started on port ${port}`);
+
+    const gracefulShutdown = async (signal: string) => {
+      logger.info(`Worker received ${signal}, shutting down...`);
+      try {
+        await healthServer.close();
+        cacheManager.shutdown();
+        await taskQueueService.stopWorker();
+        process.exit(0);
+      } catch (error) {
+        logger.error({ error }, "Worker shutdown error");
+        process.exit(1);
+      }
+    };
+
+    process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+    process.on("SIGINT", () => gracefulShutdown("SIGINT"));
+  } catch (err) {
+    logger.error(err, "Worker failed to start");
+    process.exit(1);
+  }
+};
+
+/**
  * Only start the server if this file is being run directly (not imported)
  * This allows other scripts to import helper functions without starting the server
  */
 if (isMainModule) {
-  start();
+  if (config.processType === "worker") {
+    startWorkerOnly();
+  } else {
+    start();
+  }
 }

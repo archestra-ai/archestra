@@ -18,6 +18,7 @@ import {
   parseBodyLimit,
   parseConnectorSyncMaxDuration,
   parseContentMaxLength,
+  parseProcessType,
   parseSampleRate,
   parseVirtualKeyDefaultExpiration,
 } from "./config";
@@ -989,6 +990,37 @@ describe("parseConnectorSyncMaxDuration", () => {
 
   test("should parse large value", () => {
     expect(parseConnectorSyncMaxDuration("7200")).toBe(7200);
+  });
+});
+
+describe("parseProcessType", () => {
+  test("should return 'all' when undefined", () => {
+    expect(parseProcessType(undefined)).toBe("all");
+  });
+
+  test("should return 'all' when empty string", () => {
+    expect(parseProcessType("")).toBe("all");
+  });
+
+  test("should return 'web' for 'web'", () => {
+    expect(parseProcessType("web")).toBe("web");
+  });
+
+  test("should return 'worker' for 'worker'", () => {
+    expect(parseProcessType("worker")).toBe("worker");
+  });
+
+  test("should be case insensitive", () => {
+    expect(parseProcessType("WEB")).toBe("web");
+    expect(parseProcessType("WORKER")).toBe("worker");
+    expect(parseProcessType("Web")).toBe("web");
+    expect(parseProcessType("Worker")).toBe("worker");
+  });
+
+  test("should return 'all' for unknown values", () => {
+    expect(parseProcessType("unknown")).toBe("all");
+    expect(parseProcessType("both")).toBe("all");
+    expect(parseProcessType("api")).toBe("all");
   });
 });
 

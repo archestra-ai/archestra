@@ -758,6 +758,11 @@ const config = {
       process.env.ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_MAX_CONCURRENT || "2",
       10,
     ),
+    taskWorkerShutdownTimeoutSeconds: Number.parseInt(
+      process.env
+        .ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_SHUTDOWN_TIMEOUT_SECONDS || "30",
+      10,
+    ),
   },
   secretsManager: {
     type: process.env.ARCHESTRA_SECRETS_MANAGER?.toUpperCase() || "DB",

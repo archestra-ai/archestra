@@ -142,6 +142,84 @@ describe("TaskModel", () => {
     });
   });
 
+  describe("releaseToQueue", () => {
+    test("resets processing tasks to pending with decremented attempt", async () => {
+      const task = await TaskModel.create({
+        taskType: "connector_sync",
+        payload: { connectorId: "conn-1" },
+        maxAttempts: 5,
+      });
+
+      // Simulate dequeue (sets status to processing, attempt to 1)
+      const dequeued = await TaskModel.dequeue();
+      expect(dequeued).not.toBeNull();
+      expect(dequeued?.status).toBe("processing");
+      expect(dequeued?.attempt).toBe(1);
+
+      const released = await TaskModel.releaseToQueue([task.id]);
+      expect(released).toBe(1);
+
+      // Verify the task was reset
+      const [updated] = await db
+        .select()
+        .from(schema.tasksTable)
+        .where(eq(schema.tasksTable.id, task.id));
+
+      expect(updated.status).toBe("pending");
+      expect(updated.startedAt).toBeNull();
+      expect(updated.attempt).toBe(0);
+      expect(updated.scheduledFor).toBeInstanceOf(Date);
+      // scheduledFor should be close to now (within 5 seconds)
+      expect(
+        Math.abs(updated.scheduledFor.getTime() - Date.now()),
+      ).toBeLessThan(5000);
+    });
+
+    test("does not affect tasks that are not in processing status", async () => {
+      const task = await TaskModel.create({
+        taskType: "connector_sync",
+        payload: { connectorId: "conn-1" },
+      });
+      // Task is in 'pending' status — should not be released
+      const released = await TaskModel.releaseToQueue([task.id]);
+      expect(released).toBe(0);
+    });
+
+    test("does not affect completed tasks", async () => {
+      const task = await TaskModel.create({
+        taskType: "connector_sync",
+        payload: { connectorId: "conn-1" },
+      });
+      await TaskModel.complete(task.id);
+
+      const released = await TaskModel.releaseToQueue([task.id]);
+      expect(released).toBe(0);
+    });
+
+    test("returns 0 for empty ids array", async () => {
+      const released = await TaskModel.releaseToQueue([]);
+      expect(released).toBe(0);
+    });
+
+    test("handles multiple tasks at once", async () => {
+      const task1 = await TaskModel.create({
+        taskType: "connector_sync",
+        payload: { connectorId: "conn-1" },
+      });
+      const task2 = await TaskModel.create({
+        taskType: "batch_embedding",
+        payload: { documentIds: ["d1"] },
+      });
+
+      // Dequeue both
+      await TaskModel.dequeue();
+      await TaskModel.dequeue();
+
+      const released = await TaskModel.releaseToQueue([task1.id, task2.id]);
+      expect(released).toBe(2);
+    });
+  });
+
   describe("hasPendingOrProcessing", () => {
     test("returns true when a matching task exists", async () => {
       await TaskModel.create({

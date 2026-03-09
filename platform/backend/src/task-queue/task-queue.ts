@@ -9,8 +9,9 @@ type TaskHandler = (payload: Record<string, unknown>) => Promise<void>;
 export class TaskQueueService {
   private handlers = new Map<string, TaskHandler>();
   private pollIntervalId: ReturnType<typeof setInterval> | null = null;
-  private activeTasks = 0;
+  private activeTaskIds = new Set<string>();
   private stopping = false;
+  private drainResolve: (() => void) | null = null;
 
   registerHandler(taskType: string, handler: TaskHandler): void {
     this.handlers.set(taskType, handler);
@@ -105,20 +106,54 @@ export class TaskQueueService {
     );
   }
 
-  stopWorker(): void {
+  async stopWorker(): Promise<void> {
     this.stopping = true;
     if (this.pollIntervalId) {
       clearInterval(this.pollIntervalId);
       this.pollIntervalId = null;
     }
-    logger.info("[TaskQueue] Worker stopped");
+
+    if (this.activeTaskIds.size === 0) {
+      logger.info("[TaskQueue] Worker stopped (no in-flight tasks)");
+      return;
+    }
+
+    const taskIds = [...this.activeTaskIds];
+    const timeoutMs = config.kb.taskWorkerShutdownTimeoutSeconds * 1000;
+    logger.info(
+      { taskIds, timeoutMs },
+      "[TaskQueue] Draining in-flight tasks...",
+    );
+
+    const result = await Promise.race([
+      this.waitForDrain(),
+      new Promise<"timeout">((resolve) =>
+        setTimeout(() => resolve("timeout"), timeoutMs),
+      ),
+    ]);
+
+    if (result === "timeout") {
+      const remainingIds = [...this.activeTaskIds];
+      this.activeTaskIds.clear();
+      logger.warn(
+        { taskIds: remainingIds },
+        "[TaskQueue] Drain timed out, releasing tasks back to queue",
+      );
+      const released = await TaskModel.releaseToQueue(remainingIds);
+      logger.info(
+        { released, total: remainingIds.length },
+        "[TaskQueue] Released tasks back to pending",
+      );
+    } else {
+      logger.info("[TaskQueue] All in-flight tasks drained successfully");
+    }
   }
 
   // ===== Private methods =====
 
   private async poll(): Promise<void> {
     if (this.stopping) return;
-    if (this.activeTasks >= config.kb.taskWorkerMaxConcurrent) return;
+    if (this.activeTaskIds.size >= config.kb.taskWorkerMaxConcurrent) return;
 
     // Reset stuck tasks (processing for more than 1 hour)
     const resetCount = await TaskModel.resetStuckTasks(60 * 60 * 1000);
@@ -130,7 +165,7 @@ export class TaskQueueService {
     const task = await TaskModel.dequeue();
     if (!task) return;
 
-    this.activeTasks++;
+    this.activeTaskIds.add(task.id);
     this.processTask(task)
       .catch((error) => {
         logger.error(
@@ -142,8 +177,19 @@ export class TaskQueueService {
         );
       })
       .finally(() => {
-        this.activeTasks--;
+        this.activeTaskIds.delete(task.id);
+        if (this.activeTaskIds.size === 0 && this.drainResolve) {
+          this.drainResolve();
+          this.drainResolve = null;
+        }
       });
+  }
+
+  private waitForDrain(): Promise<void> {
+    if (this.activeTaskIds.size === 0) return Promise.resolve();
+    return new Promise<void>((resolve) => {
+      this.drainResolve = resolve;
+    });
   }
 
   private async processTask(task: Task): Promise<void> {

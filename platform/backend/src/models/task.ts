@@ -1,4 +1,4 @@
-import { and, eq, lt, sql } from "drizzle-orm";
+import { and, eq, inArray, lt, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { InsertTask, Task } from "@/types/task";
 
@@ -110,6 +110,31 @@ class TaskModel {
       count++;
     }
     return count;
+  }
+
+  static async releaseToQueue(ids: string[]): Promise<number> {
+    if (ids.length === 0) return 0;
+
+    const t = schema.tasksTable;
+    const result = await db
+      .update(t)
+      .set({
+        status: "pending",
+        startedAt: null,
+        scheduledFor: new Date(),
+      })
+      .where(and(inArray(t.id, ids), eq(t.status, "processing")))
+      .returning({ id: t.id });
+
+    // Decrement attempt for each released task so the interrupted attempt
+    // doesn't count against max retries (ack-late semantics)
+    for (const row of result) {
+      await db.execute(
+        sql`UPDATE tasks SET attempt = GREATEST(attempt - 1, 0) WHERE id = ${row.id}`,
+      );
+    }
+
+    return result.length;
   }
 
   static async hasPendingOrProcessing(

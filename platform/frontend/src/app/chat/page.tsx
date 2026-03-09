@@ -47,6 +47,7 @@ import {
   PLACEHOLDER_KEY,
 } from "@/components/chat-api-key-form";
 import { LoadingSpinner } from "@/components/loading";
+import { TruncatedTooltip } from "@/components/ui/truncated-tooltip";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -1230,24 +1231,31 @@ export default function ChatPage() {
               {/* Left side - conversation title */}
               {conversationId && conversation && (
                 <div className="flex items-center flex-shrink min-w-0">
-                  <h1 className="text-base font-normal text-muted-foreground truncate max-w-[300px] cursor-default">
-                    {headerAnimatingTitles.has(conversation.id) ? (
-                      <TypingText
-                        text={getConversationDisplayTitle(
+                  <TruncatedTooltip
+                    content={getConversationDisplayTitle(
+                      conversation.title,
+                      conversation.messages,
+                    )}
+                  >
+                    <h1 className="text-base font-normal text-muted-foreground truncate max-w-[300px] cursor-default">
+                      {headerAnimatingTitles.has(conversation.id) ? (
+                        <TypingText
+                          text={getConversationDisplayTitle(
+                            conversation.title,
+                            conversation.messages,
+                          )}
+                          typingSpeed={35}
+                          showCursor
+                          cursorClassName="bg-muted-foreground"
+                        />
+                      ) : (
+                        getConversationDisplayTitle(
                           conversation.title,
                           conversation.messages,
-                        )}
-                        typingSpeed={35}
-                        showCursor
-                        cursorClassName="bg-muted-foreground"
-                      />
-                    ) : (
-                      getConversationDisplayTitle(
-                        conversation.title,
-                        conversation.messages,
-                      )
-                    )}
-                  </h1>
+                        )
+                      )}
+                    </h1>
+                  </TruncatedTooltip>
                 </div>
               )}
               {/* Right side - desktop: original buttons */}

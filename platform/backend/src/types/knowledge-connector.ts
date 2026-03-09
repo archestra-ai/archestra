@@ -15,6 +15,7 @@ export type ConnectorType = z.infer<typeof ConnectorTypeSchema>;
 export const ConnectorSyncStatusSchema = z.enum([
   "running",
   "success",
+  "completed_with_errors",
   "failed",
   "partial",
 ]);
@@ -147,8 +148,15 @@ export interface ConnectorDocument {
   };
 }
 
+export interface ConnectorItemFailure {
+  itemId: string | number;
+  resource: string;
+  error: string;
+}
+
 export interface ConnectorSyncBatch {
   documents: ConnectorDocument[];
+  failures?: ConnectorItemFailure[];
   checkpoint: ConnectorCheckpoint;
   hasMore: boolean;
 }

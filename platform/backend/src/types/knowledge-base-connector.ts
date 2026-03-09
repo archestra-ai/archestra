@@ -125,6 +125,7 @@ export const UpdateConnectorRunSchema = createUpdateSchema(
   checkpoint: true,
   totalBatches: true,
   completedBatches: true,
+  itemErrors: true,
 });
 
 export type ConnectorRun = z.infer<typeof SelectConnectorRunSchema>;

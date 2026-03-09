@@ -96761,6 +96761,7 @@
                             "enum": [
                               "running",
                               "success",
+                              "completed_with_errors",
                               "failed",
                               "partial"
                             ]
@@ -97602,6 +97603,7 @@
                       "enum": [
                         "running",
                         "success",
+                        "completed_with_errors",
                         "failed",
                         "partial"
                       ]
@@ -98138,6 +98140,7 @@
                       "enum": [
                         "running",
                         "success",
+                        "completed_with_errors",
                         "failed",
                         "partial"
                       ]
@@ -98862,6 +98865,7 @@
                       "enum": [
                         "running",
                         "success",
+                        "completed_with_errors",
                         "failed",
                         "partial"
                       ]
@@ -100803,6 +100807,7 @@
                             "enum": [
                               "running",
                               "success",
+                              "completed_with_errors",
                               "failed",
                               "partial"
                             ]
@@ -100841,6 +100846,12 @@
                             "maximum": 2147483647
                           },
                           "completedBatches": {
+                            "nullable": true,
+                            "type": "integer",
+                            "minimum": -2147483648,
+                            "maximum": 2147483647
+                          },
+                          "itemErrors": {
                             "nullable": true,
                             "type": "integer",
                             "minimum": -2147483648,
@@ -100899,6 +100910,7 @@
                           "totalItems",
                           "totalBatches",
                           "completedBatches",
+                          "itemErrors",
                           "error",
                           "checkpoint",
                           "createdAt"
@@ -101217,6 +101229,7 @@
                       "enum": [
                         "running",
                         "success",
+                        "completed_with_errors",
                         "failed",
                         "partial"
                       ]
@@ -101255,6 +101268,12 @@
                       "maximum": 2147483647
                     },
                     "completedBatches": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -2147483648,
+                      "maximum": 2147483647
+                    },
+                    "itemErrors": {
                       "nullable": true,
                       "type": "integer",
                       "minimum": -2147483648,
@@ -101317,6 +101336,7 @@
                     "totalItems",
                     "totalBatches",
                     "completedBatches",
+                    "itemErrors",
                     "error",
                     "logs",
                     "checkpoint",

@@ -27,7 +27,7 @@ export async function handleBatchEmbedding(
   ) {
     const now = new Date();
     await KnowledgeBaseConnectorModel.update(updatedRun.connectorId, {
-      lastSyncStatus: "success",
+      lastSyncStatus: updatedRun.status,
       lastSyncAt: now,
     });
     logger.info(

@@ -447,6 +447,81 @@ describe("GitlabConnector", () => {
       expect(metadata.author).toBe("author");
     });
 
+    test("continues sync when issue note fetch fails", async () => {
+      const issues = [
+        makeIssue(1, "First issue"),
+        makeIssue(2, "Second issue"),
+        makeIssue(3, "Third issue"),
+      ];
+
+      mockIssuesAll.mockResolvedValueOnce(issues);
+      mockIssueNotesAll
+        .mockResolvedValueOnce([])
+        .mockRejectedValueOnce(new Error("502 Bad Gateway"))
+        .mockResolvedValueOnce([]);
+
+      // MR pass
+      mockMergeRequestsAll.mockResolvedValueOnce([]);
+
+      const batches: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: validConfig,
+        credentials,
+        checkpoint: null,
+      })) {
+        batches.push(batch);
+      }
+
+      // All 3 documents should still be yielded
+      expect(batches[0].documents).toHaveLength(3);
+      expect(batches[0].documents[1].content).not.toContain("## Comments");
+
+      // Failures array should contain 1 entry
+      expect(batches[0].failures).toHaveLength(1);
+      expect(batches[0].failures?.[0]).toEqual({
+        itemId: 2,
+        resource: "notes",
+        error: "502 Bad Gateway",
+      });
+    });
+
+    test("continues sync when MR note fetch fails", async () => {
+      // Issues pass - empty
+      mockIssuesAll.mockResolvedValueOnce([]);
+
+      const mrs = [
+        makeMergeRequest(10, "Feature branch"),
+        makeMergeRequest(11, "Bug fix"),
+      ];
+      mockMergeRequestsAll.mockResolvedValueOnce(mrs);
+      mockMergeRequestNotesAll
+        .mockRejectedValueOnce(new Error("500 Internal Server Error"))
+        .mockResolvedValueOnce([]);
+
+      const batches: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: validConfig,
+        credentials,
+        checkpoint: null,
+      })) {
+        batches.push(batch);
+      }
+
+      const mrBatch = batches.find((b) =>
+        b.documents.some((d) => d.metadata.kind === "merge_request"),
+      );
+      expect(mrBatch).toBeDefined();
+      expect(mrBatch?.documents).toHaveLength(2);
+
+      // Failures in MR batch
+      expect(mrBatch?.failures).toHaveLength(1);
+      expect(mrBatch?.failures?.[0]).toEqual({
+        itemId: 10,
+        resource: "notes",
+        error: "500 Internal Server Error",
+      });
+    });
+
     test("throws on API error", async () => {
       mockIssuesAll.mockRejectedValueOnce(
         new Error("Request failed with status code 403"),

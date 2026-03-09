@@ -29,6 +29,7 @@ class ConnectorRunModel {
         totalItems: t.totalItems,
         totalBatches: t.totalBatches,
         completedBatches: t.completedBatches,
+        itemErrors: t.itemErrors,
         error: t.error,
         checkpoint: t.checkpoint,
         createdAt: t.createdAt,
@@ -116,7 +117,11 @@ class ConnectorRunModel {
       .update(t)
       .set({
         completedBatches: sql`${t.completedBatches} + 1`,
-        status: sql`CASE WHEN ${t.completedBatches} + 1 >= ${t.totalBatches} THEN 'success' ELSE ${t.status} END`,
+        status: sql`CASE
+          WHEN ${t.completedBatches} + 1 >= ${t.totalBatches} AND ${t.itemErrors} > 0 THEN 'completed_with_errors'
+          WHEN ${t.completedBatches} + 1 >= ${t.totalBatches} THEN 'success'
+          ELSE ${t.status}
+        END`,
         completedAt: sql`CASE WHEN ${t.completedBatches} + 1 >= ${t.totalBatches} THEN NOW() ELSE ${t.completedAt} END`,
       })
       .where(eq(t.id, runId))

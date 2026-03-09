@@ -179,7 +179,12 @@ export class GitlabConnector extends BaseConnector {
       const documents: ConnectorDocument[] = [];
       for (const issue of filtered) {
         await this.rateLimit();
-        const notes = await getIssueNotes(client, project.id, issue.iid);
+        const notes = await this.safeItemFetch({
+          fetch: () => getIssueNotes(client, project.id, issue.iid),
+          fallback: [],
+          itemId: issue.iid,
+          resource: "notes",
+        });
         documents.push(issueToDocument(issue, notes, project));
       }
 
@@ -190,6 +195,7 @@ export class GitlabConnector extends BaseConnector {
         filtered.length > 0 ? filtered[filtered.length - 1] : null;
       yield {
         documents,
+        failures: this.flushFailures(),
         checkpoint: buildCheckpoint({
           type: "gitlab",
           itemUpdatedAt: lastIssue?.updated_at,
@@ -234,7 +240,12 @@ export class GitlabConnector extends BaseConnector {
       const documents: ConnectorDocument[] = [];
       for (const mr of filtered) {
         await this.rateLimit();
-        const notes = await getMergeRequestNotes(client, project.id, mr.iid);
+        const notes = await this.safeItemFetch({
+          fetch: () => getMergeRequestNotes(client, project.id, mr.iid),
+          fallback: [],
+          itemId: mr.iid,
+          resource: "notes",
+        });
         documents.push(mergeRequestToDocument(mr, notes, project));
       }
 
@@ -244,6 +255,7 @@ export class GitlabConnector extends BaseConnector {
       const lastMr = filtered.length > 0 ? filtered[filtered.length - 1] : null;
       yield {
         documents,
+        failures: this.flushFailures(),
         checkpoint: buildCheckpoint({
           type: "gitlab",
           itemUpdatedAt: lastMr?.updated_at,

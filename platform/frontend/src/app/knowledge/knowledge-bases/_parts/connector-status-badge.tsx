@@ -30,6 +30,11 @@ const STATUS_CONFIG: Record<ConnectorSyncStatus, StatusConfig> = {
     className: "bg-blue-500/10 text-blue-600 border border-blue-500/30",
     animated: true,
   },
+  completed_with_errors: {
+    label: "Completed with errors",
+    className: "bg-amber-500/10 text-amber-600 border border-amber-500/30",
+    animated: false,
+  },
   partial: {
     label: "Partial",
     className: "bg-amber-500/10 text-amber-600 border border-amber-500/30",

@@ -1219,6 +1219,13 @@
       "when": 1773064802202,
       "tag": "0173_heavy_marvel_boy",
       "breakpoints": true
+    },
+    {
+      "idx": 174,
+      "version": "7",
+      "when": 1773082514382,
+      "tag": "0174_unusual_ricochet",
+      "breakpoints": true
     }
   ]
 }

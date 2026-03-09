@@ -2,6 +2,7 @@ import logger from "@/logging";
 import type {
   Connector,
   ConnectorCredentials,
+  ConnectorItemFailure,
   ConnectorSyncBatch,
   ConnectorType,
 } from "@/types/knowledge-connector";
@@ -42,6 +43,7 @@ export abstract class BaseConnector implements Connector {
   abstract type: ConnectorType;
 
   private rateLimitDelayMs: number;
+  private itemFailures: ConnectorItemFailure[] = [];
 
   constructor(rateLimitDelayMs = DEFAULT_RATE_LIMIT_DELAY_MS) {
     this.rateLimitDelayMs = rateLimitDelayMs;
@@ -146,6 +148,40 @@ export abstract class BaseConnector implements Connector {
     }
 
     throw lastError || new Error("Unknown error during fetch retry");
+  }
+
+  protected async safeItemFetch<T>(params: {
+    fetch: () => Promise<T>;
+    fallback: T;
+    itemId: string | number;
+    resource: string;
+  }): Promise<T> {
+    try {
+      return await params.fetch();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      logger.warn(
+        {
+          connectorType: this.type,
+          itemId: params.itemId,
+          resource: params.resource,
+          error: message,
+        },
+        "[Connector] Failed to fetch sub-resource for item, using fallback",
+      );
+      this.itemFailures.push({
+        itemId: params.itemId,
+        resource: params.resource,
+        error: message,
+      });
+      return params.fallback;
+    }
+  }
+
+  protected flushFailures(): ConnectorItemFailure[] {
+    const failures = this.itemFailures;
+    this.itemFailures = [];
+    return failures;
   }
 
   protected async rateLimit(): Promise<void> {

@@ -95,6 +95,7 @@ class ConnectorSyncService {
 
     let documentsProcessed = 0;
     let documentsIngested = 0;
+    let itemErrors = 0;
     let batchCount = 0;
     const startTime = Date.now();
     let stoppedEarly = false;
@@ -150,10 +151,16 @@ class ConnectorSyncService {
           });
         }
 
+        // Track item-level failures from this batch
+        if (batch.failures?.length) {
+          itemErrors += batch.failures.length;
+        }
+
         // Update run progress + flush logs after each batch
         await ConnectorRunModel.update(run.id, {
           documentsProcessed,
           documentsIngested,
+          itemErrors,
           logs: options?.getLogOutput?.() ?? null,
         });
 
@@ -210,16 +217,19 @@ class ConnectorSyncService {
       if (batchCount === 0) {
         // No documents ingested — finalize immediately
         const now = new Date();
+        const finalStatus =
+          itemErrors > 0 ? "completed_with_errors" : "success";
         await ConnectorRunModel.update(run.id, {
-          status: "success",
+          status: finalStatus,
           completedAt: now,
           documentsProcessed,
           documentsIngested,
+          itemErrors,
           logs: options?.getLogOutput?.() ?? null,
         });
 
         await KnowledgeBaseConnectorModel.update(connectorId, {
-          lastSyncStatus: "success",
+          lastSyncStatus: finalStatus,
           lastSyncAt: now,
           lastSyncError: null,
         });

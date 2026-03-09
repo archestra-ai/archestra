@@ -63,6 +63,12 @@ export function ConnectorRunLogsDialog({
                 <span className="text-muted-foreground">Ingested:</span>{" "}
                 {run.documentsIngested ?? 0}
               </div>
+              {(run.itemErrors ?? 0) > 0 && (
+                <div>
+                  <span className="text-muted-foreground">Item errors:</span>{" "}
+                  <span className="text-amber-600">{run.itemErrors}</span>
+                </div>
+              )}
             </div>
 
             {/* Progress bar when totalItems is known */}

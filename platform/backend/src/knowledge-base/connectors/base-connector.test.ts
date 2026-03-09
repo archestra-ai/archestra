@@ -6,7 +6,7 @@ import type {
 import { BaseConnector, buildCheckpoint } from "./base-connector";
 
 /**
- * Concrete subclass that exposes the protected `joinUrl` method for testing.
+ * Concrete subclass that exposes protected methods for testing.
  */
 class TestableConnector extends BaseConnector {
   type = "jira" as ConnectorType;
@@ -21,9 +21,22 @@ class TestableConnector extends BaseConnector {
     // no-op
   }
 
-  // Expose protected method for testing
+  // Expose protected methods for testing
   public testJoinUrl(baseUrl: string, path: string): string {
     return this.joinUrl(baseUrl, path);
+  }
+
+  public testSafeItemFetch<T>(params: {
+    fetch: () => Promise<T>;
+    fallback: T;
+    itemId: string | number;
+    resource: string;
+  }): Promise<T> {
+    return this.safeItemFetch(params);
+  }
+
+  public testFlushFailures() {
+    return this.flushFailures();
   }
 }
 
@@ -86,6 +99,87 @@ describe("BaseConnector", () => {
         "rest/api/2/search",
       );
       expect(withSlash).toBe(withoutSlash);
+    });
+  });
+
+  describe("safeItemFetch", () => {
+    const connector = new TestableConnector();
+
+    test("returns fetch result on success", async () => {
+      const result = await connector.testSafeItemFetch({
+        fetch: async () => [{ id: 1 }],
+        fallback: [],
+        itemId: 42,
+        resource: "comments",
+      });
+
+      expect(result).toEqual([{ id: 1 }]);
+      expect(connector.testFlushFailures()).toHaveLength(0);
+    });
+
+    test("returns fallback on error and records failure", async () => {
+      const result = await connector.testSafeItemFetch({
+        fetch: async () => {
+          throw new Error("502 Bad Gateway");
+        },
+        fallback: [],
+        itemId: 42,
+        resource: "comments",
+      });
+
+      expect(result).toEqual([]);
+      const failures = connector.testFlushFailures();
+      expect(failures).toHaveLength(1);
+      expect(failures[0]).toEqual({
+        itemId: 42,
+        resource: "comments",
+        error: "502 Bad Gateway",
+      });
+    });
+
+    test("collects multiple failures", async () => {
+      await connector.testSafeItemFetch({
+        fetch: async () => {
+          throw new Error("error 1");
+        },
+        fallback: "fallback",
+        itemId: 1,
+        resource: "comments",
+      });
+      await connector.testSafeItemFetch({
+        fetch: async () => {
+          throw new Error("error 2");
+        },
+        fallback: "fallback",
+        itemId: 2,
+        resource: "notes",
+      });
+
+      const failures = connector.testFlushFailures();
+      expect(failures).toHaveLength(2);
+      expect(failures[0].itemId).toBe(1);
+      expect(failures[1].itemId).toBe(2);
+    });
+  });
+
+  describe("flushFailures", () => {
+    const connector = new TestableConnector();
+
+    test("returns and clears failures", async () => {
+      await connector.testSafeItemFetch({
+        fetch: async () => {
+          throw new Error("err");
+        },
+        fallback: null,
+        itemId: 1,
+        resource: "res",
+      });
+
+      const first = connector.testFlushFailures();
+      expect(first).toHaveLength(1);
+
+      const second = connector.testFlushFailures();
+      expect(second).toHaveLength(0);
     });
   });
 

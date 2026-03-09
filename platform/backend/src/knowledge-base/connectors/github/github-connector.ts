@@ -178,7 +178,12 @@ export class GithubConnector extends BaseConnector {
       const documents: ConnectorDocument[] = [];
       for (const item of items) {
         await this.rateLimit();
-        const comments = await getItemComments(octokit, repo, item.number);
+        const comments = await this.safeItemFetch({
+          fetch: () => getItemComments(octokit, repo, item.number),
+          fallback: [],
+          itemId: item.number,
+          resource: "comments",
+        });
         documents.push(itemToDocument(item, comments, repo, kind));
       }
 
@@ -189,6 +194,7 @@ export class GithubConnector extends BaseConnector {
 
       yield {
         documents,
+        failures: this.flushFailures(),
         checkpoint: buildCheckpoint({
           type: "github",
           itemUpdatedAt: lastItem?.updated_at,

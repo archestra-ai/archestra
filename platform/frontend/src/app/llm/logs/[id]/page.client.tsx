@@ -4,9 +4,9 @@ import type { archestraApiTypes } from "@shared";
 import { ArrowLeft, Layers } from "lucide-react";
 import Link from "next/link";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
-import ChatBotDemo from "@/components/chatbot-demo";
 import { CopyButton } from "@/components/copy-button";
 import { LoadingSpinner } from "@/components/loading";
+import MessageThread from "@/components/message-thread";
 import { MetadataCard, MetadataItem } from "@/components/metadata-card";
 import { Savings } from "@/components/savings";
 import { SourceBadge } from "@/components/source-badge";
@@ -234,7 +234,7 @@ function LogDetail({
         <div className="mb-8">
           <h2 className="text-xl font-semibold mb-4">Conversation</h2>
           <div className="border border-border rounded-lg bg-background overflow-hidden">
-            <ChatBotDemo
+            <MessageThread
               messages={requestMessages}
               containerClassName="h-auto"
               hideDivider={true}

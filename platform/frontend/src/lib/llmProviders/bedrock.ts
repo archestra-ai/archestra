@@ -1,4 +1,4 @@
-import type { PartialUIMessage } from "@/components/chatbot-demo";
+import type { PartialUIMessage } from "@/components/message-thread";
 import type { DualLlmResult, Interaction, InteractionUtils } from "./common";
 
 /**
@@ -305,7 +305,7 @@ class BedrockConverseInteraction implements InteractionUtils {
                   // Add tool result part
                   toolCallParts.push({
                     type: "dynamic-tool",
-                    toolName: "tool-result",
+                    toolName: block.toolUse.name,
                     toolCallId: block.toolUse.toolUseId,
                     state: "output-available",
                     input: {},

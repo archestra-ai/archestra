@@ -7,7 +7,7 @@ import type {
   GitlabConfig,
 } from "@/types/knowledge-connector";
 import { GitlabConfigSchema } from "@/types/knowledge-connector";
-import { BaseConnector } from "../base-connector";
+import { BaseConnector, buildCheckpoint } from "../base-connector";
 
 const BATCH_SIZE = 50;
 
@@ -186,12 +186,15 @@ export class GitlabConnector extends BaseConnector {
       pageHasMore = issues.length >= BATCH_SIZE;
       page++;
 
+      const lastIssue =
+        filtered.length > 0 ? filtered[filtered.length - 1] : null;
       yield {
         documents,
-        checkpoint: {
+        checkpoint: buildCheckpoint({
           type: "gitlab",
-          lastSyncedAt: new Date().toISOString(),
-        },
+          itemUpdatedAt: lastIssue?.updated_at,
+          previousLastSyncedAt: checkpoint.lastSyncedAt,
+        }),
         hasMore: pageHasMore || !isLastGroup,
       };
     }
@@ -238,12 +241,14 @@ export class GitlabConnector extends BaseConnector {
       pageHasMore = mergeRequests.length >= BATCH_SIZE;
       page++;
 
+      const lastMr = filtered.length > 0 ? filtered[filtered.length - 1] : null;
       yield {
         documents,
-        checkpoint: {
+        checkpoint: buildCheckpoint({
           type: "gitlab",
-          lastSyncedAt: new Date().toISOString(),
-        },
+          itemUpdatedAt: lastMr?.updated_at,
+          previousLastSyncedAt: checkpoint.lastSyncedAt,
+        }),
         hasMore: pageHasMore || !isLastGroup,
       };
     }

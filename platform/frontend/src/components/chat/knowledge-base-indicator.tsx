@@ -2,7 +2,7 @@
 
 import { Database } from "lucide-react";
 import { ConnectorTypeIcon } from "@/app/knowledge/knowledge-bases/_parts/connector-icons";
-import { Button } from "@/components/ui/button";
+import { OverlappedIcons } from "@/components/ui/overlapped-icons";
 import {
   Popover,
   PopoverContent,
@@ -14,11 +14,14 @@ import { useKnowledgeBases } from "@/lib/knowledge-base.query";
 interface KnowledgeBaseIndicatorProps {
   knowledgeBaseIds: string[];
   connectorIds: string[];
+  /** When true, renders KB details inline without popover/click interaction */
+  static?: boolean;
 }
 
 export function KnowledgeBaseIndicator({
   knowledgeBaseIds,
   connectorIds,
+  static: isStatic = false,
 }: KnowledgeBaseIndicatorProps) {
   const { data: knowledgeBasesData } = useKnowledgeBases();
   const { data: connectorsData } = useConnectors();
@@ -35,7 +38,7 @@ export function KnowledgeBaseIndicator({
   const totalSources = matchedKbs.length + matchedConnectors.length;
   if (totalSources === 0) return null;
 
-  // Collect all unique connector types for the pill icons
+  // Collect all unique connector types for the overlapped icons
   const kbConnectorTypes = matchedKbs.flatMap(
     (kb) => kb.connectors?.map((c) => c.connectorType) ?? [],
   );
@@ -44,90 +47,80 @@ export function KnowledgeBaseIndicator({
     ...new Set([...kbConnectorTypes, ...directConnectorTypes]),
   ];
 
-  const label =
-    totalSources === 1
-      ? (matchedKbs[0]?.name ?? matchedConnectors[0]?.name)
-      : `${totalSources} knowledge sources`;
+  const connectorIcons = uniqueConnectorTypes.map((type) => ({
+    key: type,
+    icon: <ConnectorTypeIcon type={type} className="h-full w-full" />,
+    tooltip: type,
+  }));
+
+  const kbDetails = (
+    <div className="space-y-2">
+      {matchedKbs.map((kb) => {
+        const connectors = kb.connectors ?? [];
+        const connectorTypes = [
+          ...new Set(connectors.map((c) => c.connectorType)),
+        ];
+        return (
+          <div key={kb.id} className="flex items-center justify-between gap-2">
+            <span className="text-sm font-medium truncate">{kb.name}</span>
+            {connectorTypes.length > 0 && (
+              <OverlappedIcons
+                icons={connectorTypes.map((type) => ({
+                  key: type,
+                  icon: (
+                    <ConnectorTypeIcon type={type} className="h-full w-full" />
+                  ),
+                  tooltip: type,
+                }))}
+                maxVisible={3}
+                size="sm"
+              />
+            )}
+          </div>
+        );
+      })}
+      {matchedConnectors.map((connector) => (
+        <div key={connector.id} className="flex items-center gap-2 text-sm">
+          <ConnectorTypeIcon
+            type={connector.connectorType}
+            className="h-4 w-4 shrink-0"
+          />
+          <span className="truncate">{connector.name}</span>
+        </div>
+      ))}
+    </div>
+  );
+
+  if (isStatic) {
+    return (
+      <div className="flex items-center gap-1.5 h-8 rounded-md px-2.5">
+        <Database className="size-4 text-muted-foreground shrink-0" />
+        {connectorIcons.length > 0 && (
+          <OverlappedIcons icons={connectorIcons} maxVisible={5} size="sm" />
+        )}
+      </div>
+    );
+  }
 
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-7 px-2 gap-1.5 text-xs"
+        <button
+          type="button"
+          className="flex items-center gap-1.5 h-8 rounded-md px-2.5 cursor-pointer hover:bg-accent transition-colors"
         >
-          <Database className="h-3 w-3" />
-          <span className="truncate max-w-[150px]">{label}</span>
-          {uniqueConnectorTypes.length > 0 && (
-            <div className="flex items-center gap-0.5 ml-0.5">
-              {uniqueConnectorTypes.map((type) => (
-                <ConnectorTypeIcon
-                  key={type}
-                  type={type}
-                  className="h-3.5 w-3.5"
-                />
-              ))}
-            </div>
+          <Database className="size-4 text-muted-foreground shrink-0" />
+          {connectorIcons.length > 0 && (
+            <OverlappedIcons icons={connectorIcons} maxVisible={5} size="sm" />
           )}
-        </Button>
+        </button>
       </PopoverTrigger>
       <PopoverContent className="w-64 p-3" side="top" align="start">
         <div className="space-y-3">
-          {matchedKbs.length > 0 && (
-            <div className="space-y-2">
-              {matchedKbs.length > 0 && matchedConnectors.length > 0 && (
-                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                  Knowledge Bases
-                </p>
-              )}
-              {matchedKbs.map((kb) => {
-                const connectors = kb.connectors ?? [];
-                return (
-                  <div key={kb.id} className="space-y-1.5">
-                    <p className="text-sm font-medium">{kb.name}</p>
-                    {connectors.length > 0 && (
-                      <div className="space-y-1">
-                        {connectors.map((connector) => (
-                          <div
-                            key={connector.id}
-                            className="flex items-center gap-2 text-sm"
-                          >
-                            <ConnectorTypeIcon
-                              type={connector.connectorType}
-                              className="h-4 w-4"
-                            />
-                            <span>{connector.name}</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-          {matchedConnectors.length > 0 && (
-            <div className="space-y-2">
-              {matchedKbs.length > 0 && (
-                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                  Direct Connectors
-                </p>
-              )}
-              {matchedConnectors.map((connector) => (
-                <div
-                  key={connector.id}
-                  className="flex items-center gap-2 text-sm"
-                >
-                  <ConnectorTypeIcon
-                    type={connector.connectorType}
-                    className="h-4 w-4"
-                  />
-                  <span>{connector.name}</span>
-                </div>
-              ))}
-            </div>
-          )}
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+            Knowledge Sources
+          </p>
+          {kbDetails}
         </div>
       </PopoverContent>
     </Popover>

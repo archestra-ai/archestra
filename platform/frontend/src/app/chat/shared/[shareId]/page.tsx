@@ -11,8 +11,10 @@ import {
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { InitialAgentSelector } from "@/components/chat/initial-agent-selector";
-import ChatBotDemo, { type PartialUIMessage } from "@/components/chatbot-demo";
 import { LoadingSpinner } from "@/components/loading";
+import MessageThread, {
+  type PartialUIMessage,
+} from "@/components/message-thread";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -149,7 +151,7 @@ export default function SharedConversationPage() {
 
       {/* Messages - readonly, flex-1 with min-h-0 to constrain */}
       <div className="flex-1 min-h-0">
-        <ChatBotDemo
+        <MessageThread
           messages={messages}
           containerClassName="h-full"
           hideDivider

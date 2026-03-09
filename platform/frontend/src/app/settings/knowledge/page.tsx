@@ -39,6 +39,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   Select,
   SelectContent,
@@ -206,7 +207,6 @@ function ApiKeySelector({
   filterProvider,
   label,
   pulse,
-  onAutoSelected,
 }: {
   value: string | null;
   onChange: (value: string | null) => void;
@@ -214,7 +214,6 @@ function ApiKeySelector({
   filterProvider?: string;
   label: string;
   pulse?: boolean;
-  onAutoSelected?: () => void;
 }) {
   const { data: apiKeys, isPending } = useAvailableChatApiKeys();
   const [showAddDialog, setShowAddDialog] = useState(false);
@@ -235,9 +234,8 @@ function ApiKeySelector({
 
     if (prevCount === 0 && selectableKeys.length > 0 && !value) {
       onChange(selectableKeys[0].id);
-      onAutoSelected?.();
     }
-  }, [selectableKeys, value, onChange, onAutoSelected, isPending]);
+  }, [selectableKeys, value, onChange, isPending]);
 
   if (isPending) {
     return <LoadingSpinner />;
@@ -368,12 +366,14 @@ function RerankerModelSelector({
 
   if (!selectedKeyId) {
     return (
-      <Select disabled>
-        <SelectTrigger className="w-80">
-          <SelectValue placeholder="Select a reranker API key first..." />
-        </SelectTrigger>
-        <SelectContent />
-      </Select>
+      <SearchableSelect
+        value=""
+        onValueChange={() => {}}
+        placeholder="Select a reranker API key first..."
+        items={[]}
+        className={cn("w-80")}
+        disabled
+      />
     );
   }
 
@@ -381,34 +381,21 @@ function RerankerModelSelector({
     return <LoadingSpinner />;
   }
 
+  const rerankerItems = models.map((model) => ({
+    value: model.id,
+    label: model.displayName ?? model.id,
+  }));
+
   return (
-    <Select
+    <SearchableSelect
       value={value ?? ""}
       onValueChange={(v) => onChange(v || null)}
+      placeholder="Select reranking model..."
+      searchPlaceholder="Search models..."
+      items={rerankerItems}
+      className={cn("w-80", pulse && "animate-pulse ring-2 ring-primary/40")}
       disabled={disabled}
-    >
-      <SelectTrigger
-        className={cn("w-80", pulse && "animate-pulse ring-2 ring-primary/40")}
-      >
-        <SelectValue placeholder="Select reranking model...">
-          {value ?? "Select reranking model..."}
-        </SelectValue>
-      </SelectTrigger>
-      <SelectContent>
-        {models.length === 0 ? (
-          <div className="px-2 py-3 text-sm text-muted-foreground text-center">
-            No models found for this provider. Try syncing models from the LLM
-            settings page.
-          </div>
-        ) : (
-          models.map((model) => (
-            <SelectItem key={model.id} value={model.id}>
-              {model.displayName ?? model.id}
-            </SelectItem>
-          ))
-        )}
-      </SelectContent>
-    </Select>
+    />
   );
 }
 
@@ -449,7 +436,6 @@ function KnowledgeSettingsContent() {
     string | null
   >(null);
   const [rerankerModel, setRerankerModel] = useState<string | null>(null);
-  const [embeddingModelOpen, setEmbeddingModelOpen] = useState(false);
 
   useEffect(() => {
     if (organization) {
@@ -573,7 +559,6 @@ function KnowledgeSettingsContent() {
                       embeddingSetupStep === "add-key" ||
                       embeddingSetupStep === "select-key"
                     }
-                    onAutoSelected={() => setEmbeddingModelOpen(true)}
                   />
                 )}
               </WithPermissions>
@@ -594,54 +579,31 @@ function KnowledgeSettingsContent() {
               >
                 {({ hasPermission }) => (
                   <div className="space-y-2 w-80">
-                    <Select
+                    <SearchableSelect
                       value={embeddingModel ?? ""}
                       onValueChange={(v) =>
                         setEmbeddingModel(v as EmbeddingModel)
                       }
+                      placeholder="Select embedding model..."
+                      searchPlaceholder="Search models..."
+                      items={Object.entries(EMBEDDING_MODELS).map(
+                        ([value, model]) => ({
+                          value,
+                          label: model.label,
+                          description: model.description,
+                        }),
+                      )}
+                      className={cn(
+                        "w-80",
+                        embeddingSetupStep === "select-model" &&
+                          "animate-pulse ring-2 ring-primary/40",
+                      )}
                       disabled={
                         !hasPermission ||
                         isEmbeddingModelLocked ||
                         !embeddingChatApiKeyId
                       }
-                      open={embeddingModelOpen}
-                      onOpenChange={setEmbeddingModelOpen}
-                    >
-                      <SelectTrigger
-                        className={cn(
-                          "w-80",
-                          embeddingSetupStep === "select-model" &&
-                            "animate-pulse ring-2 ring-primary/40",
-                        )}
-                      >
-                        <SelectValue placeholder="Select embedding model...">
-                          {embeddingModel ? (
-                            <div className="flex items-center gap-2">
-                              {isEmbeddingModelLocked && (
-                                <Lock className="h-3 w-3" />
-                              )}
-                              {embeddingModel}
-                            </div>
-                          ) : (
-                            "Select embedding model..."
-                          )}
-                        </SelectValue>
-                      </SelectTrigger>
-                      <SelectContent>
-                        {Object.entries(EMBEDDING_MODELS).map(
-                          ([value, model]) => (
-                            <SelectItem key={value} value={value}>
-                              <div className="flex flex-col">
-                                <span>{model.label}</span>
-                                <span className="text-xs text-muted-foreground">
-                                  {model.description}
-                                </span>
-                              </div>
-                            </SelectItem>
-                          ),
-                        )}
-                      </SelectContent>
-                    </Select>
+                    />
                     {isEmbeddingModelLocked && (
                       <p className="text-xs text-muted-foreground">
                         <Lock className="h-3 w-3 inline mr-1" />

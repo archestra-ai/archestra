@@ -24,6 +24,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { createPortal } from "react-dom";
 import { useForm } from "react-hook-form";
 import { CreateCatalogDialog } from "@/app/mcp/registry/_parts/create-catalog-dialog";
 import { CustomServerRequestDialog } from "@/app/mcp/registry/_parts/custom-server-request-dialog";
@@ -78,6 +79,7 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty";
+import { TruncatedTooltip } from "@/components/ui/truncated-tooltip";
 import { TypingText } from "@/components/ui/typing-text";
 import { Version } from "@/components/version";
 import { useDefaultAgentId, useInternalAgents } from "@/lib/agent.query";
@@ -112,6 +114,7 @@ import {
   getPendingActions,
 } from "@/lib/pending-tool-state";
 import { useTeams } from "@/lib/team.query";
+import { useIsMobile } from "@/lib/use-mobile.hook";
 import { cn } from "@/lib/utils";
 import ArchestraPromptInput from "./prompt-input";
 
@@ -178,6 +181,16 @@ export default function ChatPage() {
   // Non-admin users with no teams cannot create agents
   const cannotCreateDueToNoTeams =
     !isAgentAdmin && (!teams || teams.length === 0);
+
+  const isMobile = useIsMobile();
+
+  // Portal target for rendering actions into the mobile app shell header
+  const [mobileHeaderEl, setMobileHeaderEl] = useState<HTMLElement | null>(
+    null,
+  );
+  useEffect(() => {
+    setMobileHeaderEl(document.getElementById("mobile-header-actions"));
+  }, []);
 
   // State for browser panel - initialize from localStorage
   const [isBrowserPanelOpen, setIsBrowserPanelOpen] = useState(() => {
@@ -1230,24 +1243,31 @@ export default function ChatPage() {
               {/* Left side - conversation title */}
               {conversationId && conversation && (
                 <div className="flex items-center flex-shrink min-w-0">
-                  <h1 className="text-base font-normal text-muted-foreground truncate max-w-[300px] cursor-default">
-                    {headerAnimatingTitles.has(conversation.id) ? (
-                      <TypingText
-                        text={getConversationDisplayTitle(
+                  <TruncatedTooltip
+                    content={getConversationDisplayTitle(
+                      conversation.title,
+                      conversation.messages,
+                    )}
+                  >
+                    <h1 className="text-base font-normal text-muted-foreground truncate max-w-[360px] cursor-default">
+                      {headerAnimatingTitles.has(conversation.id) ? (
+                        <TypingText
+                          text={getConversationDisplayTitle(
+                            conversation.title,
+                            conversation.messages,
+                          )}
+                          typingSpeed={35}
+                          showCursor
+                          cursorClassName="bg-muted-foreground"
+                        />
+                      ) : (
+                        getConversationDisplayTitle(
                           conversation.title,
                           conversation.messages,
-                        )}
-                        typingSpeed={35}
-                        showCursor
-                        cursorClassName="bg-muted-foreground"
-                      />
-                    ) : (
-                      getConversationDisplayTitle(
-                        conversation.title,
-                        conversation.messages,
-                      )
-                    )}
-                  </h1>
+                        )
+                      )}
+                    </h1>
+                  </TruncatedTooltip>
                 </div>
               )}
               {/* Right side - desktop: original buttons */}
@@ -1530,7 +1550,27 @@ export default function ChatPage() {
                   }
                 }}
               >
-                <div className="flex justify-end p-2">
+                {/* Browser toggle - portaled to mobile header bar, inline on desktop */}
+                {isMobile && mobileHeaderEl
+                  ? createPortal(
+                      <Button
+                        variant={
+                          isBrowserPanelOpen && !isPlaywrightSetupVisible
+                            ? "secondary"
+                            : "ghost"
+                        }
+                        size="sm"
+                        onClick={toggleBrowserPanel}
+                        className="text-xs -mr-2"
+                        disabled={isPlaywrightSetupVisible}
+                      >
+                        <Globe className="h-3 w-3 mr-1" />
+                        Browser
+                      </Button>,
+                      mobileHeaderEl,
+                    )
+                  : null}
+                <div className="hidden md:flex justify-end p-2">
                   <Button
                     variant={
                       isBrowserPanelOpen && !isPlaywrightSetupVisible

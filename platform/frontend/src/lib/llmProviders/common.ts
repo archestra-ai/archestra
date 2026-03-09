@@ -7,7 +7,7 @@ import {
 import type {
   PartialUIMessage,
   PolicyDeniedPart,
-} from "@/components/chatbot-demo";
+} from "@/components/message-thread";
 
 export type Interaction =
   archestraApiTypes.GetInteractionsResponses["200"]["data"][number];

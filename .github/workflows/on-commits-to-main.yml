@@ -81,10 +81,23 @@ jobs:
           turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
           sentry-auth-token: ${{ secrets.PLATFORM_NEXTJS_SOURCE_MAP_SENTRY_AUTH_TOKEN }}
 
+  build-mcp-server-base-image:
+    name: Build MCP Server Base Image
+    uses: ./.github/workflows/build-base-mcp-server-docker-image.yml
+    permissions:
+      contents: read
+      id-token: write
+    with:
+      push_to_gcr: true
+      version: ${{ github.sha }}
+    secrets:
+      GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_SERVICE_ACCOUNT_NAME }}
+      GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+
   deploy-to-staging:
     name: Deploy to staging
     runs-on: blacksmith-2vcpu-ubuntu-2404
-    needs: build-staging-image
+    needs: [build-staging-image, build-mcp-server-base-image]
     permissions:
       contents: read
       id-token: write # Required for Workload Identity Federation

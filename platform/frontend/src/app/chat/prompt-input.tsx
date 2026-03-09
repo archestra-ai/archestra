@@ -9,7 +9,7 @@ import {
   supportsFileUploads,
 } from "@shared";
 import type { ChatStatus } from "ai";
-import { PaperclipIcon } from "lucide-react";
+import { MoreVerticalIcon, PaperclipIcon } from "lucide-react";
 import type { FormEvent } from "react";
 import { useCallback, useEffect, useRef } from "react";
 import {
@@ -19,7 +19,6 @@ import {
   PromptInputBody,
   PromptInputButton,
   PromptInputFooter,
-  PromptInputHeader,
   type PromptInputMessage,
   PromptInputProvider,
   PromptInputSpeechButton,
@@ -39,6 +38,11 @@ import { ModelSelector } from "@/components/chat/model-selector";
 import { PlaywrightInstallInline } from "@/components/chat/playwright-install-dialog";
 import { Button } from "@/components/ui/button";
 import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
@@ -46,6 +50,7 @@ import {
 import { useProfile } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth.query";
 import { conversationStorageKeys } from "@/lib/chat-utils";
+import { useIsMobile } from "@/lib/use-mobile.hook";
 
 interface ArchestraPromptInputProps {
   onSubmit: (
@@ -194,6 +199,8 @@ const PromptInputContent = ({
   const hasKnowledgeSources =
     knowledgeBaseIds.length > 0 || connectorIds.length > 0;
 
+  const isMobile = useIsMobile();
+
   // Determine if file uploads should be shown
   // 1. Organization must allow file uploads (allowFileUploads)
   // 2. Model must support at least one file type (modelSupportsFiles)
@@ -214,14 +221,6 @@ const PromptInputContent = ({
       onSubmit={handleWrappedSubmit}
       accept={acceptedFileTypes}
     >
-      {agentId && hasKnowledgeSources && (
-        <PromptInputHeader>
-          <KnowledgeBaseIndicator
-            knowledgeBaseIds={knowledgeBaseIds}
-            connectorIds={connectorIds}
-          />
-        </PromptInputHeader>
-      )}
       {/* File attachments display - shown inline above textarea */}
       <PromptInputAttachments className="px-3 pt-2 pb-0">
         {(attachment) => <PromptInputAttachment data={attachment} />}
@@ -245,8 +244,94 @@ const PromptInputContent = ({
         )}
       </PromptInputBody>
       <PromptInputFooter>
-        <PromptInputTools>
-          {/* File attachment button - direct click opens file browser, shows tooltip when disabled */}
+        <PromptInputTools className="gap-0.5">
+          {/* Mobile: vertical three-dots menu for collapsed toolbar items */}
+          {isMobile && (
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 px-2"
+                >
+                  <MoreVerticalIcon className="size-4" />
+                  <span className="sr-only">More options</span>
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent side="top" align="start" className="w-auto p-3">
+                <div className="flex flex-col gap-3">
+                  {agentId && hasKnowledgeSources && (
+                    <div>
+                      <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1">
+                        Knowledge Sources
+                      </p>
+                      <KnowledgeBaseIndicator
+                        knowledgeBaseIds={knowledgeBaseIds}
+                        connectorIds={connectorIds}
+                        static
+                      />
+                    </div>
+                  )}
+                  {selectorAgentId !== undefined && onAgentChange && (
+                    <div>
+                      <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1">
+                        Agent
+                      </p>
+                      <InitialAgentSelector
+                        currentAgentId={selectorAgentId}
+                        onAgentChange={onAgentChange}
+                      />
+                    </div>
+                  )}
+                  <div>
+                    <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1">
+                      Model
+                    </p>
+                    <ModelSelector
+                      selectedModel={selectedModel}
+                      onModelChange={onModelChange}
+                    />
+                  </div>
+                  {(conversationId || onApiKeyChange) && (
+                    <div>
+                      <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1">
+                        Provider API Key
+                      </p>
+                      <ChatApiKeySelector
+                        conversationId={conversationId}
+                        currentProvider={currentProvider}
+                        currentConversationChatApiKeyId={
+                          conversationId
+                            ? (currentConversationChatApiKeyId ?? null)
+                            : (initialApiKeyId ?? null)
+                        }
+                        messageCount={messageCount}
+                        onApiKeyChange={onApiKeyChange}
+                        onProviderChange={onProviderChange}
+                        isModelsLoading={isModelsLoading}
+                        agentLlmApiKeyId={agentLlmApiKeyId}
+                      />
+                    </div>
+                  )}
+                  {tokensUsed > 0 && maxContextLength && (
+                    <div>
+                      <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1">
+                        Context
+                      </p>
+                      <ContextIndicator
+                        tokensUsed={tokensUsed}
+                        maxTokens={maxContextLength}
+                        size="sm"
+                      />
+                    </div>
+                  )}
+                </div>
+              </PopoverContent>
+            </Popover>
+          )}
+
+          {/* File attachment button - always visible */}
           {showFileUploadButton ? (
             <Tooltip>
               <TooltipTrigger asChild>
@@ -302,52 +387,64 @@ const PromptInputContent = ({
               </TooltipContent>
             </Tooltip>
           )}
-          {selectorAgentId !== undefined && onAgentChange && (
-            <InitialAgentSelector
-              currentAgentId={selectorAgentId}
-              onAgentChange={onAgentChange}
-            />
-          )}
-          <ModelSelector
-            selectedModel={selectedModel}
-            onModelChange={onModelChange}
-            onOpenChange={(open) => {
-              if (!open) {
-                setTimeout(() => {
-                  textareaRef.current?.focus();
-                }, 100);
-              }
-            }}
-          />
-          {(conversationId || onApiKeyChange) && (
-            <ChatApiKeySelector
-              conversationId={conversationId}
-              currentProvider={currentProvider}
-              currentConversationChatApiKeyId={
-                conversationId
-                  ? (currentConversationChatApiKeyId ?? null)
-                  : (initialApiKeyId ?? null)
-              }
-              messageCount={messageCount}
-              onApiKeyChange={onApiKeyChange}
-              onProviderChange={onProviderChange}
-              isModelsLoading={isModelsLoading}
-              agentLlmApiKeyId={agentLlmApiKeyId}
-              onOpenChange={(open) => {
-                if (!open) {
-                  setTimeout(() => {
-                    textareaRef.current?.focus();
-                  }, 100);
-                }
-              }}
-            />
-          )}
-          {tokensUsed > 0 && maxContextLength && (
-            <ContextIndicator
-              tokensUsed={tokensUsed}
-              maxTokens={maxContextLength}
-              size="sm"
-            />
+
+          {/* Desktop: inline toolbar items */}
+          {!isMobile && (
+            <>
+              {agentId && hasKnowledgeSources && (
+                <KnowledgeBaseIndicator
+                  knowledgeBaseIds={knowledgeBaseIds}
+                  connectorIds={connectorIds}
+                />
+              )}
+              {selectorAgentId !== undefined && onAgentChange && (
+                <InitialAgentSelector
+                  currentAgentId={selectorAgentId}
+                  onAgentChange={onAgentChange}
+                />
+              )}
+              <ModelSelector
+                selectedModel={selectedModel}
+                onModelChange={onModelChange}
+                onOpenChange={(open) => {
+                  if (!open) {
+                    setTimeout(() => {
+                      textareaRef.current?.focus();
+                    }, 100);
+                  }
+                }}
+              />
+              {(conversationId || onApiKeyChange) && (
+                <ChatApiKeySelector
+                  conversationId={conversationId}
+                  currentProvider={currentProvider}
+                  currentConversationChatApiKeyId={
+                    conversationId
+                      ? (currentConversationChatApiKeyId ?? null)
+                      : (initialApiKeyId ?? null)
+                  }
+                  messageCount={messageCount}
+                  onApiKeyChange={onApiKeyChange}
+                  onProviderChange={onProviderChange}
+                  isModelsLoading={isModelsLoading}
+                  agentLlmApiKeyId={agentLlmApiKeyId}
+                  onOpenChange={(open) => {
+                    if (!open) {
+                      setTimeout(() => {
+                        textareaRef.current?.focus();
+                      }, 100);
+                    }
+                  }}
+                />
+              )}
+              {tokensUsed > 0 && maxContextLength && (
+                <ContextIndicator
+                  tokensUsed={tokensUsed}
+                  maxTokens={maxContextLength}
+                  size="sm"
+                />
+              )}
+            </>
           )}
         </PromptInputTools>
         <div className="flex items-center gap-2">

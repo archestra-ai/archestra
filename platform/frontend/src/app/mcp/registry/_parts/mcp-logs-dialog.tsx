@@ -26,6 +26,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { TruncatedTooltip } from "@/components/ui/truncated-tooltip";
 import { useAnimatedDots } from "@/lib/animated-dots.hook";
 import websocketService from "@/lib/websocket";
 import {
@@ -425,7 +426,7 @@ export function McpLogsContent({
 
       {/* Pod selector cards */}
       {!hideInstallationSelector && installs.length >= 1 && (
-        <div className="flex gap-3 overflow-x-auto pb-1 flex-shrink-0">
+        <div className="grid grid-cols-3 gap-3 pb-1 flex-shrink-0">
           {installs.map((install) => {
             const status = deploymentStatuses[install.id];
             const isSelected = serverId === install.id;
@@ -440,7 +441,7 @@ export function McpLogsContent({
                 onClick={() => {
                   if (serverId !== install.id) setServerId(install.id);
                 }}
-                className={`relative flex-1 min-w-0 max-w-[20%] rounded-lg border p-3 text-left transition-colors cursor-pointer ${
+                className={`relative min-w-0 rounded-lg border p-3 text-left transition-colors cursor-pointer ${
                   isSelected
                     ? isFailed
                       ? "border-destructive/50 bg-destructive/5 ring-1 ring-destructive/30"
@@ -449,17 +450,19 @@ export function McpLogsContent({
                 }`}
               >
                 <div className="flex items-center justify-between gap-2 mb-1.5">
-                  <span className="flex items-center gap-1.5 text-sm font-medium truncate">
-                    <DeploymentStatusDot
-                      state={
-                        (status?.state === "not_created" ||
-                        status?.state === "succeeded"
-                          ? "running"
-                          : (status?.state ?? "pending")) as DeploymentState
-                      }
-                    />
-                    {install.name}
-                  </span>
+                  <TruncatedTooltip content={install.name}>
+                    <span className="flex items-center gap-1.5 text-sm font-medium truncate">
+                      <DeploymentStatusDot
+                        state={
+                          (status?.state === "not_created" ||
+                          status?.state === "succeeded"
+                            ? "running"
+                            : (status?.state ?? "pending")) as DeploymentState
+                        }
+                      />
+                      <span className="truncate">{install.name}</span>
+                    </span>
+                  </TruncatedTooltip>
                   {status && status.state !== "not_created" && (
                     <span
                       className={`text-xs px-1.5 py-0.5 rounded-full border font-medium flex-shrink-0 ${

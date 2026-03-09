@@ -7,7 +7,7 @@ import type {
   ConnectorSyncBatch,
 } from "@/types/knowledge-connector";
 import { ConfluenceConfigSchema } from "@/types/knowledge-connector";
-import { BaseConnector } from "../base-connector";
+import { BaseConnector, buildCheckpoint } from "../base-connector";
 
 const DEFAULT_BATCH_SIZE = 50;
 
@@ -141,15 +141,15 @@ export class ConfluenceConnector extends BaseConnector {
       hasMore = results.length >= batchSize && !!cursor;
 
       const lastPage = results[results.length - 1];
-      const newCheckpoint: ConfluenceCheckpoint = {
-        type: "confluence",
-        lastSyncedAt: new Date().toISOString(),
-        lastPageId: lastPage?.id ?? checkpoint.lastPageId,
-      };
 
       yield {
         documents,
-        checkpoint: newCheckpoint,
+        checkpoint: buildCheckpoint({
+          type: "confluence",
+          itemUpdatedAt: lastPage?.version?.when,
+          previousLastSyncedAt: checkpoint.lastSyncedAt,
+          extra: { lastPageId: lastPage?.id ?? checkpoint.lastPageId },
+        }),
         hasMore,
       };
     }

@@ -508,9 +508,17 @@ describe("GitlabConnector", () => {
       );
     });
 
-    test("updates checkpoint with current timestamp", async () => {
-      mockIssuesAll.mockResolvedValueOnce([makeIssue(1, "Test")]);
-      mockIssueNotesAll.mockResolvedValueOnce([]);
+    test("checkpoint uses last item updated_at timestamp instead of current time", async () => {
+      const issues = [
+        makeIssue(1, "First issue"),
+        {
+          ...makeIssue(2, "Second issue"),
+          updated_at: "2024-06-20T15:30:00.000Z",
+        },
+      ];
+
+      mockIssuesAll.mockResolvedValueOnce(issues);
+      mockIssueNotesAll.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
       mockMergeRequestsAll.mockResolvedValueOnce([]);
 
       const batches: ConnectorSyncBatch[] = [];
@@ -522,10 +530,34 @@ describe("GitlabConnector", () => {
         batches.push(batch);
       }
 
-      expect(batches[0].checkpoint.type).toBe("gitlab");
-      expect(
-        (batches[0].checkpoint as { lastSyncedAt?: string }).lastSyncedAt,
-      ).toBeDefined();
+      const checkpoint = batches[0].checkpoint as {
+        type: string;
+        lastSyncedAt?: string;
+      };
+      expect(checkpoint.type).toBe("gitlab");
+      expect(checkpoint.lastSyncedAt).toBe("2024-06-20T15:30:00.000Z");
+    });
+
+    test("checkpoint preserves previous value when batch has no items", async () => {
+      mockIssuesAll.mockResolvedValueOnce([]);
+      mockMergeRequestsAll.mockResolvedValueOnce([]);
+
+      const batches: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: validConfig,
+        credentials,
+        checkpoint: {
+          type: "gitlab",
+          lastSyncedAt: "2024-01-10T00:00:00.000Z",
+        },
+      })) {
+        batches.push(batch);
+      }
+
+      const checkpoint = batches[0].checkpoint as {
+        lastSyncedAt?: string;
+      };
+      expect(checkpoint.lastSyncedAt).toBe("2024-01-10T00:00:00.000Z");
     });
   });
 

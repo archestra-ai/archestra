@@ -8,7 +8,7 @@ import {
   ToolHeader,
   ToolInput,
 } from "@/components/ai-elements/tool";
-import type { PolicyDeniedPart } from "@/components/chatbot-demo";
+import type { PolicyDeniedPart } from "@/components/message-thread";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { EditPolicyDialog } from "./edit-policy-dialog";
 

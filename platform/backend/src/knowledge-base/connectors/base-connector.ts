@@ -6,6 +6,32 @@ import type {
   ConnectorType,
 } from "@/types/knowledge-connector";
 
+/**
+ * Build a connector checkpoint with `lastSyncedAt` derived from the last
+ * fetched item's updated timestamp.  Falls back to the previous checkpoint
+ * value when the batch contains no items.
+ *
+ * Centralises the timestamp logic so every connector computes its checkpoint
+ * the same way (using item timestamps, never wall-clock time).
+ */
+export function buildCheckpoint<
+  T extends ConnectorType,
+  E extends Record<string, unknown> = Record<never, never>,
+>(params: {
+  type: T;
+  itemUpdatedAt: string | Date | null | undefined;
+  previousLastSyncedAt: string | undefined;
+  extra?: E;
+}): { type: T; lastSyncedAt: string | undefined } & E {
+  return {
+    type: params.type,
+    lastSyncedAt: params.itemUpdatedAt
+      ? new Date(String(params.itemUpdatedAt)).toISOString()
+      : params.previousLastSyncedAt,
+    ...params.extra,
+  } as { type: T; lastSyncedAt: string | undefined } & E;
+}
+
 const MAX_RETRIES = 3;
 const RETRY_BASE_DELAY_MS = 1000;
 const RETRY_MAX_DELAY_MS = 10000;

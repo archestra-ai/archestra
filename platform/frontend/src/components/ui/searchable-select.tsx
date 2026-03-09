@@ -15,7 +15,7 @@ interface SearchableSelectProps {
   onValueChange: (value: string) => void;
   placeholder?: string;
   searchPlaceholder?: string;
-  items: Array<{ value: string; label: string }>;
+  items: Array<{ value: string; label: string; description?: string }>;
   className?: string;
   disabled?: boolean;
   allowCustom?: boolean;
@@ -40,7 +40,11 @@ export function SearchableSelect({
     if (!searchQuery) return items;
 
     const query = searchQuery.toLowerCase();
-    return items.filter((item) => item.label.toLowerCase().includes(query));
+    return items.filter(
+      (item) =>
+        item.label.toLowerCase().includes(query) ||
+        item.description?.toLowerCase().includes(query),
+    );
   }, [items, searchQuery]);
 
   const selectedItem = items.find((item) => item.value === value);
@@ -120,7 +124,14 @@ export function SearchableSelect({
                   value === item.value && "bg-accent text-accent-foreground",
                 )}
               >
-                <span className="truncate">{item.label}</span>
+                <span className="truncate min-w-0">
+                  {item.label}
+                  {item.description && (
+                    <span className="block text-xs text-muted-foreground truncate">
+                      {item.description}
+                    </span>
+                  )}
+                </span>
                 <Check
                   className={cn(
                     "ml-2 h-4 w-4 shrink-0",

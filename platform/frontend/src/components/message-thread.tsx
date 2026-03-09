@@ -9,7 +9,7 @@ import {
   ShieldCheck,
   TriangleAlert,
 } from "lucide-react";
-import { Fragment } from "react";
+import { Fragment, useMemo } from "react";
 import { Action, Actions } from "@/components/ai-elements/actions";
 import {
   Conversation,
@@ -37,14 +37,18 @@ import {
   ToolInput,
   ToolOutput,
 } from "@/components/ai-elements/tool";
+import {
+  hasKnowledgeBaseToolCall,
+  KnowledgeGraphCitations,
+} from "@/components/chat/knowledge-graph-citations";
+import { PolicyDeniedTool } from "@/components/chat/policy-denied-tool";
+import Divider from "@/components/divider";
 import { Button } from "@/components/ui/button";
 import { preserveNewlines } from "@/lib/chat-utils";
 import { parsePolicyDenied } from "@/lib/llmProviders/common";
 import { cn } from "@/lib/utils";
-import { PolicyDeniedTool } from "./chat/policy-denied-tool";
-import Divider from "./divider";
 
-const ChatBotDemo = ({
+const MessageThread = ({
   messages,
   reload,
   isEnded,
@@ -62,6 +66,7 @@ const ChatBotDemo = ({
   profileId?: string;
 }) => {
   const status: ChatStatus = "streaming" as ChatStatus;
+  const allParts = useMemo(() => messages.flatMap((m) => m.parts), [messages]);
 
   return (
     <div
@@ -155,6 +160,23 @@ const ChatBotDemo = ({
                             />
                           );
                         }
+                        const isLastAssistantMessage =
+                          message.role === "assistant" &&
+                          idx ===
+                            messages.length -
+                              1 -
+                              [...messages]
+                                .reverse()
+                                .findIndex((m) => m.role === "assistant");
+                        const isLastTextPartInMessage =
+                          isLastAssistantMessage &&
+                          message.parts
+                            .slice(i + 1)
+                            .every((p) => p.type !== "text");
+                        const showCitations =
+                          isLastTextPartInMessage &&
+                          hasKnowledgeBaseToolCall(allParts);
+
                         return (
                           <Fragment key={`${message.id}-${i}`}>
                             <Message from={message.role}>
@@ -169,6 +191,9 @@ const ChatBotDemo = ({
                                     ? preserveNewlines(part.text)
                                     : part.text}
                                 </Response>
+                                {showCitations && (
+                                  <KnowledgeGraphCitations parts={allParts} />
+                                )}
                               </MessageContent>
                             </Message>
                             {message.role === "assistant" &&
@@ -639,4 +664,4 @@ function _isBlockedToolPart(part: unknown): part is BlockedToolPart {
   );
 }
 
-export default ChatBotDemo;
+export default MessageThread;

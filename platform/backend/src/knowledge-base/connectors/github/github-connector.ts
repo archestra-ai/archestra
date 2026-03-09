@@ -7,7 +7,7 @@ import type {
   GithubConfig,
 } from "@/types/knowledge-connector";
 import { GithubConfigSchema } from "@/types/knowledge-connector";
-import { BaseConnector } from "../base-connector";
+import { BaseConnector, buildCheckpoint } from "../base-connector";
 
 const BATCH_SIZE = 50;
 
@@ -185,14 +185,15 @@ export class GithubConnector extends BaseConnector {
       pageHasMore = response.data.length >= BATCH_SIZE;
       page++;
 
-      const newCheckpoint: GithubCheckpoint = {
-        type: "github",
-        lastSyncedAt: new Date().toISOString(),
-      };
+      const lastItem = items.length > 0 ? items[items.length - 1] : null;
 
       yield {
         documents,
-        checkpoint: newCheckpoint,
+        checkpoint: buildCheckpoint({
+          type: "github",
+          itemUpdatedAt: lastItem?.updated_at,
+          previousLastSyncedAt: checkpoint.lastSyncedAt,
+        }),
         hasMore: pageHasMore || !isLastGroup,
       };
     }

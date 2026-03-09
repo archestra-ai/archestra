@@ -69,10 +69,11 @@ export function McpExecTerminal({ serverId, isActive }: McpExecTerminalProps) {
         fontFamily:
           "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
         theme: {
-          background: "#0f172a", // slate-950
+          background: "#020617", // slate-950 — matches logs container
           foreground: "#34d399", // emerald-400 — matches logs
           cursor: "#34d399",
         },
+        scrollback: 5000,
       });
 
       terminal.loadAddon(fitAddon);
@@ -242,10 +243,11 @@ export function McpExecTerminal({ serverId, isActive }: McpExecTerminalProps) {
             </div>
           )}
           <div
-            ref={terminalRef}
-            className="flex-1 min-h-0"
+            className="flex-1 min-h-0 p-4 pb-2"
             style={{ display: status === "connecting" ? "none" : "block" }}
-          />
+          >
+            <div ref={terminalRef} className="h-full" />
+          </div>
           {status === "connected" && (
             <div className="flex items-center justify-between px-3 py-2 border-t border-slate-800">
               <div className="flex items-center gap-1.5 text-emerald-400 text-xs font-mono">

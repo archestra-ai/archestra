@@ -348,6 +348,64 @@ describe("ConfluenceConnector", () => {
       expect(metadata.status).toBe("current");
     });
 
+    test("checkpoint uses last page version timestamp instead of current time", async () => {
+      const pages = [
+        makePage("123", "First Page"),
+        {
+          ...makePage("456", "Second Page"),
+          version: { when: "2024-06-20T15:30:00.000Z" },
+        },
+      ];
+
+      mockSearchContentByCQL.mockResolvedValueOnce({
+        results: pages,
+        size: pages.length,
+      });
+
+      const batches: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: validConfig,
+        credentials,
+        checkpoint: null,
+      })) {
+        batches.push(batch);
+      }
+
+      const checkpoint = batches[0].checkpoint as {
+        lastSyncedAt?: string;
+        lastPageId?: string;
+      };
+      expect(checkpoint.lastSyncedAt).toBe("2024-06-20T15:30:00.000Z");
+      expect(checkpoint.lastPageId).toBe("456");
+    });
+
+    test("checkpoint preserves previous value when batch has no pages", async () => {
+      mockSearchContentByCQL.mockResolvedValueOnce({
+        results: [],
+        size: 0,
+      });
+
+      const batches: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: validConfig,
+        credentials,
+        checkpoint: {
+          type: "confluence",
+          lastSyncedAt: "2024-01-10T00:00:00.000Z",
+          lastPageId: "99",
+        },
+      })) {
+        batches.push(batch);
+      }
+
+      const checkpoint = batches[0].checkpoint as {
+        lastSyncedAt?: string;
+        lastPageId?: string;
+      };
+      expect(checkpoint.lastSyncedAt).toBe("2024-01-10T00:00:00.000Z");
+      expect(checkpoint.lastPageId).toBe("99");
+    });
+
     test("throws on search API error", async () => {
       mockSearchContentByCQL.mockRejectedValueOnce(
         new Error("Request failed with status code 400"),

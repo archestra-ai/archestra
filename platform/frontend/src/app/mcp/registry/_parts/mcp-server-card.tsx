@@ -37,6 +37,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { TruncatedTooltip } from "@/components/ui/truncated-tooltip";
 import { LOCAL_MCP_DISABLED_MESSAGE } from "@/consts";
 import { useCreateProfile } from "@/lib/agent.query";
 import { useBulkAssignTools } from "@/lib/agent-tools.query";
@@ -794,14 +795,13 @@ export function McpServerCard({
       <CardHeader className="gap-0">
         <div className="flex items-start justify-between gap-4 overflow-hidden">
           <div className="min-w-0 flex-1">
-            <div
-              className="flex items-center gap-2 mb-1 overflow-hidden w-full"
-              title={item.name}
-            >
+            <div className="flex items-center gap-2 mb-1 overflow-hidden w-full">
               <McpCatalogIcon icon={item.icon} catalogId={item.id} size={20} />
-              <span className="text-lg font-semibold whitespace-nowrap text-ellipsis overflow-hidden">
-                {item.name}
-              </span>
+              <TruncatedTooltip content={item.name}>
+                <span className="text-lg font-semibold whitespace-nowrap text-ellipsis overflow-hidden">
+                  {item.name}
+                </span>
+              </TruncatedTooltip>
             </div>
             {item.description && (
               <p className="text-xs text-muted-foreground line-clamp-2">

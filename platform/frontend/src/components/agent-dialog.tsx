@@ -72,6 +72,7 @@ import { ExpandableText } from "@/components/ui/expandable-text";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { MultiSelectCombobox } from "@/components/ui/multi-select-combobox";
+import { OverlappedIcons } from "@/components/ui/overlapped-icons";
 import {
   Popover,
   PopoverContent,
@@ -1276,12 +1277,6 @@ export function AgentDialog({
                                       ) ?? [],
                                     ),
                                   ];
-                                  const visibleIcons = connectorTypes.slice(
-                                    0,
-                                    3,
-                                  );
-                                  const overflowCount =
-                                    connectorTypes.length - 3;
                                   return (
                                     <CommandItem
                                       key={kb.id}
@@ -1314,35 +1309,23 @@ export function AgentDialog({
                                         )}
                                       </div>
                                       {connectorTypes.length > 0 && (
-                                        <div className="flex items-center -space-x-1 ml-2 shrink-0">
-                                          {visibleIcons.map((type: string) => (
-                                            <div
-                                              key={type}
-                                              className="rounded-full bg-muted p-0.5 ring-1 ring-background"
-                                            >
-                                              <ConnectorTypeIcon
-                                                type={type}
-                                                className="h-3.5 w-3.5"
-                                              />
-                                            </div>
-                                          ))}
-                                          {overflowCount > 0 && (
-                                            <TooltipProvider>
-                                              <Tooltip>
-                                                <TooltipTrigger asChild>
-                                                  <div className="rounded-full bg-muted px-1 py-0.5 ring-1 ring-background text-[10px] font-medium text-muted-foreground">
-                                                    +{overflowCount}
-                                                  </div>
-                                                </TooltipTrigger>
-                                                <TooltipContent side="right">
-                                                  {connectorTypes
-                                                    .slice(3)
-                                                    .join(", ")}
-                                                </TooltipContent>
-                                              </Tooltip>
-                                            </TooltipProvider>
+                                        <OverlappedIcons
+                                          icons={connectorTypes.map(
+                                            (type: string) => ({
+                                              key: type,
+                                              icon: (
+                                                <ConnectorTypeIcon
+                                                  type={type}
+                                                  className="h-full w-full"
+                                                />
+                                              ),
+                                              tooltip: type,
+                                            }),
                                           )}
-                                        </div>
+                                          maxVisible={3}
+                                          size="sm"
+                                          className="ml-2"
+                                        />
                                       )}
                                     </CommandItem>
                                   );

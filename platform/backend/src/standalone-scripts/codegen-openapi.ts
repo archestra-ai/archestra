@@ -5,7 +5,6 @@ import logger from "@/logging";
 import {
   createFastifyInstance,
   registerApiRoutes,
-  registerHealthEndpoint,
   registerSwaggerPlugin,
 } from "@/server";
 
@@ -22,9 +21,6 @@ async function generateOpenApiSpec() {
 
   // Register swagger plugin with custom servers for the docs
   await registerSwaggerPlugin(fastify);
-
-  // Register health endpoint
-  registerHealthEndpoint(fastify);
 
   // Register all API routes (includes EE routes if license is activated)
   await registerApiRoutes(fastify);

@@ -47,7 +47,6 @@ import {
   PLACEHOLDER_KEY,
 } from "@/components/chat-api-key-form";
 import { LoadingSpinner } from "@/components/loading";
-import { TruncatedTooltip } from "@/components/ui/truncated-tooltip";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -79,6 +78,7 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty";
+import { TruncatedTooltip } from "@/components/ui/truncated-tooltip";
 import { TypingText } from "@/components/ui/typing-text";
 import { Version } from "@/components/version";
 import { useDefaultAgentId, useInternalAgents } from "@/lib/agent.query";
@@ -1237,7 +1237,7 @@ export default function ChatPage() {
                       conversation.messages,
                     )}
                   >
-                    <h1 className="text-base font-normal text-muted-foreground truncate max-w-[300px] cursor-default">
+                    <h1 className="text-base font-normal text-muted-foreground truncate max-w-[360px] cursor-default">
                       {headerAnimatingTitles.has(conversation.id) ? (
                         <TypingText
                           text={getConversationDisplayTitle(

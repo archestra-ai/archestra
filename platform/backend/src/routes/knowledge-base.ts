@@ -10,6 +10,7 @@ import {
   ConnectorRunModel,
   KnowledgeBaseConnectorModel,
   KnowledgeBaseModel,
+  TaskModel,
 } from "@/models";
 import { secretManager } from "@/secrets-manager";
 import { taskQueueService } from "@/task-queue";
@@ -554,8 +555,9 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async ({ params: { id }, organizationId }, reply) => {
       await findConnectorOrThrow(id, organizationId);
 
-      const hasActiveRun = await ConnectorRunModel.hasActiveRun(id);
-      if (hasActiveRun) {
+      const hasPendingOrProcessing =
+        await TaskModel.hasPendingOrProcessing("connector_sync", id);
+      if (hasPendingOrProcessing) {
         throw new ApiError(
           409,
           "A sync is already in progress for this connector",

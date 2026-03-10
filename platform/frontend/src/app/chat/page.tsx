@@ -293,20 +293,23 @@ export default function ChatPage() {
     const savedModelId = localStorage.getItem(
       LocalStorageKeys.selectedChatModel,
     );
-    if (
-      savedModelId &&
-      allModels.length > 0 &&
-      allModels.some((m) => m.id === savedModelId)
-    ) {
-      setInitialModel(savedModelId);
-      // Find provider for saved model and auto-select key
-      for (const [provider, models] of Object.entries(modelsByProvider)) {
-        if (models?.some((m) => m.id === savedModelId)) {
-          autoSelectKeyForProvider(provider);
-          break;
+    if (savedModelId) {
+      // Wait for models to load so we can validate the saved model still exists
+      if (allModels.length === 0) return;
+
+      if (allModels.some((m) => m.id === savedModelId)) {
+        setInitialModel(savedModelId);
+        // Find provider for saved model and auto-select key
+        for (const [provider, models] of Object.entries(modelsByProvider)) {
+          if (models?.some((m) => m.id === savedModelId)) {
+            autoSelectKeyForProvider(provider);
+            break;
+          }
         }
+        return;
       }
-      return;
+      // Saved model no longer available — clear stale value and fall through
+      localStorage.removeItem(LocalStorageKeys.selectedChatModel);
     }
 
     // 2. Agent-configured model as fallback

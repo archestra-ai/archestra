@@ -1,5 +1,5 @@
-import type pino from "pino";
 import { Octokit } from "@octokit/rest";
+import type pino from "pino";
 import type {
   ConnectorCredentials,
   ConnectorDocument,

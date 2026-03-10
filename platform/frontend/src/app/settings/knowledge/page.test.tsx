@@ -62,6 +62,15 @@ vi.mock("@/lib/organization.query", () => ({
     mutateAsync: vi.fn(),
     isPending: false,
   }),
+  useTestEmbeddingConnection: () => ({
+    mutateAsync: vi.fn(),
+    mutate: vi.fn(),
+    isPending: false,
+  }),
+  useDropEmbeddingConfig: () => ({
+    mutateAsync: vi.fn(),
+    isPending: false,
+  }),
 }));
 
 let mockApiKeys: Array<{

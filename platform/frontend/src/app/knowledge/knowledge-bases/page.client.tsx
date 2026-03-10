@@ -417,6 +417,8 @@ function ExpandedConnectors({ knowledgeBaseId }: { knowledgeBaseId: string }) {
                 </div>
               </TableCell>
               <TableCell>
+                {/* biome-ignore lint/a11y/useKeyWithClickEvents: stopPropagation wrapper for action buttons inside clickable row */}
+                {/* biome-ignore lint/a11y/noStaticElementInteractions: wrapper only prevents row click propagation */}
                 <div
                   className="flex items-center justify-center gap-1"
                   onClick={(e) => e.stopPropagation()}
@@ -436,9 +438,7 @@ function ExpandedConnectors({ knowledgeBaseId }: { knowledgeBaseId: string }) {
                           variant="ghost"
                           size="icon"
                           className="h-7 w-7"
-                          onClick={() =>
-                            setRemovingConnectorId(connector.id)
-                          }
+                          onClick={() => setRemovingConnectorId(connector.id)}
                         >
                           <Unlink className="h-3.5 w-3.5 text-muted-foreground" />
                         </Button>

@@ -1,9 +1,25 @@
 import { MEMBER_ROLE_NAME } from "@shared";
-import { and, eq, inArray } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  ilike,
+  inArray,
+  or,
+  sql,
+} from "drizzle-orm";
 import db, { schema } from "@/database";
+import {
+  createPaginatedResult,
+  type PaginatedResult,
+} from "@/database/utils/pagination";
 import logger from "@/logging";
 import type {
   InsertTeam,
+  PaginationQuery,
+  SortingQueryFor,
   Team,
   TeamExternalGroup,
   TeamMember,
@@ -11,6 +27,8 @@ import type {
 } from "@/types";
 import { ApiError } from "@/types";
 import TeamTokenModel from "./team-token";
+
+export const TEAM_SORT_COLUMNS = ["name", "createdAt", "memberCount"] as const;
 
 class TeamModel {
   /**
@@ -77,6 +95,113 @@ class TeamModel {
       "TeamModel.findByOrganization: completed",
     );
     return teamsWithMembers;
+  }
+
+  /**
+   * Find all teams in an organization with pagination, search, and sorting
+   */
+  static async findAllPaginated(params: {
+    organizationId: string;
+    pagination: PaginationQuery;
+    sorting: SortingQueryFor<typeof TEAM_SORT_COLUMNS>;
+    search?: string;
+    userId?: string;
+    isTeamAdmin: boolean;
+  }): Promise<PaginatedResult<Team>> {
+    const { organizationId, pagination, sorting, search, userId, isTeamAdmin } =
+      params;
+
+    logger.debug(
+      { organizationId, pagination, sorting, search, isTeamAdmin },
+      "TeamModel.findAllPaginated: fetching teams",
+    );
+
+    // Build WHERE conditions
+    const conditions = [eq(schema.teamsTable.organizationId, organizationId)];
+
+    // Add search filter
+    if (search) {
+      const searchCondition = or(
+        ilike(schema.teamsTable.name, `%${search}%`),
+        ilike(schema.teamsTable.description, `%${search}%`),
+      );
+      if (searchCondition) {
+        conditions.push(searchCondition);
+      }
+    }
+
+    // For non-admin users, only return teams where user is a member
+    if (!isTeamAdmin && userId) {
+      const userTeamIds = await TeamModel.getUserTeamIds(userId);
+      if (userTeamIds.length === 0) {
+        return createPaginatedResult([], 0, pagination);
+      }
+      conditions.push(inArray(schema.teamsTable.id, userTeamIds));
+    }
+
+    const whereClause = and(...conditions);
+
+    // Build member count subquery for sorting by memberCount
+    const memberCountSubquery = db
+      .select({
+        teamId: schema.teamMembersTable.teamId,
+        memberCount: count().as("member_count"),
+      })
+      .from(schema.teamMembersTable)
+      .groupBy(schema.teamMembersTable.teamId)
+      .as("member_counts");
+
+    // Determine sort column and direction
+    const direction = sorting.sortDirection === "asc" ? asc : desc;
+    const sortColumn =
+      sorting.sortBy === "memberCount"
+        ? sql`COALESCE(${memberCountSubquery.memberCount}, 0)`
+        : sorting.sortBy === "name"
+          ? schema.teamsTable.name
+          : schema.teamsTable.createdAt;
+
+    // Get total count
+    const [{ total }] = await db
+      .select({ total: count() })
+      .from(schema.teamsTable)
+      .where(whereClause);
+
+    // Get paginated results with sorting
+    const teams = await db
+      .select({
+        id: schema.teamsTable.id,
+        name: schema.teamsTable.name,
+        description: schema.teamsTable.description,
+        organizationId: schema.teamsTable.organizationId,
+        createdBy: schema.teamsTable.createdBy,
+        createdAt: schema.teamsTable.createdAt,
+        updatedAt: schema.teamsTable.updatedAt,
+        convertToolResultsToToon: schema.teamsTable.convertToolResultsToToon,
+      })
+      .from(schema.teamsTable)
+      .leftJoin(
+        memberCountSubquery,
+        eq(schema.teamsTable.id, memberCountSubquery.teamId),
+      )
+      .where(whereClause)
+      .orderBy(direction(sortColumn))
+      .limit(pagination.limit)
+      .offset(pagination.offset);
+
+    // Batch fetch members for the paginated teams
+    const teamIds = teams.map((t) => t.id);
+    const membersByTeam = await TeamModel.getTeamMembersBatch(teamIds);
+
+    const teamsWithMembers: Team[] = teams.map((team) => ({
+      ...team,
+      members: membersByTeam.get(team.id) || [],
+    }));
+
+    logger.debug(
+      { organizationId, total: Number(total), count: teamsWithMembers.length },
+      "TeamModel.findAllPaginated: completed",
+    );
+    return createPaginatedResult(teamsWithMembers, Number(total), pagination);
   }
 
   /**

@@ -304,7 +304,8 @@ test.describe("Organization Roles API - Role Lifecycle", () => {
       method: "get",
       urlSuffix: "/api/roles",
     });
-    const roles = await listResponse.json();
+    const rolesBody = await listResponse.json();
+    const roles = rolesBody.data;
     const foundRole = roles.find(
       (r: { id: string }) => r.id === createdRole.id,
     );

@@ -1,7 +1,28 @@
 import type { AnyRoleName } from "@shared";
-import { and, count, eq } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  ilike,
+  inArray,
+  or,
+  type SQL,
+} from "drizzle-orm";
 import db, { schema } from "@/database";
+import type { PaginatedResult } from "@/database/utils/pagination";
+import { createPaginatedResult } from "@/database/utils/pagination";
 import logger from "@/logging";
+import type { PaginationQuery, SortingQueryFor } from "@/types";
+import type { MemberWithUser } from "@/types/member";
+
+export const MEMBER_SORT_COLUMNS = [
+  "name",
+  "email",
+  "role",
+  "createdAt",
+] as const;
 
 class MemberModel {
   /**
@@ -272,6 +293,166 @@ class MemberModel {
       .from(schema.membersTable)
       .where(eq(schema.membersTable.defaultAgentId, agentId));
     return (result?.count ?? 0) > 0;
+  }
+
+  /**
+   * Find all members with user details, pagination, sorting, search, and filtering.
+   * Includes pending signup status and team memberships (batch-loaded).
+   */
+  static async findAllPaginatedByOrganization(params: {
+    organizationId: string;
+    pagination: PaginationQuery;
+    sorting: SortingQueryFor<typeof MEMBER_SORT_COLUMNS>;
+    search?: string;
+    teamIds?: string[];
+    role?: string;
+  }): Promise<PaginatedResult<MemberWithUser>> {
+    const { organizationId, pagination, sorting, search, teamIds, role } =
+      params;
+
+    logger.debug(
+      { organizationId, pagination, sorting, search, teamIds, role },
+      "MemberModel.findAllPaginatedByOrganization: fetching members",
+    );
+
+    // Build WHERE conditions
+    const conditions: SQL[] = [
+      eq(schema.membersTable.organizationId, organizationId),
+    ];
+
+    // Search across user name and email
+    if (search) {
+      const searchPattern = `%${search}%`;
+      const searchCondition = or(
+        ilike(schema.usersTable.name, searchPattern),
+        ilike(schema.usersTable.email, searchPattern),
+      );
+      if (searchCondition) {
+        conditions.push(searchCondition);
+      }
+    }
+
+    // Filter by role
+    if (role) {
+      conditions.push(eq(schema.membersTable.role, role));
+    }
+
+    // Filter by team membership: members who belong to any of the specified teams
+    if (teamIds && teamIds.length > 0) {
+      const membersInTeams = db
+        .select({ userId: schema.teamMembersTable.userId })
+        .from(schema.teamMembersTable)
+        .where(inArray(schema.teamMembersTable.teamId, teamIds));
+      conditions.push(inArray(schema.membersTable.userId, membersInTeams));
+    }
+
+    const whereClause = and(...conditions);
+
+    // Determine sort column and direction
+    const direction = sorting.sortDirection === "asc" ? asc : desc;
+    const sortColumn = (() => {
+      switch (sorting.sortBy) {
+        case "name":
+          return schema.usersTable.name;
+        case "email":
+          return schema.usersTable.email;
+        case "role":
+          return schema.membersTable.role;
+        case "createdAt":
+          return schema.membersTable.createdAt;
+        default:
+          return schema.membersTable.createdAt;
+      }
+    })();
+    const orderByClause = direction(sortColumn);
+
+    // Fetch paginated data and total count in parallel
+    const [rows, [{ total }]] = await Promise.all([
+      db
+        .select({
+          id: schema.membersTable.id,
+          userId: schema.membersTable.userId,
+          name: schema.usersTable.name,
+          email: schema.usersTable.email,
+          role: schema.membersTable.role,
+          createdAt: schema.membersTable.createdAt,
+        })
+        .from(schema.membersTable)
+        .innerJoin(
+          schema.usersTable,
+          eq(schema.membersTable.userId, schema.usersTable.id),
+        )
+        .where(whereClause)
+        .orderBy(orderByClause)
+        .limit(pagination.limit)
+        .offset(pagination.offset),
+      db
+        .select({ total: count() })
+        .from(schema.membersTable)
+        .innerJoin(
+          schema.usersTable,
+          eq(schema.membersTable.userId, schema.usersTable.id),
+        )
+        .where(whereClause),
+    ]);
+
+    if (rows.length === 0) {
+      return createPaginatedResult([], Number(total), pagination);
+    }
+
+    const userIds = rows.map((r) => r.userId);
+
+    // Batch-load team memberships for all returned members
+    const teamMemberships = await db
+      .select({
+        userId: schema.teamMembersTable.userId,
+        teamId: schema.teamMembersTable.teamId,
+        teamName: schema.teamsTable.name,
+      })
+      .from(schema.teamMembersTable)
+      .innerJoin(
+        schema.teamsTable,
+        eq(schema.teamMembersTable.teamId, schema.teamsTable.id),
+      )
+      .where(inArray(schema.teamMembersTable.userId, userIds));
+
+    const teamsByUserId = new Map<
+      string,
+      Array<{ id: string; name: string }>
+    >();
+    for (const userId of userIds) {
+      teamsByUserId.set(userId, []);
+    }
+    for (const tm of teamMemberships) {
+      const teams = teamsByUserId.get(tm.userId) || [];
+      teams.push({ id: tm.teamId, name: tm.teamName });
+      teamsByUserId.set(tm.userId, teams);
+    }
+
+    // Batch-load pending signup status: users without an account record
+    const usersWithAccounts = await db
+      .select({ userId: schema.accountsTable.userId })
+      .from(schema.accountsTable)
+      .where(inArray(schema.accountsTable.userId, userIds));
+    const hasAccountSet = new Set(usersWithAccounts.map((a) => a.userId));
+
+    const data: MemberWithUser[] = rows.map((row) => ({
+      id: row.id,
+      userId: row.userId,
+      name: row.name,
+      email: row.email,
+      role: row.role,
+      createdAt: row.createdAt,
+      teams: teamsByUserId.get(row.userId) || [],
+      isPendingSignup: !hasAccountSet.has(row.userId),
+    }));
+
+    logger.debug(
+      { organizationId, count: data.length, total: Number(total) },
+      "MemberModel.findAllPaginatedByOrganization: completed",
+    );
+
+    return createPaginatedResult(data, Number(total), pagination);
   }
 }
 

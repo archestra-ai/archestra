@@ -69,7 +69,7 @@ import { LlmProxyActions } from "./llm-proxy-actions";
 
 type LlmProxiesInitialData = {
   agents: archestraApiTypes.GetAgentsResponses["200"] | null;
-  teams: archestraApiTypes.GetTeamsResponses["200"];
+  teams: archestraApiTypes.GetTeamsResponses["200"]["data"];
 };
 
 export default function LlmProxiesPage({
@@ -243,7 +243,7 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
     queryKey: ["teams"],
     queryFn: async () => {
       const { data } = await archestraApiSdk.getTeams();
-      return data || [];
+      return data?.data || [];
     },
     initialData: initialData?.teams,
   });

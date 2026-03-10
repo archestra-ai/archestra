@@ -15,11 +15,12 @@ test.describe("Teams API", () => {
       });
       expect(response.status()).toBe(200);
 
-      const teams = await response.json();
-      expect(Array.isArray(teams)).toBe(true);
+      const body = await response.json();
+      expect(body.data).toBeDefined();
+      expect(Array.isArray(body.data)).toBe(true);
 
       // Admin should see both Engineering and Marketing teams (created in auth setup)
-      const teamNames = teams.map((t: { name: string }) => t.name);
+      const teamNames = body.data.map((t: { name: string }) => t.name);
       expect(teamNames).toContain(ENGINEERING_TEAM_NAME);
       expect(teamNames).toContain(MARKETING_TEAM_NAME);
     });
@@ -36,11 +37,12 @@ test.describe("Teams API", () => {
       });
       expect(response.status()).toBe(200);
 
-      const teams = await response.json();
-      expect(Array.isArray(teams)).toBe(true);
+      const body = await response.json();
+      expect(body.data).toBeDefined();
+      expect(Array.isArray(body.data)).toBe(true);
 
       // Member is only in Marketing Team (per auth setup)
-      const teamNames = teams.map((t: { name: string }) => t.name);
+      const teamNames = body.data.map((t: { name: string }) => t.name);
       expect(teamNames).toContain(MARKETING_TEAM_NAME);
       // Member should NOT see Engineering Team (they're not a member)
       expect(teamNames).not.toContain(ENGINEERING_TEAM_NAME);
@@ -58,11 +60,12 @@ test.describe("Teams API", () => {
       });
       expect(response.status()).toBe(200);
 
-      const teams = await response.json();
-      expect(Array.isArray(teams)).toBe(true);
+      const body = await response.json();
+      expect(body.data).toBeDefined();
+      expect(Array.isArray(body.data)).toBe(true);
 
       // Editor is in both Engineering and Marketing Teams (per auth setup)
-      const teamNames = teams.map((t: { name: string }) => t.name);
+      const teamNames = body.data.map((t: { name: string }) => t.name);
       expect(teamNames).toContain(ENGINEERING_TEAM_NAME);
       expect(teamNames).toContain(MARKETING_TEAM_NAME);
     });
@@ -146,9 +149,10 @@ test.describe("Teams API", () => {
         urlSuffix: "/api/teams",
       });
       expect(listResponse.status()).toBe(200);
-      const teams = await listResponse.json();
-      expect(Array.isArray(teams)).toBe(true);
-      expect(teams.some((t: { id: string }) => t.id === team.id)).toBe(true);
+      const listBody = await listResponse.json();
+      expect(listBody.data).toBeDefined();
+      expect(Array.isArray(listBody.data)).toBe(true);
+      expect(listBody.data.some((t: { id: string }) => t.id === team.id)).toBe(true);
 
       // Cleanup
       await deleteTeam(request, team.id);

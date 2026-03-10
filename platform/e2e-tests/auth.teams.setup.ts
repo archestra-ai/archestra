@@ -109,7 +109,8 @@ async function getTeams(request: APIRequestContext): Promise<Team[]> {
     return [];
   }
 
-  return response.json();
+  const body = await response.json();
+  return body.data ?? body;
 }
 
 /**

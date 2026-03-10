@@ -33453,7 +33453,13 @@ export type UpdateOptimizationRuleResponse = UpdateOptimizationRuleResponses[key
 export type GetRolesData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        search?: string;
+        limit?: number;
+        offset?: number;
+        sortBy?: 'name' | 'createdAt';
+        sortDirection?: 'asc' | 'desc';
+    };
     url: '/api/roles';
 };
 
@@ -33520,18 +33526,29 @@ export type GetRolesResponses = {
     /**
      * Default Response
      */
-    200: Array<{
-        id: string;
-        organizationId?: string;
-        role: string;
-        name: string;
-        permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel'>;
+    200: {
+        data: Array<{
+            id: string;
+            organizationId?: string;
+            role: string;
+            name: string;
+            description: string | null;
+            permission: {
+                [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel'>;
+            };
+            createdAt: string;
+            updatedAt: string | null;
+            predefined: boolean;
+        }>;
+        pagination: {
+            currentPage: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+            hasNext: boolean;
+            hasPrev: boolean;
         };
-        createdAt: string;
-        updatedAt: string | null;
-        predefined: boolean;
-    }>;
+    };
 };
 
 export type GetRolesResponse = GetRolesResponses[keyof GetRolesResponses];
@@ -33539,6 +33556,7 @@ export type GetRolesResponse = GetRolesResponses[keyof GetRolesResponses];
 export type CreateRoleData = {
     body: {
         name: string;
+        description?: string | null;
         permission: {
             [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel'>;
         };
@@ -33616,6 +33634,7 @@ export type CreateRoleResponses = {
         organizationId?: string;
         role: string;
         name: string;
+        description: string | null;
         permission: {
             [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel'>;
         };
@@ -33789,6 +33808,7 @@ export type GetRoleResponses = {
         organizationId?: string;
         role: string;
         name: string;
+        description: string | null;
         permission: {
             [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel'>;
         };
@@ -33803,6 +33823,7 @@ export type GetRoleResponse = GetRoleResponses[keyof GetRoleResponses];
 export type UpdateRoleData = {
     body?: {
         name?: string;
+        description?: string | null;
         permission?: {
             [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel'>;
         };
@@ -33885,6 +33906,7 @@ export type UpdateRoleResponses = {
         organizationId?: string;
         role: string;
         name: string;
+        description: string | null;
         permission: {
             [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel'>;
         };
@@ -34882,6 +34904,111 @@ export type GetOrganizationMembersResponses = {
 
 export type GetOrganizationMembersResponse = GetOrganizationMembersResponses[keyof GetOrganizationMembersResponses];
 
+export type GetOrganizationMembersPaginatedData = {
+    body?: never;
+    path?: never;
+    query?: {
+        search?: string;
+        teamIds?: string;
+        role?: string;
+        limit?: number;
+        offset?: number;
+        sortBy?: 'name' | 'email' | 'role' | 'createdAt';
+        sortDirection?: 'asc' | 'desc';
+    };
+    url: '/api/organization/members/paginated';
+};
+
+export type GetOrganizationMembersPaginatedErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetOrganizationMembersPaginatedError = GetOrganizationMembersPaginatedErrors[keyof GetOrganizationMembersPaginatedErrors];
+
+export type GetOrganizationMembersPaginatedResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        data: Array<{
+            id: string;
+            userId: string;
+            name: string | null;
+            email: string;
+            role: string;
+            createdAt: string;
+            teams: Array<{
+                id: string;
+                name: string;
+            }>;
+            isPendingSignup: boolean;
+        }>;
+        pagination: {
+            currentPage: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+            hasNext: boolean;
+            hasPrev: boolean;
+        };
+    };
+};
+
+export type GetOrganizationMembersPaginatedResponse = GetOrganizationMembersPaginatedResponses[keyof GetOrganizationMembersPaginatedResponses];
+
 export type PerplexityChatCompletionsWithDefaultAgentData = {
     body?: XaiChatCompletionRequestInput;
     headers: {
@@ -35743,7 +35870,13 @@ export type GetCostSavingsStatisticsResponse = GetCostSavingsStatisticsResponses
 export type GetTeamsData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        search?: string;
+        limit?: number;
+        offset?: number;
+        sortBy?: 'name' | 'createdAt' | 'memberCount';
+        sortDirection?: 'asc' | 'desc';
+    };
     url: '/api/teams';
 };
 
@@ -35810,24 +35943,34 @@ export type GetTeamsResponses = {
     /**
      * Default Response
      */
-    200: Array<{
-        id: string;
-        name: string;
-        description: string | null;
-        organizationId: string;
-        createdBy: string;
-        createdAt: string;
-        updatedAt: string;
-        convertToolResultsToToon: boolean;
-        members?: Array<{
+    200: {
+        data: Array<{
             id: string;
-            teamId: string;
-            userId: string;
-            role: string;
-            syncedFromSso: boolean;
+            name: string;
+            description: string | null;
+            organizationId: string;
+            createdBy: string;
             createdAt: string;
+            updatedAt: string;
+            convertToolResultsToToon: boolean;
+            members?: Array<{
+                id: string;
+                teamId: string;
+                userId: string;
+                role: string;
+                syncedFromSso: boolean;
+                createdAt: string;
+            }>;
         }>;
-    }>;
+        pagination: {
+            currentPage: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+            hasNext: boolean;
+            hasPrev: boolean;
+        };
+    };
 };
 
 export type GetTeamsResponse = GetTeamsResponses[keyof GetTeamsResponses];

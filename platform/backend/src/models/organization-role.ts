@@ -8,10 +8,20 @@ import {
   type Resource,
 } from "@shared";
 import { predefinedPermissionsMap } from "@shared/access-control";
-import { and, eq, getTableColumns, sql } from "drizzle-orm";
+import { and, count, eq, getTableColumns, ilike, or, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
+import {
+  createPaginatedResult,
+  type PaginatedResult,
+} from "@/database/utils/pagination";
 import logger from "@/logging";
-import type { OrganizationRole } from "@/types";
+import type {
+  OrganizationRole,
+  PaginationQuery,
+  SortingQueryFor,
+} from "@/types";
+
+export const ROLE_SORT_COLUMNS = ["name", "createdAt"] as const;
 
 const generatePredefinedRole = (
   role: PredefinedRoleName,
@@ -20,6 +30,7 @@ const generatePredefinedRole = (
   id: role,
   role: role,
   name: role,
+  description: null,
   organizationId,
   permission: OrganizationRoleModel.getPredefinedRolePermissions(role),
   predefined: true,
@@ -388,6 +399,92 @@ class OrganizationRoleModel {
       // Return predefined roles as fallback
       return predefinedRoles;
     }
+  }
+
+  /**
+   * List all roles for an organization with pagination, sorting, and search.
+   * Predefined roles always appear first, before custom roles.
+   */
+  static async getAllPaginated(params: {
+    organizationId: string;
+    pagination: PaginationQuery;
+    sorting: SortingQueryFor<typeof ROLE_SORT_COLUMNS>;
+    search?: string;
+  }): Promise<PaginatedResult<OrganizationRole>> {
+    const { organizationId, pagination, sorting, search } = params;
+
+    // Get predefined roles, filtered by search if applicable
+    let predefinedRoles =
+      OrganizationRoleModel.getPredefinedOnly(organizationId);
+
+    if (search) {
+      const searchLower = search.toLowerCase();
+      predefinedRoles = predefinedRoles.filter(
+        (r) =>
+          r.name.toLowerCase().includes(searchLower) ||
+          (r.description?.toLowerCase().includes(searchLower) ?? false),
+      );
+    }
+
+    // Build where conditions for custom roles query
+    const conditions = [
+      eq(schema.organizationRolesTable.organizationId, organizationId),
+    ];
+    if (search) {
+      const searchCondition = or(
+        ilike(schema.organizationRolesTable.name, `%${search}%`),
+        ilike(schema.organizationRolesTable.description, `%${search}%`),
+      );
+      if (searchCondition) {
+        conditions.push(searchCondition);
+      }
+    }
+
+    const whereClause = and(...conditions);
+
+    // Fetch all matching custom roles and count in parallel
+    const [customRolesRaw, [{ total: customTotal }]] = await Promise.all([
+      db
+        .select({
+          ...getTableColumns(schema.organizationRolesTable),
+          predefined: sql<boolean>`false`,
+        })
+        .from(schema.organizationRolesTable)
+        .where(whereClause),
+      db
+        .select({ total: count() })
+        .from(schema.organizationRolesTable)
+        .where(whereClause),
+    ]);
+
+    const customRoles: OrganizationRole[] = customRolesRaw.map((role) => ({
+      ...role,
+      permission: JSON.parse(role.permission),
+    }));
+
+    // Sort custom roles based on sorting params
+    const sortDirection = sorting.sortDirection === "asc" ? 1 : -1;
+    customRoles.sort((a, b) => {
+      if (sorting.sortBy === "name") {
+        return a.name.localeCompare(b.name) * sortDirection;
+      }
+      // Default sort by createdAt
+      const aTime = a.createdAt.getTime();
+      const bTime = b.createdAt.getTime();
+      return (aTime - bTime) * sortDirection;
+    });
+
+    // Combine: predefined first, then sorted custom roles
+    const allRoles = [...predefinedRoles, ...customRoles];
+    const total = predefinedRoles.length + Number(customTotal);
+
+    // Apply pagination in memory across the combined list
+    const paginatedRoles = allRoles.slice(
+      pagination.offset,
+      pagination.offset + pagination.limit,
+    );
+
+    return createPaginatedResult(paginatedRoles, total, pagination);
   }
 
   /**

@@ -10,6 +10,7 @@ export const organizationRole = pgTable(
       .references(() => organizationsTable.id, { onDelete: "cascade" }),
     role: text("role").notNull(), // Immutable identifier (lowercase, no spaces) - used by better-auth
     name: text("name").notNull(), // Editable display name - shown in UI
+    description: text("description"),
     permission: text("permission").notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").$onUpdate(

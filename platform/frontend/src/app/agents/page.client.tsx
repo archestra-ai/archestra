@@ -64,7 +64,7 @@ import { AgentActions } from "./agent-actions";
 
 type AgentsInitialData = {
   agents: archestraApiTypes.GetAgentsResponses["200"] | null;
-  teams: archestraApiTypes.GetTeamsResponses["200"];
+  teams: archestraApiTypes.GetTeamsResponses["200"]["data"];
 };
 
 export default function AgentsPage({
@@ -237,7 +237,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     queryKey: ["teams"],
     queryFn: async () => {
       const { data } = await archestraApiSdk.getTeams();
-      return data || [];
+      return data?.data || [];
     },
     initialData: initialData?.teams,
   });

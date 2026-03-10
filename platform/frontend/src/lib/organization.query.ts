@@ -9,6 +9,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { appearanceKeys } from "@/lib/appearance.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
+import { DEFAULT_TABLE_LIMIT } from "@/lib/utils";
 import { handleApiError } from "./utils";
 
 /**
@@ -26,6 +27,8 @@ export const organizationKeys = {
     [...organizationKeys.all, "onboarding-status"] as const,
   memberSignupStatus: () =>
     [...organizationKeys.all, "member-signup-status"] as const,
+  membersPaginated: (params?: unknown) =>
+    [...organizationKeys.all, "members-paginated", params] as const,
 };
 
 /**
@@ -480,6 +483,130 @@ export function useDeletePendingSignupMember() {
         queryKey: organizationKeys.memberSignupStatus(),
       });
       toast.success("Pending member removed");
+    },
+  });
+}
+
+export type PaginatedMember =
+  archestraApiTypes.GetOrganizationMembersPaginatedResponses["200"]["data"][number];
+
+/**
+ * Fetch paginated organization members with search, filtering, and sorting
+ */
+export function useOrganizationMembersPaginated(params?: {
+  limit?: number;
+  offset?: number;
+  sortBy?: string;
+  sortDirection?: string;
+  search?: string;
+  teamIds?: string;
+  role?: string;
+}) {
+  return useQuery({
+    queryKey: organizationKeys.membersPaginated(params),
+    queryFn: async () => {
+      const { data, error } =
+        await archestraApiSdk.getOrganizationMembersPaginated({
+          query: {
+            limit: params?.limit ?? DEFAULT_TABLE_LIMIT,
+            offset: params?.offset ?? 0,
+            sortBy: params?.sortBy as "name" | "email" | "role" | "createdAt",
+            sortDirection: params?.sortDirection as "asc" | "desc",
+            search: params?.search,
+            teamIds: params?.teamIds,
+            role: params?.role,
+          },
+        });
+      if (error) {
+        handleApiError(error);
+        return {
+          data: [],
+          pagination: {
+            currentPage: 1,
+            limit: DEFAULT_TABLE_LIMIT,
+            total: 0,
+            totalPages: 0,
+            hasNext: false,
+            hasPrev: false,
+          },
+        };
+      }
+      return data;
+    },
+  });
+}
+
+/**
+ * Update a member's role via better-auth
+ */
+export function useUpdateMemberRole() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      memberId,
+      role,
+      organizationId,
+    }: {
+      memberId: string;
+      role: string;
+      organizationId: string;
+    }) => {
+      const response = await authClient.organization.updateMemberRole({
+        memberId,
+        role: role as NonNullable<
+          Parameters<typeof authClient.organization.updateMemberRole>[0]
+        >["role"],
+        organizationId,
+      });
+
+      if (response.error) {
+        toast.error(response.error.message || "Failed to update member role");
+        return null;
+      }
+
+      return response.data;
+    },
+    onSuccess: (data) => {
+      if (!data) return;
+      queryClient.invalidateQueries({
+        queryKey: organizationKeys.all,
+      });
+      toast.success("Member role updated");
+    },
+  });
+}
+
+/**
+ * Remove a member from the organization via better-auth
+ */
+export function useRemoveMember() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      memberId,
+      organizationId,
+    }: {
+      memberId: string;
+      organizationId: string;
+    }) => {
+      const response = await authClient.organization.removeMember({
+        memberIdOrEmail: memberId,
+        organizationId,
+      });
+
+      if (response.error) {
+        toast.error(response.error.message || "Failed to remove member");
+        return null;
+      }
+
+      return response.data;
+    },
+    onSuccess: (data) => {
+      if (!data) return;
+      queryClient.invalidateQueries({
+        queryKey: organizationKeys.all,
+      });
+      toast.success("Member removed from organization");
     },
   });
 }

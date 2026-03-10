@@ -77,7 +77,7 @@ type TokenPriceData = {
   pricePerMillionInput: string;
   pricePerMillionOutput: string;
 };
-type TeamData = archestraApiTypes.GetTeamsResponses["200"][number];
+type TeamData = archestraApiTypes.GetTeamsResponses["200"]["data"][number];
 type UsageStatus = "safe" | "warning" | "danger";
 type LimitEntityType = CreateLimitData["entityType"];
 type CreateLimitData = archestraApiTypes.CreateLimitData["body"];

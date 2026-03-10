@@ -108,6 +108,328 @@ describe("TeamModel", () => {
     });
   });
 
+  describe("findAllPaginated", () => {
+    test("should return paginated teams for organization", async ({
+      makeOrganization,
+      makeUser,
+      makeTeam,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      await makeTeam(org.id, user.id, { name: "Alpha Team" });
+      await makeTeam(org.id, user.id, { name: "Beta Team" });
+      await makeTeam(org.id, user.id, { name: "Gamma Team" });
+
+      const result = await TeamModel.findAllPaginated({
+        organizationId: org.id,
+        pagination: { limit: 2, offset: 0 },
+        sorting: { sortDirection: "asc" },
+        isTeamAdmin: true,
+      });
+
+      expect(result.data).toHaveLength(2);
+      expect(result.pagination.total).toBe(3);
+      expect(result.pagination.hasNext).toBe(true);
+      expect(result.pagination.hasPrev).toBe(false);
+    });
+
+    test("should search teams by name case-insensitively", async ({
+      makeOrganization,
+      makeUser,
+      makeTeam,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      await makeTeam(org.id, user.id, { name: "Engineering Team" });
+      await makeTeam(org.id, user.id, { name: "Marketing Team" });
+      await makeTeam(org.id, user.id, { name: "Sales Team" });
+
+      const result = await TeamModel.findAllPaginated({
+        organizationId: org.id,
+        pagination: { limit: 20, offset: 0 },
+        sorting: {},
+        search: "engineering",
+        isTeamAdmin: true,
+      });
+
+      expect(result.data).toHaveLength(1);
+      expect(result.data[0].name).toBe("Engineering Team");
+    });
+
+    test("should search teams by description", async ({
+      makeOrganization,
+      makeUser,
+      makeTeam,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      await makeTeam(org.id, user.id, {
+        name: "Team A",
+        description: "Handles frontend development",
+      });
+      await makeTeam(org.id, user.id, {
+        name: "Team B",
+        description: "Handles backend development",
+      });
+      await makeTeam(org.id, user.id, {
+        name: "Team C",
+        description: "Handles sales",
+      });
+
+      const result = await TeamModel.findAllPaginated({
+        organizationId: org.id,
+        pagination: { limit: 20, offset: 0 },
+        sorting: {},
+        search: "development",
+        isTeamAdmin: true,
+      });
+
+      expect(result.data).toHaveLength(2);
+    });
+
+    test("should sort teams by name ascending", async ({
+      makeOrganization,
+      makeUser,
+      makeTeam,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      await makeTeam(org.id, user.id, { name: "Zebra Team" });
+      await makeTeam(org.id, user.id, { name: "Alpha Team" });
+      await makeTeam(org.id, user.id, { name: "Middle Team" });
+
+      const result = await TeamModel.findAllPaginated({
+        organizationId: org.id,
+        pagination: { limit: 20, offset: 0 },
+        sorting: { sortBy: "name", sortDirection: "asc" },
+        isTeamAdmin: true,
+      });
+
+      expect(result.data[0].name).toBe("Alpha Team");
+      expect(result.data[1].name).toBe("Middle Team");
+      expect(result.data[2].name).toBe("Zebra Team");
+    });
+
+    test("should sort teams by name descending", async ({
+      makeOrganization,
+      makeUser,
+      makeTeam,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      await makeTeam(org.id, user.id, { name: "Zebra Team" });
+      await makeTeam(org.id, user.id, { name: "Alpha Team" });
+      await makeTeam(org.id, user.id, { name: "Middle Team" });
+
+      const result = await TeamModel.findAllPaginated({
+        organizationId: org.id,
+        pagination: { limit: 20, offset: 0 },
+        sorting: { sortBy: "name", sortDirection: "desc" },
+        isTeamAdmin: true,
+      });
+
+      expect(result.data[0].name).toBe("Zebra Team");
+      expect(result.data[1].name).toBe("Middle Team");
+      expect(result.data[2].name).toBe("Alpha Team");
+    });
+
+    test("should only return user's teams when not admin", async ({
+      makeOrganization,
+      makeUser,
+      makeTeam,
+      makeTeamMember,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      const otherUser = await makeUser();
+
+      const team1 = await makeTeam(org.id, user.id, { name: "User Team" });
+      await makeTeam(org.id, user.id, { name: "Other Team" });
+
+      // Add otherUser to team1 only
+      await makeTeamMember(team1.id, otherUser.id);
+
+      const result = await TeamModel.findAllPaginated({
+        organizationId: org.id,
+        pagination: { limit: 20, offset: 0 },
+        sorting: {},
+        userId: otherUser.id,
+        isTeamAdmin: false,
+      });
+
+      expect(result.data).toHaveLength(1);
+      expect(result.data[0].name).toBe("User Team");
+    });
+
+    test("should return empty result for non-admin user with no teams", async ({
+      makeOrganization,
+      makeUser,
+      makeTeam,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      const otherUser = await makeUser();
+      await makeTeam(org.id, user.id, { name: "Some Team" });
+
+      const result = await TeamModel.findAllPaginated({
+        organizationId: org.id,
+        pagination: { limit: 20, offset: 0 },
+        sorting: {},
+        userId: otherUser.id,
+        isTeamAdmin: false,
+      });
+
+      expect(result.data).toHaveLength(0);
+      expect(result.pagination.total).toBe(0);
+    });
+
+    test("should include members in paginated results", async ({
+      makeOrganization,
+      makeUser,
+      makeTeam,
+      makeTeamMember,
+    }) => {
+      const org = await makeOrganization();
+      const user1 = await makeUser();
+      const user2 = await makeUser();
+      const team = await makeTeam(org.id, user1.id, { name: "Test Team" });
+      await makeTeamMember(team.id, user1.id);
+      await makeTeamMember(team.id, user2.id);
+
+      const result = await TeamModel.findAllPaginated({
+        organizationId: org.id,
+        pagination: { limit: 20, offset: 0 },
+        sorting: {},
+        isTeamAdmin: true,
+      });
+
+      expect(result.data).toHaveLength(1);
+      expect(result.data[0].members).toHaveLength(2);
+    });
+
+    test("should handle second page correctly", async ({
+      makeOrganization,
+      makeUser,
+      makeTeam,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      await makeTeam(org.id, user.id, { name: "Team 1" });
+      await makeTeam(org.id, user.id, { name: "Team 2" });
+      await makeTeam(org.id, user.id, { name: "Team 3" });
+
+      const result = await TeamModel.findAllPaginated({
+        organizationId: org.id,
+        pagination: { limit: 2, offset: 2 },
+        sorting: {},
+        isTeamAdmin: true,
+      });
+
+      expect(result.data).toHaveLength(1);
+      expect(result.pagination.total).toBe(3);
+      expect(result.pagination.hasNext).toBe(false);
+      expect(result.pagination.hasPrev).toBe(true);
+    });
+
+    test("should not return teams from other organizations", async ({
+      makeOrganization,
+      makeUser,
+      makeTeam,
+    }) => {
+      const org1 = await makeOrganization();
+      const org2 = await makeOrganization();
+      const user = await makeUser();
+      await makeTeam(org1.id, user.id, { name: "Org1 Team" });
+      await makeTeam(org2.id, user.id, { name: "Org2 Team" });
+
+      const result = await TeamModel.findAllPaginated({
+        organizationId: org1.id,
+        pagination: { limit: 20, offset: 0 },
+        sorting: {},
+        isTeamAdmin: true,
+      });
+
+      expect(result.data).toHaveLength(1);
+      expect(result.data[0].name).toBe("Org1 Team");
+    });
+
+    test("should sort teams by memberCount", async ({
+      makeOrganization,
+      makeUser,
+      makeTeam,
+      makeTeamMember,
+    }) => {
+      const org = await makeOrganization();
+      const user1 = await makeUser();
+      const user2 = await makeUser();
+      const user3 = await makeUser();
+
+      const teamA = await makeTeam(org.id, user1.id, { name: "Small Team" });
+      const teamB = await makeTeam(org.id, user1.id, { name: "Big Team" });
+      await makeTeam(org.id, user1.id, { name: "Empty Team" });
+
+      await makeTeamMember(teamA.id, user1.id);
+      await makeTeamMember(teamB.id, user1.id);
+      await makeTeamMember(teamB.id, user2.id);
+      await makeTeamMember(teamB.id, user3.id);
+
+      const result = await TeamModel.findAllPaginated({
+        organizationId: org.id,
+        pagination: { limit: 20, offset: 0 },
+        sorting: { sortBy: "memberCount", sortDirection: "desc" },
+        isTeamAdmin: true,
+      });
+
+      expect(result.data[0].name).toBe("Big Team");
+      expect(result.data[0].members).toHaveLength(3);
+      expect(result.data[1].name).toBe("Small Team");
+      expect(result.data[1].members).toHaveLength(1);
+      expect(result.data[2].name).toBe("Empty Team");
+      expect(result.data[2].members).toHaveLength(0);
+    });
+
+    test("should return all teams for admin regardless of membership", async ({
+      makeOrganization,
+      makeUser,
+      makeTeam,
+    }) => {
+      const org = await makeOrganization();
+      const creator = await makeUser();
+      await makeTeam(org.id, creator.id, { name: "Team A" });
+      await makeTeam(org.id, creator.id, { name: "Team B" });
+
+      const result = await TeamModel.findAllPaginated({
+        organizationId: org.id,
+        pagination: { limit: 20, offset: 0 },
+        sorting: {},
+        isTeamAdmin: true,
+      });
+
+      expect(result.data).toHaveLength(2);
+    });
+
+    test("should return empty when search matches nothing", async ({
+      makeOrganization,
+      makeUser,
+      makeTeam,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      await makeTeam(org.id, user.id, { name: "Alpha Team" });
+
+      const result = await TeamModel.findAllPaginated({
+        organizationId: org.id,
+        pagination: { limit: 20, offset: 0 },
+        sorting: {},
+        search: "nonexistent",
+        isTeamAdmin: true,
+      });
+
+      expect(result.data).toHaveLength(0);
+      expect(result.pagination.total).toBe(0);
+    });
+  });
+
   describe("getUserTeams", () => {
     test("returns teams with members for the user", async ({
       makeUser,
@@ -241,7 +563,7 @@ describe("TeamModel", () => {
       const org = await makeOrganization();
       const team1 = await makeTeam(org.id, user.id, { name: "Team 1" });
       const team2 = await makeTeam(org.id, user.id, { name: "Team 2" });
-      const _team3 = await makeTeam(org.id, user.id, { name: "Team 3" });
+      await makeTeam(org.id, user.id, { name: "Team 3" });
 
       const teams = await TeamModel.findByIds([team1.id, team2.id]);
 
@@ -840,7 +1162,7 @@ describe("TeamModel", () => {
       const org = await makeOrganization();
       const team1 = await makeTeam(org.id, user.id, { name: "Team 1" });
       const team2 = await makeTeam(org.id, user.id, { name: "Team 2" });
-      const _team3 = await makeTeam(org.id, user.id, { name: "Team 3" });
+      await makeTeam(org.id, user.id, { name: "Team 3" });
 
       // Add user to team1 and team2, but not team3
       await TeamModel.addMember(team1.id, user.id);

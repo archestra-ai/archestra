@@ -1,17 +1,72 @@
 import { archestraApiSdk, type archestraApiTypes } from "@shared";
 import { useQueries, useQuery } from "@tanstack/react-query";
+import { DEFAULT_TABLE_LIMIT, handleApiError } from "./utils";
 
 const { getTeams, getTeamVaultFolder } = archestraApiSdk;
 
-type Teams = archestraApiTypes.GetTeamsResponses["200"];
-export type Team = Teams[number];
+type PaginatedTeamsResponse = archestraApiTypes.GetTeamsResponses["200"];
+export type Team = PaginatedTeamsResponse["data"][number];
 export type TeamWithVaultPath = Team & { vaultPath?: string | null };
 
-export function useTeams(params?: { initialData?: Teams }) {
+/**
+ * Fetches all teams (no pagination, large limit).
+ * Used by components that need the full list (dropdowns, filters, etc.)
+ */
+export function useTeams(params?: { initialData?: Team[] }) {
   return useQuery({
     queryKey: ["teams"],
-    queryFn: async () => (await getTeams()).data ?? [],
+    queryFn: async () => {
+      const { data, error } = await getTeams({
+        query: { limit: 1000 },
+      });
+      if (error) {
+        handleApiError(error);
+        return [];
+      }
+      return data?.data ?? [];
+    },
     initialData: params?.initialData,
+  });
+}
+
+/**
+ * Paginated teams hook for the teams settings page (DataTable).
+ */
+export function useTeamsPaginated(params?: {
+  limit?: number;
+  offset?: number;
+  sortBy?: string;
+  sortDirection?: string;
+  search?: string;
+}) {
+  return useQuery({
+    queryKey: ["teams", "paginated", params],
+    queryFn: async () => {
+      const { data, error } = await getTeams({
+        query: {
+          limit: params?.limit ?? DEFAULT_TABLE_LIMIT,
+          offset: params?.offset ?? 0,
+          sortBy: params?.sortBy as "name" | "createdAt" | "memberCount",
+          sortDirection: params?.sortDirection as "asc" | "desc",
+          search: params?.search,
+        },
+      });
+      if (error) {
+        handleApiError(error);
+        return {
+          data: [],
+          pagination: {
+            currentPage: 1,
+            limit: 20,
+            total: 0,
+            totalPages: 0,
+            hasNext: false,
+            hasPrev: false,
+          },
+        };
+      }
+      return data;
+    },
   });
 }
 

@@ -295,7 +295,8 @@ test.describe("Identity Provider Team Sync E2E", () => {
     const teamResponse = await page.request.get(
       `http://localhost:9000/api/teams`,
     );
-    const teams = await teamResponse.json();
+    const teamsBody = await teamResponse.json();
+    const teams = teamsBody.data ?? teamsBody;
     const createdTeam = teams.find(
       (t: { name: string }) => t.name === teamName,
     );

@@ -48,13 +48,14 @@ const customRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["Roles"],
         body: z.object({
           name: CreateUpdateRoleNameSchema,
+          description: z.string().max(500).nullish(),
           permission: PermissionsSchema,
         }),
         response: constructResponseSchema(SelectOrganizationRoleSchema),
       },
     },
     async (request, reply) => {
-      const { name, permission } = request.body;
+      const { name, description, permission } = request.body;
       const { organizationId, user } = request;
 
       // Get user's permissions to validate they can grant these permissions
@@ -95,6 +96,7 @@ const customRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
             permission,
             additionalFields: {
               name,
+              description: description ?? null,
             },
             organizationId,
           },
@@ -138,6 +140,7 @@ const customRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }),
         body: z.object({
           name: CreateUpdateRoleNameSchema.optional(),
+          description: z.string().max(500).nullish(),
           permission: PermissionsSchema.optional(),
         }),
         response: constructResponseSchema(SelectOrganizationRoleSchema),
@@ -146,7 +149,7 @@ const customRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async (
       {
         params: { roleId },
-        body: { name, permission },
+        body: { name, description, permission },
         user,
         organizationId,
         headers,
@@ -191,6 +194,8 @@ const customRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Build update data
       const updateData: Record<string, unknown> = {};
       if (name) updateData.name = name;
+      if (description !== undefined)
+        updateData.description = description ?? null;
       if (permission) updateData.permission = permission;
 
       const result = await betterAuth.api.updateOrgRole({

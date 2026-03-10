@@ -253,6 +253,273 @@ describe("OrganizationRoleModel", () => {
     });
   });
 
+  describe("getAllPaginated", () => {
+    test("should return predefined roles first, then custom roles", async ({
+      makeOrganization,
+      makeCustomRole,
+    }) => {
+      const org = await makeOrganization();
+      await makeCustomRole(org.id, {
+        role: "custom_role",
+        name: "Custom Role",
+        permission: { agent: ["read"] },
+      });
+
+      const result = await OrganizationRoleModel.getAllPaginated({
+        organizationId: org.id,
+        pagination: { limit: 20, offset: 0 },
+        sorting: {},
+      });
+
+      // 3 predefined + 1 custom
+      expect(result.data).toHaveLength(4);
+      expect(result.pagination.total).toBe(4);
+
+      // First 3 should be predefined (admin, editor, member)
+      expect(result.data[0].predefined).toBe(true);
+      expect(result.data[0].name).toBe(ADMIN_ROLE_NAME);
+      expect(result.data[1].predefined).toBe(true);
+      expect(result.data[1].name).toBe(EDITOR_ROLE_NAME);
+      expect(result.data[2].predefined).toBe(true);
+      expect(result.data[2].name).toBe(MEMBER_ROLE_NAME);
+
+      // Last should be custom
+      expect(result.data[3].predefined).toBe(false);
+      expect(result.data[3].name).toBe("Custom Role");
+    });
+
+    test("should paginate across predefined and custom roles", async ({
+      makeOrganization,
+      makeCustomRole,
+    }) => {
+      const org = await makeOrganization();
+      await makeCustomRole(org.id, {
+        role: "custom_1",
+        name: "Custom One",
+        permission: { agent: ["read"] },
+      });
+      await makeCustomRole(org.id, {
+        role: "custom_2",
+        name: "Custom Two",
+        permission: { agent: ["create"] },
+      });
+
+      // Page 1: should get first 3 (predefined roles)
+      const page1 = await OrganizationRoleModel.getAllPaginated({
+        organizationId: org.id,
+        pagination: { limit: 3, offset: 0 },
+        sorting: {},
+      });
+
+      expect(page1.data).toHaveLength(3);
+      expect(page1.pagination.total).toBe(5);
+      expect(page1.pagination.hasNext).toBe(true);
+      expect(page1.pagination.hasPrev).toBe(false);
+      expect(page1.data.every((r) => r.predefined)).toBe(true);
+
+      // Page 2: should get 2 custom roles
+      const page2 = await OrganizationRoleModel.getAllPaginated({
+        organizationId: org.id,
+        pagination: { limit: 3, offset: 3 },
+        sorting: {},
+      });
+
+      expect(page2.data).toHaveLength(2);
+      expect(page2.pagination.hasNext).toBe(false);
+      expect(page2.pagination.hasPrev).toBe(true);
+      expect(page2.data.every((r) => !r.predefined)).toBe(true);
+    });
+
+    test("should filter predefined roles by search", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+
+      const result = await OrganizationRoleModel.getAllPaginated({
+        organizationId: org.id,
+        pagination: { limit: 20, offset: 0 },
+        sorting: {},
+        search: "admin",
+      });
+
+      expect(result.data).toHaveLength(1);
+      expect(result.data[0].name).toBe(ADMIN_ROLE_NAME);
+      expect(result.data[0].predefined).toBe(true);
+    });
+
+    test("should filter custom roles by search", async ({
+      makeOrganization,
+      makeCustomRole,
+    }) => {
+      const org = await makeOrganization();
+      await makeCustomRole(org.id, {
+        role: "viewer_role",
+        name: "Viewer",
+        permission: { agent: ["read"] },
+      });
+      await makeCustomRole(org.id, {
+        role: "editor_custom",
+        name: "Custom Editor",
+        permission: { agent: ["read", "update"] },
+      });
+
+      const result = await OrganizationRoleModel.getAllPaginated({
+        organizationId: org.id,
+        pagination: { limit: 20, offset: 0 },
+        sorting: {},
+        search: "viewer",
+      });
+
+      // Should only match the custom "Viewer" role (not predefined ones)
+      expect(result.data).toHaveLength(1);
+      expect(result.data[0].name).toBe("Viewer");
+    });
+
+    test("should sort custom roles by name ascending", async ({
+      makeOrganization,
+      makeCustomRole,
+    }) => {
+      const org = await makeOrganization();
+      await makeCustomRole(org.id, {
+        role: "zebra_role",
+        name: "Zebra Role",
+        permission: { agent: ["read"] },
+      });
+      await makeCustomRole(org.id, {
+        role: "alpha_role",
+        name: "Alpha Role",
+        permission: { agent: ["read"] },
+      });
+
+      const result = await OrganizationRoleModel.getAllPaginated({
+        organizationId: org.id,
+        pagination: { limit: 20, offset: 0 },
+        sorting: { sortBy: "name", sortDirection: "asc" },
+      });
+
+      // Predefined first, then custom sorted by name asc
+      const customRoles = result.data.filter((r) => !r.predefined);
+      expect(customRoles).toHaveLength(2);
+      expect(customRoles[0].name).toBe("Alpha Role");
+      expect(customRoles[1].name).toBe("Zebra Role");
+    });
+
+    test("should sort custom roles by name descending", async ({
+      makeOrganization,
+      makeCustomRole,
+    }) => {
+      const org = await makeOrganization();
+      await makeCustomRole(org.id, {
+        role: "zebra_role",
+        name: "Zebra Role",
+        permission: { agent: ["read"] },
+      });
+      await makeCustomRole(org.id, {
+        role: "alpha_role",
+        name: "Alpha Role",
+        permission: { agent: ["read"] },
+      });
+
+      const result = await OrganizationRoleModel.getAllPaginated({
+        organizationId: org.id,
+        pagination: { limit: 20, offset: 0 },
+        sorting: { sortBy: "name", sortDirection: "desc" },
+      });
+
+      const customRoles = result.data.filter((r) => !r.predefined);
+      expect(customRoles).toHaveLength(2);
+      expect(customRoles[0].name).toBe("Zebra Role");
+      expect(customRoles[1].name).toBe("Alpha Role");
+    });
+
+    test("should return only predefined roles when no custom roles exist", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+
+      const result = await OrganizationRoleModel.getAllPaginated({
+        organizationId: org.id,
+        pagination: { limit: 20, offset: 0 },
+        sorting: {},
+      });
+
+      expect(result.data).toHaveLength(3);
+      expect(result.pagination.total).toBe(3);
+      expect(result.data.every((r) => r.predefined)).toBe(true);
+    });
+
+    test("should return empty when search matches nothing", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+
+      const result = await OrganizationRoleModel.getAllPaginated({
+        organizationId: org.id,
+        pagination: { limit: 20, offset: 0 },
+        sorting: {},
+        search: "nonexistent",
+      });
+
+      expect(result.data).toHaveLength(0);
+      expect(result.pagination.total).toBe(0);
+    });
+
+    test("should not return custom roles from other organizations", async ({
+      makeOrganization,
+      makeCustomRole,
+    }) => {
+      const org1 = await makeOrganization();
+      const org2 = await makeOrganization();
+      await makeCustomRole(org1.id, {
+        role: "org1_role",
+        name: "Org1 Custom Role",
+        permission: { agent: ["read"] },
+      });
+      await makeCustomRole(org2.id, {
+        role: "org2_role",
+        name: "Org2 Custom Role",
+        permission: { agent: ["read"] },
+      });
+
+      const result = await OrganizationRoleModel.getAllPaginated({
+        organizationId: org1.id,
+        pagination: { limit: 20, offset: 0 },
+        sorting: {},
+      });
+
+      // 3 predefined + 1 custom from org1
+      expect(result.data).toHaveLength(4);
+      const customRoles = result.data.filter((r) => !r.predefined);
+      expect(customRoles).toHaveLength(1);
+      expect(customRoles[0].name).toBe("Org1 Custom Role");
+    });
+
+    test("should search across both predefined and custom roles simultaneously", async ({
+      makeOrganization,
+      makeCustomRole,
+    }) => {
+      const org = await makeOrganization();
+      await makeCustomRole(org.id, {
+        role: "member_extended",
+        name: "Member Extended",
+        permission: { agent: ["read", "create"] },
+      });
+
+      const result = await OrganizationRoleModel.getAllPaginated({
+        organizationId: org.id,
+        pagination: { limit: 20, offset: 0 },
+        sorting: {},
+        search: "member",
+      });
+
+      // Should match predefined "member" and custom "Member Extended"
+      expect(result.data).toHaveLength(2);
+      const names = result.data.map((r) => r.name);
+      expect(names).toContain(MEMBER_ROLE_NAME);
+      expect(names).toContain("Member Extended");
+    });
+  });
+
   describe("canDelete", () => {
     test("should return false for predefined roles", async ({
       makeOrganization,

@@ -427,26 +427,27 @@ export async function assignEngineeringTeamToDefaultProfileViaApi({
       `Failed to get teams: ${JSON.stringify(teamsResponse.error)}`,
     );
   }
-  if (!teamsResponse.data || teamsResponse.data.length === 0) {
+  const teams = teamsResponse.data?.data;
+  if (!teams || teams.length === 0) {
     throw new Error(
       `No teams returned from API. Response: ${JSON.stringify(teamsResponse)}`,
     );
   }
 
-  const defaultTeam = teamsResponse.data.find(
+  const defaultTeam = teams.find(
     (team) => team.name === DEFAULT_TEAM_NAME,
   );
   if (!defaultTeam) {
-    const teamNames = teamsResponse.data.map((t) => t.name).join(", ");
+    const teamNames = teams.map((t) => t.name).join(", ");
     throw new Error(
       `Team "${DEFAULT_TEAM_NAME}" not found. Available teams: [${teamNames}]`,
     );
   }
-  const engineeringTeam = teamsResponse.data.find(
+  const engineeringTeam = teams.find(
     (team) => team.name === ENGINEERING_TEAM_NAME,
   );
   if (!engineeringTeam) {
-    const teamNames = teamsResponse.data.map((t) => t.name).join(", ");
+    const teamNames = teams.map((t) => t.name).join(", ");
     throw new Error(
       `Team "${ENGINEERING_TEAM_NAME}" not found. Available teams: [${teamNames}]`,
     );
@@ -509,9 +510,9 @@ export async function createTeamMcpGatewayViaApi({
       `Failed to get teams: ${JSON.stringify(teamsResponse.error)}`,
     );
   }
-  const team = teamsResponse.data?.find((t) => t.name === teamName);
+  const team = teamsResponse.data?.data?.find((t) => t.name === teamName);
   if (!team) {
-    const teamNames = teamsResponse.data?.map((t) => t.name).join(", ");
+    const teamNames = teamsResponse.data?.data?.map((t) => t.name).join(", ");
     throw new Error(
       `Team "${teamName}" not found. Available teams: [${teamNames}]`,
     );

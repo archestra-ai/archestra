@@ -594,7 +594,8 @@ export const getTeamByName = async (
     method: "get",
     urlSuffix: "/api/teams",
   });
-  const teams = await teamsResponse.json();
+  const teamsBody = await teamsResponse.json();
+  const teams = teamsBody.data ?? teamsBody;
   const team = teams.find((t: { name: string }) => t.name === teamName);
   if (!team) {
     throw new Error(`Team '${teamName}' not found`);

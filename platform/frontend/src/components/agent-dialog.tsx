@@ -596,7 +596,7 @@ export function AgentDialog({
     queryKey: ["teams"],
     queryFn: async () => {
       const response = await archestraApiSdk.getTeams();
-      return response.data || [];
+      return response.data?.data || [];
     },
   });
   const resource = getResourceForAgentType(agentType);

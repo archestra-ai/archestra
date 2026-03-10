@@ -3,6 +3,7 @@ import { and, eq, inArray, like } from "drizzle-orm";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import db, { schema } from "@/database";
+import { MEMBER_SORT_COLUMNS } from "@/models/member";
 import {
   ChatApiKeyModel,
   InteractionModel,
@@ -17,6 +18,10 @@ import {
   ApiError,
   CompleteOnboardingSchema,
   constructResponseSchema,
+  createPaginatedResponseSchema,
+  createSortingQuerySchema,
+  MemberWithUserSchema,
+  PaginationQuerySchema,
   PublicAppearanceSchema,
   SelectOrganizationSchema,
   UpdateAppearanceSchema,
@@ -409,6 +414,52 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async ({ organizationId }, reply) => {
       const members = await MemberModel.findAllByOrganization(organizationId);
       return reply.send(members);
+    },
+  );
+
+  fastify.get(
+    "/api/organization/members/paginated",
+    {
+      schema: {
+        operationId: RouteId.GetOrganizationMembersPaginated,
+        description:
+          "Get paginated members of the organization with search, sorting, and filtering",
+        tags: ["Organization"],
+        querystring: z
+          .object({
+            search: z.string().optional(),
+            teamIds: z.string().optional(),
+            role: z.string().optional(),
+          })
+          .merge(PaginationQuerySchema)
+          .merge(createSortingQuerySchema(MEMBER_SORT_COLUMNS)),
+        response: constructResponseSchema(
+          createPaginatedResponseSchema(MemberWithUserSchema),
+        ),
+      },
+    },
+    async ({ organizationId, query }, reply) => {
+      const { search, teamIds, role, limit, offset, sortBy, sortDirection } =
+        query;
+
+      const parsedTeamIds = teamIds
+        ? teamIds
+            .split(",")
+            .map((id) => id.trim())
+            .filter(Boolean)
+        : undefined;
+
+      const result =
+        await MemberModel.findAllPaginatedByOrganization({
+          organizationId,
+          pagination: { limit, offset },
+          sorting: { sortBy, sortDirection },
+          search,
+          teamIds: parsedTeamIds,
+          role,
+        });
+
+      return reply.send(result);
     },
   );
 

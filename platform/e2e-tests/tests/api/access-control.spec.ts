@@ -11,7 +11,9 @@ test.describe("Organization Roles API - Read Operations", () => {
       urlSuffix: "/api/roles",
     });
 
-    const roles = await response.json();
+    const rolesBody = await response.json();
+    expect(rolesBody.data).toBeDefined();
+    const roles = rolesBody.data;
     expect(Array.isArray(roles)).toBe(true);
     expect(roles.length).toBeGreaterThanOrEqual(2); // At least admin and member
 

@@ -70,7 +70,7 @@ import { McpGatewayActions } from "./mcp-gateway-actions";
 
 type McpGatewaysInitialData = {
   agents: archestraApiTypes.GetAgentsResponses["200"] | null;
-  teams: archestraApiTypes.GetTeamsResponses["200"];
+  teams: archestraApiTypes.GetTeamsResponses["200"]["data"];
 };
 
 export default function McpGatewaysPage({
@@ -249,7 +249,7 @@ function McpGateways({
     queryKey: ["teams"],
     queryFn: async () => {
       const { data } = await archestraApiSdk.getTeams();
-      return data || [];
+      return data?.data || [];
     },
     initialData: initialData?.teams,
   });

@@ -4,13 +4,17 @@ import { z } from "zod";
 import { hasAnyAgentTypeAdminPermission, hasPermission } from "@/auth";
 import config from "@/config";
 import { AgentToolModel, TeamModel } from "@/models";
+import { TEAM_SORT_COLUMNS } from "@/models/team";
 import {
   AddTeamExternalGroupBodySchema,
   AddTeamMemberBodySchema,
   ApiError,
   CreateTeamBodySchema,
   constructResponseSchema,
+  createPaginatedResponseSchema,
+  createSortingQuerySchema,
   DeleteObjectResponseSchema,
+  PaginationQuerySchema,
   SelectTeamExternalGroupSchema,
   SelectTeamMemberSchema,
   SelectTeamSchema,
@@ -25,22 +29,33 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.GetTeams,
         description: "Get all teams in the organization",
         tags: ["Teams"],
-        response: constructResponseSchema(z.array(SelectTeamSchema)),
+        querystring: z
+          .object({
+            search: z.string().optional(),
+          })
+          .merge(PaginationQuerySchema)
+          .merge(createSortingQuerySchema(TEAM_SORT_COLUMNS)),
+        response: constructResponseSchema(
+          createPaginatedResponseSchema(SelectTeamSchema),
+        ),
       },
     },
     async (request, reply) => {
+      const { search, limit, offset, sortBy, sortDirection } = request.query;
       const { success: isTeamAdmin } = await hasPermission(
         { team: ["admin"] },
         request.headers,
       );
 
-      // Non-team admins only see teams they're members of
-      if (!isTeamAdmin) {
-        return reply.send(await TeamModel.getUserTeams(request.user.id));
-      }
-      // Team admins see all teams in the organization
       return reply.send(
-        await TeamModel.findByOrganization(request.organizationId),
+        await TeamModel.findAllPaginated({
+          organizationId: request.organizationId,
+          pagination: { limit, offset },
+          sorting: { sortBy, sortDirection },
+          search,
+          userId: request.user.id,
+          isTeamAdmin,
+        }),
       );
     },
   );

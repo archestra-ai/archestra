@@ -788,6 +788,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetOnboardingStatus]: {}, // Onboarding status route - available to all authenticated users (no specific permissions required)
   [RouteId.GetMemberSignupStatus]: {}, // Member signup status - available to all authenticated users
   [RouteId.GetOrganizationMembers]: { member: ["read"] }, // List organization members
+  [RouteId.GetOrganizationMembersPaginated]: { member: ["read"] }, // List organization members (paginated)
   [RouteId.DeletePendingSignupMember]: { member: ["delete"] }, // Delete auto-provisioned member who hasn't signed up
   [RouteId.GetUserPermissions]: {}, // User permissions route - available to all authenticated users (no specific permissions required)
 

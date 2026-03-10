@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.1.3](https://github.com/archestra-ai/archestra/compare/platform-v1.1.2...platform-v1.1.3) (2026-03-10)
+
+
+### Bug Fixes
+
+* chat model selector — filter by API key, auto-select best, group assigned-to tooltip ([#3250](https://github.com/archestra-ai/archestra/issues/3250)) ([3d9ac35](https://github.com/archestra-ai/archestra/commit/3d9ac35352f6ff93d59082735524e04184f68513))
+* persist selected model to localStorage in chat ([#3253](https://github.com/archestra-ai/archestra/issues/3253)) ([406faac](https://github.com/archestra-ai/archestra/commit/406faac9f49ca2d162d017ba46bc364fd18ca7bd))
+
+
+### Miscellaneous Chores
+
+* add debug logging to knowledge base connectors ([#3252](https://github.com/archestra-ai/archestra/issues/3252)) ([3cd7259](https://github.com/archestra-ai/archestra/commit/3cd725992c3e95129625559fd775b68d7bfa882f))
+* add drop embedding model ([#3254](https://github.com/archestra-ai/archestra/issues/3254)) ([0f8abc8](https://github.com/archestra-ai/archestra/commit/0f8abc854ad4b98f8026f39349c62374e23e2d57))
+
 ## [1.1.2](https://github.com/archestra-ai/archestra/compare/platform-v1.1.1...platform-v1.1.2) (2026-03-10)
 
 

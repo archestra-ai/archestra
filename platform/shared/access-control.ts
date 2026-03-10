@@ -751,6 +751,12 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateKnowledgeSettings]: {
     knowledgeSettings: ["update"],
   },
+  [RouteId.DropEmbeddingConfig]: {
+    knowledgeSettings: ["update"],
+  },
+  [RouteId.TestEmbeddingConnection]: {
+    knowledgeSettings: ["update"],
+  },
 
   /**
    * Get public identity providers route (minimal info for login page)

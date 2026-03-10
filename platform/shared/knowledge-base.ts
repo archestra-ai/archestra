@@ -2,13 +2,10 @@ import { z } from "zod";
 
 /**
  * Supported embedding models for knowledge base RAG.
- * Only OpenAI embedding models are supported currently.
+ * Accepts any model name string — the EMBEDDING_MODELS record provides suggestions.
  */
-export const EmbeddingModelSchema = z.enum([
-  "text-embedding-3-small",
-  "text-embedding-3-large",
-]);
-export type EmbeddingModel = z.infer<typeof EmbeddingModelSchema>;
+export const EmbeddingModelSchema = z.string().min(1);
+export type EmbeddingModel = string;
 
 export const DEFAULT_EMBEDDING_MODEL: EmbeddingModel = "text-embedding-3-small";
 
@@ -27,11 +24,9 @@ interface EmbeddingModelMeta {
 /**
  * Embedding model metadata used by both frontend (settings UI) and backend (embedding dimensions).
  * For text-embedding-3-large, dimensions are reduced to 1536 to match the pgvector index.
- *
- * Typed as `Record<EmbeddingModel, …>` so adding a new enum value without an entry here
- * causes a compile error.
+ * Known models — users can also type any custom model name.
  */
-export const EMBEDDING_MODELS: Record<EmbeddingModel, EmbeddingModelMeta> = {
+export const EMBEDDING_MODELS: Record<string, EmbeddingModelMeta> = {
   "text-embedding-3-small": {
     // https://developers.openai.com/api/docs/guides/embeddings/#embedding-models
     label: "text-embedding-3-small",
@@ -54,7 +49,8 @@ export const RERANKER_MIN_RELEVANCE_SCORE = 3;
 
 /**
  * Get the embedding dimensions for a given model.
+ * Falls back to EMBEDDING_DIMENSIONS for unknown models.
  */
-export function getEmbeddingDimensions(model: EmbeddingModel): number {
-  return EMBEDDING_MODELS[model].dimensions;
+export function getEmbeddingDimensions(model: string): number {
+  return EMBEDDING_MODELS[model]?.dimensions ?? EMBEDDING_DIMENSIONS;
 }

@@ -294,6 +294,8 @@ export const RouteId = {
 
   // Knowledge Settings Routes (organization-level)
   UpdateKnowledgeSettings: "updateKnowledgeSettings",
+  DropEmbeddingConfig: "dropEmbeddingConfig",
+  TestEmbeddingConnection: "testEmbeddingConnection",
 
   // Identity Provider Routes
   GetPublicIdentityProviders: "getPublicIdentityProviders",

@@ -1,7 +1,7 @@
 "use client";
 
 import type { archestraApiTypes } from "@shared";
-import { ArrowLeft, Layers } from "lucide-react";
+import { ArrowLeft, Database, Layers } from "lucide-react";
 import Link from "next/link";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { CopyButton } from "@/components/copy-button";
@@ -120,11 +120,20 @@ function LogDetail({
               <>
                 <SourceBadge source={dynamicInteraction.source} />
                 <Badge variant="secondary" className="text-xs">
-                  <Layers className="h-3 w-3 mr-1" />
-                  {agent?.name ??
-                    (interaction.profileId === null
-                      ? "Deleted LLM Proxy"
-                      : "Unknown")}
+                  {dynamicInteraction.source?.startsWith("knowledge:") ? (
+                    <>
+                      <Database className="h-3 w-3 mr-1" />
+                      Knowledge Base
+                    </>
+                  ) : (
+                    <>
+                      <Layers className="h-3 w-3 mr-1" />
+                      {agent?.name ??
+                        (interaction.profileId === null
+                          ? "Deleted LLM Proxy"
+                          : "Unknown")}
+                    </>
+                  )}
                 </Badge>
               </>
             }
@@ -137,30 +146,33 @@ function LogDetail({
             </MetadataItem>
             <MetadataItem label="Cost">
               <div className="font-mono">
-                {(() => {
-                  const savings = calculateCostSavings(dynamicInteraction);
-                  const effectiveCost = dynamicInteraction.cost || "0";
-                  const effectiveBaselineCost =
-                    dynamicInteraction.baselineCost ||
-                    dynamicInteraction.cost ||
-                    "0";
-                  return (
-                    <TooltipProvider>
-                      <Savings
-                        cost={effectiveCost}
-                        baselineCost={effectiveBaselineCost}
-                        toonCostSavings={dynamicInteraction.toonCostSavings}
-                        toonTokensSaved={savings.toonTokensSaved}
-                        toonSkipReason={dynamicInteraction.toonSkipReason}
-                        format="percent"
-                        tooltip="always"
-                        variant="interaction"
-                        baselineModel={dynamicInteraction.baselineModel}
-                        actualModel={dynamicInteraction.model}
-                      />
-                    </TooltipProvider>
-                  );
-                })()}
+                {dynamicInteraction.cost ? (
+                  (() => {
+                    const savings = calculateCostSavings(dynamicInteraction);
+                    const effectiveCost = dynamicInteraction.cost;
+                    const effectiveBaselineCost =
+                      dynamicInteraction.baselineCost ||
+                      dynamicInteraction.cost;
+                    return (
+                      <TooltipProvider>
+                        <Savings
+                          cost={effectiveCost}
+                          baselineCost={effectiveBaselineCost}
+                          toonCostSavings={dynamicInteraction.toonCostSavings}
+                          toonTokensSaved={savings.toonTokensSaved}
+                          toonSkipReason={dynamicInteraction.toonSkipReason}
+                          format="percent"
+                          tooltip="always"
+                          variant="interaction"
+                          baselineModel={dynamicInteraction.baselineModel}
+                          actualModel={dynamicInteraction.model}
+                        />
+                      </TooltipProvider>
+                    );
+                  })()
+                ) : (
+                  <span className="text-muted-foreground">—</span>
+                )}
               </div>
             </MetadataItem>
             <MetadataItem label="Model">
@@ -231,17 +243,19 @@ function LogDetail({
           </MetadataCard>
         </div>
 
-        <div className="mb-8">
-          <h2 className="text-xl font-semibold mb-4">Conversation</h2>
-          <div className="border border-border rounded-lg bg-background overflow-hidden">
-            <MessageThread
-              messages={requestMessages}
-              containerClassName="h-auto"
-              hideDivider={true}
-              profileId={agent?.id}
-            />
+        {requestMessages.length > 0 && (
+          <div className="mb-8">
+            <h2 className="text-xl font-semibold mb-4">Conversation</h2>
+            <div className="border border-border rounded-lg bg-background overflow-hidden">
+              <MessageThread
+                messages={requestMessages}
+                containerClassName="h-auto"
+                hideDivider={true}
+                profileId={agent?.id}
+              />
+            </div>
           </div>
-        </div>
+        )}
 
         <div>
           <h2 className="text-xl font-semibold mb-4">Raw Data</h2>

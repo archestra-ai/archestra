@@ -5,7 +5,7 @@ import {
   INTERACTION_SOURCE_DISPLAY,
   type InteractionSource,
 } from "@shared";
-import { Layers, MessageSquare, User } from "lucide-react";
+import { Database, Layers, MessageSquare, User } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
@@ -182,6 +182,10 @@ function SessionRow({
                 ? `${lastUserMessage.slice(0, 80)}...`
                 : lastUserMessage}
             </span>
+          ) : session.source?.startsWith("knowledge:") ? (
+            <span className="text-muted-foreground">
+              {INTERACTION_SOURCE_DISPLAY[session.source]?.label ?? session.source}
+            </span>
           ) : (
             <span className="text-muted-foreground">No message</span>
           )}
@@ -248,11 +252,19 @@ function SessionRow({
       <TableCell className="py-3">
         <div className="flex flex-wrap gap-1">
           <Badge variant="secondary" className="text-xs max-w-[200px]">
-            <Layers className="h-3 w-3 mr-1 shrink-0" />
+            {session.source?.startsWith("knowledge:") ? (
+              <Database className="h-3 w-3 mr-1 shrink-0" />
+            ) : (
+              <Layers className="h-3 w-3 mr-1 shrink-0" />
+            )}
             <span className="truncate">
               {agent?.name ??
                 session.profileName ??
-                (session.profileId === null ? "Deleted LLM Proxy" : "Unknown")}
+                (session.source?.startsWith("knowledge:")
+                  ? "Knowledge Base"
+                  : session.profileId === null
+                    ? "Deleted LLM Proxy"
+                    : "Unknown")}
             </span>
           </Badge>
           {session.userNames.map((userName) => (

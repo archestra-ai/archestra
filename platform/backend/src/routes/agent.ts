@@ -1,4 +1,8 @@
-import { RouteId } from "@shared";
+import {
+  LABELS_ENTRY_DELIMITER,
+  LABELS_VALUE_DELIMITER,
+  RouteId,
+} from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import {
@@ -93,7 +97,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
               .string()
               .optional()
               .describe(
-                "Filter by labels. Format: key1:val1,val2;key2:val3. AND across keys, OR within values.",
+                "Filter by labels. Format: key1:val1|val2;key2:val3. AND across keys, OR within values.",
               ),
           })
           .merge(PaginationQuerySchema)
@@ -911,13 +915,13 @@ function parseLabelsParam(
 ): Record<string, string[]> | undefined {
   if (!labels) return undefined;
   const result: Record<string, string[]> = {};
-  for (const entry of labels.split(";")) {
+  for (const entry of labels.split(LABELS_ENTRY_DELIMITER)) {
     const colonIdx = entry.indexOf(":");
     if (colonIdx === -1) continue;
     const key = entry.slice(0, colonIdx).trim();
     const values = entry
       .slice(colonIdx + 1)
-      .split(",")
+      .split(LABELS_VALUE_DELIMITER)
       .map((v) => v.trim())
       .filter(Boolean);
     if (key && values.length > 0) {

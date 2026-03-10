@@ -1,3 +1,4 @@
+import { LABEL_RESERVED_CHARS } from "@shared";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
@@ -20,10 +21,28 @@ export const InsertAgentLabelSchema = createInsertSchema(
   schema.agentLabelsTable,
 );
 
+const RESERVED_CHARS_MESSAGE = `Must not contain |, ; or : characters`;
+
+const labelKeySchema = z
+  .string()
+  .min(1)
+  .refine(
+    (v) => !LABEL_RESERVED_CHARS.some((c) => v.includes(c)),
+    RESERVED_CHARS_MESSAGE,
+  );
+
+const labelValueSchema = z
+  .string()
+  .min(1)
+  .refine(
+    (v) => !LABEL_RESERVED_CHARS.some((c) => v.includes(c)),
+    RESERVED_CHARS_MESSAGE,
+  );
+
 // Combined label schema for easier frontend consumption
 export const AgentLabelWithDetailsSchema = z.object({
-  key: z.string(),
-  value: z.string(),
+  key: labelKeySchema,
+  value: labelValueSchema,
   keyId: UuidIdSchema.optional(),
   valueId: UuidIdSchema.optional(),
 });

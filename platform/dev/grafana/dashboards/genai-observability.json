@@ -1174,7 +1174,7 @@
           ],
           "limit": 20,
           "metricsQueryType": "range",
-          "query": "{status=ok && resource.service.name=\"Archestra\" && span.route.category=\"llm-proxy\" }",
+          "query": "{status=ok && resource.service.name=\"Archestra\" && span.route.category=\"llm-proxy\" && span.archestra.trigger.source=~\"$source\"}",
           "queryType": "traceql",
           "refId": "A",
           "tableType": "traces"
@@ -1606,7 +1606,7 @@
           },
           "limit": 20,
           "metricsQueryType": "range",
-          "query": "{resource.service.name=\"Archestra\" && span.route.category=\"llm-proxy\" && span.gen_ai.provider.name=~\"$provider\" && span.gen_ai.request.model=~\"$model\"}",
+          "query": "{resource.service.name=\"Archestra\" && span.route.category=\"llm-proxy\" && span.gen_ai.provider.name=~\"$provider\" && span.gen_ai.request.model=~\"$model\" && span.archestra.trigger.source=~\"$source\"}",
           "queryType": "traceql",
           "refId": "A",
           "tableType": "traces"
@@ -3604,6 +3604,62 @@
         "regex": "",
         "sort": 1,
         "type": "query"
+      },
+      {
+        "allValue": ".*",
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        },
+        "includeAll": true,
+        "label": "Source",
+        "multi": true,
+        "name": "source",
+        "options": [
+          {
+            "selected": true,
+            "text": "All",
+            "value": "$__all"
+          },
+          {
+            "selected": false,
+            "text": "API",
+            "value": "api"
+          },
+          {
+            "selected": false,
+            "text": "Chat",
+            "value": "chat"
+          },
+          {
+            "selected": false,
+            "text": "Slack",
+            "value": "chatops:slack"
+          },
+          {
+            "selected": false,
+            "text": "MS Teams",
+            "value": "chatops:ms-teams"
+          },
+          {
+            "selected": false,
+            "text": "Email",
+            "value": "email"
+          },
+          {
+            "selected": false,
+            "text": "Knowledge - Embedding",
+            "value": "knowledge:embedding"
+          },
+          {
+            "selected": false,
+            "text": "Knowledge - Reranker",
+            "value": "knowledge:reranker"
+          }
+        ],
+        "query": "api,chat,chatops:slack,chatops:ms-teams,email,knowledge:embedding,knowledge:reranker",
+        "type": "custom"
       },
       {
         "current": {

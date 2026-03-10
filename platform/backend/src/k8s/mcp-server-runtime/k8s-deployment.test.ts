@@ -2217,6 +2217,155 @@ describe("K8sDeployment.generateDeploymentSpec", () => {
     // No env vars (all are mounted secrets, empty ones skipped entirely)
     expect(container?.env).toEqual([]);
   });
+
+  test("generates deploymentSpec with envFrom referencing existing K8s Secret", () => {
+    const mcpServer: McpServer = {
+      id: "envfrom-secret-id",
+      name: "envfrom-secret-server",
+      catalogId: "catalog-envfrom",
+      // biome-ignore lint/suspicious/noExplicitAny: Mock data for testing
+    } as any;
+
+    const k8sDeployment = createMockK8sDeployment(mcpServer);
+
+    const dockerImage = "test:latest";
+    const localConfig: z.infer<typeof LocalConfigSchema> = {
+      command: "node",
+      arguments: ["server.js"],
+      envFrom: [{ type: "secret", name: "github-app-token" }],
+    };
+
+    const deploymentSpec = k8sDeployment.generateDeploymentSpec(
+      dockerImage,
+      localConfig,
+      false,
+      8080,
+    );
+
+    const container = deploymentSpec.spec?.template.spec?.containers[0];
+    expect(container?.envFrom).toEqual([
+      { secretRef: { name: "github-app-token" } },
+    ]);
+  });
+
+  test("generates deploymentSpec with envFrom referencing existing K8s ConfigMap", () => {
+    const mcpServer: McpServer = {
+      id: "envfrom-configmap-id",
+      name: "envfrom-configmap-server",
+      catalogId: "catalog-envfrom-cm",
+      // biome-ignore lint/suspicious/noExplicitAny: Mock data for testing
+    } as any;
+
+    const k8sDeployment = createMockK8sDeployment(mcpServer);
+
+    const dockerImage = "test:latest";
+    const localConfig: z.infer<typeof LocalConfigSchema> = {
+      command: "node",
+      arguments: ["server.js"],
+      envFrom: [{ type: "configMap", name: "mcp-config" }],
+    };
+
+    const deploymentSpec = k8sDeployment.generateDeploymentSpec(
+      dockerImage,
+      localConfig,
+      false,
+      8080,
+    );
+
+    const container = deploymentSpec.spec?.template.spec?.containers[0];
+    expect(container?.envFrom).toEqual([
+      { configMapRef: { name: "mcp-config" } },
+    ]);
+  });
+
+  test("generates deploymentSpec with envFrom including prefix", () => {
+    const mcpServer: McpServer = {
+      id: "envfrom-prefix-id",
+      name: "envfrom-prefix-server",
+      catalogId: "catalog-envfrom-prefix",
+      // biome-ignore lint/suspicious/noExplicitAny: Mock data for testing
+    } as any;
+
+    const k8sDeployment = createMockK8sDeployment(mcpServer);
+
+    const dockerImage = "test:latest";
+    const localConfig: z.infer<typeof LocalConfigSchema> = {
+      command: "node",
+      arguments: ["server.js"],
+      envFrom: [
+        { type: "secret", name: "github-token", prefix: "GH_" },
+        { type: "configMap", name: "shared-config", prefix: "APP_" },
+      ],
+    };
+
+    const deploymentSpec = k8sDeployment.generateDeploymentSpec(
+      dockerImage,
+      localConfig,
+      false,
+      8080,
+    );
+
+    const container = deploymentSpec.spec?.template.spec?.containers[0];
+    expect(container?.envFrom).toEqual([
+      { secretRef: { name: "github-token" }, prefix: "GH_" },
+      { configMapRef: { name: "shared-config" }, prefix: "APP_" },
+    ]);
+  });
+
+  test("does not include envFrom when envFrom array is empty", () => {
+    const mcpServer: McpServer = {
+      id: "no-envfrom-id",
+      name: "no-envfrom-server",
+      catalogId: "catalog-no-envfrom",
+      // biome-ignore lint/suspicious/noExplicitAny: Mock data for testing
+    } as any;
+
+    const k8sDeployment = createMockK8sDeployment(mcpServer);
+
+    const dockerImage = "test:latest";
+    const localConfig: z.infer<typeof LocalConfigSchema> = {
+      command: "node",
+      arguments: ["server.js"],
+      envFrom: [],
+    };
+
+    const deploymentSpec = k8sDeployment.generateDeploymentSpec(
+      dockerImage,
+      localConfig,
+      false,
+      8080,
+    );
+
+    const container = deploymentSpec.spec?.template.spec?.containers[0];
+    expect(container?.envFrom).toBeUndefined();
+  });
+
+  test("does not include envFrom when not specified", () => {
+    const mcpServer: McpServer = {
+      id: "undefined-envfrom-id",
+      name: "undefined-envfrom-server",
+      catalogId: "catalog-undefined-envfrom",
+      // biome-ignore lint/suspicious/noExplicitAny: Mock data for testing
+    } as any;
+
+    const k8sDeployment = createMockK8sDeployment(mcpServer);
+
+    const dockerImage = "test:latest";
+    const localConfig: z.infer<typeof LocalConfigSchema> = {
+      command: "node",
+      arguments: ["server.js"],
+    };
+
+    const deploymentSpec = k8sDeployment.generateDeploymentSpec(
+      dockerImage,
+      localConfig,
+      false,
+      8080,
+    );
+
+    const container = deploymentSpec.spec?.template.spec?.containers[0];
+    expect(container?.envFrom).toBeUndefined();
+  });
 });
 
 describe("K8sDeployment.generateDeploymentSpec - YAML + platform nodeSelector/tolerations", () => {

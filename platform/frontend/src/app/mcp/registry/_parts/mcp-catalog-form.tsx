@@ -128,6 +128,7 @@ export function McpCatalogForm({
             command: "",
             arguments: "",
             environment: [],
+            envFrom: [],
             dockerImage: "",
             transportType: "stdio",
             httpPort: "",
@@ -189,6 +190,16 @@ export function McpCatalogForm({
   const { fields, append, remove } = useFieldArray({
     control: form.control,
     name: "localConfig.environment",
+  });
+
+  // Use field array for envFrom (existing K8s Secrets/ConfigMaps)
+  const {
+    fields: envFromFields,
+    append: appendEnvFrom,
+    remove: removeEnvFrom,
+  } = useFieldArray({
+    control: form.control,
+    name: "localConfig.envFrom",
   });
 
   // Use field array for imagePullSecrets
@@ -610,6 +621,86 @@ export function McpCatalogForm({
               form={form}
               useExternalSecretsManager={showByosOption}
             />
+          </div>
+        )}
+
+        {currentServerType === "local" && (
+          <div className="border rounded-lg p-5 space-y-4">
+            <div className="space-y-1">
+              <h3 className="font-semibold text-sm">
+                Environment From K8s Secrets / ConfigMaps
+              </h3>
+              <p className="text-sm text-muted-foreground">
+                Inject all keys from existing Kubernetes Secrets or ConfigMaps
+                as environment variables. Useful for auto-rotating tokens (e.g.
+                ExternalSecrets) or shared configuration.
+              </p>
+            </div>
+
+            {envFromFields.map((field, index) => (
+              <div key={field.id} className="border rounded-lg p-3 space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <Select
+                    value={form.watch(`localConfig.envFrom.${index}.type`)}
+                    onValueChange={(val) =>
+                      form.setValue(
+                        `localConfig.envFrom.${index}.type`,
+                        val as "secret" | "configMap",
+                        { shouldDirty: true },
+                      )
+                    }
+                  >
+                    <SelectTrigger className="w-[200px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="secret">Secret</SelectItem>
+                      <SelectItem value="configMap">ConfigMap</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => removeEnvFrom(index)}
+                  >
+                    <Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" />
+                  </Button>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs">
+                      Name <span className="text-destructive">*</span>
+                    </Label>
+                    <Input
+                      placeholder="my-k8s-secret"
+                      className="font-mono"
+                      {...form.register(`localConfig.envFrom.${index}.name`)}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Prefix (optional)</Label>
+                    <Input
+                      placeholder="e.g. MY_PREFIX_"
+                      className="font-mono"
+                      {...form.register(`localConfig.envFrom.${index}.prefix`)}
+                    />
+                  </div>
+                </div>
+              </div>
+            ))}
+
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                appendEnvFrom({ type: "secret", name: "", prefix: "" })
+              }
+            >
+              <Plus className="h-4 w-4 mr-1" />
+              Add
+            </Button>
           </div>
         )}
 

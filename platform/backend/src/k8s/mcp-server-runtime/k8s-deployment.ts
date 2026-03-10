@@ -793,6 +793,17 @@ export default class K8sDeployment {
               ? undefined // Let K8s decide (defaults to Always for :latest, IfNotPresent for others)
               : ("Never" as k8s.V1Container["imagePullPolicy"]), // For local images like "gaggimate-mcp:latest" without registry
           env: envVars,
+          // Inject all keys from existing K8s Secrets/ConfigMaps as env vars
+          ...(localConfig.envFrom?.length
+            ? {
+                envFrom: localConfig.envFrom.map((ref) => ({
+                  ...(ref.type === "secret"
+                    ? { secretRef: { name: ref.name } }
+                    : { configMapRef: { name: ref.name } }),
+                  ...(ref.prefix ? { prefix: ref.prefix } : {}),
+                })),
+              }
+            : {}),
           ...(localConfig.command
             ? {
                 command: [localConfig.command],
@@ -1085,6 +1096,29 @@ export default class K8sDeployment {
           container.env = [...(container.env || []), envVar];
         }
       }
+    }
+
+    // 6b. Apply envFrom (existing K8s Secrets/ConfigMaps) if not already in YAML
+    if (
+      localConfig.envFrom?.length &&
+      deployment.spec?.template?.spec?.containers?.[0]
+    ) {
+      const container = deployment.spec.template.spec.containers[0];
+      const existingEnvFrom = container.envFrom || [];
+      const existingNames = new Set(
+        existingEnvFrom.map(
+          (e) => e.secretRef?.name || e.configMapRef?.name || "",
+        ),
+      );
+      const newEnvFrom = localConfig.envFrom
+        .filter((ref) => !existingNames.has(ref.name))
+        .map((ref) => ({
+          ...(ref.type === "secret"
+            ? { secretRef: { name: ref.name } }
+            : { configMapRef: { name: ref.name } }),
+          ...(ref.prefix ? { prefix: ref.prefix } : {}),
+        }));
+      container.envFrom = [...existingEnvFrom, ...newEnvFrom];
     }
 
     // 7. Ensure command and args from localConfig are applied

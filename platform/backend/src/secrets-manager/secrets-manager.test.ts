@@ -563,18 +563,10 @@ describe("SecretsManager", async () => {
     });
 
     describe("KV version configuration", () => {
-      // Helper to set vaultKvVersion on the imported config object.
-      // Needed because tests use `const config = getVaultConfigFromEnv()` which
-      // shadows the import, making direct `config.secretsManager` access hit TDZ.
-      const setKvVersion = (v: string) => {
-        config.secretsManager.vaultKvVersion = v;
-      };
-
       test("should default to KV v2 when ARCHESTRA_HASHICORP_VAULT_KV_VERSION is not set", () => {
         process.env.ARCHESTRA_HASHICORP_VAULT_ADDR = "http://localhost:8200";
         process.env.ARCHESTRA_HASHICORP_VAULT_TOKEN = "dev-root-token";
         delete process.env.ARCHESTRA_HASHICORP_VAULT_KV_VERSION;
-        setKvVersion("2");
         delete process.env.ARCHESTRA_HASHICORP_VAULT_SECRET_PATH;
 
         const config = getVaultConfigFromEnv();
@@ -587,7 +579,6 @@ describe("SecretsManager", async () => {
         process.env.ARCHESTRA_HASHICORP_VAULT_ADDR = "http://localhost:8200";
         process.env.ARCHESTRA_HASHICORP_VAULT_TOKEN = "dev-root-token";
         process.env.ARCHESTRA_HASHICORP_VAULT_KV_VERSION = "1";
-        setKvVersion("1");
         delete process.env.ARCHESTRA_HASHICORP_VAULT_SECRET_PATH;
 
         const config = getVaultConfigFromEnv();
@@ -600,7 +591,6 @@ describe("SecretsManager", async () => {
         process.env.ARCHESTRA_HASHICORP_VAULT_ADDR = "http://localhost:8200";
         process.env.ARCHESTRA_HASHICORP_VAULT_TOKEN = "dev-root-token";
         process.env.ARCHESTRA_HASHICORP_VAULT_KV_VERSION = "2";
-        setKvVersion("2");
         delete process.env.ARCHESTRA_HASHICORP_VAULT_SECRET_PATH;
 
         const config = getVaultConfigFromEnv();
@@ -613,7 +603,6 @@ describe("SecretsManager", async () => {
         process.env.ARCHESTRA_HASHICORP_VAULT_ADDR = "http://localhost:8200";
         process.env.ARCHESTRA_HASHICORP_VAULT_TOKEN = "dev-root-token";
         process.env.ARCHESTRA_HASHICORP_VAULT_KV_VERSION = "3";
-        setKvVersion("3");
 
         expect(() => getVaultConfigFromEnv()).toThrow(
           SecretsManagerConfigurationError,
@@ -627,7 +616,6 @@ describe("SecretsManager", async () => {
         process.env.ARCHESTRA_HASHICORP_VAULT_ADDR = "http://localhost:8200";
         process.env.ARCHESTRA_HASHICORP_VAULT_TOKEN = "dev-root-token";
         process.env.ARCHESTRA_HASHICORP_VAULT_KV_VERSION = "1";
-        setKvVersion("1");
         process.env.ARCHESTRA_HASHICORP_VAULT_SECRET_PATH = "custom/secrets";
 
         const config = getVaultConfigFromEnv();
@@ -641,7 +629,6 @@ describe("SecretsManager", async () => {
         process.env.ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD = "K8S";
         process.env.ARCHESTRA_HASHICORP_VAULT_K8S_ROLE = "archestra";
         process.env.ARCHESTRA_HASHICORP_VAULT_KV_VERSION = "1";
-        setKvVersion("1");
         delete process.env.ARCHESTRA_HASHICORP_VAULT_SECRET_PATH;
         delete process.env.ARCHESTRA_HASHICORP_VAULT_K8S_TOKEN_PATH;
         delete process.env.ARCHESTRA_HASHICORP_VAULT_K8S_MOUNT_POINT;
@@ -657,7 +644,6 @@ describe("SecretsManager", async () => {
         process.env.ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD = "AWS";
         process.env.ARCHESTRA_HASHICORP_VAULT_AWS_ROLE = "archestra-role";
         process.env.ARCHESTRA_HASHICORP_VAULT_KV_VERSION = "1";
-        setKvVersion("1");
         delete process.env.ARCHESTRA_HASHICORP_VAULT_SECRET_PATH;
         delete process.env.ARCHESTRA_HASHICORP_VAULT_AWS_MOUNT_POINT;
         delete process.env.ARCHESTRA_HASHICORP_VAULT_AWS_REGION;

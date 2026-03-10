@@ -1,4 +1,3 @@
-import config from "@/config";
 import type { VaultConfig, VaultKvVersion } from "@/types";
 
 export class SecretsManagerConfigurationError extends Error {
@@ -43,7 +42,11 @@ export function getVaultConfigFromEnv(): VaultConfig {
   const errors: string[] = [];
 
   // Parse KV version first (needed for default secret path)
-  const kvVersionEnv = config.secretsManager.vaultKvVersion;
+  // Read directly from process.env instead of importing config to avoid
+  // triggering config.ts module evaluation (which requires DATABASE_URL).
+  // This is critical because vault-env-injector imports this module and runs
+  // BEFORE the database URL is available.
+  const kvVersionEnv = process.env.ARCHESTRA_HASHICORP_VAULT_KV_VERSION || "2";
   let kvVersion: VaultKvVersion = DEFAULT_KV_VERSION;
 
   if (kvVersionEnv === "1" || kvVersionEnv === "2") {

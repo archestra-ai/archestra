@@ -4,7 +4,6 @@ import {
   type Version2Client,
   type Version3Client,
 } from "jira.js";
-import logger from "@/logging";
 import type {
   ConnectorCredentials,
   ConnectorDocument,
@@ -64,7 +63,7 @@ export class JiraConnector extends BaseConnector {
       return { success: false, error: "Invalid Jira configuration" };
     }
 
-    logger.info(
+    this.log.info(
       { baseUrl: parsed.jiraBaseUrl, isCloud: parsed.isCloud },
       "[JiraConnector] Testing connection",
     );
@@ -77,11 +76,11 @@ export class JiraConnector extends BaseConnector {
         const client = createV2Client(parsed, params.credentials);
         await client.myself.getCurrentUser();
       }
-      logger.info("[JiraConnector] Connection test successful");
+      this.log.info("[JiraConnector] Connection test successful");
       return { success: true };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      logger.error(
+      this.log.error(
         { error: message, ...extractJiraErrorDetails(error) },
         "[JiraConnector] Connection test failed",
       );
@@ -103,7 +102,7 @@ export class JiraConnector extends BaseConnector {
       };
       const jql = buildJql(parsed, checkpoint);
 
-      logger.info({ jql }, "[JiraConnector] Estimating total items");
+      this.log.info({ jql }, "[JiraConnector] Estimating total items");
 
       // Use classic JQL search with maxResults=0 to get total without fetching issues
       if (parsed.isCloud) {
@@ -124,7 +123,7 @@ export class JiraConnector extends BaseConnector {
       });
       return result.total ?? null;
     } catch (error) {
-      logger.warn(
+      this.log.warn(
         {
           error: extractErrorMessage(error),
           ...extractJiraErrorDetails(error),
@@ -152,7 +151,7 @@ export class JiraConnector extends BaseConnector {
     };
     const jql = buildJql(parsed, checkpoint, params.startTime);
 
-    logger.info(
+    this.log.info(
       {
         baseUrl: parsed.jiraBaseUrl,
         isCloud: parsed.isCloud,
@@ -187,7 +186,7 @@ export class JiraConnector extends BaseConnector {
       await this.rateLimit();
 
       try {
-        logger.debug(
+        this.log.debug(
           { batchIndex, nextPageToken },
           "[JiraConnector] Fetching cloud batch",
         );
@@ -206,7 +205,7 @@ export class JiraConnector extends BaseConnector {
         nextPageToken = searchResult.nextPageToken ?? undefined;
         hasMore = !!nextPageToken;
 
-        logger.info(
+        this.log.info(
           {
             batchIndex,
             issueCount: issues.length,
@@ -219,7 +218,7 @@ export class JiraConnector extends BaseConnector {
         batchIndex++;
         yield buildBatch(documents, issues, checkpoint, hasMore);
       } catch (error) {
-        logger.error(
+        this.log.error(
           {
             batchIndex,
             error: extractErrorMessage(error),
@@ -247,7 +246,7 @@ export class JiraConnector extends BaseConnector {
       await this.rateLimit();
 
       try {
-        logger.debug(
+        this.log.debug(
           { batchIndex, nextPageToken },
           "[JiraConnector] Fetching server batch",
         );
@@ -266,7 +265,7 @@ export class JiraConnector extends BaseConnector {
         nextPageToken = searchResult.nextPageToken ?? undefined;
         hasMore = !!nextPageToken;
 
-        logger.info(
+        this.log.info(
           {
             batchIndex,
             issueCount: issues.length,
@@ -279,7 +278,7 @@ export class JiraConnector extends BaseConnector {
         batchIndex++;
         yield buildBatch(documents, issues, checkpoint, hasMore);
       } catch (error) {
-        logger.error(
+        this.log.error(
           {
             batchIndex,
             error: extractErrorMessage(error),

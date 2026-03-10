@@ -1,5 +1,4 @@
 import { Gitlab } from "@gitbeaker/rest";
-import logger from "@/logging";
 import type {
   ConnectorCredentials,
   ConnectorDocument,
@@ -49,7 +48,7 @@ export class GitlabConnector extends BaseConnector {
       return { success: false, error: "Invalid GitLab configuration" };
     }
 
-    logger.debug(
+    this.log.debug(
       { baseUrl: parsed.gitlabUrl },
       "[GitlabConnector] Testing connection",
     );
@@ -57,11 +56,11 @@ export class GitlabConnector extends BaseConnector {
     try {
       const client = createGitlabClient(parsed, params.credentials);
       await client.Users.showCurrentUser();
-      logger.debug("[GitlabConnector] Connection test successful");
+      this.log.debug("[GitlabConnector] Connection test successful");
       return { success: true };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      logger.error(
+      this.log.error(
         { error: message },
         "[GitlabConnector] Connection test failed",
       );
@@ -77,7 +76,7 @@ export class GitlabConnector extends BaseConnector {
     const parsed = parseGitlabConfig(params.config);
     if (!parsed) return null;
 
-    logger.debug(
+    this.log.debug(
       { projectIds: parsed.projectIds, groupId: parsed.groupId },
       "[GitlabConnector] Estimating total items",
     );
@@ -115,7 +114,7 @@ export class GitlabConnector extends BaseConnector {
 
       return total > 0 ? total : null;
     } catch (error) {
-      logger.warn(
+      this.log.warn(
         { error: extractErrorMessage(error) },
         "[GitlabConnector] Failed to estimate total items",
       );
@@ -141,7 +140,7 @@ export class GitlabConnector extends BaseConnector {
     const client = createGitlabClient(parsed, params.credentials);
     const projects = await getProjects(client, parsed);
 
-    logger.debug(
+    this.log.debug(
       {
         baseUrl: parsed.gitlabUrl,
         projectCount: projects.length,
@@ -191,7 +190,7 @@ export class GitlabConnector extends BaseConnector {
     let page = 1;
     let pageHasMore = true;
 
-    logger.debug(
+    this.log.debug(
       { project: project.pathWithNamespace },
       "[GitlabConnector] Syncing project issues",
     );
@@ -200,7 +199,7 @@ export class GitlabConnector extends BaseConnector {
       await this.rateLimit();
 
       try {
-        logger.debug(
+        this.log.debug(
           { project: project.pathWithNamespace, page },
           "[GitlabConnector] Fetching issues batch",
         );
@@ -237,7 +236,7 @@ export class GitlabConnector extends BaseConnector {
         pageHasMore = issues.length >= BATCH_SIZE;
         page++;
 
-        logger.debug(
+        this.log.debug(
           {
             project: project.pathWithNamespace,
             issueCount: issues.length,
@@ -260,7 +259,7 @@ export class GitlabConnector extends BaseConnector {
           hasMore: pageHasMore || !isLastGroup,
         };
       } catch (error) {
-        logger.error(
+        this.log.error(
           {
             project: project.pathWithNamespace,
             page,
@@ -284,7 +283,7 @@ export class GitlabConnector extends BaseConnector {
     let page = 1;
     let pageHasMore = true;
 
-    logger.debug(
+    this.log.debug(
       { project: project.pathWithNamespace },
       "[GitlabConnector] Syncing project merge requests",
     );
@@ -293,7 +292,7 @@ export class GitlabConnector extends BaseConnector {
       await this.rateLimit();
 
       try {
-        logger.debug(
+        this.log.debug(
           { project: project.pathWithNamespace, page },
           "[GitlabConnector] Fetching merge requests batch",
         );
@@ -330,7 +329,7 @@ export class GitlabConnector extends BaseConnector {
         pageHasMore = mergeRequests.length >= BATCH_SIZE;
         page++;
 
-        logger.debug(
+        this.log.debug(
           {
             project: project.pathWithNamespace,
             mrCount: mergeRequests.length,
@@ -353,7 +352,7 @@ export class GitlabConnector extends BaseConnector {
           hasMore: pageHasMore || !isLastGroup,
         };
       } catch (error) {
-        logger.error(
+        this.log.error(
           {
             project: project.pathWithNamespace,
             page,

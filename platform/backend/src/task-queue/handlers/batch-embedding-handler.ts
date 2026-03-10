@@ -14,7 +14,7 @@ export async function handleBatchEmbedding(
     );
   }
 
-  await embeddingService.processDocuments(documentIds);
+  await embeddingService.processDocuments(documentIds, connectorRunId);
 
   const updatedRun = await ConnectorRunModel.completeBatch(connectorRunId);
 
@@ -34,7 +34,7 @@ export async function handleBatchEmbedding(
       lastSyncAt: now,
     });
     logger.info(
-      { connectorRunId, connectorId: updatedRun.connectorId },
+      { runId: connectorRunId, connectorId: updatedRun.connectorId },
       "[BatchEmbeddingHandler] All batches complete, connector run finalized",
     );
   }

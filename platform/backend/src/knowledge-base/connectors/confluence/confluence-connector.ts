@@ -1,5 +1,4 @@
 import { ConfluenceClient } from "confluence.js";
-import logger from "@/logging";
 import type {
   ConfluenceCheckpoint,
   ConfluenceConfig,
@@ -50,7 +49,7 @@ export class ConfluenceConnector extends BaseConnector {
       return { success: false, error: "Invalid Confluence configuration" };
     }
 
-    logger.debug(
+    this.log.debug(
       { baseUrl: parsed.confluenceUrl, isCloud: parsed.isCloud },
       "[ConfluenceConnector] Testing connection",
     );
@@ -58,11 +57,11 @@ export class ConfluenceConnector extends BaseConnector {
     try {
       const client = createConfluenceClient(parsed, params.credentials);
       await client.space.getSpaces({ limit: 1 });
-      logger.debug("[ConfluenceConnector] Connection test successful");
+      this.log.debug("[ConfluenceConnector] Connection test successful");
       return { success: true };
     } catch (error) {
       const message = extractErrorMessage(error);
-      logger.error(
+      this.log.error(
         { error: message },
         "[ConfluenceConnector] Connection test failed",
       );
@@ -84,7 +83,7 @@ export class ConfluenceConnector extends BaseConnector {
       };
       const cql = buildCql(parsed, checkpoint);
 
-      logger.debug({ cql }, "[ConfluenceConnector] Estimating total items");
+      this.log.debug({ cql }, "[ConfluenceConnector] Estimating total items");
 
       const client = createConfluenceClient(parsed, params.credentials);
 
@@ -97,7 +96,7 @@ export class ConfluenceConnector extends BaseConnector {
       const totalSize = (result as any).totalSize as number | undefined;
       return totalSize ?? null;
     } catch (error) {
-      logger.warn(
+      this.log.warn(
         { error: extractErrorMessage(error) },
         "[ConfluenceConnector] Failed to estimate total items",
       );
@@ -124,7 +123,7 @@ export class ConfluenceConnector extends BaseConnector {
     const cql = buildCql(parsed, checkpoint, params.startTime);
     const client = createConfluenceClient(parsed, params.credentials);
 
-    logger.debug(
+    this.log.debug(
       {
         baseUrl: parsed.confluenceUrl,
         isCloud: parsed.isCloud,
@@ -143,7 +142,7 @@ export class ConfluenceConnector extends BaseConnector {
       await this.rateLimit();
 
       try {
-        logger.debug(
+        this.log.debug(
           { batchIndex, cursor },
           "[ConfluenceConnector] Fetching batch",
         );
@@ -183,7 +182,7 @@ export class ConfluenceConnector extends BaseConnector {
         const lastPage = results[results.length - 1];
         const rawModifiedAt: string | undefined = lastPage?.version?.when;
 
-        logger.debug(
+        this.log.debug(
           {
             batchIndex,
             pageCount: results.length,
@@ -208,7 +207,7 @@ export class ConfluenceConnector extends BaseConnector {
           hasMore,
         };
       } catch (error) {
-        logger.error(
+        this.log.error(
           { batchIndex, error: extractErrorMessage(error) },
           "[ConfluenceConnector] Batch fetch failed",
         );

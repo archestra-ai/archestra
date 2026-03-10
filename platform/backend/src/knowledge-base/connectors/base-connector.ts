@@ -1,4 +1,5 @@
-import logger from "@/logging";
+import type pino from "pino";
+import defaultLogger from "@/logging";
 import type {
   Connector,
   ConnectorCredentials,
@@ -42,11 +43,16 @@ export const REQUEST_TIMEOUT_MS = 30000;
 export abstract class BaseConnector implements Connector {
   abstract type: ConnectorType;
 
+  protected log: pino.Logger = defaultLogger;
   private rateLimitDelayMs: number;
   private itemFailures: ConnectorItemFailure[] = [];
 
   constructor(rateLimitDelayMs = DEFAULT_RATE_LIMIT_DELAY_MS) {
     this.rateLimitDelayMs = rateLimitDelayMs;
+  }
+
+  setLogger(log: pino.Logger): void {
+    this.log = log;
   }
 
   abstract validateConfig(
@@ -106,7 +112,7 @@ export abstract class BaseConnector implements Connector {
 
           if (attempt < maxRetries) {
             const delay = calculateBackoffDelay(attempt);
-            logger.warn(
+            this.log.warn(
               {
                 connectorType: this.type,
                 attempt: attempt + 1,
@@ -129,7 +135,7 @@ export abstract class BaseConnector implements Connector {
 
         if (isRetryableError(error) && attempt < maxRetries) {
           const delay = calculateBackoffDelay(attempt);
-          logger.warn(
+          this.log.warn(
             {
               connectorType: this.type,
               attempt: attempt + 1,
@@ -160,7 +166,7 @@ export abstract class BaseConnector implements Connector {
       return await params.fetch();
     } catch (error) {
       const message = extractErrorMessage(error);
-      logger.warn(
+      this.log.warn(
         {
           connectorType: this.type,
           itemId: params.itemId,

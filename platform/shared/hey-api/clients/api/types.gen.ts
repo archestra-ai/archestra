@@ -11636,7 +11636,7 @@ export type GetAgentsData = {
          */
         excludeAuthorIds?: Array<string>;
         /**
-         * Filter by labels. Format: key1:val1,val2;key2:val3. AND across keys, OR within values.
+         * Filter by labels. Format: key1:val1|val2;key2:val3. AND across keys, OR within values.
          */
         labels?: string;
         limit?: number;

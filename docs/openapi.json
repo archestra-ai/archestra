@@ -36609,7 +36609,7 @@
             "in": "query",
             "name": "labels",
             "required": false,
-            "description": "Filter by labels. Format: key1:val1,val2;key2:val3. AND across keys, OR within values."
+            "description": "Filter by labels. Format: key1:val1|val2;key2:val3. AND across keys, OR within values."
           },
           {
             "schema": {
@@ -36956,10 +36956,12 @@
                               "type": "object",
                               "properties": {
                                 "key": {
-                                  "type": "string"
+                                  "type": "string",
+                                  "minLength": 1
                                 },
                                 "value": {
-                                  "type": "string"
+                                  "type": "string",
+                                  "minLength": 1
                                 },
                                 "keyId": {
                                   "type": "string",
@@ -37418,10 +37420,12 @@
                       "type": "object",
                       "properties": {
                         "key": {
-                          "type": "string"
+                          "type": "string",
+                          "minLength": 1
                         },
                         "value": {
-                          "type": "string"
+                          "type": "string",
+                          "minLength": 1
                         },
                         "keyId": {
                           "type": "string",
@@ -37753,10 +37757,12 @@
                         "type": "object",
                         "properties": {
                           "key": {
-                            "type": "string"
+                            "type": "string",
+                            "minLength": 1
                           },
                           "value": {
-                            "type": "string"
+                            "type": "string",
+                            "minLength": 1
                           },
                           "keyId": {
                             "type": "string",
@@ -38385,10 +38391,12 @@
                           "type": "object",
                           "properties": {
                             "key": {
-                              "type": "string"
+                              "type": "string",
+                              "minLength": 1
                             },
                             "value": {
-                              "type": "string"
+                              "type": "string",
+                              "minLength": 1
                             },
                             "keyId": {
                               "type": "string",
@@ -38972,10 +38980,12 @@
                         "type": "object",
                         "properties": {
                           "key": {
-                            "type": "string"
+                            "type": "string",
+                            "minLength": 1
                           },
                           "value": {
-                            "type": "string"
+                            "type": "string",
+                            "minLength": 1
                           },
                           "keyId": {
                             "type": "string",
@@ -39558,10 +39568,12 @@
                         "type": "object",
                         "properties": {
                           "key": {
-                            "type": "string"
+                            "type": "string",
+                            "minLength": 1
                           },
                           "value": {
-                            "type": "string"
+                            "type": "string",
+                            "minLength": 1
                           },
                           "keyId": {
                             "type": "string",
@@ -40156,10 +40168,12 @@
                         "type": "object",
                         "properties": {
                           "key": {
-                            "type": "string"
+                            "type": "string",
+                            "minLength": 1
                           },
                           "value": {
-                            "type": "string"
+                            "type": "string",
+                            "minLength": 1
                           },
                           "keyId": {
                             "type": "string",
@@ -40569,10 +40583,12 @@
                       "type": "object",
                       "properties": {
                         "key": {
-                          "type": "string"
+                          "type": "string",
+                          "minLength": 1
                         },
                         "value": {
-                          "type": "string"
+                          "type": "string",
+                          "minLength": 1
                         },
                         "keyId": {
                           "type": "string",
@@ -40909,10 +40925,12 @@
                         "type": "object",
                         "properties": {
                           "key": {
-                            "type": "string"
+                            "type": "string",
+                            "minLength": 1
                           },
                           "value": {
-                            "type": "string"
+                            "type": "string",
+                            "minLength": 1
                           },
                           "keyId": {
                             "type": "string",
@@ -41760,10 +41778,12 @@
                             "type": "object",
                             "properties": {
                               "key": {
-                                "type": "string"
+                                "type": "string",
+                                "minLength": 1
                               },
                               "value": {
-                                "type": "string"
+                                "type": "string",
+                                "minLength": 1
                               },
                               "keyId": {
                                 "type": "string",
@@ -42415,10 +42435,12 @@
                         "type": "object",
                         "properties": {
                           "key": {
-                            "type": "string"
+                            "type": "string",
+                            "minLength": 1
                           },
                           "value": {
-                            "type": "string"
+                            "type": "string",
+                            "minLength": 1
                           },
                           "keyId": {
                             "type": "string",

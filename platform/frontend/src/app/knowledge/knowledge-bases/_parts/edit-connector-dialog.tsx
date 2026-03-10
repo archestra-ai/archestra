@@ -93,6 +93,12 @@ export function EditConnectorDialog({
   const isCloud = form.watch("config.isCloud") as boolean | undefined;
   const emailRequired = needsEmail && isCloud !== false;
 
+  useEffect(() => {
+    if (!emailRequired) {
+      form.clearErrors("email");
+    }
+  }, [emailRequired, form]);
+
   const handleSubmit = async (values: EditConnectorFormValues) => {
     const hasCredentials = values.apiToken.length > 0;
     const result = await updateConnector.mutateAsync({

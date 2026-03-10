@@ -270,7 +270,7 @@ export default function ChatPage() {
   }, [initialAgentId, searchParams, internalAgents, defaultAgentId]);
 
   // Initialize model and API key once agent is resolved.
-  // Priority: agent config > localStorage > first available model.
+  // Priority: localStorage (user's explicit choice) > agent config > first available model.
   // Separated from agent resolution but uses ref to avoid race conditions —
   // the ref is written synchronously in the same render cycle, so this effect
   // always sees the correct agent even when both effects fire together.
@@ -278,21 +278,7 @@ export default function ChatPage() {
     if (!initialAgentId) return;
     if (initialModel) return; // Already initialized
 
-    const agent = resolvedAgentRef.current;
-    const agentData = agent as Record<string, unknown> | undefined;
-
-    // 1. Agent-configured model takes priority
-    if (agentData?.llmModel) {
-      setInitialModel(agentData.llmModel as string);
-      if (agentData.llmApiKeyId) {
-        setInitialApiKeyId(agentData.llmApiKeyId as string);
-      }
-      return;
-    }
-
-    // 2. Fall back to localStorage / first available (needs models loaded)
     const allModels = Object.values(modelsByProvider).flat();
-    if (allModels.length === 0) return;
 
     // Helper: auto-select the first API key for a given provider
     const autoSelectKeyForProvider = (provider: string) => {
@@ -303,10 +289,15 @@ export default function ChatPage() {
       }
     };
 
+    // 1. User's explicit selection from localStorage takes priority
     const savedModelId = localStorage.getItem(
       LocalStorageKeys.selectedChatModel,
     );
-    if (savedModelId && allModels.some((m) => m.id === savedModelId)) {
+    if (
+      savedModelId &&
+      allModels.length > 0 &&
+      allModels.some((m) => m.id === savedModelId)
+    ) {
       setInitialModel(savedModelId);
       // Find provider for saved model and auto-select key
       for (const [provider, models] of Object.entries(modelsByProvider)) {
@@ -318,7 +309,20 @@ export default function ChatPage() {
       return;
     }
 
-    // 3. Fall back to first available model
+    // 2. Agent-configured model as fallback
+    const agent = resolvedAgentRef.current;
+    const agentData = agent as Record<string, unknown> | undefined;
+    if (agentData?.llmModel) {
+      setInitialModel(agentData.llmModel as string);
+      if (agentData.llmApiKeyId) {
+        setInitialApiKeyId(agentData.llmApiKeyId as string);
+      }
+      return;
+    }
+
+    // 3. Fall back to first available model (needs models loaded)
+    if (allModels.length === 0) return;
+
     const providers = Object.keys(modelsByProvider);
     if (providers.length > 0) {
       const firstProvider = providers[0];

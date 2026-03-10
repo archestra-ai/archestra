@@ -1,10 +1,10 @@
-import type pino from "pino";
 import {
   ClientType,
   createClient,
   type Version2Client,
   type Version3Client,
 } from "jira.js";
+import type pino from "pino";
 import type {
   ConnectorCredentials,
   ConnectorDocument,
@@ -222,6 +222,7 @@ export class JiraConnector extends BaseConnector {
         this.log.error(
           {
             batchIndex,
+            host: config.jiraBaseUrl,
             error: extractErrorMessage(error),
             ...extractJiraErrorDetails(error),
           },
@@ -239,7 +240,7 @@ export class JiraConnector extends BaseConnector {
     checkpoint: JiraCheckpoint,
   ): AsyncGenerator<ConnectorSyncBatch> {
     const client = createV2Client(config, credentials, this.log);
-    let nextPageToken: string | undefined;
+    let startAt = 0;
     let hasMore = true;
     let batchIndex = 0;
 
@@ -248,29 +249,32 @@ export class JiraConnector extends BaseConnector {
 
       try {
         this.log.debug(
-          { batchIndex, nextPageToken },
+          { batchIndex, startAt },
           "[JiraConnector] Fetching server batch",
         );
 
         const searchResult =
-          await client.issueSearch.searchForIssuesUsingJqlEnhancedSearchPost({
+          await client.issueSearch.searchForIssuesUsingJqlPost({
             jql,
             fields: SEARCH_FIELDS,
-            nextPageToken,
+            startAt,
             maxResults: BATCH_SIZE,
           });
 
         const issues = searchResult.issues ?? [];
         const documents = issuesToDocuments(issues, config);
 
-        nextPageToken = searchResult.nextPageToken ?? undefined;
-        hasMore = !!nextPageToken;
+        startAt += issues.length;
+        hasMore =
+          issues.length >= BATCH_SIZE &&
+          startAt < (searchResult.total ?? startAt);
 
         this.log.info(
           {
             batchIndex,
             issueCount: issues.length,
             documentCount: documents.length,
+            total: searchResult.total,
             hasMore,
           },
           "[JiraConnector] Server batch fetched",
@@ -282,6 +286,7 @@ export class JiraConnector extends BaseConnector {
         this.log.error(
           {
             batchIndex,
+            host: config.jiraBaseUrl,
             error: extractErrorMessage(error),
             ...extractJiraErrorDetails(error),
           },
@@ -422,11 +427,11 @@ function extractJiraErrorDetails(error: unknown): Record<string, unknown> {
   if (err.response) {
     details.status = err.response.status;
     details.statusText = err.response.statusText;
-    if (err.response.config?.url) {
-      details.url = err.response.config.url;
-    }
-    if (err.response.config?.baseURL) {
-      details.baseUrl = err.response.config.baseURL;
+    const cfg = err.response.config ?? err.config;
+    if (cfg?.url) {
+      details.url = cfg.baseURL
+        ? `${cfg.baseURL.replace(/\/+$/, "")}${cfg.url}`
+        : cfg.url;
     }
     if (err.response.data) {
       try {
@@ -438,6 +443,14 @@ function extractJiraErrorDetails(error: unknown): Record<string, unknown> {
         details.responseBody = "[unserializable]";
       }
     }
+  }
+
+  // Fallback: request config without response (e.g. network error)
+  if (!details.url && err.config?.url) {
+    const cfg = err.config;
+    details.url = cfg.baseURL
+      ? `${cfg.baseURL.replace(/\/+$/, "")}${cfg.url}`
+      : cfg.url;
   }
 
   // Some errors store status directly

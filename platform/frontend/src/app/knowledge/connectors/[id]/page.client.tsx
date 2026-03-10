@@ -117,14 +117,15 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
           <div className="flex items-center gap-2">
             <ConnectorStatusBadge status={status} />
             {error && (
-              <button
-                type="button"
+              <Button
+                variant="ghost"
+                className="h-auto p-0"
                 onClick={() => setSelectedRunId(row.original.id)}
               >
-                <Badge variant="destructive" className="cursor-pointer text-xs">
+                <Badge variant="destructive" className="text-xs">
                   Error
                 </Badge>
-              </button>
+              </Button>
             )}
           </div>
         );

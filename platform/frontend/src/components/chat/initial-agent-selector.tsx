@@ -444,10 +444,10 @@ function AgentSettingsView({
   const [isSaving, setIsSaving] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: agent?.id ensures reset when switching agents
+  // biome-ignore lint/correctness/useExhaustiveDependencies: only reset when switching agents, not on systemPrompt changes from autosave
   useEffect(() => {
     setInstructions(agent?.systemPrompt ?? "");
-  }, [agent?.id, agent?.systemPrompt]);
+  }, [agent?.id]);
 
   const saveInstructions = useCallback(
     (value: string) => {

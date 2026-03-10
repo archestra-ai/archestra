@@ -90,7 +90,12 @@ export const ProfileLabels = forwardRef<ProfileLabelsRef, ProfileLabelsProps>(
         const key = newLabelKey.trim();
         const value = newLabelValue.trim();
 
-        if (!key || !value) {
+        if (
+          !key ||
+          !value ||
+          hasReservedChars(key) ||
+          hasReservedChars(value)
+        ) {
           return null;
         }
 

@@ -2,7 +2,7 @@
 
 import type { archestraApiTypes } from "@shared";
 import { ArrowLeft, ChevronDown } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { Button } from "@/components/ui/button";
 import {
@@ -152,12 +152,6 @@ export function CreateConnectorDialog({
   const isCloud = form.watch("config.isCloud") as boolean | undefined;
   const needsEmail = connectorType === "jira" || connectorType === "confluence";
   const emailRequired = needsEmail && isCloud !== false;
-
-  useEffect(() => {
-    if (!emailRequired) {
-      form.clearErrors("email");
-    }
-  }, [emailRequired, form]);
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -316,11 +310,14 @@ export function CreateConnectorDialog({
                   <FormField
                     control={form.control}
                     name="email"
-                    rules={
-                      emailRequired
-                        ? { required: "Email is required" }
-                        : undefined
-                    }
+                    rules={{
+                      validate: (value) => {
+                        const currentIsCloud = form.getValues("config.isCloud");
+                        if (currentIsCloud !== false && !value)
+                          return "Email is required";
+                        return true;
+                      },
+                    }}
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>

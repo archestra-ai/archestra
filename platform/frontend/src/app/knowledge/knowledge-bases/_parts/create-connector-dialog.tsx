@@ -124,7 +124,7 @@ export function CreateConnectorDialog({
       connectorType: values.connectorType,
       config: config as archestraApiTypes.CreateConnectorData["body"]["config"],
       credentials: {
-        email: values.email,
+        ...(values.email && { email: values.email }),
         apiToken: values.apiToken,
       },
       schedule: values.schedule,
@@ -148,7 +148,9 @@ export function CreateConnectorDialog({
   };
 
   const urlConfig = getUrlConfig(connectorType);
+  const isCloud = form.watch("config.isCloud") as boolean | undefined;
   const needsEmail = connectorType === "jira" || connectorType === "confluence";
+  const emailRequired = needsEmail && isCloud !== false;
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -277,17 +279,33 @@ export function CreateConnectorDialog({
                   <FormField
                     control={form.control}
                     name="email"
-                    rules={{ required: "Email is required" }}
+                    rules={
+                      emailRequired
+                        ? { required: "Email is required" }
+                        : undefined
+                    }
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Email</FormLabel>
+                        <FormLabel>
+                          Email{!emailRequired && " (optional)"}
+                        </FormLabel>
                         <FormControl>
                           <Input
                             type="email"
-                            placeholder="user@example.com"
+                            placeholder={
+                              emailRequired
+                                ? "user@example.com"
+                                : "Required for basic auth, leave empty for PAT"
+                            }
                             {...field}
                           />
                         </FormControl>
+                        {!emailRequired && (
+                          <FormDescription>
+                            Leave empty to authenticate with a personal access
+                            token instead.
+                          </FormDescription>
+                        )}
                         <FormMessage />
                       </FormItem>
                     )}
@@ -299,20 +317,28 @@ export function CreateConnectorDialog({
                   name="apiToken"
                   rules={{
                     required: needsEmail
-                      ? "API token is required"
+                      ? emailRequired
+                        ? "API token is required"
+                        : "API token or personal access token is required"
                       : "Personal access token is required",
                   }}
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>
-                        {needsEmail ? "API Token" : "Personal Access Token"}
+                        {needsEmail
+                          ? emailRequired
+                            ? "API Token"
+                            : "API Token / Personal Access Token"
+                          : "Personal Access Token"}
                       </FormLabel>
                       <FormControl>
                         <Input
                           type="password"
                           placeholder={
                             needsEmail
-                              ? "Your API token"
+                              ? emailRequired
+                                ? "Your API token"
+                                : "Your API token or personal access token"
                               : "Your personal access token"
                           }
                           {...field}

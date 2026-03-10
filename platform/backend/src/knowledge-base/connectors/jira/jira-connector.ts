@@ -125,7 +125,10 @@ export class JiraConnector extends BaseConnector {
       return result.total ?? null;
     } catch (error) {
       logger.warn(
-        { error: extractErrorMessage(error), ...extractJiraErrorDetails(error) },
+        {
+          error: extractErrorMessage(error),
+          ...extractJiraErrorDetails(error),
+        },
         "[JiraConnector] Failed to estimate total items",
       );
       return null;
@@ -204,7 +207,12 @@ export class JiraConnector extends BaseConnector {
         hasMore = !!nextPageToken;
 
         logger.info(
-          { batchIndex, issueCount: issues.length, documentCount: documents.length, hasMore },
+          {
+            batchIndex,
+            issueCount: issues.length,
+            documentCount: documents.length,
+            hasMore,
+          },
           "[JiraConnector] Cloud batch fetched",
         );
 
@@ -212,7 +220,11 @@ export class JiraConnector extends BaseConnector {
         yield buildBatch(documents, issues, checkpoint, hasMore);
       } catch (error) {
         logger.error(
-          { batchIndex, error: extractErrorMessage(error), ...extractJiraErrorDetails(error) },
+          {
+            batchIndex,
+            error: extractErrorMessage(error),
+            ...extractJiraErrorDetails(error),
+          },
           "[JiraConnector] Cloud batch fetch failed",
         );
         throw error;
@@ -255,7 +267,12 @@ export class JiraConnector extends BaseConnector {
         hasMore = !!nextPageToken;
 
         logger.info(
-          { batchIndex, issueCount: issues.length, documentCount: documents.length, hasMore },
+          {
+            batchIndex,
+            issueCount: issues.length,
+            documentCount: documents.length,
+            hasMore,
+          },
           "[JiraConnector] Server batch fetched",
         );
 
@@ -263,7 +280,11 @@ export class JiraConnector extends BaseConnector {
         yield buildBatch(documents, issues, checkpoint, hasMore);
       } catch (error) {
         logger.error(
-          { batchIndex, error: extractErrorMessage(error), ...extractJiraErrorDetails(error) },
+          {
+            batchIndex,
+            error: extractErrorMessage(error),
+            ...extractJiraErrorDetails(error),
+          },
           "[JiraConnector] Server batch fetch failed",
         );
         throw error;

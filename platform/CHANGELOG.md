@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.1.2](https://github.com/archestra-ai/archestra/compare/platform-v1.1.1...platform-v1.1.2) (2026-03-10)
+
+
+### Bug Fixes
+
+* UI polish — connector dialogs, emoji picker, scope badges ([#3245](https://github.com/archestra-ai/archestra/issues/3245)) ([4e09e5a](https://github.com/archestra-ai/archestra/commit/4e09e5a3a663b0f557f8442017964e05898d2433))
+
+
+### Miscellaneous Chores
+
+* extract error messages ([#3242](https://github.com/archestra-ai/archestra/issues/3242)) ([e194e87](https://github.com/archestra-ai/archestra/commit/e194e87d8f541bcce92c72cf4ab872ca7fe05422))
+
 ## [1.1.1](https://github.com/archestra-ai/archestra/compare/platform-v1.1.0...platform-v1.1.1) (2026-03-10)
 
 

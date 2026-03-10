@@ -827,6 +827,7 @@ function createCohereClient(
     ? metrics.llm.getObservableFetch(
         "cohere",
         options.agent,
+        options.source,
         options.externalAgentId,
       )
     : fetch;

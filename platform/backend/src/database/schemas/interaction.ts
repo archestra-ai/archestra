@@ -1,4 +1,7 @@
-import type { SupportedProviderDiscriminator } from "@shared";
+import type {
+  InteractionSource,
+  SupportedProviderDiscriminator,
+} from "@shared";
 import {
   index,
   integer,
@@ -13,7 +16,6 @@ import {
 import type {
   InteractionRequest,
   InteractionResponse,
-  InteractionSource,
   ToonSkipReason,
 } from "@/types";
 import agentsTable from "./agent";

@@ -1,3 +1,4 @@
+import type { InteractionSource } from "@shared";
 import {
   and,
   asc,
@@ -24,7 +25,6 @@ import logger from "@/logging";
 import type {
   InsertInteraction,
   Interaction,
-  InteractionSource,
   PaginationQuery,
   SessionSummary,
   SortingQuery,

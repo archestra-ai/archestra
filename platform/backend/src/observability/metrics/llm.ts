@@ -9,7 +9,7 @@
  */
 
 import type { GoogleGenAI } from "@google/genai";
-import type { SupportedProvider } from "@shared";
+import type { InteractionSource, SupportedProvider } from "@shared";
 import client from "prom-client";
 import logger from "@/logging";
 import { getUsageTokens as getAnthropicUsage } from "@/routes/proxy/adapterV2/anthropic";
@@ -135,6 +135,7 @@ export function initializeMetrics(labelKeys: string[]): void {
     "agent_id",
     "agent_name",
     "agent_type",
+    "source",
   ];
 
   llmRequestDuration = new client.Histogram({
@@ -206,11 +207,13 @@ export function initializeMetrics(labelKeys: string[]): void {
  * @param additionalLabels Additional labels to include
  * @param model The model name
  * @param externalAgentId Optional external agent ID from X-Archestra-Agent-Id header
+ * @param source Interaction source (e.g. "api", "chat", "knowledge:embedding")
  */
 function buildMetricLabels(
   profile: Agent,
   additionalLabels: Record<string, string>,
-  model?: string,
+  model: string | undefined,
+  source: InteractionSource,
   externalAgentId?: string,
 ): Record<string, string> {
   // external_agent_id: External agent ID from X-Archestra-Agent-Id header (or empty if not provided)
@@ -221,6 +224,7 @@ function buildMetricLabels(
     agent_name: profile.name,
     agent_type: profile.agentType ?? "",
     model: model ?? "unknown",
+    source,
     ...additionalLabels,
   };
 
@@ -242,13 +246,15 @@ function buildMetricLabels(
  * @param profile The Archestra profile
  * @param usage Token usage object with input/output counts
  * @param model The model name
+ * @param source Interaction source (e.g. "api", "chat", "knowledge:embedding")
  * @param externalAgentId Optional external agent ID from X-Archestra-Agent-Id header
  */
 export function reportLLMTokens(
   provider: SupportedProvider,
   profile: Agent,
   usage: { input?: number; output?: number },
-  model: string | undefined,
+  model: string,
+  source: InteractionSource,
   externalAgentId?: string,
 ): void {
   if (!llmTokensCounter) {
@@ -264,6 +270,7 @@ export function reportLLMTokens(
         profile,
         { provider, type: "input" },
         model,
+        source,
         externalAgentId,
       ),
       value: usage.input,
@@ -276,6 +283,7 @@ export function reportLLMTokens(
         profile,
         { provider, type: "output" },
         model,
+        source,
         externalAgentId,
       ),
       value: usage.output,
@@ -286,7 +294,13 @@ export function reportLLMTokens(
   const totalTokens = (usage.input ?? 0) + (usage.output ?? 0);
   if (totalTokens > 0 && llmTokenUsage) {
     llmTokenUsage.observe({
-      labels: buildMetricLabels(profile, { provider }, model, externalAgentId),
+      labels: buildMetricLabels(
+        profile,
+        { provider },
+        model,
+        source,
+        externalAgentId,
+      ),
       value: totalTokens,
       exemplarLabels,
     });
@@ -301,13 +315,15 @@ export function reportLLMTokens(
  * @param profile The Archestra profile
  * @param count Number of blocked tools
  * @param model The model name
+ * @param source Interaction source (e.g. "api", "chat", "knowledge:embedding")
  * @param externalAgentId Optional external agent ID from X-Archestra-Agent-Id header
  */
 export function reportBlockedTools(
   provider: SupportedProvider,
   profile: Agent,
   count: number,
-  model?: string,
+  model: string,
+  source: InteractionSource,
   externalAgentId?: string,
 ) {
   if (!llmBlockedToolCounter) {
@@ -317,7 +333,13 @@ export function reportBlockedTools(
     return;
   }
   llmBlockedToolCounter.inc({
-    labels: buildMetricLabels(profile, { provider }, model, externalAgentId),
+    labels: buildMetricLabels(
+      profile,
+      { provider },
+      model,
+      source,
+      externalAgentId,
+    ),
     value: count,
     exemplarLabels: getExemplarLabels(),
   });
@@ -329,6 +351,7 @@ export function reportBlockedTools(
  * @param profile The Archestra profile
  * @param model The model name
  * @param cost The cost in USD
+ * @param source Interaction source (e.g. "api", "chat", "knowledge:embedding")
  * @param externalAgentId Optional external agent ID from X-Archestra-Agent-Id header
  */
 export function reportLLMCost(
@@ -336,6 +359,7 @@ export function reportLLMCost(
   profile: Agent,
   model: string,
   cost: number | null | undefined,
+  source: InteractionSource,
   externalAgentId?: string,
 ): void {
   if (!llmCostTotal) {
@@ -346,7 +370,13 @@ export function reportLLMCost(
     return;
   }
   llmCostTotal.inc({
-    labels: buildMetricLabels(profile, { provider }, model, externalAgentId),
+    labels: buildMetricLabels(
+      profile,
+      { provider },
+      model,
+      source,
+      externalAgentId,
+    ),
     value: cost,
     exemplarLabels: getExemplarLabels(),
   });
@@ -360,13 +390,15 @@ export function reportLLMCost(
  * @param profile The Archestra profile
  * @param model The model name
  * @param ttftSeconds Time to first token in seconds
+ * @param source Interaction source (e.g. "api", "chat", "knowledge:embedding")
  * @param externalAgentId Optional external agent ID from X-Archestra-Agent-Id header
  */
 export function reportTimeToFirstToken(
   provider: SupportedProvider,
   profile: Agent,
-  model: string | undefined,
+  model: string,
   ttftSeconds: number,
+  source: InteractionSource,
   externalAgentId?: string,
 ): void {
   if (!llmTimeToFirstToken) {
@@ -378,7 +410,13 @@ export function reportTimeToFirstToken(
     return;
   }
   llmTimeToFirstToken.observe({
-    labels: buildMetricLabels(profile, { provider }, model, externalAgentId),
+    labels: buildMetricLabels(
+      profile,
+      { provider },
+      model,
+      source,
+      externalAgentId,
+    ),
     value: ttftSeconds,
     exemplarLabels: getExemplarLabels(),
   });
@@ -393,14 +431,16 @@ export function reportTimeToFirstToken(
  * @param model The model name
  * @param outputTokens Number of output tokens generated
  * @param durationSeconds Total request duration in seconds
+ * @param source Interaction source (e.g. "api", "chat", "knowledge:embedding")
  * @param externalAgentId Optional external agent ID from X-Archestra-Agent-Id header
  */
 export function reportTokensPerSecond(
   provider: SupportedProvider,
   profile: Agent,
-  model: string | undefined,
+  model: string,
   outputTokens: number,
   durationSeconds: number,
+  source: InteractionSource,
   externalAgentId?: string,
 ): void {
   if (!llmTokensPerSecond) {
@@ -413,7 +453,13 @@ export function reportTokensPerSecond(
   }
   const tokensPerSecond = outputTokens / durationSeconds;
   llmTokensPerSecond.observe({
-    labels: buildMetricLabels(profile, { provider }, model, externalAgentId),
+    labels: buildMetricLabels(
+      profile,
+      { provider },
+      model,
+      source,
+      externalAgentId,
+    ),
     value: tokensPerSecond,
     exemplarLabels: getExemplarLabels(),
   });
@@ -423,11 +469,13 @@ export function reportTokensPerSecond(
  * Returns a fetch wrapped in observability. Use it as OpenAI or Anthropic provider custom fetch implementation.
  * @param provider The LLM provider
  * @param profile The Archestra profile
+ * @param source Interaction source (e.g. "api", "chat", "knowledge:embedding")
  * @param externalAgentId Optional external agent ID from X-Archestra-Agent-Id header
  */
 export function getObservableFetch(
   provider: SupportedProvider,
   profile: Agent,
+  source: InteractionSource,
   externalAgentId?: string,
 ): Fetch {
   return async function observableFetch(
@@ -464,6 +512,7 @@ export function getObservableFetch(
           profile,
           { provider, status_code: status },
           model,
+          source,
           externalAgentId,
         ),
         value: duration,
@@ -477,6 +526,7 @@ export function getObservableFetch(
           profile,
           { provider, status_code: "0" },
           model,
+          source,
           externalAgentId,
         ),
         value: duration,
@@ -507,7 +557,8 @@ export function getObservableFetch(
             provider,
             profile,
             { input, output },
-            model,
+            model ?? "unknown",
+            source,
             externalAgentId,
           );
         }
@@ -524,11 +575,13 @@ export function getObservableFetch(
  * Wraps observability around GenAI's LLM request methods
  * @param genAI The GoogleGenAI instance
  * @param profile The Archestra profile
+ * @param source Interaction source (e.g. "api", "chat", "knowledge:embedding")
  * @param externalAgentId Optional external agent ID from X-Archestra-Agent-Id header
  */
 export function getObservableGenAI(
   genAI: GoogleGenAI,
   profile: Agent,
+  source: InteractionSource,
   externalAgentId?: string,
 ) {
   const originalGenerateContent = genAI.models.generateContent;
@@ -554,6 +607,7 @@ export function getObservableGenAI(
           profile,
           { provider, status_code: "200" },
           model,
+          source,
           externalAgentId,
         ),
         value: duration,
@@ -568,14 +622,22 @@ export function getObservableGenAI(
           provider,
           profile,
           { input, output },
-          model,
+          model ?? "unknown",
+          source,
           externalAgentId,
         );
       }
 
       return result;
     } catch (error) {
-      observeGeminiError(error, startTime, profile, model, externalAgentId);
+      observeGeminiError(
+        error,
+        startTime,
+        profile,
+        model,
+        source,
+        externalAgentId,
+      );
       throw error;
     }
   };
@@ -604,6 +666,7 @@ export function getObservableGenAI(
           profile,
           { provider, status_code: "200" },
           model,
+          source,
           externalAgentId,
         ),
         value: duration,
@@ -612,7 +675,14 @@ export function getObservableGenAI(
 
       return result;
     } catch (error) {
-      observeGeminiError(error, startTime, profile, model, externalAgentId);
+      observeGeminiError(
+        error,
+        startTime,
+        profile,
+        model,
+        source,
+        externalAgentId,
+      );
       throw error;
     }
   };
@@ -632,6 +702,7 @@ export function reportKbLlmCall(params: {
   outputTokens: number;
   durationSeconds: number;
   cost: number | undefined;
+  source: InteractionSource;
 }): void {
   const labels: Record<string, string> = {
     provider: params.provider,
@@ -640,6 +711,7 @@ export function reportKbLlmCall(params: {
     agent_id: "",
     agent_name: "Knowledge Base",
     agent_type: "",
+    source: params.source,
   };
   // Fill in dynamic label keys with empty values
   for (const key of currentLabelKeys) {
@@ -709,7 +781,8 @@ function observeGeminiError(
   startTime: number,
   profile: Agent,
   model: string | undefined,
-  externalAgentId: string | undefined,
+  source: InteractionSource,
+  externalAgentId?: string,
 ): void {
   const duration = (Date.now() - startTime) / 1000;
   const statusCode =
@@ -724,6 +797,7 @@ function observeGeminiError(
       profile,
       { provider: "gemini", status_code: statusCode },
       model,
+      source,
       externalAgentId,
     ),
     value: duration,

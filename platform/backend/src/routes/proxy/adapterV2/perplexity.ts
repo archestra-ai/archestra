@@ -470,17 +470,18 @@ export const perplexityAdapterFactory: LLMProvider<
 
   createClient(
     apiKey: string | undefined,
-    options?: CreateClientOptions,
+    options: CreateClientOptions,
   ): OpenAIProvider {
-    if (options?.mockMode) {
+    if (options.mockMode) {
       return new MockOpenAIClient() as unknown as OpenAIProvider;
     }
 
     // Use observable fetch for request duration metrics if agent is provided
-    const customFetch = options?.agent
+    const customFetch = options.agent
       ? metrics.llm.getObservableFetch(
           "perplexity",
           options.agent,
+          options.source,
           options.externalAgentId,
         )
       : undefined;
@@ -488,7 +489,7 @@ export const perplexityAdapterFactory: LLMProvider<
     // Use OpenAI SDK with Perplexity base URL (OpenAI-compatible API)
     return new OpenAIProvider({
       apiKey,
-      baseURL: options?.baseUrl,
+      baseURL: options.baseUrl,
       fetch: customFetch,
     });
   },

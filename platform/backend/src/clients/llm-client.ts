@@ -9,6 +9,7 @@ import { createMistral } from "@ai-sdk/mistral";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createXai } from "@ai-sdk/xai";
 import { context, propagation } from "@opentelemetry/api";
+import type { InteractionSource } from "@shared";
 import {
   EXTERNAL_AGENT_ID_HEADER,
   PROVIDER_BASE_URL_HEADER,
@@ -24,7 +25,7 @@ import config from "@/config";
 import logger from "@/logging";
 import { ChatApiKeyModel, TeamModel } from "@/models";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
-import { ApiError, type InteractionSource } from "@/types";
+import { ApiError } from "@/types";
 
 /**
  * Placeholder API key for providers that don't require authentication (vLLM, Ollama).

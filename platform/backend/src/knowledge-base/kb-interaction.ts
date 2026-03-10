@@ -98,6 +98,7 @@ export async function withKbObservability<T>(
         outputTokens: interaction.outputTokens,
         durationSeconds,
         cost,
+        source: params.source,
       });
 
       InteractionModel.create({

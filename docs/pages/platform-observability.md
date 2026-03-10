@@ -24,12 +24,12 @@ The endpoint `http://localhost:9050/metrics` exposes Prometheus-formatted metric
 
 #### LLM Metrics
 
-- `llm_request_duration_seconds` - LLM API request duration by provider, model, agent_id, agent_name, agent_type, external_agent_id, and status code
-- `llm_tokens_total` - Token consumption by provider, model, agent_id, agent_name, agent_type, external_agent_id, and type (input/output)
-- `llm_cost_total` - Estimated cost in USD by provider, model, agent_id, agent_name, agent_type, and external_agent_id. Requires token pricing to be configured in Archestra.
-- `llm_blocked_tools_total` - Counter of tool calls blocked by tool invocation policies, grouped by provider, model, agent_id, agent_name, agent_type, and external_agent_id
-- `llm_time_to_first_token_seconds` - Time to first token (TTFT) for streaming requests, by provider, agent_id, agent_name, agent_type, external_agent_id, and model. Helps developers choose models with lower initial response latency.
-- `llm_tokens_per_second` - Output tokens per second throughput, by provider, agent_id, agent_name, agent_type, external_agent_id, and model. Allows comparing model response speeds for latency-sensitive applications.
+- `llm_request_duration_seconds` - LLM API request duration by provider, model, agent_id, agent_name, agent_type, external_agent_id, source, and status code
+- `llm_tokens_total` - Token consumption by provider, model, agent_id, agent_name, agent_type, external_agent_id, source, and type (input/output)
+- `llm_cost_total` - Estimated cost in USD by provider, model, agent_id, agent_name, agent_type, external_agent_id, and source. Requires token pricing to be configured in Archestra.
+- `llm_blocked_tools_total` - Counter of tool calls blocked by tool invocation policies, grouped by provider, model, agent_id, agent_name, agent_type, external_agent_id, and source
+- `llm_time_to_first_token_seconds` - Time to first token (TTFT) for streaming requests, by provider, agent_id, agent_name, agent_type, external_agent_id, source, and model. Helps developers choose models with lower initial response latency.
+- `llm_tokens_per_second` - Output tokens per second throughput, by provider, agent_id, agent_name, agent_type, external_agent_id, source, and model. Allows comparing model response speeds for latency-sensitive applications.
 
 > **Note:** `agent_id` and `agent_name` are the internal Archestra agent identifier and name. `external_agent_id` contains the external agent ID passed via the [`X-Archestra-Agent-Id`](/docs/platform-llm-proxy#custom-headers) header — this allows clients to associate metrics with their own agent identifiers. If the header is not provided, the label will be empty. `agent_type` indicates the type of agent: `agent`, `llm_proxy`, `mcp_gateway`, or `profile`. Knowledge Base operations (embeddings, reranking) emit the same LLM metrics with `agent_name="Knowledge Base"` and empty `agent_id`.
 

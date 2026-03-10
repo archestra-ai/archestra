@@ -26,7 +26,6 @@ import {
 import { ToonSkipReasonSchema } from "./tool-result-compression";
 
 export { InteractionSourceSchema };
-export type { InteractionSource } from "@shared";
 
 export const UserInfoSchema = z.object({
   id: z.string(),

@@ -1,5 +1,9 @@
 import crypto from "node:crypto";
-import { PLAYWRIGHT_MCP_CATALOG_ID, type SupportedProvider } from "@shared";
+import {
+  type InteractionSource,
+  PLAYWRIGHT_MCP_CATALOG_ID,
+  type SupportedProvider,
+} from "@shared";
 import type { UserContent } from "ai";
 import { NoOutputGeneratedError, stepCountIs, streamText } from "ai";
 import { MIN_IMAGE_ATTACHMENT_SIZE } from "@/agents/incoming-email/constants";
@@ -17,7 +21,6 @@ import {
   TeamModel,
 } from "@/models";
 import { mapProviderError, ProviderError } from "@/routes/chat/errors";
-import type { InteractionSource } from "@/types";
 
 /**
  * Source-agnostic attachment for A2A execution.

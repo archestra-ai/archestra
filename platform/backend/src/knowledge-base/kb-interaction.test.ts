@@ -344,6 +344,7 @@ describe("withKbObservability", () => {
         model: "text-embedding-3-small",
         inputTokens: 500,
         outputTokens: 0,
+        source: "knowledge:embedding",
       }),
     );
     // Should include durationSeconds (number >= 0) and cost

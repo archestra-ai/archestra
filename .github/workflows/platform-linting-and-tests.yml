@@ -764,6 +764,42 @@ jobs:
         with:
           working-directory: ./platform
 
+      - name: Check upstream job results
+        id: check-jobs
+        if: always()
+        env:
+          E2E_RESULT: ${{ needs.platform-e2e-tests.result }}
+          QUICKSTART_RESULT: ${{ needs.platform-quickstart-e2e-tests.result }}
+          VAULT_K8S_RESULT: ${{ needs.platform-vault-k8s-e2e-tests.result }}
+        run: |
+          failed_jobs=""
+          if [ "$E2E_RESULT" = "failure" ]; then
+            failed_jobs="${failed_jobs}\n- **E2E Tests** (API/UI/Vault)"
+          fi
+          if [ "$QUICKSTART_RESULT" = "failure" ]; then
+            failed_jobs="${failed_jobs}\n- **Quickstart Tests**"
+          fi
+          if [ "$VAULT_K8S_RESULT" = "failure" ]; then
+            failed_jobs="${failed_jobs}\n- **Vault K8s Tests**"
+          fi
+
+          if [ -n "$failed_jobs" ]; then
+            # Use heredoc for multi-line output
+            {
+              echo "custom_info<<CUSTOM_INFO_EOF"
+              echo ""
+              echo "> [!CAUTION]"
+              echo "> **Some E2E jobs failed before or during test execution.** Test results above may be incomplete — check the failed jobs for details:"
+              echo -e "$failed_jobs"
+              echo ""
+              echo "CUSTOM_INFO_EOF"
+            } >> "$GITHUB_OUTPUT"
+            echo "has_failures=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "custom_info=" >> "$GITHUB_OUTPUT"
+            echo "has_failures=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Download all blob reports
         uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
         with:
@@ -799,6 +835,17 @@ jobs:
         with:
           report-file: platform/e2e-tests/results.json
           job-summary: true
+          custom-info: ${{ steps.check-jobs.outputs.custom_info }}
+
+      # Fail the merge-reports job if any upstream e2e job failed.
+      # This ensures the overall "Merge E2E Test Reports" status is red when
+      # jobs fail at infrastructure level (e.g. init container crash) even if
+      # no Playwright test failures were recorded.
+      - name: Fail if any upstream E2E job failed
+        if: always() && steps.check-jobs.outputs.has_failures == 'true'
+        run: |
+          echo "::error::One or more upstream E2E jobs failed. Check the job logs above for details."
+          exit 1
 
   # Scan Docker images for CVEs using Docker Scout
   # Runs on merge queue only (not on PRs) to reduce CI time

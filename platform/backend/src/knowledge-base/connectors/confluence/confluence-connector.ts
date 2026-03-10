@@ -1,4 +1,5 @@
 import { ConfluenceClient } from "confluence.js";
+import logger from "@/logging";
 import type {
   ConfluenceCheckpoint,
   ConfluenceConfig,
@@ -49,12 +50,22 @@ export class ConfluenceConnector extends BaseConnector {
       return { success: false, error: "Invalid Confluence configuration" };
     }
 
+    logger.debug(
+      { baseUrl: parsed.confluenceUrl, isCloud: parsed.isCloud },
+      "[ConfluenceConnector] Testing connection",
+    );
+
     try {
       const client = createConfluenceClient(parsed, params.credentials);
       await client.space.getSpaces({ limit: 1 });
+      logger.debug("[ConfluenceConnector] Connection test successful");
       return { success: true };
     } catch (error) {
       const message = extractErrorMessage(error);
+      logger.error(
+        { error: message },
+        "[ConfluenceConnector] Connection test failed",
+      );
       return { success: false, error: `Connection failed: ${message}` };
     }
   }
@@ -72,6 +83,9 @@ export class ConfluenceConnector extends BaseConnector {
         type: "confluence" as const,
       };
       const cql = buildCql(parsed, checkpoint);
+
+      logger.debug({ cql }, "[ConfluenceConnector] Estimating total items");
+
       const client = createConfluenceClient(parsed, params.credentials);
 
       const result = await client.content.searchContentByCQL({
@@ -82,7 +96,11 @@ export class ConfluenceConnector extends BaseConnector {
       // biome-ignore lint/suspicious/noExplicitAny: SDK type missing totalSize field
       const totalSize = (result as any).totalSize as number | undefined;
       return totalSize ?? null;
-    } catch {
+    } catch (error) {
+      logger.warn(
+        { error: extractErrorMessage(error) },
+        "[ConfluenceConnector] Failed to estimate total items",
+      );
       return null;
     }
   }
@@ -106,60 +124,96 @@ export class ConfluenceConnector extends BaseConnector {
     const cql = buildCql(parsed, checkpoint, params.startTime);
     const client = createConfluenceClient(parsed, params.credentials);
 
+    logger.debug(
+      {
+        baseUrl: parsed.confluenceUrl,
+        isCloud: parsed.isCloud,
+        spaceKeys: parsed.spaceKeys,
+        cql,
+        checkpoint,
+      },
+      "[ConfluenceConnector] Starting sync",
+    );
+
     let cursor: string | undefined;
     let hasMore = true;
+    let batchIndex = 0;
 
     while (hasMore) {
       await this.rateLimit();
 
-      const searchResult = await client.content.searchContentByCQL({
-        cql,
-        cursor,
-        limit: batchSize,
-        expand: ["body.storage", "version", "space", "metadata.labels"],
-      });
+      try {
+        logger.debug(
+          { batchIndex, cursor },
+          "[ConfluenceConnector] Fetching batch",
+        );
 
-      const results = searchResult.results ?? [];
-      const documents: ConnectorDocument[] = [];
+        const searchResult = await client.content.searchContentByCQL({
+          cql,
+          cursor,
+          limit: batchSize,
+          expand: ["body.storage", "version", "space", "metadata.labels"],
+        });
 
-      for (const page of results) {
-        if (shouldSkipPage(page, parsed.labelsToSkip)) {
-          continue;
+        const results = searchResult.results ?? [];
+        const documents: ConnectorDocument[] = [];
+
+        for (const page of results) {
+          if (shouldSkipPage(page, parsed.labelsToSkip)) {
+            continue;
+          }
+
+          documents.push(
+            pageToDocument(page, parsed.confluenceUrl, parsed.isCloud),
+          );
         }
 
-        documents.push(
-          pageToDocument(page, parsed.confluenceUrl, parsed.isCloud),
-        );
-      }
+        // Extract cursor from _links.next if available
+        // biome-ignore lint/suspicious/noExplicitAny: SDK links type
+        const links = (searchResult as any)._links;
+        const nextUrl: string | undefined = links?.next;
+        if (nextUrl) {
+          const cursorMatch = nextUrl.match(/cursor=([^&]+)/);
+          cursor = cursorMatch ? decodeURIComponent(cursorMatch[1]) : undefined;
+        } else {
+          cursor = undefined;
+        }
+        hasMore = results.length >= batchSize && !!cursor;
 
-      // Extract cursor from _links.next if available
-      // biome-ignore lint/suspicious/noExplicitAny: SDK links type
-      const links = (searchResult as any)._links;
-      const nextUrl: string | undefined = links?.next;
-      if (nextUrl) {
-        const cursorMatch = nextUrl.match(/cursor=([^&]+)/);
-        cursor = cursorMatch ? decodeURIComponent(cursorMatch[1]) : undefined;
-      } else {
-        cursor = undefined;
-      }
-      hasMore = results.length >= batchSize && !!cursor;
+        const lastPage = results[results.length - 1];
+        const rawModifiedAt: string | undefined = lastPage?.version?.when;
 
-      const lastPage = results[results.length - 1];
-      const rawModifiedAt: string | undefined = lastPage?.version?.when;
-
-      yield {
-        documents,
-        checkpoint: buildCheckpoint({
-          type: "confluence",
-          itemUpdatedAt: rawModifiedAt,
-          previousLastSyncedAt: checkpoint.lastSyncedAt,
-          extra: {
-            lastPageId: lastPage?.id ?? checkpoint.lastPageId,
-            lastRawModifiedAt: rawModifiedAt ?? checkpoint.lastRawModifiedAt,
+        logger.debug(
+          {
+            batchIndex,
+            pageCount: results.length,
+            documentCount: documents.length,
+            hasMore,
           },
-        }),
-        hasMore,
-      };
+          "[ConfluenceConnector] Batch fetched",
+        );
+
+        batchIndex++;
+        yield {
+          documents,
+          checkpoint: buildCheckpoint({
+            type: "confluence",
+            itemUpdatedAt: rawModifiedAt,
+            previousLastSyncedAt: checkpoint.lastSyncedAt,
+            extra: {
+              lastPageId: lastPage?.id ?? checkpoint.lastPageId,
+              lastRawModifiedAt: rawModifiedAt ?? checkpoint.lastRawModifiedAt,
+            },
+          }),
+          hasMore,
+        };
+      } catch (error) {
+        logger.error(
+          { batchIndex, error: extractErrorMessage(error) },
+          "[ConfluenceConnector] Batch fetch failed",
+        );
+        throw error;
+      }
     }
   }
 }

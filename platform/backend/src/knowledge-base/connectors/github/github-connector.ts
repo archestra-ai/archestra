@@ -1,4 +1,5 @@
 import { Octokit } from "@octokit/rest";
+import logger from "@/logging";
 import type {
   ConnectorCredentials,
   ConnectorDocument,
@@ -10,6 +11,7 @@ import { GithubConfigSchema } from "@/types/knowledge-connector";
 import {
   BaseConnector,
   buildCheckpoint,
+  extractErrorMessage,
   REQUEST_TIMEOUT_MS,
 } from "../base-connector";
 
@@ -49,12 +51,22 @@ export class GithubConnector extends BaseConnector {
       return { success: false, error: "Invalid GitHub configuration" };
     }
 
+    logger.debug(
+      { baseUrl: parsed.githubUrl, owner: parsed.owner },
+      "[GithubConnector] Testing connection",
+    );
+
     try {
       const octokit = createOctokit(parsed, params.credentials);
       await octokit.rest.users.getAuthenticated();
+      logger.debug("[GithubConnector] Connection test successful");
       return { success: true };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      logger.error(
+        { error: message },
+        "[GithubConnector] Connection test failed",
+      );
       return { success: false, error: `Connection failed: ${message}` };
     }
   }
@@ -66,6 +78,11 @@ export class GithubConnector extends BaseConnector {
   }): Promise<number | null> {
     const parsed = parseGithubConfig(params.config);
     if (!parsed) return null;
+
+    logger.debug(
+      { owner: parsed.owner, repos: parsed.repos },
+      "[GithubConnector] Estimating total items",
+    );
 
     try {
       const octokit = createOctokit(parsed, params.credentials);
@@ -93,7 +110,11 @@ export class GithubConnector extends BaseConnector {
       }
 
       return total;
-    } catch {
+    } catch (error) {
+      logger.warn(
+        { error: extractErrorMessage(error) },
+        "[GithubConnector] Failed to estimate total items",
+      );
       return null;
     }
   }
@@ -115,6 +136,18 @@ export class GithubConnector extends BaseConnector {
     };
     const octokit = createOctokit(parsed, params.credentials);
     const repos = await getRepos(octokit, parsed);
+
+    logger.debug(
+      {
+        baseUrl: parsed.githubUrl,
+        owner: parsed.owner,
+        repoCount: repos.length,
+        includeIssues: parsed.includeIssues,
+        includePullRequests: parsed.includePullRequests,
+        checkpoint,
+      },
+      "[GithubConnector] Starting sync",
+    );
 
     for (let repoIdx = 0; repoIdx < repos.length; repoIdx++) {
       const repo = repos[repoIdx];
@@ -158,11 +191,21 @@ export class GithubConnector extends BaseConnector {
     let page = 1;
     let pageHasMore = true;
 
+    logger.debug(
+      { repo: `${repo.owner}/${repo.name}`, kind },
+      "[GithubConnector] Syncing repo items",
+    );
+
     while (pageHasMore) {
       await this.rateLimit();
 
       let response: Awaited<ReturnType<typeof octokit.rest.issues.listForRepo>>;
       try {
+        logger.debug(
+          { repo: `${repo.owner}/${repo.name}`, kind, page },
+          "[GithubConnector] Fetching batch",
+        );
+
         response = await octokit.rest.issues.listForRepo({
           owner: repo.owner,
           repo: repo.name,
@@ -181,9 +224,21 @@ export class GithubConnector extends BaseConnector {
           "status" in err &&
           (err as Record<string, unknown>).status === 404
         ) {
-          // Repo has issues disabled or doesn't exist — skip it
+          logger.debug(
+            { repo: `${repo.owner}/${repo.name}`, kind },
+            "[GithubConnector] Repo not found or issues disabled, skipping",
+          );
           break;
         }
+        logger.error(
+          {
+            repo: `${repo.owner}/${repo.name}`,
+            kind,
+            page,
+            error: extractErrorMessage(err),
+          },
+          "[GithubConnector] Batch fetch failed",
+        );
         throw err;
       }
 
@@ -208,6 +263,17 @@ export class GithubConnector extends BaseConnector {
 
       pageHasMore = response.data.length >= BATCH_SIZE;
       page++;
+
+      logger.debug(
+        {
+          repo: `${repo.owner}/${repo.name}`,
+          kind,
+          itemCount: items.length,
+          documentCount: documents.length,
+          hasMore: pageHasMore || !isLastGroup,
+        },
+        "[GithubConnector] Batch fetched",
+      );
 
       const lastItem = items.length > 0 ? items[items.length - 1] : null;
 

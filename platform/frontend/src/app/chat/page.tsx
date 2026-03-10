@@ -348,18 +348,10 @@ export default function ChatPage() {
     (newProvider: SupportedProvider, _apiKeyId: string) => {
       const providerModels = modelsByProvider[newProvider];
       if (providerModels && providerModels.length > 0) {
-        // Try to restore from localStorage for this provider
-        const savedModelKey = `selected-chat-model-${newProvider}`;
-        const savedModelId = localStorage.getItem(savedModelKey);
-        if (savedModelId && providerModels.some((m) => m.id === savedModelId)) {
-          setInitialModel(savedModelId);
-          localStorage.setItem("selected-chat-model", savedModelId);
-          return;
-        }
         // Fall back to first model for this provider
         const firstModel = providerModels[0];
         setInitialModel(firstModel.id);
-        localStorage.setItem("selected-chat-model", firstModel.id);
+        localStorage.setItem(LocalStorageKeys.selectedChatModel, firstModel.id);
       }
     },
     [modelsByProvider],
@@ -514,6 +506,9 @@ export default function ChatPage() {
         selectedModel: model,
         selectedProvider: provider,
       });
+
+      // Persist to localStorage so it's restored on next visit
+      localStorage.setItem(LocalStorageKeys.selectedChatModel, model);
     },
     [conversation, chatModels, updateConversationMutation],
   );
@@ -532,6 +527,9 @@ export default function ChatPage() {
           selectedModel: firstModel.id,
           selectedProvider: newProvider,
         });
+
+        // Persist to localStorage so it's restored on next visit
+        localStorage.setItem(LocalStorageKeys.selectedChatModel, firstModel.id);
       }
     },
     [conversation, modelsByProvider, updateConversationMutation],

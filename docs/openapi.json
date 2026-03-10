@@ -98833,6 +98833,9 @@
                     "updatedAt": {
                       "type": "string",
                       "format": "date-time"
+                    },
+                    "totalDocsIngested": {
+                      "type": "number"
                     }
                   },
                   "required": [
@@ -98849,7 +98852,8 @@
                     "lastSyncError",
                     "checkpoint",
                     "createdAt",
-                    "updatedAt"
+                    "updatedAt",
+                    "totalDocsIngested"
                   ],
                   "additionalProperties": false
                 }

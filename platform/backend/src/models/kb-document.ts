@@ -117,6 +117,15 @@ class KbDocumentModel {
     return result.rowCount !== null && result.rowCount > 0;
   }
 
+  static async countByConnector(connectorId: string): Promise<number> {
+    const [result] = await db
+      .select({ count: count() })
+      .from(schema.kbDocumentsTable)
+      .where(eq(schema.kbDocumentsTable.connectorId, connectorId));
+
+    return result?.count ?? 0;
+  }
+
   static async countByKnowledgeBase(knowledgeBaseId: string): Promise<number> {
     const [result] = await db
       .select({ count: count() })
@@ -136,6 +145,36 @@ class KbDocumentModel {
       );
 
     return result?.count ?? 0;
+  }
+
+  static async countByKnowledgeBaseIds(
+    knowledgeBaseIds: string[],
+  ): Promise<Map<string, number>> {
+    if (knowledgeBaseIds.length === 0) return new Map();
+
+    const results = await db
+      .select({
+        knowledgeBaseId:
+          schema.knowledgeBaseConnectorAssignmentsTable.knowledgeBaseId,
+        count: count(),
+      })
+      .from(schema.kbDocumentsTable)
+      .innerJoin(
+        schema.knowledgeBaseConnectorAssignmentsTable,
+        eq(
+          schema.knowledgeBaseConnectorAssignmentsTable.connectorId,
+          schema.kbDocumentsTable.connectorId,
+        ),
+      )
+      .where(
+        inArray(
+          schema.knowledgeBaseConnectorAssignmentsTable.knowledgeBaseId,
+          knowledgeBaseIds,
+        ),
+      )
+      .groupBy(schema.knowledgeBaseConnectorAssignmentsTable.knowledgeBaseId);
+
+    return new Map(results.map((r) => [r.knowledgeBaseId, r.count]));
   }
 }
 

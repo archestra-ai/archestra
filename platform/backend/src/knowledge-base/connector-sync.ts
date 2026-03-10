@@ -40,15 +40,6 @@ class ConnectorSyncService {
       throw new Error(`Connector not found: ${connectorId}`);
     }
 
-    // Verify connector is assigned to at least one knowledge base
-    const knowledgeBaseIds =
-      await KnowledgeBaseConnectorModel.getKnowledgeBaseIds(connectorId);
-    if (knowledgeBaseIds.length === 0) {
-      throw new Error(
-        `Connector ${connectorId} is not assigned to any knowledge base`,
-      );
-    }
-
     // Load credentials from secrets manager
     const credentials = await this.loadCredentials(connector.secretId, log);
 

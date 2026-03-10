@@ -267,16 +267,19 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
         </Button>
 
         <div className="rounded-lg border p-4">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
-            <MetadataItem label="Schedule">
-              <div>{formatCronSchedule(connector.schedule)}</div>
-            </MetadataItem>
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 text-sm">
             <MetadataItem label="Last Sync">
               <div>
                 {connector.lastSyncAt
                   ? formatDate({ date: connector.lastSyncAt })
                   : "Never"}
               </div>
+            </MetadataItem>
+            <MetadataItem label="Documents">
+              <div>{connector.totalDocsIngested}</div>
+            </MetadataItem>
+            <MetadataItem label="Schedule">
+              <div>{formatCronSchedule(connector.schedule)}</div>
             </MetadataItem>
             <KnowledgeBasesMetadataItem connectorId={connectorId} />
           </div>

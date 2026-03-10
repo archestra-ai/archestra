@@ -183,6 +183,17 @@ class ConnectorRunModel {
     return (result?.count ?? 0) > 0;
   }
 
+  static async sumDocsIngestedByConnector(
+    connectorId: string,
+  ): Promise<number> {
+    const [result] = await db
+      .select({ total: sum(schema.connectorRunsTable.documentsIngested) })
+      .from(schema.connectorRunsTable)
+      .where(eq(schema.connectorRunsTable.connectorId, connectorId));
+
+    return Number(result?.total ?? 0);
+  }
+
   static async sumDocsIngestedByKnowledgeBaseIds(
     knowledgeBaseIds: string[],
   ): Promise<Map<string, number>> {

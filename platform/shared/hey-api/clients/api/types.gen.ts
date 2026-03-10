@@ -28184,6 +28184,7 @@ export type GetConnectorResponses = {
         } | Array<unknown> | null;
         createdAt: string;
         updatedAt: string;
+        totalDocsIngested: number;
     };
 };
 

@@ -1,3 +1,4 @@
+import type pino from "pino";
 import { Octokit } from "@octokit/rest";
 import type {
   ConnectorCredentials,
@@ -56,7 +57,7 @@ export class GithubConnector extends BaseConnector {
     );
 
     try {
-      const octokit = createOctokit(parsed, params.credentials);
+      const octokit = createOctokit(parsed, params.credentials, this.log);
       await octokit.rest.users.getAuthenticated();
       this.log.debug("[GithubConnector] Connection test successful");
       return { success: true };
@@ -84,7 +85,7 @@ export class GithubConnector extends BaseConnector {
     );
 
     try {
-      const octokit = createOctokit(parsed, params.credentials);
+      const octokit = createOctokit(parsed, params.credentials, this.log);
       const repos = await getRepos(octokit, parsed);
       let total = 0;
 
@@ -133,7 +134,7 @@ export class GithubConnector extends BaseConnector {
     const checkpoint = (params.checkpoint as GithubCheckpoint | null) ?? {
       type: "github" as const,
     };
-    const octokit = createOctokit(parsed, params.credentials);
+    const octokit = createOctokit(parsed, params.credentials, this.log);
     const repos = await getRepos(octokit, parsed);
 
     this.log.debug(
@@ -295,11 +296,22 @@ export class GithubConnector extends BaseConnector {
 function createOctokit(
   config: GithubConfig,
   credentials: ConnectorCredentials,
+  log: pino.Logger,
 ): Octokit {
   const nativeFetch = globalThis.fetch;
   return new Octokit({
     auth: credentials.apiToken,
     baseUrl: config.githubUrl.replace(/\/+$/, ""),
+    log: {
+      debug: (message: string) =>
+        log.debug({ sdkMessage: message }, "[GithubConnector] SDK debug"),
+      info: (message: string) =>
+        log.debug({ sdkMessage: message }, "[GithubConnector] SDK info"),
+      warn: (message: string) =>
+        log.warn({ sdkMessage: message }, "[GithubConnector] SDK warning"),
+      error: (message: string) =>
+        log.error({ sdkMessage: message }, "[GithubConnector] SDK error"),
+    },
     request: {
       fetch: (url: string | URL | Request, init?: RequestInit) =>
         nativeFetch(url, {

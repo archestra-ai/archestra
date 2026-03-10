@@ -1,3 +1,4 @@
+import type pino from "pino";
 import {
   ClientType,
   createClient,
@@ -70,10 +71,10 @@ export class JiraConnector extends BaseConnector {
 
     try {
       if (parsed.isCloud) {
-        const client = createV3Client(parsed, params.credentials);
+        const client = createV3Client(parsed, params.credentials, this.log);
         await client.myself.getCurrentUser();
       } else {
-        const client = createV2Client(parsed, params.credentials);
+        const client = createV2Client(parsed, params.credentials, this.log);
         await client.myself.getCurrentUser();
       }
       this.log.info("[JiraConnector] Connection test successful");
@@ -106,7 +107,7 @@ export class JiraConnector extends BaseConnector {
 
       // Use classic JQL search with maxResults=0 to get total without fetching issues
       if (parsed.isCloud) {
-        const client = createV3Client(parsed, params.credentials);
+        const client = createV3Client(parsed, params.credentials, this.log);
         const result = await client.issueSearch.searchForIssuesUsingJql({
           jql,
           fields: ["summary"],
@@ -115,7 +116,7 @@ export class JiraConnector extends BaseConnector {
         return result.total ?? null;
       }
 
-      const client = createV2Client(parsed, params.credentials);
+      const client = createV2Client(parsed, params.credentials, this.log);
       const result = await client.issueSearch.searchForIssuesUsingJql({
         jql,
         fields: ["summary"],
@@ -177,7 +178,7 @@ export class JiraConnector extends BaseConnector {
     jql: string,
     checkpoint: JiraCheckpoint,
   ): AsyncGenerator<ConnectorSyncBatch> {
-    const client = createV3Client(config, credentials);
+    const client = createV3Client(config, credentials, this.log);
     let nextPageToken: string | undefined;
     let hasMore = true;
     let batchIndex = 0;
@@ -237,7 +238,7 @@ export class JiraConnector extends BaseConnector {
     jql: string,
     checkpoint: JiraCheckpoint,
   ): AsyncGenerator<ConnectorSyncBatch> {
-    const client = createV2Client(config, credentials);
+    const client = createV2Client(config, credentials, this.log);
     let nextPageToken: string | undefined;
     let hasMore = true;
     let batchIndex = 0;
@@ -297,6 +298,7 @@ export class JiraConnector extends BaseConnector {
 function createV3Client(
   config: JiraConfig,
   credentials: ConnectorCredentials,
+  log: pino.Logger,
 ): Version3Client {
   // @ts-expect-error jira.js@5.3.1 overload resolution broken: private 'client' property intersects to 'never'
   return createClient(ClientType.Version3, {
@@ -307,12 +309,14 @@ function createV3Client(
         apiToken: credentials.apiToken,
       },
     },
+    middlewares: buildJiraMiddlewares(log),
   }) as unknown as Version3Client;
 }
 
 function createV2Client(
   config: JiraConfig,
   credentials: ConnectorCredentials,
+  log: pino.Logger,
 ): Version2Client {
   return createClient(ClientType.Version2, {
     host: config.jiraBaseUrl.replace(/\/+$/, ""),
@@ -320,7 +324,38 @@ function createV2Client(
     authentication: credentials.email
       ? { basic: { email: credentials.email, apiToken: credentials.apiToken } }
       : { oauth2: { accessToken: credentials.apiToken } },
+    middlewares: buildJiraMiddlewares(log),
   }) as unknown as Version2Client;
+}
+
+function buildJiraMiddlewares(log: pino.Logger) {
+  return {
+    onError: (error: unknown) => {
+      // biome-ignore lint/suspicious/noExplicitAny: Axios error shape
+      const err = error as any;
+      log.debug(
+        {
+          status: err?.response?.status,
+          method: err?.config?.method?.toUpperCase(),
+          url: err?.config?.url,
+          error: err?.message ?? String(error),
+        },
+        "[JiraConnector] HTTP error",
+      );
+    },
+    onResponse: (response: unknown) => {
+      // biome-ignore lint/suspicious/noExplicitAny: Axios response shape
+      const res = response as any;
+      log.debug(
+        {
+          status: res?.status,
+          method: res?.config?.method?.toUpperCase(),
+          url: res?.config?.url,
+        },
+        "[JiraConnector] HTTP response",
+      );
+    },
+  };
 }
 
 function issuesToDocuments(

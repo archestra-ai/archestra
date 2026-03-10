@@ -1,3 +1,4 @@
+import type pino from "pino";
 import { ConfluenceClient } from "confluence.js";
 import type {
   ConfluenceCheckpoint,
@@ -55,7 +56,7 @@ export class ConfluenceConnector extends BaseConnector {
     );
 
     try {
-      const client = createConfluenceClient(parsed, params.credentials);
+      const client = createConfluenceClient(parsed, params.credentials, this.log);
       await client.space.getSpaces({ limit: 1 });
       this.log.debug("[ConfluenceConnector] Connection test successful");
       return { success: true };
@@ -85,7 +86,7 @@ export class ConfluenceConnector extends BaseConnector {
 
       this.log.debug({ cql }, "[ConfluenceConnector] Estimating total items");
 
-      const client = createConfluenceClient(parsed, params.credentials);
+      const client = createConfluenceClient(parsed, params.credentials, this.log);
 
       const result = await client.content.searchContentByCQL({
         cql,
@@ -121,7 +122,7 @@ export class ConfluenceConnector extends BaseConnector {
     };
     const batchSize = parsed.batchSize ?? DEFAULT_BATCH_SIZE;
     const cql = buildCql(parsed, checkpoint, params.startTime);
-    const client = createConfluenceClient(parsed, params.credentials);
+    const client = createConfluenceClient(parsed, params.credentials, this.log);
 
     this.log.debug(
       {
@@ -222,6 +223,7 @@ export class ConfluenceConnector extends BaseConnector {
 function createConfluenceClient(
   config: ConfluenceConfig,
   credentials: ConnectorCredentials,
+  log: pino.Logger,
 ) {
   const host = config.confluenceUrl.replace(/\/+$/, "");
   return new ConfluenceClient({
@@ -231,6 +233,33 @@ function createConfluenceClient(
       ? { basic: { email: credentials.email, apiToken: credentials.apiToken } }
       : { oauth2: { accessToken: credentials.apiToken } },
     apiPrefix: config.isCloud ? "/wiki/rest/" : "/rest/",
+    middlewares: {
+      onError: (error: unknown) => {
+        // biome-ignore lint/suspicious/noExplicitAny: Axios error shape
+        const err = error as any;
+        log.debug(
+          {
+            status: err?.response?.status,
+            method: err?.config?.method?.toUpperCase(),
+            url: err?.config?.url,
+            error: err?.message ?? String(error),
+          },
+          "[ConfluenceConnector] HTTP error",
+        );
+      },
+      onResponse: (response: unknown) => {
+        // biome-ignore lint/suspicious/noExplicitAny: Axios response shape
+        const res = response as any;
+        log.debug(
+          {
+            status: res?.status,
+            method: res?.config?.method?.toUpperCase(),
+            url: res?.config?.url,
+          },
+          "[ConfluenceConnector] HTTP response",
+        );
+      },
+    },
   });
 }
 

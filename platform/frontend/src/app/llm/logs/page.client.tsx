@@ -184,7 +184,8 @@ function SessionRow({
             </span>
           ) : session.source?.startsWith("knowledge:") ? (
             <span className="text-muted-foreground">
-              {INTERACTION_SOURCE_DISPLAY[session.source]?.label ?? session.source}
+              {INTERACTION_SOURCE_DISPLAY[session.source]?.label ??
+                session.source}
             </span>
           ) : (
             <span className="text-muted-foreground">No message</span>
@@ -216,11 +217,11 @@ function SessionRow({
         </TooltipProvider>
       </TableCell>
       <TableCell className="font-mono text-xs py-3">
-        {session.totalCost && session.totalBaselineCost && (
+        {session.totalCost && (
           <TooltipProvider>
             <Savings
               cost={session.totalCost}
-              baselineCost={session.totalBaselineCost}
+              baselineCost={session.totalBaselineCost || session.totalCost}
               toonCostSavings={session.totalToonCostSavings}
               format="percent"
               tooltip="hover"

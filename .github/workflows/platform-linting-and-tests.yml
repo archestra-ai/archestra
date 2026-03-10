@@ -345,6 +345,9 @@ jobs:
             artifact: blob-report-vault
             extra_helm_set: "archestra.env.ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT"
     steps:
+      # REVERT: Force failure to test check-jobs step
+      - name: Force failure for testing
+        run: exit 1
       - name: Checkout repository
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -442,6 +445,9 @@ jobs:
       contents: read
       packages: read
     steps:
+      # REVERT: Force failure to test check-jobs step
+      - name: Force failure for testing
+        run: exit 1
       - name: Checkout repository
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -634,6 +640,9 @@ jobs:
       contents: read
       packages: read
     steps:
+      # REVERT: Force failure to test check-jobs step
+      - name: Force failure for testing
+        run: exit 1
       - name: Checkout repository
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2

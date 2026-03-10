@@ -451,7 +451,7 @@ export function McpServerCard({
         <>
           <div className="flex items-center gap-1">
             <Wrench className="h-3.5 w-3.5" />
-            <span>{toolsCount}</span>
+            <span data-testid={`${E2eTestId.McpServerToolsCount}`}>{toolsCount}</span>
           </div>
           <div className="h-4 w-px bg-border" />
         </>

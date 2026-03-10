@@ -232,16 +232,26 @@ function KnowledgeBaseCard({
                       </span>
                     </TooltipTrigger>
                     <TooltipContent side="bottom">
-                      <div className="space-y-1">
-                        {kb.assignedAgents.map((agent) => (
-                          <div
-                            key={agent.id}
-                            className="flex items-center gap-1.5 text-xs"
-                          >
-                            <span className="text-muted-foreground">
-                              {formatAgentType(agent.agentType)}
-                            </span>
-                            <span>{agent.name}</span>
+                      <div className="space-y-2">
+                        {Object.entries(
+                          kb.assignedAgents.reduce<
+                            Record<string, typeof kb.assignedAgents>
+                          >((groups, agent) => {
+                            const label = formatAgentType(agent.agentType);
+                            if (!groups[label]) groups[label] = [];
+                            groups[label].push(agent);
+                            return groups;
+                          }, {}),
+                        ).map(([type, agents]) => (
+                          <div key={type}>
+                            <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-0.5">
+                              {type}
+                            </div>
+                            {agents.map((agent) => (
+                              <div key={agent.id} className="text-xs pl-1">
+                                {agent.name}
+                              </div>
+                            ))}
                           </div>
                         ))}
                       </div>

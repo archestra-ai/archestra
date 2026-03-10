@@ -128,7 +128,7 @@ function buildRerankerInteraction(
       messages: [{ role: "user" as const, content: prompt }],
     },
     response: {
-      id: `reranker-${Date.now()}`,
+      id: `reranker-${crypto.randomUUID()}`,
       object: "chat.completion" as const,
       created: Math.floor(Date.now() / 1000),
       model: config.modelName,

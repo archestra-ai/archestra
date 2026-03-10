@@ -97,6 +97,44 @@ export async function withKbObservability<T>(
   });
 }
 
+/**
+ * Builds interaction data for an embedding API call.
+ * Strips embedding vectors from the stored response to save space.
+ */
+export function buildEmbeddingInteraction(params: {
+  model: string;
+  input: string | string[];
+  dimensions: number;
+  response: {
+    object: string;
+    data: Array<{ object: string; embedding: number[]; index: number }>;
+    model: string;
+    usage: { prompt_tokens: number; total_tokens: number };
+  };
+}): KbInteractionData {
+  const { response } = params;
+  return {
+    request: {
+      model: params.model,
+      input: params.input,
+      dimensions: params.dimensions,
+    },
+    response: {
+      object: response.object,
+      data: response.data.map((d) => ({
+        object: d.object,
+        embedding: [] as number[],
+        index: d.index,
+      })),
+      model: response.model,
+      usage: response.usage,
+    },
+    model: response.model,
+    inputTokens: response.usage.prompt_tokens,
+    outputTokens: 0,
+  };
+}
+
 // ===== Internal constants =====
 
 const PROVIDER_CHAT_INTERACTION_TYPE: Record<

@@ -1036,7 +1036,9 @@ const createConnector = async (
       knowledgeBaseIds: [kgId],
       connectorType: overrides?.connectorType ?? "jira",
       config: overrides?.config ?? {
-        baseUrl: "https://test.atlassian.net",
+        type: "jira",
+        jiraBaseUrl: "https://test.atlassian.net",
+        isCloud: true,
         projectKey: "TEST",
       },
       credentials: overrides?.credentials ?? {

@@ -782,11 +782,15 @@ const startWorker = async () => {
     const gracefulShutdown = async (signal: string) => {
       logger.info(`Worker received ${signal}, shutting down...`);
 
-      // Force exit if cleanup takes too long (e.g., long-running task doesn't respect cancellation)
+      // Force exit if cleanup takes too long (e.g., long-running task doesn't respect cancellation).
+      // Must exceed taskWorkerShutdownTimeoutSeconds so stopWorker() has time to drain
+      // in-flight tasks and release them back to the queue.
+      const forceExitTimeoutMs =
+        (config.kb.taskWorkerShutdownTimeoutSeconds + 5) * 1000;
       const forceExitTimeout = setTimeout(() => {
         logger.warn("Worker shutdown timed out, forcing exit");
         process.exit(1);
-      }, SHUTDOWN_CLEANUP_TIMEOUT_MS);
+      }, forceExitTimeoutMs);
 
       try {
         await healthServer.close();

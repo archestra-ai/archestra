@@ -15,6 +15,7 @@ import type {
   ConnectorDocument,
 } from "@/types/knowledge-connector";
 import { chunkDocument } from "./chunker";
+import { extractErrorMessage } from "./connectors/base-connector";
 import { getConnector } from "./connectors/registry";
 
 /**
@@ -285,6 +286,7 @@ class ConnectorSyncService {
       await KnowledgeBaseConnectorModel.update(connectorId, {
         lastSyncStatus: "failed",
         lastSyncError: errorMessage,
+        lastSyncAt: new Date(),
       });
 
       runLog.error({ error: errorMessage }, "[ConnectorSync] Sync failed");
@@ -446,28 +448,3 @@ class ConnectorSyncService {
 }
 
 export const connectorSyncService = new ConnectorSyncService();
-
-// ===== Module-level helpers =====
-
-function extractErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-  if (typeof error === "string") {
-    return error;
-  }
-  if (error !== null && typeof error === "object") {
-    // Handle plain objects thrown by libraries like confluence.js
-    // which extract Axios response data (e.g. { statusCode: 401, message: "..." })
-    const obj = error as Record<string, unknown>;
-    if (typeof obj.message === "string") {
-      return obj.message;
-    }
-    try {
-      return JSON.stringify(error);
-    } catch {
-      return "[Unknown error object]";
-    }
-  }
-  return String(error);
-}

@@ -7,7 +7,11 @@ import type {
   ConnectorSyncBatch,
 } from "@/types/knowledge-connector";
 import { ConfluenceConfigSchema } from "@/types/knowledge-connector";
-import { BaseConnector, buildCheckpoint } from "../base-connector";
+import {
+  BaseConnector,
+  buildCheckpoint,
+  extractErrorMessage,
+} from "../base-connector";
 
 const DEFAULT_BATCH_SIZE = 50;
 
@@ -50,7 +54,7 @@ export class ConfluenceConnector extends BaseConnector {
       await client.space.getSpaces({ limit: 1 });
       return { success: true };
     } catch (error) {
-      const message = extractConnectorErrorMessage(error);
+      const message = extractErrorMessage(error);
       return { success: false, error: `Connection failed: ${message}` };
     }
   }
@@ -333,27 +337,3 @@ const HTML_ENTITY_MAP: Record<string, string> = {
   nbsp: " ",
 };
 
-/**
- * Extract a meaningful error message from errors thrown by confluence.js.
- * The library throws Axios response data (plain objects) instead of Error instances.
- */
-function extractConnectorErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-  if (typeof error === "string") {
-    return error;
-  }
-  if (error !== null && typeof error === "object") {
-    const obj = error as Record<string, unknown>;
-    if (typeof obj.message === "string") {
-      return obj.message;
-    }
-    try {
-      return JSON.stringify(error);
-    } catch {
-      return "[Unknown error object]";
-    }
-  }
-  return String(error);
-}

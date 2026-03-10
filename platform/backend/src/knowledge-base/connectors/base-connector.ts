@@ -229,3 +229,29 @@ function calculateBackoffDelay(attempt: number): number {
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
+
+/**
+ * Extract a meaningful error message from unknown errors.
+ * Handles plain objects thrown by libraries like confluence.js,
+ * which extract Axios response data instead of wrapping in Error instances.
+ */
+export function extractErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  if (typeof error === "string") {
+    return error;
+  }
+  if (error !== null && typeof error === "object") {
+    const obj = error as Record<string, unknown>;
+    if (typeof obj.message === "string") {
+      return obj.message;
+    }
+    try {
+      return JSON.stringify(error);
+    } catch {
+      return "[Unknown error object]";
+    }
+  }
+  return String(error);
+}

@@ -64,13 +64,21 @@ describe("GithubConnector", () => {
       expect(result.error).toContain("owner");
     });
 
-    test("returns invalid when githubUrl is not a valid URL", async () => {
+    test("returns invalid when githubUrl uses unsupported protocol", async () => {
       const result = await connector.validateConfig({
-        githubUrl: "not-a-url",
+        githubUrl: "ftp://github.example.com",
         owner: "test-org",
       });
       expect(result.valid).toBe(false);
       expect(result.error).toContain("valid HTTP(S) URL");
+    });
+
+    test("accepts URL without protocol by prepending https://", async () => {
+      const result = await connector.validateConfig({
+        githubUrl: "api.github.com",
+        owner: "test-org",
+      });
+      expect(result).toEqual({ valid: true });
     });
 
     test("accepts config with optional repos filter", async () => {

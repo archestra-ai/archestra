@@ -58,12 +58,19 @@ describe("GitlabConnector", () => {
       expect(result.error).toContain("gitlabUrl");
     });
 
-    test("returns invalid when gitlabUrl is not a valid URL", async () => {
+    test("returns invalid when gitlabUrl uses unsupported protocol", async () => {
       const result = await connector.validateConfig({
-        gitlabUrl: "not-a-url",
+        gitlabUrl: "ftp://gitlab.example.com",
       });
       expect(result.valid).toBe(false);
       expect(result.error).toContain("valid HTTP(S) URL");
+    });
+
+    test("accepts URL without protocol by prepending https://", async () => {
+      const result = await connector.validateConfig({
+        gitlabUrl: "gitlab.com",
+      });
+      expect(result).toEqual({ valid: true });
     });
 
     test("accepts config with optional projectIds", async () => {

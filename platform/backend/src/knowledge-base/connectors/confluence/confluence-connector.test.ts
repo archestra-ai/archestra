@@ -61,9 +61,9 @@ describe("ConfluenceConnector", () => {
       expect(result.error).toContain("isCloud");
     });
 
-    test("returns invalid when confluenceUrl is not a valid URL", async () => {
+    test("returns invalid when confluenceUrl uses unsupported protocol", async () => {
       const result = await connector.validateConfig({
-        confluenceUrl: "not-a-url",
+        confluenceUrl: "ftp://confluence.example.com",
         isCloud: true,
       });
       expect(result.valid).toBe(false);
@@ -74,6 +74,14 @@ describe("ConfluenceConnector", () => {
       const result = await connector.validateConfig({
         confluenceUrl: "https://confluence.mycompany.com",
         isCloud: false,
+      });
+      expect(result).toEqual({ valid: true });
+    });
+
+    test("accepts URL without protocol by prepending https://", async () => {
+      const result = await connector.validateConfig({
+        confluenceUrl: "mycompany.atlassian.net/wiki",
+        isCloud: true,
       });
       expect(result).toEqual({ valid: true });
     });

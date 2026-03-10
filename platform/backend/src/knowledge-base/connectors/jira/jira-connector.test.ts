@@ -65,9 +65,9 @@ describe("JiraConnector", () => {
       expect(result.error).toContain("isCloud");
     });
 
-    test("returns invalid when jiraBaseUrl is not a valid URL", async () => {
+    test("returns invalid when jiraBaseUrl uses unsupported protocol", async () => {
       const result = await connector.validateConfig({
-        jiraBaseUrl: "not-a-url",
+        jiraBaseUrl: "ftp://jira.example.com",
         isCloud: true,
       });
       expect(result.valid).toBe(false);
@@ -78,6 +78,14 @@ describe("JiraConnector", () => {
       const result = await connector.validateConfig({
         jiraBaseUrl: "https://jira.mycompany.com",
         isCloud: false,
+      });
+      expect(result).toEqual({ valid: true });
+    });
+
+    test("accepts URL without protocol by prepending https://", async () => {
+      const result = await connector.validateConfig({
+        jiraBaseUrl: "mycompany.atlassian.net",
+        isCloud: true,
       });
       expect(result).toEqual({ valid: true });
     });

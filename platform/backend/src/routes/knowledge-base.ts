@@ -486,6 +486,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         body: z.object({
           name: z.string().min(1).optional(),
           config: ConnectorConfigSchema.optional(),
+          credentials: ConnectorCredentialsSchema.optional(),
           schedule: z.string().optional(),
           enabled: z.boolean().optional(),
         }),
@@ -493,9 +494,18 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id }, body, organizationId }, reply) => {
-      await findConnectorOrThrow(id, organizationId);
+      const connector = await findConnectorOrThrow(id, organizationId);
 
-      const updated = await KnowledgeBaseConnectorModel.update(id, body);
+      // Update credentials secret if provided
+      if (body.credentials && connector.secretId) {
+        await secretManager().updateSecret(
+          connector.secretId,
+          body.credentials,
+        );
+      }
+
+      const { credentials: _, ...updateData } = body;
+      const updated = await KnowledgeBaseConnectorModel.update(id, updateData);
       if (!updated) {
         throw new ApiError(404, "Connector not found");
       }

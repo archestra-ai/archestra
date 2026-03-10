@@ -28227,6 +28227,10 @@ export type UpdateConnectorData = {
             includeMergeRequests?: boolean;
             labelsToSkip?: Array<string>;
         };
+        credentials?: {
+            email?: string;
+            apiToken: string;
+        };
         schedule?: string;
         enabled?: boolean;
     };

@@ -99279,6 +99279,20 @@
                       }
                     ]
                   },
+                  "credentials": {
+                    "type": "object",
+                    "properties": {
+                      "email": {
+                        "type": "string"
+                      },
+                      "apiToken": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "apiToken"
+                    ]
+                  },
                   "schedule": {
                     "type": "string"
                   },

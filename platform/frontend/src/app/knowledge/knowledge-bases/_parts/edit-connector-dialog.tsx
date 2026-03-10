@@ -46,6 +46,8 @@ interface EditConnectorFormValues {
   name: string;
   enabled: boolean;
   config: Record<string, unknown>;
+  email: string;
+  apiToken: string;
   schedule: string;
 }
 
@@ -65,6 +67,8 @@ export function EditConnectorDialog({
       name: connector.name,
       enabled: connector.enabled,
       config: connector.config as Record<string, unknown>,
+      email: "",
+      apiToken: "",
       schedule: connector.schedule,
     },
   });
@@ -75,6 +79,8 @@ export function EditConnectorDialog({
         name: connector.name,
         enabled: connector.enabled,
         config: connector.config as Record<string, unknown>,
+        email: "",
+        apiToken: "",
         schedule: connector.schedule,
       });
     }
@@ -83,7 +89,12 @@ export function EditConnectorDialog({
   const connectorType = connector.connectorType;
   const urlConfig = getEditUrlConfig(connectorType);
 
+  const needsEmail = connectorType === "jira" || connectorType === "confluence";
+  const isCloud = form.watch("config.isCloud") as boolean | undefined;
+  const emailRequired = needsEmail && isCloud !== false;
+
   const handleSubmit = async (values: EditConnectorFormValues) => {
+    const hasCredentials = values.apiToken.length > 0;
     const result = await updateConnector.mutateAsync({
       id: connector.id,
       body: {
@@ -92,6 +103,12 @@ export function EditConnectorDialog({
         config:
           values.config as archestraApiTypes.CreateConnectorData["body"]["config"],
         schedule: values.schedule,
+        ...(hasCredentials && {
+          credentials: {
+            ...(values.email && { email: values.email }),
+            apiToken: values.apiToken,
+          },
+        }),
       },
     });
     if (result) {
@@ -120,6 +137,29 @@ export function EditConnectorDialog({
             className="flex flex-col overflow-hidden"
           >
             <div className="space-y-4 overflow-y-auto py-1 pr-1">
+              <FormField
+                control={form.control}
+                name="enabled"
+                render={({ field }) => (
+                  <FormItem className="flex items-center justify-between rounded-lg border p-3">
+                    <div>
+                      <FormLabel className="text-sm font-medium">
+                        Enabled
+                      </FormLabel>
+                      <FormDescription className="text-xs">
+                        When disabled, scheduled syncs will not run.
+                      </FormDescription>
+                    </div>
+                    <FormControl>
+                      <Switch
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                      />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+
               <FormField
                 control={form.control}
                 name="name"
@@ -180,25 +220,58 @@ export function EditConnectorDialog({
                 />
               )}
 
+              {needsEmail && (
+                <FormField
+                  control={form.control}
+                  name="email"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>
+                        Email{!emailRequired && " (optional)"}
+                      </FormLabel>
+                      <FormControl>
+                        <Input
+                          type="email"
+                          placeholder={
+                            emailRequired
+                              ? "user@example.com"
+                              : "Required for basic auth, leave empty for PAT"
+                          }
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormDescription>
+                        Leave empty to keep existing credentials unchanged.
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
+
               <FormField
                 control={form.control}
-                name="enabled"
+                name="apiToken"
                 render={({ field }) => (
-                  <FormItem className="flex items-center justify-between rounded-lg border p-3">
-                    <div>
-                      <FormLabel className="text-sm font-medium">
-                        Enabled
-                      </FormLabel>
-                      <FormDescription className="text-xs">
-                        When disabled, scheduled syncs will not run.
-                      </FormDescription>
-                    </div>
+                  <FormItem>
+                    <FormLabel>
+                      {needsEmail
+                        ? emailRequired
+                          ? "API Token"
+                          : "API Token / Personal Access Token"
+                        : "Personal Access Token"}
+                    </FormLabel>
                     <FormControl>
-                      <Switch
-                        checked={field.value}
-                        onCheckedChange={field.onChange}
+                      <Input
+                        type="password"
+                        placeholder="Leave empty to keep existing token"
+                        {...field}
                       />
                     </FormControl>
+                    <FormDescription>
+                      Leave empty to keep existing credentials unchanged.
+                    </FormDescription>
+                    <FormMessage />
                   </FormItem>
                 )}
               />

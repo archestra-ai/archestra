@@ -3710,7 +3710,7 @@
             "value": "knowledge:reranker"
           }
         ],
-        "query": "api,chat,chatops:slack,chatops:ms-teams,email,knowledge:embedding,knowledge:reranker",
+        "query": "API : api,Chat : chat,Slack : chatops:slack,MS Teams : chatops:ms-teams,Email : email,Knowledge - Embedding : knowledge:embedding,Knowledge - Reranker : knowledge:reranker",
         "type": "custom"
       },
       {

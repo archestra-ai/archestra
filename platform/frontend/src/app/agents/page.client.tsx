@@ -360,8 +360,15 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
         const scope = agent.scope;
         return (
           <div className="font-medium">
-            <div className="flex items-start gap-2">
-              <span className="break-words min-w-0">{agent.name}</span>
+            <div className="flex items-center gap-2">
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="truncate min-w-0">{agent.name}</span>
+                  </TooltipTrigger>
+                  <TooltipContent>{agent.name}</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
               <AgentBadge type={agent.builtIn ? "builtIn" : scope} />
               {agent.labels && agent.labels.length > 0 && (
                 <LabelTags labels={agent.labels} />

@@ -334,7 +334,14 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
         return (
           <div className="font-medium">
             <div className="flex items-center gap-2">
-              {agent.name}
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="truncate min-w-0">{agent.name}</span>
+                  </TooltipTrigger>
+                  <TooltipContent>{agent.name}</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
               <AgentBadge type={scope} />
               {agent.agentType === "profile" && (
                 <TooltipProvider>

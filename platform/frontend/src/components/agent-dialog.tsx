@@ -1254,7 +1254,7 @@ export function AgentDialog({
                             const totalSelected =
                               knowledgeBaseIds.length + connectorIds.length;
                             return totalSelected === 0
-                              ? "Select connectors or knowledge bases..."
+                              ? "Select connectors or knowledge bases"
                               : `${totalSelected} source${totalSelected > 1 ? "s" : ""} selected`;
                           })()}
                           <ChevronDown className="ml-2 h-4 w-4 opacity-50" />

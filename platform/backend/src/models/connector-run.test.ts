@@ -371,6 +371,83 @@ describe("ConnectorRunModel", () => {
     });
   });
 
+  describe("sumDocsIngestedByConnector", () => {
+    test("returns sum of documentsIngested for a connector", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+
+      await ConnectorRunModel.create({
+        connectorId: connector.id,
+        status: "success",
+        startedAt: new Date(),
+        documentsIngested: 10,
+      });
+      await ConnectorRunModel.create({
+        connectorId: connector.id,
+        status: "success",
+        startedAt: new Date(),
+        documentsIngested: 20,
+      });
+
+      const result = await ConnectorRunModel.sumDocsIngestedByConnector(
+        connector.id,
+      );
+
+      expect(result).toBe(30);
+    });
+
+    test("returns 0 for connector with no runs", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+
+      const result = await ConnectorRunModel.sumDocsIngestedByConnector(
+        connector.id,
+      );
+
+      expect(result).toBe(0);
+    });
+
+    test("does not include runs from other connectors", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const connector1 = await makeKnowledgeBaseConnector(kb.id, org.id);
+      const connector2 = await makeKnowledgeBaseConnector(kb.id, org.id);
+
+      await ConnectorRunModel.create({
+        connectorId: connector1.id,
+        status: "success",
+        startedAt: new Date(),
+        documentsIngested: 10,
+      });
+      await ConnectorRunModel.create({
+        connectorId: connector2.id,
+        status: "success",
+        startedAt: new Date(),
+        documentsIngested: 20,
+      });
+
+      const result = await ConnectorRunModel.sumDocsIngestedByConnector(
+        connector1.id,
+      );
+
+      expect(result).toBe(10);
+    });
+  });
+
   describe("sumDocsIngestedByKnowledgeBaseIds", () => {
     test("returns sum of documentsIngested per knowledge base", async ({
       makeOrganization,

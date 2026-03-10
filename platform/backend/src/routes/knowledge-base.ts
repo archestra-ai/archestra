@@ -8,6 +8,7 @@ import {
   AgentKnowledgeBaseModel,
   AgentModel,
   ConnectorRunModel,
+  KbDocumentModel,
   KnowledgeBaseConnectorModel,
   KnowledgeBaseModel,
   TaskModel,
@@ -81,7 +82,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const [allConnectors, docsIndexedByKbId, agentIdsByKbId] =
         await Promise.all([
           KnowledgeBaseConnectorModel.findByKnowledgeBaseIds(kbIds),
-          ConnectorRunModel.sumDocsIngestedByKnowledgeBaseIds(kbIds),
+          KbDocumentModel.countByKnowledgeBaseIds(kbIds),
           AgentKnowledgeBaseModel.getAgentIdsForKnowledgeBases(kbIds),
         ]);
 
@@ -460,12 +461,17 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "Get a connector by ID",
         tags: ["Connectors"],
         params: z.object({ id: z.string() }),
-        response: constructResponseSchema(SelectKnowledgeBaseConnectorSchema),
+        response: constructResponseSchema(
+          SelectKnowledgeBaseConnectorSchema.extend({
+            totalDocsIngested: z.number(),
+          }),
+        ),
       },
     },
     async ({ params: { id }, organizationId }, reply) => {
       const connector = await findConnectorOrThrow(id, organizationId);
-      return reply.send(connector);
+      const totalDocsIngested = await KbDocumentModel.countByConnector(id);
+      return reply.send({ ...connector, totalDocsIngested });
     },
   );
 

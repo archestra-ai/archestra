@@ -2,21 +2,12 @@
 
 import type { archestraApiTypes } from "@shared";
 import type { ColumnDef } from "@tanstack/react-table";
-import {
-  ArrowLeft,
-  Database,
-  FileText,
-  Pencil,
-  Play,
-  Plug,
-  Plus,
-  X,
-} from "lucide-react";
+import { ArrowLeft, Database, Pencil, Play, Plug, Plus, X } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
-import { ConnectorRunLogsDialog } from "@/app/knowledge/connectors/_parts/connector-run-logs-dialog";
+import { ConnectorRunDetailsDialog } from "@/app/knowledge/connectors/_parts/connector-run-details-dialog";
 import { ConnectorStatusDot } from "@/app/knowledge/knowledge-bases/_parts/connector-enabled-dot";
 import { ConnectorTypeIcon } from "@/app/knowledge/knowledge-bases/_parts/connector-icons";
 import { ConnectorStatusBadge } from "@/app/knowledge/knowledge-bases/_parts/connector-status-badge";
@@ -120,7 +111,25 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
       id: "status",
       accessorKey: "status",
       header: "Status",
-      cell: ({ row }) => <ConnectorStatusBadge status={row.original.status} />,
+      cell: ({ row }) => {
+        const { status, error } = row.original;
+        return (
+          <div className="flex items-center gap-2">
+            <ConnectorStatusBadge status={status} />
+            {error && (
+              <Button
+                variant="ghost"
+                className="h-auto p-0"
+                onClick={() => setSelectedRunId(row.original.id)}
+              >
+                <Badge variant="destructive" className="text-xs">
+                  Error
+                </Badge>
+              </Button>
+            )}
+          </div>
+        );
+      },
     },
     {
       id: "startedAt",
@@ -166,23 +175,6 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
       id: "documentsIngested",
       header: "Ingested",
       cell: ({ row }) => <div>{row.original.documentsIngested ?? 0}</div>,
-    },
-    {
-      id: "logs",
-      header: "Logs",
-      cell: ({ row }) => {
-        return (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 px-2"
-            onClick={() => setSelectedRunId(row.original.id)}
-          >
-            <FileText className="mr-1 h-3.5 w-3.5" />
-            View
-          </Button>
-        );
-      },
     },
   ];
 
@@ -267,16 +259,19 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
         </Button>
 
         <div className="rounded-lg border p-4">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
-            <MetadataItem label="Schedule">
-              <div>{formatCronSchedule(connector.schedule)}</div>
-            </MetadataItem>
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 text-sm">
             <MetadataItem label="Last Sync">
               <div>
                 {connector.lastSyncAt
                   ? formatDate({ date: connector.lastSyncAt })
                   : "Never"}
               </div>
+            </MetadataItem>
+            <MetadataItem label="Documents">
+              <div>{connector.totalDocsIngested}</div>
+            </MetadataItem>
+            <MetadataItem label="Schedule">
+              <div>{formatCronSchedule(connector.schedule)}</div>
             </MetadataItem>
             <KnowledgeBasesMetadataItem connectorId={connectorId} />
           </div>
@@ -308,7 +303,7 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
           )}
         </LoadingWrapper>
 
-        <ConnectorRunLogsDialog
+        <ConnectorRunDetailsDialog
           connectorId={connectorId}
           runId={selectedRunId}
           onClose={() => setSelectedRunId(null)}

@@ -6,15 +6,15 @@ import {
   ArrowLeft,
   Check,
   Globe,
-  Info,
   Link2,
   Pencil,
   Plus,
   RefreshCw,
   Trash2,
+  Unlink,
   Users,
 } from "lucide-react";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { KnowledgePageLayout } from "@/app/knowledge/_parts/knowledge-page-layout";
@@ -50,7 +50,7 @@ import {
   useConnectors as useAllConnectors,
   useAssignConnectorToKnowledgeBases,
   useConnectors,
-  useDeleteConnector,
+  useUnassignConnectorFromKnowledgeBase,
 } from "@/lib/connector.query";
 import {
   useDeleteKnowledgeBase,
@@ -326,10 +326,11 @@ type ConnectorItem =
   archestraApiTypes.GetConnectorsResponses["200"]["data"][number];
 
 function ExpandedConnectors({ knowledgeBaseId }: { knowledgeBaseId: string }) {
+  const router = useRouter();
   const { data: connectors, isPending } = useConnectors(knowledgeBaseId);
   const [editingConnector, setEditingConnector] =
     useState<ConnectorItem | null>(null);
-  const [deletingConnectorId, setDeletingConnectorId] = useState<string | null>(
+  const [removingConnectorId, setRemovingConnectorId] = useState<string | null>(
     null,
   );
 
@@ -362,14 +363,22 @@ function ExpandedConnectors({ knowledgeBaseId }: { knowledgeBaseId: string }) {
             <TableHead className="uppercase text-xs tracking-wider text-right bg-muted">
               Status
             </TableHead>
-            <TableHead className="uppercase text-xs tracking-wider text-center w-[140px] bg-muted">
+            <TableHead className="uppercase text-xs tracking-wider text-center w-[100px] bg-muted">
               Actions
             </TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {items.map((connector) => (
-            <TableRow key={connector.id} className="hover:bg-muted/50">
+            <TableRow
+              key={connector.id}
+              className="hover:bg-muted/50 cursor-pointer"
+              onClick={() =>
+                router.push(
+                  `/knowledge/connectors/${connector.id}?from=knowledge-bases`,
+                )
+              }
+            >
               <TableCell>
                 <div className="flex items-center gap-3">
                   <ConnectorStatusDot
@@ -408,19 +417,12 @@ function ExpandedConnectors({ knowledgeBaseId }: { knowledgeBaseId: string }) {
                 </div>
               </TableCell>
               <TableCell>
-                <div className="flex items-center justify-center gap-1">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7"
-                    asChild
-                  >
-                    <Link
-                      href={`/knowledge/connectors/${connector.id}?from=knowledge-bases`}
-                    >
-                      <Info className="h-3.5 w-3.5 text-muted-foreground" />
-                    </Link>
-                  </Button>
+                {/* biome-ignore lint/a11y/useKeyWithClickEvents: stopPropagation wrapper for action buttons inside clickable row */}
+                {/* biome-ignore lint/a11y/noStaticElementInteractions: wrapper only prevents row click propagation */}
+                <div
+                  className="flex items-center justify-center gap-1"
+                  onClick={(e) => e.stopPropagation()}
+                >
                   <Button
                     variant="ghost"
                     size="icon"
@@ -429,14 +431,23 @@ function ExpandedConnectors({ knowledgeBaseId }: { knowledgeBaseId: string }) {
                   >
                     <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
                   </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7"
-                    onClick={() => setDeletingConnectorId(connector.id)}
-                  >
-                    <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
-                  </Button>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          onClick={() => setRemovingConnectorId(connector.id)}
+                        >
+                          <Unlink className="h-3.5 w-3.5 text-muted-foreground" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        Remove from knowledge base
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
                 </div>
               </TableCell>
             </TableRow>
@@ -452,11 +463,12 @@ function ExpandedConnectors({ knowledgeBaseId }: { knowledgeBaseId: string }) {
         />
       )}
 
-      {deletingConnectorId && (
-        <DeleteConnectorDialog
-          connectorId={deletingConnectorId}
-          open={!!deletingConnectorId}
-          onOpenChange={(open) => !open && setDeletingConnectorId(null)}
+      {removingConnectorId && (
+        <RemoveConnectorDialog
+          connectorId={removingConnectorId}
+          knowledgeBaseId={knowledgeBaseId}
+          open={!!removingConnectorId}
+          onOpenChange={(open) => !open && setRemovingConnectorId(null)}
         />
       )}
     </>
@@ -661,35 +673,41 @@ function AddConnectorDialog({
   );
 }
 
-function DeleteConnectorDialog({
+function RemoveConnectorDialog({
   connectorId,
+  knowledgeBaseId,
   open,
   onOpenChange,
 }: {
   connectorId: string;
+  knowledgeBaseId: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const deleteConnector = useDeleteConnector();
+  const unassignMutation = useUnassignConnectorFromKnowledgeBase();
 
-  const handleDelete = useCallback(async () => {
-    const result = await deleteConnector.mutateAsync(connectorId);
+  const handleRemove = useCallback(async () => {
+    const result = await unassignMutation.mutateAsync({
+      connectorId,
+      knowledgeBaseId,
+    });
     if (result) {
       onOpenChange(false);
     }
-  }, [connectorId, deleteConnector, onOpenChange]);
+  }, [connectorId, knowledgeBaseId, unassignMutation, onOpenChange]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Delete Connector</DialogTitle>
+          <DialogTitle>Remove Connector</DialogTitle>
           <DialogDescription>
-            Are you sure you want to delete this connector? All sync history
-            will be permanently removed. This action cannot be undone.
+            Are you sure you want to remove this connector from the knowledge
+            base? The connector itself will not be deleted and can be re-added
+            later.
           </DialogDescription>
         </DialogHeader>
-        <DialogForm onSubmit={handleDelete}>
+        <DialogForm onSubmit={handleRemove}>
           <DialogFooter>
             <Button
               type="button"
@@ -701,9 +719,9 @@ function DeleteConnectorDialog({
             <Button
               type="submit"
               variant="destructive"
-              disabled={deleteConnector.isPending}
+              disabled={unassignMutation.isPending}
             >
-              {deleteConnector.isPending ? "Deleting..." : "Delete Connector"}
+              {unassignMutation.isPending ? "Removing..." : "Remove Connector"}
             </Button>
           </DialogFooter>
         </DialogForm>
@@ -736,9 +754,9 @@ function DeleteKnowledgeBaseDialog({
         <DialogHeader>
           <DialogTitle>Delete Knowledge Base</DialogTitle>
           <DialogDescription>
-            Are you sure you want to delete this knowledge base? All connectors
-            and sync history will be permanently removed. This action cannot be
-            undone.
+            Are you sure you want to delete this knowledge base? Connectors will
+            not be deleted but will be unlinked from this knowledge base. This
+            action cannot be undone.
           </DialogDescription>
         </DialogHeader>
         <DialogForm onSubmit={handleDelete}>

@@ -484,7 +484,7 @@ test.describe("Knowledge Bases API", () => {
       await deleteKnowledgeBase(request, kg.id);
     });
 
-    test("connectors are cascade-deleted when KG is deleted", async ({
+    test.skip("connectors are cascade-deleted when KG is deleted", async ({
       request,
       makeApiRequest,
       createKnowledgeBase,

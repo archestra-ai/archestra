@@ -1,7 +1,6 @@
 "use client";
 
 import { ConnectorStatusBadge } from "@/app/knowledge/knowledge-bases/_parts/connector-status-badge";
-import { LogViewer } from "@/components/log-viewer";
 import {
   Dialog,
   DialogContent,
@@ -11,17 +10,17 @@ import {
 import { useConnectorRun } from "@/lib/connector.query";
 import { formatDate } from "@/lib/utils";
 
-interface ConnectorRunLogsDialogProps {
+interface ConnectorRunDetailsDialogProps {
   connectorId: string;
   runId: string | null;
   onClose: () => void;
 }
 
-export function ConnectorRunLogsDialog({
+export function ConnectorRunDetailsDialog({
   connectorId,
   runId,
   onClose,
-}: ConnectorRunLogsDialogProps) {
+}: ConnectorRunDetailsDialogProps) {
   const { data: run } = useConnectorRun({ connectorId, runId });
 
   return (
@@ -31,18 +30,18 @@ export function ConnectorRunLogsDialog({
         if (!open) onClose();
       }}
     >
-      <DialogContent className="max-w-5xl h-[70vh] flex flex-col p-8">
+      <DialogContent className="max-w-3xl p-8">
         <DialogHeader className="flex-shrink-0">
           <DialogTitle className="flex items-center gap-2">
-            Sync Run Logs
+            Sync Run Details
             {run && <ConnectorStatusBadge status={run.status} />}
           </DialogTitle>
         </DialogHeader>
 
         {run && (
-          <div className="flex flex-col flex-1 min-h-0 gap-4">
+          <div className="flex flex-col gap-4">
             {/* Run metadata */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm flex-shrink-0">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm">
               <div>
                 <span className="text-muted-foreground">Started:</span>{" "}
                 {formatDate({ date: run.startedAt })}
@@ -73,7 +72,7 @@ export function ConnectorRunLogsDialog({
 
             {/* Progress bar when totalItems is known */}
             {run.totalItems != null && run.totalItems > 0 && (
-              <div className="flex-shrink-0">
+              <div>
                 <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
                   <div
                     className="h-full bg-primary transition-all duration-500 rounded-full"
@@ -93,22 +92,15 @@ export function ConnectorRunLogsDialog({
 
             {/* Error section */}
             {run.error && (
-              <div className="flex-shrink-0">
+              <div>
                 <h4 className="text-sm font-medium text-destructive mb-1">
                   Error
                 </h4>
-                <pre className="text-xs bg-destructive/10 text-destructive p-3 rounded-md whitespace-pre-wrap break-words max-h-32 overflow-auto">
+                <pre className="text-xs bg-destructive/10 text-destructive p-3 rounded-md whitespace-pre-wrap break-words max-h-48 overflow-auto">
                   {run.error}
                 </pre>
               </div>
             )}
-
-            {/* Log viewer */}
-            <LogViewer
-              logs={run.logs ?? ""}
-              isStreaming={run.status === "running"}
-              label="Output"
-            />
           </div>
         )}
       </DialogContent>

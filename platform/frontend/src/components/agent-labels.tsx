@@ -1,11 +1,16 @@
 "use client";
 
+import { LABEL_RESERVED_CHARS } from "@shared";
 import { Plus, Tags, X } from "lucide-react";
 import { forwardRef, useCallback, useImperativeHandle, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+
+function hasReservedChars(value: string): boolean {
+  return LABEL_RESERVED_CHARS.some((c) => value.includes(c));
+}
 
 export interface ProfileLabel {
   key: string;
@@ -34,11 +39,14 @@ export const ProfileLabels = forwardRef<ProfileLabelsRef, ProfileLabelsProps>(
       newLabelKey.trim() !== "" &&
       labels.some((l) => l.key === newLabelKey.trim());
 
+    const hasInvalidChars =
+      hasReservedChars(newLabelKey) || hasReservedChars(newLabelValue);
+
     const handleAddLabel = useCallback(() => {
       const key = newLabelKey.trim();
       const value = newLabelValue.trim();
 
-      if (!key || !value) {
+      if (!key || !value || hasReservedChars(key) || hasReservedChars(value)) {
         return;
       }
 
@@ -82,7 +90,12 @@ export const ProfileLabels = forwardRef<ProfileLabelsRef, ProfileLabelsProps>(
         const key = newLabelKey.trim();
         const value = newLabelValue.trim();
 
-        if (!key || !value) {
+        if (
+          !key ||
+          !value ||
+          hasReservedChars(key) ||
+          hasReservedChars(value)
+        ) {
           return null;
         }
 
@@ -142,7 +155,9 @@ export const ProfileLabels = forwardRef<ProfileLabelsRef, ProfileLabelsProps>(
             variant="outline"
             size="icon"
             onClick={handleAddLabel}
-            disabled={!newLabelKey.trim() || !newLabelValue.trim()}
+            disabled={
+              !newLabelKey.trim() || !newLabelValue.trim() || hasInvalidChars
+            }
             className="shrink-0"
             aria-label="Add label"
           >
@@ -154,6 +169,11 @@ export const ProfileLabels = forwardRef<ProfileLabelsRef, ProfileLabelsProps>(
           <p className="text-xs text-amber-600 dark:text-amber-500">
             This will update the existing &ldquo;{newLabelKey.trim()}&rdquo;
             label
+          </p>
+        )}
+        {hasInvalidChars && (
+          <p className="text-xs text-destructive">
+            Label key or value must not contain | ; : characters
           </p>
         )}
 

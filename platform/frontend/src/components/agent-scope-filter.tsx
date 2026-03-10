@@ -1,5 +1,6 @@
 "use client";
 
+import { LABELS_ENTRY_DELIMITER, LABELS_VALUE_DELIMITER } from "@shared";
 import { Check, ChevronDown, Search, X } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
@@ -616,13 +617,13 @@ function parseLabelsParam(
 ): Record<string, string[]> | null {
   if (!labels) return null;
   const result: Record<string, string[]> = {};
-  for (const entry of labels.split(";")) {
+  for (const entry of labels.split(LABELS_ENTRY_DELIMITER)) {
     const colonIdx = entry.indexOf(":");
     if (colonIdx === -1) continue;
     const key = entry.slice(0, colonIdx).trim();
     const values = entry
       .slice(colonIdx + 1)
-      .split(",")
+      .split(LABELS_VALUE_DELIMITER)
       .map((v) => v.trim())
       .filter(Boolean);
     if (key && values.length > 0) {
@@ -637,5 +638,7 @@ function serializeLabels(labels: Record<string, string[]>): string | null {
     ([, values]) => values.length > 0,
   );
   if (entries.length === 0) return null;
-  return entries.map(([key, values]) => `${key}:${values.join(",")}`).join(";");
+  return entries
+    .map(([key, values]) => `${key}:${values.join(LABELS_VALUE_DELIMITER)}`)
+    .join(LABELS_ENTRY_DELIMITER);
 }

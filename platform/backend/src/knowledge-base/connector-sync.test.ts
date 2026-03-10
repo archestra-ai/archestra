@@ -122,29 +122,6 @@ describe("ConnectorSyncService", () => {
     ).rejects.toThrow("Connector not found");
   });
 
-  test("executeSync throws when connector not assigned to any KB", async ({
-    makeOrganization,
-  }) => {
-    const org = await makeOrganization();
-
-    // Create connector directly without KB assignment
-    const connector = await KnowledgeBaseConnectorModel.create({
-      organizationId: org.id,
-      name: "Orphan Connector",
-      connectorType: "jira",
-      config: {
-        type: "jira",
-        jiraBaseUrl: "https://test.atlassian.net",
-        isCloud: true,
-        projectKey: "TEST",
-      },
-    });
-
-    await expect(
-      connectorSyncService.executeSync(connector.id),
-    ).rejects.toThrow("not assigned to any knowledge base");
-  });
-
   test("executeSync skips unchanged documents (same content hash)", async ({
     makeOrganization,
     makeKnowledgeBase,

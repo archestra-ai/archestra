@@ -127,8 +127,10 @@ describe("CreateConnectorDialog", () => {
       expect(
         screen.getByRole("button", { name: /Advanced/ }),
       ).toBeInTheDocument();
-      // Advanced fields should not be visible when collapsed
-      expect(screen.queryByText("Cloud Instance")).not.toBeInTheDocument();
+      // Cloud Instance is now in the main form, not Advanced
+      expect(screen.getByText("Cloud Instance")).toBeInTheDocument();
+      // Advanced-only fields should not be visible when collapsed
+      expect(screen.queryByText(/Project Key/)).not.toBeInTheDocument();
     });
   });
 
@@ -139,9 +141,8 @@ describe("CreateConnectorDialog", () => {
       await user.click(screen.getByRole("button", { name: /Advanced/ }));
 
       await waitFor(() => {
-        expect(screen.getByText("Cloud Instance")).toBeInTheDocument();
+        expect(screen.getByText(/Project Key/)).toBeInTheDocument();
       });
-      expect(screen.getByText(/Project Key/)).toBeInTheDocument();
       expect(screen.getByText(/JQL Query/)).toBeInTheDocument();
     });
 
@@ -151,13 +152,13 @@ describe("CreateConnectorDialog", () => {
       // Expand
       await user.click(screen.getByRole("button", { name: /Advanced/ }));
       await waitFor(() => {
-        expect(screen.getByText("Cloud Instance")).toBeInTheDocument();
+        expect(screen.getByText(/Project Key/)).toBeInTheDocument();
       });
 
       // Collapse
       await user.click(screen.getByRole("button", { name: /Advanced/ }));
       await waitFor(() => {
-        expect(screen.queryByText("Cloud Instance")).not.toBeInTheDocument();
+        expect(screen.queryByText(/Project Key/)).not.toBeInTheDocument();
       });
     });
 
@@ -167,7 +168,7 @@ describe("CreateConnectorDialog", () => {
       await user.click(screen.getByRole("button", { name: /Advanced/ }));
 
       await waitFor(() => {
-        expect(screen.getByText("Cloud Instance")).toBeInTheDocument();
+        expect(screen.getByText(/Project Key/)).toBeInTheDocument();
       });
       // Only one URL label should exist (the main one, not inside Advanced)
       const urlLabels = screen.getAllByText("URL");

@@ -2,7 +2,10 @@ import { vi } from "vitest";
 
 const mockEmbeddingsCreate = vi.hoisted(() =>
   vi.fn().mockResolvedValue({
-    data: [{ embedding: [] }],
+    object: "list",
+    data: [{ object: "embedding", embedding: [], index: 0 }],
+    model: "text-embedding-3-small",
+    usage: { prompt_tokens: 5, total_tokens: 5 },
   }),
 );
 
@@ -106,7 +109,10 @@ describe("QueryService", () => {
     // Mock query embedding - similar to emb0
     const queryEmb = makeFakeEmbedding(1.1);
     mockEmbeddingsCreate.mockResolvedValueOnce({
-      data: [{ embedding: queryEmb }],
+      object: "list",
+      data: [{ object: "embedding", embedding: queryEmb, index: 0 }],
+      model: "text-embedding-3-small",
+      usage: { prompt_tokens: 5, total_tokens: 5 },
     });
 
     const results = await queryService.query({
@@ -148,7 +154,10 @@ describe("QueryService", () => {
 
     const queryEmb = makeFakeEmbedding(1);
     mockEmbeddingsCreate.mockResolvedValueOnce({
-      data: [{ embedding: queryEmb }],
+      object: "list",
+      data: [{ object: "embedding", embedding: queryEmb, index: 0 }],
+      model: "text-embedding-3-small",
+      usage: { prompt_tokens: 5, total_tokens: 5 },
     });
 
     const results = await queryService.query({
@@ -190,7 +199,10 @@ describe("QueryService", () => {
 
     const queryEmb = makeFakeEmbedding(1);
     mockEmbeddingsCreate.mockResolvedValueOnce({
-      data: [{ embedding: queryEmb }],
+      object: "list",
+      data: [{ object: "embedding", embedding: queryEmb, index: 0 }],
+      model: "text-embedding-3-small",
+      usage: { prompt_tokens: 5, total_tokens: 5 },
     });
 
     const results = await queryService.query({
@@ -239,7 +251,10 @@ describe("QueryService", () => {
 
     const queryEmb = makeFakeEmbedding(0);
     mockEmbeddingsCreate.mockResolvedValueOnce({
-      data: [{ embedding: queryEmb }],
+      object: "list",
+      data: [{ object: "embedding", embedding: queryEmb, index: 0 }],
+      model: "text-embedding-3-small",
+      usage: { prompt_tokens: 5, total_tokens: 5 },
     });
 
     const results = await queryService.query({
@@ -308,7 +323,12 @@ describe("QueryService", () => {
       .mockResolvedValueOnce([fullTextOnly, { ...sharedResult, score: 3.0 }]);
 
     mockEmbeddingsCreate.mockResolvedValueOnce({
-      data: [{ embedding: makeFakeEmbedding(1) }],
+      object: "list",
+      data: [
+        { object: "embedding", embedding: makeFakeEmbedding(1), index: 0 },
+      ],
+      model: "text-embedding-3-small",
+      usage: { prompt_tokens: 5, total_tokens: 5 },
     });
 
     const results = await queryService.query({
@@ -360,7 +380,12 @@ describe("QueryService", () => {
       .mockResolvedValueOnce([]);
 
     mockEmbeddingsCreate.mockResolvedValueOnce({
-      data: [{ embedding: makeFakeEmbedding(1) }],
+      object: "list",
+      data: [
+        { object: "embedding", embedding: makeFakeEmbedding(1), index: 0 },
+      ],
+      model: "text-embedding-3-small",
+      usage: { prompt_tokens: 5, total_tokens: 5 },
     });
 
     const results = await queryService.query({
@@ -420,7 +445,12 @@ describe("QueryService", () => {
       .mockResolvedValueOnce([chunk2, chunk1]);
 
     mockEmbeddingsCreate.mockResolvedValueOnce({
-      data: [{ embedding: makeFakeEmbedding(1) }],
+      object: "list",
+      data: [
+        { object: "embedding", embedding: makeFakeEmbedding(1), index: 0 },
+      ],
+      model: "text-embedding-3-small",
+      usage: { prompt_tokens: 5, total_tokens: 5 },
     });
 
     // Reranker reverses the order

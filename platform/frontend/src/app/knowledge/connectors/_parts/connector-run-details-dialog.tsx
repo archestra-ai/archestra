@@ -10,17 +10,17 @@ import {
 import { useConnectorRun } from "@/lib/connector.query";
 import { formatDate } from "@/lib/utils";
 
-interface ConnectorRunLogsDialogProps {
+interface ConnectorRunDetailsDialogProps {
   connectorId: string;
   runId: string | null;
   onClose: () => void;
 }
 
-export function ConnectorRunLogsDialog({
+export function ConnectorRunDetailsDialog({
   connectorId,
   runId,
   onClose,
-}: ConnectorRunLogsDialogProps) {
+}: ConnectorRunDetailsDialogProps) {
   const { data: run } = useConnectorRun({ connectorId, runId });
 
   return (

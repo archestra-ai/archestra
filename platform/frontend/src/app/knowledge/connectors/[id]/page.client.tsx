@@ -7,7 +7,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
-import { ConnectorRunLogsDialog } from "@/app/knowledge/connectors/_parts/connector-run-logs-dialog";
+import { ConnectorRunDetailsDialog } from "@/app/knowledge/connectors/_parts/connector-run-details-dialog";
 import { ConnectorStatusDot } from "@/app/knowledge/knowledge-bases/_parts/connector-enabled-dot";
 import { ConnectorTypeIcon } from "@/app/knowledge/knowledge-bases/_parts/connector-icons";
 import { ConnectorStatusBadge } from "@/app/knowledge/knowledge-bases/_parts/connector-status-badge";
@@ -117,13 +117,14 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
           <div className="flex items-center gap-2">
             <ConnectorStatusBadge status={status} />
             {error && (
-              <Badge
-                variant="destructive"
-                className="cursor-pointer text-xs"
+              <button
+                type="button"
                 onClick={() => setSelectedRunId(row.original.id)}
               >
-                Error
-              </Badge>
+                <Badge variant="destructive" className="cursor-pointer text-xs">
+                  Error
+                </Badge>
+              </button>
             )}
           </div>
         );
@@ -301,7 +302,7 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
           )}
         </LoadingWrapper>
 
-        <ConnectorRunLogsDialog
+        <ConnectorRunDetailsDialog
           connectorId={connectorId}
           runId={selectedRunId}
           onClose={() => setSelectedRunId(null)}

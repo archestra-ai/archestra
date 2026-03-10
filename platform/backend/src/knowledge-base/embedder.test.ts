@@ -2,7 +2,10 @@ import { vi } from "vitest";
 
 const mockEmbeddingsCreate = vi.hoisted(() =>
   vi.fn().mockResolvedValue({
+    object: "list",
     data: [],
+    model: "text-embedding-3-small",
+    usage: { prompt_tokens: 0, total_tokens: 0 },
   }),
 );
 
@@ -79,7 +82,13 @@ describe("EmbeddingService", () => {
     const emb0 = makeFakeEmbedding(1);
     const emb1 = makeFakeEmbedding(2);
     mockEmbeddingsCreate.mockResolvedValueOnce({
-      data: [{ embedding: emb0 }, { embedding: emb1 }],
+      object: "list",
+      data: [
+        { object: "embedding", embedding: emb0, index: 0 },
+        { object: "embedding", embedding: emb1, index: 1 },
+      ],
+      model: "text-embedding-3-small",
+      usage: { prompt_tokens: 10, total_tokens: 10 },
     });
 
     await embeddingService.processDocument(doc.id, makeEmbeddingContext());
@@ -226,7 +235,10 @@ describe("EmbeddingService", () => {
     mockEmbeddingsCreate
       .mockRejectedValueOnce(rateLimitError)
       .mockResolvedValueOnce({
-        data: [{ embedding: emb }],
+        object: "list",
+        data: [{ object: "embedding", embedding: emb, index: 0 }],
+        model: "text-embedding-3-small",
+        usage: { prompt_tokens: 5, total_tokens: 5 },
       });
 
     await embeddingService.processDocument(doc.id, makeEmbeddingContext());
@@ -326,7 +338,14 @@ describe("EmbeddingService", () => {
 
     // All 3 chunks should arrive in a single API call
     mockEmbeddingsCreate.mockResolvedValueOnce({
-      data: [{ embedding: emb0 }, { embedding: emb1 }, { embedding: emb2 }],
+      object: "list",
+      data: [
+        { object: "embedding", embedding: emb0, index: 0 },
+        { object: "embedding", embedding: emb1, index: 1 },
+        { object: "embedding", embedding: emb2, index: 2 },
+      ],
+      model: "text-embedding-3-small",
+      usage: { prompt_tokens: 15, total_tokens: 15 },
     });
 
     await embeddingService.processDocuments([doc1.id, doc2.id]);

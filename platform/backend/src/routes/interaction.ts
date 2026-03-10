@@ -1,4 +1,4 @@
-import { RouteId } from "@shared";
+import { InteractionSourceSchema, RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { hasAnyAgentTypeAdminPermission } from "@/auth";
@@ -155,6 +155,9 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
               .string()
               .optional()
               .describe("Filter by user ID (from X-Archestra-User-Id header)"),
+            source: InteractionSourceSchema.optional().describe(
+              "Filter by interaction source",
+            ),
             sessionId: z.string().optional().describe("Filter by session ID"),
             startDate: z
               .string()
@@ -184,6 +187,7 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
         query: {
           profileId,
           userId,
+          source,
           sessionId,
           startDate,
           endDate,
@@ -210,6 +214,7 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
           isAgentAdmin,
           profileId,
           filterUserId: userId,
+          source,
           sessionId,
           startDate,
           endDate,
@@ -226,6 +231,7 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
         {
           profileId,
           userId,
+          source,
           sessionId,
           startDate: startDate ? new Date(startDate) : undefined,
           endDate: endDate ? new Date(endDate) : undefined,

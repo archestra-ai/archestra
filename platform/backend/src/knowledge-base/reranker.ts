@@ -1,8 +1,13 @@
+import type { SupportedProvider } from "@shared";
 import { RERANKER_MIN_RELEVANCE_SCORE } from "@shared";
 import { generateObject } from "ai";
 import { z } from "zod";
 import logger from "@/logging";
 import type { VectorSearchResult } from "@/models/kb-chunk";
+import {
+  getProviderChatInteractionType,
+  withKbObservability,
+} from "./kb-interaction";
 import { resolveRerankerConfig } from "./kb-llm-client";
 
 async function rerank(params: {
@@ -38,18 +43,30 @@ ${numberedList}
 
 Score each passage from 0 (completely irrelevant) to 10 (perfectly relevant). Return scores for all passages.`;
 
-  try {
-    const result = await generateObject({
-      model: rerankerConfig.llmModel,
-      schema: z.object({
-        scores: z.array(
-          z.object({
-            index: z.number(),
-            score: z.number().min(0).max(10),
-          }),
-        ),
+  const schema = z.object({
+    scores: z.array(
+      z.object({
+        index: z.number(),
+        score: z.number().min(0).max(10),
       }),
-      prompt,
+    ),
+  });
+
+  try {
+    const result = await withKbObservability({
+      operationName: "chat",
+      provider: rerankerConfig.provider,
+      model: rerankerConfig.modelName,
+      source: "knowledge:reranker",
+      type: getProviderChatInteractionType(rerankerConfig.provider),
+      callback: () =>
+        generateObject({
+          model: rerankerConfig.llmModel,
+          schema,
+          prompt,
+        }),
+      buildInteraction: (res) =>
+        buildRerankerInteraction(rerankerConfig, prompt, res),
     });
 
     const scoreMap = new Map<number, number>();
@@ -92,3 +109,50 @@ Score each passage from 0 (completely irrelevant) to 10 (perfectly relevant). Re
 }
 
 export default rerank;
+
+// ===== Internal helpers =====
+
+function buildRerankerInteraction(
+  config: { modelName: string; provider: SupportedProvider },
+  prompt: string,
+  // biome-ignore lint/suspicious/noExplicitAny: Vercel AI SDK result type is complex
+  result: any,
+) {
+  const usage = result.usage as
+    | { promptTokens?: number; completionTokens?: number }
+    | undefined;
+
+  return {
+    request: {
+      model: config.modelName,
+      messages: [{ role: "user" as const, content: prompt }],
+    },
+    response: {
+      id: `reranker-${crypto.randomUUID()}`,
+      object: "chat.completion" as const,
+      created: Math.floor(Date.now() / 1000),
+      model: config.modelName,
+      choices: [
+        {
+          index: 0,
+          message: {
+            role: "assistant" as const,
+            content: JSON.stringify(result.object),
+            refusal: null,
+          },
+          finish_reason: "stop" as const,
+          logprobs: null,
+        },
+      ],
+      usage: {
+        prompt_tokens: usage?.promptTokens ?? 0,
+        completion_tokens: usage?.completionTokens ?? 0,
+        total_tokens:
+          (usage?.promptTokens ?? 0) + (usage?.completionTokens ?? 0),
+      },
+    },
+    model: config.modelName,
+    inputTokens: usage?.promptTokens ?? 0,
+    outputTokens: usage?.completionTokens ?? 0,
+  };
+}

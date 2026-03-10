@@ -119,11 +119,36 @@ class ConnectorRunModel {
         completedBatches: sql`${t.completedBatches} + 1`,
         status: sql`CASE
           WHEN ${t.status} != 'running' THEN ${t.status}
-          WHEN ${t.completedBatches} + 1 >= ${t.totalBatches} AND ${t.itemErrors} > 0 THEN 'completed_with_errors'
-          WHEN ${t.completedBatches} + 1 >= ${t.totalBatches} THEN 'success'
+          WHEN ${t.totalBatches} > 0 AND ${t.completedBatches} + 1 >= ${t.totalBatches} AND ${t.itemErrors} > 0 THEN 'completed_with_errors'
+          WHEN ${t.totalBatches} > 0 AND ${t.completedBatches} + 1 >= ${t.totalBatches} THEN 'success'
           ELSE ${t.status}
         END`,
-        completedAt: sql`CASE WHEN ${t.completedBatches} + 1 >= ${t.totalBatches} THEN NOW() ELSE ${t.completedAt} END`,
+        completedAt: sql`CASE WHEN ${t.totalBatches} > 0 AND ${t.completedBatches} + 1 >= ${t.totalBatches} THEN NOW() ELSE ${t.completedAt} END`,
+      })
+      .where(eq(t.id, runId))
+      .returning();
+    return result ?? null;
+  }
+
+  /**
+   * Atomically checks if all batches are complete and transitions the run to
+   * success/completed_with_errors. Called after totalBatches is set to handle
+   * the case where all batches completed before totalBatches was written.
+   */
+  static async finalizeBatchesIfComplete(
+    runId: string,
+  ): Promise<ConnectorRun | null> {
+    const t = schema.connectorRunsTable;
+    const [result] = await db
+      .update(t)
+      .set({
+        status: sql`CASE
+          WHEN ${t.status} != 'running' THEN ${t.status}
+          WHEN ${t.totalBatches} > 0 AND ${t.completedBatches} >= ${t.totalBatches} AND ${t.itemErrors} > 0 THEN 'completed_with_errors'
+          WHEN ${t.totalBatches} > 0 AND ${t.completedBatches} >= ${t.totalBatches} THEN 'success'
+          ELSE ${t.status}
+        END`,
+        completedAt: sql`CASE WHEN ${t.status} = 'running' AND ${t.totalBatches} > 0 AND ${t.completedBatches} >= ${t.totalBatches} THEN NOW() ELSE ${t.completedAt} END`,
       })
       .where(eq(t.id, runId))
       .returning();

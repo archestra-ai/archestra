@@ -24,14 +24,14 @@ The endpoint `http://localhost:9050/metrics` exposes Prometheus-formatted metric
 
 #### LLM Metrics
 
-- `llm_request_duration_seconds` - LLM API request duration by provider, model, agent_id, agent_name, agent_type, external_agent_id, and status code
-- `llm_tokens_total` - Token consumption by provider, model, agent_id, agent_name, agent_type, external_agent_id, and type (input/output)
-- `llm_cost_total` - Estimated cost in USD by provider, model, agent_id, agent_name, agent_type, and external_agent_id. Requires token pricing to be configured in Archestra.
-- `llm_blocked_tools_total` - Counter of tool calls blocked by tool invocation policies, grouped by provider, model, agent_id, agent_name, agent_type, and external_agent_id
-- `llm_time_to_first_token_seconds` - Time to first token (TTFT) for streaming requests, by provider, agent_id, agent_name, agent_type, external_agent_id, and model. Helps developers choose models with lower initial response latency.
-- `llm_tokens_per_second` - Output tokens per second throughput, by provider, agent_id, agent_name, agent_type, external_agent_id, and model. Allows comparing model response speeds for latency-sensitive applications.
+- `llm_request_duration_seconds` - LLM API request duration by provider, model, agent_id, agent_name, agent_type, external_agent_id, source, and status code
+- `llm_tokens_total` - Token consumption by provider, model, agent_id, agent_name, agent_type, external_agent_id, source, and type (input/output)
+- `llm_cost_total` - Estimated cost in USD by provider, model, agent_id, agent_name, agent_type, external_agent_id, and source. Requires token pricing to be configured in Archestra.
+- `llm_blocked_tools_total` - Counter of tool calls blocked by tool invocation policies, grouped by provider, model, agent_id, agent_name, agent_type, external_agent_id, and source
+- `llm_time_to_first_token_seconds` - Time to first token (TTFT) for streaming requests, by provider, agent_id, agent_name, agent_type, external_agent_id, source, and model. Helps developers choose models with lower initial response latency.
+- `llm_tokens_per_second` - Output tokens per second throughput, by provider, agent_id, agent_name, agent_type, external_agent_id, source, and model. Allows comparing model response speeds for latency-sensitive applications.
 
-> **Note:** `agent_id` and `agent_name` are the internal Archestra agent identifier and name. `external_agent_id` contains the external agent ID passed via the [`X-Archestra-Agent-Id`](/docs/platform-llm-proxy#custom-headers) header — this allows clients to associate metrics with their own agent identifiers. If the header is not provided, the label will be empty. `agent_type` indicates the type of agent: `agent`, `llm_proxy`, `mcp_gateway`, or `profile`.
+> **Note:** `agent_id` and `agent_name` are the internal Archestra agent identifier and name. `external_agent_id` contains the external agent ID passed via the [`X-Archestra-Agent-Id`](/docs/platform-llm-proxy#custom-headers) header — this allows clients to associate metrics with their own agent identifiers. If the header is not provided, the label will be empty. `agent_type` indicates the type of agent: `agent`, `llm_proxy`, `mcp_gateway`, or `profile`. Knowledge Base operations (embeddings, reranking) emit the same LLM metrics with `agent_name="Knowledge Base"` and empty `agent_id`.
 
 #### MCP Metrics
 
@@ -137,6 +137,7 @@ When [Sentry](/docs/platform-deployment#observability--metrics) is configured, i
 Archestra automatically traces:
 
 - **LLM API calls** - Calls to LLM providers with dedicated spans showing model, tokens, and response time
+- **Knowledge Base operations** - Embedding and reranking LLM calls made by the Knowledge Base system, with cost and token tracking
 - **MCP tool calls** - Tool executions through the MCP Gateway with tool name, server, and duration
 - **HTTP requests** (verbose mode only) - All API requests with method, route, and status code
 
@@ -160,6 +161,7 @@ Each LLM API call produces a span with `SpanKind.CLIENT` (indicating an outbound
 - `archestra.agent.type` - Agent type (`agent`, `llm_proxy`, `mcp_gateway`, `profile`)
 - `archestra.execution.id` - Execution ID (from [`X-Archestra-Execution-Id`](/docs/platform-llm-proxy#custom-headers) header)
 - `archestra.external_agent_id` - Client-provided agent ID (from [`X-Archestra-Agent-Id`](/docs/platform-llm-proxy#custom-headers) header)
+- `archestra.trigger.source` - The source that triggered the LLM call (e.g., `knowledge:embedding`, `knowledge:reranker`, `api`, `chat`). Useful for filtering traces by origin.
 - `archestra.label.<key>` - Custom agent labels (e.g., `archestra.label.environment=production`)
 - `archestra.user.id` - The Archestra user ID who made the request (when available)
 - `archestra.user.email` - The Archestra user email (when available)
@@ -214,6 +216,21 @@ Each MCP tool call executed through the MCP Gateway produces a dedicated span:
 **Span Names:**
 
 - `execute_tool {tool_name}` - e.g., `execute_tool github__list_repos`
+
+### Knowledge Base Spans
+
+Knowledge Base embedding and reranking LLM calls produce spans with the same structure as LLM proxy spans. These calls bypass the LLM proxy (they call provider APIs directly), but are instrumented with the same OTEL tracing, Prometheus metrics, and interaction recording.
+
+**Key differences from proxy LLM spans:**
+
+- `gen_ai.agent.id` and `gen_ai.agent.name` are not set (KB calls are not tied to a profile)
+- `archestra.trigger.source` is set to `knowledge:embedding` or `knowledge:reranker`
+- Prometheus metrics use `agent_name="Knowledge Base"` as a synthetic label
+
+**Span Names:**
+
+- `embedding text-embedding-3-small` - Embedding API calls
+- `chat {model}` - Reranker LLM calls (uses chat completion for relevance scoring)
 
 ### Session Tracking
 

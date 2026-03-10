@@ -251,6 +251,22 @@ class ConnectorSyncService {
           documentsIngested,
           logs: options?.getLogOutput?.() ?? null,
         });
+
+        // Handle edge case: all batches may have completed before totalBatches was set.
+        // finalizeBatchesIfComplete atomically checks and transitions if ready.
+        const finalizedRun = await ConnectorRunModel.finalizeBatchesIfComplete(
+          run.id,
+        );
+        if (
+          finalizedRun &&
+          (finalizedRun.status === "success" ||
+            finalizedRun.status === "completed_with_errors")
+        ) {
+          await KnowledgeBaseConnectorModel.update(connectorId, {
+            lastSyncStatus: finalizedRun.status,
+            lastSyncAt: finalizedRun.completedAt ?? new Date(),
+          });
+        }
       }
 
       runLog.info(

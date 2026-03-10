@@ -162,22 +162,31 @@ test.describe("Chat - Auth Required Tool", () => {
     const textarea = memberPage.getByTestId(E2eTestId.ChatPromptTextarea);
     await expect(textarea).toBeVisible({ timeout: 15_000 });
 
-    // Select our test agent via the agent selector
+    // Select our test agent via the agent selector dialog
     const agentSelector = memberPage.getByRole("combobox").first();
     await expect(agentSelector).toBeVisible({ timeout: 5_000 });
     await agentSelector.click();
 
+    // The dialog opens to "settings" view. Click "Change" to go to the agent list.
+    const changeButton = memberPage.getByRole("button", { name: "Change" });
+    await expect(changeButton).toBeVisible({ timeout: 5_000 });
+    await changeButton.click();
+
     // Search for our test agent
-    const searchInput = memberPage.getByPlaceholder("Search agent...");
+    const searchInput = memberPage.getByPlaceholder("Search agents...");
     await expect(searchInput).toBeVisible({ timeout: 3_000 });
     await searchInput.fill(profileName);
 
-    // Select the test agent from the dropdown
-    const profileOption = memberPage.getByRole("option", {
-      name: profileName,
+    // Select the test agent from the grid (AgentCard is a button)
+    const profileButton = memberPage.getByRole("button", {
+      name: new RegExp(profileName),
     });
-    await expect(profileOption).toBeVisible({ timeout: 5_000 });
-    await profileOption.click();
+    await expect(profileButton).toBeVisible({ timeout: 5_000 });
+    await profileButton.click();
+
+    // Close the agent selector dialog (goes back to settings view, need to dismiss)
+    await memberPage.keyboard.press("Escape");
+    await memberPage.waitForTimeout(500);
 
     // Select an Anthropic model — the member's default may be a different
     // provider (e.g. Cohere in CI) whose WireMock stubs won't return our

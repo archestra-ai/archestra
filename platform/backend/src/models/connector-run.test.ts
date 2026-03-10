@@ -638,6 +638,32 @@ describe("ConnectorRunModel", () => {
       expect(result?.completedBatches).toBe(1);
     });
 
+    test("does not transition status when totalBatches is 0", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+
+      // totalBatches defaults to 0 — not yet set by sync loop
+      const run = await ConnectorRunModel.create({
+        connectorId: connector.id,
+        status: "running",
+        startedAt: new Date(),
+        totalBatches: 0,
+        completedBatches: 0,
+      });
+
+      const result = await ConnectorRunModel.completeBatch(run.id);
+
+      // Should stay "running" — totalBatches hasn't been set yet
+      expect(result?.status).toBe("running");
+      expect(result?.completedBatches).toBe(1);
+      expect(result?.completedAt).toBeNull();
+    });
+
     test("transitions running run to success when last batch completes", async ({
       makeOrganization,
       makeKnowledgeBase,
@@ -660,6 +686,106 @@ describe("ConnectorRunModel", () => {
       expect(result?.status).toBe("success");
       expect(result?.completedBatches).toBe(1);
       expect(result?.completedAt).not.toBeNull();
+    });
+  });
+
+  describe("finalizeBatchesIfComplete", () => {
+    test("transitions to success when completedBatches >= totalBatches > 0", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+
+      const run = await ConnectorRunModel.create({
+        connectorId: connector.id,
+        status: "running",
+        startedAt: new Date(),
+        totalBatches: 2,
+        completedBatches: 2,
+      });
+
+      const result = await ConnectorRunModel.finalizeBatchesIfComplete(run.id);
+
+      expect(result?.status).toBe("success");
+      expect(result?.completedAt).not.toBeNull();
+    });
+
+    test("transitions to completed_with_errors when there are item errors", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+
+      const run = await ConnectorRunModel.create({
+        connectorId: connector.id,
+        status: "running",
+        startedAt: new Date(),
+        totalBatches: 2,
+        completedBatches: 2,
+        itemErrors: 3,
+      });
+
+      const result = await ConnectorRunModel.finalizeBatchesIfComplete(run.id);
+
+      expect(result?.status).toBe("completed_with_errors");
+      expect(result?.completedAt).not.toBeNull();
+    });
+
+    test("stays running when completedBatches < totalBatches", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+
+      const run = await ConnectorRunModel.create({
+        connectorId: connector.id,
+        status: "running",
+        startedAt: new Date(),
+        totalBatches: 3,
+        completedBatches: 1,
+      });
+
+      const result = await ConnectorRunModel.finalizeBatchesIfComplete(run.id);
+
+      expect(result?.status).toBe("running");
+      expect(result?.completedAt).toBeNull();
+    });
+
+    test("preserves non-running statuses", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+
+      const run = await ConnectorRunModel.create({
+        connectorId: connector.id,
+        status: "running",
+        startedAt: new Date(),
+        totalBatches: 1,
+        completedBatches: 1,
+      });
+
+      // Simulate the run being failed/superseded
+      await ConnectorRunModel.update(run.id, {
+        status: "failed",
+        error: "Superseded by new sync run",
+      });
+
+      const result = await ConnectorRunModel.finalizeBatchesIfComplete(run.id);
+
+      expect(result?.status).toBe("failed");
     });
   });
 });

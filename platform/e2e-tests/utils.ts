@@ -56,7 +56,7 @@ export async function addCustomSelfHostedCatalogItem({
 
   await page.getByRole("button", { name: "Self-hosted" }).click();
   await page.getByRole("textbox", { name: "Name *" }).fill(catalogItemName);
-  await page.getByRole("textbox", { name: "Command *" }).fill("sh");
+  await page.getByRole("textbox", { name: "Command" }).fill("sh");
   const singleLineCommand = testMcpServerCommand.replace(/\n/g, " ");
   await page
     .getByRole("textbox", { name: "Arguments (one per line)" })

@@ -1135,17 +1135,18 @@ export const anthropicAdapterFactory: LLMProvider<
 
   createClient(
     apiKey: string | undefined,
-    options?: CreateClientOptions,
+    options: CreateClientOptions,
   ): AnthropicProvider {
-    if (options?.mockMode) {
+    if (options.mockMode) {
       return new MockAnthropicClient() as unknown as AnthropicProvider;
     }
 
     // Use observable fetch for request duration metrics if agent is provided
-    const customFetch = options?.agent
+    const customFetch = options.agent
       ? metrics.llm.getObservableFetch(
           "anthropic",
           options.agent,
+          options.source,
           options.externalAgentId,
         )
       : undefined;
@@ -1158,9 +1159,9 @@ export const anthropicAdapterFactory: LLMProvider<
     return new AnthropicProvider({
       apiKey: regularApiKey,
       authToken: token,
-      baseURL: options?.baseUrl,
+      baseURL: options.baseUrl,
       fetch: customFetch,
-      defaultHeaders: options?.defaultHeaders,
+      defaultHeaders: options.defaultHeaders,
     });
   },
 

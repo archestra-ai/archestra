@@ -10,7 +10,12 @@ import {
   context as otelContext,
   propagation,
 } from "@opentelemetry/api";
-import { ARCHESTRA_TOKEN_PREFIX, SOURCE_HEADER } from "@shared";
+import {
+  ARCHESTRA_TOKEN_PREFIX,
+  type InteractionSource,
+  InteractionSourceSchema,
+  SOURCE_HEADER,
+} from "@shared";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import config from "@/config";
 import logger from "@/logging";
@@ -36,8 +41,6 @@ import {
 import {
   type Agent,
   ApiError,
-  type InteractionSource,
-  InteractionSourceSchema,
   type LLMProvider,
   type LLMStreamAdapter,
   type ToolCompressionStats,
@@ -89,7 +92,7 @@ export interface LLMProxyContext<TRequest> {
   resolvedUser?: { id: string; email: string; name: string } | null;
   sessionId?: string | null;
   sessionSource?: SessionSource;
-  source?: InteractionSource | null;
+  source: InteractionSource;
   executionId?: string;
   parentContext?: Context;
   teamIds?: string[];
@@ -510,6 +513,7 @@ export async function handleLLMProxy<
       mockMode: config.benchmark.mockMode,
       agent: resolvedAgent,
       externalAgentId,
+      source,
       defaultHeaders:
         Object.keys(headersToForward).length > 0 ? headersToForward : undefined,
     });
@@ -660,6 +664,7 @@ async function handleStreaming<
               agent,
               actualModel,
               ttftSeconds,
+              source,
               externalAgentId,
             );
           }
@@ -777,6 +782,7 @@ async function handleStreaming<
         providerName,
         toolCallCount: toolCalls.length,
         actualModel,
+        source,
         externalAgentId,
       });
     } else if (toolCalls.length > 0) {
@@ -818,6 +824,7 @@ async function handleStreaming<
           agent,
           { input: usage.inputTokens, output: usage.outputTokens },
           actualModel,
+          source,
           externalAgentId,
         );
 
@@ -829,6 +836,7 @@ async function handleStreaming<
             actualModel,
             usage.outputTokens,
             totalDurationSeconds,
+            source,
             externalAgentId,
           );
         }
@@ -847,6 +855,7 @@ async function handleStreaming<
           agent,
           actualModel,
           costs.actualCost,
+          source,
           externalAgentId,
         ),
       );
@@ -1028,6 +1037,7 @@ async function handleNonStreaming<
         providerName,
         toolCallCount: toolCalls.length,
         actualModel,
+        source,
         externalAgentId,
       });
 
@@ -1046,6 +1056,7 @@ async function handleNonStreaming<
           agent,
           actualModel,
           costs.actualCost,
+          source,
           externalAgentId,
         ),
       );
@@ -1088,6 +1099,7 @@ async function handleNonStreaming<
   //   agent,
   //   { input: usage.inputTokens, output: usage.outputTokens },
   //   actualModel,
+  //   source,
   //   externalAgentId,
   // );
 
@@ -1104,6 +1116,7 @@ async function handleNonStreaming<
       agent,
       actualModel,
       costs.actualCost,
+      source,
       externalAgentId,
     ),
   );

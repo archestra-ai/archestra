@@ -3,6 +3,10 @@ import { EMBEDDING_BATCH_SIZE } from "@shared";
 import OpenAI from "openai";
 import logger from "@/logging";
 import { KbChunkModel, KbDocumentModel } from "@/models";
+import {
+  buildEmbeddingInteraction,
+  withKbObservability,
+} from "./kb-interaction";
 import { getDefaultOrgEmbeddingConfig } from "./kb-llm-client";
 
 const RETRY_MAX_ATTEMPTS = 3;
@@ -221,11 +225,28 @@ class EmbeddingService {
   ): Promise<OpenAI.Embeddings.CreateEmbeddingResponse> {
     for (let attempt = 1; attempt <= RETRY_MAX_ATTEMPTS; attempt++) {
       try {
-        return await ctx.client.embeddings.create({
+        const response = await withKbObservability({
+          operationName: "embedding",
+          provider: "openai",
           model: ctx.model,
-          input: texts,
-          dimensions: ctx.dimensions,
+          source: "knowledge:embedding",
+          type: "openai:embeddings",
+          callback: () =>
+            ctx.client.embeddings.create({
+              model: ctx.model,
+              input: texts,
+              dimensions: ctx.dimensions,
+            }),
+          buildInteraction: (resp) =>
+            buildEmbeddingInteraction({
+              model: ctx.model,
+              input: texts,
+              dimensions: ctx.dimensions,
+              response: resp,
+            }),
         });
+
+        return response;
       } catch (error) {
         const isLastAttempt = attempt === RETRY_MAX_ATTEMPTS;
         if (isLastAttempt || !this.isRetryableError(error)) {

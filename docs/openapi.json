@@ -78243,7 +78243,9 @@
                                   "chat",
                                   "chatops:slack",
                                   "chatops:ms-teams",
-                                  "email"
+                                  "email",
+                                  "knowledge:embedding",
+                                  "knowledge:reranker"
                                 ]
                               },
                               "request": {
@@ -78401,7 +78403,283 @@
                                   "chat",
                                   "chatops:slack",
                                   "chatops:ms-teams",
-                                  "email"
+                                  "email",
+                                  "knowledge:embedding",
+                                  "knowledge:reranker"
+                                ]
+                              },
+                              "request": {
+                                "type": "object",
+                                "properties": {
+                                  "model": {
+                                    "type": "string"
+                                  },
+                                  "input": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      }
+                                    ]
+                                  },
+                                  "dimensions": {
+                                    "type": "number"
+                                  },
+                                  "encoding_format": {
+                                    "type": "string",
+                                    "enum": [
+                                      "float",
+                                      "base64"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "model",
+                                  "input"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "processedRequest": {
+                                "nullable": true,
+                                "type": "object",
+                                "properties": {
+                                  "model": {
+                                    "type": "string"
+                                  },
+                                  "input": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      }
+                                    ]
+                                  },
+                                  "dimensions": {
+                                    "type": "number"
+                                  },
+                                  "encoding_format": {
+                                    "type": "string",
+                                    "enum": [
+                                      "float",
+                                      "base64"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "model",
+                                  "input"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "response": {
+                                "type": "object",
+                                "properties": {
+                                  "object": {
+                                    "type": "string",
+                                    "enum": [
+                                      "list"
+                                    ]
+                                  },
+                                  "data": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "properties": {
+                                        "object": {
+                                          "type": "string",
+                                          "enum": [
+                                            "embedding"
+                                          ]
+                                        },
+                                        "embedding": {
+                                          "type": "array",
+                                          "items": {
+                                            "type": "number"
+                                          }
+                                        },
+                                        "index": {
+                                          "type": "number"
+                                        }
+                                      },
+                                      "required": [
+                                        "object",
+                                        "embedding",
+                                        "index"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  },
+                                  "model": {
+                                    "type": "string"
+                                  },
+                                  "usage": {
+                                    "type": "object",
+                                    "properties": {
+                                      "prompt_tokens": {
+                                        "type": "number"
+                                      },
+                                      "total_tokens": {
+                                        "type": "number"
+                                      }
+                                    },
+                                    "required": [
+                                      "prompt_tokens",
+                                      "total_tokens"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "required": [
+                                  "object",
+                                  "data",
+                                  "model",
+                                  "usage"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "openai:embeddings"
+                                ]
+                              },
+                              "model": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "baselineModel": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "inputTokens": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
+                              "outputTokens": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
+                              "baselineCost": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "cost": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "toonTokensBefore": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
+                              "toonTokensAfter": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
+                              "toonCostSavings": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "toonSkipReason": {
+                                "nullable": true,
+                                "type": "string",
+                                "enum": [
+                                  "not_enabled",
+                                  "not_effective",
+                                  "no_tool_results"
+                                ]
+                              },
+                              "createdAt": {
+                                "type": "string",
+                                "format": "date-time"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "profileId",
+                              "externalAgentId",
+                              "executionId",
+                              "userId",
+                              "sessionId",
+                              "sessionSource",
+                              "request",
+                              "response",
+                              "type",
+                              "model",
+                              "baselineModel",
+                              "inputTokens",
+                              "outputTokens",
+                              "baselineCost",
+                              "cost",
+                              "toonTokensBefore",
+                              "toonTokensAfter",
+                              "toonCostSavings",
+                              "createdAt"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "profileId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "externalAgentId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "executionId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "userId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "sessionId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "sessionSource": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "source": {
+                                "nullable": true,
+                                "type": "string",
+                                "enum": [
+                                  "api",
+                                  "chat",
+                                  "chatops:slack",
+                                  "chatops:ms-teams",
+                                  "email",
+                                  "knowledge:embedding",
+                                  "knowledge:reranker"
                                 ]
                               },
                               "request": {
@@ -78559,7 +78837,9 @@
                                   "chat",
                                   "chatops:slack",
                                   "chatops:ms-teams",
-                                  "email"
+                                  "email",
+                                  "knowledge:embedding",
+                                  "knowledge:reranker"
                                 ]
                               },
                               "request": {
@@ -78717,7 +78997,9 @@
                                   "chat",
                                   "chatops:slack",
                                   "chatops:ms-teams",
-                                  "email"
+                                  "email",
+                                  "knowledge:embedding",
+                                  "knowledge:reranker"
                                 ]
                               },
                               "request": {
@@ -80575,7 +80857,9 @@
                                   "chat",
                                   "chatops:slack",
                                   "chatops:ms-teams",
-                                  "email"
+                                  "email",
+                                  "knowledge:embedding",
+                                  "knowledge:reranker"
                                 ]
                               },
                               "request": {
@@ -80733,7 +81017,9 @@
                                   "chat",
                                   "chatops:slack",
                                   "chatops:ms-teams",
-                                  "email"
+                                  "email",
+                                  "knowledge:embedding",
+                                  "knowledge:reranker"
                                 ]
                               },
                               "request": {
@@ -80891,7 +81177,9 @@
                                   "chat",
                                   "chatops:slack",
                                   "chatops:ms-teams",
-                                  "email"
+                                  "email",
+                                  "knowledge:embedding",
+                                  "knowledge:reranker"
                                 ]
                               },
                               "request": {
@@ -81049,7 +81337,9 @@
                                   "chat",
                                   "chatops:slack",
                                   "chatops:ms-teams",
-                                  "email"
+                                  "email",
+                                  "knowledge:embedding",
+                                  "knowledge:reranker"
                                 ]
                               },
                               "request": {
@@ -81207,7 +81497,9 @@
                                   "chat",
                                   "chatops:slack",
                                   "chatops:ms-teams",
-                                  "email"
+                                  "email",
+                                  "knowledge:embedding",
+                                  "knowledge:reranker"
                                 ]
                               },
                               "request": {
@@ -81365,7 +81657,9 @@
                                   "chat",
                                   "chatops:slack",
                                   "chatops:ms-teams",
-                                  "email"
+                                  "email",
+                                  "knowledge:embedding",
+                                  "knowledge:reranker"
                                 ]
                               },
                               "request": {
@@ -81523,7 +81817,9 @@
                                   "chat",
                                   "chatops:slack",
                                   "chatops:ms-teams",
-                                  "email"
+                                  "email",
+                                  "knowledge:embedding",
+                                  "knowledge:reranker"
                                 ]
                               },
                               "request": {
@@ -81670,7 +81966,9 @@
                                   "chat",
                                   "chatops:slack",
                                   "chatops:ms-teams",
-                                  "email"
+                                  "email",
+                                  "knowledge:embedding",
+                                  "knowledge:reranker"
                                 ]
                               },
                               "request": {
@@ -81817,7 +82115,9 @@
                                   "chat",
                                   "chatops:slack",
                                   "chatops:ms-teams",
-                                  "email"
+                                  "email",
+                                  "knowledge:embedding",
+                                  "knowledge:reranker"
                                 ]
                               },
                               "request": {
@@ -81975,7 +82275,9 @@
                                   "chat",
                                   "chatops:slack",
                                   "chatops:ms-teams",
-                                  "email"
+                                  "email",
+                                  "knowledge:embedding",
+                                  "knowledge:reranker"
                                 ]
                               },
                               "request": {
@@ -82133,7 +82435,9 @@
                                   "chat",
                                   "chatops:slack",
                                   "chatops:ms-teams",
-                                  "email"
+                                  "email",
+                                  "knowledge:embedding",
+                                  "knowledge:reranker"
                                 ]
                               },
                               "request": {
@@ -82291,7 +82595,9 @@
                                   "chat",
                                   "chatops:slack",
                                   "chatops:ms-teams",
-                                  "email"
+                                  "email",
+                                  "knowledge:embedding",
+                                  "knowledge:reranker"
                                 ]
                               },
                               "request": {
@@ -82703,6 +83009,24 @@
           },
           {
             "schema": {
+              "type": "string",
+              "enum": [
+                "api",
+                "chat",
+                "chatops:slack",
+                "chatops:ms-teams",
+                "email",
+                "knowledge:embedding",
+                "knowledge:reranker"
+              ]
+            },
+            "in": "query",
+            "name": "source",
+            "required": false,
+            "description": "Filter by interaction source"
+          },
+          {
+            "schema": {
               "type": "string"
             },
             "in": "query",
@@ -82793,7 +83117,9 @@
                               "chat",
                               "chatops:slack",
                               "chatops:ms-teams",
-                              "email"
+                              "email",
+                              "knowledge:embedding",
+                              "knowledge:reranker"
                             ]
                           },
                           "interactionId": {
@@ -83755,7 +84081,9 @@
                             "chat",
                             "chatops:slack",
                             "chatops:ms-teams",
-                            "email"
+                            "email",
+                            "knowledge:embedding",
+                            "knowledge:reranker"
                           ]
                         },
                         "request": {
@@ -83913,7 +84241,283 @@
                             "chat",
                             "chatops:slack",
                             "chatops:ms-teams",
-                            "email"
+                            "email",
+                            "knowledge:embedding",
+                            "knowledge:reranker"
+                          ]
+                        },
+                        "request": {
+                          "type": "object",
+                          "properties": {
+                            "model": {
+                              "type": "string"
+                            },
+                            "input": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                }
+                              ]
+                            },
+                            "dimensions": {
+                              "type": "number"
+                            },
+                            "encoding_format": {
+                              "type": "string",
+                              "enum": [
+                                "float",
+                                "base64"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "model",
+                            "input"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "processedRequest": {
+                          "nullable": true,
+                          "type": "object",
+                          "properties": {
+                            "model": {
+                              "type": "string"
+                            },
+                            "input": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                }
+                              ]
+                            },
+                            "dimensions": {
+                              "type": "number"
+                            },
+                            "encoding_format": {
+                              "type": "string",
+                              "enum": [
+                                "float",
+                                "base64"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "model",
+                            "input"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "response": {
+                          "type": "object",
+                          "properties": {
+                            "object": {
+                              "type": "string",
+                              "enum": [
+                                "list"
+                              ]
+                            },
+                            "data": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "object": {
+                                    "type": "string",
+                                    "enum": [
+                                      "embedding"
+                                    ]
+                                  },
+                                  "embedding": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "number"
+                                    }
+                                  },
+                                  "index": {
+                                    "type": "number"
+                                  }
+                                },
+                                "required": [
+                                  "object",
+                                  "embedding",
+                                  "index"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "model": {
+                              "type": "string"
+                            },
+                            "usage": {
+                              "type": "object",
+                              "properties": {
+                                "prompt_tokens": {
+                                  "type": "number"
+                                },
+                                "total_tokens": {
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "prompt_tokens",
+                                "total_tokens"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "object",
+                            "data",
+                            "model",
+                            "usage"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "openai:embeddings"
+                          ]
+                        },
+                        "model": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "baselineModel": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "inputTokens": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
+                        "outputTokens": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
+                        "baselineCost": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "cost": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "toonTokensBefore": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
+                        "toonTokensAfter": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
+                        "toonCostSavings": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "toonSkipReason": {
+                          "nullable": true,
+                          "type": "string",
+                          "enum": [
+                            "not_enabled",
+                            "not_effective",
+                            "no_tool_results"
+                          ]
+                        },
+                        "createdAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "profileId",
+                        "externalAgentId",
+                        "executionId",
+                        "userId",
+                        "sessionId",
+                        "sessionSource",
+                        "request",
+                        "response",
+                        "type",
+                        "model",
+                        "baselineModel",
+                        "inputTokens",
+                        "outputTokens",
+                        "baselineCost",
+                        "cost",
+                        "toonTokensBefore",
+                        "toonTokensAfter",
+                        "toonCostSavings",
+                        "createdAt"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "profileId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "externalAgentId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "executionId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "userId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "sessionId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "sessionSource": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "source": {
+                          "nullable": true,
+                          "type": "string",
+                          "enum": [
+                            "api",
+                            "chat",
+                            "chatops:slack",
+                            "chatops:ms-teams",
+                            "email",
+                            "knowledge:embedding",
+                            "knowledge:reranker"
                           ]
                         },
                         "request": {
@@ -84071,7 +84675,9 @@
                             "chat",
                             "chatops:slack",
                             "chatops:ms-teams",
-                            "email"
+                            "email",
+                            "knowledge:embedding",
+                            "knowledge:reranker"
                           ]
                         },
                         "request": {
@@ -84229,7 +84835,9 @@
                             "chat",
                             "chatops:slack",
                             "chatops:ms-teams",
-                            "email"
+                            "email",
+                            "knowledge:embedding",
+                            "knowledge:reranker"
                           ]
                         },
                         "request": {
@@ -86087,7 +86695,9 @@
                             "chat",
                             "chatops:slack",
                             "chatops:ms-teams",
-                            "email"
+                            "email",
+                            "knowledge:embedding",
+                            "knowledge:reranker"
                           ]
                         },
                         "request": {
@@ -86245,7 +86855,9 @@
                             "chat",
                             "chatops:slack",
                             "chatops:ms-teams",
-                            "email"
+                            "email",
+                            "knowledge:embedding",
+                            "knowledge:reranker"
                           ]
                         },
                         "request": {
@@ -86403,7 +87015,9 @@
                             "chat",
                             "chatops:slack",
                             "chatops:ms-teams",
-                            "email"
+                            "email",
+                            "knowledge:embedding",
+                            "knowledge:reranker"
                           ]
                         },
                         "request": {
@@ -86561,7 +87175,9 @@
                             "chat",
                             "chatops:slack",
                             "chatops:ms-teams",
-                            "email"
+                            "email",
+                            "knowledge:embedding",
+                            "knowledge:reranker"
                           ]
                         },
                         "request": {
@@ -86719,7 +87335,9 @@
                             "chat",
                             "chatops:slack",
                             "chatops:ms-teams",
-                            "email"
+                            "email",
+                            "knowledge:embedding",
+                            "knowledge:reranker"
                           ]
                         },
                         "request": {
@@ -86877,7 +87495,9 @@
                             "chat",
                             "chatops:slack",
                             "chatops:ms-teams",
-                            "email"
+                            "email",
+                            "knowledge:embedding",
+                            "knowledge:reranker"
                           ]
                         },
                         "request": {
@@ -87035,7 +87655,9 @@
                             "chat",
                             "chatops:slack",
                             "chatops:ms-teams",
-                            "email"
+                            "email",
+                            "knowledge:embedding",
+                            "knowledge:reranker"
                           ]
                         },
                         "request": {
@@ -87182,7 +87804,9 @@
                             "chat",
                             "chatops:slack",
                             "chatops:ms-teams",
-                            "email"
+                            "email",
+                            "knowledge:embedding",
+                            "knowledge:reranker"
                           ]
                         },
                         "request": {
@@ -87329,7 +87953,9 @@
                             "chat",
                             "chatops:slack",
                             "chatops:ms-teams",
-                            "email"
+                            "email",
+                            "knowledge:embedding",
+                            "knowledge:reranker"
                           ]
                         },
                         "request": {
@@ -87487,7 +88113,9 @@
                             "chat",
                             "chatops:slack",
                             "chatops:ms-teams",
-                            "email"
+                            "email",
+                            "knowledge:embedding",
+                            "knowledge:reranker"
                           ]
                         },
                         "request": {
@@ -87645,7 +88273,9 @@
                             "chat",
                             "chatops:slack",
                             "chatops:ms-teams",
-                            "email"
+                            "email",
+                            "knowledge:embedding",
+                            "knowledge:reranker"
                           ]
                         },
                         "request": {
@@ -87803,7 +88433,9 @@
                             "chat",
                             "chatops:slack",
                             "chatops:ms-teams",
-                            "email"
+                            "email",
+                            "knowledge:embedding",
+                            "knowledge:reranker"
                           ]
                         },
                         "request": {

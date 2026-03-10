@@ -339,6 +339,7 @@ describe("recordBlockedToolCallMetrics", () => {
       providerName: "openai",
       toolCallCount: 2,
       actualModel: "gpt-4",
+      source: "api",
       externalAgentId: "ext-1",
     });
 
@@ -364,6 +365,7 @@ describe("recordBlockedToolCallMetrics", () => {
       providerName: "anthropic",
       toolCallCount: 1,
       actualModel: "claude-3-opus",
+      source: "api",
       externalAgentId: "ext-2",
     });
 
@@ -372,6 +374,7 @@ describe("recordBlockedToolCallMetrics", () => {
       agent,
       1,
       "claude-3-opus",
+      "api",
       "ext-2",
     );
   });
@@ -388,6 +391,7 @@ describe("recordBlockedToolCallMetrics", () => {
       providerName: "openai",
       toolCallCount: 1,
       actualModel: "gpt-4",
+      source: "api",
     });
 
     expect(mockRecordBlockedToolSpans).toHaveBeenCalledWith(

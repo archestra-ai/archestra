@@ -240,7 +240,7 @@ export class JiraConnector extends BaseConnector {
     checkpoint: JiraCheckpoint,
   ): AsyncGenerator<ConnectorSyncBatch> {
     const client = createV2Client(config, credentials);
-    let nextPageToken: string | undefined;
+    let startAt = 0;
     let hasMore = true;
     let batchIndex = 0;
 
@@ -249,29 +249,32 @@ export class JiraConnector extends BaseConnector {
 
       try {
         logger.debug(
-          { batchIndex, nextPageToken },
+          { batchIndex, startAt },
           "[JiraConnector] Fetching server batch",
         );
 
         const searchResult =
-          await client.issueSearch.searchForIssuesUsingJqlEnhancedSearchPost({
+          await client.issueSearch.searchForIssuesUsingJqlPost({
             jql,
             fields: SEARCH_FIELDS,
-            nextPageToken,
+            startAt,
             maxResults: BATCH_SIZE,
           });
 
         const issues = searchResult.issues ?? [];
         const documents = issuesToDocuments(issues, config);
 
-        nextPageToken = searchResult.nextPageToken ?? undefined;
-        hasMore = !!nextPageToken;
+        startAt += issues.length;
+        hasMore =
+          issues.length >= BATCH_SIZE &&
+          startAt < (searchResult.total ?? startAt);
 
         logger.info(
           {
             batchIndex,
             issueCount: issues.length,
             documentCount: documents.length,
+            total: searchResult.total,
             hasMore,
           },
           "[JiraConnector] Server batch fetched",

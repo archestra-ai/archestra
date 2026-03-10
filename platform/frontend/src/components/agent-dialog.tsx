@@ -1238,8 +1238,11 @@ export function AgentDialog({
                     <Label>Knowledge Sources</Label>
                     <p className="text-xs text-muted-foreground">
                       Select specific connectors or knowledge bases to use in{" "}
-                      {agentTypeDisplayName[agentType] || "agent"}&apos;s
-                      replies.
+                      {(agentTypeDisplayName[agentType] || "agent").replace(
+                        /^./,
+                        (c) => c.toUpperCase(),
+                      )}
+                      &apos;s replies
                     </p>
                     <Popover>
                       <PopoverTrigger asChild>

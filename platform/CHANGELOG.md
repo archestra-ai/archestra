@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.1.4](https://github.com/archestra-ai/archestra/compare/platform-v1.1.3...platform-v1.1.4) (2026-03-10)
+
+
+### Miscellaneous Chores
+
+* fix jira conn ([#3258](https://github.com/archestra-ai/archestra/issues/3258)) ([4a58742](https://github.com/archestra-ai/archestra/commit/4a587425ff8f65aa19d6f0ebdd4b30462b113cee))
+* include runId in all knowledge-connector task logs ([#3257](https://github.com/archestra-ai/archestra/issues/3257)) ([9c27ee2](https://github.com/archestra-ai/archestra/commit/9c27ee25877672918aa50f7bb9fa6c64c5ebe982))
+
 ## [1.1.3](https://github.com/archestra-ai/archestra/compare/platform-v1.1.2...platform-v1.1.3) (2026-03-10)
 
 

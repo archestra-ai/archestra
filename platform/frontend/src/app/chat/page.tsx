@@ -1172,7 +1172,7 @@ export default function ChatPage() {
           </EmptyMedia>
           <EmptyTitle>No agents yet</EmptyTitle>
           <EmptyDescription>
-            Create an agent to start chatting.
+            Create an agent to start CHATTING.
           </EmptyDescription>
         </EmptyHeader>
         <EmptyContent>

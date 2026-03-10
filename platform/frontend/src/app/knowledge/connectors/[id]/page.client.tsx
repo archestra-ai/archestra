@@ -2,15 +2,7 @@
 
 import type { archestraApiTypes } from "@shared";
 import type { ColumnDef } from "@tanstack/react-table";
-import {
-  ArrowLeft,
-  Database,
-  Pencil,
-  Play,
-  Plug,
-  Plus,
-  X,
-} from "lucide-react";
+import { ArrowLeft, Database, Pencil, Play, Plug, Plus, X } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useState } from "react";

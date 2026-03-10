@@ -101,7 +101,7 @@ export function EditConnectorDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+      <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col overflow-hidden">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <div className="flex h-7 w-7 items-center justify-center rounded-md bg-muted">
@@ -117,90 +117,116 @@ export function EditConnectorDialog({
         <Form {...form}>
           <form
             onSubmit={form.handleSubmit(handleSubmit)}
-            className="space-y-4"
+            className="flex flex-col overflow-hidden"
           >
-            <FormField
-              control={form.control}
-              name="name"
-              rules={{ required: "Name is required" }}
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Name</FormLabel>
-                  <FormControl>
-                    <Input placeholder="Connector name" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
+            <div className="space-y-4 overflow-y-auto py-1 pr-1">
+              <FormField
+                control={form.control}
+                name="name"
+                rules={{ required: "Name is required" }}
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Name</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Connector name" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                // biome-ignore lint/suspicious/noExplicitAny: dynamic field name for connector-specific URL
+                name={urlConfig.fieldName as any}
+                rules={{ required: `${urlConfig.label} is required` }}
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{urlConfig.label}</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder={urlConfig.placeholder}
+                        {...field}
+                        value={(field.value as string) ?? ""}
+                      />
+                    </FormControl>
+                    <FormDescription>{urlConfig.description}</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              {(connectorType === "jira" || connectorType === "confluence") && (
+                <FormField
+                  control={form.control}
+                  // biome-ignore lint/suspicious/noExplicitAny: dynamic field name for connector config
+                  name={"config.isCloud" as any}
+                  render={({ field }) => (
+                    <FormItem className="flex items-center justify-between rounded-lg border p-3">
+                      <div className="space-y-0.5">
+                        <FormLabel>Cloud Instance</FormLabel>
+                        <FormDescription>
+                          Enable if this is a cloud-hosted instance.
+                        </FormDescription>
+                      </div>
+                      <FormControl>
+                        <Switch
+                          checked={(field.value as boolean) ?? true}
+                          onCheckedChange={field.onChange}
+                        />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
               )}
-            />
 
-            <FormField
-              control={form.control}
-              // biome-ignore lint/suspicious/noExplicitAny: dynamic field name for connector-specific URL
-              name={urlConfig.fieldName as any}
-              rules={{ required: `${urlConfig.label} is required` }}
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{urlConfig.label}</FormLabel>
-                  <FormControl>
-                    <Input
-                      placeholder={urlConfig.placeholder}
-                      {...field}
-                      value={(field.value as string) ?? ""}
-                    />
-                  </FormControl>
-                  <FormDescription>{urlConfig.description}</FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+              <FormField
+                control={form.control}
+                name="enabled"
+                render={({ field }) => (
+                  <FormItem className="flex items-center justify-between rounded-lg border p-3">
+                    <div>
+                      <FormLabel className="text-sm font-medium">
+                        Enabled
+                      </FormLabel>
+                      <FormDescription className="text-xs">
+                        When disabled, scheduled syncs will not run.
+                      </FormDescription>
+                    </div>
+                    <FormControl>
+                      <Switch
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                      />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
 
-            <FormField
-              control={form.control}
-              name="enabled"
-              render={({ field }) => (
-                <FormItem className="flex items-center justify-between rounded-lg border p-3">
-                  <div>
-                    <FormLabel className="text-sm font-medium">
-                      Enabled
-                    </FormLabel>
-                    <FormDescription className="text-xs">
-                      When disabled, scheduled syncs will not run.
-                    </FormDescription>
-                  </div>
-                  <FormControl>
-                    <Switch
-                      checked={field.value}
-                      onCheckedChange={field.onChange}
-                    />
-                  </FormControl>
-                </FormItem>
-              )}
-            />
+              <Collapsible>
+                <CollapsibleTrigger className="flex w-full items-center justify-between cursor-pointer group border-t pt-3">
+                  <span className="text-sm font-medium">Advanced</span>
+                  <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180" />
+                </CollapsibleTrigger>
+                <CollapsibleContent className="pt-4 space-y-4">
+                  <SchedulePicker form={form} name="schedule" />
+                  {connectorType === "jira" && (
+                    <JiraConfigFields form={form} hideUrl hideIsCloud />
+                  )}
+                  {connectorType === "confluence" && (
+                    <ConfluenceConfigFields form={form} hideUrl hideIsCloud />
+                  )}
+                  {connectorType === "github" && (
+                    <GithubConfigFields form={form} hideUrl />
+                  )}
+                  {connectorType === "gitlab" && (
+                    <GitlabConfigFields form={form} hideUrl />
+                  )}
+                </CollapsibleContent>
+              </Collapsible>
+            </div>
 
-            <Collapsible>
-              <CollapsibleTrigger className="flex w-full items-center justify-between cursor-pointer group border-t pt-3">
-                <span className="text-sm font-medium">Advanced</span>
-                <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180" />
-              </CollapsibleTrigger>
-              <CollapsibleContent className="pt-4 space-y-4">
-                <SchedulePicker form={form} name="schedule" />
-                {connectorType === "jira" && (
-                  <JiraConfigFields form={form} hideUrl />
-                )}
-                {connectorType === "confluence" && (
-                  <ConfluenceConfigFields form={form} hideUrl />
-                )}
-                {connectorType === "github" && (
-                  <GithubConfigFields form={form} hideUrl />
-                )}
-                {connectorType === "gitlab" && (
-                  <GitlabConfigFields form={form} hideUrl />
-                )}
-              </CollapsibleContent>
-            </Collapsible>
-
-            <DialogFooter>
+            <DialogFooter className="pt-4">
               <Button
                 type="button"
                 variant="outline"

@@ -28,6 +28,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import { useCreateConnector } from "@/lib/connector.query";
 import { ConfluenceConfigFields } from "./confluence-config-fields";
 import { ConnectorTypeIcon } from "./connector-icons";
@@ -154,7 +155,7 @@ export function CreateConnectorDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+      <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col overflow-hidden">
         {step === "select" ? (
           <>
             <DialogHeader>
@@ -185,33 +186,39 @@ export function CreateConnectorDialog({
             </div>
           </>
         ) : (
-          <>
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7"
-                  onClick={handleBack}
-                >
-                  <ArrowLeft className="h-4 w-4" />
-                </Button>
-                Configure{" "}
-                {CONNECTOR_OPTIONS.find((o) => o.type === selectedType)?.label}{" "}
-                Connector
-              </DialogTitle>
-              <DialogDescription>
-                Enter the connection details for your{" "}
-                {CONNECTOR_OPTIONS.find((o) => o.type === selectedType)?.label}{" "}
-                instance.
-              </DialogDescription>
-            </DialogHeader>
+          <Form {...form}>
+            <form
+              onSubmit={form.handleSubmit(handleSubmit)}
+              className="flex flex-col overflow-hidden"
+            >
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    onClick={handleBack}
+                  >
+                    <ArrowLeft className="h-4 w-4" />
+                  </Button>
+                  Configure{" "}
+                  {
+                    CONNECTOR_OPTIONS.find((o) => o.type === selectedType)
+                      ?.label
+                  }{" "}
+                  Connector
+                </DialogTitle>
+                <DialogDescription>
+                  Enter the connection details for your{" "}
+                  {
+                    CONNECTOR_OPTIONS.find((o) => o.type === selectedType)
+                      ?.label
+                  }{" "}
+                  instance.
+                </DialogDescription>
+              </DialogHeader>
 
-            <Form {...form}>
-              <form
-                onSubmit={form.handleSubmit(handleSubmit)}
-                className="space-y-4"
-              >
+              <div className="space-y-4 overflow-y-auto py-4 pr-1">
                 <FormField
                   control={form.control}
                   name="name"
@@ -250,6 +257,30 @@ export function CreateConnectorDialog({
                     </FormItem>
                   )}
                 />
+
+                {(connectorType === "jira" ||
+                  connectorType === "confluence") && (
+                  <FormField
+                    control={form.control}
+                    name="config.isCloud"
+                    render={({ field }) => (
+                      <FormItem className="flex items-center justify-between rounded-lg border p-3">
+                        <div className="space-y-0.5">
+                          <FormLabel>Cloud Instance</FormLabel>
+                          <FormDescription>
+                            Enable if this is a cloud-hosted instance.
+                          </FormDescription>
+                        </div>
+                        <FormControl>
+                          <Switch
+                            checked={(field.value as boolean) ?? true}
+                            onCheckedChange={field.onChange}
+                          />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+                )}
 
                 {connectorType === "github" && (
                   <FormField
@@ -357,10 +388,10 @@ export function CreateConnectorDialog({
                   <CollapsibleContent className="pt-4 space-y-4">
                     <SchedulePicker form={form} name="schedule" />
                     {connectorType === "jira" && (
-                      <JiraConfigFields form={form} hideUrl />
+                      <JiraConfigFields form={form} hideUrl hideIsCloud />
                     )}
                     {connectorType === "confluence" && (
-                      <ConfluenceConfigFields form={form} hideUrl />
+                      <ConfluenceConfigFields form={form} hideUrl hideIsCloud />
                     )}
                     {connectorType === "github" && (
                       <GithubConfigFields form={form} hideUrl />
@@ -370,20 +401,20 @@ export function CreateConnectorDialog({
                     )}
                   </CollapsibleContent>
                 </Collapsible>
+              </div>
 
-                <DialogFooter>
-                  <Button type="button" variant="outline" onClick={handleBack}>
-                    Back
-                  </Button>
-                  <Button type="submit" disabled={createConnector.isPending}>
-                    {createConnector.isPending
-                      ? "Creating..."
-                      : "Create Connector"}
-                  </Button>
-                </DialogFooter>
-              </form>
-            </Form>
-          </>
+              <DialogFooter className="pt-4">
+                <Button type="button" variant="outline" onClick={handleBack}>
+                  Back
+                </Button>
+                <Button type="submit" disabled={createConnector.isPending}>
+                  {createConnector.isPending
+                    ? "Creating..."
+                    : "Create Connector"}
+                </Button>
+              </DialogFooter>
+            </form>
+          </Form>
         )}
       </DialogContent>
     </Dialog>

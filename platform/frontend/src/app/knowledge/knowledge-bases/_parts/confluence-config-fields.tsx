@@ -18,12 +18,14 @@ interface ConfluenceConfigFieldsProps {
   form: UseFormReturn<any>;
   prefix?: string;
   hideUrl?: boolean;
+  hideIsCloud?: boolean;
 }
 
 export function ConfluenceConfigFields({
   form,
   prefix = "config",
   hideUrl = false,
+  hideIsCloud = false,
 }: ConfluenceConfigFieldsProps) {
   return (
     <div className="space-y-4">
@@ -48,26 +50,28 @@ export function ConfluenceConfigFields({
         />
       )}
 
-      <FormField
-        control={form.control}
-        name={`${prefix}.isCloud`}
-        render={({ field }) => (
-          <FormItem className="flex items-center justify-between rounded-lg border p-3">
-            <div className="space-y-0.5">
-              <FormLabel>Cloud Instance</FormLabel>
-              <FormDescription>
-                Enable if this is a Confluence Cloud instance.
-              </FormDescription>
-            </div>
-            <FormControl>
-              <Switch
-                checked={field.value ?? true}
-                onCheckedChange={field.onChange}
-              />
-            </FormControl>
-          </FormItem>
-        )}
-      />
+      {!hideIsCloud && (
+        <FormField
+          control={form.control}
+          name={`${prefix}.isCloud`}
+          render={({ field }) => (
+            <FormItem className="flex items-center justify-between rounded-lg border p-3">
+              <div className="space-y-0.5">
+                <FormLabel>Cloud Instance</FormLabel>
+                <FormDescription>
+                  Enable if this is a Confluence Cloud instance.
+                </FormDescription>
+              </div>
+              <FormControl>
+                <Switch
+                  checked={field.value ?? true}
+                  onCheckedChange={field.onChange}
+                />
+              </FormControl>
+            </FormItem>
+          )}
+        />
+      )}
 
       <FormField
         control={form.control}

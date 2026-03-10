@@ -1,6 +1,10 @@
 "use client";
 
-import type { archestraApiTypes } from "@shared";
+import {
+  type archestraApiTypes,
+  INTERACTION_SOURCE_DISPLAY,
+  type InteractionSource,
+} from "@shared";
 import { Layers, MessageSquare, User } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -301,6 +305,7 @@ function SessionsTable({
   const pageSizeFromUrl = searchParams.get("pageSize");
   const profileIdFromUrl = searchParams.get("profileId");
   const userIdFromUrl = searchParams.get("userId");
+  const sourceFromUrl = searchParams.get("source");
   const startDateFromUrl = searchParams.get("startDate");
   const endDateFromUrl = searchParams.get("endDate");
   const searchFromUrl = searchParams.get("search");
@@ -310,6 +315,7 @@ function SessionsTable({
 
   const [profileFilter, setProfileFilter] = useState(profileIdFromUrl || "all");
   const [userFilter, setUserFilter] = useState(userIdFromUrl || "all");
+  const [sourceFilter, setSourceFilter] = useState(sourceFromUrl || "all");
 
   // Helper to update URL params
   const updateUrlParams = useCallback(
@@ -375,11 +381,24 @@ function SessionsTable({
     [updateUrlParams],
   );
 
+  const handleSourceFilterChange = useCallback(
+    (value: string) => {
+      setSourceFilter(value);
+      updateUrlParams({
+        source: value === "all" ? null : value,
+        page: "1", // Reset to first page
+      });
+    },
+    [updateUrlParams],
+  );
+
   const { data: sessionsResponse, isFetching } = useInteractionSessions({
     limit: pageSize,
     offset: pageIndex * pageSize,
     profileId: profileFilter !== "all" ? profileFilter : undefined,
     userId: userFilter !== "all" ? userFilter : undefined,
+    source:
+      sourceFilter !== "all" ? (sourceFilter as InteractionSource) : undefined,
     startDate: dateTimePicker.startDateParam,
     endDate: dateTimePicker.endDateParam,
     search: searchFromUrl || undefined,
@@ -397,6 +416,7 @@ function SessionsTable({
   const hasFilters =
     profileFilter !== "all" ||
     userFilter !== "all" ||
+    sourceFilter !== "all" ||
     dateTimePicker.dateRange !== undefined ||
     !!searchFromUrl;
 
@@ -433,6 +453,19 @@ function SessionsTable({
           className="w-[200px]"
         />
 
+        <SearchableSelect
+          value={sourceFilter}
+          onValueChange={handleSourceFilterChange}
+          placeholder="Filter by Source"
+          items={[
+            { value: "all", label: "All Sources" },
+            ...Object.entries(INTERACTION_SOURCE_DISPLAY).map(
+              ([value, { label }]) => ({ value, label }),
+            ),
+          ]}
+          className="w-[200px]"
+        />
+
         <DateTimeRangePicker
           dateRange={dateTimePicker.dateRange}
           isDialogOpen={dateTimePicker.isDateDialogOpen}
@@ -456,6 +489,7 @@ function SessionsTable({
             onClick={() => {
               handleProfileFilterChange("all");
               handleUserFilterChange("all");
+              handleSourceFilterChange("all");
               dateTimePicker.clearDateRange();
               updateUrlParams({ search: null, page: "1" });
             }}

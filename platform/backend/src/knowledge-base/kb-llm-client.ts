@@ -15,6 +15,7 @@ interface EmbeddingConfig {
 interface RerankerConfig {
   llmModel: LLMModel;
   modelName: string;
+  provider: SupportedProvider;
 }
 
 /**
@@ -80,6 +81,7 @@ export async function resolveRerankerConfig(
       baseUrl: resolved.baseUrl,
     }),
     modelName,
+    provider: resolved.provider,
   };
 }
 

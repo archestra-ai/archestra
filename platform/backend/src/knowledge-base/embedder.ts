@@ -3,6 +3,7 @@ import { EMBEDDING_BATCH_SIZE } from "@shared";
 import OpenAI from "openai";
 import logger from "@/logging";
 import { KbChunkModel, KbDocumentModel } from "@/models";
+import { withKbObservability } from "./kb-interaction";
 import { getDefaultOrgEmbeddingConfig } from "./kb-llm-client";
 
 const RETRY_MAX_ATTEMPTS = 3;
@@ -221,11 +222,23 @@ class EmbeddingService {
   ): Promise<OpenAI.Embeddings.CreateEmbeddingResponse> {
     for (let attempt = 1; attempt <= RETRY_MAX_ATTEMPTS; attempt++) {
       try {
-        return await ctx.client.embeddings.create({
+        const response = await withKbObservability({
+          operationName: "embedding",
+          provider: "openai",
           model: ctx.model,
-          input: texts,
-          dimensions: ctx.dimensions,
+          source: "knowledge:embedding",
+          type: "openai:embeddings",
+          callback: () =>
+            ctx.client.embeddings.create({
+              model: ctx.model,
+              input: texts,
+              dimensions: ctx.dimensions,
+            }),
+          buildInteraction: (resp) =>
+            buildEmbeddingInteraction(ctx, texts, resp),
         });
+
+        return response;
       } catch (error) {
         const isLastAttempt = attempt === RETRY_MAX_ATTEMPTS;
         if (isLastAttempt || !this.isRetryableError(error)) {
@@ -262,3 +275,33 @@ class EmbeddingService {
 }
 
 export const embeddingService = new EmbeddingService();
+
+// ===== Internal helpers =====
+
+function buildEmbeddingInteraction(
+  ctx: EmbeddingContext,
+  texts: string[],
+  response: OpenAI.Embeddings.CreateEmbeddingResponse,
+) {
+  return {
+    request: {
+      model: ctx.model,
+      input: texts,
+      dimensions: ctx.dimensions,
+    },
+    // Strip embedding vectors from stored response to save space
+    response: {
+      object: response.object,
+      data: response.data.map((d) => ({
+        object: d.object,
+        embedding: [] as number[],
+        index: d.index,
+      })),
+      model: response.model,
+      usage: response.usage,
+    },
+    model: response.model,
+    inputTokens: response.usage.prompt_tokens,
+    outputTokens: 0,
+  };
+}

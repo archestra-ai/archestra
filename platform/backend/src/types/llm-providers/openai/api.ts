@@ -94,6 +94,35 @@ export const ChatCompletionResponseSchema = z
     `https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L248`,
   );
 
+// ===== Embeddings API =====
+
+export const EmbeddingUsageSchema = z.object({
+  prompt_tokens: z.number(),
+  total_tokens: z.number(),
+});
+
+export const EmbeddingRequestSchema = z.object({
+  model: z.string(),
+  input: z.union([z.string(), z.array(z.string())]),
+  dimensions: z.number().optional(),
+  encoding_format: z.enum(["float", "base64"]).optional(),
+});
+
+export const EmbeddingResponseSchema = z.object({
+  object: z.literal("list"),
+  data: z.array(
+    z.object({
+      object: z.literal("embedding"),
+      embedding: z.array(z.number()),
+      index: z.number(),
+    }),
+  ),
+  model: z.string(),
+  usage: EmbeddingUsageSchema,
+});
+
+// ===== Chat Completions Headers =====
+
 export const ChatCompletionsHeadersSchema = z.object({
   "user-agent": z.string().optional().describe("The user agent of the client"),
   authorization: z

@@ -1,4 +1,7 @@
-import { SupportedProvidersDiscriminatorSchema } from "@shared";
+import {
+  InteractionSourceSchema,
+  SupportedProvidersDiscriminatorSchema,
+} from "@shared";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
@@ -22,19 +25,8 @@ import {
 } from "./llm-providers";
 import { ToonSkipReasonSchema } from "./tool-result-compression";
 
-/**
- * Where an LLM proxy request originated from.
- * Stored in the `source` column of the interactions table.
- */
-export const InteractionSourceSchema = z.enum([
-  "api",
-  "chat",
-  "chatops:slack",
-  "chatops:ms-teams",
-  "email",
-]);
-
-export type InteractionSource = z.infer<typeof InteractionSourceSchema>;
+export { InteractionSourceSchema };
+export type { InteractionSource } from "@shared";
 
 export const UserInfoSchema = z.object({
   id: z.string(),
@@ -47,6 +39,7 @@ export const UserInfoSchema = z.object({
  */
 export const InteractionRequestSchema = z.union([
   OpenAi.API.ChatCompletionRequestSchema,
+  OpenAi.API.EmbeddingRequestSchema,
   Gemini.API.GenerateContentRequestSchema,
   Anthropic.API.MessagesRequestSchema,
   Bedrock.API.ConverseRequestSchema,
@@ -66,6 +59,7 @@ export const InteractionRequestSchema = z.union([
 
 export const InteractionResponseSchema = z.union([
   OpenAi.API.ChatCompletionResponseSchema,
+  OpenAi.API.EmbeddingResponseSchema,
   Gemini.API.GenerateContentResponseSchema,
   Anthropic.API.MessagesResponseSchema,
   Bedrock.API.ConverseResponseSchema,
@@ -118,6 +112,12 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
     requestType: RequestTypeSchema.optional(),
     /** Resolved prompt name if externalAgentId matches a prompt ID */
     externalAgentIdLabel: z.string().nullable().optional(),
+  }),
+  BaseSelectInteractionSchema.extend({
+    type: z.enum(["openai:embeddings"]),
+    request: OpenAi.API.EmbeddingRequestSchema,
+    processedRequest: OpenAi.API.EmbeddingRequestSchema.nullable().optional(),
+    response: OpenAi.API.EmbeddingResponseSchema,
   }),
   BaseSelectInteractionSchema.extend({
     type: z.enum(["gemini:generateContent"]),
@@ -271,9 +271,9 @@ export const InsertInteractionSchema = createInsertSchema(
     response: InteractionResponseSchema,
   },
 ).extend({
-  // Override profileId to be required for creating interactions
-  // (it's nullable in the DB schema to preserve interactions when agents are deleted)
-  profileId: z.string().uuid(),
+  // Override profileId - required for proxy interactions, nullable for system interactions
+  // (e.g., knowledge base embeddings/reranking have no associated profile)
+  profileId: z.string().uuid().nullable(),
 });
 
 export type UserInfo = z.infer<typeof UserInfoSchema>;

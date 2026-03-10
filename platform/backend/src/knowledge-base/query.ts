@@ -3,6 +3,7 @@ import logger from "@/logging";
 import { KbChunkModel } from "@/models";
 import type { VectorSearchResult } from "@/models/kb-chunk";
 import type { AclEntry } from "@/types/kb-document";
+import { withKbObservability } from "./kb-interaction";
 import { resolveEmbeddingConfig } from "./kb-llm-client";
 import rerank from "./reranker";
 import reciprocalRankFusion from "./rrf";
@@ -42,10 +43,38 @@ class QueryService {
       return [];
     }
 
-    const embeddingPromise = embeddingConfig.client.embeddings.create({
+    const embeddingPromise = withKbObservability({
+      operationName: "embedding",
+      provider: "openai",
       model: embeddingConfig.model,
-      input: queryText,
-      dimensions: embeddingConfig.dimensions,
+      source: "knowledge:embedding",
+      type: "openai:embeddings",
+      callback: () =>
+        embeddingConfig.client.embeddings.create({
+          model: embeddingConfig.model,
+          input: queryText,
+          dimensions: embeddingConfig.dimensions,
+        }),
+      buildInteraction: (response) => ({
+        request: {
+          model: embeddingConfig.model,
+          input: queryText,
+          dimensions: embeddingConfig.dimensions,
+        },
+        response: {
+          object: response.object,
+          data: response.data.map((d) => ({
+            object: d.object,
+            embedding: [] as number[],
+            index: d.index,
+          })),
+          model: response.model,
+          usage: response.usage,
+        },
+        model: response.model,
+        inputTokens: response.usage.prompt_tokens,
+        outputTokens: 0,
+      }),
     });
 
     const fullTextPromise = hybridEnabled

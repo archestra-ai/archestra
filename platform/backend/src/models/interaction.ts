@@ -24,6 +24,7 @@ import logger from "@/logging";
 import type {
   InsertInteraction,
   Interaction,
+  InteractionSource,
   PaginationQuery,
   SessionSummary,
   SortingQuery,
@@ -771,6 +772,7 @@ class InteractionModel {
     filters?: {
       profileId?: string;
       userId?: string;
+      source?: InteractionSource;
       externalAgentId?: string;
       sessionId?: string;
       startDate?: Date;
@@ -806,6 +808,11 @@ class InteractionModel {
     // User filter
     if (filters?.userId) {
       conditions.push(eq(schema.interactionsTable.userId, filters.userId));
+    }
+
+    // Source filter
+    if (filters?.source) {
+      conditions.push(eq(schema.interactionsTable.source, filters.source));
     }
 
     // External agent ID filter

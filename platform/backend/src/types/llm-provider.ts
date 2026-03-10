@@ -40,7 +40,7 @@ import type { Agent } from "./agent";
  * Follows OTEL GenAI Semantic Conventions.
  * Span names are constructed as `{operationName} {model}`.
  */
-export type GenAiOperationName = "chat" | "generate_content";
+export type GenAiOperationName = "chat" | "generate_content" | "embedding";
 
 import type {
   CommonMcpToolDefinition,

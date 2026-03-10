@@ -1771,6 +1771,188 @@ describe("InteractionModel", () => {
     });
   });
 
+  describe("getSessions source filtering", () => {
+    test("filters sessions by source", async ({ makeAdmin }) => {
+      const admin = await makeAdmin();
+      const agent = await AgentModel.create({
+        name: "Agent",
+        teams: [],
+        scope: "org",
+      });
+
+      // Create interactions with different sources
+      await InteractionModel.create({
+        profileId: agent.id,
+        sessionId: "api-session",
+        source: "api",
+        request: { model: "gpt-4", messages: [] },
+        response: {
+          id: "r1",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      await InteractionModel.create({
+        profileId: agent.id,
+        sessionId: "chat-session",
+        source: "chat",
+        request: { model: "gpt-4", messages: [] },
+        response: {
+          id: "r2",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      await InteractionModel.create({
+        profileId: null,
+        source: "knowledge:embedding",
+        request: {
+          model: "text-embedding-3-small",
+          input: ["test"],
+          dimensions: 1536,
+        },
+        response: {
+          object: "list",
+          data: [{ object: "embedding", embedding: [], index: 0 }],
+          model: "text-embedding-3-small",
+          usage: { prompt_tokens: 10, total_tokens: 10 },
+        },
+        type: "openai:embeddings",
+        model: "text-embedding-3-small",
+        inputTokens: 10,
+        outputTokens: 0,
+      });
+
+      await InteractionModel.create({
+        profileId: null,
+        source: "knowledge:reranker",
+        request: {
+          model: "gpt-4o",
+          messages: [{ role: "user", content: "Rerank these passages" }],
+        },
+        response: {
+          id: "r3",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4o",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+        model: "gpt-4o",
+        inputTokens: 50,
+        outputTokens: 20,
+      });
+
+      // Filter by "api" source
+      const apiSessions = await InteractionModel.getSessions(
+        { limit: 100, offset: 0 },
+        admin.id,
+        true,
+        { source: "api" },
+      );
+      expect(apiSessions.data).toHaveLength(1);
+      expect(apiSessions.data[0].source).toBe("api");
+
+      // Filter by "knowledge:embedding" source
+      const embeddingSessions = await InteractionModel.getSessions(
+        { limit: 100, offset: 0 },
+        admin.id,
+        true,
+        { source: "knowledge:embedding" },
+      );
+      expect(embeddingSessions.data).toHaveLength(1);
+      expect(embeddingSessions.data[0].source).toBe("knowledge:embedding");
+
+      // Filter by "knowledge:reranker" source
+      const rerankerSessions = await InteractionModel.getSessions(
+        { limit: 100, offset: 0 },
+        admin.id,
+        true,
+        { source: "knowledge:reranker" },
+      );
+      expect(rerankerSessions.data).toHaveLength(1);
+      expect(rerankerSessions.data[0].source).toBe("knowledge:reranker");
+
+      // No filter returns all
+      const allSessions = await InteractionModel.getSessions(
+        { limit: 100, offset: 0 },
+        admin.id,
+        true,
+      );
+      expect(allSessions.data).toHaveLength(4);
+    });
+
+    test("returns empty when filtering by source with no matches", async ({
+      makeAdmin,
+    }) => {
+      const admin = await makeAdmin();
+      const agent = await AgentModel.create({
+        name: "Agent",
+        teams: [],
+        scope: "org",
+      });
+
+      await InteractionModel.create({
+        profileId: agent.id,
+        sessionId: "api-session",
+        source: "api",
+        request: { model: "gpt-4", messages: [] },
+        response: {
+          id: "r1",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      const sessions = await InteractionModel.getSessions(
+        { limit: 100, offset: 0 },
+        admin.id,
+        true,
+        { source: "knowledge:embedding" },
+      );
+      expect(sessions.data).toHaveLength(0);
+    });
+
+    test("can create embedding interaction with null profileId", async () => {
+      const interaction = await InteractionModel.create({
+        profileId: null,
+        source: "knowledge:embedding",
+        type: "openai:embeddings",
+        request: {
+          model: "text-embedding-3-small",
+          input: ["hello world"],
+          dimensions: 1536,
+        },
+        response: {
+          object: "list",
+          data: [{ object: "embedding", embedding: [], index: 0 }],
+          model: "text-embedding-3-small",
+          usage: { prompt_tokens: 5, total_tokens: 5 },
+        },
+        model: "text-embedding-3-small",
+        inputTokens: 5,
+        outputTokens: 0,
+      });
+
+      expect(interaction).toBeDefined();
+      expect(interaction.id).toBeDefined();
+      expect(interaction.profileId).toBeNull();
+      expect(interaction.source).toBe("knowledge:embedding");
+      expect(interaction.type).toBe("openai:embeddings");
+    });
+  });
+
   describe("getSessions lastInteraction and claudeCodeTitle", () => {
     test("returns lastInteractionRequest and lastInteractionType for session with single interaction", async ({
       makeAdmin,

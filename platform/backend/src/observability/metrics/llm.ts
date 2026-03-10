@@ -620,6 +620,79 @@ export function getObservableGenAI(
   return genAI;
 }
 
+/**
+ * Reports Prometheus metrics for knowledge base LLM calls (embeddings, reranking).
+ * These bypass the LLM proxy so metrics must be emitted separately.
+ * Uses a synthetic "Knowledge Base" agent label since KB calls have no associated profile.
+ */
+export function reportKbLlmCall(params: {
+  provider: SupportedProvider;
+  model: string;
+  inputTokens: number;
+  outputTokens: number;
+  durationSeconds: number;
+  cost: number | undefined;
+}): void {
+  const labels: Record<string, string> = {
+    provider: params.provider,
+    model: params.model,
+    external_agent_id: "",
+    agent_id: "",
+    agent_name: "Knowledge Base",
+    agent_type: "",
+  };
+  // Fill in dynamic label keys with empty values
+  for (const key of currentLabelKeys) {
+    labels[key] = "";
+  }
+
+  const exemplarLabels = getExemplarLabels();
+
+  if (llmRequestDuration) {
+    llmRequestDuration.observe({
+      labels: { ...labels, status_code: "200" },
+      value: params.durationSeconds,
+      exemplarLabels,
+    });
+  }
+
+  if (llmTokensCounter) {
+    if (params.inputTokens > 0) {
+      llmTokensCounter.inc({
+        labels: { ...labels, type: "input" },
+        value: params.inputTokens,
+        exemplarLabels,
+      });
+    }
+    if (params.outputTokens > 0) {
+      llmTokensCounter.inc({
+        labels: { ...labels, type: "output" },
+        value: params.outputTokens,
+        exemplarLabels,
+      });
+    }
+  }
+
+  if (llmTokenUsage) {
+    const totalTokens = params.inputTokens + params.outputTokens;
+    if (totalTokens > 0) {
+      llmTokenUsage.observe({
+        labels,
+        value: totalTokens,
+        exemplarLabels,
+      });
+    }
+  }
+
+  if (llmCostTotal && params.cost) {
+    llmCostTotal.inc({
+      labels,
+      value: params.cost,
+      exemplarLabels,
+    });
+  }
+}
+
 function extractGeminiModel(arg: unknown): string | undefined {
   try {
     if (arg && typeof arg === "object" && "model" in arg) {

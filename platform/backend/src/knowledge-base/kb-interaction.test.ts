@@ -53,6 +53,15 @@ vi.mock("@/models", () => ({
   },
 }));
 
+const mockReportKbLlmCall = vi.fn();
+vi.mock("@/observability", () => ({
+  metrics: {
+    llm: {
+      reportKbLlmCall: (params: unknown) => mockReportKbLlmCall(params),
+    },
+  },
+}));
+
 vi.mock("@/logging", () => ({
   default: {
     warn: vi.fn(),
@@ -307,6 +316,40 @@ describe("withKbObservability", () => {
         cost: null,
       }),
     );
+  });
+
+  it("emits Prometheus metrics via reportKbLlmCall", async () => {
+    mockGetEffectivePricing.mockReturnValueOnce({
+      pricePerMillionInput: "2.00",
+      pricePerMillionOutput: "10.00",
+      source: "default",
+    });
+
+    await withKbObservability({
+      ...baseParams,
+      callback: async () => "result",
+      buildInteraction: () => ({
+        request: {},
+        response: {},
+        model: "text-embedding-3-small",
+        inputTokens: 500,
+        outputTokens: 0,
+      }),
+    });
+
+    expect(mockReportKbLlmCall).toHaveBeenCalledOnce();
+    expect(mockReportKbLlmCall).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: "openai",
+        model: "text-embedding-3-small",
+        inputTokens: 500,
+        outputTokens: 0,
+      }),
+    );
+    // Should include durationSeconds (number >= 0) and cost
+    const call = mockReportKbLlmCall.mock.calls[0][0];
+    expect(typeof call.durationSeconds).toBe("number");
+    expect(call.durationSeconds).toBeGreaterThanOrEqual(0);
   });
 
   it("works with reranker source and chat operation", async () => {

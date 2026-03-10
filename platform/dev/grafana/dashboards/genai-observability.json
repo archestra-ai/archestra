@@ -1606,7 +1606,7 @@
           },
           "limit": 20,
           "metricsQueryType": "range",
-          "query": "{resource.service.name=\"Archestra\" && span.route.category=\"llm-proxy\" && span.gen_ai.agent.name=~\"$agent_name\" && span.gen_ai.provider.name=~\"$provider\" && span.gen_ai.request.model=~\"$model\"}",
+          "query": "{resource.service.name=\"Archestra\" && span.route.category=\"llm-proxy\" && span.gen_ai.provider.name=~\"$provider\" && span.gen_ai.request.model=~\"$model\"}",
           "queryType": "traceql",
           "refId": "A",
           "tableType": "traces"

@@ -6,6 +6,7 @@ import type {
 } from "@shared";
 import logger from "@/logging";
 import { InteractionModel, ModelModel } from "@/models";
+import { metrics } from "@/observability";
 import {
   ATTR_ARCHESTRA_COST,
   ATTR_ARCHESTRA_TRIGGER_SOURCE,
@@ -67,7 +68,9 @@ export async function withKbObservability<T>(
     callback: async (span: Span) => {
       span.setAttribute(ATTR_ARCHESTRA_TRIGGER_SOURCE, params.source);
 
+      const startTime = Date.now();
       const result = await params.callback();
+      const durationSeconds = (Date.now() - startTime) / 1000;
       const interaction = params.buildInteraction(result);
 
       span.setAttribute(ATTR_GENAI_RESPONSE_MODEL, interaction.model);
@@ -87,6 +90,15 @@ export async function withKbObservability<T>(
       if (cost !== undefined) {
         span.setAttribute(ATTR_ARCHESTRA_COST, cost);
       }
+
+      metrics.llm.reportKbLlmCall({
+        provider: params.provider,
+        model: interaction.model,
+        inputTokens: interaction.inputTokens,
+        outputTokens: interaction.outputTokens,
+        durationSeconds,
+        cost,
+      });
 
       InteractionModel.create({
         profileId: null,

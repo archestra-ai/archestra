@@ -1554,12 +1554,8 @@ export function AgentDialog({
               </div>
             )}
 
-            {/* Section 5: Advanced (collapsible) */}
-            {!isBuiltIn &&
-              (showSecurity ||
-                (isInternalAgent && !isBuiltIn) ||
-                (agentType === "mcp_gateway" &&
-                  identityProviders.length > 0)) && (
+            {/* Section 5: Advanced (collapsible) — always shown for non-built-in (Labels are universal) */}
+            {!isBuiltIn && (
                 <Collapsible>
                   <div className="rounded-lg border bg-card">
                     <CollapsibleTrigger className="flex w-full items-center justify-between p-4 hover:bg-muted/50 transition-colors [&[data-state=open]>svg]:rotate-90">

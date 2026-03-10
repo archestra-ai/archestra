@@ -10,16 +10,22 @@ import {
 // Mock jira.js SDK
 const mockGetCurrentUser = vi.fn();
 const mockEnhancedSearchPost = vi.fn();
+const mockSearchForIssuesUsingJql = vi.fn();
+const capturedConfigs: { type: string; config: Record<string, unknown> }[] = [];
 
 vi.mock("jira.js", () => ({
   ClientType: { Version2: "Version2", Version3: "Version3" },
   // biome-ignore lint/suspicious/noExplicitAny: mock factory
-  createClient: (_type: any, _config: any) => ({
-    myself: { getCurrentUser: mockGetCurrentUser },
-    issueSearch: {
-      searchForIssuesUsingJqlEnhancedSearchPost: mockEnhancedSearchPost,
-    },
-  }),
+  createClient: (type: any, config: any) => {
+    capturedConfigs.push({ type, config });
+    return {
+      myself: { getCurrentUser: mockGetCurrentUser },
+      issueSearch: {
+        searchForIssuesUsingJqlEnhancedSearchPost: mockEnhancedSearchPost,
+        searchForIssuesUsingJql: mockSearchForIssuesUsingJql,
+      },
+    };
+  },
 }));
 
 describe("JiraConnector", () => {
@@ -38,6 +44,7 @@ describe("JiraConnector", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    capturedConfigs.length = 0;
     connector = new JiraConnector();
   });
 
@@ -141,6 +148,68 @@ describe("JiraConnector", () => {
 
       expect(result.success).toBe(false);
       expect(result.error).toContain("Invalid Jira configuration");
+    });
+
+    test("uses basic auth for server when email is provided", async () => {
+      mockGetCurrentUser.mockResolvedValueOnce({ displayName: "User" });
+
+      await connector.testConnection({
+        config: { ...validConfig, isCloud: false },
+        credentials: { email: "admin", apiToken: "password123" },
+      });
+
+      const serverConfig = capturedConfigs.find(
+        (c) => c.type === "Version2",
+      )?.config;
+      expect(serverConfig?.authentication).toEqual({
+        basic: { email: "admin", apiToken: "password123" },
+      });
+    });
+
+    test("uses oauth2 (PAT) auth for server when email is not provided", async () => {
+      mockGetCurrentUser.mockResolvedValueOnce({ displayName: "User" });
+
+      await connector.testConnection({
+        config: { ...validConfig, isCloud: false },
+        credentials: { apiToken: "pat-token-value" },
+      });
+
+      const serverConfig = capturedConfigs.find(
+        (c) => c.type === "Version2",
+      )?.config;
+      expect(serverConfig?.authentication).toEqual({
+        oauth2: { accessToken: "pat-token-value" },
+      });
+    });
+
+    test("sets noCheckAtlassianToken for server instances", async () => {
+      mockGetCurrentUser.mockResolvedValueOnce({ displayName: "User" });
+
+      await connector.testConnection({
+        config: { ...validConfig, isCloud: false },
+        credentials: { apiToken: "pat-token" },
+      });
+
+      const serverConfig = capturedConfigs.find(
+        (c) => c.type === "Version2",
+      )?.config;
+      expect(serverConfig?.noCheckAtlassianToken).toBe(true);
+    });
+
+    test("uses basic auth for cloud instances", async () => {
+      mockGetCurrentUser.mockResolvedValueOnce({ displayName: "User" });
+
+      await connector.testConnection({
+        config: validConfig,
+        credentials,
+      });
+
+      const cloudConfig = capturedConfigs.find(
+        (c) => c.type === "Version3",
+      )?.config;
+      expect(cloudConfig?.authentication).toEqual({
+        basic: { email: "user@example.com", apiToken: "test-api-token" },
+      });
     });
   });
 

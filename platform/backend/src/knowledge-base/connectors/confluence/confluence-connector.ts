@@ -169,12 +169,10 @@ function createConfluenceClient(
   const host = config.confluenceUrl.replace(/\/+$/, "");
   return new ConfluenceClient({
     host,
-    authentication: {
-      basic: {
-        email: credentials.email ?? "",
-        apiToken: credentials.apiToken,
-      },
-    },
+    noCheckAtlassianToken: true,
+    authentication: credentials.email
+      ? { basic: { email: credentials.email, apiToken: credentials.apiToken } }
+      : { oauth2: { accessToken: credentials.apiToken } },
     apiPrefix: config.isCloud ? "/wiki/rest/" : "/rest/",
   });
 }

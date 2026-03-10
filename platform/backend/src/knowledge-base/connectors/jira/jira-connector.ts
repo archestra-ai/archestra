@@ -222,15 +222,12 @@ function createV2Client(
   config: JiraConfig,
   credentials: ConnectorCredentials,
 ): Version2Client {
-  // @ts-expect-error jira.js@5.3.1 overload resolution broken: private 'client' property intersects to 'never'
   return createClient(ClientType.Version2, {
     host: config.jiraBaseUrl.replace(/\/+$/, ""),
-    authentication: {
-      basic: {
-        email: credentials.email,
-        apiToken: credentials.apiToken,
-      },
-    },
+    noCheckAtlassianToken: true,
+    authentication: credentials.email
+      ? { basic: { email: credentials.email, apiToken: credentials.apiToken } }
+      : { oauth2: { accessToken: credentials.apiToken } },
   }) as unknown as Version2Client;
 }
 

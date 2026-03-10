@@ -2584,6 +2584,221 @@ spec:
       },
     ]);
   });
+
+  test("preserves user-added envFrom entries in deployment YAML", () => {
+    const yamlWithEnvFrom = `
+apiVersion: apps/v1
+kind: Deployment
+spec:
+  template:
+    spec:
+      containers:
+        - name: mcp-server
+          image: test:latest
+          command: ["node"]
+          args: ["server.js"]
+          envFrom:
+            - secretRef:
+                name: github-app-token
+            - configMapRef:
+                name: shared-config
+              prefix: APP_
+`;
+
+    const k8sDeployment = createK8sDeploymentWithYaml(yamlWithEnvFrom);
+
+    const spec = k8sDeployment.generateDeploymentSpec(
+      "test:latest",
+      { command: "node", arguments: ["server.js"] },
+      false,
+      8080,
+    );
+
+    const container = spec.spec?.template.spec?.containers[0];
+    expect(container?.envFrom).toEqual([
+      { secretRef: { name: "github-app-token" } },
+      { configMapRef: { name: "shared-config" }, prefix: "APP_" },
+    ]);
+  });
+
+  test("preserves user-added secretKeyRef entries referencing external secrets in YAML", () => {
+    const yamlWithExternalSecret = `
+apiVersion: apps/v1
+kind: Deployment
+spec:
+  template:
+    spec:
+      containers:
+        - name: mcp-server
+          image: test:latest
+          command: ["node"]
+          args: ["server.js"]
+          env:
+            - name: GITHUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: github-app-external-secret
+                  key: token
+            - name: CUSTOM_VAR
+              value: "my-value"
+`;
+
+    const k8sDeployment = createK8sDeploymentWithYaml(yamlWithExternalSecret);
+
+    const spec = k8sDeployment.generateDeploymentSpec(
+      "test:latest",
+      { command: "node", arguments: ["server.js"] },
+      false,
+      8080,
+    );
+
+    const container = spec.spec?.template.spec?.containers[0];
+    const githubToken = container?.env?.find((e) => e.name === "GITHUB_TOKEN");
+    const customVar = container?.env?.find((e) => e.name === "CUSTOM_VAR");
+
+    // User-added secretKeyRef referencing external secret should be preserved
+    expect(githubToken).toEqual({
+      name: "GITHUB_TOKEN",
+      valueFrom: {
+        secretKeyRef: {
+          name: "github-app-external-secret",
+          key: "token",
+        },
+      },
+    });
+
+    // User-added plain env var should be preserved
+    expect(customVar).toEqual({
+      name: "CUSTOM_VAR",
+      value: "my-value",
+    });
+  });
+
+  test("filters archestra-managed secretKeyRef for empty secrets but preserves external ones", () => {
+    // YAML contains both an archestra-managed secretKeyRef and a user-added external one
+    const yamlWithMixedSecrets = `
+apiVersion: apps/v1
+kind: Deployment
+spec:
+  template:
+    spec:
+      containers:
+        - name: mcp-server
+          image: test:latest
+          command: ["node"]
+          args: ["server.js"]
+          env:
+            - name: ARCHESTRA_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: mcp-server-yaml-test-id-secrets
+                  key: ARCHESTRA_SECRET
+            - name: EXTERNAL_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: my-external-secret
+                  key: api-token
+`;
+
+    const k8sDeployment = createK8sDeploymentWithYaml(yamlWithMixedSecrets);
+
+    const spec = k8sDeployment.generateDeploymentSpec(
+      "test:latest",
+      { command: "node", arguments: ["server.js"] },
+      false,
+      8080,
+    );
+
+    const container = spec.spec?.template.spec?.containers[0];
+
+    // Archestra-managed secretKeyRef should be filtered out (no corresponding secret value)
+    const archestraSecret = container?.env?.find(
+      (e) => e.name === "ARCHESTRA_SECRET",
+    );
+    expect(archestraSecret).toBeUndefined();
+
+    // External secretKeyRef should be preserved
+    const externalToken = container?.env?.find(
+      (e) => e.name === "EXTERNAL_TOKEN",
+    );
+    expect(externalToken).toEqual({
+      name: "EXTERNAL_TOKEN",
+      valueFrom: {
+        secretKeyRef: {
+          name: "my-external-secret",
+          key: "api-token",
+        },
+      },
+    });
+  });
+
+  test("merges localConfig.envFrom with YAML envFrom without duplicates", () => {
+    const yamlWithEnvFrom = `
+apiVersion: apps/v1
+kind: Deployment
+spec:
+  template:
+    spec:
+      containers:
+        - name: mcp-server
+          image: test:latest
+          command: ["node"]
+          args: ["server.js"]
+          envFrom:
+            - secretRef:
+                name: existing-yaml-secret
+`;
+
+    const catalogItem = {
+      deploymentSpecYaml: yamlWithEnvFrom,
+      localConfig: {
+        command: "node",
+        arguments: ["server.js"],
+        envFrom: [
+          { type: "secret" as const, name: "from-local-config" },
+          { type: "secret" as const, name: "existing-yaml-secret" }, // duplicate
+        ],
+      },
+    } as unknown as import("@/types").InternalMcpCatalog;
+
+    const mcpServer = {
+      id: "yaml-envfrom-merge-id",
+      name: "yaml-envfrom-merge-server",
+      catalogId: "catalog-yaml-envfrom",
+    } as McpServer;
+
+    const k8sDeployment = new K8sDeployment({
+      mcpServer: mcpServer,
+      k8sApi: {} as k8s.CoreV1Api,
+      k8sAppsApi: {} as k8s.AppsV1Api,
+      k8sAttach: {} as k8s.Attach,
+      k8sLog: {} as k8s.Log,
+      k8sExec: {} as Exec,
+      namespace: "default",
+      catalogItem: catalogItem,
+    });
+
+    const spec = k8sDeployment.generateDeploymentSpec(
+      "test:latest",
+      {
+        command: "node",
+        arguments: ["server.js"],
+        envFrom: [
+          { type: "secret", name: "from-local-config" },
+          { type: "secret", name: "existing-yaml-secret" }, // duplicate
+        ],
+      },
+      false,
+      8080,
+    );
+
+    const container = spec.spec?.template.spec?.containers[0];
+    // Should have existing-yaml-secret from YAML + from-local-config from localConfig, no duplicates
+    expect(container?.envFrom).toEqual([
+      { secretRef: { name: "existing-yaml-secret" } },
+      { secretRef: { name: "from-local-config" } },
+    ]);
+  });
 });
 
 describe("K8sDeployment.createK8sSecret", () => {

@@ -1060,7 +1060,7 @@ export default class K8sDeployment {
     }
 
     // 6. Merge environment variables (YAML env vars + system env vars)
-    // Also filter out YAML secretKeyRef entries for keys that don't have values
+    // Also filter out archestra-managed secretKeyRef entries for keys that don't have values
     if (deployment.spec?.template?.spec?.containers?.[0]) {
       const container = deployment.spec.template.spec.containers[0];
 
@@ -1073,15 +1073,21 @@ export default class K8sDeployment {
         }
       }
 
-      // Filter YAML env vars to remove secretKeyRef entries for keys without values
-      // This prevents "couldn't find key X in Secret" errors when secrets are optional/empty
+      // Filter YAML env vars to remove archestra-managed secretKeyRef entries for keys without values.
+      // Only filter entries that reference the archestra-managed K8s Secret — preserve user-added
+      // secretKeyRef entries that reference other secrets (e.g., ExternalSecrets, manually created secrets).
+      // This prevents "couldn't find key X in Secret" errors when archestra-managed secrets are optional/empty.
       if (container.env) {
         container.env = container.env.filter((envVar) => {
           // Keep all non-secretKeyRef env vars
           if (!envVar.valueFrom?.secretKeyRef) {
             return true;
           }
-          // Only keep secretKeyRef env vars if the key will be in the K8s Secret
+          // Keep secretKeyRef entries that reference a different secret (user-managed)
+          if (envVar.valueFrom.secretKeyRef.name !== k8sSecretName) {
+            return true;
+          }
+          // Only keep archestra-managed secretKeyRef if the key will be in the K8s Secret
           const secretKey = envVar.valueFrom.secretKeyRef.key;
           return secretKey && validSecretKeys.has(secretKey);
         });

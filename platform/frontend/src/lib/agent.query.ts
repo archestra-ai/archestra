@@ -220,6 +220,10 @@ export function useUpdateProfile() {
       });
       // Invalidate tokens queries since team changes affect which tokens are visible for a profile
       queryClient.invalidateQueries({ queryKey: ["tokens"] });
+      // Invalidate knowledge bases when knowledgeBaseIds change (updates assignedAgents)
+      if (variables.data?.knowledgeBaseIds !== undefined) {
+        queryClient.invalidateQueries({ queryKey: ["knowledge-bases"] });
+      }
     },
   });
 }

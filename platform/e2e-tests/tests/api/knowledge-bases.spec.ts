@@ -268,7 +268,6 @@ test.describe("Knowledge Bases API", () => {
       expect(connector).toHaveProperty("id");
       expect(connector.name).toBe(connectorName);
       expect(connector.connectorType).toBe("jira");
-      expect(connector.knowledgeBaseId).toBe(kg.id);
       expect(connector).toHaveProperty("config");
       expect(connector).toHaveProperty("schedule");
       expect(connector.enabled).toBe(true);
@@ -300,7 +299,7 @@ test.describe("Knowledge Bases API", () => {
       const getResponse = await makeApiRequest({
         request,
         method: "get",
-        urlSuffix: `/api/knowledge-bases/${kg.id}/connectors/${connector.id}`,
+        urlSuffix: `/api/connectors/${connector.id}`,
       });
       const fetched = await getResponse.json();
 
@@ -342,7 +341,7 @@ test.describe("Knowledge Bases API", () => {
       const listResponse = await makeApiRequest({
         request,
         method: "get",
-        urlSuffix: `/api/knowledge-bases/${kg.id}/connectors?limit=50&offset=0`,
+        urlSuffix: `/api/connectors?knowledgeBaseId=${kg.id}&limit=50&offset=0`,
       });
       const body = await listResponse.json();
 
@@ -383,7 +382,7 @@ test.describe("Knowledge Bases API", () => {
       const updateResponse = await makeApiRequest({
         request,
         method: "put",
-        urlSuffix: `/api/knowledge-bases/${kg.id}/connectors/${connector.id}`,
+        urlSuffix: `/api/connectors/${connector.id}`,
         data: {
           name: updatedName,
           enabled: false,
@@ -401,7 +400,7 @@ test.describe("Knowledge Bases API", () => {
       const getResponse = await makeApiRequest({
         request,
         method: "get",
-        urlSuffix: `/api/knowledge-bases/${kg.id}/connectors/${connector.id}`,
+        urlSuffix: `/api/connectors/${connector.id}`,
       });
       const fetched = await getResponse.json();
       expect(fetched.name).toBe(updatedName);
@@ -435,7 +434,7 @@ test.describe("Knowledge Bases API", () => {
       const deleteResponse = await makeApiRequest({
         request,
         method: "delete",
-        urlSuffix: `/api/knowledge-bases/${kg.id}/connectors/${connector.id}`,
+        urlSuffix: `/api/connectors/${connector.id}`,
       });
       const result = await deleteResponse.json();
       expect(result.success).toBe(true);
@@ -444,7 +443,7 @@ test.describe("Knowledge Bases API", () => {
       const getResponse = await makeApiRequest({
         request,
         method: "get",
-        urlSuffix: `/api/knowledge-bases/${kg.id}/connectors/${connector.id}`,
+        urlSuffix: `/api/connectors/${connector.id}`,
         ignoreStatusCheck: true,
       });
       expect(getResponse.status()).toBe(404);
@@ -469,9 +468,10 @@ test.describe("Knowledge Bases API", () => {
       const response = await makeApiRequest({
         request,
         method: "post",
-        urlSuffix: `/api/knowledge-bases/${kg.id}/connectors`,
+        urlSuffix: "/api/connectors",
         data: {
           name: "Invalid Connector",
+          knowledgeBaseIds: [kg.id],
           connectorType: "invalid_type",
           config: { baseUrl: "https://test.atlassian.net" },
           credentials: { email: "test@example.com", apiToken: "tok" },
@@ -513,11 +513,11 @@ test.describe("Knowledge Bases API", () => {
       const result = await deleteResponse.json();
       expect(result.success).toBe(true);
 
-      // Verify connector is gone (KG is gone, so fetching connector via KG returns 404)
+      // Verify connector is gone (KG cascade-deleted the connector)
       const getResponse = await makeApiRequest({
         request,
         method: "get",
-        urlSuffix: `/api/knowledge-bases/${kg.id}/connectors/${connector.id}`,
+        urlSuffix: `/api/connectors/${connector.id}`,
         ignoreStatusCheck: true,
       });
       expect(getResponse.status()).toBe(404);
@@ -549,7 +549,7 @@ test.describe("Knowledge Bases API", () => {
       const runsResponse = await makeApiRequest({
         request,
         method: "get",
-        urlSuffix: `/api/knowledge-bases/${kg.id}/connectors/${connector.id}/runs?limit=10&offset=0`,
+        urlSuffix: `/api/connectors/${connector.id}/runs?limit=10&offset=0`,
       });
       const body = await runsResponse.json();
 

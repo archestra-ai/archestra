@@ -1,4 +1,5 @@
 import { Gitlab } from "@gitbeaker/rest";
+import logger from "@/logging";
 import type {
   ConnectorCredentials,
   ConnectorDocument,
@@ -7,7 +8,11 @@ import type {
   GitlabConfig,
 } from "@/types/knowledge-connector";
 import { GitlabConfigSchema } from "@/types/knowledge-connector";
-import { BaseConnector, buildCheckpoint } from "../base-connector";
+import {
+  BaseConnector,
+  buildCheckpoint,
+  extractErrorMessage,
+} from "../base-connector";
 
 const BATCH_SIZE = 50;
 
@@ -44,12 +49,22 @@ export class GitlabConnector extends BaseConnector {
       return { success: false, error: "Invalid GitLab configuration" };
     }
 
+    logger.debug(
+      { baseUrl: parsed.gitlabUrl },
+      "[GitlabConnector] Testing connection",
+    );
+
     try {
       const client = createGitlabClient(parsed, params.credentials);
       await client.Users.showCurrentUser();
+      logger.debug("[GitlabConnector] Connection test successful");
       return { success: true };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      logger.error(
+        { error: message },
+        "[GitlabConnector] Connection test failed",
+      );
       return { success: false, error: `Connection failed: ${message}` };
     }
   }
@@ -61,6 +76,11 @@ export class GitlabConnector extends BaseConnector {
   }): Promise<number | null> {
     const parsed = parseGitlabConfig(params.config);
     if (!parsed) return null;
+
+    logger.debug(
+      { projectIds: parsed.projectIds, groupId: parsed.groupId },
+      "[GitlabConnector] Estimating total items",
+    );
 
     try {
       const client = createGitlabClient(parsed, params.credentials);
@@ -94,7 +114,11 @@ export class GitlabConnector extends BaseConnector {
       }
 
       return total > 0 ? total : null;
-    } catch {
+    } catch (error) {
+      logger.warn(
+        { error: extractErrorMessage(error) },
+        "[GitlabConnector] Failed to estimate total items",
+      );
       return null;
     }
   }
@@ -116,6 +140,17 @@ export class GitlabConnector extends BaseConnector {
     };
     const client = createGitlabClient(parsed, params.credentials);
     const projects = await getProjects(client, parsed);
+
+    logger.debug(
+      {
+        baseUrl: parsed.gitlabUrl,
+        projectCount: projects.length,
+        includeIssues: parsed.includeIssues,
+        includeMergeRequests: parsed.includeMergeRequests,
+        checkpoint,
+      },
+      "[GitlabConnector] Starting sync",
+    );
 
     for (let projIdx = 0; projIdx < projects.length; projIdx++) {
       const project = projects[projIdx];
@@ -156,53 +191,85 @@ export class GitlabConnector extends BaseConnector {
     let page = 1;
     let pageHasMore = true;
 
+    logger.debug(
+      { project: project.pathWithNamespace },
+      "[GitlabConnector] Syncing project issues",
+    );
+
     while (pageHasMore) {
       await this.rateLimit();
 
-      // biome-ignore lint/suspicious/noExplicitAny: Gitbeaker Camelize types
-      const issues: any[] = await client.Issues.all({
-        projectId: project.id,
-        perPage: BATCH_SIZE,
-        page,
-        sort: "asc",
-        orderBy: "updated_at",
-        ...(checkpoint.lastSyncedAt
-          ? { updatedAfter: checkpoint.lastSyncedAt }
-          : {}),
-      });
+      try {
+        logger.debug(
+          { project: project.pathWithNamespace, page },
+          "[GitlabConnector] Fetching issues batch",
+        );
 
-      const filtered = issues.filter(
-        (issue: { labels?: string[] }) =>
-          !shouldSkipByLabels(issue.labels ?? [], config.labelsToSkip),
-      );
-
-      const documents: ConnectorDocument[] = [];
-      for (const issue of filtered) {
-        await this.rateLimit();
-        const notes = await this.safeItemFetch({
-          fetch: () => getIssueNotes(client, project.id, issue.iid),
-          fallback: [],
-          itemId: issue.iid,
-          resource: "notes",
+        // biome-ignore lint/suspicious/noExplicitAny: Gitbeaker Camelize types
+        const issues: any[] = await client.Issues.all({
+          projectId: project.id,
+          perPage: BATCH_SIZE,
+          page,
+          sort: "asc",
+          orderBy: "updated_at",
+          ...(checkpoint.lastSyncedAt
+            ? { updatedAfter: checkpoint.lastSyncedAt }
+            : {}),
         });
-        documents.push(issueToDocument(issue, notes, project));
+
+        const filtered = issues.filter(
+          (issue: { labels?: string[] }) =>
+            !shouldSkipByLabels(issue.labels ?? [], config.labelsToSkip),
+        );
+
+        const documents: ConnectorDocument[] = [];
+        for (const issue of filtered) {
+          await this.rateLimit();
+          const notes = await this.safeItemFetch({
+            fetch: () => getIssueNotes(client, project.id, issue.iid),
+            fallback: [],
+            itemId: issue.iid,
+            resource: "notes",
+          });
+          documents.push(issueToDocument(issue, notes, project));
+        }
+
+        pageHasMore = issues.length >= BATCH_SIZE;
+        page++;
+
+        logger.debug(
+          {
+            project: project.pathWithNamespace,
+            issueCount: issues.length,
+            documentCount: documents.length,
+            hasMore: pageHasMore || !isLastGroup,
+          },
+          "[GitlabConnector] Issues batch fetched",
+        );
+
+        const lastIssue =
+          filtered.length > 0 ? filtered[filtered.length - 1] : null;
+        yield {
+          documents,
+          failures: this.flushFailures(),
+          checkpoint: buildCheckpoint({
+            type: "gitlab",
+            itemUpdatedAt: lastIssue?.updated_at,
+            previousLastSyncedAt: checkpoint.lastSyncedAt,
+          }),
+          hasMore: pageHasMore || !isLastGroup,
+        };
+      } catch (error) {
+        logger.error(
+          {
+            project: project.pathWithNamespace,
+            page,
+            error: extractErrorMessage(error),
+          },
+          "[GitlabConnector] Issues batch fetch failed",
+        );
+        throw error;
       }
-
-      pageHasMore = issues.length >= BATCH_SIZE;
-      page++;
-
-      const lastIssue =
-        filtered.length > 0 ? filtered[filtered.length - 1] : null;
-      yield {
-        documents,
-        failures: this.flushFailures(),
-        checkpoint: buildCheckpoint({
-          type: "gitlab",
-          itemUpdatedAt: lastIssue?.updated_at,
-          previousLastSyncedAt: checkpoint.lastSyncedAt,
-        }),
-        hasMore: pageHasMore || !isLastGroup,
-      };
     }
   }
 
@@ -217,52 +284,85 @@ export class GitlabConnector extends BaseConnector {
     let page = 1;
     let pageHasMore = true;
 
+    logger.debug(
+      { project: project.pathWithNamespace },
+      "[GitlabConnector] Syncing project merge requests",
+    );
+
     while (pageHasMore) {
       await this.rateLimit();
 
-      // biome-ignore lint/suspicious/noExplicitAny: Gitbeaker Camelize types
-      const mergeRequests: any[] = await client.MergeRequests.all({
-        projectId: project.id,
-        perPage: BATCH_SIZE,
-        page,
-        sort: "asc",
-        orderBy: "updated_at",
-        ...(checkpoint.lastSyncedAt
-          ? { updatedAfter: checkpoint.lastSyncedAt }
-          : {}),
-      });
+      try {
+        logger.debug(
+          { project: project.pathWithNamespace, page },
+          "[GitlabConnector] Fetching merge requests batch",
+        );
 
-      const filtered = mergeRequests.filter(
-        (mr: { labels?: string[] }) =>
-          !shouldSkipByLabels(mr.labels ?? [], config.labelsToSkip),
-      );
-
-      const documents: ConnectorDocument[] = [];
-      for (const mr of filtered) {
-        await this.rateLimit();
-        const notes = await this.safeItemFetch({
-          fetch: () => getMergeRequestNotes(client, project.id, mr.iid),
-          fallback: [],
-          itemId: mr.iid,
-          resource: "notes",
+        // biome-ignore lint/suspicious/noExplicitAny: Gitbeaker Camelize types
+        const mergeRequests: any[] = await client.MergeRequests.all({
+          projectId: project.id,
+          perPage: BATCH_SIZE,
+          page,
+          sort: "asc",
+          orderBy: "updated_at",
+          ...(checkpoint.lastSyncedAt
+            ? { updatedAfter: checkpoint.lastSyncedAt }
+            : {}),
         });
-        documents.push(mergeRequestToDocument(mr, notes, project));
+
+        const filtered = mergeRequests.filter(
+          (mr: { labels?: string[] }) =>
+            !shouldSkipByLabels(mr.labels ?? [], config.labelsToSkip),
+        );
+
+        const documents: ConnectorDocument[] = [];
+        for (const mr of filtered) {
+          await this.rateLimit();
+          const notes = await this.safeItemFetch({
+            fetch: () => getMergeRequestNotes(client, project.id, mr.iid),
+            fallback: [],
+            itemId: mr.iid,
+            resource: "notes",
+          });
+          documents.push(mergeRequestToDocument(mr, notes, project));
+        }
+
+        pageHasMore = mergeRequests.length >= BATCH_SIZE;
+        page++;
+
+        logger.debug(
+          {
+            project: project.pathWithNamespace,
+            mrCount: mergeRequests.length,
+            documentCount: documents.length,
+            hasMore: pageHasMore || !isLastGroup,
+          },
+          "[GitlabConnector] Merge requests batch fetched",
+        );
+
+        const lastMr =
+          filtered.length > 0 ? filtered[filtered.length - 1] : null;
+        yield {
+          documents,
+          failures: this.flushFailures(),
+          checkpoint: buildCheckpoint({
+            type: "gitlab",
+            itemUpdatedAt: lastMr?.updated_at,
+            previousLastSyncedAt: checkpoint.lastSyncedAt,
+          }),
+          hasMore: pageHasMore || !isLastGroup,
+        };
+      } catch (error) {
+        logger.error(
+          {
+            project: project.pathWithNamespace,
+            page,
+            error: extractErrorMessage(error),
+          },
+          "[GitlabConnector] Merge requests batch fetch failed",
+        );
+        throw error;
       }
-
-      pageHasMore = mergeRequests.length >= BATCH_SIZE;
-      page++;
-
-      const lastMr = filtered.length > 0 ? filtered[filtered.length - 1] : null;
-      yield {
-        documents,
-        failures: this.flushFailures(),
-        checkpoint: buildCheckpoint({
-          type: "gitlab",
-          itemUpdatedAt: lastMr?.updated_at,
-          previousLastSyncedAt: checkpoint.lastSyncedAt,
-        }),
-        hasMore: pageHasMore || !isLastGroup,
-      };
     }
   }
 }

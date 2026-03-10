@@ -1094,12 +1094,13 @@ const chatModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["Chat"],
         querystring: z.object({
           provider: SupportedProvidersSchema.optional(),
+          apiKeyId: z.string().uuid().optional(),
         }),
         response: constructResponseSchema(z.array(ChatModelSchema)),
       },
     },
     async ({ query, organizationId, user }, reply) => {
-      const { provider } = query;
+      const { provider, apiKeyId } = query;
 
       // Trigger models.dev metadata sync in background if needed
       modelsDevClient.syncIfNeeded();
@@ -1117,6 +1118,7 @@ const chatModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         {
           organizationId,
           provider,
+          apiKeyId,
           apiKeyCount: apiKeys.length,
           apiKeys: apiKeys.map((k) => ({
             id: k.id,
@@ -1129,7 +1131,13 @@ const chatModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       );
 
       // Get models from database based on user's API keys
-      const apiKeyIds = apiKeys.map((k) => k.id);
+      // If a specific apiKeyId is provided and it's in the user's accessible keys,
+      // only return models for that key
+      const accessibleKeyIds = apiKeys.map((k) => k.id);
+      const apiKeyIds =
+        apiKeyId && accessibleKeyIds.includes(apiKeyId)
+          ? [apiKeyId]
+          : accessibleKeyIds;
       const dbModels = await ApiKeyModelModel.getModelsForApiKeyIds(apiKeyIds);
 
       logger.info(

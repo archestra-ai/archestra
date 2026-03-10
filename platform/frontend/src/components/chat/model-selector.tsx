@@ -89,6 +89,8 @@ interface ModelSelectorProps {
   onClear?: () => void;
   /** Render trigger as an outline button instead of the default ghost prompt-input button */
   variant?: "default" | "outline";
+  /** When provided, only show models associated with this API key */
+  apiKeyId?: string | null;
 }
 
 /** Map our provider names to logo provider names
@@ -541,8 +543,11 @@ export function ModelSelector({
   onOpenChange: onOpenChangeProp,
   onClear,
   variant = "default",
+  apiKeyId,
 }: ModelSelectorProps) {
-  const { modelsByProvider, isPending: isLoading } = useModelsByProvider();
+  const { modelsByProvider, isPending: isLoading } = useModelsByProvider({
+    apiKeyId,
+  });
   const syncMutation = useSyncChatModels();
   const [open, setOpen] = useState(false);
   const [filters, setFilters] = useState<ModelFilters>(INITIAL_FILTERS);

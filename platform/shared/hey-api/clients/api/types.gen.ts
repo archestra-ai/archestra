@@ -18169,6 +18169,7 @@ export type GetChatModelsData = {
     path?: never;
     query?: {
         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax';
+        apiKeyId?: string;
     };
     url: '/api/chat/models';
 };

@@ -163,9 +163,7 @@ describe("knowledge-connector schemas", () => {
       expect(parseUrl("ftp://files.example.com")).toBe(
         "ftp://files.example.com",
       );
-      expect(parseUrl("ssh://git.example.com")).toBe(
-        "ssh://git.example.com",
-      );
+      expect(parseUrl("ssh://git.example.com")).toBe("ssh://git.example.com");
     });
 
     test("prepends https:// for URL with path but no protocol", () => {

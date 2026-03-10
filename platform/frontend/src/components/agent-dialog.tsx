@@ -1236,6 +1236,11 @@ export function AgentDialog({
                 {(knowledgeBases.length > 0 || connectors.length > 0) && (
                   <div className="space-y-2">
                     <Label>Knowledge Sources</Label>
+                    <p className="text-xs text-muted-foreground">
+                      Select specific connectors or knowledge bases to use in{" "}
+                      {agentTypeDisplayName[agentType] || "agent"}&apos;s
+                      replies.
+                    </p>
                     <Popover>
                       <PopoverTrigger asChild>
                         <Button

@@ -1136,6 +1136,12 @@ const chatModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // If a specific apiKeyId is provided and it's in the user's accessible keys,
       // only return models for that key
       const accessibleKeyIds = apiKeys.map((k) => k.id);
+      if (apiKeyId && !accessibleKeyIds.includes(apiKeyId)) {
+        logger.warn(
+          { apiKeyId, organizationId, userId: user.id },
+          "Requested apiKeyId not found in user's accessible keys, falling back to all keys",
+        );
+      }
       const apiKeyIds =
         apiKeyId && accessibleKeyIds.includes(apiKeyId)
           ? [apiKeyId]

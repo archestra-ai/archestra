@@ -31,10 +31,8 @@ export function useChatModels(params?: { apiKeyId?: string | null }) {
   return useQuery({
     queryKey: ["chat-models", apiKeyId ?? null],
     queryFn: async (): Promise<ChatModel[]> => {
-      const query: { apiKeyId?: string } = {};
-      if (apiKeyId) query.apiKeyId = apiKeyId;
       const { data, error } = await getChatModels({
-        query: Object.keys(query).length > 0 ? query : undefined,
+        query: apiKeyId ? { apiKeyId } : undefined,
       });
       if (error) {
         handleApiError(error);

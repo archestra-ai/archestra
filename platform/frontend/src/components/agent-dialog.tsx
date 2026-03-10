@@ -1236,10 +1236,6 @@ export function AgentDialog({
                 {(knowledgeBases.length > 0 || connectors.length > 0) && (
                   <div className="space-y-2">
                     <Label>Knowledge Sources</Label>
-                    <p className="text-sm text-muted-foreground">
-                      Attach knowledge bases or connectors to enable RAG
-                      queries.
-                    </p>
                     <Popover>
                       <PopoverTrigger asChild>
                         <Button
@@ -1250,7 +1246,7 @@ export function AgentDialog({
                             const totalSelected =
                               knowledgeBaseIds.length + connectorIds.length;
                             return totalSelected === 0
-                              ? "Select knowledge sources..."
+                              ? "Select connectors or knowledge bases..."
                               : `${totalSelected} source${totalSelected > 1 ? "s" : ""} selected`;
                           })()}
                           <ChevronDown className="ml-2 h-4 w-4 opacity-50" />

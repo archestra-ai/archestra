@@ -5,7 +5,6 @@ import type { ColumnDef } from "@tanstack/react-table";
 import {
   ArrowLeft,
   Database,
-  FileText,
   Pencil,
   Play,
   Plug,
@@ -120,7 +119,23 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
       id: "status",
       accessorKey: "status",
       header: "Status",
-      cell: ({ row }) => <ConnectorStatusBadge status={row.original.status} />,
+      cell: ({ row }) => {
+        const { status, error } = row.original;
+        return (
+          <div className="flex items-center gap-2">
+            <ConnectorStatusBadge status={status} />
+            {error && (
+              <Badge
+                variant="destructive"
+                className="cursor-pointer text-xs"
+                onClick={() => setSelectedRunId(row.original.id)}
+              >
+                Error
+              </Badge>
+            )}
+          </div>
+        );
+      },
     },
     {
       id: "startedAt",
@@ -166,23 +181,6 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
       id: "documentsIngested",
       header: "Ingested",
       cell: ({ row }) => <div>{row.original.documentsIngested ?? 0}</div>,
-    },
-    {
-      id: "logs",
-      header: "Logs",
-      cell: ({ row }) => {
-        return (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 px-2"
-            onClick={() => setSelectedRunId(row.original.id)}
-          >
-            <FileText className="mr-1 h-3.5 w-3.5" />
-            View
-          </Button>
-        );
-      },
     },
   ];
 

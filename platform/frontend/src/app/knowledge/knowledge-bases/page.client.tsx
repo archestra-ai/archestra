@@ -754,9 +754,9 @@ function DeleteKnowledgeBaseDialog({
         <DialogHeader>
           <DialogTitle>Delete Knowledge Base</DialogTitle>
           <DialogDescription>
-            Are you sure you want to delete this knowledge base? Connectors
-            will not be deleted but will be unlinked from this knowledge base.
-            This action cannot be undone.
+            Are you sure you want to delete this knowledge base? Connectors will
+            not be deleted but will be unlinked from this knowledge base. This
+            action cannot be undone.
           </DialogDescription>
         </DialogHeader>
         <DialogForm onSubmit={handleDelete}>

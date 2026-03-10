@@ -24,9 +24,32 @@ vi.mock("@/observability/tracing/llm", () => ({
 const mockCreate = vi.fn((_data: unknown) =>
   Promise.resolve({ id: "test-interaction-id" }),
 );
+const mockFindByProviderAndModelId = vi.fn(
+  (_provider: unknown, _model: unknown) =>
+    Promise.resolve({
+      id: "model-1",
+      modelId: "text-embedding-3-small",
+      provider: "openai",
+      customPricePerMillionInput: null,
+      customPricePerMillionOutput: null,
+      promptPricePerToken: null,
+      completionPricePerToken: null,
+    }),
+);
+const mockGetEffectivePricing = vi.fn(() => ({
+  pricePerMillionInput: "0.02",
+  pricePerMillionOutput: "0.02",
+  source: "default",
+}));
 vi.mock("@/models", () => ({
   InteractionModel: {
     create: (data: unknown) => mockCreate(data),
+  },
+  ModelModel: {
+    findByProviderAndModelId: (_provider: unknown, _model: unknown) =>
+      mockFindByProviderAndModelId(_provider, _model),
+    getEffectivePricing: (_model: unknown, _modelId?: unknown) =>
+      mockGetEffectivePricing(),
   },
 }));
 
@@ -225,6 +248,65 @@ describe("withKbObservability", () => {
     });
 
     expect(result).toBe("success");
+  });
+
+  it("calculates cost from model pricing and stores it", async () => {
+    mockGetEffectivePricing.mockReturnValueOnce({
+      pricePerMillionInput: "3.00",
+      pricePerMillionOutput: "15.00",
+      source: "custom",
+    });
+
+    await withKbObservability({
+      ...baseParams,
+      callback: async () => "result",
+      buildInteraction: () => ({
+        request: {},
+        response: {},
+        model: "text-embedding-3-small",
+        inputTokens: 1_000_000,
+        outputTokens: 0,
+      }),
+    });
+
+    await vi.waitFor(() => {
+      expect(mockCreate).toHaveBeenCalledOnce();
+    });
+
+    // Cost = (1M / 1M) * 3.00 + (0 / 1M) * 15.00 = 3.00
+    expect(mockCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        cost: "3.0000000000",
+      }),
+    );
+
+    expect(mockSpan.setAttribute).toHaveBeenCalledWith("archestra.cost", 3);
+  });
+
+  it("stores null cost when pricing lookup fails", async () => {
+    mockFindByProviderAndModelId.mockRejectedValueOnce(new Error("DB down"));
+
+    await withKbObservability({
+      ...baseParams,
+      callback: async () => "result",
+      buildInteraction: () => ({
+        request: {},
+        response: {},
+        model: "unknown-model",
+        inputTokens: 100,
+        outputTokens: 0,
+      }),
+    });
+
+    await vi.waitFor(() => {
+      expect(mockCreate).toHaveBeenCalledOnce();
+    });
+
+    expect(mockCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        cost: null,
+      }),
+    );
   });
 
   it("works with reranker source and chat operation", async () => {

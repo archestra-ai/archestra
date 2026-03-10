@@ -5,8 +5,9 @@ import type {
   SupportedProviderDiscriminator,
 } from "@shared";
 import logger from "@/logging";
-import { InteractionModel } from "@/models";
+import { InteractionModel, ModelModel } from "@/models";
 import {
+  ATTR_ARCHESTRA_COST,
   ATTR_ARCHESTRA_TRIGGER_SOURCE,
   ATTR_GENAI_RESPONSE_MODEL,
   ATTR_GENAI_USAGE_INPUT_TOKENS,
@@ -76,6 +77,17 @@ export async function withKbObservability<T>(
         interaction.outputTokens,
       );
 
+      const cost = await calculateKbCost({
+        model: interaction.model,
+        provider: params.provider,
+        inputTokens: interaction.inputTokens,
+        outputTokens: interaction.outputTokens,
+      });
+
+      if (cost !== undefined) {
+        span.setAttribute(ATTR_ARCHESTRA_COST, cost);
+      }
+
       InteractionModel.create({
         profileId: null,
         source: params.source,
@@ -85,6 +97,7 @@ export async function withKbObservability<T>(
         model: interaction.model,
         inputTokens: interaction.inputTokens,
         outputTokens: interaction.outputTokens,
+        cost: cost?.toFixed(10) ?? null,
       }).catch((error) => {
         logger.warn(
           { error: error instanceof Error ? error.message : String(error) },
@@ -133,6 +146,36 @@ export function buildEmbeddingInteraction(params: {
     inputTokens: response.usage.prompt_tokens,
     outputTokens: 0,
   };
+}
+
+// ===== Internal helpers =====
+
+async function calculateKbCost(params: {
+  model: string;
+  provider: SupportedProvider;
+  inputTokens: number;
+  outputTokens: number;
+}): Promise<number | undefined> {
+  try {
+    const modelEntry = await ModelModel.findByProviderAndModelId(
+      params.provider,
+      params.model,
+    );
+    const pricing = ModelModel.getEffectivePricing(modelEntry, params.model);
+    const inputCost =
+      (params.inputTokens / 1_000_000) *
+      Number.parseFloat(pricing.pricePerMillionInput);
+    const outputCost =
+      (params.outputTokens / 1_000_000) *
+      Number.parseFloat(pricing.pricePerMillionOutput);
+    return inputCost + outputCost;
+  } catch (error) {
+    logger.warn(
+      { error: error instanceof Error ? error.message : String(error) },
+      "[KB] Failed to calculate cost",
+    );
+    return undefined;
+  }
 }
 
 // ===== Internal constants =====

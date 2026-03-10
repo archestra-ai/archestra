@@ -18252,6 +18252,8 @@ export type GetChatModelsResponses = {
             isCustomPrice: boolean;
             priceSource: 'custom' | 'models_dev' | 'default';
         };
+        isBest?: boolean;
+        isFastest?: boolean;
     }>;
 };
 

@@ -45,6 +45,8 @@ const ChatModelSchema = z.object({
   provider: SupportedProvidersSchema,
   createdAt: z.string().optional(),
   capabilities: ModelCapabilitiesSchema.optional(),
+  isBest: z.boolean().optional(),
+  isFastest: z.boolean().optional(),
 });
 
 export interface ModelInfo {
@@ -1152,15 +1154,17 @@ const chatModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Filter by provider if specified
       const filteredModels = provider
-        ? dbModels.filter((m) => m.provider === provider)
+        ? dbModels.filter((m) => m.model.provider === provider)
         : dbModels;
 
-      // Transform to response format with capabilities
-      const models = filteredModels.map((model) => ({
+      // Transform to response format with capabilities and markers
+      const models = filteredModels.map(({ model, isBest, isFastest }) => ({
         id: model.modelId,
         displayName: model.description || model.modelId,
         provider: model.provider,
         capabilities: ModelModel.toCapabilities(model),
+        isBest,
+        isFastest,
       }));
 
       logger.info(

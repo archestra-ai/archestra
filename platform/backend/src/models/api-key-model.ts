@@ -278,17 +278,28 @@ class ApiKeyModelModel {
 
   /**
    * Get unique models for a list of API key IDs.
-   * Returns models with their data, ordered by provider and modelId.
+   * Returns models with their data and isBest/isFastest markers,
+   * ordered by provider and modelId.
+   * A model is marked as best/fastest if ANY of the provided API keys marks it so.
    */
-  static async getModelsForApiKeyIds(apiKeyIds: string[]): Promise<Model[]> {
+  static async getModelsForApiKeyIds(
+    apiKeyIds: string[],
+  ): Promise<Array<{ model: Model; isBest: boolean; isFastest: boolean }>> {
     if (apiKeyIds.length === 0) {
       return [];
     }
 
-    // Get unique models linked to any of the provided API keys
+    // Get models with aggregated markers (true if ANY linked key has the marker)
     const results = await db
-      .selectDistinctOn([schema.modelsTable.id], {
+      .select({
         model: schema.modelsTable,
+        isBest: sql<boolean>`bool_or(${schema.apiKeyModelsTable.isBest})`.as(
+          "is_best_agg",
+        ),
+        isFastest:
+          sql<boolean>`bool_or(${schema.apiKeyModelsTable.isFastest})`.as(
+            "is_fastest_agg",
+          ),
       })
       .from(schema.apiKeyModelsTable)
       .innerJoin(
@@ -296,13 +307,17 @@ class ApiKeyModelModel {
         eq(schema.apiKeyModelsTable.modelId, schema.modelsTable.id),
       )
       .where(inArray(schema.apiKeyModelsTable.apiKeyId, apiKeyIds))
+      .groupBy(schema.modelsTable.id)
       .orderBy(
-        schema.modelsTable.id,
         asc(schema.modelsTable.provider),
         asc(schema.modelsTable.modelId),
       );
 
-    return results.map((r) => r.model);
+    return results.map((r) => ({
+      model: r.model,
+      isBest: r.isBest,
+      isFastest: r.isFastest,
+    }));
   }
   /**
    * Get the "best" model for a specific API key.

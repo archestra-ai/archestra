@@ -60664,6 +60664,12 @@
                           "priceSource"
                         ],
                         "additionalProperties": false
+                      },
+                      "isBest": {
+                        "type": "boolean"
+                      },
+                      "isFastest": {
+                        "type": "boolean"
                       }
                     },
                     "required": [

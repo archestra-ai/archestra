@@ -85,6 +85,6 @@ describe("ModelSyncService", () => {
       apiKey.id,
     ]);
     expect(linkedModels).toHaveLength(3);
-    expect(linkedModels.every((m) => m.provider === "openai")).toBe(true);
+    expect(linkedModels.every((m) => m.model.provider === "openai")).toBe(true);
   });
 });

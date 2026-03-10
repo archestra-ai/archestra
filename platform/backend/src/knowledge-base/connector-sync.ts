@@ -131,10 +131,7 @@ class ConnectorSyncService {
             runLog.warn(
               {
                 documentId: doc.id,
-                error:
-                  docError instanceof Error
-                    ? docError.message
-                    : String(docError),
+                error: extractErrorMessage(docError),
               },
               "[ConnectorSync] Failed to ingest document",
             );

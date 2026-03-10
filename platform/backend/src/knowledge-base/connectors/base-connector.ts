@@ -159,7 +159,7 @@ export abstract class BaseConnector implements Connector {
     try {
       return await params.fetch();
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = extractErrorMessage(error);
       logger.warn(
         {
           connectorType: this.type,

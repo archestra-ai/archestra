@@ -5,13 +5,13 @@ import {
   ArrowLeft,
   Bot,
   Check,
-  ChevronDown,
   ExternalLink,
   Info,
   Loader2,
   Plus,
   Search,
-  Settings,
+  User,
+  XIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ConnectorTypeIcon } from "@/app/knowledge/knowledge-bases/_parts/connector-icons";
@@ -27,14 +27,16 @@ import { TokenSelect } from "@/components/token-select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { OverlappedIcons } from "@/components/ui/overlapped-icons";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Tooltip,
@@ -47,6 +49,7 @@ import {
   useAgentDelegations,
   useAllProfileTools,
   useAssignTool,
+  useRemoveAgentDelegation,
   useSyncAgentDelegations,
   useUnassignTool,
 } from "@/lib/agent-tools.query";
@@ -66,9 +69,9 @@ import {
 import { cn } from "@/lib/utils";
 
 type ScopeFilter = "my" | "others" | "team" | "org";
-type PopoverView =
-  | "list"
+type DialogView =
   | "settings"
+  | "change"
   | "add-tool"
   | "configure-tool"
   | "add-delegation";
@@ -81,20 +84,6 @@ interface InitialAgentSelectorProps {
   onAgentChange: (agentId: string) => void;
 }
 
-function toggleSetValue<T>(set: Set<T>, value: T): Set<T> {
-  const next = new Set(set);
-  if (next.has(value)) {
-    next.delete(value);
-  } else {
-    next.add(value);
-  }
-  return next;
-}
-
-// ============================================================================
-// Main Component
-// ============================================================================
-
 export function InitialAgentSelector({
   currentAgentId,
   onAgentChange,
@@ -102,7 +91,7 @@ export function InitialAgentSelector({
   const { data: allAgents = [] } = useInternalAgents();
   const { data: session } = authClient.useSession();
   const [open, setOpen] = useState(false);
-  const [view, setView] = useState<PopoverView>("list");
+  const [view, setView] = useState<DialogView>("settings");
   const [search, setSearch] = useState("");
   const [scopeFilters, setScopeFilters] = useState<Set<ScopeFilter>>(
     () => new Set<ScopeFilter>(["my", "team", "org"]),
@@ -111,8 +100,34 @@ export function InitialAgentSelector({
     null,
   );
 
-  const installer = useMcpInstallOrchestrator();
   const userId = session?.user?.id;
+
+  const filteredAgents = useMemo(() => {
+    let result = allAgents.filter((a) => {
+      const scope = (a as unknown as Record<string, unknown>).scope as string;
+      const authorId = (a as unknown as Record<string, unknown>)
+        .authorId as string;
+      if (scope === "personal") {
+        if (authorId === userId) return scopeFilters.has("my");
+        return scopeFilters.has("others");
+      }
+      return scopeFilters.has(scope as ScopeFilter);
+    });
+    if (search) {
+      const lower = search.toLowerCase();
+      result = result.filter(
+        (a) =>
+          a.name.toLowerCase().includes(lower) ||
+          a.description?.toLowerCase().includes(lower),
+      );
+    }
+    const scopeOrder: Record<string, number> = { personal: 0, team: 1, org: 2 };
+    return [...result].sort((a, b) => {
+      const sa = (a as unknown as Record<string, unknown>).scope as string;
+      const sb = (b as unknown as Record<string, unknown>).scope as string;
+      return (scopeOrder[sa] ?? 3) - (scopeOrder[sb] ?? 3);
+    });
+  }, [allAgents, search, scopeFilters, userId]);
 
   const currentAgent = useMemo(
     () =>
@@ -144,13 +159,16 @@ export function InitialAgentSelector({
     return allAgents.filter((a) => targetIds.has(a.id));
   }, [allAgents, triggerDelegations]);
 
+  // Knowledge base data for connector icons in avatar group
   const { data: knowledgeBasesData } = useKnowledgeBases();
   const { data: connectorsData } = useConnectors();
+
   const allKnowledgeBases = knowledgeBasesData?.data ?? [];
   const allConnectors = connectorsData?.data ?? [];
   const knowledgeBaseIds = currentAgent?.knowledgeBaseIds ?? [];
   const connectorIds = currentAgent?.connectorIds ?? [];
 
+  // Match knowledge bases and connectors for the current agent
   const matchedKbs = useMemo(
     () => allKnowledgeBases.filter((k) => knowledgeBaseIds.includes(k.id)),
     [allKnowledgeBases, knowledgeBaseIds],
@@ -160,61 +178,25 @@ export function InitialAgentSelector({
     [allConnectors, connectorIds],
   );
 
+  // Compute unique connector types from matched knowledge bases and connectors
   const agentConnectorTypes = useMemo(() => {
     const kbConnectorTypes = matchedKbs.flatMap(
       (kb) => kb.connectors?.map((c) => c.connectorType) ?? [],
     );
     const directConnectorTypes = matchedConnectors.map((c) => c.connectorType);
+
     return [...new Set([...kbConnectorTypes, ...directConnectorTypes])];
   }, [matchedKbs, matchedConnectors]);
 
-  const filteredAgents = useMemo(() => {
-    let result = allAgents.filter((a) => {
-      const scope = (a as unknown as Record<string, unknown>).scope as string;
-      const authorId = (a as unknown as Record<string, unknown>)
-        .authorId as string;
-      if (scope === "personal") {
-        if (authorId === userId) return scopeFilters.has("my");
-        return scopeFilters.has("others");
-      }
-      return scopeFilters.has(scope as ScopeFilter);
-    });
-
-    if (search) {
-      const lower = search.toLowerCase();
-      result = result.filter(
-        (a) =>
-          a.name.toLowerCase().includes(lower) ||
-          a.description?.toLowerCase().includes(lower),
-      );
-    }
-
-    const scopeOrder: Record<string, number> = {
-      personal: 0,
-      team: 1,
-      org: 2,
-    };
-    return [...result].sort((a, b) => {
-      const sa = (a as unknown as Record<string, unknown>).scope as string;
-      const sb = (b as unknown as Record<string, unknown>).scope as string;
-      return (scopeOrder[sa] ?? 3) - (scopeOrder[sb] ?? 3);
-    });
-  }, [allAgents, search, scopeFilters, userId]);
-
   const handleAgentSelect = (agentId: string) => {
-    onAgentChange(agentId);
-    setOpen(false);
-  };
-
-  const handleEditAgent = (agentId: string) => {
     onAgentChange(agentId);
     setView("settings");
     setSearch("");
     setScopeFilters(new Set(["my", "team", "org"]));
   };
 
-  const resetToList = useCallback(() => {
-    setView("list");
+  const resetToSettings = useCallback(() => {
+    setView("settings");
     setSearch("");
     setScopeFilters(new Set(["my", "team", "org"]));
     setSelectedCatalog(null);
@@ -222,7 +204,7 @@ export function InitialAgentSelector({
 
   const handleOpenChange = (newOpen: boolean) => {
     setOpen(newOpen);
-    if (!newOpen) resetToList();
+    if (!newOpen) resetToSettings();
   };
 
   const handleSelectCatalog = (catalog: CatalogItem) => {
@@ -230,336 +212,199 @@ export function InitialAgentSelector({
     setView("configure-tool");
   };
 
-  const hasOpenDialogs =
-    installer.isDialogOpened("remote-install") ||
-    installer.isDialogOpened("oauth") ||
-    installer.isDialogOpened("no-auth") ||
-    installer.isDialogOpened("local-install");
-
   return (
-    <>
-      <Popover open={open} onOpenChange={handleOpenChange}>
-        <PopoverTrigger asChild>
-          <PromptInputButton
-            role="combobox"
-            aria-expanded={open}
-            data-agent-selector
-            className="max-w-[300px] min-w-0"
-          >
-            <AgentIcon
-              icon={
-                (currentAgent as unknown as Record<string, unknown>)?.icon as
-                  | string
-                  | null
-              }
-              size={16}
-            />
-            <span className="truncate flex-1 text-left">
-              {currentAgent?.name ?? "Select agent"}
-            </span>
-            <ToolServerAvatarGroup
-              catalogs={assignedCatalogs}
-              subagents={triggerSubagents}
-              connectorTypes={agentConnectorTypes}
-              showAddButton
-            />
-            <ChevronDown className="size-3 text-muted-foreground shrink-0 ml-0.5" />
-          </PromptInputButton>
-        </PopoverTrigger>
-        <PopoverContent
-          side="top"
-          align="start"
-          sideOffset={8}
-          className="w-[420px] p-0 overflow-hidden"
-          onInteractOutside={(e) => {
-            if (hasOpenDialogs) e.preventDefault();
-          }}
-          onFocusOutside={(e) => {
-            if (hasOpenDialogs) e.preventDefault();
-          }}
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogTrigger asChild>
+        <PromptInputButton
+          role="combobox"
+          aria-expanded={open}
+          data-agent-selector
+          className="max-w-[300px] min-w-0"
         >
-          {view === "list" && (
-            <AgentListView
-              agents={filteredAgents}
-              currentAgentId={currentAgentId}
-              scopeFilters={scopeFilters}
-              search={search}
-              onScopeFiltersChange={setScopeFilters}
-              onSearchChange={setSearch}
-              onSelect={handleAgentSelect}
-              onEdit={handleEditAgent}
-            />
-          )}
-
-          {view === "settings" && (
-            <AgentSettingsView
-              agent={currentAgent}
-              onBack={resetToList}
-              onAddTool={() => setView("add-tool")}
-              onEditTool={handleSelectCatalog}
-            />
-          )}
-
-          {view === "add-tool" && currentAgent && (
-            <AddToolView
-              agentId={currentAgent.id}
-              onBack={() => setView("settings")}
-              onSelectCatalog={handleSelectCatalog}
-              onAddDelegation={() => setView("add-delegation")}
-              installer={installer}
-            />
-          )}
-
-          {view === "add-delegation" && currentAgent && (
-            <AddDelegationView
-              agentId={currentAgent.id}
-              onBack={() => setView("add-tool")}
-              onDone={() => setView("settings")}
-            />
-          )}
-
-          {view === "configure-tool" && currentAgent && selectedCatalog && (
-            <ConfigureToolView
-              agentId={currentAgent.id}
-              catalog={selectedCatalog}
-              onBack={() => setView("add-tool")}
-              onDone={() => setView("settings")}
-            />
-          )}
-        </PopoverContent>
-      </Popover>
-
-      {/* Install dialogs rendered outside popover */}
-      <RemoteServerInstallDialog
-        isOpen={installer.isDialogOpened("remote-install")}
-        onClose={installer.closeRemoteInstall}
-        onConfirm={installer.handleRemoteServerInstallConfirm}
-        catalogItem={installer.selectedCatalogItem}
-        isInstalling={installer.isInstalling}
-        isReauth={installer.isReauth}
-      />
-      <OAuthConfirmationDialog
-        open={installer.isDialogOpened("oauth")}
-        onOpenChange={(isOpen) => {
-          if (!isOpen) installer.closeOAuth();
-        }}
-        serverName={installer.selectedCatalogItem?.name || ""}
-        onConfirm={installer.handleOAuthConfirm}
-        onCancel={installer.closeOAuth}
-        catalogId={installer.selectedCatalogItem?.id}
-      />
-      <NoAuthInstallDialog
-        isOpen={installer.isDialogOpened("no-auth")}
-        onClose={installer.closeNoAuth}
-        onInstall={installer.handleNoAuthConfirm}
-        catalogItem={installer.noAuthCatalogItem}
-        isInstalling={installer.isInstalling}
-      />
-      {installer.localServerCatalogItem && (
-        <LocalServerInstallDialog
-          isOpen={installer.isDialogOpened("local-install")}
-          onClose={installer.closeLocalInstall}
-          onConfirm={installer.handleLocalServerInstallConfirm}
-          catalogItem={installer.localServerCatalogItem}
-          isInstalling={installer.isInstalling}
-          isReauth={installer.isReauth}
-        />
-      )}
-    </>
-  );
-}
-
-// ============================================================================
-// Agent List View (popover main view)
-// ============================================================================
-
-const SCOPE_OPTIONS: { value: ScopeFilter; label: string }[] = [
-  { value: "my", label: "My Personal" },
-  { value: "team", label: "Team" },
-  { value: "org", label: "Organization" },
-  { value: "others", label: "Others' Personal" },
-];
-
-function AgentListView({
-  agents,
-  currentAgentId,
-  scopeFilters,
-  search,
-  onScopeFiltersChange,
-  onSearchChange,
-  onSelect,
-  onEdit,
-}: {
-  agents: Array<{ id: string; name: string; description?: string | null }>;
-  currentAgentId: string | null;
-  scopeFilters: Set<ScopeFilter>;
-  search: string;
-  onScopeFiltersChange: (filters: Set<ScopeFilter>) => void;
-  onSearchChange: (search: string) => void;
-  onSelect: (agentId: string) => void;
-  onEdit: (agentId: string) => void;
-}) {
-  return (
-    <div className="flex flex-col">
-      {/* Scope filters + Search */}
-      <div className="flex items-center gap-2 px-3 pt-3 pb-2">
-        <div className="flex gap-0.5 flex-wrap">
-          {SCOPE_OPTIONS.map((option) => (
-            <Button
-              key={option.value}
-              variant={scopeFilters.has(option.value) ? "secondary" : "ghost"}
-              size="sm"
-              className="h-7 px-2.5 text-xs"
-              onClick={() => {
-                onScopeFiltersChange(
-                  toggleSetValue(scopeFilters, option.value),
-                );
-              }}
-            >
-              {option.label}
-            </Button>
-          ))}
-        </div>
-        <div className="flex-1" />
-        <div className="relative">
-          <Search className="absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={search}
-            onChange={(e) => onSearchChange(e.target.value)}
-            placeholder="Search..."
-            className="h-7 w-[100px] pl-7 text-xs focus:w-[140px] transition-all duration-200"
+          <AgentIcon
+            icon={
+              (currentAgent as unknown as Record<string, unknown>)?.icon as
+                | string
+                | null
+            }
+            size={16}
           />
-        </div>
-      </div>
+          <span className="truncate flex-1 text-left">
+            {currentAgent?.name ?? "Select agent"}
+          </span>
+          <ToolServerAvatarGroup
+            catalogs={assignedCatalogs}
+            subagents={triggerSubagents}
+            connectorTypes={agentConnectorTypes}
+            showAddButton
+          />
+        </PromptInputButton>
+      </DialogTrigger>
+      <DialogContent
+        className="max-w-3xl h-[600px] p-0 gap-0 overflow-hidden flex flex-col"
+        onCloseAutoFocus={(e) => e.preventDefault()}
+        showCloseButton={false}
+      >
+        <DialogTitle className="sr-only">
+          {view === "settings" && "Agent Settings"}
+          {view === "change" && "Select Agent"}
+          {view === "add-tool" && "Add Tools"}
+          {view === "configure-tool" && "Configure Tools"}
+          {view === "add-delegation" && "Call an Agent"}
+        </DialogTitle>
 
-      <div className="mx-3 border-t" />
+        {view === "settings" && (
+          <AgentSettingsView
+            agent={currentAgent}
+            onChangeAgent={() => setView("change")}
+            onAddTool={() => setView("add-tool")}
+            onEditTool={handleSelectCatalog}
+            matchedKnowledgeBases={matchedKbs}
+            matchedConnectors={matchedConnectors}
+          />
+        )}
 
-      {/* Agent list */}
-      <div className="max-h-[280px] overflow-y-auto px-1.5 py-1">
-        {agents.length === 0 ? (
-          <p className="text-xs text-muted-foreground text-center py-6">
-            No agents found
-          </p>
-        ) : (
-          agents.map((agent) => (
-            <AgentRow
-              key={agent.id}
-              agent={agent}
-              isSelected={agent.id === currentAgentId}
-              onSelect={() => onSelect(agent.id)}
-              onEdit={() => onEdit(agent.id)}
+        {view === "change" && (
+          <div className="flex flex-col h-full">
+            <DialogHeader
+              title="Select Agent"
+              onBack={resetToSettings}
+              extra={
+                <div className="flex items-center gap-1">
+                  {(
+                    [
+                      { value: "my", label: "My Personal" },
+                      { value: "team", label: "Team" },
+                      { value: "org", label: "Organization" },
+                      { value: "others", label: "Others' Personal" },
+                    ] as const
+                  ).map((option) => (
+                    <Button
+                      key={option.value}
+                      variant={
+                        scopeFilters.has(option.value) ? "secondary" : "ghost"
+                      }
+                      size="sm"
+                      className="text-xs h-7 px-2.5"
+                      onClick={() => {
+                        setScopeFilters((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(option.value)) {
+                            next.delete(option.value);
+                          } else {
+                            next.add(option.value);
+                          }
+                          return next;
+                        });
+                      }}
+                    >
+                      {option.label}
+                    </Button>
+                  ))}
+                </div>
+              }
             />
-          ))
+            <div className="px-4 pt-4 shrink-0">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  placeholder="Search agents..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="pl-9"
+                  autoFocus
+                />
+              </div>
+            </div>
+            <div className="px-4 pt-4 pb-4 flex-1 min-h-0 overflow-y-auto">
+              {filteredAgents.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-8">
+                  No agents found.
+                </p>
+              ) : (
+                <div className="grid grid-cols-3 gap-3">
+                  {filteredAgents.map((agent) => (
+                    <AgentCard
+                      key={agent.id}
+                      agent={agent}
+                      isSelected={currentAgentId === agent.id}
+                      onSelect={() => handleAgentSelect(agent.id)}
+                      currentUserId={userId}
+                    />
+                  ))}
+                  <a
+                    href="/agents?create=true"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex h-full min-h-[120px] flex-col items-center justify-center gap-2 rounded-lg border border-dashed p-4 text-center transition-colors hover:bg-accent cursor-pointer text-muted-foreground"
+                  >
+                    <ExternalLink className="size-5" />
+                    <span className="text-xs font-medium">Create Agent</span>
+                  </a>
+                </div>
+              )}
+            </div>
+          </div>
         )}
-      </div>
 
-      <div className="mx-3 border-t" />
+        {view === "add-tool" && currentAgent && (
+          <AddToolView
+            agentId={currentAgent.id}
+            onBack={resetToSettings}
+            onSelectCatalog={handleSelectCatalog}
+            onAddDelegation={() => setView("add-delegation")}
+          />
+        )}
 
-      {/* Create Agent */}
-      <div className="px-1.5 py-1">
-        <a
-          href="/agents?create=true"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center gap-2 px-2.5 py-2 rounded-md text-xs text-muted-foreground hover:bg-accent transition-colors"
-        >
-          <Plus className="size-3.5" />
-          Create Agent
-        </a>
-      </div>
-    </div>
+        {view === "add-delegation" && currentAgent && (
+          <AddDelegationView
+            agentId={currentAgent.id}
+            onBack={() => setView("add-tool")}
+            onDone={resetToSettings}
+          />
+        )}
+
+        {view === "configure-tool" && currentAgent && selectedCatalog && (
+          <ConfigureToolView
+            agentId={currentAgent.id}
+            catalog={selectedCatalog}
+            onBack={() => setView("add-tool")}
+            onDone={resetToSettings}
+          />
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }
 
-// ============================================================================
-// Agent Row
-// ============================================================================
-
-function AgentRow({
-  agent,
-  isSelected,
-  onSelect,
-  onEdit,
-}: {
-  agent: { id: string; name: string; description?: string | null };
-  isSelected: boolean;
-  onSelect: () => void;
-  onEdit: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onSelect}
-      className={cn(
-        "group flex w-full items-center gap-2.5 px-2.5 py-2 rounded-md cursor-pointer transition-colors mb-0.5 text-left",
-        isSelected
-          ? "bg-accent border border-border"
-          : "hover:bg-accent/50 border border-transparent",
-      )}
-    >
-      <div
-        className={cn(
-          "flex size-7 shrink-0 items-center justify-center rounded-md",
-          isSelected ? "bg-primary/10" : "bg-muted",
-        )}
-      >
-        <AgentIcon
-          icon={
-            (agent as unknown as Record<string, unknown>).icon as string | null
-          }
-          size={14}
-        />
-      </div>
-      <span className="text-sm font-medium truncate flex-1">{agent.name}</span>
-      {isSelected && <Check className="size-3.5 text-primary shrink-0" />}
-      <span
-        role="none"
-        onClick={(e) => {
-          e.stopPropagation();
-          onEdit();
-        }}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") {
-            e.stopPropagation();
-            onEdit();
-          }
-        }}
-        className="size-6 flex items-center justify-center rounded-md opacity-0 group-hover:opacity-100 hover:bg-muted transition-all shrink-0"
-      >
-        <Settings className="size-3 text-muted-foreground" />
-      </span>
-    </button>
-  );
-}
-
-// ============================================================================
-// Popover Header (reusable)
-// ============================================================================
-
-function PopoverHeader({
+// Reusable dialog header with back button and close
+function DialogHeader({
   title,
   onBack,
-  icon,
   extra,
 }: {
   title: string;
   onBack: () => void;
-  icon?: React.ReactNode;
   extra?: React.ReactNode;
 }) {
   return (
-    <div className="flex items-center gap-2 border-b px-3 py-2.5 shrink-0">
+    <div className="flex items-center gap-3 border-b px-4 py-3 shrink-0">
       <Button
         variant="ghost"
         size="sm"
-        className="h-7 w-7 p-0"
+        className="h-8 px-2 gap-1.5"
         onClick={onBack}
       >
         <ArrowLeft className="size-4" />
+        Back
       </Button>
-      {icon}
-      <span className="text-sm font-semibold truncate flex-1">{title}</span>
+      <span className="text-sm font-medium">{title}</span>
+      <div className="flex-1" />
       {extra}
+      <DialogClose className="rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2">
+        <XIcon className="size-4" />
+        <span className="sr-only">Close</span>
+      </DialogClose>
     </div>
   );
 }
@@ -570,9 +415,11 @@ function PopoverHeader({
 
 function AgentSettingsView({
   agent,
-  onBack,
+  onChangeAgent,
   onAddTool,
   onEditTool,
+  matchedKnowledgeBases: matchedKbs,
+  matchedConnectors,
 }: {
   agent: {
     id: string;
@@ -582,18 +429,20 @@ function AgentSettingsView({
     icon?: string | null;
     scope?: string;
   } | null;
-  onBack: () => void;
+  onChangeAgent: () => void;
   onAddTool: () => void;
   onEditTool: (catalog: CatalogItem) => void;
+  matchedKnowledgeBases: archestraApiTypes.GetKnowledgeBasesResponses["200"]["data"];
+  matchedConnectors: archestraApiTypes.GetConnectorsResponses["200"]["data"];
 }) {
   const updateProfile = useUpdateProfile();
   const { data: canReadAgents } = useHasPermissions({ agent: ["read"] });
 
+  const hasKnowledgeSources =
+    matchedKbs.length > 0 || matchedConnectors.length > 0;
   const [instructions, setInstructions] = useState(agent?.systemPrompt ?? "");
   const [isSaving, setIsSaving] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const scope = (agent as unknown as Record<string, unknown>)?.scope as string;
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: agent?.id ensures reset when switching agents
   useEffect(() => {
@@ -632,82 +481,131 @@ function AgentSettingsView({
 
   if (!agent) {
     return (
-      <div className="p-4 text-center text-muted-foreground text-sm">
+      <div className="p-6 text-center text-muted-foreground">
         No agent selected
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col max-h-[450px]">
-      <PopoverHeader
-        title={agent.name}
-        onBack={onBack}
-        icon={
-          <div className="flex size-7 shrink-0 items-center justify-center rounded-md bg-primary/10">
-            <AgentIcon icon={agent.icon as string | null} size={14} />
+    <div className="flex flex-col h-full">
+      <div className="flex items-center justify-between border-b px-4 py-3 shrink-0">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted">
+            <AgentIcon icon={agent.icon as string | null} size={24} />
           </div>
-        }
-        extra={
-          <div className="flex items-center gap-1.5">
-            {isSaving && (
-              <Loader2 className="size-3 animate-spin text-muted-foreground" />
+          <div>
+            <div className="font-semibold text-sm">{agent.name}</div>
+            {agent.description && (
+              <div className="text-xs text-muted-foreground line-clamp-1">
+                {agent.description}
+              </div>
             )}
-            <AgentBadge
-              type={scope as "personal" | "team" | "org"}
-              className="text-[10px] px-1.5 py-0"
-            />
           </div>
-        }
-      />
+        </div>
+        <div className="flex items-center gap-2">
+          {isSaving && (
+            <Loader2 className="size-3.5 animate-spin text-muted-foreground" />
+          )}
+          <Button variant="outline" size="sm" onClick={onChangeAgent}>
+            Change
+          </Button>
+          <DialogClose className="rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2">
+            <XIcon className="size-4" />
+            <span className="sr-only">Close</span>
+          </DialogClose>
+        </div>
+      </div>
 
-      <div className="flex-1 min-h-0 overflow-y-auto">
-        {(scope === "org" || scope === "team") && (
-          <Alert variant="info" className="mx-3 mt-3 border-0 py-1.5 text-xs">
-            <Info className="size-3" />
-            <AlertDescription className="text-[11px]">
+      <div className="p-4 space-y-4 flex-1 min-h-0 overflow-y-auto">
+        {((agent as unknown as Record<string, unknown>).scope === "org" ||
+          (agent as unknown as Record<string, unknown>).scope === "team") && (
+          <Alert variant="info" className="border-0 py-2 text-xs">
+            <Info className="size-3.5" />
+            <AlertDescription className="text-xs">
               You are editing a shared agent
             </AlertDescription>
           </Alert>
         )}
-
-        {/* Instructions */}
-        <div className="px-3 pt-3 pb-2">
-          <Label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5 block">
-            Instructions
-          </Label>
+        <div>
+          <Label className="mb-1.5">Instructions</Label>
           <Textarea
             value={instructions}
             onChange={(e) => handleInstructionsChange(e.target.value)}
-            className="resize-none text-sm min-h-[70px] max-h-[140px]"
+            className="resize-none text-sm min-h-[80px] max-h-[200px]"
             placeholder="Tell the agent what to do..."
           />
         </div>
 
-        <div className="mx-3 border-t" />
-
-        {/* Tools & MCP Servers */}
-        <div className="px-3 py-3">
-          <Label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5 block">
-            Tools & MCP Servers
-          </Label>
-          <AssignedToolsBadges
+        <div>
+          <Label className="mb-1.5">Tools and subagents</Label>
+          <AssignedToolsGrid
             agentId={agent.id}
             onAddTool={onAddTool}
             onEditTool={onEditTool}
           />
         </div>
+
+        {hasKnowledgeSources && (
+          <div>
+            <Label className="mb-1.5">Knowledge sources</Label>
+            <div className="space-y-2">
+              {matchedKbs.map((kb) => {
+                const connectors = kb.connectors ?? [];
+                const connectorTypes = [
+                  ...new Set(connectors.map((c) => c.connectorType)),
+                ];
+                return (
+                  <div
+                    key={kb.id}
+                    className="flex items-center justify-between gap-2 rounded-lg border bg-muted/30 p-3"
+                  >
+                    <span className="text-sm font-medium truncate">
+                      {kb.name}
+                    </span>
+                    {connectorTypes.length > 0 && (
+                      <OverlappedIcons
+                        icons={connectorTypes.map((type) => ({
+                          key: type,
+                          icon: (
+                            <ConnectorTypeIcon
+                              type={type}
+                              className="h-full w-full"
+                            />
+                          ),
+                          tooltip: type,
+                        }))}
+                        maxVisible={3}
+                        size="sm"
+                      />
+                    )}
+                  </div>
+                );
+              })}
+              {matchedConnectors.map((connector) => (
+                <div
+                  key={connector.id}
+                  className="flex items-center gap-2 rounded-lg border bg-muted/30 p-3 text-sm"
+                >
+                  <ConnectorTypeIcon
+                    type={connector.connectorType}
+                    className="h-4 w-4 shrink-0"
+                  />
+                  <span className="truncate">{connector.name}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {canReadAgents && (
-        <div className="border-t px-3 py-2.5 shrink-0">
+        <div className="border-t px-4 py-3 shrink-0">
           <a
             href={`/agents?edit=${agent.id}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-xs text-primary hover:text-primary/80 transition-colors flex items-center gap-1"
+            className="text-sm text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1.5"
           >
-            Full configuration <ExternalLink className="size-3" />
+            Full configuration →
           </a>
         </div>
       )}
@@ -715,11 +613,8 @@ function AgentSettingsView({
   );
 }
 
-// ============================================================================
-// Assigned Tools Badges (inline badges for settings view)
-// ============================================================================
-
-function AssignedToolsBadges({
+// Shows assigned MCP servers as cards + an "Add" card
+function AssignedToolsGrid({
   agentId,
   onAddTool,
   onEditTool,
@@ -736,12 +631,16 @@ function AssignedToolsBadges({
   });
   const { data: allAgents = [] } = useInternalAgents();
   const { data: delegations = [] } = useAgentDelegations(agentId);
+  const removeDelegation = useRemoveAgentDelegation();
+  const unassignTool = useUnassignTool();
+  const invalidateAllQueries = useInvalidateToolAssignmentQueries();
 
   const delegatedAgents = useMemo(() => {
     const targetIds = new Set(delegations.map((d) => d.id));
     return allAgents.filter((a) => targetIds.has(a.id));
   }, [allAgents, delegations]);
 
+  // Group assigned tools by catalogId
   const assignedByCatalog = useMemo(() => {
     const map = new Map<string, { count: number; toolIds: string[] }>();
     for (const at of assignedToolsData?.data ?? []) {
@@ -760,58 +659,109 @@ function AssignedToolsBadges({
     [catalogItems, assignedByCatalog],
   );
 
+  const handleRemove = async (catalogId: string) => {
+    const entry = assignedByCatalog.get(catalogId);
+    if (!entry) return;
+    await Promise.all(
+      entry.toolIds.map((id) =>
+        unassignTool.mutateAsync({
+          agentId,
+          toolId: id,
+          skipInvalidation: true,
+        }),
+      ),
+    );
+    invalidateAllQueries(agentId);
+  };
+
   return (
-    <div className="flex flex-wrap gap-1.5">
+    <div className="grid grid-cols-3 gap-2">
       {delegatedAgents.map((agent) => (
-        <span
+        <div
           key={`delegation-${agent.id}`}
-          className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-muted border text-xs"
+          className="group relative flex flex-col items-center gap-1.5 rounded-lg border border-primary bg-primary/5 p-3 text-center"
         >
-          <AgentIcon
-            icon={
-              (agent as unknown as Record<string, unknown>).icon as
-                | string
-                | null
+          <button
+            type="button"
+            className="absolute top-1.5 right-1.5 hidden group-hover:flex h-5 w-5 items-center justify-center rounded-full bg-muted hover:bg-destructive hover:text-destructive-foreground transition-colors z-10"
+            onClick={() =>
+              removeDelegation.mutate({
+                agentId,
+                targetAgentId: agent.id,
+              })
             }
-            size={14}
-          />
-          <span className="truncate max-w-[100px]">{agent.name}</span>
-        </span>
+            title={`Remove ${agent.name}`}
+          >
+            <XIcon className="size-3" />
+          </button>
+          <div className="flex flex-col items-center gap-1.5 w-full">
+            <AgentIcon
+              icon={
+                (agent as unknown as Record<string, unknown>).icon as
+                  | string
+                  | null
+              }
+              size={24}
+            />
+            <span className="text-xs font-medium truncate w-full">
+              {agent.name}
+            </span>
+            <AgentToolAvatars agentId={agent.id} />
+          </div>
+        </div>
       ))}
       {assignedCatalogs.map((catalog) => {
         const info = assignedByCatalog.get(catalog.id);
         return (
-          <button
+          <div
             key={catalog.id}
-            type="button"
-            onClick={() => onEditTool(catalog)}
-            className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-muted border text-xs hover:bg-accent transition-colors cursor-pointer"
+            className="group relative flex flex-col items-center gap-1.5 rounded-lg border border-primary bg-primary/5 p-3 text-center cursor-pointer transition-colors hover:bg-primary/10"
           >
-            <McpCatalogIcon
-              icon={catalog.icon}
-              catalogId={catalog.id}
-              size={14}
-            />
-            <span className="truncate max-w-[80px]">{catalog.name}</span>
-            <span className="text-muted-foreground text-[10px]">
-              {info?.count ?? 0}
-            </span>
-          </button>
+            <button
+              type="button"
+              className="absolute top-1.5 right-1.5 hidden group-hover:flex h-5 w-5 items-center justify-center rounded-full bg-muted hover:bg-destructive hover:text-destructive-foreground transition-colors z-10"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleRemove(catalog.id);
+              }}
+              title={`Remove ${catalog.name}`}
+            >
+              <XIcon className="size-3" />
+            </button>
+            <button
+              type="button"
+              className="flex flex-col items-center gap-1.5 w-full"
+              onClick={() => onEditTool(catalog)}
+            >
+              <McpCatalogIcon
+                icon={catalog.icon}
+                catalogId={catalog.id}
+                size={24}
+              />
+              <span className="text-xs font-medium truncate w-full">
+                {catalog.name}
+              </span>
+              <span className="text-[10px] text-muted-foreground">
+                {info?.count ?? 0} {(info?.count ?? 0) === 1 ? "tool" : "tools"}
+              </span>
+            </button>
+          </div>
         );
       })}
       <button
         type="button"
         onClick={onAddTool}
-        className="inline-flex items-center gap-1 px-2 py-1 rounded-md border border-dashed text-xs text-muted-foreground hover:bg-accent transition-colors cursor-pointer"
+        className="flex flex-col items-center justify-center gap-1.5 rounded-lg border border-dashed p-3 text-center transition-colors hover:bg-accent cursor-pointer text-muted-foreground"
       >
-        <Plus className="size-3" /> Add
+        <Plus className="size-5" />
+        <span className="text-xs font-medium">Add</span>
       </button>
     </div>
   );
 }
 
 // ============================================================================
-// Add Tool View
+// Add Tool View - Pick an MCP server
 // ============================================================================
 
 function AddToolView({
@@ -819,17 +769,17 @@ function AddToolView({
   onBack,
   onSelectCatalog,
   onAddDelegation,
-  installer,
 }: {
   agentId: string;
   onBack: () => void;
   onSelectCatalog: (catalog: CatalogItem) => void;
   onAddDelegation: () => void;
-  installer: ReturnType<typeof useMcpInstallOrchestrator>;
 }) {
   const { data: catalogItems = [], isPending } = useInternalMcpCatalog();
   const allCredentials = useMcpServersGroupedByCatalog();
   const [search, setSearch] = useState("");
+
+  const installer = useMcpInstallOrchestrator();
 
   const { data: assignedToolsData } = useAllProfileTools({
     filters: { agentId },
@@ -845,6 +795,7 @@ function AddToolView({
     return ids;
   }, [assignedToolsData]);
 
+  // Detect servers that are still being installed (local servers with pending status)
   const hasInstallingServers = useMemo(() => {
     if (!allCredentials) return false;
     return Object.values(allCredentials).some((servers) =>
@@ -856,6 +807,7 @@ function AddToolView({
     );
   }, [allCredentials]);
 
+  // Enable polling while servers are installing
   useMcpServers({ hasInstallingServers });
 
   const filteredCatalogs = useMemo(() => {
@@ -876,39 +828,43 @@ function AddToolView({
   }, [catalogItems, search, assignedCatalogIds]);
 
   return (
-    <div className="flex flex-col max-h-[450px]">
-      <PopoverHeader title="Add Tools" onBack={onBack} />
-
-      <div className="px-3 pt-3 pb-2 shrink-0">
+    <div className="flex flex-col h-full">
+      <DialogHeader title="Add Tools" onBack={onBack} />
+      <div className="px-4 pt-4 shrink-0">
         <div className="relative">
-          <Search className="absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Search MCP servers..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="pl-8 h-8 text-xs"
+            className="pl-9"
             autoFocus
           />
         </div>
       </div>
-
-      <div className="px-3 pb-3 flex-1 min-h-0 overflow-y-auto">
+      <div className="px-4 pt-4 pb-4 flex-1 min-h-0 overflow-y-auto">
         {isPending ? (
-          <div className="flex items-center justify-center gap-2 py-6 text-xs text-muted-foreground">
-            <Loader2 className="size-3.5 animate-spin" />
+          <div className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" />
             Loading...
           </div>
+        ) : filteredCatalogs.length === 0 ? (
+          <p className="text-sm text-muted-foreground text-center py-8">
+            No MCP servers found.
+          </p>
         ) : (
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-3 gap-3">
             {!search && (
               <button
                 type="button"
                 onClick={onAddDelegation}
-                className="flex flex-col items-center gap-1.5 rounded-lg border p-3 text-center transition-colors cursor-pointer hover:bg-accent"
+                className="flex flex-col items-center gap-2 rounded-lg border p-4 text-center transition-colors cursor-pointer hover:bg-accent"
               >
-                <Bot className="size-6 text-muted-foreground" />
-                <span className="text-xs font-medium">Call an Agent</span>
-                <p className="text-[10px] text-muted-foreground line-clamp-2">
+                <Bot className="size-7 text-muted-foreground" />
+                <span className="text-sm font-medium truncate w-full">
+                  Call an Agent
+                </span>
+                <p className="text-xs text-muted-foreground line-clamp-2 w-full">
                   Delegate tasks to another agent
                 </p>
               </button>
@@ -937,34 +893,34 @@ function AddToolView({
                         : installer.triggerInstallByCatalogId(catalog.id)
                   }
                   className={cn(
-                    "relative flex flex-col items-center gap-1.5 rounded-lg border p-3 text-center transition-colors",
+                    "relative flex flex-col items-center gap-2 rounded-lg border p-4 text-center transition-colors",
                     isAssigned
-                      ? "opacity-50 cursor-default"
+                      ? "opacity-50 cursor-default border-primary/30"
                       : "cursor-pointer hover:bg-accent",
                     isServerInstalling && "opacity-60 cursor-wait",
                   )}
                 >
                   {isAssigned && (
                     <div className="absolute top-2 right-2">
-                      <Check className="size-3.5 text-primary" />
+                      <Check className="h-4 w-4 text-primary" />
                     </div>
                   )}
                   <McpCatalogIcon
                     icon={catalog.icon}
                     catalogId={catalog.id}
-                    size={24}
+                    size={28}
                   />
-                  <span className="text-xs font-medium truncate w-full">
+                  <span className="text-sm font-medium truncate w-full">
                     {catalog.name}
                   </span>
                   {catalog.description && (
-                    <p className="text-[10px] text-muted-foreground line-clamp-2 w-full">
+                    <p className="text-xs text-muted-foreground line-clamp-2 w-full">
                       {catalog.description}
                     </p>
                   )}
                   {isServerInstalling && (
                     <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                      <Loader2 className="size-3 animate-spin" />
+                      <Loader2 className="h-3 w-3 animate-spin" />
                       Installing...
                     </span>
                   )}
@@ -984,21 +940,60 @@ function AddToolView({
                 href="/mcp/registry"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex flex-col items-center justify-center gap-1.5 rounded-lg border border-dashed p-3 text-center transition-colors cursor-pointer hover:bg-accent text-muted-foreground"
+                className="flex flex-col items-center justify-center gap-2 rounded-lg border bg-accent/50 p-4 text-center transition-colors cursor-pointer hover:bg-accent"
               >
-                <ExternalLink className="size-5" />
-                <span className="text-xs font-medium">Add New Server</span>
+                <ExternalLink className="size-7 text-muted-foreground" />
+                <span className="text-sm font-medium">Add New Server</span>
               </a>
             )}
           </div>
         )}
       </div>
+
+      <RemoteServerInstallDialog
+        isOpen={installer.isDialogOpened("remote-install")}
+        onClose={installer.closeRemoteInstall}
+        onConfirm={installer.handleRemoteServerInstallConfirm}
+        catalogItem={installer.selectedCatalogItem}
+        isInstalling={installer.isInstalling}
+        isReauth={installer.isReauth}
+      />
+
+      <OAuthConfirmationDialog
+        open={installer.isDialogOpened("oauth")}
+        onOpenChange={(open) => {
+          if (!open) installer.closeOAuth();
+        }}
+        serverName={installer.selectedCatalogItem?.name || ""}
+        onConfirm={installer.handleOAuthConfirm}
+        onCancel={installer.closeOAuth}
+        catalogId={installer.selectedCatalogItem?.id}
+      />
+
+      <NoAuthInstallDialog
+        isOpen={installer.isDialogOpened("no-auth")}
+        onClose={installer.closeNoAuth}
+        onInstall={installer.handleNoAuthConfirm}
+        catalogItem={installer.noAuthCatalogItem}
+        isInstalling={installer.isInstalling}
+      />
+
+      {installer.localServerCatalogItem && (
+        <LocalServerInstallDialog
+          isOpen={installer.isDialogOpened("local-install")}
+          onClose={installer.closeLocalInstall}
+          onConfirm={installer.handleLocalServerInstallConfirm}
+          catalogItem={installer.localServerCatalogItem}
+          isInstalling={installer.isInstalling}
+          isReauth={installer.isReauth}
+        />
+      )}
     </div>
   );
 }
 
 // ============================================================================
-// Configure Tool View
+// Configure Tool View - Select credential & tools for a catalog
 // ============================================================================
 
 function ConfigureToolView({
@@ -1026,6 +1021,7 @@ function ConfigureToolView({
   const unassignTool = useUnassignTool();
   const invalidateAllQueries = useInvalidateToolAssignmentQueries();
 
+  // Get currently assigned tool IDs and agent-tool IDs for this catalog
   const assignedToolIds = useMemo(() => {
     const ids = new Set<string>();
     for (const at of assignedToolsData?.data ?? []) {
@@ -1045,6 +1041,7 @@ function ConfigureToolView({
   );
   const [isSaving, setIsSaving] = useState(false);
 
+  // Initialize selection from assigned tools, or select all for new catalog
   useEffect(() => {
     if (initializedRef.current || allTools.length === 0) return;
     initializedRef.current = true;
@@ -1055,6 +1052,7 @@ function ConfigureToolView({
     }
   }, [allTools, assignedToolIds]);
 
+  // Auto-set default credential once loaded
   useEffect(() => {
     if (!credential && mcpServers.length > 0) {
       setCredential(mcpServers[0].id);
@@ -1120,13 +1118,13 @@ function ConfigureToolView({
   }, [selectedToolIds, assignedToolIds]);
 
   return (
-    <div className="flex flex-col max-h-[450px]">
-      <PopoverHeader title={catalog.name} onBack={onBack} />
+    <div className="flex flex-col h-full">
+      <DialogHeader title={catalog.name} onBack={onBack} />
 
       <div className="flex flex-col flex-1 min-h-0">
         {showCredentialSelector && (
-          <div className="px-3 pt-3 pb-2 space-y-1 shrink-0">
-            <Label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+          <div className="px-4 pt-4 pb-2 space-y-1.5 shrink-0">
+            <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               Connect on behalf of
             </Label>
             <TokenSelect
@@ -1139,12 +1137,12 @@ function ConfigureToolView({
         )}
 
         {isLoading ? (
-          <div className="flex items-center justify-center gap-2 py-6 text-xs text-muted-foreground">
-            <Loader2 className="size-3.5 animate-spin" />
+          <div className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" />
             Loading tools...
           </div>
         ) : allTools.length === 0 ? (
-          <div className="p-3 text-xs text-muted-foreground text-center">
+          <div className="p-4 text-sm text-muted-foreground text-center">
             No tools available.
           </div>
         ) : (
@@ -1159,7 +1157,7 @@ function ConfigureToolView({
 
         <div className="p-3 border-t shrink-0">
           <Button
-            className="w-full h-8 text-xs"
+            className="w-full"
             onClick={handleSave}
             disabled={
               (!hasChanges && isEditing) ||
@@ -1167,9 +1165,7 @@ function ConfigureToolView({
               isSaving
             }
           >
-            {isSaving ? (
-              <Loader2 className="size-3.5 animate-spin mr-1.5" />
-            ) : null}
+            {isSaving ? <Loader2 className="size-4 animate-spin mr-2" /> : null}
             {isEditing
               ? `Save (${selectedToolIds.size} tool${selectedToolIds.size !== 1 ? "s" : ""})`
               : newToolCount === 0
@@ -1183,7 +1179,7 @@ function ConfigureToolView({
 }
 
 // ============================================================================
-// Add Delegation View
+// Add Delegation View - Pick agents to delegate to
 // ============================================================================
 
 function AddDelegationView({
@@ -1211,8 +1207,8 @@ function AddDelegationView({
   );
 
   const filteredAgents = useMemo(() => {
-    let result = allAgents.filter((a) => {
-      if (a.id === agentId) return false;
+    let result = allAgents.filter((a) => a.id !== agentId);
+    result = result.filter((a) => {
       const scope = (a as unknown as Record<string, unknown>).scope as string;
       const authorId = (a as unknown as Record<string, unknown>)
         .authorId as string;
@@ -1222,7 +1218,6 @@ function AddDelegationView({
       }
       return scopeFilters.has(scope as ScopeFilter);
     });
-
     if (search) {
       const lower = search.toLowerCase();
       result = result.filter(
@@ -1231,12 +1226,7 @@ function AddDelegationView({
           a.description?.toLowerCase().includes(lower),
       );
     }
-
-    const scopeOrder: Record<string, number> = {
-      personal: 0,
-      team: 1,
-      org: 2,
-    };
+    const scopeOrder: Record<string, number> = { personal: 0, team: 1, org: 2 };
     return [...result].sort((a, b) => {
       const sa = (a as unknown as Record<string, unknown>).scope as string;
       const sb = (b as unknown as Record<string, unknown>).scope as string;
@@ -1263,105 +1253,126 @@ function AddDelegationView({
   };
 
   return (
-    <div className="flex flex-col max-h-[450px]">
-      <PopoverHeader title="Call an Agent" onBack={onBack} />
-
-      {/* Scope filters + Search */}
-      <div className="flex items-center gap-2 px-3 pt-2 pb-1">
-        <div className="flex gap-0.5 flex-wrap">
-          {SCOPE_OPTIONS.map((option) => (
-            <Button
-              key={option.value}
-              variant={scopeFilters.has(option.value) ? "secondary" : "ghost"}
-              size="sm"
-              className="h-7 px-2.5 text-xs"
-              onClick={() =>
-                setScopeFilters(toggleSetValue(scopeFilters, option.value))
-              }
-            >
-              {option.label}
-            </Button>
-          ))}
-        </div>
-        <div className="flex-1" />
+    <div className="flex flex-col h-full">
+      <DialogHeader
+        title="Call an Agent"
+        onBack={onBack}
+        extra={
+          <div className="flex items-center gap-1">
+            {(
+              [
+                { value: "my", label: "My Personal" },
+                { value: "team", label: "Team" },
+                { value: "org", label: "Organization" },
+                { value: "others", label: "Others' Personal" },
+              ] as const
+            ).map((option) => (
+              <Button
+                key={option.value}
+                variant={scopeFilters.has(option.value) ? "secondary" : "ghost"}
+                size="sm"
+                className="text-xs h-7 px-2.5"
+                onClick={() => {
+                  setScopeFilters((prev) => {
+                    const next = new Set(prev);
+                    if (next.has(option.value)) {
+                      next.delete(option.value);
+                    } else {
+                      next.add(option.value);
+                    }
+                    return next;
+                  });
+                }}
+              >
+                {option.label}
+              </Button>
+            ))}
+          </div>
+        }
+      />
+      <div className="px-4 pt-4 shrink-0">
         <div className="relative">
-          <Search className="absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
+            placeholder="Search agents..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search..."
-            className="h-7 w-[100px] pl-7 text-xs focus:w-[140px] transition-all duration-200"
+            className="pl-9"
             autoFocus
           />
         </div>
       </div>
-
-      <div className="px-3 pb-2">
-        <Alert variant="info" className="border-0 py-1.5 text-[11px]">
-          <Info className="size-3" />
-          <AlertDescription className="text-[11px]">
-            Adding a subagent makes its tools available to all users of this
-            agent
+      <div className="px-4 pt-2 shrink-0">
+        <Alert variant="info" className="border-0 py-2 text-xs">
+          <Info className="size-3.5" />
+          <AlertDescription className="text-xs">
+            Adding a subagent makes its tools and capabilities available to all
+            users of this agent during conversations
           </AlertDescription>
         </Alert>
       </div>
-
-      <div className="px-3 pb-3 flex-1 min-h-0 overflow-y-auto">
+      <div className="px-4 pt-2 pb-4 flex-1 min-h-0 overflow-y-auto">
         {filteredAgents.length === 0 ? (
-          <p className="text-xs text-muted-foreground text-center py-6">
-            No agents found
+          <p className="text-sm text-muted-foreground text-center py-8">
+            No agents found.
           </p>
         ) : (
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-3 gap-3">
             {filteredAgents.map((agent) => (
               <button
                 key={agent.id}
                 type="button"
                 onClick={() => handleToggle(agent.id)}
                 className={cn(
-                  "relative flex flex-col items-center gap-1.5 rounded-lg border p-3 text-center transition-colors cursor-pointer hover:bg-accent",
+                  "flex h-full min-h-[120px] flex-col items-start gap-2 rounded-lg border p-4 text-left transition-colors hover:bg-accent cursor-pointer",
                   delegatedIds.has(agent.id) && "border-primary bg-accent",
                 )}
               >
-                {delegatedIds.has(agent.id) && (
-                  <div className="absolute top-2 right-2">
-                    <Check className="size-3.5 text-primary" />
+                <div className="flex w-full items-center gap-2">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-muted">
+                    <AgentIcon
+                      icon={
+                        (agent as unknown as Record<string, unknown>).icon as
+                          | string
+                          | null
+                      }
+                      size={16}
+                    />
                   </div>
-                )}
-                <AgentIcon
-                  icon={
-                    (agent as unknown as Record<string, unknown>).icon as
-                      | string
-                      | null
-                  }
-                  size={20}
-                />
-                <span className="text-xs font-medium truncate w-full">
-                  {agent.name}
-                </span>
+                  <span className="text-sm font-medium truncate flex-1">
+                    {agent.name}
+                  </span>
+                  {delegatedIds.has(agent.id) && (
+                    <Check className="h-4 w-4 shrink-0 text-primary" />
+                  )}
+                </div>
                 {agent.description && (
-                  <p className="text-[10px] text-muted-foreground line-clamp-2 w-full">
+                  <p className="text-xs text-muted-foreground line-clamp-2 w-full">
                     {agent.description}
                   </p>
                 )}
-                <AgentBadge
-                  type={
-                    (agent as unknown as Record<string, unknown>).scope as
-                      | "personal"
-                      | "team"
-                      | "org"
-                  }
-                  className="text-[10px] px-1.5 py-0"
-                />
+                <div className="flex items-center gap-2 w-full mt-auto">
+                  <AgentBadge
+                    type={
+                      (agent as unknown as Record<string, unknown>).scope as
+                        | "personal"
+                        | "team"
+                        | "org"
+                    }
+                    className="text-[10px] px-1.5 py-0"
+                  />
+                  <div className="flex-1" />
+                  <AgentToolAvatars agentId={agent.id} />
+                </div>
               </button>
             ))}
             <a
               href="/agents?create=true"
               target="_blank"
               rel="noopener noreferrer"
-              className="flex flex-col items-center justify-center gap-1.5 rounded-lg border border-dashed p-3 text-center transition-colors cursor-pointer hover:bg-accent text-muted-foreground"
+              className="flex h-full min-h-[120px] flex-col items-center justify-center gap-2 rounded-lg border border-dashed p-4 text-center transition-colors hover:bg-accent cursor-pointer text-muted-foreground"
             >
-              <ExternalLink className="size-4" />
+              <ExternalLink className="size-5" />
               <span className="text-xs font-medium">Create Agent</span>
             </a>
           </div>
@@ -1372,8 +1383,109 @@ function AddDelegationView({
 }
 
 // ============================================================================
-// Helper Components
+// Agent Card (for change agent view)
 // ============================================================================
+
+function AgentCard({
+  agent,
+  isSelected,
+  onSelect,
+  currentUserId,
+}: {
+  agent: {
+    id: string;
+    name: string;
+    description?: string | null;
+    scope: string;
+  };
+  isSelected: boolean;
+  onSelect: () => void;
+  currentUserId?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      className={cn(
+        "flex h-full min-h-[120px] flex-col items-start gap-2 rounded-lg border p-4 text-left transition-colors hover:bg-accent cursor-pointer",
+        isSelected && "border-primary bg-accent",
+      )}
+    >
+      <div className="flex w-full items-center gap-2">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-muted">
+          <AgentIcon
+            icon={
+              (agent as unknown as Record<string, unknown>).icon as
+                | string
+                | null
+            }
+            size={16}
+          />
+        </div>
+        <span className="text-sm font-medium truncate flex-1">
+          {agent.name}
+        </span>
+        {isSelected && <Check className="h-4 w-4 shrink-0 text-primary" />}
+      </div>
+      {agent.description && (
+        <p className="text-xs text-muted-foreground line-clamp-2 w-full">
+          {agent.description}
+        </p>
+      )}
+      <div className="flex items-center gap-2 w-full mt-auto">
+        <AgentBadge
+          type={agent.scope as "personal" | "team" | "org"}
+          className="text-[10px] px-1.5 py-0"
+        />
+        {agent.scope === "personal" &&
+          (agent as unknown as Record<string, unknown>).authorId !==
+            currentUserId &&
+          Boolean((agent as unknown as Record<string, unknown>).authorName) && (
+            <Badge
+              variant="secondary"
+              className="text-[10px] gap-1 px-1.5 py-0"
+            >
+              <User className="h-2.5 w-2.5" />
+              {
+                (agent as unknown as Record<string, unknown>)
+                  .authorName as string
+              }
+            </Badge>
+          )}
+        <div className="flex-1" />
+        <AgentToolAvatars agentId={agent.id} />
+      </div>
+    </button>
+  );
+}
+
+function AgentToolAvatars({ agentId }: { agentId: string }) {
+  const { data: catalogItems = [] } = useInternalMcpCatalog();
+  const { data: allAgents = [] } = useInternalAgents();
+  const { data: assignedToolsData } = useAllProfileTools({
+    filters: { agentId },
+    skipPagination: true,
+    enabled: !!agentId,
+  });
+  const { data: delegations = [] } = useAgentDelegations(agentId);
+
+  const catalogs = useMemo(() => {
+    const catalogIds = new Set<string>();
+    for (const at of assignedToolsData?.data ?? []) {
+      if (at.tool.catalogId) catalogIds.add(at.tool.catalogId);
+    }
+    return catalogItems.filter((c) => catalogIds.has(c.id));
+  }, [assignedToolsData, catalogItems]);
+
+  const subagents = useMemo(() => {
+    const targetIds = new Set(delegations.map((d) => d.id));
+    return allAgents.filter((a) => targetIds.has(a.id));
+  }, [allAgents, delegations]);
+
+  if (catalogs.length === 0 && subagents.length === 0) return null;
+
+  return <ToolServerAvatarGroup catalogs={catalogs} subagents={subagents} />;
+}
 
 const MAX_VISIBLE_AVATARS = 3;
 
@@ -1430,6 +1542,7 @@ function ToolServerAvatarGroup({
     })),
   ];
 
+  // Build custom overflow tooltip (showing up to 5 names)
   const hiddenItems = icons.slice(MAX_VISIBLE_AVATARS);
   const overflowTooltip =
     hiddenItems.length <= 5

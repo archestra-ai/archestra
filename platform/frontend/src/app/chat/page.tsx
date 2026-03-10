@@ -1492,7 +1492,7 @@ export default function ChatPage() {
                 </div>
               ) : (
                 activeAgentId && (
-                  <div className="sticky bottom-0 bg-background p-4">
+                  <div className="sticky bottom-0 bg-background border-t p-4">
                     <div className="max-w-4xl mx-auto space-y-3">
                       <ArchestraPromptInput
                         onSubmit={handleSubmit}

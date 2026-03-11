@@ -266,7 +266,7 @@ export function ConnectionOptions({
             <div className="p-4 rounded-lg border bg-card space-y-6">
               {llmProxies && llmProxies.length === 0 ? (
                 <NoAccessMessage
-                  canCreate={canCreateLlmProxy}
+                  canCreate={!!canCreateLlmProxy}
                   createHref="/llm/proxies"
                   createLabel="LLM Proxies"
                 />
@@ -320,7 +320,7 @@ export function ConnectionOptions({
             <div className="p-4 rounded-lg border bg-card">
               {mcpGateways && mcpGateways.length === 0 ? (
                 <NoAccessMessage
-                  canCreate={canCreateMcpGateway}
+                  canCreate={!!canCreateMcpGateway}
                   createHref="/mcp/gateways"
                   createLabel="MCP Gateways"
                 />
@@ -337,7 +337,7 @@ export function ConnectionOptions({
             <div className="p-4 rounded-lg border bg-card space-y-6">
               {internalAgents && internalAgents.length === 0 ? (
                 <NoAccessMessage
-                  canCreate={canCreateAgent}
+                  canCreate={!!canCreateAgent}
                   createHref="/agents"
                   createLabel="Agents"
                 />

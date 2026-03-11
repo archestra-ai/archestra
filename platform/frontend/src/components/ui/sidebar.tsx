@@ -259,7 +259,8 @@ function SidebarTrigger({
   onClick,
   ...props
 }: React.ComponentProps<typeof Button>) {
-  const { toggleSidebar } = useSidebar();
+  const { toggleSidebar, state } = useSidebar();
+  const isCollapsed = state === "collapsed";
   const isMac =
     typeof navigator !== "undefined" &&
     navigator.userAgent.toLowerCase().includes("mac");
@@ -285,12 +286,18 @@ function SidebarTrigger({
         </Button>
       </TooltipTrigger>
       <TooltipContent side="right">
-        <span>
-          Toggle Sidebar{" "}
-          <kbd className="ml-1 rounded border bg-muted px-1 py-0.5 text-[10px] font-mono">
-            {modLabel}+{SHORTCUT_SIDEBAR.label}
-          </kbd>
-        </span>
+        {isCollapsed ? (
+          <span>
+            Toggle Sidebar{" "}
+            <kbd className="ml-1 rounded border bg-muted px-1 py-0.5 text-[11px] font-mono">
+              {modLabel} + {SHORTCUT_SIDEBAR.label}
+            </kbd>
+          </span>
+        ) : (
+          <span className="text-[11px] font-mono">
+            {modLabel} + {SHORTCUT_SIDEBAR.label}
+          </span>
+        )}
       </TooltipContent>
     </Tooltip>
   );

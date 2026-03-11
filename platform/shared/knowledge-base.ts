@@ -34,9 +34,7 @@ export type SupportedEmbeddingDimension =
  * - 1536 → "embedding" (original column, kept for backward compatibility)
  * - 768  → "embedding_768"
  */
-export function getEmbeddingColumnName(
-  dimensions: SupportedEmbeddingDimension,
-): string {
+export function getEmbeddingColumnName(dimensions: number): string {
   if (dimensions === 1536) return "embedding";
   return `embedding_${dimensions}`;
 }

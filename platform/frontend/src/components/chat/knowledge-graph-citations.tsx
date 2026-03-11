@@ -8,7 +8,7 @@ import {
 } from "@/app/knowledge/knowledge-bases/_parts/connector-icons";
 import { Button } from "@/components/ui/button";
 
-const KNOWLEDGE_BASE_TOOL_SUFFIX = "query_knowledge_base";
+const KNOWLEDGE_BASE_TOOL_SUFFIX = "query_knowledge_sources";
 
 export function hasKnowledgeBaseToolCall(
   parts: Array<{ type: string; toolName?: string }>,
@@ -21,7 +21,7 @@ export function hasKnowledgeBaseToolCall(
     ) {
       return true;
     }
-    // Legacy tool parts have type like "tool-archestra__query_knowledge_base"
+    // Legacy tool parts have type like "tool-archestra__query_knowledge_sources"
     if (
       typeof part.type === "string" &&
       part.type.endsWith(KNOWLEDGE_BASE_TOOL_SUFFIX)

@@ -5,7 +5,7 @@ import {
   MCP_SERVER_TOOL_NAME_SEPARATOR,
   TOOL_ARTIFACT_WRITE_FULL_NAME,
   TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_FULL_NAME,
-  TOOL_QUERY_KNOWLEDGE_BASE_FULL_NAME,
+  TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
   TOOL_TODO_WRITE_FULL_NAME,
 } from "@shared";
 import { executeA2AMessage } from "@/agents/a2a-executor";
@@ -1782,10 +1782,10 @@ export async function executeArchestraTool(
     }
   }
 
-  if (toolName === TOOL_QUERY_KNOWLEDGE_BASE_FULL_NAME) {
+  if (toolName === TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME) {
     logger.info(
       { agentId: contextAgent.id, queryArgs: args },
-      "query_knowledge_base tool called",
+      "query_knowledge_sources tool called",
     );
 
     try {
@@ -1910,7 +1910,7 @@ export async function executeArchestraTool(
           agentId: contextAgent.id,
           error: error instanceof Error ? error.message : String(error),
         },
-        "query_knowledge_base failed",
+        "query_knowledge_sources failed",
       );
       return {
         content: [
@@ -2946,17 +2946,17 @@ export function getArchestraMcpTools(): Tool[] {
       _meta: {},
     },
     {
-      name: TOOL_QUERY_KNOWLEDGE_BASE_FULL_NAME,
-      title: "Query Knowledge Base",
+      name: TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
+      title: "Query Knowledge Sources",
       description:
-        "Query the organization's knowledge base to retrieve information from ingested documents (uploaded files, Jira issues, Confluence pages, etc.). Uses graph-based retrieval augmented generation (GraphRAG) for accurate and contextual results. IMPORTANT: formulate queries about the actual content you are looking for, not about the source system. For example, instead of 'get information from jira', ask 'what tasks or issues are being tracked' or 'what are the open bugs'.",
+        "Query the organization's knowledge sources to retrieve information from ingested documents (uploaded files, Jira issues, Confluence pages, etc.). Uses graph-based retrieval augmented generation (GraphRAG) for accurate and contextual results. IMPORTANT: formulate queries about the actual content you are looking for, not about the source system. For example, instead of 'get information from jira', ask 'what tasks or issues are being tracked' or 'what are the open bugs'.",
       inputSchema: {
         type: "object",
         properties: {
           query: {
             type: "string",
             description:
-              "A natural language query about the content stored in the knowledge base. Ask about topics, concepts, or information — not about source systems (e.g. ask 'what tasks are in progress' rather than 'get jira data').",
+              "A natural language query about the content stored in the knowledge sources. Ask about topics, concepts, or information — not about source systems (e.g. ask 'what tasks are in progress' rather than 'get jira data').",
           },
           mode: {
             type: "string",

@@ -5,15 +5,15 @@ import {
 } from "./knowledge-graph-citations";
 
 describe("hasKnowledgeBaseToolCall", () => {
-  it("returns true when a part has toolName ending with query_knowledge_base", () => {
+  it("returns true when a part has toolName ending with query_knowledge_sources", () => {
     const parts = [
-      { type: "dynamic-tool", toolName: "archestra__query_knowledge_base" },
+      { type: "dynamic-tool", toolName: "archestra__query_knowledge_sources" },
     ];
     expect(hasKnowledgeBaseToolCall(parts)).toBe(true);
   });
 
-  it("returns true for legacy tool parts with type ending in query_knowledge_base", () => {
-    const parts = [{ type: "tool-archestra__query_knowledge_base" }];
+  it("returns true for legacy tool parts with type ending in query_knowledge_sources", () => {
+    const parts = [{ type: "tool-archestra__query_knowledge_sources" }];
     expect(hasKnowledgeBaseToolCall(parts)).toBe(true);
   });
 
@@ -33,7 +33,7 @@ describe("hasKnowledgeBaseToolCall", () => {
     const parts = [
       { type: "text" },
       { type: "dynamic-tool", toolName: "web_search" },
-      { type: "dynamic-tool", toolName: "archestra__query_knowledge_base" },
+      { type: "dynamic-tool", toolName: "archestra__query_knowledge_sources" },
       { type: "text" },
     ];
     expect(hasKnowledgeBaseToolCall(parts)).toBe(true);
@@ -43,7 +43,7 @@ describe("hasKnowledgeBaseToolCall", () => {
 describe("extractCitations", () => {
   const makeKbPart = (output: unknown) => ({
     type: "dynamic-tool",
-    toolName: "archestra__query_knowledge_base",
+    toolName: "archestra__query_knowledge_sources",
     state: "output-available" as const,
     output,
   });
@@ -126,7 +126,7 @@ describe("extractCitations", () => {
   it("ignores KB parts that are not in output-available state", () => {
     const part = {
       type: "dynamic-tool",
-      toolName: "archestra__query_knowledge_base",
+      toolName: "archestra__query_knowledge_sources",
       state: "input-available",
       output: undefined,
     };
@@ -200,7 +200,7 @@ describe("extractCitations", () => {
 
   it("extracts citations from legacy tool type parts", () => {
     const part = {
-      type: "tool-archestra__query_knowledge_base",
+      type: "tool-archestra__query_knowledge_sources",
       state: "output-available" as const,
       output: {
         results: [
@@ -234,7 +234,7 @@ describe("extractCitations", () => {
         },
       ],
     });
-    const toolResult = `name: archestra__query_knowledge_base\ncontent: "${innerJson.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+    const toolResult = `name: archestra__query_knowledge_sources\ncontent: "${innerJson.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
     const output = { tool_result: toolResult };
     const citations = extractCitations([makeKbPart(output)]);
     expect(citations).toHaveLength(1);

@@ -126,19 +126,19 @@ describe("getArchestraMcpTools", () => {
     expect(tool?.title).toBe("Get LLM Proxy Token Usage");
   });
 
-  test("should have query_knowledge_base tool", () => {
+  test("should have query_knowledge_sources tool", () => {
     const tools = getArchestraMcpTools();
-    const tool = tools.find((t) => t.name.endsWith("query_knowledge_base"));
+    const tool = tools.find((t) => t.name.endsWith("query_knowledge_sources"));
 
     expect(tool).toBeDefined();
-    expect(tool?.title).toBe("Query Knowledge Base");
+    expect(tool?.title).toBe("Query Knowledge Sources");
     expect(tool?.inputSchema).toEqual({
       type: "object",
       properties: {
         query: {
           type: "string",
           description:
-            "A natural language query about the content stored in the knowledge base. Ask about topics, concepts, or information — not about source systems (e.g. ask 'what tasks are in progress' rather than 'get jira data').",
+            "A natural language query about the content stored in the knowledge sources. Ask about topics, concepts, or information — not about source systems (e.g. ask 'what tasks are in progress' rather than 'get jira data').",
         },
         mode: {
           type: "string",
@@ -720,8 +720,8 @@ describe("executeArchestraTool", () => {
     });
   });
 
-  describe("query_knowledge_base tool", () => {
-    const toolName = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}query_knowledge_base`;
+  describe("query_knowledge_sources tool", () => {
+    const toolName = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}query_knowledge_sources`;
 
     test("should return error when query param is missing", async () => {
       const result = await executeArchestraTool(toolName, {}, mockContext);

@@ -11,7 +11,7 @@ Check ../docs_writer_prompt.md before changing this file.
 
 -->
 
-Knowledge bases provide built-in retrieval augmented generation (RAG) powered by PostgreSQL and pgvector. Connectors sync data from external tools into knowledge bases, where documents are chunked, embedded, and indexed for hybrid search. Agents query their assigned knowledge bases at runtime via the `query_knowledge_base` tool.
+Knowledge bases provide built-in retrieval augmented generation (RAG) powered by PostgreSQL and pgvector. Connectors sync data from external tools into knowledge bases, where documents are chunked, embedded, and indexed for hybrid search. Agents automatically query their assigned knowledge sources at runtime.
 
 > **Enterprise feature.** Knowledge bases require an enterprise license. Contact sales@archestra.ai for licensing information.
 
@@ -33,11 +33,11 @@ flowchart LR
 
 ### Querying
 
-At runtime, the `query_knowledge_base` tool embeds the query, runs vector and optional full-text search in parallel, then fuses, reranks, and filters results.
+At runtime, the agent's query is embedded, then vector and optional full-text search run in parallel. Results are fused, reranked, and filtered before being returned.
 
 ```mermaid
 flowchart LR
-    Q[query_knowledge_base] -->|OpenAI API| QE[Query Embedding]
+    Q[Agent Query] -->|OpenAI API| QE[Query Embedding]
     QE --> VS[Vector Search]
     QE --> FTS["Full-Text Search (configurable)"]
     VS --> RRF[Reciprocal Rank Fusion]

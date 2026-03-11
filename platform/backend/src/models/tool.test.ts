@@ -1,7 +1,7 @@
 import {
   MCP_SERVER_TOOL_NAME_SEPARATOR,
   TOOL_ARTIFACT_WRITE_FULL_NAME,
-  TOOL_QUERY_KNOWLEDGE_BASE_FULL_NAME,
+  TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
   TOOL_TODO_WRITE_FULL_NAME,
 } from "@shared";
 import db, { schema } from "@/database";
@@ -1349,7 +1349,7 @@ describe("ToolModel", () => {
   });
 
   describe("assignDefaultArchestraToolsToAgent", () => {
-    test("assigns all default tools including query_knowledge_base, but getMcpToolsByAgent filters it out when agent has no KG", async ({
+    test("assigns all default tools including query_knowledge_sources, but getMcpToolsByAgent filters it out when agent has no KG", async ({
       makeAgent,
       seedAndAssignArchestraTools,
     }) => {
@@ -1360,7 +1360,7 @@ describe("ToolModel", () => {
       // Create a new agent WITHOUT a knowledgeBaseId
       const agent = await makeAgent({ name: "Test Agent" });
 
-      // Assign default tools (always includes query_knowledge_base now)
+      // Assign default tools (always includes query_knowledge_sources now)
       await ToolModel.assignDefaultArchestraToolsToAgent(agent.id);
 
       // Verify the tool was assigned in the junction table
@@ -1375,11 +1375,11 @@ describe("ToolModel", () => {
       expect(toolNames).toContain(TOOL_ARTIFACT_WRITE_FULL_NAME);
       expect(toolNames).toContain(TOOL_TODO_WRITE_FULL_NAME);
 
-      // query_knowledge_base is filtered out at query time because agent has no KG
-      expect(toolNames).not.toContain(TOOL_QUERY_KNOWLEDGE_BASE_FULL_NAME);
+      // query_knowledge_sources is filtered out at query time because agent has no KG
+      expect(toolNames).not.toContain(TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME);
     });
 
-    test("includes query_knowledge_base when agent has a knowledge base assigned", async ({
+    test("includes query_knowledge_sources when agent has a knowledge base assigned", async ({
       makeAgent,
       makeOrganization,
       makeKnowledgeBase,
@@ -1409,10 +1409,10 @@ describe("ToolModel", () => {
       const mcpTools = await ToolModel.getMcpToolsByAgent(agent.id);
       const toolNames = mcpTools.map((t) => t.name);
 
-      // Should have all three default tools including query_knowledge_base
+      // Should have all three default tools including query_knowledge_sources
       expect(toolNames).toContain(TOOL_ARTIFACT_WRITE_FULL_NAME);
       expect(toolNames).toContain(TOOL_TODO_WRITE_FULL_NAME);
-      expect(toolNames).toContain(TOOL_QUERY_KNOWLEDGE_BASE_FULL_NAME);
+      expect(toolNames).toContain(TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME);
     });
 
     test("is idempotent - does not create duplicates", async ({
@@ -1450,7 +1450,7 @@ describe("ToolModel", () => {
   });
 
   describe("knowledge base tool visibility", () => {
-    test("getMcpToolsByAgent excludes query_knowledge_base when agent has no KG assigned", async ({
+    test("getMcpToolsByAgent excludes query_knowledge_sources when agent has no KG assigned", async ({
       makeAgent,
       seedAndAssignArchestraTools,
     }) => {
@@ -1461,13 +1461,13 @@ describe("ToolModel", () => {
       const tools = await ToolModel.getMcpToolsByAgent(agent.id);
       const toolNames = tools.map((t) => t.name);
 
-      expect(toolNames).not.toContain(TOOL_QUERY_KNOWLEDGE_BASE_FULL_NAME);
+      expect(toolNames).not.toContain(TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME);
       // Other Archestra tools should still be present
       expect(toolNames).toContain(TOOL_ARTIFACT_WRITE_FULL_NAME);
       expect(toolNames).toContain(TOOL_TODO_WRITE_FULL_NAME);
     });
 
-    test("getMcpToolsByAgent includes query_knowledge_base when agent has a KG assigned", async ({
+    test("getMcpToolsByAgent includes query_knowledge_sources when agent has a KG assigned", async ({
       makeAgent,
       makeOrganization,
       makeKnowledgeBase,
@@ -1488,10 +1488,10 @@ describe("ToolModel", () => {
       const tools = await ToolModel.getMcpToolsByAgent(agent.id);
       const toolNames = tools.map((t) => t.name);
 
-      expect(toolNames).toContain(TOOL_QUERY_KNOWLEDGE_BASE_FULL_NAME);
+      expect(toolNames).toContain(TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME);
     });
 
-    test("findByCatalogId includes query_knowledge_base (always visible in catalog)", async ({
+    test("findByCatalogId includes query_knowledge_sources (always visible in catalog)", async ({
       makeAgent,
       seedAndAssignArchestraTools,
     }) => {
@@ -1502,11 +1502,11 @@ describe("ToolModel", () => {
       const tools = await ToolModel.findByCatalogId(ARCHESTRA_MCP_CATALOG_ID);
       const toolNames = tools.map((t) => t.name);
 
-      expect(toolNames).toContain(TOOL_QUERY_KNOWLEDGE_BASE_FULL_NAME);
+      expect(toolNames).toContain(TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME);
       expect(toolNames).toContain(TOOL_ARTIFACT_WRITE_FULL_NAME);
     });
 
-    test("assignArchestraToolsToAgent always assigns query_knowledge_base (filtered at query time)", async ({
+    test("assignArchestraToolsToAgent always assigns query_knowledge_sources (filtered at query time)", async ({
       makeAgent,
       seedAndAssignArchestraTools,
     }) => {
@@ -1527,7 +1527,7 @@ describe("ToolModel", () => {
       const tools = await ToolModel.getMcpToolsByAgent(agent.id);
       const toolNames = tools.map((t) => t.name);
 
-      expect(toolNames).not.toContain(TOOL_QUERY_KNOWLEDGE_BASE_FULL_NAME);
+      expect(toolNames).not.toContain(TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME);
       expect(toolNames).toContain(TOOL_ARTIFACT_WRITE_FULL_NAME);
     });
   });

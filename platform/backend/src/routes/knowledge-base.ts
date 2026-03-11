@@ -454,14 +454,11 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         taskType: "connector_sync",
         payload: { connectorId: connector.id },
       });
-      await KnowledgeBaseConnectorModel.update(connector.id, {
-        lastSyncStatus: "running",
-      });
-
-      // Re-fetch to return updated status
-      const updatedConnector = await KnowledgeBaseConnectorModel.findById(
+      const updatedConnector = await KnowledgeBaseConnectorModel.update(
         connector.id,
+        { lastSyncStatus: "running" },
       );
+
       return reply.send(updatedConnector ?? connector);
     },
   );

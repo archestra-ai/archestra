@@ -1,4 +1,8 @@
-import { BUILT_IN_AGENT_IDS, BUILT_IN_AGENT_NAMES } from "@shared";
+import {
+  BUILT_IN_AGENT_IDS,
+  BUILT_IN_AGENT_NAMES,
+  TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
+} from "@shared";
 import { vi } from "vitest";
 import { describe, expect, test } from "@/test";
 import AgentModel from "./agent";
@@ -1145,6 +1149,31 @@ describe("AgentToolModel.findAll", () => {
       expect(mockConfigurePolicies).not.toHaveBeenCalled();
 
       vi.doUnmock("@/agents/subagents/policy-configuration");
+    });
+  });
+
+  describe("Knowledge sources tool filtering", () => {
+    test("findAll excludes query_knowledge_sources tool", async ({
+      makeAgent,
+      makeTool,
+      makeAgentTool,
+    }) => {
+      const agent = await makeAgent();
+      const regularTool = await makeTool({ name: "regular-tool" });
+      const kbTool = await makeTool({
+        name: TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
+      });
+      await makeAgentTool(agent.id, regularTool.id);
+      await makeAgentTool(agent.id, kbTool.id);
+
+      const result = await AgentToolModel.findAll({
+        filters: { agentId: agent.id, excludeArchestraTools: true },
+        skipPagination: true,
+      });
+
+      const toolNames = result.data.map((at) => at.tool.name);
+      expect(toolNames).toContain("regular-tool");
+      expect(toolNames).not.toContain(TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME);
     });
   });
 });

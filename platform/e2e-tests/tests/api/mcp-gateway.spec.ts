@@ -1,5 +1,8 @@
 import crypto from "node:crypto";
-import { OAUTH_ENDPOINTS } from "@shared";
+import {
+  OAUTH_ENDPOINTS,
+  TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
+} from "@shared";
 import {
   API_BASE_URL,
   MCP_GATEWAY_URL_SUFFIX,
@@ -1763,5 +1766,116 @@ test.describe("MCP Gateway - CIMD (Client ID Metadata Documents)", () => {
     expect(response.status()).toBe(200);
     const body = await response.json();
     expect(body.client_id_metadata_document_supported).toBe(true);
+  });
+});
+
+test.describe("MCP Gateway - Knowledge Sources Tool Description", () => {
+  let profileId: string;
+  let archestraToken: string;
+  let knowledgeBaseId: string;
+
+  test.beforeAll(async ({ request, createKnowledgeBase, createConnector }) => {
+    const uniqueSuffix = crypto.randomUUID().slice(0, 8);
+
+    // Create a knowledge base
+    const kbResponse = await createKnowledgeBase(
+      request,
+      `E2E KB Dynamic Desc ${uniqueSuffix}`,
+    );
+    const kb = await kbResponse.json();
+    knowledgeBaseId = kb.id;
+
+    // Create a connector assigned to the knowledge base
+    await createConnector(
+      request,
+      knowledgeBaseId,
+      `E2E Jira Conn ${uniqueSuffix}`,
+    );
+
+    // Create an agent with the knowledge base assigned
+    const agentResponse = await makeApiRequest({
+      request,
+      method: "post",
+      urlSuffix: "/api/agents",
+      data: {
+        name: `MCP Gateway KB Test ${uniqueSuffix}`,
+        teams: [],
+        scope: "personal",
+        knowledgeBaseIds: [knowledgeBaseId],
+      },
+    });
+    const agent = await agentResponse.json();
+    profileId = agent.id;
+
+    // Assign Archestra tools to the profile
+    await assignArchestraToolsToProfile(request, profileId);
+
+    // Get org token
+    archestraToken = await getOrgTokenForProfile(request);
+  });
+
+  test.afterAll(async ({ request, deleteAgent, deleteKnowledgeBase }) => {
+    await deleteAgent(request, profileId);
+    await deleteKnowledgeBase(request, knowledgeBaseId);
+  });
+
+  test("query_knowledge_sources tool has dynamic description with KB name and connector type", async ({
+    request,
+  }) => {
+    // Initialize MCP session
+    await makeApiRequest({
+      request,
+      method: "post",
+      urlSuffix: `${MCP_GATEWAY_URL_SUFFIX}/${profileId}`,
+      headers: {
+        Authorization: `Bearer ${archestraToken}`,
+        "Content-Type": "application/json",
+        Accept: "application/json, text/event-stream",
+      },
+      data: {
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {
+          protocolVersion: "2024-11-05",
+          capabilities: { tools: {} },
+          clientInfo: { name: "test-client", version: "1.0.0" },
+        },
+      },
+    });
+
+    // List tools
+    const listToolsResponse = await makeApiRequest({
+      request,
+      method: "post",
+      urlSuffix: `${MCP_GATEWAY_URL_SUFFIX}/${profileId}`,
+      headers: {
+        Authorization: `Bearer ${archestraToken}`,
+        "Content-Type": "application/json",
+        Accept: "application/json, text/event-stream",
+      },
+      data: {
+        jsonrpc: "2.0",
+        id: 2,
+        method: "tools/list",
+        params: {},
+      },
+    });
+
+    expect(listToolsResponse.status()).toBe(200);
+    const listResult = await listToolsResponse.json();
+    const tools = listResult.result.tools;
+
+    // Find the knowledge sources tool
+    const kbTool = tools.find(
+      // biome-ignore lint/suspicious/noExplicitAny: e2e test
+      (t: any) => t.name === TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
+    );
+
+    expect(kbTool).toBeDefined();
+
+    // Verify dynamic description includes the KB name and connector type
+    expect(kbTool.description).toContain("E2E KB Dynamic Desc");
+    expect(kbTool.description).toContain("jira");
   });
 });

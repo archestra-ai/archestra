@@ -541,10 +541,15 @@ export function ChatMessages({
                           isLastAssistantInSequence &&
                           isLastTextPart &&
                           status !== "streaming";
+                        // Show citations on the assistant message AFTER the
+                        // tool result, not on the message that initiated the
+                        // tool call. Look at the previous message's parts.
+                        const prevMessage = idx > 0 ? messages[idx - 1] : null;
                         const citationParts =
                           isLastTextPart &&
-                          hasKnowledgeBaseToolCall(message.parts)
-                            ? message.parts
+                          prevMessage?.role === "assistant" &&
+                          hasKnowledgeBaseToolCall(prevMessage.parts ?? [])
+                            ? prevMessage.parts
                             : undefined;
 
                         // Check for <think> tags (used by Qwen and similar models)

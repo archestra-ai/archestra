@@ -85,6 +85,12 @@ drizzle-kit check    # Check consistency of generated SQL migrations history
 # IMPORTANT: Never create manually-named migration files - Drizzle tracks migrations
 # via the meta/_journal.json file which references the generated file names.
 
+# Custom Data-Only Migrations (no schema changes)
+# For pure data migrations (UPDATE, INSERT) with no schema changes, use:
+#   cd backend && npx drizzle-kit generate --custom --name=<descriptive-name>
+# This creates an empty SQL file tracked by Drizzle's journal. Add your SQL, then run:
+#   npx drizzle-kit check
+
 # Database Connection
 # PostgreSQL is running in Kubernetes (managed by Tilt)
 # Connect to database:

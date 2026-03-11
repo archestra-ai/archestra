@@ -594,13 +594,6 @@ class ToolModel {
       })
       .onConflictDoNothing();
 
-    // Rename legacy tool: query_knowledge_base → query_knowledge_sources
-    const legacyKbToolName = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}query_knowledge_base`;
-    await db
-      .update(schema.toolsTable)
-      .set({ name: TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME })
-      .where(eq(schema.toolsTable.name, legacyKbToolName));
-
     const archestraTools = getArchestraMcpTools();
     const archestraToolNames = archestraTools.map((t) => t.name);
 
@@ -820,10 +813,7 @@ class ToolModel {
       .where(
         and(
           eq(schema.toolsTable.catalogId, catalogId),
-          ne(
-            schema.toolsTable.name,
-            TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
-          ),
+          ne(schema.toolsTable.name, TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME),
         ),
       )
       .orderBy(desc(schema.toolsTable.createdAt));

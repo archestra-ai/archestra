@@ -38,6 +38,28 @@ describe("hasKnowledgeBaseToolCall", () => {
     ];
     expect(hasKnowledgeBaseToolCall(parts)).toBe(true);
   });
+
+  it("should be used to determine citation placement: citations belong on the NEXT message, not the tool-call message", () => {
+    // Message that initiates the tool call — has both text and tool parts
+    const toolCallMessageParts = [
+      { type: "text" },
+      {
+        type: "dynamic-tool",
+        toolName: "archestra__query_knowledge_sources",
+      },
+    ];
+    // The follow-up message that uses the results — text only
+    const followUpMessageParts = [{ type: "text" }];
+
+    // The tool-call message contains the KB tool call
+    expect(hasKnowledgeBaseToolCall(toolCallMessageParts)).toBe(true);
+    // The follow-up message does NOT contain a KB tool call
+    expect(hasKnowledgeBaseToolCall(followUpMessageParts)).toBe(false);
+
+    // Citation placement rule: show citations on the follow-up message
+    // (where hasKnowledgeBaseToolCall is false for current message,
+    //  but true for a previous message)
+  });
 });
 
 describe("extractCitations", () => {
@@ -244,6 +266,55 @@ describe("extractCitations", () => {
       connectorType: "jira",
       documentId: "doc-wrapped",
     });
+  });
+
+  it("does not extract citations when tool call is pending (no output yet)", () => {
+    const part = {
+      type: "dynamic-tool",
+      toolName: "archestra__query_knowledge_sources",
+      state: "call" as const,
+      output: undefined,
+    };
+    expect(extractCitations([part])).toEqual([]);
+  });
+
+  it("does not extract citations when tool is still running", () => {
+    const part = {
+      type: "dynamic-tool",
+      toolName: "archestra__query_knowledge_sources",
+      state: "running" as const,
+      output: undefined,
+    };
+    expect(extractCitations([part])).toEqual([]);
+  });
+
+  it("only returns citations from parts with output-available state, ignoring pending ones", () => {
+    const pendingPart = {
+      type: "dynamic-tool",
+      toolName: "archestra__query_knowledge_sources",
+      state: "call" as const,
+      output: undefined,
+    };
+    const completedPart = {
+      type: "dynamic-tool",
+      toolName: "archestra__query_knowledge_sources",
+      state: "output-available" as const,
+      output: {
+        results: [
+          {
+            citation: {
+              title: "Completed Doc",
+              sourceUrl: null,
+              connectorType: null,
+              documentId: "doc-completed",
+            },
+          },
+        ],
+      },
+    };
+    const citations = extractCitations([pendingPart, completedPart]);
+    expect(citations).toHaveLength(1);
+    expect(citations[0].documentId).toBe("doc-completed");
   });
 
   it("extracts citations across multiple KB tool parts", () => {

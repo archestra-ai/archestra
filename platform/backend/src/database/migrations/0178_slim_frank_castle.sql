@@ -1,1 +1,0 @@
-ALTER TABLE "organization" ADD COLUMN "embedding_dimensions" integer;

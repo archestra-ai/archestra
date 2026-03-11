@@ -156,7 +156,7 @@ function LogoSlot({
       </div>
       <div className="flex gap-2">
         <PermissionButton
-          permissions={{ appearance: ["update"] }}
+          permissions={{ appearanceSettings: ["update"] }}
           variant="outline"
           size="sm"
           onClick={() => fileInputRef.current?.click()}
@@ -168,7 +168,7 @@ function LogoSlot({
 
         {hasPreviewOrCurrentLogo && (
           <PermissionButton
-            permissions={{ appearance: ["update"] }}
+            permissions={{ appearanceSettings: ["update"] }}
             variant="outline"
             size="sm"
             onClick={handleRemoveLogo}

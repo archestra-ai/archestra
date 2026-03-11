@@ -1006,7 +1006,7 @@ export function InternalMCPCatalog({
   return (
     <div className="space-y-4">
       <div className="relative max-w-md">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground z-10 pointer-events-none" />
         <DebouncedInput
           placeholder="Search registry by name..."
           initialValue={searchQueryFromUrl}

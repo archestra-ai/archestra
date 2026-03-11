@@ -1,2 +1,0 @@
-ALTER TABLE "kb_chunks" ADD COLUMN "embedding_768" vector(768);--> statement-breakpoint
-CREATE INDEX "kb_chunks_embedding_768_idx" ON "kb_chunks" USING hnsw ("embedding_768" vector_cosine_ops) WITH (m = 16, ef_construction = 64);

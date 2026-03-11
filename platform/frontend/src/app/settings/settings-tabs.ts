@@ -18,6 +18,9 @@ export function useSettingsTabs() {
     ...(permissionMap?.["/settings/security"]
       ? [{ label: "Security", href: "/settings/security" }]
       : []),
+    ...(permissionMap?.["/settings/agents"]
+      ? [{ label: "Agents", href: "/settings/agents" }]
+      : []),
     ...(permissionMap?.["/settings/llm"]
       ? [{ label: "LLM", href: "/settings/llm" }]
       : []),

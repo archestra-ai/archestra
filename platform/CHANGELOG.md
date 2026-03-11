@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.1.6](https://github.com/archestra-ai/archestra/compare/platform-v1.1.5...platform-v1.1.6) (2026-03-11)
+
+
+### Bug Fixes
+
+* hide Browser button on initial chat, collapsible sidebar with tooltips ([#3273](https://github.com/archestra-ai/archestra/issues/3273)) ([76a326d](https://github.com/archestra-ai/archestra/commit/76a326d56462a1412636357f10b578a9e05501e6))
+
+
+### Miscellaneous Chores
+
+* adjust test to sidebarCollapsed perm ([#3278](https://github.com/archestra-ai/archestra/issues/3278)) ([e7cbf34](https://github.com/archestra-ai/archestra/commit/e7cbf348702954dc820fb9939fbad10363fd010c))
+
 ## [1.1.5](https://github.com/archestra-ai/archestra/compare/platform-v1.1.4...platform-v1.1.5) (2026-03-11)
 
 

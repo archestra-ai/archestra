@@ -590,9 +590,21 @@ export async function expectAuthenticated(
   page: Page,
   timeout = 30000,
 ): Promise<void> {
-  await expect(page.getByTestId(E2eTestId.SidebarNavGuardrails)).toBeVisible({
+  await expect(page.getByTestId(E2eTestId.SidebarUserProfile)).toBeVisible({
     timeout,
   });
+}
+
+/**
+ * Expand the sidebar if it's currently collapsed.
+ * Useful for tests that need to read sidebar text content.
+ */
+export async function expandSidebar(page: Page): Promise<void> {
+  const sidebar = page.locator("[data-slot=sidebar]");
+  const state = await sidebar.getAttribute("data-state");
+  if (state === "collapsed") {
+    await page.locator("[data-sidebar=trigger]").first().click();
+  }
 }
 
 /**

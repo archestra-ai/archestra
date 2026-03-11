@@ -10,7 +10,6 @@ import {
   useUpdateAppearance,
 } from "@/lib/organization.query";
 import { useOrgTheme } from "@/lib/theme.hook";
-import { LightDarkToggle } from "./_components/light-dark-toggle";
 import { LogoUpload } from "./_components/logo-upload";
 import { ThemeSelector } from "./_components/theme-selector";
 
@@ -63,7 +62,6 @@ export default function AppearanceSettingsPage() {
   return (
     <div>
       <div className="space-y-6">
-        <LightDarkToggle currentThemeId={currentUITheme} />
         <LogoUpload
           currentLogo={logo}
           currentLogoDark={logoDark}
@@ -79,7 +77,7 @@ export default function AppearanceSettingsPage() {
         {hasChanges && (
           <div className="flex gap-3 sticky bottom-0 bg-background p-4 rounded-lg border border-border shadow-lg">
             <PermissionButton
-              permissions={{ appearance: ["update"] }}
+              permissions={{ appearanceSettings: ["update"] }}
               onClick={() => {
                 saveAppearance?.(currentUITheme || DEFAULT_THEME);
                 setHasChanges(false);

@@ -11,6 +11,7 @@ import { z } from "zod";
 import db, { schema } from "@/database";
 import { resolveApiKeyFromChatApiKey } from "@/knowledge-base/kb-llm-client";
 import {
+  AgentModel,
   ChatApiKeyModel,
   InteractionModel,
   InvitationModel,
@@ -28,6 +29,7 @@ import {
   constructResponseSchema,
   PublicAppearanceSchema,
   SelectOrganizationSchema,
+  UpdateAgentSettingsSchema,
   UpdateAppearanceSchema,
   UpdateKnowledgeSettingsSchema,
   UpdateLlmSettingsSchema,
@@ -114,6 +116,35 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ organizationId, body }, reply) => {
+      const organization = await OrganizationModel.patch(organizationId, body);
+
+      if (!organization) {
+        throw new ApiError(404, "Organization not found");
+      }
+
+      return reply.send(organization);
+    },
+  );
+
+  fastify.patch(
+    "/api/organization/agent-settings",
+    {
+      schema: {
+        operationId: RouteId.UpdateAgentSettings,
+        description: "Update agent settings (default model, default agent)",
+        tags: ["Organization"],
+        body: UpdateAgentSettingsSchema,
+        response: constructResponseSchema(SelectOrganizationSchema),
+      },
+    },
+    async ({ organizationId, body }, reply) => {
+      if (body.defaultAgentId) {
+        const agent = await AgentModel.findById(body.defaultAgentId);
+        if (!agent || agent.organizationId !== organizationId) {
+          throw new ApiError(404, "Agent not found");
+        }
+      }
+
       const organization = await OrganizationModel.patch(organizationId, body);
 
       if (!organization) {

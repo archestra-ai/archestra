@@ -40,6 +40,7 @@ import type {
   ToolWithAssignments,
   UpdateTool,
 } from "@/types";
+import AgentConnectorAssignmentModel from "./agent-connector-assignment";
 import AgentTeamModel from "./agent-team";
 import AgentToolModel from "./agent-tool";
 import McpServerModel from "./mcp-server";
@@ -405,13 +406,13 @@ class ToolModel {
    * explicitly assigned like any other MCP server tools.
    */
   static async getMcpToolsByAgent(agentId: string): Promise<Tool[]> {
-    // Get tool IDs assigned via junction table (MCP tools) and agent's KB assignment
-    const [assignedToolIds, hasKnowledgeBase] = await Promise.all([
+    // Get tool IDs assigned via junction table (MCP tools) and agent's knowledge sources
+    const [assignedToolIds, hasKnowledgeSources] = await Promise.all([
       AgentToolModel.findToolIdsByAgent(agentId),
-      ToolModel.getAgentHasKnowledgeBase(agentId),
+      ToolModel.getAgentHasKnowledgeSources(agentId),
     ]);
 
-    if (assignedToolIds.length === 0 && !hasKnowledgeBase) {
+    if (assignedToolIds.length === 0 && !hasKnowledgeSources) {
       return [];
     }
 
@@ -436,9 +437,9 @@ class ToolModel {
             .orderBy(desc(schema.toolsTable.createdAt))
         : [];
 
-    // Auto-inject query_knowledge_sources when the agent has a knowledge base assigned,
-    // regardless of whether the tool was manually assigned
-    if (hasKnowledgeBase) {
+    // Auto-inject query_knowledge_sources when the agent has knowledge sources
+    // (knowledge bases or directly-assigned connectors)
+    if (hasKnowledgeSources) {
       const hasKbTool = tools.some(
         (t) => t.name === TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
       );
@@ -452,7 +453,7 @@ class ToolModel {
       }
     }
 
-    return ToolModel.filterUnavailableTools(tools, hasKnowledgeBase);
+    return ToolModel.filterUnavailableTools(tools, hasKnowledgeSources);
   }
 
   /**
@@ -1812,30 +1813,34 @@ class ToolModel {
   // =============================================================================
 
   /**
-   * Check if an agent has any knowledge bases assigned.
+   * Check if an agent has any knowledge sources — either knowledge bases or
+   * directly-assigned connectors.
    */
-  private static async getAgentHasKnowledgeBase(
+  private static async getAgentHasKnowledgeSources(
     agentId: string,
   ): Promise<boolean> {
-    const rows = await db
-      .select({
-        knowledgeBaseId: schema.agentKnowledgeBasesTable.knowledgeBaseId,
-      })
-      .from(schema.agentKnowledgeBasesTable)
-      .where(eq(schema.agentKnowledgeBasesTable.agentId, agentId))
-      .limit(1);
-    return rows.length > 0;
+    const [kbRows, connectorIds] = await Promise.all([
+      db
+        .select({
+          knowledgeBaseId: schema.agentKnowledgeBasesTable.knowledgeBaseId,
+        })
+        .from(schema.agentKnowledgeBasesTable)
+        .where(eq(schema.agentKnowledgeBasesTable.agentId, agentId))
+        .limit(1),
+      AgentConnectorAssignmentModel.getConnectorIds(agentId),
+    ]);
+    return kbRows.length > 0 || connectorIds.length > 0;
   }
 
   /**
    * Filter out tools that should not be visible based on current configuration.
-   * Filters out the query_knowledge_sources tool when the agent has no knowledge base assigned.
+   * Filters out the query_knowledge_sources tool when the agent has no knowledge sources.
    */
   private static filterUnavailableTools<T extends { name: string }>(
     tools: T[],
-    hasKnowledgeBase: boolean,
+    hasKnowledgeSources: boolean,
   ): T[] {
-    if (hasKnowledgeBase) {
+    if (hasKnowledgeSources) {
       return tools;
     }
     return tools.filter(

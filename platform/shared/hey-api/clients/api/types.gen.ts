@@ -11995,6 +11995,10 @@ export type GetAllAgentsData = {
          * Exclude built-in agents from the results. Defaults to false.
          */
         excludeBuiltIn?: boolean;
+        /**
+         * Filter by scope: personal, team, org, or built_in.
+         */
+        scope?: 'personal' | 'team' | 'org' | 'built_in';
     };
     url: '/api/agents/all';
 };
@@ -34071,6 +34075,7 @@ export type GetOrganizationResponses = {
         rerankerModel: string | null;
         defaultLlmModel: string | null;
         defaultLlmProvider: string | null;
+        defaultAgentId: string | null;
     };
 };
 
@@ -34254,6 +34259,7 @@ export type UpdateAppearanceResponses = {
         rerankerModel: string | null;
         defaultLlmModel: string | null;
         defaultLlmProvider: string | null;
+        defaultAgentId: string | null;
     };
 };
 
@@ -34355,6 +34361,7 @@ export type UpdateSecuritySettingsResponses = {
         rerankerModel: string | null;
         defaultLlmModel: string | null;
         defaultLlmProvider: string | null;
+        defaultAgentId: string | null;
     };
 };
 
@@ -34365,8 +34372,6 @@ export type UpdateLlmSettingsData = {
         convertToolResultsToToon?: boolean;
         compressionScope?: 'organization' | 'team';
         limitCleanupInterval?: '1h' | '12h' | '24h' | '1w' | '1m';
-        defaultLlmModel?: string | null;
-        defaultLlmProvider?: string | null;
     };
     path?: never;
     query?: never;
@@ -34459,10 +34464,113 @@ export type UpdateLlmSettingsResponses = {
         rerankerModel: string | null;
         defaultLlmModel: string | null;
         defaultLlmProvider: string | null;
+        defaultAgentId: string | null;
     };
 };
 
 export type UpdateLlmSettingsResponse = UpdateLlmSettingsResponses[keyof UpdateLlmSettingsResponses];
+
+export type UpdateAgentSettingsData = {
+    body?: {
+        defaultLlmModel?: string | null;
+        defaultLlmProvider?: string | null;
+        defaultAgentId?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/organization/agent-settings';
+};
+
+export type UpdateAgentSettingsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type UpdateAgentSettingsError = UpdateAgentSettingsErrors[keyof UpdateAgentSettingsErrors];
+
+export type UpdateAgentSettingsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        name: string;
+        slug: string;
+        logo: string | null;
+        logoDark: string | null;
+        createdAt: string;
+        metadata: string | null;
+        limitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
+        onboardingComplete: boolean;
+        theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
+        customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
+        convertToolResultsToToon: boolean;
+        compressionScope: 'organization' | 'team';
+        globalToolPolicy: 'permissive' | 'restrictive';
+        allowChatFileUploads: boolean;
+        embeddingModel: string | null;
+        embeddingChatApiKeyId: string | null;
+        rerankerChatApiKeyId: string | null;
+        rerankerModel: string | null;
+        defaultLlmModel: string | null;
+        defaultLlmProvider: string | null;
+        defaultAgentId: string | null;
+    };
+};
+
+export type UpdateAgentSettingsResponse = UpdateAgentSettingsResponses[keyof UpdateAgentSettingsResponses];
 
 export type UpdateKnowledgeSettingsData = {
     body?: {
@@ -34563,6 +34671,7 @@ export type UpdateKnowledgeSettingsResponses = {
         rerankerModel: string | null;
         defaultLlmModel: string | null;
         defaultLlmProvider: string | null;
+        defaultAgentId: string | null;
     };
 };
 
@@ -34661,6 +34770,7 @@ export type DropEmbeddingConfigResponses = {
         rerankerModel: string | null;
         defaultLlmModel: string | null;
         defaultLlmProvider: string | null;
+        defaultAgentId: string | null;
     };
 };
 
@@ -34842,6 +34952,7 @@ export type CompleteOnboardingResponses = {
         rerankerModel: string | null;
         defaultLlmModel: string | null;
         defaultLlmProvider: string | null;
+        defaultAgentId: string | null;
     };
 };
 

@@ -27,6 +27,7 @@ import config from "@/config";
 import db, { schema as dbSchema } from "@/database";
 import logger from "@/logging";
 import {
+  AgentConnectorAssignmentModel,
   AgentKnowledgeBaseModel,
   AgentModel,
   AgentTeamModel,
@@ -1001,8 +1002,12 @@ export async function buildKnowledgeSourcesDescription(
     return cached.description;
   }
 
-  const assignments = await AgentKnowledgeBaseModel.findByAgent(agentId);
-  if (assignments.length === 0) {
+  const [kbAssignments, directConnectorIds] = await Promise.all([
+    AgentKnowledgeBaseModel.findByAgent(agentId),
+    AgentConnectorAssignmentModel.getConnectorIds(agentId),
+  ]);
+
+  if (kbAssignments.length === 0 && directConnectorIds.length === 0) {
     kbDescriptionCache.set(agentId, {
       description: null,
       expiresAt: Date.now() + KB_DESCRIPTION_CACHE_TTL_MS,
@@ -1010,15 +1015,21 @@ export async function buildKnowledgeSourcesDescription(
     return null;
   }
 
-  const kbIds = assignments.map((a) => a.knowledgeBaseId);
+  const kbIds = kbAssignments.map((a) => a.knowledgeBaseId);
 
-  const [knowledgeBases, connectors] = await Promise.all([
-    KnowledgeBaseModel.findByIds(kbIds),
-    KnowledgeBaseConnectorModel.findByKnowledgeBaseIds(kbIds),
+  const [knowledgeBases, kbConnectors, directConnectors] = await Promise.all([
+    kbIds.length > 0 ? KnowledgeBaseModel.findByIds(kbIds) : [],
+    kbIds.length > 0
+      ? KnowledgeBaseConnectorModel.findByKnowledgeBaseIds(kbIds)
+      : [],
+    KnowledgeBaseConnectorModel.findByIds(directConnectorIds),
   ]);
 
   const kbNames = knowledgeBases.map((kb) => kb.name);
-  const connectorTypes = [...new Set(connectors.map((c) => c.connectorType))];
+  const allConnectors = [...kbConnectors, ...directConnectors];
+  const connectorTypes = [
+    ...new Set(allConnectors.map((c) => c.connectorType)),
+  ];
 
   let description =
     "Query the organization's knowledge sources to retrieve relevant information. " +

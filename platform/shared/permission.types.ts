@@ -38,9 +38,10 @@ export const resources = [
   "llmLimit",
   "llmProvider",
   "secret",
-  "appearance",
+  "appearanceSettings",
   "securitySettings",
   "llmSettings",
+  "agentSettings",
   "agentTrigger",
   /**
    * Better-auth access control resource - needed for organization role management
@@ -61,6 +62,7 @@ export const resources = [
   "member",
   "invitation",
   "team",
+  "minimalisticView",
 ] as const;
 
 export const resourceLabels: Record<Resource, string> = {
@@ -87,10 +89,12 @@ export const resourceLabels: Record<Resource, string> = {
   llmLimit: "LLM Limits",
   llmProvider: "LLM Providers",
   secret: "Secrets",
-  appearance: "Appearance",
+  appearanceSettings: "Appearance",
   securitySettings: "Security Settings",
   llmSettings: "LLM Settings",
+  agentSettings: "Agent Settings",
   agentTrigger: "Agent Triggers",
+  minimalisticView: "Minimalistic View",
 };
 
 export const resourceDescriptions: Record<Resource, string> = {
@@ -104,6 +108,7 @@ export const resourceDescriptions: Record<Resource, string> = {
   llmProvider: "LLM provider API keys, virtual keys, and models",
   llmLimit: "LLM usage limits",
   llmSettings: "LLM settings (compression, cleanup interval)",
+  agentSettings: "Agent settings (default model, default agent)",
   llmCost: "LLM usage and cost analytics",
   mcpRegistry: "MCP server registry management",
   mcpServerInstallation: "Installed MCP servers and their runtime",
@@ -116,12 +121,13 @@ export const resourceDescriptions: Record<Resource, string> = {
   invitation: "User invitations",
   identityProvider: "Identity providers for authentication",
   secret: "Secrets manager configuration and connectivity",
-  appearance: "White-labeling settings (theme, logo, fonts)",
+  appearanceSettings: "White-labeling settings (theme, logo, fonts)",
   securitySettings: "Security settings (tool policy, chat file uploads)",
   knowledgeBase:
     "Knowledge bases and connectors for RAG-based document retrieval",
   knowledgeSettings:
     "Knowledge settings (embedding and reranking models configuration)",
+  minimalisticView: "Controls if the minimalistic view of the app is enabled",
   organization: "Organization (internal, used by authentication system)",
 };
 
@@ -129,14 +135,17 @@ export const resourceDescriptions: Record<Resource, string> = {
  * Resources that are internal to better-auth and should not be shown
  * in user-facing documentation or the RBAC UI.
  */
-export const internalResources: Resource[] = ["organization"];
+export const internalResources: Resource[] = [
+  "organization",
+  "minimalisticView",
+];
 
 /**
  * Groups resources by category for the RBAC UI (role builder and permissions card).
  * Used in both the create/edit role dialog and the account permissions display.
  */
 export const resourceCategories: Record<string, Resource[]> = {
-  Agents: ["agent", "agentTrigger"],
+  Agents: ["agent", "agentTrigger", "agentSettings"],
   MCP: [
     "mcpGateway",
     "toolPolicy",
@@ -146,7 +155,7 @@ export const resourceCategories: Record<string, Resource[]> = {
   ],
   LLM: ["llmProxy", "llmProvider", "llmLimit", "llmSettings", "llmCost"],
   Knowledge: ["knowledgeBase", "knowledgeSettings"],
-  Other: ["chat", "log", "dualLlmConfig", "dualLlmResult"],
+  Other: ["chat", "log", "dualLlmConfig", "dualLlmResult", "minimalisticView"],
   Administration: [
     "member",
     "ac",
@@ -154,7 +163,7 @@ export const resourceCategories: Record<string, Resource[]> = {
     "invitation",
     "identityProvider",
     "secret",
-    "appearance",
+    "appearanceSettings",
     "securitySettings",
   ],
 };

@@ -362,6 +362,36 @@ export function useUpdateLlmSettings(
 }
 
 /**
+ * Update agent settings (default model, default agent)
+ */
+export function useUpdateAgentSettings(
+  onSuccessMessage: string,
+  onErrorMessage: string,
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (
+      data: archestraApiTypes.UpdateAgentSettingsData["body"],
+    ) => {
+      const { data: updatedOrganization, error } =
+        await archestraApiSdk.updateAgentSettings({ body: data });
+
+      if (error) {
+        toast.error(onErrorMessage);
+        return null;
+      }
+
+      return updatedOrganization;
+    },
+    onSuccess: (updatedOrganization) => {
+      if (!updatedOrganization) return;
+      queryClient.setQueryData(organizationKeys.details(), updatedOrganization);
+      toast.success(onSuccessMessage);
+    },
+  });
+}
+
+/**
  * Update knowledge settings (embedding model)
  */
 export function useUpdateKnowledgeSettings(

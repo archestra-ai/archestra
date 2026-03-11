@@ -94,9 +94,10 @@ describe("useSettingsTabs", () => {
       member: ["read"],
       team: ["read"],
       ac: ["read"],
-      appearance: ["read"],
+      appearanceSettings: ["read"],
       securitySettings: ["read"],
       llmSettings: ["read"],
+      agentSettings: ["read"],
     };
 
     const { result } = renderHook(() => useSettingsTabs(), {
@@ -107,6 +108,7 @@ describe("useSettingsTabs", () => {
       const labels = getTabLabels(result.current);
       expect(labels).toContain("Dual LLM");
       expect(labels).toContain("Security");
+      expect(labels).toContain("Agents");
       expect(labels).toContain("LLM");
       expect(labels).toContain("Users");
       expect(labels).toContain("Teams");
@@ -254,9 +256,10 @@ describe("useSettingsTabs", () => {
       ac: ["read"],
       identityProvider: ["read"],
       secret: ["read"],
-      appearance: ["read"],
+      appearanceSettings: ["read"],
       securitySettings: ["read"],
       llmSettings: ["read"],
+      agentSettings: ["read"],
     };
 
     const { result } = renderHook(() => useSettingsTabs(), {
@@ -270,6 +273,7 @@ describe("useSettingsTabs", () => {
         "Authentication",
         "Dual LLM",
         "Security",
+        "Agents",
         "LLM",
         "Users",
         "Teams",

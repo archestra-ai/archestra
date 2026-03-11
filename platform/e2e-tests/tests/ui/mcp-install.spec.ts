@@ -349,13 +349,8 @@ test.describe("MCP Install", () => {
     await argumentsInput.fill(`-c\n${PYTHON_MCP_SCRIPT}`);
 
     // Force manual reinstall by adding a prompted env var
-    await settingsDialog
-      .getByRole("button", { name: "Add Variable" })
-      .click();
-    await settingsDialog
-      .getByPlaceholder("API_KEY")
-      .first()
-      .fill("E2E_PROMPT");
+    await settingsDialog.getByRole("button", { name: "Add Variable" }).click();
+    await settingsDialog.getByPlaceholder("API_KEY").first().fill("E2E_PROMPT");
     await settingsDialog
       .getByTestId(E2eTestId.PromptOnInstallationCheckbox)
       .first()

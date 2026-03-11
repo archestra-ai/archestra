@@ -131,6 +131,15 @@ class KnowledgeBaseConnectorModel {
     return result ?? null;
   }
 
+  static async findByIds(ids: string[]): Promise<KnowledgeBaseConnector[]> {
+    if (ids.length === 0) return [];
+
+    return await db
+      .select()
+      .from(schema.knowledgeBaseConnectorsTable)
+      .where(inArray(schema.knowledgeBaseConnectorsTable.id, ids));
+  }
+
   static async create(
     data: InsertKnowledgeBaseConnector,
   ): Promise<KnowledgeBaseConnector> {

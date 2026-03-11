@@ -416,6 +416,11 @@ export default function ChatPage() {
     return undefined;
   }, [initialModel, modelsByProvider]);
 
+  // Whether the current initial model matches the org default
+  const isInitialModelDefault =
+    !!organization?.defaultLlmModel &&
+    initialModel === organization.defaultLlmModel;
+
   const chatSession = useChatSession(conversationId);
 
   const { isLoading: isLoadingFeatures } = useConfig();
@@ -1675,6 +1680,7 @@ export default function ChatPage() {
                       isPlaywrightSetupVisible={isPlaywrightSetupVisible}
                       selectorAgentId={initialAgentId}
                       onAgentChange={handleInitialAgentChange}
+                      isDefaultModel={isInitialModelDefault}
                     />
                   </div>
                 </div>

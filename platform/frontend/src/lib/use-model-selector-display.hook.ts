@@ -28,7 +28,7 @@ export function useModelSelectorDisplay({
   // Reset to collapsed when conversation changes
   useEffect(() => {
     setIsExpanded(false);
-  }, [conversationId]);
+  }, []);
 
   const expand = useCallback(() => setIsExpanded(true), []);
 

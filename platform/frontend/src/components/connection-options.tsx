@@ -97,7 +97,7 @@ export function ConnectionOptions({
       ).find((tab) => tabPermissions[tab]);
       if (firstPermitted) onTabChange(firstPermitted);
     }
-  }, [activeTab, canReadLlmProxy, canReadMcpGateway, canReadAgent, onTabChange]);
+  }, [activeTab, onTabChange, tabPermissions]);
 
   return (
     <div className="space-y-6">
@@ -182,9 +182,7 @@ export function ConnectionOptions({
               <Route
                 className="h-4 w-4"
                 style={
-                  activeTab === "mcp"
-                    ? { color: "var(--chart-2)" }
-                    : undefined
+                  activeTab === "mcp" ? { color: "var(--chart-2)" } : undefined
                 }
               />
               <span className="font-medium">MCP Gateway</span>
@@ -231,9 +229,7 @@ export function ConnectionOptions({
               <Bot
                 className="h-4 w-4"
                 style={
-                  activeTab === "a2a"
-                    ? { color: "var(--chart-3)" }
-                    : undefined
+                  activeTab === "a2a" ? { color: "var(--chart-3)" } : undefined
                 }
               />
               <span className="font-medium">A2A Gateway</span>

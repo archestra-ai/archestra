@@ -449,7 +449,10 @@ export function AppSidebar() {
           </Link>
           <SidebarTrigger className="size-7 cursor-pointer" />
         </div>
-        <Link href="/chat" className="hidden group-data-[collapsible=icon]:flex">
+        <Link
+          href="/chat"
+          className="hidden group-data-[collapsible=icon]:flex"
+        >
           <img src="/logo.png" alt="Logo" className="size-7" />
         </Link>
         <SidebarTrigger className="hidden group-data-[collapsible=icon]:flex size-8 cursor-pointer" />

@@ -9,7 +9,6 @@ import {
   TriangleAlert,
 } from "lucide-react";
 import { Fragment, useMemo } from "react";
-import { MessageActions } from "@/components/chat/message-actions";
 import {
   Conversation,
   ConversationContent,
@@ -40,6 +39,7 @@ import {
   hasKnowledgeBaseToolCall,
   KnowledgeGraphCitations,
 } from "@/components/chat/knowledge-graph-citations";
+import { MessageActions } from "@/components/chat/message-actions";
 import { PolicyDeniedTool } from "@/components/chat/policy-denied-tool";
 import Divider from "@/components/divider";
 import { Button } from "@/components/ui/button";

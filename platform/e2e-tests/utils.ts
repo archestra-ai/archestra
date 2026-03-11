@@ -596,6 +596,18 @@ export async function expectAuthenticated(
 }
 
 /**
+ * Expand the sidebar if it's currently collapsed.
+ * Useful for tests that need to read sidebar text content.
+ */
+export async function expandSidebar(page: Page): Promise<void> {
+  const sidebar = page.locator("[data-slot=sidebar]");
+  const state = await sidebar.getAttribute("data-state");
+  if (state === "collapsed") {
+    await page.locator("[data-sidebar=trigger]").first().click();
+  }
+}
+
+/**
  * Login via API (bypasses UI form for reliability).
  * Handles rate limiting with exponential backoff retry.
  *

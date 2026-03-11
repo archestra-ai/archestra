@@ -109,6 +109,57 @@ vi.mock("@/components/chat/model-selector", () => ({
   ModelSelector: () => <div data-testid="model-selector" />,
 }));
 
+// Separate mock function so InitialAgentSelector mock can access admin state
+const mockCanUpdateOrganization = vi.fn().mockReturnValue(false);
+
+vi.mock("@/components/chat/initial-agent-selector", () => ({
+  InitialAgentSelector: ({
+    onAttach,
+    attachDisabled,
+    attachDisabledReason,
+    selectedModel,
+  }: {
+    onAttach?: () => void;
+    attachDisabled?: boolean;
+    attachDisabledReason?: string;
+    selectedModel?: string;
+  }) => {
+    const canUpdate = mockCanUpdateOrganization();
+    return (
+      <div data-testid="initial-agent-selector">
+        {selectedModel && <div data-testid="model-selector" />}
+        {onAttach && !attachDisabled ? (
+          <button
+            type="button"
+            data-testid="chat-file-upload-button"
+            onClick={onAttach}
+          >
+            Upload
+          </button>
+        ) : attachDisabled ? (
+          <span data-testid="chat-disabled-file-upload-button">
+            <div data-testid="tooltip-content" role="tooltip">
+              {canUpdate ? (
+                <span>
+                  File uploads are disabled.{" "}
+                  <a
+                    href="/settings/security"
+                    aria-label="Enable file uploads in security settings"
+                  >
+                    Enable in settings
+                  </a>
+                </span>
+              ) : (
+                attachDisabledReason
+              )}
+            </div>
+          </span>
+        ) : null}
+      </div>
+    );
+  },
+}));
+
 // Mock the Tooltip components to avoid Radix UI complexity
 vi.mock("@/components/ui/tooltip", () => ({
   Tooltip: ({ children }: { children: React.ReactNode }) => <>{children}</>,
@@ -170,6 +221,8 @@ describe("ArchestraPromptInput", () => {
     onModelChange: vi.fn(),
     agentId: "test-agent-id",
     isPlaywrightSetupVisible: false,
+    selectorAgentId: "test-agent-id",
+    onAgentChange: vi.fn(),
   };
 
   beforeEach(() => {
@@ -240,12 +293,8 @@ describe("ArchestraPromptInput", () => {
     });
 
     it("should show settings link in tooltip for admins when file uploads disabled", () => {
-      // Mock admin user with securitySettings update permission
-      mockUseHasPermissions.mockReturnValue({
-        data: true,
-        isPending: false,
-        isLoading: false,
-      });
+      // Mock admin user with organization update permission
+      mockCanUpdateOrganization.mockReturnValue(true);
 
       render(
         <ArchestraPromptInput
@@ -270,12 +319,8 @@ describe("ArchestraPromptInput", () => {
     });
 
     it("should show admin message in tooltip for non-admins when file uploads disabled", () => {
-      // Mock non-admin user without securitySettings update permission
-      mockUseHasPermissions.mockReturnValue({
-        data: false,
-        isPending: false,
-        isLoading: false,
-      });
+      // Mock non-admin user without organization update permission
+      mockCanUpdateOrganization.mockReturnValue(false);
 
       render(
         <ArchestraPromptInput

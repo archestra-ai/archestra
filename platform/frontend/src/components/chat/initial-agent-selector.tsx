@@ -2,6 +2,7 @@
 
 import {
   type archestraApiTypes,
+  E2eTestId,
   isBuiltInCatalogId,
   type SupportedProvider,
 } from "@shared";
@@ -132,6 +133,9 @@ export function InitialAgentSelector({
   const { data: session } = authClient.useSession();
   const userId = session?.user?.id;
   const { data: isAdmin } = useHasPermissions({ agent: ["admin"] });
+  const { data: canUpdateOrganization } = useHasPermissions({
+    organization: ["update"],
+  });
 
   const [agentSearch, setAgentSearch] = useState("");
   const [scopeFilters, setScopeFilters] = useState({
@@ -316,15 +320,42 @@ export function InitialAgentSelector({
           className="w-64"
         >
           {/* Attach file */}
-          {onAttach && (
+          {onAttach && !attachDisabled && (
             <DropdownMenuItem
-              disabled={attachDisabled}
               onClick={onAttach}
-              title={attachDisabled ? attachDisabledReason : undefined}
+              data-testid={E2eTestId.ChatFileUploadButton}
             >
               <PaperclipIcon className="size-4" />
               Attach image or file
             </DropdownMenuItem>
+          )}
+          {onAttach && attachDisabled && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span data-testid={E2eTestId.ChatDisabledFileUploadButton}>
+                  <DropdownMenuItem disabled>
+                    <PaperclipIcon className="size-4" />
+                    Attach image or file
+                  </DropdownMenuItem>
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="right">
+                {canUpdateOrganization ? (
+                  <span>
+                    File uploads are disabled.{" "}
+                    <a
+                      href="/settings/security"
+                      className="underline hover:no-underline"
+                      aria-label="Enable file uploads in security settings"
+                    >
+                      Enable in settings
+                    </a>
+                  </span>
+                ) : (
+                  attachDisabledReason
+                )}
+              </TooltipContent>
+            </Tooltip>
           )}
 
           {/* Current agent config submenu */}

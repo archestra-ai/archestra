@@ -1,10 +1,6 @@
 "use client";
 
-import {
-  EMBEDDING_MODELS,
-  type EmbeddingModel,
-  PROVIDERS_WITH_OPTIONAL_API_KEY,
-} from "@shared";
+import { EMBEDDING_MODELS, PROVIDERS_WITH_OPTIONAL_API_KEY } from "@shared";
 import {
   AlertTriangle,
   Info,
@@ -13,6 +9,8 @@ import {
   Lock,
   Plus,
   Settings,
+  Trash2,
+  Zap,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
@@ -54,7 +52,9 @@ import {
 } from "@/lib/chat-settings.query";
 import { useFeature } from "@/lib/config.query";
 import {
+  useDropEmbeddingConfig,
   useOrganization,
+  useTestEmbeddingConnection,
   useUpdateKnowledgeSettings,
 } from "@/lib/organization.query";
 import { cn } from "@/lib/utils";
@@ -418,6 +418,65 @@ function useSetupStep({
   return null;
 }
 
+function DropEmbeddingConfigDialog({
+  open,
+  onOpenChange,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const dropMutation = useDropEmbeddingConfig();
+
+  const handleDrop = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await dropMutation.mutateAsync();
+    onOpenChange(false);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Drop Embedding Configuration</DialogTitle>
+          <DialogDescription>
+            This will delete all embedded documents and reset connector
+            checkpoints. Connectors and knowledge bases are preserved — the next
+            sync will re-ingest everything with the new embedding model.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogForm onSubmit={handleDrop}>
+          <Alert variant="destructive" className="py-2">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription className="text-xs">
+              All embedded documents will be permanently deleted. Connectors and
+              knowledge bases will not be affected.
+            </AlertDescription>
+          </Alert>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              variant="destructive"
+              disabled={dropMutation.isPending}
+            >
+              {dropMutation.isPending && (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              )}
+              Drop Embedding Config
+            </Button>
+          </DialogFooter>
+        </DialogForm>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function KnowledgeSettingsContent() {
   const { data: organization, isPending } = useOrganization();
   const { data: apiKeys } = useAvailableChatApiKeys();
@@ -425,10 +484,10 @@ function KnowledgeSettingsContent() {
     "Knowledge settings updated",
     "Failed to update knowledge settings",
   );
+  const testConnection = useTestEmbeddingConnection();
+  const [showDropDialog, setShowDropDialog] = useState(false);
 
-  const [embeddingModel, setEmbeddingModel] = useState<EmbeddingModel | null>(
-    null,
-  );
+  const [embeddingModel, setEmbeddingModel] = useState<string | null>(null);
   const [embeddingChatApiKeyId, setEmbeddingChatApiKeyId] = useState<
     string | null
   >(null);
@@ -443,9 +502,7 @@ function KnowledgeSettingsContent() {
       // (otherwise the database default is not a user choice)
       const hasEmbeddingKey = !!organization.embeddingChatApiKeyId;
       setEmbeddingModel(
-        hasEmbeddingKey
-          ? ((organization.embeddingModel as EmbeddingModel) ?? null)
-          : null,
+        hasEmbeddingKey ? (organization.embeddingModel ?? null) : null,
       );
       setEmbeddingChatApiKeyId(organization.embeddingChatApiKeyId ?? null);
       setRerankerChatApiKeyId(organization.rerankerChatApiKeyId ?? null);
@@ -455,7 +512,7 @@ function KnowledgeSettingsContent() {
 
   const serverEmbeddingKeyId = organization?.embeddingChatApiKeyId ?? null;
   const serverEmbeddingModel = serverEmbeddingKeyId
-    ? ((organization?.embeddingModel as EmbeddingModel | null) ?? null)
+    ? (organization?.embeddingModel ?? null)
     : null;
   const serverRerankerKeyId = organization?.rerankerChatApiKeyId ?? null;
   const serverRerankerModel = organization?.rerankerModel ?? null;
@@ -581,11 +638,9 @@ function KnowledgeSettingsContent() {
                   <div className="space-y-2 w-80">
                     <SearchableSelect
                       value={embeddingModel ?? ""}
-                      onValueChange={(v) =>
-                        setEmbeddingModel(v as EmbeddingModel)
-                      }
+                      onValueChange={(v) => setEmbeddingModel(v || null)}
                       placeholder="Select embedding model..."
-                      searchPlaceholder="Search models..."
+                      searchPlaceholder="Search or type model name..."
                       items={Object.entries(EMBEDDING_MODELS).map(
                         ([value, model]) => ({
                           value,
@@ -603,13 +658,30 @@ function KnowledgeSettingsContent() {
                         isEmbeddingModelLocked ||
                         !embeddingChatApiKeyId
                       }
+                      allowCustom
                     />
                     {isEmbeddingModelLocked && (
-                      <p className="text-xs text-muted-foreground">
-                        <Lock className="h-3 w-3 inline mr-1" />
-                        Locked — changing the embedding model requires
-                        re-embedding all documents.
-                      </p>
+                      <div className="flex items-center gap-2">
+                        <p className="text-xs text-muted-foreground">
+                          <Lock className="h-3 w-3 inline mr-1" />
+                          Locked — changing the embedding model requires
+                          re-embedding all documents.
+                        </p>
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          size="sm"
+                          className="h-6 text-xs px-2"
+                          onClick={() => setShowDropDialog(true)}
+                        >
+                          <Trash2 className="h-3 w-3 mr-1" />
+                          Drop
+                        </Button>
+                        <DropEmbeddingConfigDialog
+                          open={showDropDialog}
+                          onOpenChange={setShowDropDialog}
+                        />
+                      </div>
                     )}
                     {!embeddingChatApiKeyId && !isEmbeddingModelLocked && (
                       <p className="text-xs text-muted-foreground">
@@ -621,6 +693,30 @@ function KnowledgeSettingsContent() {
               </WithPermissions>
             }
           />
+
+          {embeddingChatApiKeyId && embeddingModel && (
+            <div className="flex items-center">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={testConnection.isPending}
+                onClick={() =>
+                  testConnection.mutate({
+                    embeddingChatApiKeyId,
+                    embeddingModel,
+                  })
+                }
+              >
+                {testConnection.isPending ? (
+                  <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                ) : (
+                  <Zap className="h-3 w-3 mr-1" />
+                )}
+                Test Connection
+              </Button>
+            </div>
+          )}
         </div>
 
         {/* Reranking Configuration */}

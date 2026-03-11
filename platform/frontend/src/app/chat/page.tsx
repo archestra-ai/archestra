@@ -270,7 +270,7 @@ export default function ChatPage() {
   }, [initialAgentId, searchParams, internalAgents, defaultAgentId]);
 
   // Initialize model and API key once agent is resolved.
-  // Priority: agent config > localStorage > first available model.
+  // Priority: localStorage (user's explicit choice) > agent config > first available model.
   // Separated from agent resolution but uses ref to avoid race conditions —
   // the ref is written synchronously in the same render cycle, so this effect
   // always sees the correct agent even when both effects fire together.
@@ -278,21 +278,7 @@ export default function ChatPage() {
     if (!initialAgentId) return;
     if (initialModel) return; // Already initialized
 
-    const agent = resolvedAgentRef.current;
-    const agentData = agent as Record<string, unknown> | undefined;
-
-    // 1. Agent-configured model takes priority
-    if (agentData?.llmModel) {
-      setInitialModel(agentData.llmModel as string);
-      if (agentData.llmApiKeyId) {
-        setInitialApiKeyId(agentData.llmApiKeyId as string);
-      }
-      return;
-    }
-
-    // 2. Fall back to localStorage / first available (needs models loaded)
     const allModels = Object.values(modelsByProvider).flat();
-    if (allModels.length === 0) return;
 
     // Helper: auto-select the first API key for a given provider
     const autoSelectKeyForProvider = (provider: string) => {
@@ -303,22 +289,43 @@ export default function ChatPage() {
       }
     };
 
+    // 1. User's explicit selection from localStorage takes priority
     const savedModelId = localStorage.getItem(
       LocalStorageKeys.selectedChatModel,
     );
-    if (savedModelId && allModels.some((m) => m.id === savedModelId)) {
-      setInitialModel(savedModelId);
-      // Find provider for saved model and auto-select key
-      for (const [provider, models] of Object.entries(modelsByProvider)) {
-        if (models?.some((m) => m.id === savedModelId)) {
-          autoSelectKeyForProvider(provider);
-          break;
+    if (savedModelId) {
+      // Wait for models to load so we can validate the saved model still exists
+      if (allModels.length === 0) return;
+
+      if (allModels.some((m) => m.id === savedModelId)) {
+        setInitialModel(savedModelId);
+        // Find provider for saved model and auto-select key
+        for (const [provider, models] of Object.entries(modelsByProvider)) {
+          if (models?.some((m) => m.id === savedModelId)) {
+            autoSelectKeyForProvider(provider);
+            break;
+          }
         }
+        return;
+      }
+      // Saved model no longer available — clear stale value and fall through
+      localStorage.removeItem(LocalStorageKeys.selectedChatModel);
+    }
+
+    // 2. Agent-configured model as fallback
+    const agent = resolvedAgentRef.current;
+    const agentData = agent as Record<string, unknown> | undefined;
+    if (agentData?.llmModel) {
+      setInitialModel(agentData.llmModel as string);
+      if (agentData.llmApiKeyId) {
+        setInitialApiKeyId(agentData.llmApiKeyId as string);
       }
       return;
     }
 
-    // 3. Fall back to first available model
+    // 3. Fall back to first available model (needs models loaded)
+    if (allModels.length === 0) return;
+
     const providers = Object.keys(modelsByProvider);
     if (providers.length > 0) {
       const firstProvider = providers[0];
@@ -348,18 +355,10 @@ export default function ChatPage() {
     (newProvider: SupportedProvider, _apiKeyId: string) => {
       const providerModels = modelsByProvider[newProvider];
       if (providerModels && providerModels.length > 0) {
-        // Try to restore from localStorage for this provider
-        const savedModelKey = `selected-chat-model-${newProvider}`;
-        const savedModelId = localStorage.getItem(savedModelKey);
-        if (savedModelId && providerModels.some((m) => m.id === savedModelId)) {
-          setInitialModel(savedModelId);
-          localStorage.setItem("selected-chat-model", savedModelId);
-          return;
-        }
         // Fall back to first model for this provider
         const firstModel = providerModels[0];
         setInitialModel(firstModel.id);
-        localStorage.setItem("selected-chat-model", firstModel.id);
+        localStorage.setItem(LocalStorageKeys.selectedChatModel, firstModel.id);
       }
     },
     [modelsByProvider],
@@ -514,6 +513,9 @@ export default function ChatPage() {
         selectedModel: model,
         selectedProvider: provider,
       });
+
+      // Persist to localStorage so it's restored on next visit
+      localStorage.setItem(LocalStorageKeys.selectedChatModel, model);
     },
     [conversation, chatModels, updateConversationMutation],
   );
@@ -532,6 +534,9 @@ export default function ChatPage() {
           selectedModel: firstModel.id,
           selectedProvider: newProvider,
         });
+
+        // Persist to localStorage so it's restored on next visit
+        localStorage.setItem(LocalStorageKeys.selectedChatModel, firstModel.id);
       }
     },
     [conversation, modelsByProvider, updateConversationMutation],

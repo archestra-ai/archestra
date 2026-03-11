@@ -228,6 +228,17 @@ class KnowledgeBaseConnectorModel {
     return results.map((r) => r.knowledgeBaseId);
   }
 
+  static async resetCheckpointsByOrganization(
+    organizationId: string,
+  ): Promise<void> {
+    await db
+      .update(schema.knowledgeBaseConnectorsTable)
+      .set({ checkpoint: null })
+      .where(
+        eq(schema.knowledgeBaseConnectorsTable.organizationId, organizationId),
+      );
+  }
+
   static async getConnectorIds(knowledgeBaseId: string): Promise<string[]> {
     const results = await db
       .select({

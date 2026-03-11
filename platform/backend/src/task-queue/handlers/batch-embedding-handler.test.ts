@@ -43,7 +43,10 @@ describe("handleBatchEmbedding", () => {
       connectorRunId: "run-1",
     });
 
-    expect(mockProcessDocuments).toHaveBeenCalledWith(["doc-1", "doc-2"]);
+    expect(mockProcessDocuments).toHaveBeenCalledWith(
+      ["doc-1", "doc-2"],
+      "run-1",
+    );
     expect(mockCompleteBatch).toHaveBeenCalledWith("run-1");
     expect(mockUpdateConnector).not.toHaveBeenCalled();
   });

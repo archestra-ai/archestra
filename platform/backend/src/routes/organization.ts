@@ -1,12 +1,20 @@
-import { AUTO_PROVISIONED_INVITATION_STATUS, RouteId } from "@shared";
+import {
+  AUTO_PROVISIONED_INVITATION_STATUS,
+  EMBEDDING_DIMENSIONS,
+  RouteId,
+} from "@shared";
 import { and, eq, inArray, like } from "drizzle-orm";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
+import OpenAI from "openai";
 import { z } from "zod";
 import db, { schema } from "@/database";
+import { resolveApiKeyFromChatApiKey } from "@/knowledge-base/kb-llm-client";
 import {
   ChatApiKeyModel,
   InteractionModel,
   InvitationModel,
+  KbDocumentModel,
+  KnowledgeBaseConnectorModel,
   McpToolCallModel,
   MemberModel,
   OrganizationModel,
@@ -165,6 +173,120 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       return reply.send(organization);
+    },
+  );
+
+  fastify.post(
+    "/api/organization/knowledge-settings/drop-embedding",
+    {
+      schema: {
+        operationId: RouteId.DropEmbeddingConfig,
+        description:
+          "Drop the embedding configuration, deleting all KB documents and resetting connector checkpoints",
+        tags: ["Organization"],
+        response: constructResponseSchema(SelectOrganizationSchema),
+      },
+    },
+    async ({ organizationId }, reply) => {
+      const currentOrg = await OrganizationModel.getById(organizationId);
+      if (!currentOrg?.embeddingChatApiKeyId || !currentOrg?.embeddingModel) {
+        throw new ApiError(
+          400,
+          "Embedding configuration is not locked — nothing to drop",
+        );
+      }
+
+      // Delete all KB documents (chunks cascade via FK)
+      await KbDocumentModel.deleteByOrganization(organizationId);
+
+      // Reset connector checkpoints so next sync does a full re-ingest
+      await KnowledgeBaseConnectorModel.resetCheckpointsByOrganization(
+        organizationId,
+      );
+
+      // Clear embedding config
+      const organization = await OrganizationModel.patch(organizationId, {
+        embeddingModel: null,
+        embeddingChatApiKeyId: null,
+      });
+
+      if (!organization) {
+        throw new ApiError(404, "Organization not found");
+      }
+
+      return reply.send(organization);
+    },
+  );
+
+  fastify.post(
+    "/api/organization/knowledge-settings/test-embedding",
+    {
+      schema: {
+        operationId: RouteId.TestEmbeddingConnection,
+        description: "Test the embedding connection by embedding a sample text",
+        tags: ["Organization"],
+        body: z.object({
+          embeddingChatApiKeyId: z.string().uuid(),
+          embeddingModel: z.string().min(1),
+        }),
+        response: constructResponseSchema(
+          z.object({
+            success: z.boolean(),
+            error: z.string().optional(),
+          }),
+        ),
+      },
+    },
+    async ({ body }, reply) => {
+      // Validate API key exists and is OpenAI provider
+      const chatApiKey = await ChatApiKeyModel.findById(
+        body.embeddingChatApiKeyId,
+      );
+      if (!chatApiKey) {
+        throw new ApiError(404, "API key not found");
+      }
+      if (chatApiKey.provider !== "openai") {
+        throw new ApiError(
+          400,
+          "Embedding API key must be an OpenAI provider key",
+        );
+      }
+
+      // Resolve the actual secret
+      const resolved = await resolveApiKeyFromChatApiKey(
+        body.embeddingChatApiKeyId,
+      );
+      if (!resolved) {
+        return reply.send({
+          success: false,
+          error: "Could not resolve API key secret",
+        });
+      }
+
+      try {
+        const client = new OpenAI({
+          apiKey: resolved.apiKey,
+          baseURL: resolved.baseUrl ?? undefined,
+        });
+
+        const response = await client.embeddings.create({
+          model: body.embeddingModel,
+          input: ["hello world"],
+          dimensions: EMBEDDING_DIMENSIONS,
+        });
+
+        if (response.data.length > 0) {
+          return reply.send({ success: true });
+        }
+
+        return reply.send({
+          success: false,
+          error: "No embedding data returned",
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Unknown error";
+        return reply.send({ success: false, error: message });
+      }
     },
   );
 

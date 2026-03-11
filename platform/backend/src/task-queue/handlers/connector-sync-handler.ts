@@ -39,12 +39,20 @@ export async function handleConnectorSync(
         },
       });
       logger.info(
-        { connectorId, continuationCount: continuationCount + 1 },
+        {
+          connectorId,
+          runId: result.runId,
+          continuationCount: continuationCount + 1,
+        },
         "[ConnectorSyncHandler] Enqueued continuation",
       );
     } else {
       logger.warn(
-        { connectorId, maxContinuations: MAX_CONTINUATIONS },
+        {
+          connectorId,
+          runId: result.runId,
+          maxContinuations: MAX_CONTINUATIONS,
+        },
         "[ConnectorSyncHandler] Max continuations reached",
       );
     }

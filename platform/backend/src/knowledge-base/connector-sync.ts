@@ -15,7 +15,10 @@ import type {
   ConnectorDocument,
 } from "@/types/knowledge-connector";
 import { chunkDocument } from "./chunker";
-import { extractErrorMessage } from "./connectors/base-connector";
+import {
+  BaseConnector,
+  extractErrorMessage,
+} from "./connectors/base-connector";
 import { getConnector } from "./connectors/registry";
 
 /**
@@ -68,6 +71,11 @@ class ConnectorSyncService {
 
     // Bind runId to logger so every log line in this sync includes it
     const runLog = log.child({ runId: run.id, connectorId });
+
+    // Propagate the run-scoped logger into the connector implementation
+    if (connectorImpl instanceof BaseConnector) {
+      connectorImpl.setLogger(runLog);
+    }
 
     // Update connector lastSyncStatus to running
     await KnowledgeBaseConnectorModel.update(connectorId, {

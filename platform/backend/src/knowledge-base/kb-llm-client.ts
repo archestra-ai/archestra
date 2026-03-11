@@ -39,14 +39,13 @@ export async function resolveEmbeddingConfig(
     return null;
   }
 
-  const model = org.embeddingModel as EmbeddingModel;
   return {
     client: new OpenAI({
       apiKey: resolved.apiKey,
       baseURL: resolved.baseUrl ?? undefined,
     }),
-    model,
-    dimensions: getEmbeddingDimensions(model),
+    model: org.embeddingModel,
+    dimensions: getEmbeddingDimensions(org.embeddingModel),
   };
 }
 
@@ -102,9 +101,13 @@ export async function getDefaultOrgEmbeddingConfig(): Promise<{
   return { organizationId: org.id, config: embeddingConfig };
 }
 
-// ===== Internal helpers =====
-
-async function resolveApiKeyFromChatApiKey(chatApiKeyId: string): Promise<{
+/**
+ * Resolve the actual API key, base URL, and provider from a chat API key ID.
+ * Used by embedding config resolution and test-embedding endpoint.
+ */
+export async function resolveApiKeyFromChatApiKey(
+  chatApiKeyId: string,
+): Promise<{
   apiKey: string;
   baseUrl: string | null;
   provider: SupportedProvider;

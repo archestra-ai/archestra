@@ -1,5 +1,5 @@
 import { Octokit } from "@octokit/rest";
-import logger from "@/logging";
+import type pino from "pino";
 import type {
   ConnectorCredentials,
   ConnectorDocument,
@@ -51,19 +51,19 @@ export class GithubConnector extends BaseConnector {
       return { success: false, error: "Invalid GitHub configuration" };
     }
 
-    logger.debug(
+    this.log.debug(
       { baseUrl: parsed.githubUrl, owner: parsed.owner },
       "[GithubConnector] Testing connection",
     );
 
     try {
-      const octokit = createOctokit(parsed, params.credentials);
+      const octokit = createOctokit(parsed, params.credentials, this.log);
       await octokit.rest.users.getAuthenticated();
-      logger.debug("[GithubConnector] Connection test successful");
+      this.log.debug("[GithubConnector] Connection test successful");
       return { success: true };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      logger.error(
+      this.log.error(
         { error: message },
         "[GithubConnector] Connection test failed",
       );
@@ -79,13 +79,13 @@ export class GithubConnector extends BaseConnector {
     const parsed = parseGithubConfig(params.config);
     if (!parsed) return null;
 
-    logger.debug(
+    this.log.debug(
       { owner: parsed.owner, repos: parsed.repos },
       "[GithubConnector] Estimating total items",
     );
 
     try {
-      const octokit = createOctokit(parsed, params.credentials);
+      const octokit = createOctokit(parsed, params.credentials, this.log);
       const repos = await getRepos(octokit, parsed);
       let total = 0;
 
@@ -111,7 +111,7 @@ export class GithubConnector extends BaseConnector {
 
       return total;
     } catch (error) {
-      logger.warn(
+      this.log.warn(
         { error: extractErrorMessage(error) },
         "[GithubConnector] Failed to estimate total items",
       );
@@ -134,10 +134,10 @@ export class GithubConnector extends BaseConnector {
     const checkpoint = (params.checkpoint as GithubCheckpoint | null) ?? {
       type: "github" as const,
     };
-    const octokit = createOctokit(parsed, params.credentials);
+    const octokit = createOctokit(parsed, params.credentials, this.log);
     const repos = await getRepos(octokit, parsed);
 
-    logger.debug(
+    this.log.debug(
       {
         baseUrl: parsed.githubUrl,
         owner: parsed.owner,
@@ -191,7 +191,7 @@ export class GithubConnector extends BaseConnector {
     let page = 1;
     let pageHasMore = true;
 
-    logger.debug(
+    this.log.debug(
       { repo: `${repo.owner}/${repo.name}`, kind },
       "[GithubConnector] Syncing repo items",
     );
@@ -201,7 +201,7 @@ export class GithubConnector extends BaseConnector {
 
       let response: Awaited<ReturnType<typeof octokit.rest.issues.listForRepo>>;
       try {
-        logger.debug(
+        this.log.debug(
           { repo: `${repo.owner}/${repo.name}`, kind, page },
           "[GithubConnector] Fetching batch",
         );
@@ -224,13 +224,13 @@ export class GithubConnector extends BaseConnector {
           "status" in err &&
           (err as Record<string, unknown>).status === 404
         ) {
-          logger.debug(
+          this.log.debug(
             { repo: `${repo.owner}/${repo.name}`, kind },
             "[GithubConnector] Repo not found or issues disabled, skipping",
           );
           break;
         }
-        logger.error(
+        this.log.error(
           {
             repo: `${repo.owner}/${repo.name}`,
             kind,
@@ -264,7 +264,7 @@ export class GithubConnector extends BaseConnector {
       pageHasMore = response.data.length >= BATCH_SIZE;
       page++;
 
-      logger.debug(
+      this.log.debug(
         {
           repo: `${repo.owner}/${repo.name}`,
           kind,
@@ -296,11 +296,22 @@ export class GithubConnector extends BaseConnector {
 function createOctokit(
   config: GithubConfig,
   credentials: ConnectorCredentials,
+  log: pino.Logger,
 ): Octokit {
   const nativeFetch = globalThis.fetch;
   return new Octokit({
     auth: credentials.apiToken,
     baseUrl: config.githubUrl.replace(/\/+$/, ""),
+    log: {
+      debug: (message: string) =>
+        log.debug({ sdkMessage: message }, "[GithubConnector] SDK debug"),
+      info: (message: string) =>
+        log.debug({ sdkMessage: message }, "[GithubConnector] SDK info"),
+      warn: (message: string) =>
+        log.warn({ sdkMessage: message }, "[GithubConnector] SDK warning"),
+      error: (message: string) =>
+        log.error({ sdkMessage: message }, "[GithubConnector] SDK error"),
+    },
     request: {
       fetch: (url: string | URL | Request, init?: RequestInit) =>
         nativeFetch(url, {

@@ -1,8 +1,7 @@
 "use client";
 
-import { type archestraApiTypes, isBuiltInCatalogId } from "@shared";
+import type { archestraApiTypes } from "@shared";
 import {
-  ArrowLeft,
   BookOpen,
   Check,
   ChevronDown,
@@ -22,15 +21,15 @@ import { NoAuthInstallDialog } from "@/app/mcp/registry/_parts/no-auth-install-d
 import { RemoteServerInstallDialog } from "@/app/mcp/registry/_parts/remote-server-install-dialog";
 import { AgentBadge } from "@/components/agent-badge";
 import { AgentIcon } from "@/components/agent-icon";
-import { McpCatalogIcon, ToolChecklist } from "@/components/agent-tools-editor";
+import { McpCatalogIcon } from "@/components/agent-tools-editor";
 import { PromptInputButton } from "@/components/ai-elements/prompt-input";
 import { OAuthConfirmationDialog } from "@/components/oauth-confirmation-dialog";
 import { TokenSelect } from "@/components/token-select";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
@@ -43,14 +42,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { OverlappedIcons } from "@/components/ui/overlapped-icons";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { useInternalAgents, useUpdateProfile } from "@/lib/agent.query";
 import { useInvalidateToolAssignmentQueries } from "@/lib/agent-tools.hook";
 import {
@@ -97,10 +89,6 @@ export function InitialAgentSelector({
     others: false,
   });
 
-  // Dialog state for tool configuration (needs full dialog for complex forms)
-  const [configDialogOpen, setConfigDialogOpen] = useState(false);
-  const [configCatalog, setConfigCatalog] = useState<CatalogItem | null>(null);
-
   // Install orchestrator lifted here so dialogs survive dropdown close
   const installer = useMcpInstallOrchestrator();
 
@@ -123,31 +111,6 @@ export function InitialAgentSelector({
     [allAgents, currentAgentId],
   );
 
-  const effectiveAgentId = currentAgent?.id ?? currentAgentId;
-
-  const { data: catalogItems = [] } = useInternalMcpCatalog();
-  const { data: assignedToolsData } = useAllProfileTools({
-    filters: { agentId: effectiveAgentId ?? undefined },
-    skipPagination: true,
-    enabled: !!effectiveAgentId,
-  });
-
-  const assignedCatalogs = useMemo(() => {
-    const catalogIds = new Set<string>();
-    for (const at of assignedToolsData?.data ?? []) {
-      if (at.tool.catalogId) catalogIds.add(at.tool.catalogId);
-    }
-    return catalogItems.filter((c) => catalogIds.has(c.id));
-  }, [assignedToolsData, catalogItems]);
-
-  const { data: triggerDelegations = [] } = useAgentDelegations(
-    effectiveAgentId ?? undefined,
-  );
-  const triggerSubagents = useMemo(() => {
-    const targetIds = new Set(triggerDelegations.map((d) => d.id));
-    return allAgents.filter((a) => targetIds.has(a.id));
-  }, [allAgents, triggerDelegations]);
-
   const { data: knowledgeBasesData } = useKnowledgeBases();
   const { data: connectorsData } = useConnectors();
   const allKnowledgeBases = knowledgeBasesData?.data ?? [];
@@ -163,14 +126,6 @@ export function InitialAgentSelector({
     () => allConnectors.filter((c) => connectorIds.includes(c.id)),
     [allConnectors, connectorIds],
   );
-
-  const agentConnectorTypes = useMemo(() => {
-    const kbConnectorTypes = matchedKbs.flatMap(
-      (kb) => kb.connectors?.map((c) => c.connectorType) ?? [],
-    );
-    const directConnectorTypes = matchedConnectors.map((c) => c.connectorType);
-    return [...new Set([...kbConnectorTypes, ...directConnectorTypes])];
-  }, [matchedKbs, matchedConnectors]);
 
   // Filter agents for the switch list
   const aq = agentSearch.toLowerCase().trim();
@@ -201,11 +156,6 @@ export function InitialAgentSelector({
     setAgentSearch("");
   };
 
-  const handleOpenConfigureTool = (catalog: CatalogItem) => {
-    setConfigCatalog(catalog);
-    setConfigDialogOpen(true);
-  };
-
   const scopeTabs = [
     { key: "my" as const, label: "My" },
     { key: "shared" as const, label: "Shared" },
@@ -232,12 +182,6 @@ export function InitialAgentSelector({
             <span className="truncate flex-1 text-left">
               {currentAgent?.name ?? "Select agent"}
             </span>
-            <ToolServerAvatarGroup
-              catalogs={assignedCatalogs}
-              subagents={triggerSubagents}
-              connectorTypes={agentConnectorTypes}
-              showAddButton
-            />
           </PromptInputButton>
         </DropdownMenuTrigger>
 
@@ -265,7 +209,6 @@ export function InitialAgentSelector({
                   <InstructionsSubMenu agent={currentAgent} />
                   <ToolsSubMenu
                     agentId={currentAgent.id}
-                    onConfigureTool={handleOpenConfigureTool}
                     onInstall={installer.triggerInstallByCatalogId}
                     forceOpen={isInstallDialogOpen}
                   />
@@ -385,29 +328,6 @@ export function InitialAgentSelector({
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
-
-      {/* Configure Tool Dialog — kept as Dialog for complex credential/tool selection forms */}
-      {configCatalog && currentAgent && (
-        <Dialog open={configDialogOpen} onOpenChange={setConfigDialogOpen}>
-          <DialogContent
-            className="max-w-lg h-[500px] p-0 gap-0 overflow-hidden flex flex-col"
-            onCloseAutoFocus={(e) => e.preventDefault()}
-          >
-            <DialogTitle className="sr-only">
-              Configure {configCatalog.name}
-            </DialogTitle>
-            <ConfigureToolView
-              agentId={currentAgent.id}
-              catalog={configCatalog}
-              onBack={() => setConfigDialogOpen(false)}
-              onDone={() => {
-                setConfigDialogOpen(false);
-                setConfigCatalog(null);
-              }}
-            />
-          </DialogContent>
-        </Dialog>
-      )}
 
       {/* Install dialogs — rendered at top level so they survive dropdown close */}
       <RemoteServerInstallDialog
@@ -562,17 +482,15 @@ function InstructionsSubMenu({
 }
 
 // ============================================================================
-// Tools SubMenu
+// Tools SubMenu — swaps between server list and inline tool detail
 // ============================================================================
 
 function ToolsSubMenu({
   agentId,
-  onConfigureTool,
   onInstall,
   forceOpen,
 }: {
   agentId: string;
-  onConfigureTool: (catalog: CatalogItem) => void;
   onInstall: (catalogId: string) => void;
   forceOpen?: boolean;
 }) {
@@ -586,6 +504,9 @@ function ToolsSubMenu({
   const invalidateAllQueries = useInvalidateToolAssignmentQueries();
   const allCredentials = useMcpServersGroupedByCatalog();
   const [serverSearch, setServerSearch] = useState("");
+
+  // Inline detail state — when set, the submenu shows tool checklist
+  const [detailCatalog, setDetailCatalog] = useState<CatalogItem | null>(null);
 
   const hasInstallingServers = useMemo(() => {
     if (!allCredentials) return false;
@@ -661,136 +582,452 @@ function ToolsSubMenu({
         </span>
       </DropdownMenuSubTrigger>
       <DropdownMenuPortal>
-        <DropdownMenuSubContent className="w-60">
-          <div className="px-2 py-1">
-            <div className="relative">
-              <Search className="absolute left-2 top-1/2 -translate-y-1/2 size-3 text-muted-foreground pointer-events-none" />
-              <Input
-                value={serverSearch}
-                onChange={(e) => setServerSearch(e.target.value)}
-                onClick={(e) => e.stopPropagation()}
-                onKeyDown={(e) => e.stopPropagation()}
-                placeholder="Search tools..."
-                className="h-7 pl-7 text-xs"
-              />
-            </div>
-          </div>
-          <DropdownMenuSeparator />
-
-          <div className="max-h-[300px] overflow-y-auto">
-            {/* Connected servers */}
-            {connectedFiltered.length > 0 && (
-              <DropdownMenuGroup>
-                <DropdownMenuLabel>Connected</DropdownMenuLabel>
-                {connectedFiltered.map((catalog) => {
-                  const info = assignedByCatalog.get(catalog.id);
-                  return (
-                    <DropdownMenuItem
-                      key={catalog.id}
-                      className="group"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        onConfigureTool(catalog);
-                      }}
-                    >
-                      <McpCatalogIcon
-                        icon={catalog.icon}
-                        catalogId={catalog.id}
-                        size={14}
-                      />
-                      <span className="flex-1 truncate">{catalog.name}</span>
-                      <span className="text-[10px] text-muted-foreground group-hover:opacity-0 transition-opacity">
-                        {info?.count ?? 0} tools
-                      </span>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleRemove(catalog.id);
-                        }}
-                        className="absolute right-8 opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-destructive/15 hover:text-destructive text-muted-foreground transition-all"
-                      >
-                        <XIcon className="size-3" />
-                      </button>
-                      <ChevronDown className="size-3 -rotate-90 text-muted-foreground" />
-                    </DropdownMenuItem>
-                  );
-                })}
-              </DropdownMenuGroup>
-            )}
-
-            {/* Available servers */}
-            {availableCatalogs.length > 0 && (
-              <DropdownMenuGroup>
-                {connectedFiltered.length > 0 && <DropdownMenuSeparator />}
-                <DropdownMenuLabel>Available</DropdownMenuLabel>
-                {availableCatalogs.map((catalog) => {
-                  const servers = allCredentials?.[catalog.id] ?? [];
-                  const hasCredentials =
-                    catalog.serverType === "builtin" || servers.length > 0;
-                  const isServerInstalling = servers.some(
-                    (s) =>
-                      s.localInstallationStatus === "pending" ||
-                      s.localInstallationStatus === "discovering-tools",
-                  );
-                  const isReady = hasCredentials && !isServerInstalling;
-                  return (
-                    <DropdownMenuItem
-                      key={catalog.id}
-                      disabled={isServerInstalling}
-                      onSelect={(e) => {
-                        if (!isReady) e.preventDefault();
-                      }}
-                      onClick={() =>
-                        isReady
-                          ? onConfigureTool(catalog)
-                          : onInstall(catalog.id)
-                      }
-                    >
-                      <McpCatalogIcon
-                        icon={catalog.icon}
-                        catalogId={catalog.id}
-                        size={14}
-                      />
-                      <span className="flex-1 truncate">{catalog.name}</span>
-                      {isServerInstalling ? (
-                        <Loader2 className="size-3 animate-spin text-muted-foreground" />
-                      ) : isReady ? (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary">
-                          Add
-                        </span>
-                      ) : (
-                        <Badge
-                          variant="outline"
-                          className="text-[10px] px-1.5 py-0"
-                        >
-                          Install
-                        </Badge>
-                      )}
-                    </DropdownMenuItem>
-                  );
-                })}
-              </DropdownMenuGroup>
-            )}
-
-            {connectedFiltered.length === 0 &&
-              availableCatalogs.length === 0 && (
-                <div className="py-4 text-center text-xs text-muted-foreground">
-                  No tools found
+        <DropdownMenuSubContent
+          className={detailCatalog ? "w-72 p-0" : "w-60"}
+        >
+          {detailCatalog ? (
+            /* ── Tool detail view ── */
+            <InlineToolDetail
+              agentId={agentId}
+              catalog={detailCatalog}
+              onBack={() => setDetailCatalog(null)}
+              onDone={() => setDetailCatalog(null)}
+            />
+          ) : (
+            /* ── Server list view ── */
+            <>
+              <div className="px-2 py-1">
+                <div className="relative">
+                  <Search className="absolute left-2 top-1/2 -translate-y-1/2 size-3 text-muted-foreground pointer-events-none" />
+                  <Input
+                    value={serverSearch}
+                    onChange={(e) => setServerSearch(e.target.value)}
+                    onClick={(e) => e.stopPropagation()}
+                    onKeyDown={(e) => e.stopPropagation()}
+                    placeholder="Search tools..."
+                    className="h-7 pl-7 text-xs"
+                  />
                 </div>
-              )}
-          </div>
+              </div>
+              <DropdownMenuSeparator />
 
-          <DropdownMenuSeparator />
-          <DropdownMenuItem asChild>
-            <a href="/mcp/registry" target="_blank" rel="noopener noreferrer">
-              <Plus className="size-3.5" />
-              Add New Server
-            </a>
-          </DropdownMenuItem>
+              <div className="max-h-[300px] overflow-y-auto">
+                {/* Connected servers */}
+                {connectedFiltered.length > 0 && (
+                  <DropdownMenuGroup>
+                    <DropdownMenuLabel>Connected</DropdownMenuLabel>
+                    {connectedFiltered.map((catalog) => {
+                      const info = assignedByCatalog.get(catalog.id);
+                      return (
+                        <DropdownMenuItem
+                          key={catalog.id}
+                          className="group"
+                          onSelect={(e) => e.preventDefault()}
+                          onClick={() => setDetailCatalog(catalog)}
+                        >
+                          <McpCatalogIcon
+                            icon={catalog.icon}
+                            catalogId={catalog.id}
+                            size={14}
+                          />
+                          <span className="flex-1 truncate">
+                            {catalog.name}
+                          </span>
+                          <span className="text-[10px] text-muted-foreground group-hover:opacity-0 transition-opacity">
+                            {info?.count ?? 0} tools
+                          </span>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleRemove(catalog.id);
+                            }}
+                            className="absolute right-8 opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-destructive/15 hover:text-destructive text-muted-foreground transition-all"
+                          >
+                            <XIcon className="size-3" />
+                          </button>
+                          <ChevronDown className="size-3 -rotate-90 text-muted-foreground" />
+                        </DropdownMenuItem>
+                      );
+                    })}
+                  </DropdownMenuGroup>
+                )}
+
+                {/* Available servers */}
+                {availableCatalogs.length > 0 && (
+                  <DropdownMenuGroup>
+                    {connectedFiltered.length > 0 && (
+                      <DropdownMenuSeparator />
+                    )}
+                    <DropdownMenuLabel>Available</DropdownMenuLabel>
+                    {availableCatalogs.map((catalog) => {
+                      const servers = allCredentials?.[catalog.id] ?? [];
+                      const hasCredentials =
+                        catalog.serverType === "builtin" || servers.length > 0;
+                      const isServerInstalling = servers.some(
+                        (s) =>
+                          s.localInstallationStatus === "pending" ||
+                          s.localInstallationStatus === "discovering-tools",
+                      );
+                      const isReady = hasCredentials && !isServerInstalling;
+                      return (
+                        <DropdownMenuItem
+                          key={catalog.id}
+                          disabled={isServerInstalling}
+                          onSelect={(e) => {
+                            if (isReady) e.preventDefault();
+                          }}
+                          onClick={() =>
+                            isReady
+                              ? setDetailCatalog(catalog)
+                              : onInstall(catalog.id)
+                          }
+                        >
+                          <McpCatalogIcon
+                            icon={catalog.icon}
+                            catalogId={catalog.id}
+                            size={14}
+                          />
+                          <span className="flex-1 truncate">
+                            {catalog.name}
+                          </span>
+                          {isServerInstalling ? (
+                            <Loader2 className="size-3 animate-spin text-muted-foreground" />
+                          ) : isReady ? (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary">
+                              Add
+                            </span>
+                          ) : (
+                            <Badge
+                              variant="outline"
+                              className="text-[10px] px-1.5 py-0"
+                            >
+                              Install
+                            </Badge>
+                          )}
+                        </DropdownMenuItem>
+                      );
+                    })}
+                  </DropdownMenuGroup>
+                )}
+
+                {connectedFiltered.length === 0 &&
+                  availableCatalogs.length === 0 && (
+                    <div className="py-4 text-center text-xs text-muted-foreground">
+                      No tools found
+                    </div>
+                  )}
+              </div>
+
+              <DropdownMenuSeparator />
+              <DropdownMenuItem asChild>
+                <a
+                  href="/mcp/registry"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <Plus className="size-3.5" />
+                  Add New Server
+                </a>
+              </DropdownMenuItem>
+            </>
+          )}
         </DropdownMenuSubContent>
       </DropdownMenuPortal>
     </DropdownMenuSub>
+  );
+}
+
+// ============================================================================
+// Inline Tool Detail — renders inside the Tools submenu dropdown
+// ============================================================================
+
+function InlineToolDetail({
+  agentId,
+  catalog,
+  onBack,
+  onDone,
+}: {
+  agentId: string;
+  catalog: CatalogItem;
+  onBack: () => void;
+  onDone: () => void;
+}) {
+  const { data: allTools = [], isLoading } = useCatalogTools(catalog.id);
+  const allCredentials = useMcpServersGroupedByCatalog({
+    catalogId: catalog.id,
+  });
+  const mcpServers = allCredentials?.[catalog.id] ?? [];
+  const { data: assignedToolsData } = useAllProfileTools({
+    filters: { agentId },
+    skipPagination: true,
+    enabled: !!agentId,
+  });
+  const assignTool = useAssignTool();
+  const unassignTool = useUnassignTool();
+  const invalidateAllQueries = useInvalidateToolAssignmentQueries();
+
+  const assignedToolIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const at of assignedToolsData?.data ?? []) {
+      if (at.tool.catalogId === catalog.id) {
+        ids.add(at.tool.id);
+      }
+    }
+    return ids;
+  }, [assignedToolsData, catalog.id]);
+
+  const initializedRef = useRef(false);
+  const [selectedToolIds, setSelectedToolIds] = useState<Set<string>>(
+    new Set(),
+  );
+  const [credential, setCredential] = useState<string | null>(
+    mcpServers[0]?.id ?? null,
+  );
+  const [toolSearch, setToolSearch] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    if (initializedRef.current || allTools.length === 0) return;
+    initializedRef.current = true;
+    if (assignedToolIds.size > 0) {
+      setSelectedToolIds(new Set(assignedToolIds));
+    } else {
+      setSelectedToolIds(new Set(allTools.map((t) => t.id)));
+    }
+  }, [allTools, assignedToolIds]);
+
+  useEffect(() => {
+    if (!credential && mcpServers.length > 0) {
+      setCredential(mcpServers[0].id);
+    }
+  }, [credential, mcpServers]);
+
+  const isBuiltin = catalog.serverType === "builtin";
+  const showCredentialSelector = !isBuiltin && mcpServers.length > 0;
+
+  const selectedCount = allTools.filter((t) =>
+    selectedToolIds.has(t.id),
+  ).length;
+  const totalCount = allTools.length;
+
+  const tq = toolSearch.toLowerCase().trim();
+  const filteredTools = tq
+    ? allTools.filter(
+        (t) =>
+          t.name.toLowerCase().includes(tq) ||
+          t.description?.toLowerCase().includes(tq),
+      )
+    : allTools;
+
+  const toggleTool = (toolId: string) => {
+    const newSet = new Set(selectedToolIds);
+    if (newSet.has(toolId)) {
+      newSet.delete(toolId);
+    } else {
+      newSet.add(toolId);
+    }
+    setSelectedToolIds(newSet);
+  };
+
+  const selectAll = () => {
+    const newSet = new Set(selectedToolIds);
+    for (const t of filteredTools) newSet.add(t.id);
+    setSelectedToolIds(newSet);
+  };
+
+  const deselectAll = () => {
+    const newSet = new Set(selectedToolIds);
+    for (const t of filteredTools) newSet.delete(t.id);
+    setSelectedToolIds(newSet);
+  };
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    try {
+      const isLocal = catalog.serverType === "local";
+      const toAdd = [...selectedToolIds].filter(
+        (id) => !assignedToolIds.has(id),
+      );
+      const toRemove = [...assignedToolIds].filter(
+        (id) => !selectedToolIds.has(id),
+      );
+
+      await Promise.all([
+        ...toAdd.map((toolId) =>
+          assignTool.mutateAsync({
+            agentId,
+            toolId,
+            credentialSourceMcpServerId:
+              !isLocal && !isBuiltin ? (credential ?? undefined) : undefined,
+            executionSourceMcpServerId: isLocal
+              ? (credential ?? undefined)
+              : undefined,
+            skipInvalidation: true,
+          }),
+        ),
+        ...toRemove.map((toolId) =>
+          unassignTool.mutateAsync({
+            agentId,
+            toolId,
+            skipInvalidation: true,
+          }),
+        ),
+      ]);
+      if (toAdd.length > 0 || toRemove.length > 0) {
+        invalidateAllQueries(agentId);
+      }
+      onDone();
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const hasChanges = useMemo(() => {
+    if (selectedToolIds.size !== assignedToolIds.size) return true;
+    for (const id of selectedToolIds) {
+      if (!assignedToolIds.has(id)) return true;
+    }
+    return false;
+  }, [selectedToolIds, assignedToolIds]);
+
+  const isEditing = assignedToolIds.size > 0;
+  const newToolCount = useMemo(() => {
+    return [...selectedToolIds].filter((id) => !assignedToolIds.has(id)).length;
+  }, [selectedToolIds, assignedToolIds]);
+
+  return (
+    // biome-ignore lint/a11y/noStaticElementInteractions: prevents dropdown from closing when interacting with tool detail
+    <div
+      onClick={(e) => e.stopPropagation()}
+      onKeyDown={(e) => e.stopPropagation()}
+    >
+      {/* Back + title */}
+      <div className="flex items-center gap-1.5 px-2 py-1.5 border-b">
+        <button
+          type="button"
+          onClick={onBack}
+          className="p-1 rounded hover:bg-accent text-muted-foreground"
+        >
+          <ChevronDown className="size-3.5 rotate-90" />
+        </button>
+        <McpCatalogIcon icon={catalog.icon} catalogId={catalog.id} size={16} />
+        <span className="text-sm font-medium truncate">{catalog.name}</span>
+      </div>
+
+      {/* Credential selector */}
+      {showCredentialSelector && (
+        <div className="px-3 py-1.5 border-b">
+          <div className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">
+            Connect on behalf of
+          </div>
+          <TokenSelect
+            catalogId={catalog.id}
+            value={credential}
+            onValueChange={setCredential}
+            shouldSetDefaultValue={false}
+          />
+        </div>
+      )}
+
+      {/* Select count + select/deselect all */}
+      <div className="flex items-center justify-between px-3 py-1.5">
+        <span className="text-[11px] text-muted-foreground">
+          {selectedCount} of {totalCount} selected
+        </span>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={selectAll}
+            className="text-[11px] text-muted-foreground hover:text-foreground"
+          >
+            Select All
+          </button>
+          <button
+            type="button"
+            onClick={deselectAll}
+            className="text-[11px] text-muted-foreground hover:text-foreground"
+          >
+            Deselect All
+          </button>
+        </div>
+      </div>
+
+      {/* Search tools */}
+      {totalCount > 5 && (
+        <div className="px-2 pb-1">
+          <div className="relative">
+            <Search className="absolute left-2 top-1/2 -translate-y-1/2 size-3 text-muted-foreground pointer-events-none" />
+            <Input
+              value={toolSearch}
+              onChange={(e) => setToolSearch(e.target.value)}
+              placeholder="Search tools..."
+              className="h-7 pl-7 text-xs"
+            />
+          </div>
+        </div>
+      )}
+
+      <DropdownMenuSeparator />
+
+      {/* Tool list */}
+      {isLoading ? (
+        <div className="flex items-center justify-center gap-2 py-6 text-xs text-muted-foreground">
+          <Loader2 className="size-3 animate-spin" />
+          Loading...
+        </div>
+      ) : (
+        <div className="max-h-[220px] overflow-y-auto">
+          {filteredTools.length === 0 ? (
+            <div className="py-4 text-center text-xs text-muted-foreground">
+              No tools found
+            </div>
+          ) : (
+            filteredTools.map((tool) => {
+              const checked = selectedToolIds.has(tool.id);
+              return (
+                <DropdownMenuCheckboxItem
+                  key={tool.id}
+                  checked={checked}
+                  onCheckedChange={() => toggleTool(tool.id)}
+                  onSelect={(e) => e.preventDefault()}
+                >
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-xs font-medium">{tool.name}</span>
+                    {tool.description && (
+                      <span className="text-[11px] text-muted-foreground leading-tight line-clamp-1">
+                        {tool.description}
+                      </span>
+                    )}
+                  </div>
+                </DropdownMenuCheckboxItem>
+              );
+            })
+          )}
+        </div>
+      )}
+
+      {/* Save button */}
+      <div className="p-2 border-t">
+        <Button
+          size="sm"
+          className="w-full"
+          onClick={handleSave}
+          disabled={
+            (!hasChanges && isEditing) ||
+            (!isEditing && newToolCount === 0) ||
+            isSaving
+          }
+        >
+          {isSaving ? <Loader2 className="size-3 animate-spin mr-1" /> : null}
+          {isEditing
+            ? `Save (${selectedCount} tool${selectedCount !== 1 ? "s" : ""})`
+            : newToolCount === 0
+              ? "Add"
+              : `Add ${newToolCount} tool${newToolCount !== 1 ? "s" : ""}`}
+        </Button>
+      </div>
+    </div>
   );
 }
 
@@ -1076,295 +1313,5 @@ function KnowledgeSubMenu({
         </DropdownMenuSubContent>
       </DropdownMenuPortal>
     </DropdownMenuSub>
-  );
-}
-
-// ============================================================================
-// Configure Tool View (Dialog-based for complex credential/tool selection)
-// ============================================================================
-
-function ConfigureToolView({
-  agentId,
-  catalog,
-  onBack,
-  onDone,
-}: {
-  agentId: string;
-  catalog: CatalogItem;
-  onBack: () => void;
-  onDone: () => void;
-}) {
-  const { data: allTools = [], isLoading } = useCatalogTools(catalog.id);
-  const allCredentials = useMcpServersGroupedByCatalog({
-    catalogId: catalog.id,
-  });
-  const mcpServers = allCredentials?.[catalog.id] ?? [];
-  const { data: assignedToolsData } = useAllProfileTools({
-    filters: { agentId },
-    skipPagination: true,
-    enabled: !!agentId,
-  });
-  const assignTool = useAssignTool();
-  const unassignTool = useUnassignTool();
-  const invalidateAllQueries = useInvalidateToolAssignmentQueries();
-
-  const assignedToolIds = useMemo(() => {
-    const ids = new Set<string>();
-    for (const at of assignedToolsData?.data ?? []) {
-      if (at.tool.catalogId === catalog.id) {
-        ids.add(at.tool.id);
-      }
-    }
-    return ids;
-  }, [assignedToolsData, catalog.id]);
-
-  const initializedRef = useRef(false);
-  const [selectedToolIds, setSelectedToolIds] = useState<Set<string>>(
-    new Set(),
-  );
-  const [credential, setCredential] = useState<string | null>(
-    mcpServers[0]?.id ?? null,
-  );
-  const [isSaving, setIsSaving] = useState(false);
-
-  useEffect(() => {
-    if (initializedRef.current || allTools.length === 0) return;
-    initializedRef.current = true;
-    if (assignedToolIds.size > 0) {
-      setSelectedToolIds(new Set(assignedToolIds));
-    } else {
-      setSelectedToolIds(new Set(allTools.map((t) => t.id)));
-    }
-  }, [allTools, assignedToolIds]);
-
-  useEffect(() => {
-    if (!credential && mcpServers.length > 0) {
-      setCredential(mcpServers[0].id);
-    }
-  }, [credential, mcpServers]);
-
-  const isBuiltin = catalog.serverType === "builtin";
-  const showCredentialSelector = !isBuiltin && mcpServers.length > 0;
-
-  const handleSave = async () => {
-    setIsSaving(true);
-    try {
-      const isLocal = catalog.serverType === "local";
-      const toAdd = [...selectedToolIds].filter(
-        (id) => !assignedToolIds.has(id),
-      );
-      const toRemove = [...assignedToolIds].filter(
-        (id) => !selectedToolIds.has(id),
-      );
-
-      await Promise.all([
-        ...toAdd.map((toolId) =>
-          assignTool.mutateAsync({
-            agentId,
-            toolId,
-            credentialSourceMcpServerId:
-              !isLocal && !isBuiltin ? (credential ?? undefined) : undefined,
-            executionSourceMcpServerId: isLocal
-              ? (credential ?? undefined)
-              : undefined,
-            skipInvalidation: true,
-          }),
-        ),
-        ...toRemove.map((toolId) =>
-          unassignTool.mutateAsync({
-            agentId,
-            toolId,
-            skipInvalidation: true,
-          }),
-        ),
-      ]);
-      if (toAdd.length > 0 || toRemove.length > 0) {
-        invalidateAllQueries(agentId);
-      }
-      onDone();
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const hasChanges = useMemo(() => {
-    if (selectedToolIds.size !== assignedToolIds.size) return true;
-    for (const id of selectedToolIds) {
-      if (!assignedToolIds.has(id)) return true;
-    }
-    return false;
-  }, [selectedToolIds, assignedToolIds]);
-
-  const isEditing = assignedToolIds.size > 0;
-
-  const newToolCount = useMemo(() => {
-    return [...selectedToolIds].filter((id) => !assignedToolIds.has(id)).length;
-  }, [selectedToolIds, assignedToolIds]);
-
-  return (
-    <div className="flex flex-col h-full">
-      <div className="flex items-center gap-3 border-b px-4 py-3 shrink-0">
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-8 px-2 gap-1.5"
-          onClick={onBack}
-        >
-          <ArrowLeft className="size-4" />
-          Back
-        </Button>
-        <div className="flex items-center gap-2">
-          <McpCatalogIcon
-            icon={catalog.icon}
-            catalogId={catalog.id}
-            size={20}
-          />
-          <span className="text-sm font-medium">{catalog.name}</span>
-        </div>
-      </div>
-
-      <div className="flex flex-col flex-1 min-h-0">
-        {showCredentialSelector && (
-          <div className="px-4 pt-4 pb-2 space-y-1.5 shrink-0">
-            <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Connect on behalf of
-            </Label>
-            <TokenSelect
-              catalogId={catalog.id}
-              value={credential}
-              onValueChange={setCredential}
-              shouldSetDefaultValue={false}
-            />
-          </div>
-        )}
-
-        {isLoading ? (
-          <div className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
-            <Loader2 className="size-4 animate-spin" />
-            Loading tools...
-          </div>
-        ) : allTools.length === 0 ? (
-          <div className="p-4 text-sm text-muted-foreground text-center">
-            No tools available.
-          </div>
-        ) : (
-          <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
-            <ToolChecklist
-              tools={allTools}
-              selectedToolIds={selectedToolIds}
-              onSelectionChange={setSelectedToolIds}
-            />
-          </div>
-        )}
-
-        <div className="p-3 border-t shrink-0">
-          <Button
-            className="w-full"
-            onClick={handleSave}
-            disabled={
-              (!hasChanges && isEditing) ||
-              (!isEditing && newToolCount === 0) ||
-              isSaving
-            }
-          >
-            {isSaving ? <Loader2 className="size-4 animate-spin mr-2" /> : null}
-            {isEditing
-              ? `Save (${selectedToolIds.size} tool${selectedToolIds.size !== 1 ? "s" : ""})`
-              : newToolCount === 0
-                ? "Add"
-                : `Add ${newToolCount} tool${newToolCount !== 1 ? "s" : ""}`}
-          </Button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ============================================================================
-// Avatar Components
-// ============================================================================
-
-const MAX_VISIBLE_AVATARS = 3;
-
-type SubagentItem = {
-  id: string;
-  name: string;
-  icon?: string | null;
-};
-
-function ToolServerAvatarGroup({
-  catalogs,
-  subagents = [],
-  connectorTypes = [],
-  showAddButton = false,
-}: {
-  catalogs: CatalogItem[];
-  subagents?: SubagentItem[];
-  connectorTypes?: string[];
-  showAddButton?: boolean;
-}) {
-  const hasNonBuiltInTools =
-    subagents.length > 0 || catalogs.some((c) => !isBuiltInCatalogId(c.id));
-  const totalCount = catalogs.length + subagents.length + connectorTypes.length;
-
-  if (totalCount === 0) {
-    if (!showAddButton) return null;
-    return (
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <div className="flex size-5 shrink-0 items-center justify-center rounded-full bg-muted ml-1">
-            <Plus className="size-3 text-muted-foreground" />
-          </div>
-        </TooltipTrigger>
-        <TooltipContent side="top">Add tools</TooltipContent>
-      </Tooltip>
-    );
-  }
-
-  const icons = [
-    ...subagents.map((a) => ({
-      key: a.id,
-      icon: <AgentIcon icon={a.icon as string | null} size={12} />,
-      tooltip: a.name,
-    })),
-    ...catalogs.map((c) => ({
-      key: c.id,
-      icon: <McpCatalogIcon icon={c.icon} catalogId={c.id} size={12} />,
-      tooltip: c.name,
-    })),
-    ...connectorTypes.map((type) => ({
-      key: `connector-${type}`,
-      icon: <ConnectorTypeIcon type={type} className="h-3 w-3" />,
-      tooltip: type,
-    })),
-  ];
-
-  const hiddenItems = icons.slice(MAX_VISIBLE_AVATARS);
-  const overflowTooltip =
-    hiddenItems.length <= 5
-      ? hiddenItems.map((i) => i.tooltip).join(", ")
-      : `${hiddenItems
-          .slice(0, 5)
-          .map((i) => i.tooltip)
-          .join(", ")} and ${hiddenItems.length - 5} more`;
-
-  return (
-    <div className="flex items-center ml-1">
-      <OverlappedIcons
-        icons={icons}
-        maxVisible={MAX_VISIBLE_AVATARS}
-        overflowTooltip={overflowTooltip}
-      />
-      {showAddButton && !hasNonBuiltInTools && (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <div className="flex size-5 shrink-0 items-center justify-center rounded-full bg-muted ring-1 ring-background ml-0.5">
-              <Plus className="size-3 text-muted-foreground" />
-            </div>
-          </TooltipTrigger>
-          <TooltipContent side="top">Add tools</TooltipContent>
-        </Tooltip>
-      )}
-    </div>
   );
 }

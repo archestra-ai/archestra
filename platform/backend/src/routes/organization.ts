@@ -304,7 +304,7 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         const response = await client.embeddings.create({
           model: body.embeddingModel,
           input: ["hello world"],
-          ...(body.embeddingModel.startsWith("nomic")
+          ...(body.embeddingModel.includes("nomic")
             ? {}
             : { dimensions: getEmbeddingDimensions(body.embeddingModel) }),
         });

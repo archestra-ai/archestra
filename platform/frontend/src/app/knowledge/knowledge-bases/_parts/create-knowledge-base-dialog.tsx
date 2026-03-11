@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { Button } from "@/components/ui/button";
 import {
@@ -20,10 +19,6 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { useCreateKnowledgeBase } from "@/lib/knowledge-base.query";
-import {
-  type KnowledgeBaseVisibility,
-  VisibilitySelector,
-} from "./visibility-selector";
 
 interface CreateKnowledgeBaseFormValues {
   name: string;
@@ -38,9 +33,6 @@ export function CreateKnowledgeBaseDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const createKnowledgeBase = useCreateKnowledgeBase();
-  const [visibility, setVisibility] =
-    useState<KnowledgeBaseVisibility>("org-wide");
-  const [teamIds, setTeamIds] = useState<string[]>([]);
 
   const form = useForm<CreateKnowledgeBaseFormValues>({
     defaultValues: {
@@ -53,13 +45,9 @@ export function CreateKnowledgeBaseDialog({
     const result = await createKnowledgeBase.mutateAsync({
       name: values.name,
       ...(values.description && { description: values.description }),
-      visibility,
-      teamIds: visibility === "team-scoped" ? teamIds : [],
     });
     if (result) {
       form.reset();
-      setVisibility("org-wide");
-      setTeamIds([]);
       onOpenChange(false);
     }
   };
@@ -105,13 +93,6 @@ export function CreateKnowledgeBaseDialog({
                   <FormMessage />
                 </FormItem>
               )}
-            />
-
-            <VisibilitySelector
-              visibility={visibility}
-              onVisibilityChange={setVisibility}
-              teamIds={teamIds}
-              onTeamIdsChange={setTeamIds}
             />
 
             <DialogFooter>

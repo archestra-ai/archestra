@@ -13,6 +13,7 @@ import type {
   ConnectorSyncStatus,
   ConnectorType,
 } from "@/types";
+import type { KnowledgeBaseVisibility } from "@/types/knowledge-base";
 import knowledgeBasesTable from "./knowledge-base";
 import secretTable from "./secret";
 
@@ -33,6 +34,11 @@ const knowledgeBaseConnectorsTable = pgTable(
     lastSyncStatus: text("last_sync_status").$type<ConnectorSyncStatus>(),
     lastSyncError: text("last_sync_error"),
     checkpoint: jsonb("checkpoint").$type<ConnectorCheckpoint>(),
+    visibility: text("visibility")
+      .$type<KnowledgeBaseVisibility>()
+      .notNull()
+      .default("org-wide"),
+    teamIds: jsonb("team_ids").$type<string[]>().notNull().default([]),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .notNull()

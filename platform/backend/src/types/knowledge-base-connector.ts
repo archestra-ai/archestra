@@ -17,30 +17,16 @@ import {
 
 export const SelectKnowledgeBaseSchema = createSelectSchema(
   schema.knowledgeBasesTable,
-  {
-    visibility: KnowledgeBaseVisibilitySchema,
-    teamIds: z.array(z.string()),
-  },
 );
 export const InsertKnowledgeBaseSchema = createInsertSchema(
   schema.knowledgeBasesTable,
-  {
-    visibility: KnowledgeBaseVisibilitySchema.optional(),
-    teamIds: z.array(z.string()).optional(),
-  },
 ).omit({ id: true, createdAt: true, updatedAt: true });
 export const UpdateKnowledgeBaseSchema = createUpdateSchema(
   schema.knowledgeBasesTable,
-  {
-    visibility: KnowledgeBaseVisibilitySchema.optional(),
-    teamIds: z.array(z.string()).optional(),
-  },
 ).pick({
   name: true,
   description: true,
   status: true,
-  visibility: true,
-  teamIds: true,
 });
 
 export type KnowledgeBase = z.infer<typeof SelectKnowledgeBaseSchema>;
@@ -57,6 +43,8 @@ export const SelectKnowledgeBaseConnectorSchema = createSelectSchema(
     connectorType: ConnectorTypeSchema,
     config: ConnectorConfigSchema,
     lastSyncStatus: NullableConnectorSyncStatusSchema,
+    visibility: KnowledgeBaseVisibilitySchema,
+    teamIds: z.array(z.string()),
   },
 );
 export const InsertKnowledgeBaseConnectorSchema = createInsertSchema(
@@ -66,6 +54,8 @@ export const InsertKnowledgeBaseConnectorSchema = createInsertSchema(
     config: ConnectorConfigSchema,
     checkpoint: ConnectorCheckpointSchema.optional(),
     lastSyncStatus: NullableConnectorSyncStatusSchema.optional(),
+    visibility: KnowledgeBaseVisibilitySchema.optional(),
+    teamIds: z.array(z.string()).optional(),
   },
 ).omit({ id: true, createdAt: true, updatedAt: true });
 export const UpdateKnowledgeBaseConnectorSchema = createUpdateSchema(
@@ -75,6 +65,8 @@ export const UpdateKnowledgeBaseConnectorSchema = createUpdateSchema(
     config: ConnectorConfigSchema.optional(),
     checkpoint: ConnectorCheckpointSchema.nullable().optional(),
     lastSyncStatus: NullableConnectorSyncStatusSchema.optional(),
+    visibility: KnowledgeBaseVisibilitySchema.optional(),
+    teamIds: z.array(z.string()).optional(),
   },
 ).pick({
   name: true,
@@ -86,6 +78,8 @@ export const UpdateKnowledgeBaseConnectorSchema = createUpdateSchema(
   lastSyncStatus: true,
   lastSyncError: true,
   checkpoint: true,
+  visibility: true,
+  teamIds: true,
 });
 
 export type KnowledgeBaseConnector = z.infer<

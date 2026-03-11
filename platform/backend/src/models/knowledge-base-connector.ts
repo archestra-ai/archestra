@@ -63,6 +63,8 @@ class KnowledgeBaseConnectorModel {
         lastSyncStatus: schema.knowledgeBaseConnectorsTable.lastSyncStatus,
         lastSyncError: schema.knowledgeBaseConnectorsTable.lastSyncError,
         checkpoint: schema.knowledgeBaseConnectorsTable.checkpoint,
+        visibility: schema.knowledgeBaseConnectorsTable.visibility,
+        teamIds: schema.knowledgeBaseConnectorsTable.teamIds,
         createdAt: schema.knowledgeBaseConnectorsTable.createdAt,
         updatedAt: schema.knowledgeBaseConnectorsTable.updatedAt,
       })
@@ -101,6 +103,8 @@ class KnowledgeBaseConnectorModel {
         lastSyncStatus: schema.knowledgeBaseConnectorsTable.lastSyncStatus,
         lastSyncError: schema.knowledgeBaseConnectorsTable.lastSyncError,
         checkpoint: schema.knowledgeBaseConnectorsTable.checkpoint,
+        visibility: schema.knowledgeBaseConnectorsTable.visibility,
+        teamIds: schema.knowledgeBaseConnectorsTable.teamIds,
         createdAt: schema.knowledgeBaseConnectorsTable.createdAt,
         updatedAt: schema.knowledgeBaseConnectorsTable.updatedAt,
         knowledgeBaseId:

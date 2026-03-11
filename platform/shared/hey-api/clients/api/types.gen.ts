@@ -27245,8 +27245,6 @@ export type GetKnowledgeBasesResponses = {
             organizationId: string;
             name: string;
             description: string | null;
-            visibility: 'org-wide' | 'team-scoped' | 'auto-sync-permissions';
-            teamIds: Array<string>;
             status: string;
             createdAt: string;
             updatedAt: string;
@@ -27279,8 +27277,6 @@ export type CreateKnowledgeBaseData = {
     body: {
         name: string;
         description?: string;
-        visibility?: 'org-wide' | 'team-scoped' | 'auto-sync-permissions';
-        teamIds?: Array<string>;
     };
     path?: never;
     query?: never;
@@ -27355,8 +27351,6 @@ export type CreateKnowledgeBaseResponses = {
         organizationId: string;
         name: string;
         description: string | null;
-        visibility: 'org-wide' | 'team-scoped' | 'auto-sync-permissions';
-        teamIds: Array<string>;
         status: string;
         createdAt: string;
         updatedAt: string;
@@ -27521,8 +27515,6 @@ export type GetKnowledgeBaseResponses = {
         organizationId: string;
         name: string;
         description: string | null;
-        visibility: 'org-wide' | 'team-scoped' | 'auto-sync-permissions';
-        teamIds: Array<string>;
         status: string;
         createdAt: string;
         updatedAt: string;
@@ -27535,8 +27527,6 @@ export type UpdateKnowledgeBaseData = {
     body?: {
         name?: string;
         description?: string | null;
-        visibility?: 'org-wide' | 'team-scoped' | 'auto-sync-permissions';
-        teamIds?: Array<string>;
     };
     path: {
         id: string;
@@ -27613,8 +27603,6 @@ export type UpdateKnowledgeBaseResponses = {
         organizationId: string;
         name: string;
         description: string | null;
-        visibility: 'org-wide' | 'team-scoped' | 'auto-sync-permissions';
-        teamIds: Array<string>;
         status: string;
         createdAt: string;
         updatedAt: string;
@@ -27826,6 +27814,8 @@ export type GetConnectorsResponses = {
             checkpoint: string | number | boolean | null | {
                 [key: string]: unknown;
             } | Array<unknown> | null;
+            visibility: 'org-wide' | 'team-scoped' | 'auto-sync-permissions';
+            teamIds: Array<string>;
             createdAt: string;
             updatedAt: string;
             assignedAgents: Array<{
@@ -27891,6 +27881,8 @@ export type CreateConnectorData = {
         };
         schedule?: string;
         enabled?: boolean;
+        visibility?: 'org-wide' | 'team-scoped' | 'auto-sync-permissions';
+        teamIds?: Array<string>;
         knowledgeBaseIds?: Array<string>;
     };
     path?: never;
@@ -28009,6 +28001,8 @@ export type CreateConnectorResponses = {
         checkpoint: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
+        visibility: 'org-wide' | 'team-scoped' | 'auto-sync-permissions';
+        teamIds: Array<string>;
         createdAt: string;
         updatedAt: string;
     };
@@ -28215,6 +28209,8 @@ export type GetConnectorResponses = {
         checkpoint: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
+        visibility: 'org-wide' | 'team-scoped' | 'auto-sync-permissions';
+        teamIds: Array<string>;
         createdAt: string;
         updatedAt: string;
         totalDocsIngested: number;
@@ -28266,6 +28262,8 @@ export type UpdateConnectorData = {
         };
         schedule?: string;
         enabled?: boolean;
+        visibility?: 'org-wide' | 'team-scoped' | 'auto-sync-permissions';
+        teamIds?: Array<string>;
     };
     path: {
         id: string;
@@ -28385,6 +28383,8 @@ export type UpdateConnectorResponses = {
         checkpoint: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
+        visibility: 'org-wide' | 'team-scoped' | 'auto-sync-permissions';
+        teamIds: Array<string>;
         createdAt: string;
         updatedAt: string;
     };
@@ -28630,8 +28630,6 @@ export type GetConnectorKnowledgeBasesResponses = {
             organizationId: string;
             name: string;
             description: string | null;
-            visibility: 'org-wide' | 'team-scoped' | 'auto-sync-permissions';
-            teamIds: Array<string>;
             status: string;
             createdAt: string;
             updatedAt: string;

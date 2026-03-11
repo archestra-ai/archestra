@@ -158,8 +158,6 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         body: z.object({
           name: z.string().min(1),
           description: z.string().optional(),
-          visibility: KnowledgeBaseVisibilitySchema.optional(),
-          teamIds: z.array(z.string()).optional(),
         }),
         response: constructResponseSchema(SelectKnowledgeBaseSchema),
       },
@@ -171,8 +169,6 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ...(body.description !== undefined && {
           description: body.description,
         }),
-        ...(body.visibility && { visibility: body.visibility }),
-        ...(body.teamIds && { teamIds: body.teamIds }),
       });
 
       return reply.send(kg);
@@ -207,8 +203,6 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         body: z.object({
           name: z.string().min(1).optional(),
           description: z.string().nullable().optional(),
-          visibility: KnowledgeBaseVisibilitySchema.optional(),
-          teamIds: z.array(z.string()).optional(),
         }),
         response: constructResponseSchema(SelectKnowledgeBaseSchema),
       },
@@ -399,6 +393,8 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           credentials: ConnectorCredentialsSchema,
           schedule: z.string().optional(),
           enabled: z.boolean().optional(),
+          visibility: KnowledgeBaseVisibilitySchema.optional(),
+          teamIds: z.array(z.string()).optional(),
           knowledgeBaseIds: z.array(z.string()).optional(),
         }),
         response: constructResponseSchema(SelectKnowledgeBaseConnectorSchema),
@@ -437,6 +433,8 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         secretId: secret.id,
         schedule: body.schedule,
         enabled: body.enabled,
+        visibility: body.visibility,
+        teamIds: body.teamIds,
       });
 
       // Assign to knowledge bases if provided
@@ -499,6 +497,8 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           credentials: ConnectorCredentialsSchema.optional(),
           schedule: z.string().optional(),
           enabled: z.boolean().optional(),
+          visibility: KnowledgeBaseVisibilitySchema.optional(),
+          teamIds: z.array(z.string()).optional(),
         }),
         response: constructResponseSchema(SelectKnowledgeBaseConnectorSchema),
       },

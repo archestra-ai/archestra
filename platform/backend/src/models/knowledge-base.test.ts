@@ -17,8 +17,6 @@ describe("KnowledgeBaseModel", () => {
       expect(kb.organizationId).toBe(org.id);
       expect(kb.name).toBe("My Knowledge Base");
       expect(kb.status).toBe("active");
-      expect(kb.visibility).toBe("org-wide");
-      expect(kb.teamIds).toEqual([]);
       expect(kb.description).toBeNull();
       expect(kb.createdAt).toBeInstanceOf(Date);
       expect(kb.updatedAt).toBeInstanceOf(Date);
@@ -33,14 +31,10 @@ describe("KnowledgeBaseModel", () => {
         organizationId: org.id,
         name: "Team KB",
         description: "A team-scoped KB",
-        visibility: "team-scoped",
-        teamIds: ["team-1", "team-2"],
         status: "inactive",
       });
 
       expect(kb.description).toBe("A team-scoped KB");
-      expect(kb.visibility).toBe("team-scoped");
-      expect(kb.teamIds).toEqual(["team-1", "team-2"]);
       expect(kb.status).toBe("inactive");
     });
   });

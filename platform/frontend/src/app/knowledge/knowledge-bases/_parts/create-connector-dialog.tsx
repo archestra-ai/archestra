@@ -36,6 +36,10 @@ import { GithubConfigFields } from "./github-config-fields";
 import { GitlabConfigFields } from "./gitlab-config-fields";
 import { JiraConfigFields } from "./jira-config-fields";
 import { SchedulePicker } from "./schedule-picker";
+import {
+  type KnowledgeBaseVisibility,
+  VisibilitySelector,
+} from "./visibility-selector";
 
 type ConnectorType = "jira" | "confluence" | "github" | "gitlab";
 
@@ -87,6 +91,9 @@ export function CreateConnectorDialog({
   const createConnector = useCreateConnector();
   const [step, setStep] = useState<"select" | "configure">("select");
   const [selectedType, setSelectedType] = useState<ConnectorType | null>(null);
+  const [visibility, setVisibility] =
+    useState<KnowledgeBaseVisibility>("org-wide");
+  const [teamIds, setTeamIds] = useState<string[]>([]);
 
   const form = useForm<CreateConnectorFormValues>({
     defaultValues: {
@@ -129,12 +136,16 @@ export function CreateConnectorDialog({
         apiToken: values.apiToken,
       },
       schedule: values.schedule,
+      visibility,
+      teamIds: visibility === "team-scoped" ? teamIds : [],
       ...(knowledgeBaseId && { knowledgeBaseIds: [knowledgeBaseId] }),
     });
     if (result) {
       form.reset();
       setStep("select");
       setSelectedType(null);
+      setVisibility("org-wide");
+      setTeamIds([]);
       onOpenChange(false);
     }
   };
@@ -144,6 +155,8 @@ export function CreateConnectorDialog({
       form.reset();
       setStep("select");
       setSelectedType(null);
+      setVisibility("org-wide");
+      setTeamIds([]);
     }
     onOpenChange(isOpen);
   };
@@ -232,6 +245,13 @@ export function CreateConnectorDialog({
                       <FormMessage />
                     </FormItem>
                   )}
+                />
+
+                <VisibilitySelector
+                  visibility={visibility}
+                  onVisibilityChange={setVisibility}
+                  teamIds={teamIds}
+                  onTeamIdsChange={setTeamIds}
                 />
 
                 <FormField

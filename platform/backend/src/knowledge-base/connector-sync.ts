@@ -6,7 +6,6 @@ import {
   KbChunkModel,
   KbDocumentModel,
   KnowledgeBaseConnectorModel,
-  KnowledgeBaseModel,
 } from "@/models";
 import { secretManager } from "@/secrets-manager";
 import { taskQueueService } from "@/task-queue";
@@ -449,40 +448,21 @@ class ConnectorSyncService {
   }
 
   /**
-   * Resolve ACL entries for a connector based on the visibility of the
-   * knowledge base(s) it belongs to. Uses the most restrictive visibility
-   * across all assigned KBs, merging team IDs.
+   * Resolve ACL entries for a connector based on its own visibility setting.
    */
   private async resolveConnectorAcl(
     connectorId: string,
-    log: pino.Logger,
+    _log: pino.Logger,
   ): Promise<AclEntry[]> {
-    const kbIds =
-      await KnowledgeBaseConnectorModel.getKnowledgeBaseIds(connectorId);
-    if (kbIds.length === 0) {
-      log.debug({ connectorId }, "No KBs assigned, defaulting to org-wide ACL");
+    const connector = await KnowledgeBaseConnectorModel.findById(connectorId);
+    if (!connector) {
       return buildDocumentAcl({ visibility: "org-wide", teamIds: [] });
     }
 
-    const kbs = await KnowledgeBaseModel.findByIds(kbIds);
-    if (kbs.length === 0) {
-      return buildDocumentAcl({ visibility: "org-wide", teamIds: [] });
-    }
-
-    // If any KB is team-scoped, use team-scoped with merged team IDs
-    const teamScopedKbs = kbs.filter((kb) => kb.visibility === "team-scoped");
-    if (teamScopedKbs.length > 0) {
-      const allTeamIds = [
-        ...new Set(teamScopedKbs.flatMap((kb) => kb.teamIds)),
-      ];
-      return buildDocumentAcl({
-        visibility: "team-scoped",
-        teamIds: allTeamIds,
-      });
-    }
-
-    // Default: org-wide
-    return buildDocumentAcl({ visibility: "org-wide", teamIds: [] });
+    return buildDocumentAcl({
+      visibility: connector.visibility,
+      teamIds: connector.teamIds,
+    });
   }
 
   private async loadCredentials(

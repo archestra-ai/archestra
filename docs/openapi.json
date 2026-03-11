@@ -95499,20 +95499,6 @@
                             "nullable": true,
                             "type": "string"
                           },
-                          "visibility": {
-                            "type": "string",
-                            "enum": [
-                              "org-wide",
-                              "team-scoped",
-                              "auto-sync-permissions"
-                            ]
-                          },
-                          "teamIds": {
-                            "type": "array",
-                            "items": {
-                              "type": "string"
-                            }
-                          },
                           "status": {
                             "type": "string"
                           },
@@ -95604,8 +95590,6 @@
                           "organizationId",
                           "name",
                           "description",
-                          "visibility",
-                          "teamIds",
                           "status",
                           "createdAt",
                           "updatedAt",
@@ -95896,20 +95880,6 @@
                   },
                   "description": {
                     "type": "string"
-                  },
-                  "visibility": {
-                    "type": "string",
-                    "enum": [
-                      "org-wide",
-                      "team-scoped",
-                      "auto-sync-permissions"
-                    ]
-                  },
-                  "teamIds": {
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    }
                   }
                 },
                 "required": [
@@ -95943,20 +95913,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "visibility": {
-                      "type": "string",
-                      "enum": [
-                        "org-wide",
-                        "team-scoped",
-                        "auto-sync-permissions"
-                      ]
-                    },
-                    "teamIds": {
-                      "type": "array",
-                      "items": {
-                        "type": "string"
-                      }
-                    },
                     "status": {
                       "type": "string"
                     },
@@ -95974,8 +95930,6 @@
                     "organizationId",
                     "name",
                     "description",
-                    "visibility",
-                    "teamIds",
                     "status",
                     "createdAt",
                     "updatedAt"
@@ -96238,20 +96192,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "visibility": {
-                      "type": "string",
-                      "enum": [
-                        "org-wide",
-                        "team-scoped",
-                        "auto-sync-permissions"
-                      ]
-                    },
-                    "teamIds": {
-                      "type": "array",
-                      "items": {
-                        "type": "string"
-                      }
-                    },
                     "status": {
                       "type": "string"
                     },
@@ -96269,8 +96209,6 @@
                     "organizationId",
                     "name",
                     "description",
-                    "visibility",
-                    "teamIds",
                     "status",
                     "createdAt",
                     "updatedAt"
@@ -96511,20 +96449,6 @@
                   "description": {
                     "nullable": true,
                     "type": "string"
-                  },
-                  "visibility": {
-                    "type": "string",
-                    "enum": [
-                      "org-wide",
-                      "team-scoped",
-                      "auto-sync-permissions"
-                    ]
-                  },
-                  "teamIds": {
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    }
                   }
                 }
               }
@@ -96564,20 +96488,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "visibility": {
-                      "type": "string",
-                      "enum": [
-                        "org-wide",
-                        "team-scoped",
-                        "auto-sync-permissions"
-                      ]
-                    },
-                    "teamIds": {
-                      "type": "array",
-                      "items": {
-                        "type": "string"
-                      }
-                    },
                     "status": {
                       "type": "string"
                     },
@@ -96595,8 +96505,6 @@
                     "organizationId",
                     "name",
                     "description",
-                    "visibility",
-                    "teamIds",
                     "status",
                     "createdAt",
                     "updatedAt"
@@ -97645,6 +97553,20 @@
                               }
                             ]
                           },
+                          "visibility": {
+                            "type": "string",
+                            "enum": [
+                              "org-wide",
+                              "team-scoped",
+                              "auto-sync-permissions"
+                            ]
+                          },
+                          "teamIds": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
                           "createdAt": {
                             "type": "string",
                             "format": "date-time"
@@ -97690,6 +97612,8 @@
                           "lastSyncStatus",
                           "lastSyncError",
                           "checkpoint",
+                          "visibility",
+                          "teamIds",
                           "createdAt",
                           "updatedAt",
                           "assignedAgents"
@@ -98192,6 +98116,20 @@
                   "enabled": {
                     "type": "boolean"
                   },
+                  "visibility": {
+                    "type": "string",
+                    "enum": [
+                      "org-wide",
+                      "team-scoped",
+                      "auto-sync-permissions"
+                    ]
+                  },
+                  "teamIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
                   "knowledgeBaseIds": {
                     "type": "array",
                     "items": {
@@ -98487,6 +98425,20 @@
                         }
                       ]
                     },
+                    "visibility": {
+                      "type": "string",
+                      "enum": [
+                        "org-wide",
+                        "team-scoped",
+                        "auto-sync-permissions"
+                      ]
+                    },
+                    "teamIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -98509,6 +98461,8 @@
                     "lastSyncStatus",
                     "lastSyncError",
                     "checkpoint",
+                    "visibility",
+                    "teamIds",
                     "createdAt",
                     "updatedAt"
                   ],
@@ -99024,6 +98978,20 @@
                         }
                       ]
                     },
+                    "visibility": {
+                      "type": "string",
+                      "enum": [
+                        "org-wide",
+                        "team-scoped",
+                        "auto-sync-permissions"
+                      ]
+                    },
+                    "teamIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -99049,6 +99017,8 @@
                     "lastSyncStatus",
                     "lastSyncError",
                     "checkpoint",
+                    "visibility",
+                    "teamIds",
                     "createdAt",
                     "updatedAt",
                     "totalDocsIngested"
@@ -99474,6 +99444,20 @@
                   },
                   "enabled": {
                     "type": "boolean"
+                  },
+                  "visibility": {
+                    "type": "string",
+                    "enum": [
+                      "org-wide",
+                      "team-scoped",
+                      "auto-sync-permissions"
+                    ]
+                  },
+                  "teamIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
                   }
                 }
               }
@@ -99767,6 +99751,20 @@
                         }
                       ]
                     },
+                    "visibility": {
+                      "type": "string",
+                      "enum": [
+                        "org-wide",
+                        "team-scoped",
+                        "auto-sync-permissions"
+                      ]
+                    },
+                    "teamIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -99789,6 +99787,8 @@
                     "lastSyncStatus",
                     "lastSyncError",
                     "checkpoint",
+                    "visibility",
+                    "teamIds",
                     "createdAt",
                     "updatedAt"
                   ],
@@ -101080,20 +101080,6 @@
                             "nullable": true,
                             "type": "string"
                           },
-                          "visibility": {
-                            "type": "string",
-                            "enum": [
-                              "org-wide",
-                              "team-scoped",
-                              "auto-sync-permissions"
-                            ]
-                          },
-                          "teamIds": {
-                            "type": "array",
-                            "items": {
-                              "type": "string"
-                            }
-                          },
                           "status": {
                             "type": "string"
                           },
@@ -101111,8 +101097,6 @@
                           "organizationId",
                           "name",
                           "description",
-                          "visibility",
-                          "teamIds",
                           "status",
                           "createdAt",
                           "updatedAt"

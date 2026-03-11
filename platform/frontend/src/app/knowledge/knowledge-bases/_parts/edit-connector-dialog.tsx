@@ -2,7 +2,7 @@
 
 import type { archestraApiTypes } from "@shared";
 import { ChevronDown } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { Button } from "@/components/ui/button";
 import {
@@ -36,10 +36,21 @@ import { GithubConfigFields } from "./github-config-fields";
 import { GitlabConfigFields } from "./gitlab-config-fields";
 import { JiraConfigFields } from "./jira-config-fields";
 import { SchedulePicker } from "./schedule-picker";
+import {
+  type KnowledgeBaseVisibility,
+  VisibilitySelector,
+} from "./visibility-selector";
 
 type ConnectorItem = Pick<
   archestraApiTypes.GetConnectorsResponses["200"]["data"][number],
-  "id" | "name" | "connectorType" | "config" | "schedule" | "enabled"
+  | "id"
+  | "name"
+  | "connectorType"
+  | "config"
+  | "schedule"
+  | "enabled"
+  | "visibility"
+  | "teamIds"
 >;
 
 interface EditConnectorFormValues {
@@ -61,6 +72,10 @@ export function EditConnectorDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const updateConnector = useUpdateConnector();
+  const [visibility, setVisibility] = useState<KnowledgeBaseVisibility>(
+    connector.visibility,
+  );
+  const [teamIds, setTeamIds] = useState<string[]>(connector.teamIds);
 
   const form = useForm<EditConnectorFormValues>({
     defaultValues: {
@@ -83,6 +98,8 @@ export function EditConnectorDialog({
         apiToken: "",
         schedule: connector.schedule,
       });
+      setVisibility(connector.visibility);
+      setTeamIds(connector.teamIds);
     }
   }, [open, connector, form]);
 
@@ -103,6 +120,8 @@ export function EditConnectorDialog({
         config:
           values.config as archestraApiTypes.CreateConnectorData["body"]["config"],
         schedule: values.schedule,
+        visibility,
+        teamIds: visibility === "team-scoped" ? teamIds : [],
         ...(hasCredentials && {
           credentials: {
             ...(values.email && { email: values.email }),
@@ -173,6 +192,13 @@ export function EditConnectorDialog({
                     <FormMessage />
                   </FormItem>
                 )}
+              />
+
+              <VisibilitySelector
+                visibility={visibility}
+                onVisibilityChange={setVisibility}
+                teamIds={teamIds}
+                onTeamIdsChange={setTeamIds}
               />
 
               <FormField

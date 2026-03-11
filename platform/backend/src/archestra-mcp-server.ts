@@ -20,7 +20,6 @@ import {
   ConversationModel,
   InternalMcpCatalogModel,
   KnowledgeBaseConnectorModel,
-  KnowledgeBaseModel,
   LimitModel,
   McpServerModel,
   TeamModel,
@@ -1842,16 +1841,13 @@ export async function executeArchestraTool(
         };
       }
 
-      // Build user ACL from assigned knowledge bases
-      const validKbs = hasKbs
-        ? (
-            await Promise.all(
-              agent.knowledgeBaseIds.map((id) =>
-                KnowledgeBaseModel.findById(id),
-              ),
-            )
-          ).filter((kb): kb is NonNullable<typeof kb> => kb !== null)
-        : [];
+      // Build user ACL from connector visibility settings
+      const connectorDetails = await Promise.all(
+        connectorIds.map((id) => KnowledgeBaseConnectorModel.findById(id)),
+      );
+      const validConnectors = connectorDetails.filter(
+        (c): c is NonNullable<typeof c> => c !== null,
+      );
 
       let userAcl: AclEntry[] = ["org:*"];
       if (context.userId) {
@@ -1860,9 +1856,11 @@ export async function executeArchestraTool(
           TeamModel.getUserTeamIds(context.userId),
         ]);
         if (user?.email) {
-          const visibility = validKbs.some((kb) => kb.visibility === "org-wide")
+          const visibility = validConnectors.some(
+            (c) => c.visibility === "org-wide",
+          )
             ? "org-wide"
-            : validKbs.some((kb) => kb.visibility === "team-scoped")
+            : validConnectors.some((c) => c.visibility === "team-scoped")
               ? "team-scoped"
               : "auto-sync-permissions";
           userAcl = buildUserAcl({

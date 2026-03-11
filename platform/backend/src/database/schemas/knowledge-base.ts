@@ -1,12 +1,4 @@
-import {
-  index,
-  jsonb,
-  pgTable,
-  text,
-  timestamp,
-  uuid,
-} from "drizzle-orm/pg-core";
-import type { KnowledgeBaseVisibility } from "@/types/knowledge-base";
+import { index, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 
 const knowledgeBasesTable = pgTable(
   "knowledge_bases",
@@ -15,11 +7,6 @@ const knowledgeBasesTable = pgTable(
     organizationId: text("organization_id").notNull(),
     name: text("name").notNull(),
     description: text("description"),
-    visibility: text("visibility")
-      .$type<KnowledgeBaseVisibility>()
-      .notNull()
-      .default("org-wide"),
-    teamIds: jsonb("team_ids").$type<string[]>().notNull().default([]),
     status: text("status").notNull().default("active"),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" })

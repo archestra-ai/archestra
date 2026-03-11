@@ -851,9 +851,7 @@ async function makeOAuthRefreshToken(
  */
 async function makeKnowledgeBase(
   organizationId: string,
-  overrides: Partial<
-    Pick<InsertKnowledgeBase, "name" | "status" | "visibility" | "teamIds">
-  > = {},
+  overrides: Partial<Pick<InsertKnowledgeBase, "name" | "status">> = {},
 ): Promise<KnowledgeBase> {
   const [result] = await db
     .insert(schema.knowledgeBasesTable)
@@ -875,7 +873,13 @@ async function makeKnowledgeBaseConnector(
   overrides: Partial<
     Pick<
       InsertKnowledgeBaseConnector,
-      "name" | "connectorType" | "config" | "schedule" | "enabled"
+      | "name"
+      | "connectorType"
+      | "config"
+      | "schedule"
+      | "enabled"
+      | "visibility"
+      | "teamIds"
     >
   > = {},
 ): Promise<KnowledgeBaseConnector> {

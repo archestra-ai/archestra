@@ -1,7 +1,7 @@
 "use client";
 
 import type { archestraApiTypes } from "@shared";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { Button } from "@/components/ui/button";
 import {
@@ -22,10 +22,6 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { useUpdateKnowledgeBase } from "@/lib/knowledge-base.query";
-import {
-  type KnowledgeBaseVisibility,
-  VisibilitySelector,
-} from "./visibility-selector";
 
 type KnowledgeBaseItem =
   archestraApiTypes.GetKnowledgeBasesResponses["200"]["data"][number];
@@ -45,10 +41,6 @@ export function EditKnowledgeBaseDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const updateKnowledgeBase = useUpdateKnowledgeBase();
-  const [visibility, setVisibility] = useState<KnowledgeBaseVisibility>(
-    knowledgeBase.visibility,
-  );
-  const [teamIds, setTeamIds] = useState<string[]>(knowledgeBase.teamIds);
 
   const form = useForm<EditKnowledgeBaseFormValues>({
     defaultValues: {
@@ -63,8 +55,6 @@ export function EditKnowledgeBaseDialog({
         name: knowledgeBase.name,
         description: knowledgeBase.description ?? "",
       });
-      setVisibility(knowledgeBase.visibility);
-      setTeamIds(knowledgeBase.teamIds);
     }
   }, [open, knowledgeBase, form]);
 
@@ -74,8 +64,6 @@ export function EditKnowledgeBaseDialog({
       body: {
         name: values.name,
         description: values.description || null,
-        visibility,
-        teamIds: visibility === "team-scoped" ? teamIds : [],
       },
     });
     if (result) {
@@ -127,13 +115,6 @@ export function EditKnowledgeBaseDialog({
                   <FormMessage />
                 </FormItem>
               )}
-            />
-
-            <VisibilitySelector
-              visibility={visibility}
-              onVisibilityChange={setVisibility}
-              teamIds={teamIds}
-              onTeamIdsChange={setTeamIds}
             />
 
             <DialogFooter>

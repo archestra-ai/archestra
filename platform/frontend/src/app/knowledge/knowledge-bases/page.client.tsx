@@ -5,14 +5,11 @@ import { formatDistanceToNow } from "date-fns";
 import {
   ArrowLeft,
   Check,
-  Globe,
   Link2,
   Pencil,
   Plus,
-  RefreshCw,
   Trash2,
   Unlink,
-  Users,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useState } from "react";
@@ -56,7 +53,6 @@ import {
   useDeleteKnowledgeBase,
   useKnowledgeBases,
 } from "@/lib/knowledge-base.query";
-import { useTeams } from "@/lib/team.query";
 import { cn, formatDate } from "@/lib/utils";
 import { ConnectorTypeIcon } from "./_parts/connector-icons";
 import { CreateConnectorDialog } from "./_parts/create-connector-dialog";
@@ -157,15 +153,7 @@ function KnowledgeBaseCard({
   onDelete: () => void;
 }) {
   const [isAddConnectorOpen, setIsAddConnectorOpen] = useState(false);
-  const { data: teams } = useTeams();
-  const isOrgWide = kb.visibility === "org-wide";
-  const isTeamScoped = kb.visibility === "team-scoped";
-  const isAutoSync = kb.visibility === "auto-sync-permissions";
-  const VisibilityIcon = isAutoSync ? RefreshCw : isOrgWide ? Globe : Users;
   const totalConnectors = kb.connectors.length;
-  const matchedTeams = isTeamScoped
-    ? (teams ?? []).filter((t) => kb.teamIds.includes(t.id))
-    : [];
 
   return (
     <div className="rounded-lg border">
@@ -182,44 +170,6 @@ function KnowledgeBaseCard({
         <div className="flex items-center gap-x-6 shrink-0 order-last lg:order-none w-full lg:w-auto pl-9 lg:pl-0">
           <StatItem label="Connectors" value={String(totalConnectors)} />
           <StatItem label="Docs Indexed" value={String(kb.totalDocsIndexed)} />
-          <StatItem
-            label="Visibility"
-            value={
-              isTeamScoped && matchedTeams.length > 0 ? (
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Badge
-                        variant="outline"
-                        className="gap-1.5 cursor-default"
-                      >
-                        <VisibilityIcon className="h-3.5 w-3.5" />
-                        Team-scoped
-                      </Badge>
-                    </TooltipTrigger>
-                    <TooltipContent side="bottom">
-                      <div className="space-y-0.5">
-                        {matchedTeams.map((team) => (
-                          <div key={team.id} className="text-xs">
-                            {team.name}
-                          </div>
-                        ))}
-                      </div>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              ) : (
-                <Badge variant="outline" className="gap-1.5">
-                  <VisibilityIcon className="h-3.5 w-3.5" />
-                  {isAutoSync
-                    ? "Auto Sync"
-                    : isOrgWide
-                      ? "Org-wide"
-                      : "Team-scoped"}
-                </Badge>
-              )
-            }
-          />
           <StatItem
             label="Assigned To"
             value={

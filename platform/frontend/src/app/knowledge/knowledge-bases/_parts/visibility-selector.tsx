@@ -8,7 +8,7 @@ import { MultiSelectCombobox } from "@/components/ui/multi-select-combobox";
 import { useTeams } from "@/lib/team.query";
 
 export type KnowledgeBaseVisibility = NonNullable<
-  archestraApiTypes.CreateKnowledgeBaseData["body"]["visibility"]
+  archestraApiTypes.CreateConnectorData["body"]["visibility"]
 >;
 
 interface VisibilityOption {

@@ -114,16 +114,20 @@ import {
   getPendingActions,
 } from "@/lib/pending-tool-state";
 import { useTeams } from "@/lib/team.query";
+import {
+  clearSavedModel,
+  getSavedAgent,
+  getSavedModel,
+  saveAgent,
+  saveModel,
+} from "@/lib/use-chat-preferences";
 import { useIsMobile } from "@/lib/use-mobile.hook";
 import { cn } from "@/lib/utils";
 import ArchestraPromptInput from "./prompt-input";
 
 const CONVERSATION_QUERY_PARAM = "conversation";
 
-const LocalStorageKeys = {
-  browserOpen: "archestra-chat-browser-open",
-  selectedChatModel: "archestra-chat-selected-chat-model",
-} as const;
+const BROWSER_OPEN_KEY = "archestra-chat-browser-open";
 
 export default function ChatPage() {
   const queryClient = useQueryClient();
@@ -195,7 +199,7 @@ export default function ChatPage() {
   // State for browser panel - initialize from localStorage
   const [isBrowserPanelOpen, setIsBrowserPanelOpen] = useState(() => {
     if (typeof window !== "undefined") {
-      return localStorage.getItem(LocalStorageKeys.browserOpen) === "true";
+      return localStorage.getItem(BROWSER_OPEN_KEY) === "true";
     }
     return false;
   });
@@ -246,7 +250,7 @@ export default function ChatPage() {
 
     // Try to restore from localStorage, then member's default agent, then first internal agent
     if (!initialAgentId) {
-      const savedAgentId = localStorage.getItem("selected-chat-agent");
+      const savedAgentId = getSavedAgent();
       const savedAgent = internalAgents.find((a) => a.id === savedAgentId);
       if (savedAgent) {
         setInitialAgentId(savedAgentId);
@@ -290,9 +294,7 @@ export default function ChatPage() {
     };
 
     // 1. User's explicit selection from localStorage takes priority
-    const savedModelId = localStorage.getItem(
-      LocalStorageKeys.selectedChatModel,
-    );
+    const savedModelId = getSavedModel();
     if (savedModelId) {
       // Wait for models to load so we can validate the saved model still exists
       if (allModels.length === 0) return;
@@ -309,7 +311,7 @@ export default function ChatPage() {
         return;
       }
       // Saved model no longer available — clear stale value and fall through
-      localStorage.removeItem(LocalStorageKeys.selectedChatModel);
+      clearSavedModel();
     }
 
     // 2. Agent-configured model as fallback
@@ -347,7 +349,7 @@ export default function ChatPage() {
   // Save model to localStorage when changed
   const handleInitialModelChange = useCallback((modelId: string) => {
     setInitialModel(modelId);
-    localStorage.setItem(LocalStorageKeys.selectedChatModel, modelId);
+    saveModel(modelId);
   }, []);
 
   // Handle provider change from API key selector - auto-select a model from new provider
@@ -358,7 +360,7 @@ export default function ChatPage() {
         // Fall back to first model for this provider
         const firstModel = providerModels[0];
         setInitialModel(firstModel.id);
-        localStorage.setItem(LocalStorageKeys.selectedChatModel, firstModel.id);
+        saveModel(firstModel.id);
       }
     },
     [modelsByProvider],
@@ -515,7 +517,7 @@ export default function ChatPage() {
       });
 
       // Persist to localStorage so it's restored on next visit
-      localStorage.setItem(LocalStorageKeys.selectedChatModel, model);
+      saveModel(model);
     },
     [conversation, chatModels, updateConversationMutation],
   );
@@ -536,7 +538,7 @@ export default function ChatPage() {
         });
 
         // Persist to localStorage so it's restored on next visit
-        localStorage.setItem(LocalStorageKeys.selectedChatModel, firstModel.id);
+        saveModel(firstModel.id);
       }
     },
     [conversation, modelsByProvider, updateConversationMutation],
@@ -918,13 +920,13 @@ export default function ChatPage() {
   const toggleBrowserPanel = useCallback(() => {
     const newValue = !isBrowserPanelOpen;
     setIsBrowserPanelOpen(newValue);
-    localStorage.setItem(LocalStorageKeys.browserOpen, String(newValue));
+    localStorage.setItem(BROWSER_OPEN_KEY, String(newValue));
   }, [isBrowserPanelOpen]);
 
   // Close browser panel handler (also persists to localStorage)
   const closeBrowserPanel = useCallback(() => {
     setIsBrowserPanelOpen(false);
-    localStorage.setItem(LocalStorageKeys.browserOpen, "false");
+    localStorage.setItem(BROWSER_OPEN_KEY, "false");
   }, []);
 
   // Handle creating conversation from browser URL input (when no conversation exists)
@@ -978,7 +980,7 @@ export default function ChatPage() {
   const handleInitialAgentChange = useCallback(
     (agentId: string) => {
       setInitialAgentId(agentId);
-      localStorage.setItem("selected-chat-agent", agentId);
+      saveAgent(agentId);
 
       // Apply agent's LLM config if present
       const selectedAgent = internalAgents.find((a) => a.id === agentId);

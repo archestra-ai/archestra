@@ -51,13 +51,14 @@ export function GitlabConfigFields({
         name={`${prefix}.groupId`}
         render={({ field }) => (
           <FormItem>
-            <FormLabel>Group (optional)</FormLabel>
+            <FormLabel>Group Path (optional)</FormLabel>
             <FormControl>
-              <Input placeholder="my-group" {...field} />
+              <Input placeholder="my-org/my-subgroup" {...field} />
             </FormControl>
             <FormDescription>
-              GitLab group ID or path. Leave blank to sync all accessible
-              projects.
+              The path of the GitLab group to sync from. Found in the group URL
+              (e.g. gitlab.com/groups/my-org/my-subgroup). Leave blank to sync
+              all accessible projects.
             </FormDescription>
             <FormMessage />
           </FormItem>

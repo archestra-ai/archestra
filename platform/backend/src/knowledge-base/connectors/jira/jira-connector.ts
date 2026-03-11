@@ -66,7 +66,7 @@ export class JiraConnector extends BaseConnector {
 
     this.log.info(
       { baseUrl: parsed.jiraBaseUrl, isCloud: parsed.isCloud },
-      "[JiraConnector] Testing connection",
+      "Testing connection",
     );
 
     try {
@@ -77,13 +77,13 @@ export class JiraConnector extends BaseConnector {
         const client = createV2Client(parsed, params.credentials, this.log);
         await client.myself.getCurrentUser();
       }
-      this.log.info("[JiraConnector] Connection test successful");
+      this.log.info("Connection test successful");
       return { success: true };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       this.log.error(
         { error: message, ...extractJiraErrorDetails(error) },
-        "[JiraConnector] Connection test failed",
+        "Connection test failed",
       );
       return { success: false, error: `Connection failed: ${message}` };
     }
@@ -103,7 +103,7 @@ export class JiraConnector extends BaseConnector {
       };
       const jql = buildJql(parsed, checkpoint);
 
-      this.log.info({ jql }, "[JiraConnector] Estimating total items");
+      this.log.info({ jql }, "Estimating total items");
 
       // Use classic JQL search with maxResults=0 to get total without fetching issues
       if (parsed.isCloud) {
@@ -129,7 +129,7 @@ export class JiraConnector extends BaseConnector {
           error: extractErrorMessage(error),
           ...extractJiraErrorDetails(error),
         },
-        "[JiraConnector] Failed to estimate total items",
+        "Failed to estimate total items",
       );
       return null;
     }
@@ -160,7 +160,7 @@ export class JiraConnector extends BaseConnector {
         jql,
         checkpoint,
       },
-      "[JiraConnector] Starting sync",
+      "Starting sync",
     );
 
     if (parsed.isCloud) {
@@ -187,10 +187,7 @@ export class JiraConnector extends BaseConnector {
       await this.rateLimit();
 
       try {
-        this.log.debug(
-          { batchIndex, nextPageToken },
-          "[JiraConnector] Fetching cloud batch",
-        );
+        this.log.debug({ batchIndex, nextPageToken }, "Fetching cloud batch");
 
         const searchResult =
           await client.issueSearch.searchForIssuesUsingJqlEnhancedSearchPost({
@@ -213,7 +210,7 @@ export class JiraConnector extends BaseConnector {
             documentCount: documents.length,
             hasMore,
           },
-          "[JiraConnector] Cloud batch fetched",
+          "Cloud batch fetched",
         );
 
         batchIndex++;
@@ -226,7 +223,7 @@ export class JiraConnector extends BaseConnector {
             error: extractErrorMessage(error),
             ...extractJiraErrorDetails(error),
           },
-          "[JiraConnector] Cloud batch fetch failed",
+          "Cloud batch fetch failed",
         );
         throw error;
       }
@@ -248,10 +245,7 @@ export class JiraConnector extends BaseConnector {
       await this.rateLimit();
 
       try {
-        this.log.debug(
-          { batchIndex, startAt },
-          "[JiraConnector] Fetching server batch",
-        );
+        this.log.debug({ batchIndex, startAt }, "Fetching server batch");
 
         const searchResult =
           await client.issueSearch.searchForIssuesUsingJqlPost({
@@ -277,7 +271,7 @@ export class JiraConnector extends BaseConnector {
             total: searchResult.total,
             hasMore,
           },
-          "[JiraConnector] Server batch fetched",
+          "Server batch fetched",
         );
 
         batchIndex++;
@@ -290,7 +284,7 @@ export class JiraConnector extends BaseConnector {
             error: extractErrorMessage(error),
             ...extractJiraErrorDetails(error),
           },
-          "[JiraConnector] Server batch fetch failed",
+          "Server batch fetch failed",
         );
         throw error;
       }
@@ -345,7 +339,7 @@ function buildJiraMiddlewares(log: pino.Logger) {
           url: err?.config?.url,
           error: err?.message ?? String(error),
         },
-        "[JiraConnector] HTTP error",
+        "HTTP error",
       );
     },
     onResponse: (response: unknown) => {
@@ -357,7 +351,7 @@ function buildJiraMiddlewares(log: pino.Logger) {
           method: res?.config?.method?.toUpperCase(),
           url: res?.config?.url,
         },
-        "[JiraConnector] HTTP response",
+        "HTTP response",
       );
     },
   };

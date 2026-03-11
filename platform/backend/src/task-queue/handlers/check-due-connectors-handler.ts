@@ -28,8 +28,12 @@ export async function handleCheckDueConnectors(): Promise<void> {
             payload: { connectorId: connector.id },
           });
           logger.info(
-            { connectorId: connector.id },
-            "[TaskQueue] Enqueued scheduled connector sync",
+            {
+              connectorId: connector.id,
+              connectorName: connector.name,
+              connectorType: connector.connectorType,
+            },
+            "Enqueued scheduled connector sync",
           );
         }
       }
@@ -37,10 +41,12 @@ export async function handleCheckDueConnectors(): Promise<void> {
       logger.warn(
         {
           connectorId: connector.id,
+          connectorName: connector.name,
+          connectorType: connector.connectorType,
           schedule: connector.schedule,
           error: error instanceof Error ? error.message : String(error),
         },
-        "[TaskQueue] Failed to evaluate connector schedule",
+        "Failed to evaluate connector schedule",
       );
     }
   }
@@ -68,16 +74,22 @@ async function cleanupOrphanedRunningStatuses(): Promise<void> {
         lastSyncError: "Sync task was lost",
       });
       logger.warn(
-        { connectorId: connector.id },
-        "[TaskQueue] Reset orphaned running status to failed",
+        {
+          connectorId: connector.id,
+          connectorName: connector.name,
+          connectorType: connector.connectorType,
+        },
+        "Reset orphaned running status to failed",
       );
     } catch (error) {
       logger.warn(
         {
           connectorId: connector.id,
+          connectorName: connector.name,
+          connectorType: connector.connectorType,
           error: error instanceof Error ? error.message : String(error),
         },
-        "[TaskQueue] Failed to cleanup orphaned running status",
+        "Failed to cleanup orphaned running status",
       );
     }
   }

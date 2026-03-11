@@ -22,8 +22,8 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
+  DialogStickyFooter,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Form } from "@/components/ui/form";
@@ -171,7 +171,7 @@ export function EditIdentityProviderDialog({
         <Form {...form}>
           <form
             onSubmit={form.handleSubmit(onSubmit)}
-            className="flex flex-col flex-1 overflow-hidden"
+            className="flex flex-col flex-1 min-h-0"
           >
             <div className="flex-1 overflow-y-auto py-4">
               {providerType === "saml" ? (
@@ -181,7 +181,7 @@ export function EditIdentityProviderDialog({
               )}
             </div>
 
-            <DialogFooter className="mt-4">
+            <DialogStickyFooter>
               <div className="flex w-full justify-between">
                 <PermissionButton
                   type="button"
@@ -207,7 +207,7 @@ export function EditIdentityProviderDialog({
                   </PermissionButton>
                 </div>
               </div>
-            </DialogFooter>
+            </DialogStickyFooter>
           </form>
         </Form>
       </DialogContent>

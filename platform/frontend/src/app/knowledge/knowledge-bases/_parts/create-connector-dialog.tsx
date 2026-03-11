@@ -14,8 +14,8 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
+  DialogStickyFooter,
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
@@ -189,7 +189,7 @@ export function CreateConnectorDialog({
           <Form {...form}>
             <form
               onSubmit={form.handleSubmit(handleSubmit)}
-              className="flex flex-col overflow-hidden"
+              className="flex flex-col min-h-0"
             >
               <DialogHeader>
                 <DialogTitle className="flex items-center gap-2">
@@ -406,7 +406,7 @@ export function CreateConnectorDialog({
                 </Collapsible>
               </div>
 
-              <DialogFooter className="pt-4">
+              <DialogStickyFooter>
                 <Button type="button" variant="outline" onClick={handleBack}>
                   Back
                 </Button>
@@ -415,7 +415,7 @@ export function CreateConnectorDialog({
                     ? "Creating..."
                     : "Create Connector"}
                 </Button>
-              </DialogFooter>
+              </DialogStickyFooter>
             </form>
           </Form>
         )}

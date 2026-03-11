@@ -12,8 +12,8 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
+  DialogStickyFooter,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Form } from "@/components/ui/form";
@@ -117,7 +117,7 @@ export function CreateIdentityProviderDialog({
         <Form {...form}>
           <form
             onSubmit={form.handleSubmit(onSubmit)}
-            className="flex flex-col flex-1 overflow-hidden"
+            className="flex flex-col flex-1 min-h-0"
           >
             <div className="flex-1 overflow-y-auto py-4">
               {currentProviderType === "saml" ? (
@@ -131,7 +131,7 @@ export function CreateIdentityProviderDialog({
               )}
             </div>
 
-            <DialogFooter className="mt-4">
+            <DialogStickyFooter>
               <Button type="button" variant="outline" onClick={handleClose}>
                 Cancel
               </Button>
@@ -144,7 +144,7 @@ export function CreateIdentityProviderDialog({
                   ? "Creating..."
                   : "Create Provider"}
               </PermissionButton>
-            </DialogFooter>
+            </DialogStickyFooter>
           </form>
         </Form>
       </DialogContent>

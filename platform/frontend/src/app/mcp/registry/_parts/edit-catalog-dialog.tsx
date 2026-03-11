@@ -1,6 +1,11 @@
 import { type archestraApiTypes, isPlaywrightCatalogItem } from "@shared";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogFooter } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogStickyFooter,
+} from "@/components/ui/dialog";
 import { useUpdateInternalMcpCatalogItem } from "@/lib/internal-mcp-catalog.query";
 import { McpCatalogForm } from "./mcp-catalog-form";
 import type { McpCatalogFormValues } from "./mcp-catalog-form.types";
@@ -62,15 +67,11 @@ export function EditCatalogContent({
       nameDisabled={isPlaywrightCatalogItem(item.id)}
       onDirtyChange={onDirtyChange}
       submitRef={submitRef}
-      footer={({ isDirty, onReset }) =>
-        keepOpenOnSave && !isDirty ? null : (
-          <DialogFooter
-            className={
-              keepOpenOnSave
-                ? "sticky bottom-[-24px] bg-background pt-4 pb-6 -mx-6 px-6 border-t mt-6"
-                : undefined
-            }
-          >
+      footer={({ isDirty, onReset }) => {
+        if (keepOpenOnSave && !isDirty) return null;
+        const Footer = keepOpenOnSave ? DialogStickyFooter : DialogFooter;
+        return (
+          <Footer>
             {keepOpenOnSave ? (
               <Button variant="outline" onClick={onReset} type="button">
                 Discard changes
@@ -86,9 +87,9 @@ export function EditCatalogContent({
             >
               {updateMutation.isPending ? "Saving..." : "Save Changes"}
             </Button>
-          </DialogFooter>
-        )
-      }
+          </Footer>
+        );
+      }}
     />
   );
 }

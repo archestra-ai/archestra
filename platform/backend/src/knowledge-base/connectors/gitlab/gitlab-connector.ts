@@ -48,22 +48,16 @@ export class GitlabConnector extends BaseConnector {
       return { success: false, error: "Invalid GitLab configuration" };
     }
 
-    this.log.debug(
-      { baseUrl: parsed.gitlabUrl },
-      "[GitlabConnector] Testing connection",
-    );
+    this.log.debug({ baseUrl: parsed.gitlabUrl }, "Testing connection");
 
     try {
       const client = createGitlabClient(parsed, params.credentials);
       await client.Users.showCurrentUser();
-      this.log.debug("[GitlabConnector] Connection test successful");
+      this.log.debug("Connection test successful");
       return { success: true };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      this.log.error(
-        { error: message },
-        "[GitlabConnector] Connection test failed",
-      );
+      this.log.error({ error: message }, "Connection test failed");
       return { success: false, error: `Connection failed: ${message}` };
     }
   }
@@ -78,7 +72,7 @@ export class GitlabConnector extends BaseConnector {
 
     this.log.debug(
       { projectIds: parsed.projectIds, groupId: parsed.groupId },
-      "[GitlabConnector] Estimating total items",
+      "Estimating total items",
     );
 
     try {
@@ -116,7 +110,7 @@ export class GitlabConnector extends BaseConnector {
     } catch (error) {
       this.log.warn(
         { error: extractErrorMessage(error) },
-        "[GitlabConnector] Failed to estimate total items",
+        "Failed to estimate total items",
       );
       return null;
     }
@@ -148,7 +142,7 @@ export class GitlabConnector extends BaseConnector {
         includeMergeRequests: parsed.includeMergeRequests,
         checkpoint,
       },
-      "[GitlabConnector] Starting sync",
+      "Starting sync",
     );
 
     for (let projIdx = 0; projIdx < projects.length; projIdx++) {
@@ -192,7 +186,7 @@ export class GitlabConnector extends BaseConnector {
 
     this.log.debug(
       { project: project.pathWithNamespace },
-      "[GitlabConnector] Syncing project issues",
+      "Syncing project issues",
     );
 
     while (pageHasMore) {
@@ -201,7 +195,7 @@ export class GitlabConnector extends BaseConnector {
       try {
         this.log.debug(
           { project: project.pathWithNamespace, page },
-          "[GitlabConnector] Fetching issues batch",
+          "Fetching issues batch",
         );
 
         // biome-ignore lint/suspicious/noExplicitAny: Gitbeaker Camelize types
@@ -243,7 +237,7 @@ export class GitlabConnector extends BaseConnector {
             documentCount: documents.length,
             hasMore: pageHasMore || !isLastGroup,
           },
-          "[GitlabConnector] Issues batch fetched",
+          "Issues batch fetched",
         );
 
         const lastIssue =
@@ -265,7 +259,7 @@ export class GitlabConnector extends BaseConnector {
             page,
             error: extractErrorMessage(error),
           },
-          "[GitlabConnector] Issues batch fetch failed",
+          "Issues batch fetch failed",
         );
         throw error;
       }
@@ -285,7 +279,7 @@ export class GitlabConnector extends BaseConnector {
 
     this.log.debug(
       { project: project.pathWithNamespace },
-      "[GitlabConnector] Syncing project merge requests",
+      "Syncing project merge requests",
     );
 
     while (pageHasMore) {
@@ -294,7 +288,7 @@ export class GitlabConnector extends BaseConnector {
       try {
         this.log.debug(
           { project: project.pathWithNamespace, page },
-          "[GitlabConnector] Fetching merge requests batch",
+          "Fetching merge requests batch",
         );
 
         // biome-ignore lint/suspicious/noExplicitAny: Gitbeaker Camelize types
@@ -336,7 +330,7 @@ export class GitlabConnector extends BaseConnector {
             documentCount: documents.length,
             hasMore: pageHasMore || !isLastGroup,
           },
-          "[GitlabConnector] Merge requests batch fetched",
+          "Merge requests batch fetched",
         );
 
         const lastMr =
@@ -358,7 +352,7 @@ export class GitlabConnector extends BaseConnector {
             page,
             error: extractErrorMessage(error),
           },
-          "[GitlabConnector] Merge requests batch fetch failed",
+          "Merge requests batch fetch failed",
         );
         throw error;
       }

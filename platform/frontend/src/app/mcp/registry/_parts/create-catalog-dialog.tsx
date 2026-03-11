@@ -8,8 +8,8 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
+  DialogStickyFooter,
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
@@ -65,14 +65,14 @@ export function CreateCatalogDialog({
   };
 
   const footer = (
-    <DialogFooter className="sticky bottom-[-24px] bg-background pt-4 pb-6 border-t mt-6 -mx-6 px-6">
+    <DialogStickyFooter>
       <Button variant="outline" onClick={handleClose} type="button">
         Cancel
       </Button>
       <Button type="submit" disabled={createMutation.isPending}>
         {createMutation.isPending ? "Adding..." : "Add Server"}
       </Button>
-    </DialogFooter>
+    </DialogStickyFooter>
   );
 
   const catalogButton = (

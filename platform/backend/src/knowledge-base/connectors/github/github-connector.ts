@@ -53,20 +53,17 @@ export class GithubConnector extends BaseConnector {
 
     this.log.debug(
       { baseUrl: parsed.githubUrl, owner: parsed.owner },
-      "[GithubConnector] Testing connection",
+      "Testing connection",
     );
 
     try {
       const octokit = createOctokit(parsed, params.credentials, this.log);
       await octokit.rest.users.getAuthenticated();
-      this.log.debug("[GithubConnector] Connection test successful");
+      this.log.debug("Connection test successful");
       return { success: true };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      this.log.error(
-        { error: message },
-        "[GithubConnector] Connection test failed",
-      );
+      this.log.error({ error: message }, "Connection test failed");
       return { success: false, error: `Connection failed: ${message}` };
     }
   }
@@ -81,7 +78,7 @@ export class GithubConnector extends BaseConnector {
 
     this.log.debug(
       { owner: parsed.owner, repos: parsed.repos },
-      "[GithubConnector] Estimating total items",
+      "Estimating total items",
     );
 
     try {
@@ -113,7 +110,7 @@ export class GithubConnector extends BaseConnector {
     } catch (error) {
       this.log.warn(
         { error: extractErrorMessage(error) },
-        "[GithubConnector] Failed to estimate total items",
+        "Failed to estimate total items",
       );
       return null;
     }
@@ -146,7 +143,7 @@ export class GithubConnector extends BaseConnector {
         includePullRequests: parsed.includePullRequests,
         checkpoint,
       },
-      "[GithubConnector] Starting sync",
+      "Starting sync",
     );
 
     for (let repoIdx = 0; repoIdx < repos.length; repoIdx++) {
@@ -193,7 +190,7 @@ export class GithubConnector extends BaseConnector {
 
     this.log.debug(
       { repo: `${repo.owner}/${repo.name}`, kind },
-      "[GithubConnector] Syncing repo items",
+      "Syncing repo items",
     );
 
     while (pageHasMore) {
@@ -203,7 +200,7 @@ export class GithubConnector extends BaseConnector {
       try {
         this.log.debug(
           { repo: `${repo.owner}/${repo.name}`, kind, page },
-          "[GithubConnector] Fetching batch",
+          "Fetching batch",
         );
 
         response = await octokit.rest.issues.listForRepo({
@@ -226,7 +223,7 @@ export class GithubConnector extends BaseConnector {
         ) {
           this.log.debug(
             { repo: `${repo.owner}/${repo.name}`, kind },
-            "[GithubConnector] Repo not found or issues disabled, skipping",
+            "Repo not found or issues disabled, skipping",
           );
           break;
         }
@@ -237,7 +234,7 @@ export class GithubConnector extends BaseConnector {
             page,
             error: extractErrorMessage(err),
           },
-          "[GithubConnector] Batch fetch failed",
+          "Batch fetch failed",
         );
         throw err;
       }
@@ -272,7 +269,7 @@ export class GithubConnector extends BaseConnector {
           documentCount: documents.length,
           hasMore: pageHasMore || !isLastGroup,
         },
-        "[GithubConnector] Batch fetched",
+        "Batch fetched",
       );
 
       const lastItem = items.length > 0 ? items[items.length - 1] : null;
@@ -304,13 +301,12 @@ function createOctokit(
     baseUrl: config.githubUrl.replace(/\/+$/, ""),
     log: {
       debug: (message: string) =>
-        log.debug({ sdkMessage: message }, "[GithubConnector] SDK debug"),
-      info: (message: string) =>
-        log.debug({ sdkMessage: message }, "[GithubConnector] SDK info"),
+        log.debug({ sdkMessage: message }, "SDK debug"),
+      info: (message: string) => log.debug({ sdkMessage: message }, "SDK info"),
       warn: (message: string) =>
-        log.warn({ sdkMessage: message }, "[GithubConnector] SDK warning"),
+        log.warn({ sdkMessage: message }, "SDK warning"),
       error: (message: string) =>
-        log.error({ sdkMessage: message }, "[GithubConnector] SDK error"),
+        log.error({ sdkMessage: message }, "SDK error"),
     },
     request: {
       fetch: (url: string | URL | Request, init?: RequestInit) =>

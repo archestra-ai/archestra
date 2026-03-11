@@ -52,7 +52,7 @@ export class ConfluenceConnector extends BaseConnector {
 
     this.log.debug(
       { baseUrl: parsed.confluenceUrl, isCloud: parsed.isCloud },
-      "[ConfluenceConnector] Testing connection",
+      "Testing connection",
     );
 
     try {
@@ -62,14 +62,11 @@ export class ConfluenceConnector extends BaseConnector {
         this.log,
       );
       await client.space.getSpaces({ limit: 1 });
-      this.log.debug("[ConfluenceConnector] Connection test successful");
+      this.log.debug("Connection test successful");
       return { success: true };
     } catch (error) {
       const message = extractErrorMessage(error);
-      this.log.error(
-        { error: message },
-        "[ConfluenceConnector] Connection test failed",
-      );
+      this.log.error({ error: message }, "Connection test failed");
       return { success: false, error: `Connection failed: ${message}` };
     }
   }
@@ -88,7 +85,7 @@ export class ConfluenceConnector extends BaseConnector {
       };
       const cql = buildCql(parsed, checkpoint);
 
-      this.log.debug({ cql }, "[ConfluenceConnector] Estimating total items");
+      this.log.debug({ cql }, "Estimating total items");
 
       const client = createConfluenceClient(
         parsed,
@@ -107,7 +104,7 @@ export class ConfluenceConnector extends BaseConnector {
     } catch (error) {
       this.log.warn(
         { error: extractErrorMessage(error) },
-        "[ConfluenceConnector] Failed to estimate total items",
+        "Failed to estimate total items",
       );
       return null;
     }
@@ -140,7 +137,7 @@ export class ConfluenceConnector extends BaseConnector {
         cql,
         checkpoint,
       },
-      "[ConfluenceConnector] Starting sync",
+      "Starting sync",
     );
 
     let cursor: string | undefined;
@@ -151,10 +148,7 @@ export class ConfluenceConnector extends BaseConnector {
       await this.rateLimit();
 
       try {
-        this.log.debug(
-          { batchIndex, cursor },
-          "[ConfluenceConnector] Fetching batch",
-        );
+        this.log.debug({ batchIndex, cursor }, "Fetching batch");
 
         const searchResult = await client.content.searchContentByCQL({
           cql,
@@ -198,7 +192,7 @@ export class ConfluenceConnector extends BaseConnector {
             documentCount: documents.length,
             hasMore,
           },
-          "[ConfluenceConnector] Batch fetched",
+          "Batch fetched",
         );
 
         batchIndex++;
@@ -218,7 +212,7 @@ export class ConfluenceConnector extends BaseConnector {
       } catch (error) {
         this.log.error(
           { batchIndex, error: extractErrorMessage(error) },
-          "[ConfluenceConnector] Batch fetch failed",
+          "Batch fetch failed",
         );
         throw error;
       }
@@ -252,7 +246,7 @@ function createConfluenceClient(
             url: err?.config?.url,
             error: err?.message ?? String(error),
           },
-          "[ConfluenceConnector] HTTP error",
+          "HTTP error",
         );
       },
       onResponse: (response: unknown) => {
@@ -264,7 +258,7 @@ function createConfluenceClient(
             method: res?.config?.method?.toUpperCase(),
             url: res?.config?.url,
           },
-          "[ConfluenceConnector] HTTP response",
+          "HTTP response",
         );
       },
     },

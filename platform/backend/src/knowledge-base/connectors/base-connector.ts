@@ -120,7 +120,7 @@ export abstract class BaseConnector implements Connector {
                 status: response.status,
                 delayMs: Math.round(delay),
               },
-              "[Connector] Retryable HTTP error, will retry",
+              "Retryable HTTP error, will retry",
             );
             await sleep(delay);
             continue;
@@ -143,7 +143,7 @@ export abstract class BaseConnector implements Connector {
               error: lastError.message,
               delayMs: Math.round(delay),
             },
-            "[Connector] Transient error, will retry",
+            "Transient error, will retry",
           );
           await sleep(delay);
           continue;
@@ -173,7 +173,7 @@ export abstract class BaseConnector implements Connector {
           resource: params.resource,
           error: message,
         },
-        "[Connector] Failed to fetch sub-resource for item, using fallback",
+        "Failed to fetch sub-resource for item, using fallback",
       );
       this.itemFailures.push({
         itemId: params.itemId,

@@ -6,9 +6,9 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogForm,
   DialogHeader,
+  DialogStickyFooter,
   DialogTitle,
 } from "@/components/ui/dialog";
 
@@ -43,7 +43,7 @@ export function ReinstallConfirmationDialog({
           </DialogDescription>
         </DialogHeader>
         <DialogForm onSubmit={onConfirm}>
-          <DialogFooter>
+          <DialogStickyFooter>
             <Button
               type="button"
               variant="outline"
@@ -65,7 +65,7 @@ export function ReinstallConfirmationDialog({
                 </>
               )}
             </Button>
-          </DialogFooter>
+          </DialogStickyFooter>
         </DialogForm>
       </DialogContent>
     </Dialog>

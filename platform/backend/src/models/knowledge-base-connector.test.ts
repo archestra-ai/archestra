@@ -626,6 +626,120 @@ describe("KnowledgeBaseConnectorModel", () => {
     });
   });
 
+  describe("checkpoint management", () => {
+    test("checkpoint can be set and persisted", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+
+      const checkpoint = {
+        type: "jira" as const,
+        lastSyncedAt: "2026-03-10T15:30:00.000Z",
+        lastIssueKey: "PROJ-123",
+      };
+
+      const updated = await KnowledgeBaseConnectorModel.update(connector.id, {
+        checkpoint,
+      });
+
+      expect(updated?.checkpoint).toEqual(checkpoint);
+    });
+
+    test("checkpoint is reset to null when config is updated with checkpoint: null", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+
+      // Set a checkpoint
+      await KnowledgeBaseConnectorModel.update(connector.id, {
+        checkpoint: {
+          type: "jira",
+          lastSyncedAt: "2026-03-10T15:30:00.000Z",
+          lastIssueKey: "PROJ-123",
+        },
+      });
+
+      // Update config + reset checkpoint (as the route handler does)
+      const updated = await KnowledgeBaseConnectorModel.update(connector.id, {
+        config: {
+          type: "jira",
+          jiraBaseUrl: "https://new-instance.atlassian.net",
+          isCloud: true,
+          projectKey: "NEW",
+        },
+        checkpoint: null,
+      });
+
+      expect(updated?.checkpoint).toBeNull();
+      expect((updated?.config as Record<string, unknown>).jiraBaseUrl).toBe(
+        "https://new-instance.atlassian.net",
+      );
+    });
+
+    test("checkpoint is preserved when only non-config fields are updated", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+
+      const checkpoint = {
+        type: "jira" as const,
+        lastSyncedAt: "2026-03-10T15:30:00.000Z",
+        lastIssueKey: "PROJ-123",
+      };
+
+      await KnowledgeBaseConnectorModel.update(connector.id, { checkpoint });
+
+      // Update only name - checkpoint should be preserved
+      const updated = await KnowledgeBaseConnectorModel.update(connector.id, {
+        name: "Renamed Connector",
+      });
+
+      expect(updated?.name).toBe("Renamed Connector");
+      expect(updated?.checkpoint).toEqual(checkpoint);
+    });
+
+    test("resetCheckpointsByOrganization resets all connectors in the org", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org1 = await makeOrganization();
+      const org2 = await makeOrganization();
+      const kb1 = await makeKnowledgeBase(org1.id);
+      const kb2 = await makeKnowledgeBase(org2.id);
+      const c1 = await makeKnowledgeBaseConnector(kb1.id, org1.id);
+      const c2 = await makeKnowledgeBaseConnector(kb2.id, org2.id);
+
+      const checkpoint = {
+        type: "jira" as const,
+        lastSyncedAt: "2026-03-10T15:30:00.000Z",
+      };
+
+      await KnowledgeBaseConnectorModel.update(c1.id, { checkpoint });
+      await KnowledgeBaseConnectorModel.update(c2.id, { checkpoint });
+
+      await KnowledgeBaseConnectorModel.resetCheckpointsByOrganization(org1.id);
+
+      const after1 = await KnowledgeBaseConnectorModel.findById(c1.id);
+      const after2 = await KnowledgeBaseConnectorModel.findById(c2.id);
+
+      expect(after1?.checkpoint).toBeNull();
+      expect(after2?.checkpoint).toEqual(checkpoint);
+    });
+  });
+
   describe("getKnowledgeBaseIds", () => {
     test("returns knowledge base IDs for a connector", async ({
       makeOrganization,

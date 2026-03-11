@@ -34,6 +34,7 @@ import {
   type ChatApiKeyScope,
   useAvailableChatApiKeys,
 } from "@/lib/chat-settings.query";
+import { getSavedApiKey, saveApiKey } from "@/lib/use-chat-preferences";
 
 interface ChatApiKeySelectorProps {
   /** Conversation ID for persisting selection (optional for initial chat) */
@@ -67,7 +68,6 @@ const SCOPE_ICONS: Record<ChatApiKeyScope, React.ReactNode> = {
 // Note: This stores the API key's database ID (UUID), NOT the actual API key secret.
 // The actual API key value is never exposed to the frontend - it's stored securely on the server.
 // This ID is just a reference to select which key configuration to use, similar to a userId.
-const LOCAL_STORAGE_KEY = "selected-chat-api-key-id";
 
 /**
  * API Key selector for chat - allows users to select which API key to use for the conversation.
@@ -183,10 +183,9 @@ export function ChatApiKeySelector({
       : [];
 
     // Try to find key from localStorage (per-provider key)
-    const localStorageKey = currentProvider
-      ? `${LOCAL_STORAGE_KEY}-${currentProvider}`
-      : LOCAL_STORAGE_KEY;
-    const keyIdFromLocalStorage = localStorage.getItem(localStorageKey);
+    const keyIdFromLocalStorage = currentProvider
+      ? getSavedApiKey(currentProvider)
+      : null;
     const keyFromLocalStorage = keyIdFromLocalStorage
       ? providerKeys.find((k) => k.id === keyIdFromLocalStorage)
       : null;
@@ -266,10 +265,7 @@ export function ChatApiKeySelector({
 
     // Save to localStorage for the selected key's provider
     if (selectedKeyProvider) {
-      localStorage.setItem(
-        `${LOCAL_STORAGE_KEY}-${selectedKeyProvider}`,
-        keyId,
-      );
+      saveApiKey(selectedKeyProvider, keyId);
     }
 
     // If the selected key has a different provider, notify parent to switch model

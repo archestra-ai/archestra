@@ -257,8 +257,8 @@ describe("OrganizationModel", () => {
       });
 
       expect(updated).not.toBeNull();
-      expect(updated!.defaultLlmModel).toBe("gpt-4o");
-      expect(updated!.defaultLlmProvider).toBe("openai");
+      expect(updated?.defaultLlmModel).toBe("gpt-4o");
+      expect(updated?.defaultLlmProvider).toBe("openai");
     });
 
     test("should set default agent ID", async ({
@@ -273,7 +273,7 @@ describe("OrganizationModel", () => {
       });
 
       expect(updated).not.toBeNull();
-      expect(updated!.defaultAgentId).toBe(agent.id);
+      expect(updated?.defaultAgentId).toBe(agent.id);
     });
 
     test("should clear default agent ID with null", async ({
@@ -290,7 +290,7 @@ describe("OrganizationModel", () => {
       });
 
       expect(updated).not.toBeNull();
-      expect(updated!.defaultAgentId).toBeNull();
+      expect(updated?.defaultAgentId).toBeNull();
     });
 
     test("should update all agent settings at once", async ({
@@ -307,9 +307,9 @@ describe("OrganizationModel", () => {
       });
 
       expect(updated).not.toBeNull();
-      expect(updated!.defaultLlmModel).toBe("claude-opus-4-1-20250805");
-      expect(updated!.defaultLlmProvider).toBe("anthropic");
-      expect(updated!.defaultAgentId).toBe(agent.id);
+      expect(updated?.defaultLlmModel).toBe("claude-opus-4-1-20250805");
+      expect(updated?.defaultLlmProvider).toBe("anthropic");
+      expect(updated?.defaultAgentId).toBe(agent.id);
     });
   });
 
@@ -469,7 +469,7 @@ describe("OrganizationModel", () => {
 
       const fetched = await OrganizationModel.getById(org.id);
       expect(fetched).not.toBeNull();
-      expect(fetched!.defaultAgentId).toBe(agent.id);
+      expect(fetched?.defaultAgentId).toBe(agent.id);
     });
   });
 });

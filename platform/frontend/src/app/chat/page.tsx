@@ -1539,7 +1539,22 @@ export default function ChatPage() {
           ) : (
             /* No active chat: centered prompt input */
             activeAgentId && (
-              <div className="flex-1 flex flex-col min-h-0">
+              // biome-ignore lint/a11y/noStaticElementInteractions: click-to-focus container
+              // biome-ignore lint/a11y/useKeyWithClickEvents: click-to-focus container
+              <div
+                className="flex-1 flex flex-col min-h-0"
+                onClick={(e) => {
+                  // Focus textarea when clicking empty space outside interactive elements
+                  if (
+                    e.target === e.currentTarget ||
+                    !(e.target as HTMLElement).closest(
+                      "button, a, input, textarea, [role=combobox], [data-slot=input-group]",
+                    )
+                  ) {
+                    textareaRef.current?.focus();
+                  }
+                }}
+              >
                 {/* Browser toggle - portaled to mobile header bar, inline on desktop */}
                 {isMobile && mobileHeaderEl
                   ? createPortal(

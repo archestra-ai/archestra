@@ -159,12 +159,6 @@ div:has(> [data-testid="emoji-picker-list-header"]) {
   color: var(--muted-foreground) !important;
 }
 
-/* Atmospheric glow for chat prompt input — uses theme ring color */
-.prompt-input-glow:has([data-slot="input-group-control"]:focus-visible) {
-  --tw-shadow: 0 4px 24px hsl(0 0% 0% / 0.25), 0 0 40px color-mix(in oklch, var(--ring) 20%, transparent);
-  --tw-ring-shadow: 0 0 0 1.5px color-mix(in oklch, var(--ring) 30%, transparent);
-}
-
 /* Thin scrollbar for sidebar */
 [data-sidebar="sidebar"] {
   scrollbar-width: thin;

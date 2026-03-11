@@ -15,7 +15,6 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import {
   Command,
   CommandEmpty,
@@ -57,8 +56,6 @@ interface ChatApiKeySelectorProps {
   isModelsLoading?: boolean;
   /** Agent's configured LLM API key ID - included in available keys even if user lacks direct access */
   agentLlmApiKeyId?: string | null;
-  /** Render trigger as an outline button instead of the default prompt-input button */
-  variant?: "default" | "outline";
 }
 
 const SCOPE_ICONS: Record<ChatApiKeyScope, React.ReactNode> = {
@@ -87,7 +84,6 @@ export function ChatApiKeySelector({
   onOpenChange,
   isModelsLoading = false,
   agentLlmApiKeyId,
-  variant = "default",
 }: ChatApiKeySelectorProps) {
   // Fetch ALL API keys (not filtered by provider) so user can switch providers
   // Include agent's configured key even if user doesn't have direct access
@@ -321,37 +317,19 @@ export function ChatApiKeySelector({
     <>
       <Popover open={open} onOpenChange={handleOpenChange}>
         <PopoverTrigger asChild>
-          {variant === "outline" ? (
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={disabled}
-              className="h-8 px-3 gap-1.5 text-xs max-w-[220px] min-w-0"
-            >
-              <Key className="size-4 shrink-0" />
-              <span className="truncate flex-1 text-left">
-                {currentConversationChatApiKey
-                  ? getKeyDisplayName(currentConversationChatApiKey)
-                  : isLoading
-                    ? "Loading..."
-                    : "Select key"}
-              </span>
-            </Button>
-          ) : (
-            <PromptInputButton
-              disabled={disabled}
-              className="max-w-[220px] min-w-0"
-            >
-              <Key className="size-4 shrink-0" />
-              <span className="truncate flex-1 text-left">
-                {currentConversationChatApiKey
-                  ? getKeyDisplayName(currentConversationChatApiKey)
-                  : isLoading
-                    ? "Loading..."
-                    : "Select key"}
-              </span>
-            </PromptInputButton>
-          )}
+          <PromptInputButton
+            disabled={disabled}
+            className="max-w-[220px] min-w-0"
+          >
+            <Key className="size-4 shrink-0" />
+            <span className="truncate flex-1 text-left">
+              {currentConversationChatApiKey
+                ? getKeyDisplayName(currentConversationChatApiKey)
+                : isLoading
+                  ? "Loading..."
+                  : "Select key"}
+            </span>
+          </PromptInputButton>
         </PopoverTrigger>
         <PopoverContent className="w-80 p-0" align="start">
           <Command>

@@ -278,6 +278,96 @@ describe("KnowledgeBaseConnectorModel", () => {
     });
   });
 
+  describe("findByIds", () => {
+    test("returns connectors matching the given IDs", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const connector1 = await makeKnowledgeBaseConnector(kb.id, org.id, {
+        name: "Connector 1",
+      });
+      const connector2 = await makeKnowledgeBaseConnector(kb.id, org.id, {
+        name: "Connector 2",
+      });
+
+      const results = await KnowledgeBaseConnectorModel.findByIds([
+        connector1.id,
+        connector2.id,
+      ]);
+
+      expect(results).toHaveLength(2);
+      const ids = results.map((r) => r.id);
+      expect(ids).toContain(connector1.id);
+      expect(ids).toContain(connector2.id);
+    });
+
+    test("returns empty array for empty input", async () => {
+      const results = await KnowledgeBaseConnectorModel.findByIds([]);
+      expect(results).toHaveLength(0);
+    });
+
+    test("returns only matching connectors and ignores non-existent IDs", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+
+      const results = await KnowledgeBaseConnectorModel.findByIds([
+        connector.id,
+        "00000000-0000-0000-0000-000000000000",
+      ]);
+
+      expect(results).toHaveLength(1);
+      expect(results[0].id).toBe(connector.id);
+    });
+
+    test("does not return connectors not in the ID list", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const connector1 = await makeKnowledgeBaseConnector(kb.id, org.id, {
+        name: "Included",
+      });
+      await makeKnowledgeBaseConnector(kb.id, org.id, { name: "Excluded" });
+
+      const results = await KnowledgeBaseConnectorModel.findByIds([
+        connector1.id,
+      ]);
+
+      expect(results).toHaveLength(1);
+      expect(results[0].name).toBe("Included");
+    });
+
+    test("returns connectors across different organizations", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org1 = await makeOrganization();
+      const org2 = await makeOrganization();
+      const kb1 = await makeKnowledgeBase(org1.id);
+      const kb2 = await makeKnowledgeBase(org2.id);
+      const connector1 = await makeKnowledgeBaseConnector(kb1.id, org1.id);
+      const connector2 = await makeKnowledgeBaseConnector(kb2.id, org2.id);
+
+      const results = await KnowledgeBaseConnectorModel.findByIds([
+        connector1.id,
+        connector2.id,
+      ]);
+
+      expect(results).toHaveLength(2);
+    });
+  });
+
   describe("create", () => {
     test("creates a new connector with required fields", async ({
       makeOrganization,

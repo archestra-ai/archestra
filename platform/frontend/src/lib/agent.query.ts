@@ -296,6 +296,22 @@ export function useInternalAgents() {
   });
 }
 
+export function useOrgScopedAgents() {
+  return useQuery({
+    queryKey: [
+      "agents",
+      "all",
+      { agentType: "agent", excludeBuiltIn: true, scope: "org" as const },
+    ],
+    queryFn: async () => {
+      const response = await getAllAgents({
+        query: { agentType: "agent", excludeBuiltIn: true, scope: "org" },
+      });
+      return response.data ?? [];
+    },
+  });
+}
+
 /**
  * Get version history for an internal agent.
  * Only applicable to internal agents (agents with prompts).

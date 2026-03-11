@@ -11995,6 +11995,10 @@ export type GetAllAgentsData = {
          * Exclude built-in agents from the results. Defaults to false.
          */
         excludeBuiltIn?: boolean;
+        /**
+         * Filter by scope: personal, team, org, or built_in.
+         */
+        scope?: 'personal' | 'team' | 'org' | 'built_in';
     };
     url: '/api/agents/all';
 };

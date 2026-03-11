@@ -15,7 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useInternalAgents } from "@/lib/agent.query";
+import { useOrgScopedAgents } from "@/lib/agent.query";
 import { useChatModels } from "@/lib/chat-models.query";
 import { useAvailableChatApiKeys } from "@/lib/chat-settings.query";
 import {
@@ -26,7 +26,7 @@ import {
 export default function AgentSettingsPage() {
   const { data: organization } = useOrganization();
   const { data: apiKeys } = useAvailableChatApiKeys();
-  const { data: internalAgents } = useInternalAgents();
+  const { data: orgAgents } = useOrgScopedAgents();
 
   const [selectedApiKeyId, setSelectedApiKeyId] = useState<string>("");
   const [defaultModel, setDefaultModel] = useState<string>("");
@@ -109,12 +109,6 @@ export default function AgentSettingsPage() {
     }));
   }, [allModels]);
 
-  // Filter out personal and built-in agents (useInternalAgents already excludes built-in)
-  const orgAgents = useMemo(
-    () => (internalAgents ?? []).filter((agent) => agent.scope !== "personal"),
-    [internalAgents],
-  );
-
   return (
     <div className="space-y-6">
       <SettingsBlock
@@ -176,7 +170,7 @@ export default function AgentSettingsPage() {
       />
       <SettingsBlock
         title="Default agent"
-        description="Select the default agent for new chat conversations. When set, this agent is preselected for all users who haven't chosen a personal default."
+        description="Select the default org-wide agent for new chat conversations. When set, this agent is preselected for all users who haven't chosen a personal default. Only organization-scoped agents are available."
         control={
           <WithPermissions
             permissions={{ agentSettings: ["update"] }}
@@ -197,9 +191,9 @@ export default function AgentSettingsPage() {
                   <SelectItem value="__personal__">
                     User&apos;s personal agent
                   </SelectItem>
-                  {orgAgents.map((agent) => (
+                  {(orgAgents ?? []).map((agent) => (
                     <SelectItem key={agent.id} value={agent.id}>
-                      {agent.name}
+                      {agent.icon ? `${agent.icon} ${agent.name}` : agent.name}
                     </SelectItem>
                   ))}
                 </SelectContent>

@@ -214,13 +214,17 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
             .describe(
               "Exclude built-in agents from the results. Defaults to false.",
             ),
+          scope: z
+            .enum(["personal", "team", "org", "built_in"])
+            .optional()
+            .describe("Filter by scope: personal, team, org, or built_in."),
         }),
         response: constructResponseSchema(z.array(SelectAgentSchema)),
       },
     },
     async (
       {
-        query: { agentType, agentTypes, excludeBuiltIn },
+        query: { agentType, agentTypes, excludeBuiltIn, scope },
         user,
         organizationId,
       },
@@ -258,6 +262,10 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           agentType: agentTypes ? undefined : agentType,
           agentTypes,
           excludeBuiltIn,
+          scope:
+            scope && scope !== "built_in"
+              ? (scope as "personal" | "team" | "org")
+              : undefined,
         }),
       );
     },

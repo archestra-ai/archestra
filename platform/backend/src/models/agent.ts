@@ -182,6 +182,7 @@ class AgentModel {
       agentType?: "profile" | "mcp_gateway" | "llm_proxy" | "agent";
       agentTypes?: ("profile" | "mcp_gateway" | "llm_proxy" | "agent")[];
       excludeBuiltIn?: boolean;
+      scope?: "personal" | "team" | "org";
     },
   ): Promise<Agent[]> {
     let query = db
@@ -214,6 +215,11 @@ class AgentModel {
     // Exclude built-in agents when explicitly requested or when user is not an admin
     if (options?.excludeBuiltIn || !isAgentAdmin) {
       whereConditions.push(eq(schema.agentsTable.builtIn, false));
+    }
+
+    // Filter by scope if specified
+    if (options?.scope) {
+      whereConditions.push(eq(schema.agentsTable.scope, options.scope));
     }
 
     // Apply access control filtering for non-agent admins

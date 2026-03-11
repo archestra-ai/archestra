@@ -38098,6 +38098,21 @@
             "name": "excludeBuiltIn",
             "required": false,
             "description": "Exclude built-in agents from the results. Defaults to false."
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "personal",
+                "team",
+                "org",
+                "built_in"
+              ]
+            },
+            "in": "query",
+            "name": "scope",
+            "required": false,
+            "description": "Filter by scope: personal, team, org, or built_in."
           }
         ],
         "responses": {

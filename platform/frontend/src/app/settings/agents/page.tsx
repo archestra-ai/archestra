@@ -1,7 +1,7 @@
 "use client";
 
 import { Key } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { WithPermissions } from "@/components/roles/with-permissions";
 import {
   SettingsBlock,
@@ -22,6 +22,11 @@ import {
   useOrganization,
   useUpdateAgentSettings,
 } from "@/lib/organization.query";
+import {
+  buildSavePayload,
+  detectChanges,
+  resolveInitialState,
+} from "./agent-settings-utils";
 
 export default function AgentSettingsPage() {
   const { data: organization } = useOrganization();
@@ -31,6 +36,7 @@ export default function AgentSettingsPage() {
   const [selectedApiKeyId, setSelectedApiKeyId] = useState<string>("");
   const [defaultModel, setDefaultModel] = useState<string>("");
   const [defaultAgentId, setDefaultAgentId] = useState<string>("");
+  const initializedRef = useRef(false);
 
   const { data: allModels, isPending: modelsLoading } = useChatModels({
     apiKeyId: selectedApiKeyId || null,
@@ -41,62 +47,43 @@ export default function AgentSettingsPage() {
     "Failed to update agent settings",
   );
 
-  // Sync from org data
+  // Sync from org data only on initial load
   useEffect(() => {
     if (!organization || !apiKeys) return;
-    setDefaultModel(organization.defaultLlmModel ?? "");
-    setDefaultAgentId(organization.defaultAgentId ?? "");
+    if (initializedRef.current) return;
 
-    // Resolve API key from the stored provider
-    if (organization.defaultLlmProvider) {
-      const matchingKey = apiKeys.find(
-        (k) => k.provider === organization.defaultLlmProvider,
-      );
-      if (matchingKey) {
-        setSelectedApiKeyId(matchingKey.id);
-      }
-    }
+    const state = resolveInitialState(organization, apiKeys);
+    setSelectedApiKeyId(state.selectedApiKeyId);
+    setDefaultModel(state.defaultModel);
+    setDefaultAgentId(state.defaultAgentId);
+    initializedRef.current = true;
   }, [organization, apiKeys]);
 
-  const serverModel = organization?.defaultLlmModel ?? "";
-  const serverAgentId = organization?.defaultAgentId ?? "";
-
-  const hasModelChanges = defaultModel !== serverModel;
-  const hasAgentChanges = defaultAgentId !== serverAgentId;
-  const hasChanges = hasModelChanges || hasAgentChanges;
+  const changes = organization
+    ? detectChanges(
+        { selectedApiKeyId, defaultModel, defaultAgentId },
+        organization,
+      )
+    : { hasModelChanges: false, hasAgentChanges: false, hasChanges: false };
 
   const handleSave = async () => {
-    const payload: Record<string, unknown> = {};
-
-    if (hasModelChanges) {
-      // Resolve provider from selected API key
-      let resolvedProvider: string | null = null;
-      if (defaultModel && selectedApiKeyId && apiKeys) {
-        const key = apiKeys.find((k) => k.id === selectedApiKeyId);
-        if (key) {
-          resolvedProvider = key.provider;
-        }
-      }
-      payload.defaultLlmModel = defaultModel || null;
-      payload.defaultLlmProvider = resolvedProvider;
-    }
-
-    if (hasAgentChanges) {
-      payload.defaultAgentId = defaultAgentId || null;
-    }
-
+    if (!organization || !apiKeys) return;
+    const payload = buildSavePayload(
+      { selectedApiKeyId, defaultModel, defaultAgentId },
+      organization,
+      apiKeys,
+    );
     await updateMutation.mutateAsync(payload);
+    // After successful save, allow re-sync from server on next org data change
+    initializedRef.current = false;
   };
 
   const handleCancel = () => {
-    setDefaultModel(serverModel);
-    setDefaultAgentId(serverAgentId);
-    if (organization?.defaultLlmProvider && apiKeys) {
-      const matchingKey = apiKeys.find(
-        (k) => k.provider === organization.defaultLlmProvider,
-      );
-      setSelectedApiKeyId(matchingKey?.id ?? "");
-    }
+    if (!organization || !apiKeys) return;
+    const state = resolveInitialState(organization, apiKeys);
+    setSelectedApiKeyId(state.selectedApiKeyId);
+    setDefaultModel(state.defaultModel);
+    setDefaultAgentId(state.defaultAgentId);
   };
 
   const availableKeys = apiKeys ?? [];
@@ -203,7 +190,7 @@ export default function AgentSettingsPage() {
         }
       />
       <SettingsSaveBar
-        hasChanges={hasChanges}
+        hasChanges={changes.hasChanges}
         isSaving={updateMutation.isPending}
         permissions={{ agentSettings: ["update"] }}
         onSave={handleSave}

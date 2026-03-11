@@ -11,7 +11,7 @@ import {
   Server,
 } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { A2AConnectionInstructions } from "@/components/a2a-connection-instructions";
 import type { ArchitectureTabType } from "@/components/architecture-diagram/architecture-diagram";
 import { McpConnectionInstructions } from "@/components/mcp-connection-instructions";
@@ -85,11 +85,16 @@ export function ConnectionOptions({
   );
 
   // Auto-select first permitted tab if current tab isn't accessible
-  const tabPermissions: Record<ArchitectureTabType, boolean | undefined> = {
-    proxy: canReadLlmProxy,
-    mcp: canReadMcpGateway,
-    a2a: canReadAgent,
-  };
+  const tabPermissions = useMemo<
+    Record<ArchitectureTabType, boolean | undefined>
+  >(
+    () => ({
+      proxy: canReadLlmProxy,
+      mcp: canReadMcpGateway,
+      a2a: canReadAgent,
+    }),
+    [canReadLlmProxy, canReadMcpGateway, canReadAgent],
+  );
   useEffect(() => {
     if (tabPermissions[activeTab] === false) {
       const firstPermitted = (

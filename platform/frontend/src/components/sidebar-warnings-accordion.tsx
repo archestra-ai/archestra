@@ -51,7 +51,7 @@ export function SidebarWarningsAccordion() {
                 asChild
                 className="text-destructive hover:text-destructive"
               >
-                <Link href="/settings/auth">
+                <Link href="/settings/auth?highlight=change-password">
                   <AlertTriangle className="shrink-0" />
                   <span>Change default credentials</span>
                 </Link>

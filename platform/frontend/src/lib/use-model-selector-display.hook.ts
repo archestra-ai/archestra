@@ -26,9 +26,10 @@ export function useModelSelectorDisplay({
   const [isExpanded, setIsExpanded] = useState(false);
 
   // Reset to collapsed when conversation changes
+  // biome-ignore lint/correctness/useExhaustiveDependencies: conversationId triggers reset intentionally
   useEffect(() => {
     setIsExpanded(false);
-  }, []);
+  }, [conversationId]);
 
   const expand = useCallback(() => setIsExpanded(true), []);
 

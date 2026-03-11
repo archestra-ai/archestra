@@ -624,7 +624,7 @@ class ToolModel {
 
     const existingToolsByName = new Map(existingTools.map((t) => [t.name, t]));
 
-    // Prepare tools to insert (only those that don't exist)
+    // Prepare tools to insert (only those that don't exist) and tools to update
     const toolsToInsert: InsertTool[] = [];
 
     for (const archestraTool of archestraTools) {
@@ -637,6 +637,23 @@ class ToolModel {
           catalogId,
           agentId: null,
         });
+      } else {
+        // Update description and parameters if they changed
+        const newDescription = archestraTool.description || null;
+        const descChanged = existingTool.description !== newDescription;
+        const paramsChanged =
+          JSON.stringify(existingTool.parameters) !==
+          JSON.stringify(archestraTool.inputSchema);
+
+        if (descChanged || paramsChanged) {
+          await db
+            .update(schema.toolsTable)
+            .set({
+              description: newDescription,
+              parameters: archestraTool.inputSchema,
+            })
+            .where(eq(schema.toolsTable.id, existingTool.id));
+        }
       }
     }
 

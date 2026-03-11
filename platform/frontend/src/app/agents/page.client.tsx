@@ -16,6 +16,7 @@ import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { A2AConnectionInstructions } from "@/components/a2a-connection-instructions";
 import { AgentBadge } from "@/components/agent-badge";
+import { AgentIcon } from "@/components/agent-icon";
 import { AgentDialog } from "@/components/agent-dialog";
 import {
   ActiveFilterBadges,
@@ -342,6 +343,21 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
 
   const columns: ColumnDef<AgentData>[] = [
     {
+      id: "icon",
+      size: 40,
+      enableSorting: false,
+      header: "",
+      cell: ({ row }) => {
+        const icon = (row.original as unknown as Record<string, unknown>)
+          .icon as string | null;
+        return (
+          <div className="flex items-center justify-center">
+            <AgentIcon icon={icon} size={20} />
+          </div>
+        );
+      },
+    },
+    {
       id: "name",
       accessorKey: "name",
       size: 300,
@@ -393,6 +409,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     {
       id: "toolsCount",
       accessorKey: "toolsCount",
+      size: 80,
       header: ({ column }) => (
         <Button
           variant="ghost"
@@ -413,6 +430,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     {
       id: "subagentsCount",
       accessorKey: "subagentsCount",
+      size: 80,
       header: ({ column }) => (
         <Button
           variant="ghost"

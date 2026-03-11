@@ -113,7 +113,14 @@ export function InitialAgentSelector({
   const installer = useMcpInstallOrchestrator();
 
   const filteredAgents = useMemo(() => {
-    let result = allAgents;
+    let result = allAgents.filter((a) => {
+      const scope = (a as unknown as Record<string, unknown>).scope as string;
+      if (scope === "personal") {
+        const authorId = (a as unknown as Record<string, unknown>).authorId as string;
+        return authorId === userId;
+      }
+      return true;
+    });
     if (search) {
       const lower = search.toLowerCase();
       result = result.filter(
@@ -130,7 +137,7 @@ export function InitialAgentSelector({
       const sb = (b as unknown as Record<string, unknown>).scope as string;
       return (scopeOrder[sa] ?? 3) - (scopeOrder[sb] ?? 3);
     });
-  }, [allAgents, search, currentAgentId]);
+  }, [allAgents, search, currentAgentId, userId]);
 
   const currentAgent = useMemo(
     () =>

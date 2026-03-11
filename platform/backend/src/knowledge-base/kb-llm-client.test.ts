@@ -130,9 +130,9 @@ describe("resolveEmbeddingConfig", () => {
     const result = await resolveEmbeddingConfig(org.id);
 
     expect(result).not.toBeNull();
-    expect(result!.model).toBe("text-embedding-3-small");
-    expect(result!.dimensions).toBe(1536);
-    expect(result!.client.apiKey).toBe("unused");
+    expect(result?.model).toBe("text-embedding-3-small");
+    expect(result?.dimensions).toBe(1536);
+    expect(result?.client.apiKey).toBe("unused");
   });
 
   test("returns null when secret value cannot be resolved", async ({

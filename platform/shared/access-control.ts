@@ -62,7 +62,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   invitation: ["create", "cancel"],
   identityProvider: ["read", "create", "update", "delete"],
   secret: ["read", "update"],
-  appearance: ["read", "update"],
+  appearanceSettings: ["read", "update"],
   securitySettings: ["read", "update"],
 
   // better-auth internal resource — not exposed to users, kept for ACL compatibility
@@ -104,7 +104,7 @@ export const editorPermissions: Record<Resource, Action[]> = {
   // Administration
   team: ["read"],
   secret: ["read"],
-  appearance: ["read", "update"],
+  appearanceSettings: ["read", "update"],
   securitySettings: ["read", "update"],
 
   /*
@@ -154,7 +154,7 @@ export const memberPermissions: Record<Resource, Action[]> = {
   // Administration
   team: ["read"],
   secret: [],
-  appearance: [],
+  appearanceSettings: [],
   securitySettings: [],
 
   /*
@@ -289,8 +289,9 @@ export const permissionDescriptions: Record<string, string> = {
   "identityProvider:delete": "Remove identity providers",
   "secret:read": "View secrets manager configuration",
   "secret:update": "Modify secrets manager settings and test connectivity",
-  "appearance:read": "View white-labeling settings (theme, logo, fonts)",
-  "appearance:update": "Customize theme, logo, and font settings",
+  "appearanceSettings:read":
+    "View white-labeling settings (theme, logo, fonts)",
+  "appearanceSettings:update": "Customize theme, logo, and font settings",
   "securitySettings:read": "View security settings (tool policy, file uploads)",
   "securitySettings:update": "Modify security settings",
   "knowledgeBase:read": "View knowledge bases and connectors",
@@ -751,7 +752,7 @@ export const requiredEndpointPermissionsMap: Partial<
     llmLimit: ["delete"],
   },
   [RouteId.UpdateAppearance]: {
-    appearance: ["update"],
+    appearanceSettings: ["update"],
   },
   [RouteId.UpdateSecuritySettings]: {
     securitySettings: ["update"],
@@ -988,5 +989,5 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/settings/roles": { ac: ["read"] },
   "/settings/identity-providers": { identityProvider: ["read"] },
   "/settings/secrets": { secret: ["read"] },
-  "/settings/appearance": { appearance: ["read"] },
+  "/settings/appearance": { appearanceSettings: ["read"] },
 };

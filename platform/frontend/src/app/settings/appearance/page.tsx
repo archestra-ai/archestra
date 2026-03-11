@@ -77,7 +77,7 @@ export default function AppearanceSettingsPage() {
         {hasChanges && (
           <div className="flex gap-3 sticky bottom-0 bg-background p-4 rounded-lg border border-border shadow-lg">
             <PermissionButton
-              permissions={{ appearance: ["update"] }}
+              permissions={{ appearanceSettings: ["update"] }}
               onClick={() => {
                 saveAppearance?.(currentUITheme || DEFAULT_THEME);
                 setHasChanges(false);

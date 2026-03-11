@@ -36,7 +36,7 @@ export function ThemeSelector({
           {themes.map((theme) => (
             <div key={theme.id} className="flex-1">
               <WithPermissions
-                permissions={{ appearance: ["update"] }}
+                permissions={{ appearanceSettings: ["update"] }}
                 noPermissionHandle="tooltip"
                 key={theme.id}
               >

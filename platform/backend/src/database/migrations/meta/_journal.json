@@ -1247,6 +1247,13 @@
       "when": 1773237843797,
       "tag": "0177_amusing_toad",
       "breakpoints": true
+    },
+    {
+      "idx": 178,
+      "version": "7",
+      "when": 1773238894063,
+      "tag": "0178_rename-appearance-to-appearance-settings",
+      "breakpoints": true
     }
   ]
 }

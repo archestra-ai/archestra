@@ -37,12 +37,12 @@ Full access to core resources and settings, but cannot manage users, roles, or i
 | Resource | Actions |
 |----------|--------|
 | Agents | `read`, `create`, `update`, `delete`, `team-admin` |
+| Agent Triggers | `read`, `create`, `update`, `delete` |
 | MCP Gateways | `read`, `create`, `update`, `delete`, `team-admin` |
 | LLM Proxies | `read`, `create`, `update`, `delete`, `team-admin` |
 | Tools & Policies | `read`, `create`, `update`, `delete` |
 | Logs | `read` |
 | Chats | `read`, `create`, `update`, `delete` |
-| Agent Triggers | `read`, `create`, `update`, `delete` |
 | LLM Providers | `read`, `create`, `update`, `delete` |
 | LLM Limits | `read`, `create`, `update`, `delete` |
 | LLM Settings | `read`, `update` |
@@ -105,8 +105,8 @@ The following table lists all available permissions that can be assigned to cust
 | `agentTrigger:create` | Set up new agent triggers |
 | `agentTrigger:update` | Modify agent trigger configurations |
 | `agentTrigger:delete` | Remove agent triggers |
-| `appearance:read` | View white-labeling settings (theme, logo, fonts) |
-| `appearance:update` | Customize theme, logo, and font settings |
+| `appearanceSettings:read` | View white-labeling settings (theme, logo, fonts) |
+| `appearanceSettings:update` | Customize theme, logo, and font settings |
 | `chat:read` | View and access chat conversations |
 | `chat:create` | Start new chat conversations |
 | `chat:update` | Edit chat messages and conversation settings |

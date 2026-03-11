@@ -94,7 +94,7 @@ describe("useSettingsTabs", () => {
       member: ["read"],
       team: ["read"],
       ac: ["read"],
-      appearance: ["read"],
+      appearanceSettings: ["read"],
       securitySettings: ["read"],
       llmSettings: ["read"],
     };
@@ -254,7 +254,7 @@ describe("useSettingsTabs", () => {
       ac: ["read"],
       identityProvider: ["read"],
       secret: ["read"],
-      appearance: ["read"],
+      appearanceSettings: ["read"],
       securitySettings: ["read"],
       llmSettings: ["read"],
     };

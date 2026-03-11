@@ -28,7 +28,6 @@ import {
   KnowledgeBaseConnectorModel,
   KnowledgeBaseModel,
   LimitModel,
-
   TeamModel,
   ToolInvocationPolicyModel,
   ToolModel,
@@ -1811,11 +1810,7 @@ export async function executeArchestraTool(
 
     try {
       const name = args?.name as string | undefined;
-      const scope = args?.scope as
-        | "personal"
-        | "team"
-        | "org"
-        | undefined;
+      const scope = args?.scope as "personal" | "team" | "org" | undefined;
       const limit = Math.min((args?.limit as number) ?? 20, 100);
 
       const results = await AgentModel.findAllPaginated(
@@ -1876,9 +1871,7 @@ export async function executeArchestraTool(
       const id = args?.id as string | undefined;
       if (!id) {
         return {
-          content: [
-            { type: "text", text: "Error: agent id is required." },
-          ],
+          content: [{ type: "text", text: "Error: agent id is required." }],
           isError: true,
         };
       }
@@ -1886,7 +1879,10 @@ export async function executeArchestraTool(
       if (!context.userId || !organizationId) {
         return {
           content: [
-            { type: "text", text: "Error: user/organization context not available." },
+            {
+              type: "text",
+              text: "Error: user/organization context not available.",
+            },
           ],
           isError: true,
         };
@@ -1938,7 +1934,8 @@ export async function executeArchestraTool(
         updateData.description = args.description;
       if (args?.systemPrompt !== undefined)
         updateData.systemPrompt = args.systemPrompt;
-      if (args?.userPrompt !== undefined) updateData.userPrompt = args.userPrompt;
+      if (args?.userPrompt !== undefined)
+        updateData.userPrompt = args.userPrompt;
       if (args?.icon !== undefined) updateData.icon = args.icon;
       if (args?.scope !== undefined) updateData.scope = args.scope;
       if (args?.teams !== undefined) updateData.teams = args.teams;
@@ -1992,13 +1989,10 @@ export async function executeArchestraTool(
         isError: false,
       };
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Unknown error";
+      const message = error instanceof Error ? error.message : "Unknown error";
       logger.error({ err: error }, "Error editing agent");
       return {
-        content: [
-          { type: "text", text: `Error editing agent: ${message}` },
-        ],
+        content: [{ type: "text", text: `Error editing agent: ${message}` }],
         isError: true,
       };
     }
@@ -2024,7 +2018,10 @@ export async function executeArchestraTool(
       if (!context.userId || !organizationId) {
         return {
           content: [
-            { type: "text", text: "Error: user/organization context not available." },
+            {
+              type: "text",
+              text: "Error: user/organization context not available.",
+            },
           ],
           isError: true,
         };
@@ -2072,7 +2069,10 @@ export async function executeArchestraTool(
       if (Object.keys(updateData).length === 0) {
         return {
           content: [
-            { type: "text", text: "No fields to update. Provide name, icon, or description." },
+            {
+              type: "text",
+              text: "No fields to update. Provide name, icon, or description.",
+            },
           ],
           isError: true,
         };
@@ -2085,7 +2085,9 @@ export async function executeArchestraTool(
 
       if (!updated) {
         return {
-          content: [{ type: "text", text: "Error: failed to update MCP server." }],
+          content: [
+            { type: "text", text: "Error: failed to update MCP server." },
+          ],
           isError: true,
         };
       }
@@ -3305,21 +3307,18 @@ export function getArchestraMcpTools(): Tool[] {
     {
       name: TOOL_LIST_AGENTS_FULL_NAME,
       title: "List Agents",
-      description:
-        "List agents with optional filtering by name and scope.",
+      description: "List agents with optional filtering by name and scope.",
       inputSchema: {
         type: "object",
         properties: {
           name: {
             type: "string",
-            description:
-              "Filter by name (partial match, optional)",
+            description: "Filter by name (partial match, optional)",
           },
           scope: {
             type: "string",
             enum: ["personal", "team", "org"],
-            description:
-              "Filter by scope (optional)",
+            description: "Filter by scope (optional)",
           },
           limit: {
             type: "number",
@@ -3373,7 +3372,8 @@ export function getArchestraMcpTools(): Tool[] {
           teams: {
             type: "array",
             items: { type: "string" },
-            description: "Array of team IDs to assign (replaces existing teams)",
+            description:
+              "Array of team IDs to assign (replaces existing teams)",
           },
           labels: {
             type: "array",
@@ -3381,11 +3381,15 @@ export function getArchestraMcpTools(): Tool[] {
               type: "object",
               properties: {
                 key: { type: "string", description: "The label key" },
-                value: { type: "string", description: "The value for the label" },
+                value: {
+                  type: "string",
+                  description: "The value for the label",
+                },
               },
               required: ["key", "value"],
             },
-            description: "Array of labels to set on the agent (replaces existing labels)",
+            description:
+              "Array of labels to set on the agent (replaces existing labels)",
           },
           mcpServerIds: {
             type: "array",
@@ -3620,7 +3624,10 @@ async function assignMcpServerTools(
         toolCount: tools.length,
       });
     } catch (error) {
-      logger.error({ err: error, mcpServerId }, "Error assigning MCP server tools");
+      logger.error(
+        { err: error, mcpServerId },
+        "Error assigning MCP server tools",
+      );
       results.push({ id: mcpServerId, status: "error" });
     }
   }
@@ -3642,7 +3649,10 @@ async function assignSubAgentDelegations(
       await AgentToolModel.assignDelegation(agentId, subAgentId);
       results.push({ id: subAgentId, status: "success" });
     } catch (error) {
-      logger.error({ err: error, subAgentId }, "Error assigning sub-agent delegation");
+      logger.error(
+        { err: error, subAgentId },
+        "Error assigning sub-agent delegation",
+      );
       results.push({ id: subAgentId, status: "error" });
     }
   }

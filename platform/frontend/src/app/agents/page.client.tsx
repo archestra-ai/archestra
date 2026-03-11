@@ -16,8 +16,8 @@ import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { A2AConnectionInstructions } from "@/components/a2a-connection-instructions";
 import { AgentBadge } from "@/components/agent-badge";
-import { AgentIcon } from "@/components/agent-icon";
 import { AgentDialog } from "@/components/agent-dialog";
+import { AgentIcon } from "@/components/agent-icon";
 import {
   ActiveFilterBadges,
   AgentScopeFilter,
@@ -347,15 +347,11 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
       size: 40,
       enableSorting: false,
       header: "",
-      cell: ({ row }) => {
-        const icon = (row.original as unknown as Record<string, unknown>)
-          .icon as string | null;
-        return (
-          <div className="flex items-center justify-center">
-            <AgentIcon icon={icon} size={20} />
-          </div>
-        );
-      },
+      cell: ({ row }) => (
+        <div className="flex items-center justify-center">
+          <AgentIcon icon={row.original.icon} size={20} />
+        </div>
+      ),
     },
     {
       id: "name",

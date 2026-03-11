@@ -114,10 +114,8 @@ export function InitialAgentSelector({
 
   const filteredAgents = useMemo(() => {
     let result = allAgents.filter((a) => {
-      const scope = (a as unknown as Record<string, unknown>).scope as string;
-      if (scope === "personal") {
-        const authorId = (a as unknown as Record<string, unknown>).authorId as string;
-        return authorId === userId;
+      if (a.scope === "personal") {
+        return a.authorId === userId;
       }
       return true;
     });
@@ -133,9 +131,7 @@ export function InitialAgentSelector({
     return [...result].sort((a, b) => {
       if (a.id === currentAgentId) return -1;
       if (b.id === currentAgentId) return 1;
-      const sa = (a as unknown as Record<string, unknown>).scope as string;
-      const sb = (b as unknown as Record<string, unknown>).scope as string;
-      return (scopeOrder[sa] ?? 3) - (scopeOrder[sb] ?? 3);
+      return (scopeOrder[a.scope] ?? 3) - (scopeOrder[b.scope] ?? 3);
     });
   }, [allAgents, search, currentAgentId, userId]);
 
@@ -1563,9 +1559,7 @@ function AddDelegationView({
     }
     const scopeOrder: Record<string, number> = { personal: 0, team: 1, org: 2 };
     return [...result].sort((a, b) => {
-      const sa = (a as unknown as Record<string, unknown>).scope as string;
-      const sb = (b as unknown as Record<string, unknown>).scope as string;
-      return (scopeOrder[sa] ?? 3) - (scopeOrder[sb] ?? 3);
+      return (scopeOrder[a.scope] ?? 3) - (scopeOrder[b.scope] ?? 3);
     });
   }, [allAgents, agentId, search]);
 

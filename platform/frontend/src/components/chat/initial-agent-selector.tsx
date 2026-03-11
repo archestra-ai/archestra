@@ -582,9 +582,7 @@ function ToolsSubMenu({
         </span>
       </DropdownMenuSubTrigger>
       <DropdownMenuPortal>
-        <DropdownMenuSubContent
-          className={detailCatalog ? "w-72 p-0" : "w-60"}
-        >
+        <DropdownMenuSubContent className={detailCatalog ? "w-72 p-0" : "w-60"}>
           {detailCatalog ? (
             /* ── Tool detail view ── */
             <InlineToolDetail
@@ -656,9 +654,7 @@ function ToolsSubMenu({
                 {/* Available servers */}
                 {availableCatalogs.length > 0 && (
                   <DropdownMenuGroup>
-                    {connectedFiltered.length > 0 && (
-                      <DropdownMenuSeparator />
-                    )}
+                    {connectedFiltered.length > 0 && <DropdownMenuSeparator />}
                     <DropdownMenuLabel>Available</DropdownMenuLabel>
                     {availableCatalogs.map((catalog) => {
                       const servers = allCredentials?.[catalog.id] ?? [];

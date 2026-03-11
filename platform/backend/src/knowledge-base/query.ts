@@ -71,6 +71,7 @@ class QueryService {
       ? KbChunkModel.fullTextSearch({
           connectorIds,
           queryText,
+          userAcl: params.userAcl,
           limit: overFetchLimit,
         })
       : Promise.resolve([] as VectorSearchResult[]);
@@ -85,6 +86,7 @@ class QueryService {
     const vectorRows = await KbChunkModel.vectorSearch({
       connectorIds,
       queryEmbedding,
+      userAcl: params.userAcl,
       limit: overFetchLimit,
     });
 

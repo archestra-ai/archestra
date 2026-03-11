@@ -10,6 +10,7 @@ import {
   Globe,
   Loader2,
   MoreVertical,
+  Pencil,
   Plus,
   Share2,
   Users,
@@ -1326,6 +1327,18 @@ export default function ChatPage() {
               )}
               {/* Right side - desktop: original buttons */}
               <div className="hidden md:flex items-center gap-2 flex-shrink-0">
+                {isAgentAdmin && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => openDialog("edit-agent")}
+                    className="text-xs"
+                  >
+                    <Pencil className="h-3 w-3 mr-1" />
+                    Edit Agent
+                  </Button>
+                )}
+                {isAgentAdmin && <div className="w-px h-4 bg-border" />}
                 {conversationId && (
                   <Button
                     variant="ghost"
@@ -1388,6 +1401,14 @@ export default function ChatPage() {
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
+                    {isAgentAdmin && (
+                      <DropdownMenuItem
+                        onSelect={() => openDialog("edit-agent")}
+                      >
+                        <Pencil className="h-4 w-4" />
+                        Edit Agent
+                      </DropdownMenuItem>
+                    )}
                     {conversationId && (
                       <DropdownMenuItem
                         onSelect={() => setIsShareDialogOpen(true)}

@@ -50,9 +50,10 @@ class KbChunkModel {
   static async vectorSearch(params: {
     connectorIds: string[];
     queryEmbedding: number[];
+    userAcl?: string[];
     limit?: number;
   }): Promise<VectorSearchResult[]> {
-    const { connectorIds, queryEmbedding, limit = 10 } = params;
+    const { connectorIds, queryEmbedding, userAcl, limit = 10 } = params;
     if (connectorIds.length === 0) return [];
     const embeddingStr = `[${queryEmbedding.join(",")}]`;
     const ids = sql.join(
@@ -61,6 +62,15 @@ class KbChunkModel {
     );
 
     const vectorCast = sql.raw(`::vector(${EMBEDDING_DIMENSIONS})`);
+
+    const aclFilter =
+      userAcl && userAcl.length > 0
+        ? sql`AND (c.acl = '[]'::jsonb OR c.acl ?| array[${sql.join(
+            userAcl.map((entry) => sql`${entry}`),
+            sql`, `,
+          )}])`
+        : sql``;
+
     const rows = await db.execute(sql`
       SELECT
         c.id, c.content, c.chunk_index AS "chunkIndex", c.document_id AS "documentId",
@@ -72,6 +82,7 @@ class KbChunkModel {
       LEFT JOIN knowledge_base_connectors kbc ON kbc.id = d.connector_id
       WHERE d.connector_id IN (${ids})
         AND c.embedding IS NOT NULL
+        ${aclFilter}
       ORDER BY c.embedding <=> ${embeddingStr}${vectorCast}
       LIMIT ${limit}
     `);
@@ -82,14 +93,23 @@ class KbChunkModel {
   static async fullTextSearch(params: {
     connectorIds: string[];
     queryText: string;
+    userAcl?: string[];
     limit?: number;
   }): Promise<VectorSearchResult[]> {
-    const { connectorIds, queryText, limit = 10 } = params;
+    const { connectorIds, queryText, userAcl, limit = 10 } = params;
     if (connectorIds.length === 0) return [];
     const ids = sql.join(
       connectorIds.map((id) => sql`${id}`),
       sql`, `,
     );
+
+    const aclFilter =
+      userAcl && userAcl.length > 0
+        ? sql`AND (c.acl = '[]'::jsonb OR c.acl ?| array[${sql.join(
+            userAcl.map((entry) => sql`${entry}`),
+            sql`, `,
+          )}])`
+        : sql``;
 
     const rows = await db.execute(sql`
       SELECT
@@ -102,6 +122,7 @@ class KbChunkModel {
       LEFT JOIN knowledge_base_connectors kbc ON kbc.id = d.connector_id
       WHERE d.connector_id IN (${ids})
         AND c.search_vector @@ plainto_tsquery('english', ${queryText})
+        ${aclFilter}
       ORDER BY score DESC
       LIMIT ${limit}
     `);

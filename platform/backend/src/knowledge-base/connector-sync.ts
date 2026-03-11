@@ -6,6 +6,7 @@ import {
   KbChunkModel,
   KbDocumentModel,
   KnowledgeBaseConnectorModel,
+  KnowledgeBaseModel,
 } from "@/models";
 import { secretManager } from "@/secrets-manager";
 import { taskQueueService } from "@/task-queue";
@@ -14,6 +15,7 @@ import type {
   ConnectorCredentials,
   ConnectorDocument,
 } from "@/types/knowledge-connector";
+import { buildDocumentAcl } from "./acl";
 import { chunkDocument } from "./chunker";
 import {
   BaseConnector,
@@ -113,6 +115,9 @@ class ConnectorSyncService {
       );
     }
 
+    // Resolve ACL for documents based on the KB(s) this connector belongs to
+    const documentAcl = await this.resolveConnectorAcl(connectorId, runLog);
+
     let documentsProcessed = 0;
     let documentsIngested = 0;
     let itemErrors = 0;
@@ -137,6 +142,7 @@ class ConnectorSyncService {
               connectorId,
               connectorType: connector.connectorType,
               organizationId: connector.organizationId,
+              acl: documentAcl,
               log: runLog,
             });
             if (result.ingested) {
@@ -320,9 +326,11 @@ class ConnectorSyncService {
     connectorId: string;
     connectorType: string;
     organizationId: string;
+    acl: AclEntry[];
     log: pino.Logger;
   }): Promise<{ ingested: boolean; documentId: string | null }> {
-    const { doc, connectorId, connectorType, organizationId, log } = params;
+    const { doc, connectorId, connectorType, organizationId, acl, log } =
+      params;
 
     const contentHash = createHash("sha256").update(doc.content).digest("hex");
 
@@ -351,6 +359,7 @@ class ConnectorSyncService {
         content: doc.content,
         contentHash,
         sourceUrl: doc.sourceUrl ?? null,
+        acl,
         metadata: {
           ...doc.metadata,
           connectorType,
@@ -364,7 +373,7 @@ class ConnectorSyncService {
         documentId: existing.id,
         title: doc.title,
         content: doc.content,
-        acl: existing.acl as AclEntry[],
+        acl,
         log,
       });
 
@@ -387,7 +396,7 @@ class ConnectorSyncService {
       content: doc.content,
       contentHash,
       sourceUrl: doc.sourceUrl,
-      acl: [],
+      acl,
       metadata: {
         ...doc.metadata,
         connectorType,
@@ -398,7 +407,7 @@ class ConnectorSyncService {
       documentId: created.id,
       title: doc.title,
       content: doc.content,
-      acl: [],
+      acl,
       log,
     });
 
@@ -437,6 +446,43 @@ class ConnectorSyncService {
       { documentId, chunkCount: chunks.length },
       "Document chunked and stored",
     );
+  }
+
+  /**
+   * Resolve ACL entries for a connector based on the visibility of the
+   * knowledge base(s) it belongs to. Uses the most restrictive visibility
+   * across all assigned KBs, merging team IDs.
+   */
+  private async resolveConnectorAcl(
+    connectorId: string,
+    log: pino.Logger,
+  ): Promise<AclEntry[]> {
+    const kbIds =
+      await KnowledgeBaseConnectorModel.getKnowledgeBaseIds(connectorId);
+    if (kbIds.length === 0) {
+      log.debug({ connectorId }, "No KBs assigned, defaulting to org-wide ACL");
+      return buildDocumentAcl({ visibility: "org-wide", teamIds: [] });
+    }
+
+    const kbs = await KnowledgeBaseModel.findByIds(kbIds);
+    if (kbs.length === 0) {
+      return buildDocumentAcl({ visibility: "org-wide", teamIds: [] });
+    }
+
+    // If any KB is team-scoped, use team-scoped with merged team IDs
+    const teamScopedKbs = kbs.filter((kb) => kb.visibility === "team-scoped");
+    if (teamScopedKbs.length > 0) {
+      const allTeamIds = [
+        ...new Set(teamScopedKbs.flatMap((kb) => kb.teamIds)),
+      ];
+      return buildDocumentAcl({
+        visibility: "team-scoped",
+        teamIds: allTeamIds,
+      });
+    }
+
+    // Default: org-wide
+    return buildDocumentAcl({ visibility: "org-wide", teamIds: [] });
   }
 
   private async loadCredentials(

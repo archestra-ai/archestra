@@ -42,7 +42,7 @@ export function SidebarWarningsAccordion() {
   }
 
   return (
-    <SidebarGroup className="p-0 group-data-[collapsible=icon]:p-0">
+    <SidebarGroup className="py-0 group-data-[collapsible=icon]:p-0">
       <SidebarGroupContent>
         <SidebarMenu>
           {showDefaultCredsWarning && (

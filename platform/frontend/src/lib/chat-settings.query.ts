@@ -28,7 +28,7 @@ const {
   deleteVirtualApiKey,
 } = archestraApiSdk;
 
-export function useChatApiKeys() {
+export function useChatApiKeys(params?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ["chat-api-keys"],
     queryFn: async () => {
@@ -39,6 +39,7 @@ export function useChatApiKeys() {
       }
       return data ?? [];
     },
+    enabled: params?.enabled,
   });
 }
 

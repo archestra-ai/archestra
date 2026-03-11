@@ -275,7 +275,7 @@ export function useDefaultAgentId() {
   });
 }
 
-export function useInternalAgents() {
+export function useInternalAgents(params?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ["agents", "all", { agentType: "agent", excludeBuiltIn: true }],
     queryFn: async () => {
@@ -284,6 +284,7 @@ export function useInternalAgents() {
       });
       return response.data ?? [];
     },
+    enabled: params?.enabled,
   });
 }
 

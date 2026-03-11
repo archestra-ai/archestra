@@ -150,11 +150,22 @@ export function InitialAgentSelector({
   }, [currentAgent, isAgentAdmin, userId]);
 
   const effectiveAgentId = currentAgent?.id ?? currentAgentId;
-  const { data: catalogItems = [] } = useInternalMcpCatalog();
+  const { data: canReadMcpRegistry } = useHasPermissions({
+    mcpRegistry: ["read"],
+  });
+  const { data: canReadToolPolicy } = useHasPermissions({
+    toolPolicy: ["read"],
+  });
+  const { data: canReadKnowledgeBase } = useHasPermissions({
+    knowledgeBase: ["read"],
+  });
+  const { data: catalogItems = [] } = useInternalMcpCatalog({
+    enabled: !!canReadMcpRegistry,
+  });
   const { data: assignedToolsData } = useAllProfileTools({
     filters: { agentId: effectiveAgentId ?? undefined },
     skipPagination: true,
-    enabled: !!effectiveAgentId,
+    enabled: !!effectiveAgentId && !!canReadToolPolicy,
   });
 
   const assignedCatalogs = useMemo(() => {
@@ -174,8 +185,12 @@ export function InitialAgentSelector({
   }, [allAgents, triggerDelegations]);
 
   // Knowledge base data for connector icons in avatar group
-  const { data: knowledgeBasesData } = useKnowledgeBases();
-  const { data: connectorsData } = useConnectors();
+  const { data: knowledgeBasesData } = useKnowledgeBases({
+    enabled: !!canReadKnowledgeBase,
+  });
+  const { data: connectorsData } = useConnectors({
+    enabled: !!canReadKnowledgeBase,
+  });
 
   const allKnowledgeBases = knowledgeBasesData?.data ?? [];
   const allConnectors = connectorsData?.data ?? [];

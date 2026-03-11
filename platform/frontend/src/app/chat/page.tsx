@@ -179,7 +179,16 @@ export default function ChatPage() {
   const { data: canCreateAgent } = useHasPermissions({
     agent: ["create"],
   });
-  const { data: teams } = useTeams();
+  const { data: canReadAgent } = useHasPermissions({
+    agent: ["read"],
+  });
+  const { data: canReadLlmProvider } = useHasPermissions({
+    llmProvider: ["read"],
+  });
+  const { data: canReadTeams } = useHasPermissions({
+    team: ["read"],
+  });
+  const { data: teams } = useTeams({ enabled: !!canReadTeams });
 
   // Non-admin users with no teams cannot create agents
   const cannotCreateDueToNoTeams =
@@ -195,16 +204,18 @@ export default function ChatPage() {
     return false;
   });
 
+  const hasChatAccess = canReadAgent !== false && canReadLlmProvider !== false;
+
   // Fetch internal agents for dialog editing
   const { data: internalAgents = [], isPending: isLoadingAgents } =
-    useInternalAgents();
+    useInternalAgents({ enabled: hasChatAccess });
   const { data: defaultAgentId } = useDefaultAgentId();
 
   // Fetch profiles and models for initial chat (no conversation)
   const { modelsByProvider, isPending: isModelsLoading } =
     useModelsByProvider();
   const { data: chatApiKeys = [], isLoading: isLoadingApiKeys } =
-    useChatApiKeys();
+    useChatApiKeys({ enabled: hasChatAccess });
   const { data: organization, isPending: isOrgLoading } = useOrganization();
 
   // State for initial chat (when no conversation exists yet)
@@ -434,7 +445,6 @@ export default function ChatPage() {
     return undefined;
   }, [initialModel, modelsByProvider]);
 
-
   const chatSession = useChatSession(conversationId);
 
   const { isLoading: isLoadingFeatures } = useConfig();
@@ -632,7 +642,9 @@ export default function ChatPage() {
   const {
     isLoading: isPlaywrightCheckLoading,
     isRequired: isPlaywrightSetupRequired,
-  } = usePlaywrightSetupRequired(playwrightSetupAgentId, conversationId);
+  } = usePlaywrightSetupRequired(playwrightSetupAgentId, conversationId, {
+    enabled: hasChatAccess,
+  });
   // Treat both loading and required as "visible" for disabling submit, hiding arrow, etc.
   const isPlaywrightSetupVisible =
     isPlaywrightSetupRequired || isPlaywrightCheckLoading;
@@ -1213,6 +1225,41 @@ export default function ChatPage() {
 
   // Check if the conversation's agent was deleted
   const isAgentDeleted = conversationId && conversation && !conversation.agent;
+
+  // If user lacks permission to read agents or LLM providers, show access denied
+  // Must check before loading state since disabled queries stay in pending state
+  if (canReadAgent === false || canReadLlmProvider === false) {
+    const missingPermissions: string[] = [];
+    if (canReadAgent === false) missingPermissions.push("agent:read");
+    if (canReadLlmProvider === false)
+      missingPermissions.push("llmProvider:read");
+    return (
+      <Empty className="h-full">
+        <EmptyHeader>
+          <EmptyMedia variant="icon">
+            <AlertTriangle />
+          </EmptyMedia>
+          <EmptyTitle>Access restricted</EmptyTitle>
+          <EmptyDescription>
+            You don&apos;t have the required permissions to use the chat. Ask
+            your administrator to grant you the following:
+          </EmptyDescription>
+        </EmptyHeader>
+        <EmptyContent>
+          <div className="flex flex-col items-center gap-1">
+            {missingPermissions.map((p) => (
+              <code
+                key={p}
+                className="rounded bg-muted px-2 py-1 text-sm font-mono"
+              >
+                {p}
+              </code>
+            ))}
+          </div>
+        </EmptyContent>
+      </Empty>
+    );
+  }
 
   // Show loading spinner while essential data is loading
   if (isLoadingApiKeyCheck || isLoadingAgents || isPlaywrightCheckLoading) {

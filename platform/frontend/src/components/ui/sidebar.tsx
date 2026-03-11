@@ -260,23 +260,39 @@ function SidebarTrigger({
   ...props
 }: React.ComponentProps<typeof Button>) {
   const { toggleSidebar } = useSidebar();
+  const isMac =
+    typeof navigator !== "undefined" &&
+    navigator.userAgent.toLowerCase().includes("mac");
+  const modLabel = isMac ? "⌘" : "Ctrl";
 
   return (
-    <Button
-      data-sidebar="trigger"
-      data-slot="sidebar-trigger"
-      variant="ghost"
-      size="icon"
-      className={cn("size-7", className)}
-      onClick={(event) => {
-        onClick?.(event);
-        toggleSidebar();
-      }}
-      {...props}
-    >
-      <PanelLeftIcon />
-      <span className="sr-only">Toggle Sidebar</span>
-    </Button>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          data-sidebar="trigger"
+          data-slot="sidebar-trigger"
+          variant="ghost"
+          size="icon"
+          className={cn("size-7", className)}
+          onClick={(event) => {
+            onClick?.(event);
+            toggleSidebar();
+          }}
+          {...props}
+        >
+          <PanelLeftIcon />
+          <span className="sr-only">Toggle Sidebar</span>
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent side="right">
+        <span>
+          Toggle Sidebar{" "}
+          <kbd className="ml-1 rounded border bg-muted px-1 py-0.5 text-[10px] font-mono">
+            {modLabel}+{SHORTCUT_SIDEBAR.label}
+          </kbd>
+        </span>
+      </TooltipContent>
+    </Tooltip>
   );
 }
 

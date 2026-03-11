@@ -32,6 +32,7 @@ import {
   DialogClose,
   DialogContent,
   DialogTitle,
+  DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -67,6 +68,7 @@ import {
 } from "@/lib/mcp-server.query";
 import { cn } from "@/lib/utils";
 
+type ScopeFilter = "my" | "others" | "team" | "org";
 type DialogView =
   | "settings"
   | "change"

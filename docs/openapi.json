@@ -120467,6 +120467,14 @@
                     "rerankerModel": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "defaultLlmModel": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "defaultLlmProvider": {
+                      "nullable": true,
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -120488,7 +120496,9 @@
                     "embeddingModel",
                     "embeddingChatApiKeyId",
                     "rerankerChatApiKeyId",
-                    "rerankerModel"
+                    "rerankerModel",
+                    "defaultLlmModel",
+                    "defaultLlmProvider"
                   ],
                   "additionalProperties": false
                 }
@@ -120900,6 +120910,14 @@
                     "rerankerModel": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "defaultLlmModel": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "defaultLlmProvider": {
+                      "nullable": true,
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -120921,7 +120939,9 @@
                     "embeddingModel",
                     "embeddingChatApiKeyId",
                     "rerankerChatApiKeyId",
-                    "rerankerModel"
+                    "rerankerModel",
+                    "defaultLlmModel",
+                    "defaultLlmProvider"
                   ],
                   "additionalProperties": false
                 }
@@ -121581,6 +121601,14 @@
                     "rerankerModel": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "defaultLlmModel": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "defaultLlmProvider": {
+                      "nullable": true,
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -121602,7 +121630,9 @@
                     "embeddingModel",
                     "embeddingChatApiKeyId",
                     "rerankerChatApiKeyId",
-                    "rerankerModel"
+                    "rerankerModel",
+                    "defaultLlmModel",
+                    "defaultLlmProvider"
                   ],
                   "additionalProperties": false
                 }
@@ -121855,6 +121885,14 @@
                       "1w",
                       "1m"
                     ]
+                  },
+                  "defaultLlmModel": {
+                    "nullable": true,
+                    "type": "string"
+                  },
+                  "defaultLlmProvider": {
+                    "nullable": true,
+                    "type": "string"
                   }
                 }
               }
@@ -121987,6 +122025,14 @@
                     "rerankerModel": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "defaultLlmModel": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "defaultLlmProvider": {
+                      "nullable": true,
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -122008,7 +122054,9 @@
                     "embeddingModel",
                     "embeddingChatApiKeyId",
                     "rerankerChatApiKeyId",
-                    "rerankerModel"
+                    "rerankerModel",
+                    "defaultLlmModel",
+                    "defaultLlmProvider"
                   ],
                   "additionalProperties": false
                 }
@@ -122392,6 +122440,14 @@
                     "rerankerModel": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "defaultLlmModel": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "defaultLlmProvider": {
+                      "nullable": true,
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -122413,7 +122469,9 @@
                     "embeddingModel",
                     "embeddingChatApiKeyId",
                     "rerankerChatApiKeyId",
-                    "rerankerModel"
+                    "rerankerModel",
+                    "defaultLlmModel",
+                    "defaultLlmProvider"
                   ],
                   "additionalProperties": false
                 }
@@ -122766,6 +122824,14 @@
                     "rerankerModel": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "defaultLlmModel": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "defaultLlmProvider": {
+                      "nullable": true,
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -122787,7 +122853,9 @@
                     "embeddingModel",
                     "embeddingChatApiKeyId",
                     "rerankerChatApiKeyId",
-                    "rerankerModel"
+                    "rerankerModel",
+                    "defaultLlmModel",
+                    "defaultLlmProvider"
                   ],
                   "additionalProperties": false
                 }
@@ -123429,6 +123497,14 @@
                     "rerankerModel": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "defaultLlmModel": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "defaultLlmProvider": {
+                      "nullable": true,
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -123450,7 +123526,9 @@
                     "embeddingModel",
                     "embeddingChatApiKeyId",
                     "rerankerChatApiKeyId",
-                    "rerankerModel"
+                    "rerankerModel",
+                    "defaultLlmModel",
+                    "defaultLlmProvider"
                   ],
                   "additionalProperties": false
                 }

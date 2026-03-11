@@ -1,6 +1,7 @@
 import {
   DEFAULT_MODELS,
   FAST_MODELS,
+  isSupportedProvider,
   type SupportedProvider,
   SupportedProvidersSchema,
 } from "@shared";
@@ -8,7 +9,7 @@ import { isVertexAiEnabled } from "@/clients/gemini-client";
 import { resolveProviderApiKey } from "@/clients/llm-client";
 import config, { getProviderEnvApiKey } from "@/config";
 import logger from "@/logging";
-import { ApiKeyModelModel, ChatApiKeyModel } from "@/models";
+import { ApiKeyModelModel, ChatApiKeyModel, OrganizationModel } from "@/models";
 
 /**
  * Resolve the best available LLM provider, API key, model, and base URL
@@ -70,9 +71,10 @@ export async function resolveSmartDefaultLlm(params: {
  * Extends `resolveSmartDefaultLlm` with chat-specific fallbacks:
  *
  * 1. DB-managed keys (via resolveSmartDefaultLlm)
- * 2. Environment variable API keys + hardcoded default models
- * 3. Vertex AI (Gemini without API key)
- * 4. Config defaults (ARCHESTRA_CHAT_DEFAULT_MODEL / ARCHESTRA_CHAT_DEFAULT_PROVIDER)
+ * 2. Organization-level default model (admin-configured)
+ * 3. Environment variable API keys + hardcoded default models
+ * 4. Vertex AI (Gemini without API key)
+ * 5. Config defaults (ARCHESTRA_CHAT_DEFAULT_MODEL / ARCHESTRA_CHAT_DEFAULT_PROVIDER)
  *
  * Always returns a result — never null.
  */
@@ -86,14 +88,24 @@ export async function resolveSmartDefaultLlmForChat(params: {
     return { model: dbResult.modelName, provider: dbResult.provider };
   }
 
-  // 2. Check environment variable API keys as fallback
+  // 2. Check organization-level default model
+  const org = await OrganizationModel.getById(params.organizationId);
+  if (
+    org?.defaultLlmModel &&
+    org?.defaultLlmProvider &&
+    isSupportedProvider(org.defaultLlmProvider)
+  ) {
+    return { model: org.defaultLlmModel, provider: org.defaultLlmProvider };
+  }
+
+  // 3. Check environment variable API keys as fallback
   for (const provider of SupportedProvidersSchema.options) {
     if (getProviderEnvApiKey(provider)) {
       return { model: DEFAULT_MODELS[provider], provider };
     }
   }
 
-  // 3. Check if Vertex AI is enabled — use Gemini without API key
+  // 4. Check if Vertex AI is enabled — use Gemini without API key
   if (isVertexAiEnabled()) {
     logger.info(
       { model: DEFAULT_MODELS.gemini },
@@ -102,7 +114,7 @@ export async function resolveSmartDefaultLlmForChat(params: {
     return { model: DEFAULT_MODELS.gemini, provider: "gemini" };
   }
 
-  // 4. Ultimate fallback — use configured defaults
+  // 5. Ultimate fallback — use configured defaults
   return {
     model: config.chat.defaultModel,
     provider: config.chat.defaultProvider,

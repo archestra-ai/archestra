@@ -215,10 +215,9 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
             .describe(
               "Exclude built-in agents from the results. Defaults to false.",
             ),
-          scope: z
-            .enum(["personal", "team", "org", "built_in"])
-            .optional()
-            .describe("Filter by scope: personal, team, org, or built_in."),
+          scope: AgentScopeFilterSchema.optional().describe(
+            "Filter by scope: personal, team, org, or built_in.",
+          ),
         }),
         response: constructResponseSchema(z.array(SelectAgentSchema)),
       },

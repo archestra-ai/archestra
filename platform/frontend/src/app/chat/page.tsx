@@ -249,16 +249,11 @@ export default function ChatPage() {
       }
     }
 
-    // Priority: localStorage > org default > member default > first available
+    // Priority: org default > localStorage > member default > first available
+    // Org default always wins when set (admin-configured for the whole org).
+    // localStorage only overrides when no org default is configured.
     if (!initialAgentId) {
-      const savedAgentId = getSavedAgent();
-      const savedAgent = internalAgents.find((a) => a.id === savedAgentId);
-      if (savedAgent) {
-        setInitialAgentId(savedAgentId);
-        resolvedAgentRef.current = savedAgent;
-        return;
-      }
-      // Try org's default agent (admin-configured, overrides member default)
+      // Try org's default agent first (admin-configured, takes precedence)
       if (organization?.defaultAgentId) {
         const orgDefaultAgent = internalAgents.find(
           (a) => a.id === organization.defaultAgentId,
@@ -269,6 +264,14 @@ export default function ChatPage() {
           resolvedAgentRef.current = orgDefaultAgent;
           return;
         }
+      }
+      // Try localStorage (user's previous selection, only when no org default)
+      const savedAgentId = getSavedAgent();
+      const savedAgent = internalAgents.find((a) => a.id === savedAgentId);
+      if (savedAgent) {
+        setInitialAgentId(savedAgentId);
+        resolvedAgentRef.current = savedAgent;
+        return;
       }
       // Try member's default agent
       if (defaultAgentId) {

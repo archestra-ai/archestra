@@ -41,6 +41,7 @@ export const resources = [
   "appearance",
   "securitySettings",
   "llmSettings",
+  "agentSettings",
   "agentTrigger",
   /**
    * Better-auth access control resource - needed for organization role management
@@ -90,6 +91,7 @@ export const resourceLabels: Record<Resource, string> = {
   appearance: "Appearance",
   securitySettings: "Security Settings",
   llmSettings: "LLM Settings",
+  agentSettings: "Agent Settings",
   agentTrigger: "Agent Triggers",
 };
 
@@ -104,6 +106,7 @@ export const resourceDescriptions: Record<Resource, string> = {
   llmProvider: "LLM provider API keys, virtual keys, and models",
   llmLimit: "LLM usage limits",
   llmSettings: "LLM settings (compression, cleanup interval)",
+  agentSettings: "Agent settings (default model, default agent)",
   llmCost: "LLM usage and cost analytics",
   mcpRegistry: "MCP server registry management",
   mcpServerInstallation: "Installed MCP servers and their runtime",
@@ -136,7 +139,7 @@ export const internalResources: Resource[] = ["organization"];
  * Used in both the create/edit role dialog and the account permissions display.
  */
 export const resourceCategories: Record<string, Resource[]> = {
-  Agents: ["agent", "agentTrigger"],
+  Agents: ["agent", "agentTrigger", "agentSettings"],
   MCP: [
     "mcpGateway",
     "toolPolicy",

@@ -77,6 +77,9 @@ const organizationsTable = pgTable("organization", {
 
   /** Provider for the default LLM model (e.g. "openai") */
   defaultLlmProvider: text("default_llm_provider"),
+
+  /** Organization-wide default agent ID (fallback when member has no personal default) */
+  defaultAgentId: uuid("default_agent_id"),
 });
 
 export default organizationsTable;

@@ -10,7 +10,6 @@ import {
   useUpdateAppearance,
 } from "@/lib/organization.query";
 import { useOrgTheme } from "@/lib/theme.hook";
-import { LightDarkToggle } from "./_components/light-dark-toggle";
 import { LogoUpload } from "./_components/logo-upload";
 import { ThemeSelector } from "./_components/theme-selector";
 
@@ -63,7 +62,6 @@ export default function AppearanceSettingsPage() {
   return (
     <div>
       <div className="space-y-6">
-        <LightDarkToggle currentThemeId={currentUITheme} />
         <LogoUpload
           currentLogo={logo}
           currentLogoDark={logoDark}

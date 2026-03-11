@@ -93,6 +93,7 @@ const extendedFields = {
   embeddingModel: z.string().nullable(),
   defaultLlmModel: z.string().nullable(),
   defaultLlmProvider: z.string().nullable(),
+  defaultAgentId: z.string().uuid().nullable(),
 };
 
 export const SelectOrganizationSchema = createSelectSchema(
@@ -119,8 +120,12 @@ export const UpdateLlmSettingsSchema = z.object({
   convertToolResultsToToon: z.boolean().optional(),
   compressionScope: OrganizationCompressionScopeSchema.optional(),
   limitCleanupInterval: OrganizationLimitCleanupIntervalSchema.optional(),
+});
+
+export const UpdateAgentSettingsSchema = z.object({
   defaultLlmModel: z.string().nullable().optional(),
   defaultLlmProvider: z.string().nullable().optional(),
+  defaultAgentId: z.string().uuid().nullable().optional(),
 });
 
 export const UpdateKnowledgeSettingsSchema = z.object({

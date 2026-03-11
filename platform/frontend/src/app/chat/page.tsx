@@ -270,11 +270,29 @@ export default function ChatPage() {
           return;
         }
       }
+      // Try org's default agent
+      if (organization?.defaultAgentId) {
+        const orgDefaultAgent = internalAgents.find(
+          (a) => a.id === organization.defaultAgentId,
+        );
+        if (orgDefaultAgent) {
+          setInitialAgentId(organization.defaultAgentId);
+          saveAgent(organization.defaultAgentId);
+          resolvedAgentRef.current = orgDefaultAgent;
+          return;
+        }
+      }
       setInitialAgentId(internalAgents[0].id);
       saveAgent(internalAgents[0].id);
       resolvedAgentRef.current = internalAgents[0];
     }
-  }, [initialAgentId, searchParams, internalAgents, defaultAgentId]);
+  }, [
+    initialAgentId,
+    searchParams,
+    internalAgents,
+    defaultAgentId,
+    organization?.defaultAgentId,
+  ]);
 
   // Initialize model and API key once agent is resolved.
   // Priority: localStorage (user's explicit choice) > agent config > org default > first available.

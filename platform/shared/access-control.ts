@@ -37,6 +37,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   llmProvider: ["read", "create", "update", "delete"],
   llmLimit: ["read", "create", "update", "delete"],
   llmSettings: ["read", "update"],
+  agentSettings: ["read", "update"],
   llmCost: ["read"],
 
   // MCP
@@ -80,6 +81,7 @@ export const editorPermissions: Record<Resource, Action[]> = {
   llmProvider: ["read", "create", "update", "delete"],
   llmLimit: ["read", "create", "update", "delete"],
   llmSettings: ["read", "update"],
+  agentSettings: [],
   llmCost: ["read"],
 
   // MCP
@@ -127,6 +129,7 @@ export const memberPermissions: Record<Resource, Action[]> = {
   llmProvider: ["read"],
   llmLimit: [],
   llmSettings: [],
+  agentSettings: [],
   llmCost: [],
 
   // MCP
@@ -239,6 +242,8 @@ export const permissionDescriptions: Record<string, string> = {
   "llmLimit:delete": "Remove usage limits",
   "llmSettings:read": "View LLM settings (compression, cleanup interval)",
   "llmSettings:update": "Modify LLM settings",
+  "agentSettings:read": "View agent settings (default model, default agent)",
+  "agentSettings:update": "Modify agent settings",
   "llmCost:read": "View LLM usage cost statistics and analytics",
 
   // Other
@@ -748,6 +753,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateLlmSettings]: {
     llmSettings: ["update"],
   },
+  [RouteId.UpdateAgentSettings]: {
+    agentSettings: ["update"],
+  },
   [RouteId.UpdateKnowledgeSettings]: {
     knowledgeSettings: ["update"],
   },
@@ -967,6 +975,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/settings/dual-llm": { dualLlmConfig: ["read"] },
   "/settings/security": { securitySettings: ["read"] },
   "/settings/llm": { llmSettings: ["read"] },
+  "/settings/agents": { agentSettings: ["read"] },
   "/settings/knowledge": { knowledgeSettings: ["read"] },
   "/settings/users": { member: ["read"] },
   "/settings/teams": { team: ["read"] },

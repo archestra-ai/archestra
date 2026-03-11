@@ -340,21 +340,27 @@ function ChatSessionHook({
     setPendingCustomServerToolCall,
     tokenUsage,
   };
-  sessionsRef.current.set(conversationId, sessionRef.current);
 
-  // Notify consumers only when observable data changes — NOT when useChat
-  // function references change. This breaks the infinite loop where:
-  // notifySessionUpdate → parent re-render → useChat new refs → effect → repeat.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional — these are trigger deps, not used in the callback
+  // Sync to the shared sessions map and notify consumers.
+  // All chat state values are listed as deps so the effect fires when any value
+  // changes, even though we read them through the ref for the latest snapshot.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional — deps trigger the sync, ref provides the snapshot
   useEffect(() => {
+    sessionsRef.current.set(conversationId, sessionRef.current);
     notifySessionUpdate();
   }, [
     conversationId,
     messages,
+    sendMessage,
+    stop,
     status,
     error,
+    setMessages,
+    addToolResult,
+    addToolApprovalResponse,
     pendingCustomServerToolCall,
     tokenUsage,
+    sessionsRef,
     notifySessionUpdate,
   ]);
 

@@ -1,13 +1,13 @@
 "use client";
 
-import { providerDisplayNames } from "@shared";
-import { useEffect, useState } from "react";
-import { ModelSelector } from "@/components/chat/model-selector";
+import { Key } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { WithPermissions } from "@/components/roles/with-permissions";
 import {
   SettingsBlock,
   SettingsSaveBar,
 } from "@/components/settings/settings-block";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   Select,
   SelectContent,
@@ -16,8 +16,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useInternalAgents } from "@/lib/agent.query";
-import { useModelsByProvider } from "@/lib/chat-models.query";
-import { useChatApiKeys } from "@/lib/chat-settings.query";
+import { useChatModels } from "@/lib/chat-models.query";
+import { useAvailableChatApiKeys } from "@/lib/chat-settings.query";
 import {
   useOrganization,
   useUpdateAgentSettings,
@@ -25,14 +25,14 @@ import {
 
 export default function AgentSettingsPage() {
   const { data: organization } = useOrganization();
-  const { data: chatApiKeys } = useChatApiKeys();
+  const { data: apiKeys } = useAvailableChatApiKeys();
   const { data: internalAgents } = useInternalAgents();
 
   const [selectedApiKeyId, setSelectedApiKeyId] = useState<string>("");
   const [defaultModel, setDefaultModel] = useState<string>("");
   const [defaultAgentId, setDefaultAgentId] = useState<string>("");
 
-  const { modelsByProvider } = useModelsByProvider({
+  const { data: allModels, isPending: modelsLoading } = useChatModels({
     apiKeyId: selectedApiKeyId || null,
   });
 
@@ -43,20 +43,20 @@ export default function AgentSettingsPage() {
 
   // Sync from org data
   useEffect(() => {
-    if (!organization || !chatApiKeys) return;
+    if (!organization || !apiKeys) return;
     setDefaultModel(organization.defaultLlmModel ?? "");
     setDefaultAgentId(organization.defaultAgentId ?? "");
 
     // Resolve API key from the stored provider
     if (organization.defaultLlmProvider) {
-      const matchingKey = chatApiKeys.find(
+      const matchingKey = apiKeys.find(
         (k) => k.provider === organization.defaultLlmProvider,
       );
       if (matchingKey) {
         setSelectedApiKeyId(matchingKey.id);
       }
     }
-  }, [organization, chatApiKeys]);
+  }, [organization, apiKeys]);
 
   const serverModel = organization?.defaultLlmModel ?? "";
   const serverAgentId = organization?.defaultAgentId ?? "";
@@ -69,13 +69,12 @@ export default function AgentSettingsPage() {
     const payload: Record<string, unknown> = {};
 
     if (hasModelChanges) {
+      // Resolve provider from selected API key
       let resolvedProvider: string | null = null;
-      if (defaultModel) {
-        for (const [provider, models] of Object.entries(modelsByProvider)) {
-          if (models?.some((m) => m.id === defaultModel)) {
-            resolvedProvider = provider;
-            break;
-          }
+      if (defaultModel && selectedApiKeyId && apiKeys) {
+        const key = apiKeys.find((k) => k.id === selectedApiKeyId);
+        if (key) {
+          resolvedProvider = key.provider;
         }
       }
       payload.defaultLlmModel = defaultModel || null;
@@ -92,16 +91,29 @@ export default function AgentSettingsPage() {
   const handleCancel = () => {
     setDefaultModel(serverModel);
     setDefaultAgentId(serverAgentId);
-    if (organization?.defaultLlmProvider && chatApiKeys) {
-      const matchingKey = chatApiKeys.find(
+    if (organization?.defaultLlmProvider && apiKeys) {
+      const matchingKey = apiKeys.find(
         (k) => k.provider === organization.defaultLlmProvider,
       );
       setSelectedApiKeyId(matchingKey?.id ?? "");
     }
   };
 
-  // Filter API keys for the dropdown (exclude system keys, show org-wide first)
-  const availableApiKeys = (chatApiKeys ?? []).filter((k) => !k.isSystem);
+  const availableKeys = apiKeys ?? [];
+
+  const modelItems = useMemo(() => {
+    if (!allModels) return [];
+    return allModels.map((model) => ({
+      value: model.id,
+      label: model.displayName ?? model.id,
+    }));
+  }, [allModels]);
+
+  // Filter out personal and built-in agents (useInternalAgents already excludes built-in)
+  const orgAgents = useMemo(
+    () => (internalAgents ?? []).filter((agent) => agent.scope !== "personal"),
+    [internalAgents],
+  );
 
   return (
     <div className="space-y-6">
@@ -114,12 +126,11 @@ export default function AgentSettingsPage() {
             noPermissionHandle="tooltip"
           >
             {({ hasPermission }) => (
-              <div className="flex flex-col gap-2 w-64">
+              <div className="flex flex-col gap-2 w-80">
                 <Select
                   value={selectedApiKeyId}
                   onValueChange={(value) => {
                     setSelectedApiKeyId(value);
-                    // Clear model when switching API key since models may differ
                     setDefaultModel("");
                   }}
                   disabled={updateMutation.isPending || !hasPermission}
@@ -128,21 +139,34 @@ export default function AgentSettingsPage() {
                     <SelectValue placeholder="Select API key..." />
                   </SelectTrigger>
                   <SelectContent>
-                    {availableApiKeys.map((key) => (
+                    {availableKeys.map((key) => (
                       <SelectItem key={key.id} value={key.id}>
-                        {key.name} ({providerDisplayNames[key.provider]})
+                        <div className="flex items-center gap-2">
+                          <Key className="h-3 w-3" />
+                          <span>{key.name}</span>
+                          <span className="text-xs text-muted-foreground">
+                            ({key.scope})
+                          </span>
+                        </div>
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
                 {selectedApiKeyId && (
-                  <ModelSelector
-                    selectedModel={defaultModel}
-                    onModelChange={setDefaultModel}
-                    onClear={() => setDefaultModel("")}
-                    variant="outline"
-                    disabled={updateMutation.isPending || !hasPermission}
-                    apiKeyId={selectedApiKeyId}
+                  <SearchableSelect
+                    value={defaultModel}
+                    onValueChange={setDefaultModel}
+                    placeholder={
+                      modelsLoading ? "Loading models..." : "Select model..."
+                    }
+                    searchPlaceholder="Search or type model name..."
+                    items={modelItems}
+                    className="w-80"
+                    disabled={
+                      updateMutation.isPending ||
+                      !hasPermission ||
+                      modelsLoading
+                    }
                   />
                 )}
               </div>
@@ -166,14 +190,14 @@ export default function AgentSettingsPage() {
                 }
                 disabled={updateMutation.isPending || !hasPermission}
               >
-                <SelectTrigger className="w-64">
+                <SelectTrigger className="w-80">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="__personal__">
                     User&apos;s personal agent
                   </SelectItem>
-                  {(internalAgents ?? []).map((agent) => (
+                  {orgAgents.map((agent) => (
                     <SelectItem key={agent.id} value={agent.id}>
                       {agent.name}
                     </SelectItem>

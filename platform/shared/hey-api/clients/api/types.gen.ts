@@ -34065,6 +34065,7 @@ export type GetOrganizationResponses = {
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
         embeddingModel: string | null;
+        embeddingDimensions: number | null;
         embeddingChatApiKeyId: string | null;
         rerankerChatApiKeyId: string | null;
         rerankerModel: string | null;
@@ -34247,6 +34248,7 @@ export type UpdateAppearanceResponses = {
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
         embeddingModel: string | null;
+        embeddingDimensions: number | null;
         embeddingChatApiKeyId: string | null;
         rerankerChatApiKeyId: string | null;
         rerankerModel: string | null;
@@ -34347,6 +34349,7 @@ export type UpdateSecuritySettingsResponses = {
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
         embeddingModel: string | null;
+        embeddingDimensions: number | null;
         embeddingChatApiKeyId: string | null;
         rerankerChatApiKeyId: string | null;
         rerankerModel: string | null;
@@ -34450,6 +34453,7 @@ export type UpdateLlmSettingsResponses = {
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
         embeddingModel: string | null;
+        embeddingDimensions: number | null;
         embeddingChatApiKeyId: string | null;
         rerankerChatApiKeyId: string | null;
         rerankerModel: string | null;
@@ -34463,6 +34467,7 @@ export type UpdateLlmSettingsResponse = UpdateLlmSettingsResponses[keyof UpdateL
 export type UpdateKnowledgeSettingsData = {
     body?: {
         embeddingModel?: string;
+        embeddingDimensions?: 1536 | 768;
         embeddingChatApiKeyId?: string | null;
         rerankerChatApiKeyId?: string | null;
         rerankerModel?: string | null;
@@ -34552,6 +34557,7 @@ export type UpdateKnowledgeSettingsResponses = {
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
         embeddingModel: string | null;
+        embeddingDimensions: number | null;
         embeddingChatApiKeyId: string | null;
         rerankerChatApiKeyId: string | null;
         rerankerModel: string | null;
@@ -34649,6 +34655,7 @@ export type DropEmbeddingConfigResponses = {
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
         embeddingModel: string | null;
+        embeddingDimensions: number | null;
         embeddingChatApiKeyId: string | null;
         rerankerChatApiKeyId: string | null;
         rerankerModel: string | null;
@@ -34829,6 +34836,7 @@ export type CompleteOnboardingResponses = {
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
         embeddingModel: string | null;
+        embeddingDimensions: number | null;
         embeddingChatApiKeyId: string | null;
         rerankerChatApiKeyId: string | null;
         rerankerModel: string | null;

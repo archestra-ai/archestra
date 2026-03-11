@@ -120452,6 +120452,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "embeddingDimensions": {
+                      "nullable": true,
+                      "type": "number"
+                    },
                     "embeddingChatApiKeyId": {
                       "nullable": true,
                       "type": "string",
@@ -120494,6 +120498,7 @@
                     "globalToolPolicy",
                     "allowChatFileUploads",
                     "embeddingModel",
+                    "embeddingDimensions",
                     "embeddingChatApiKeyId",
                     "rerankerChatApiKeyId",
                     "rerankerModel",
@@ -120895,6 +120900,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "embeddingDimensions": {
+                      "nullable": true,
+                      "type": "number"
+                    },
                     "embeddingChatApiKeyId": {
                       "nullable": true,
                       "type": "string",
@@ -120937,6 +120946,7 @@
                     "globalToolPolicy",
                     "allowChatFileUploads",
                     "embeddingModel",
+                    "embeddingDimensions",
                     "embeddingChatApiKeyId",
                     "rerankerChatApiKeyId",
                     "rerankerModel",
@@ -121586,6 +121596,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "embeddingDimensions": {
+                      "nullable": true,
+                      "type": "number"
+                    },
                     "embeddingChatApiKeyId": {
                       "nullable": true,
                       "type": "string",
@@ -121628,6 +121642,7 @@
                     "globalToolPolicy",
                     "allowChatFileUploads",
                     "embeddingModel",
+                    "embeddingDimensions",
                     "embeddingChatApiKeyId",
                     "rerankerChatApiKeyId",
                     "rerankerModel",
@@ -122010,6 +122025,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "embeddingDimensions": {
+                      "nullable": true,
+                      "type": "number"
+                    },
                     "embeddingChatApiKeyId": {
                       "nullable": true,
                       "type": "string",
@@ -122052,6 +122071,7 @@
                     "globalToolPolicy",
                     "allowChatFileUploads",
                     "embeddingModel",
+                    "embeddingDimensions",
                     "embeddingChatApiKeyId",
                     "rerankerChatApiKeyId",
                     "rerankerModel",
@@ -122293,6 +122313,22 @@
                     "type": "string",
                     "minLength": 1
                   },
+                  "embeddingDimensions": {
+                    "anyOf": [
+                      {
+                        "type": "number",
+                        "enum": [
+                          1536
+                        ]
+                      },
+                      {
+                        "type": "number",
+                        "enum": [
+                          768
+                        ]
+                      }
+                    ]
+                  },
                   "embeddingChatApiKeyId": {
                     "nullable": true,
                     "type": "string",
@@ -122425,6 +122461,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "embeddingDimensions": {
+                      "nullable": true,
+                      "type": "number"
+                    },
                     "embeddingChatApiKeyId": {
                       "nullable": true,
                       "type": "string",
@@ -122467,6 +122507,7 @@
                     "globalToolPolicy",
                     "allowChatFileUploads",
                     "embeddingModel",
+                    "embeddingDimensions",
                     "embeddingChatApiKeyId",
                     "rerankerChatApiKeyId",
                     "rerankerModel",
@@ -122809,6 +122850,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "embeddingDimensions": {
+                      "nullable": true,
+                      "type": "number"
+                    },
                     "embeddingChatApiKeyId": {
                       "nullable": true,
                       "type": "string",
@@ -122851,6 +122896,7 @@
                     "globalToolPolicy",
                     "allowChatFileUploads",
                     "embeddingModel",
+                    "embeddingDimensions",
                     "embeddingChatApiKeyId",
                     "rerankerChatApiKeyId",
                     "rerankerModel",
@@ -123482,6 +123528,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "embeddingDimensions": {
+                      "nullable": true,
+                      "type": "number"
+                    },
                     "embeddingChatApiKeyId": {
                       "nullable": true,
                       "type": "string",
@@ -123524,6 +123574,7 @@
                     "globalToolPolicy",
                     "allowChatFileUploads",
                     "embeddingModel",
+                    "embeddingDimensions",
                     "embeddingChatApiKeyId",
                     "rerankerChatApiKeyId",
                     "rerankerModel",

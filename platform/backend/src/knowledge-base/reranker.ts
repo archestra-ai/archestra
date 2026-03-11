@@ -52,6 +52,16 @@ Score each passage from 0 (completely irrelevant) to 10 (perfectly relevant). Re
     ),
   });
 
+  logger.info(
+    {
+      provider: rerankerConfig.provider,
+      model: rerankerConfig.modelName,
+      chunkCount: chunks.length,
+      queryText,
+    },
+    "[Reranker] Calling LLM for reranking",
+  );
+
   try {
     const result = await withKbObservability({
       operationName: "chat",

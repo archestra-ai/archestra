@@ -1,3 +1,4 @@
+import { getEmbeddingColumnName } from "@shared";
 import config from "@/config";
 import logger from "@/logging";
 import { KbChunkModel } from "@/models";
@@ -83,6 +84,18 @@ class QueryService {
     ]);
 
     const queryEmbedding = embeddingResponse.data[0].embedding;
+    const embeddingColumn = getEmbeddingColumnName(embeddingConfig.dimensions);
+
+    logger.info(
+      {
+        queryText,
+        model: embeddingConfig.model,
+        dimensions: embeddingConfig.dimensions,
+        embeddingColumn,
+        hybridEnabled,
+      },
+      "[QueryService] Starting search",
+    );
 
     const vectorRows = await KbChunkModel.vectorSearch({
       connectorIds,
@@ -91,13 +104,16 @@ class QueryService {
       limit: overFetchLimit,
     });
 
+    const vectorIds = new Set(vectorRows.map((r) => r.id));
+    const fullTextIds = new Set(fullTextRows.map((r) => r.id));
+
     logger.info(
       {
-        connectorIds,
-        queryText,
         vectorCount: vectorRows.length,
         fullTextCount: fullTextRows.length,
-        hybridEnabled,
+        vectorOnlyCount: vectorRows.filter((r) => !fullTextIds.has(r.id)).length,
+        fullTextOnlyCount: fullTextRows.filter((r) => !vectorIds.has(r.id)).length,
+        bothCount: vectorRows.filter((r) => fullTextIds.has(r.id)).length,
       },
       "[QueryService] Search candidates retrieved",
     );
@@ -113,6 +129,7 @@ class QueryService {
       topResults = vectorRows;
     }
 
+    const preRerankCount = topResults.length;
     topResults = await rerank({
       queryText,
       chunks: topResults,
@@ -122,15 +139,21 @@ class QueryService {
 
     logger.info(
       {
-        resultCount: topResults.length,
+        preRerankCount,
+        postRerankCount: topResults.length,
         results: topResults.map((r) => ({
           id: r.id,
           score: r.score,
           title: r.title,
+          source: vectorIds.has(r.id) && fullTextIds.has(r.id)
+            ? "vector+fulltext"
+            : vectorIds.has(r.id)
+              ? "vector"
+              : "fulltext",
           contentPreview: r.content.slice(0, 80),
         })),
       },
-      "[QueryService] Final results",
+      "[QueryService] Final results (after rerank)",
     );
 
     return this.mapResults(topResults);

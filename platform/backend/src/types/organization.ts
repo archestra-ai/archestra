@@ -91,6 +91,7 @@ const extendedFields = {
   compressionScope: OrganizationCompressionScopeSchema,
   globalToolPolicy: GlobalToolPolicySchema,
   embeddingModel: z.string().nullable(),
+  embeddingDimensions: z.number().nullable(),
   defaultLlmModel: z.string().nullable(),
   defaultLlmProvider: z.string().nullable(),
 };
@@ -125,6 +126,7 @@ export const UpdateLlmSettingsSchema = z.object({
 
 export const UpdateKnowledgeSettingsSchema = z.object({
   embeddingModel: z.string().min(1).optional(),
+  embeddingDimensions: z.union([z.literal(1536), z.literal(768)]).optional(),
   embeddingChatApiKeyId: z.string().uuid().nullable().optional(),
   rerankerChatApiKeyId: z.string().uuid().nullable().optional(),
   rerankerModel: z.string().nullable().optional(),

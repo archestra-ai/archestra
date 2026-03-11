@@ -16,6 +16,12 @@ export const EMBEDDING_BATCH_SIZE = 100;
 export const EMBEDDING_DIMENSIONS = 1536;
 
 /**
+ * Providers whose API keys can be used for embedding.
+ * These providers expose an OpenAI-compatible `/v1/embeddings` endpoint.
+ */
+export const EMBEDDING_COMPATIBLE_PROVIDERS = new Set(["openai", "ollama"]);
+
+/**
  * Supported embedding column sizes. Each entry maps to a dedicated
  * `vector(N)` column and HNSW index in the `kb_chunks` table.
  */

@@ -44,6 +44,7 @@ import {
   SidebarMenuSubButton,
   SidebarMenuSubItem,
   SidebarRail,
+  SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
 import { useIsAuthenticated } from "@/lib/auth.hook";
@@ -222,6 +223,7 @@ const NavPrimary = ({
     <SidebarMenuItem key={item.title}>
       <SidebarMenuButton
         asChild
+        tooltip={item.title}
         isActive={
           item.customIsActive?.(pathname, searchParams) ??
           pathname.startsWith(item.url)
@@ -321,6 +323,7 @@ const NavSecondary = ({
             <SidebarMenuItem key={item.title}>
               <SidebarMenuButton
                 asChild
+                tooltip={item.title}
                 isActive={
                   item.customIsActive?.(pathname, searchParams) ??
                   pathname.startsWith(item.url)
@@ -336,7 +339,7 @@ const NavSecondary = ({
           {!config.enterpriseFeatures.fullWhiteLabeling && (
             <>
               <SidebarMenuItem>
-                <SidebarMenuButton asChild>
+                <SidebarMenuButton asChild tooltip="Star us on GitHub">
                   <a
                     href={COMMUNITY_GITHUB_URL}
                     target="_blank"
@@ -354,7 +357,7 @@ const NavSecondary = ({
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>
-                <SidebarMenuButton asChild>
+                <SidebarMenuButton asChild tooltip="Documentation">
                   <a
                     href={COMMUNITY_DOCS_URL}
                     target="_blank"
@@ -366,7 +369,7 @@ const NavSecondary = ({
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>
-                <SidebarMenuButton asChild>
+                <SidebarMenuButton asChild tooltip="Talk to developers">
                   <a
                     href={COMMUNITY_SLACK_URL}
                     target="_blank"
@@ -378,7 +381,7 @@ const NavSecondary = ({
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>
-                <SidebarMenuButton asChild>
+                <SidebarMenuButton asChild tooltip="Report a bug">
                   <a
                     href={COMMUNITY_BUG_REPORT_URL}
                     target="_blank"
@@ -416,9 +419,12 @@ export function AppSidebar() {
   }, [knowledgeBaseEnabled]);
 
   return (
-    <Sidebar>
-      <SidebarHeader className="pt-4">
-        <AppLogo centered={false} />
+    <Sidebar collapsible="icon">
+      <SidebarHeader className="pt-4 group-data-[collapsible=icon]:pt-2 group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:items-center">
+        <div className="group-data-[collapsible=icon]:hidden">
+          <AppLogo centered={false} />
+        </div>
+        <SidebarTrigger className="hidden group-data-[collapsible=icon]:flex size-8 cursor-pointer" />
       </SidebarHeader>
       <SidebarContent>
         {isAuthenticated && permissionMap && (
@@ -456,7 +462,7 @@ export function AppSidebar() {
         <SignedIn>
           <SidebarGroup className="mt-auto">
             <SidebarGroupContent>
-              <div data-testid={E2eTestId.SidebarUserProfile}>
+              <div data-testid={E2eTestId.SidebarUserProfile} className="overflow-hidden group-data-[collapsible=icon]:[&_button]:gap-0 group-data-[collapsible=icon]:[&_button]:p-0 group-data-[collapsible=icon]:[&_button>span:not([data-slot=avatar])]:hidden group-data-[collapsible=icon]:[&_button>svg]:hidden">
                 <UserButton
                   size="default"
                   align="center"

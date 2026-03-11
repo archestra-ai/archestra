@@ -198,6 +198,7 @@ export class ConfluenceConnector extends BaseConnector {
         batchIndex++;
         yield {
           documents,
+          failures: this.flushFailures(),
           checkpoint: buildCheckpoint({
             type: "confluence",
             itemUpdatedAt: rawModifiedAt,

@@ -21,7 +21,11 @@ export function getApiKeyStorageKey(provider: string): string {
  */
 export function getSavedModel(): string | null {
   if (typeof window === "undefined") return null;
-  return localStorage.getItem(CHAT_STORAGE_KEYS.selectedModel);
+  try {
+    return localStorage.getItem(CHAT_STORAGE_KEYS.selectedModel);
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -29,7 +33,11 @@ export function getSavedModel(): string | null {
  */
 export function saveModel(modelId: string): void {
   if (typeof window === "undefined") return;
-  localStorage.setItem(CHAT_STORAGE_KEYS.selectedModel, modelId);
+  try {
+    localStorage.setItem(CHAT_STORAGE_KEYS.selectedModel, modelId);
+  } catch {
+    // QuotaExceededError or private browsing restriction
+  }
 }
 
 /**
@@ -37,7 +45,11 @@ export function saveModel(modelId: string): void {
  */
 export function clearSavedModel(): void {
   if (typeof window === "undefined") return;
-  localStorage.removeItem(CHAT_STORAGE_KEYS.selectedModel);
+  try {
+    localStorage.removeItem(CHAT_STORAGE_KEYS.selectedModel);
+  } catch {
+    // QuotaExceededError or private browsing restriction
+  }
 }
 
 /**
@@ -45,7 +57,11 @@ export function clearSavedModel(): void {
  */
 export function getSavedAgent(): string | null {
   if (typeof window === "undefined") return null;
-  return localStorage.getItem(CHAT_STORAGE_KEYS.selectedAgent);
+  try {
+    return localStorage.getItem(CHAT_STORAGE_KEYS.selectedAgent);
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -53,7 +69,11 @@ export function getSavedAgent(): string | null {
  */
 export function saveAgent(agentId: string): void {
   if (typeof window === "undefined") return;
-  localStorage.setItem(CHAT_STORAGE_KEYS.selectedAgent, agentId);
+  try {
+    localStorage.setItem(CHAT_STORAGE_KEYS.selectedAgent, agentId);
+  } catch {
+    // QuotaExceededError or private browsing restriction
+  }
 }
 
 /**
@@ -61,7 +81,11 @@ export function saveAgent(agentId: string): void {
  */
 export function getSavedApiKey(provider: string): string | null {
   if (typeof window === "undefined") return null;
-  return localStorage.getItem(getApiKeyStorageKey(provider));
+  try {
+    return localStorage.getItem(getApiKeyStorageKey(provider));
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -69,7 +93,11 @@ export function getSavedApiKey(provider: string): string | null {
  */
 export function saveApiKey(provider: string, keyId: string): void {
   if (typeof window === "undefined") return;
-  localStorage.setItem(getApiKeyStorageKey(provider), keyId);
+  try {
+    localStorage.setItem(getApiKeyStorageKey(provider), keyId);
+  } catch {
+    // QuotaExceededError or private browsing restriction
+  }
 }
 
 // ===== Model resolution logic =====

@@ -20,7 +20,7 @@ import {
   Video,
   XIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ModelSelectorContent,
   ModelSelectorEmpty,
@@ -50,6 +50,7 @@ import {
   useModelsByProvider,
 } from "@/lib/chat-models.query";
 import { useSyncChatModels } from "@/lib/chat-settings.query";
+import { resolveAutoSelectedModel } from "@/lib/use-chat-preferences";
 import { cn } from "@/lib/utils";
 
 /** Modalities that can be filtered (excludes "text" since all models support it) */
@@ -665,29 +666,20 @@ export function ModelSelector({
   );
   const isModelAvailable = allAvailableModelIds.includes(selectedModel);
 
-  // Auto-select the "best" model (or first) when models load and selected model
-  // is not in the available list (e.g. after switching API keys)
-  const prevApiKeyIdRef = useRef(apiKeyId);
+  // Auto-select the "best" model (or first) when the selected model is not
+  // in the available list (e.g. after switching API keys or on initial load).
+  // Only triggers when the model is genuinely unavailable — keeps the user's
+  // selection stable across API key changes if the model is still valid.
   useEffect(() => {
-    if (isLoading || allAvailableModels.length === 0) return;
-    // Only auto-select when apiKeyId changes or selected model is unavailable
-    const apiKeyChanged = prevApiKeyIdRef.current !== apiKeyId;
-    prevApiKeyIdRef.current = apiKeyId;
-    if (!apiKeyChanged && isModelAvailable) return;
-
-    const bestModel = allAvailableModels.find((m) => m.isBest);
-    const modelToSelect = bestModel ?? allAvailableModels[0];
-    if (modelToSelect && modelToSelect.id !== selectedModel) {
-      onModelChange(modelToSelect.id);
+    const modelToSelect = resolveAutoSelectedModel({
+      selectedModel,
+      availableModels: allAvailableModels,
+      isLoading,
+    });
+    if (modelToSelect) {
+      onModelChange(modelToSelect);
     }
-  }, [
-    isLoading,
-    apiKeyId,
-    allAvailableModels,
-    isModelAvailable,
-    selectedModel,
-    onModelChange,
-  ]);
+  }, [isLoading, allAvailableModels, selectedModel, onModelChange]);
 
   // If loading, show loading state
   if (isLoading) {

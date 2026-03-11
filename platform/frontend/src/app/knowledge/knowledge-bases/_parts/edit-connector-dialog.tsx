@@ -165,7 +165,10 @@ export function EditConnectorDialog({
                   <FormItem>
                     <FormLabel>Name</FormLabel>
                     <FormControl>
-                      <Input placeholder="Connector name" {...field} />
+                      <Input
+                        placeholder="Engineering Jira Connector"
+                        {...field}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>

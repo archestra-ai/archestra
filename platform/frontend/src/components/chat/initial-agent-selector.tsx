@@ -7,7 +7,6 @@ import {
   Check,
   ChevronDown,
   ExternalLink,
-  FileText,
   Loader2,
   Plus,
   Search,
@@ -101,6 +100,22 @@ export function InitialAgentSelector({
   // Dialog state for tool configuration (needs full dialog for complex forms)
   const [configDialogOpen, setConfigDialogOpen] = useState(false);
   const [configCatalog, setConfigCatalog] = useState<CatalogItem | null>(null);
+
+  // Install orchestrator lifted here so dialogs survive dropdown close
+  const installer = useMcpInstallOrchestrator();
+
+  // Keep dropdown open while an install dialog is active
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const isInstallDialogOpen =
+    installer.isDialogOpened("remote-install") ||
+    installer.isDialogOpened("oauth") ||
+    installer.isDialogOpened("no-auth") ||
+    installer.isDialogOpened("local-install");
+
+  const handleDropdownOpenChange = (open: boolean) => {
+    if (!open && isInstallDialogOpen) return;
+    setDropdownOpen(open);
+  };
 
   const currentAgent = useMemo(
     () =>
@@ -199,7 +214,7 @@ export function InitialAgentSelector({
 
   return (
     <>
-      <DropdownMenu>
+      <DropdownMenu open={dropdownOpen} onOpenChange={handleDropdownOpenChange}>
         <DropdownMenuTrigger asChild>
           <PromptInputButton
             role="combobox"
@@ -234,7 +249,7 @@ export function InitialAgentSelector({
         >
           {/* Current agent config submenu */}
           {currentAgent && (
-            <DropdownMenuSub>
+            <DropdownMenuSub open={isInstallDialogOpen ? true : undefined}>
               <DropdownMenuSubTrigger>
                 <AgentIcon
                   icon={
@@ -251,6 +266,8 @@ export function InitialAgentSelector({
                   <ToolsSubMenu
                     agentId={currentAgent.id}
                     onConfigureTool={handleOpenConfigureTool}
+                    onInstall={installer.triggerInstallByCatalogId}
+                    forceOpen={isInstallDialogOpen}
                   />
                   <SubagentsSubMenu agentId={currentAgent.id} />
                   <KnowledgeSubMenu
@@ -391,6 +408,43 @@ export function InitialAgentSelector({
           </DialogContent>
         </Dialog>
       )}
+
+      {/* Install dialogs — rendered at top level so they survive dropdown close */}
+      <RemoteServerInstallDialog
+        isOpen={installer.isDialogOpened("remote-install")}
+        onClose={installer.closeRemoteInstall}
+        onConfirm={installer.handleRemoteServerInstallConfirm}
+        catalogItem={installer.selectedCatalogItem}
+        isInstalling={installer.isInstalling}
+        isReauth={installer.isReauth}
+      />
+      <OAuthConfirmationDialog
+        open={installer.isDialogOpened("oauth")}
+        onOpenChange={(open) => {
+          if (!open) installer.closeOAuth();
+        }}
+        serverName={installer.selectedCatalogItem?.name || ""}
+        onConfirm={installer.handleOAuthConfirm}
+        onCancel={installer.closeOAuth}
+        catalogId={installer.selectedCatalogItem?.id}
+      />
+      <NoAuthInstallDialog
+        isOpen={installer.isDialogOpened("no-auth")}
+        onClose={installer.closeNoAuth}
+        onInstall={installer.handleNoAuthConfirm}
+        catalogItem={installer.noAuthCatalogItem}
+        isInstalling={installer.isInstalling}
+      />
+      {installer.localServerCatalogItem && (
+        <LocalServerInstallDialog
+          isOpen={installer.isDialogOpened("local-install")}
+          onClose={installer.closeLocalInstall}
+          onConfirm={installer.handleLocalServerInstallConfirm}
+          catalogItem={installer.localServerCatalogItem}
+          isInstalling={installer.isInstalling}
+          isReauth={installer.isReauth}
+        />
+      )}
     </>
   );
 }
@@ -442,9 +496,7 @@ function InstructionsSubMenu({
 
   return (
     <DropdownMenuSub>
-      <DropdownMenuSubTrigger>
-        Instructions
-      </DropdownMenuSubTrigger>
+      <DropdownMenuSubTrigger>Instructions</DropdownMenuSubTrigger>
       <DropdownMenuPortal>
         <DropdownMenuSubContent className="w-72 p-3">
           <DropdownMenuLabel>Agent Instructions</DropdownMenuLabel>
@@ -516,9 +568,13 @@ function InstructionsSubMenu({
 function ToolsSubMenu({
   agentId,
   onConfigureTool,
+  onInstall,
+  forceOpen,
 }: {
   agentId: string;
   onConfigureTool: (catalog: CatalogItem) => void;
+  onInstall: (catalogId: string) => void;
+  forceOpen?: boolean;
 }) {
   const { data: catalogItems = [] } = useInternalMcpCatalog();
   const { data: assignedToolsData } = useAllProfileTools({
@@ -529,7 +585,6 @@ function ToolsSubMenu({
   const unassignTool = useUnassignTool();
   const invalidateAllQueries = useInvalidateToolAssignmentQueries();
   const allCredentials = useMcpServersGroupedByCatalog();
-  const installer = useMcpInstallOrchestrator();
   const [serverSearch, setServerSearch] = useState("");
 
   const hasInstallingServers = useMemo(() => {
@@ -597,181 +652,145 @@ function ToolsSubMenu({
   };
 
   return (
-    <>
-      <DropdownMenuSub>
-        <DropdownMenuSubTrigger>
-          <Wrench className="size-4" />
-          <span className="flex-1">Tools</span>
-          <span className="text-[10px] text-muted-foreground">
-            {assignedByCatalog.size}
-          </span>
-        </DropdownMenuSubTrigger>
-        <DropdownMenuPortal>
-          <DropdownMenuSubContent className="w-60">
-            <div className="px-2 py-1">
-              <div className="relative">
-                <Search className="absolute left-2 top-1/2 -translate-y-1/2 size-3 text-muted-foreground pointer-events-none" />
-                <Input
-                  value={serverSearch}
-                  onChange={(e) => setServerSearch(e.target.value)}
-                  onClick={(e) => e.stopPropagation()}
-                  onKeyDown={(e) => e.stopPropagation()}
-                  placeholder="Search tools..."
-                  className="h-7 pl-7 text-xs"
-                />
-              </div>
+    <DropdownMenuSub open={forceOpen ? true : undefined}>
+      <DropdownMenuSubTrigger>
+        <Wrench className="size-4" />
+        <span className="flex-1">Tools</span>
+        <span className="text-[10px] text-muted-foreground">
+          {assignedByCatalog.size}
+        </span>
+      </DropdownMenuSubTrigger>
+      <DropdownMenuPortal>
+        <DropdownMenuSubContent className="w-60">
+          <div className="px-2 py-1">
+            <div className="relative">
+              <Search className="absolute left-2 top-1/2 -translate-y-1/2 size-3 text-muted-foreground pointer-events-none" />
+              <Input
+                value={serverSearch}
+                onChange={(e) => setServerSearch(e.target.value)}
+                onClick={(e) => e.stopPropagation()}
+                onKeyDown={(e) => e.stopPropagation()}
+                placeholder="Search tools..."
+                className="h-7 pl-7 text-xs"
+              />
             </div>
-            <DropdownMenuSeparator />
+          </div>
+          <DropdownMenuSeparator />
 
-            <div className="max-h-[300px] overflow-y-auto">
-              {/* Connected servers */}
-              {connectedFiltered.length > 0 && (
-                <DropdownMenuGroup>
-                  <DropdownMenuLabel>Connected</DropdownMenuLabel>
-                  {connectedFiltered.map((catalog) => {
-                    const info = assignedByCatalog.get(catalog.id);
-                    return (
-                      <DropdownMenuItem
-                        key={catalog.id}
-                        className="group"
+          <div className="max-h-[300px] overflow-y-auto">
+            {/* Connected servers */}
+            {connectedFiltered.length > 0 && (
+              <DropdownMenuGroup>
+                <DropdownMenuLabel>Connected</DropdownMenuLabel>
+                {connectedFiltered.map((catalog) => {
+                  const info = assignedByCatalog.get(catalog.id);
+                  return (
+                    <DropdownMenuItem
+                      key={catalog.id}
+                      className="group"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        onConfigureTool(catalog);
+                      }}
+                    >
+                      <McpCatalogIcon
+                        icon={catalog.icon}
+                        catalogId={catalog.id}
+                        size={14}
+                      />
+                      <span className="flex-1 truncate">{catalog.name}</span>
+                      <span className="text-[10px] text-muted-foreground group-hover:opacity-0 transition-opacity">
+                        {info?.count ?? 0} tools
+                      </span>
+                      <button
+                        type="button"
                         onClick={(e) => {
-                          e.preventDefault();
-                          onConfigureTool(catalog);
+                          e.stopPropagation();
+                          handleRemove(catalog.id);
                         }}
+                        className="absolute right-8 opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-destructive/15 hover:text-destructive text-muted-foreground transition-all"
                       >
-                        <McpCatalogIcon
-                          icon={catalog.icon}
-                          catalogId={catalog.id}
-                          size={14}
-                        />
-                        <span className="flex-1 truncate">{catalog.name}</span>
-                        <span className="text-[10px] text-muted-foreground group-hover:opacity-0 transition-opacity">
-                          {info?.count ?? 0} tools
+                        <XIcon className="size-3" />
+                      </button>
+                      <ChevronDown className="size-3 -rotate-90 text-muted-foreground" />
+                    </DropdownMenuItem>
+                  );
+                })}
+              </DropdownMenuGroup>
+            )}
+
+            {/* Available servers */}
+            {availableCatalogs.length > 0 && (
+              <DropdownMenuGroup>
+                {connectedFiltered.length > 0 && <DropdownMenuSeparator />}
+                <DropdownMenuLabel>Available</DropdownMenuLabel>
+                {availableCatalogs.map((catalog) => {
+                  const servers = allCredentials?.[catalog.id] ?? [];
+                  const hasCredentials =
+                    catalog.serverType === "builtin" || servers.length > 0;
+                  const isServerInstalling = servers.some(
+                    (s) =>
+                      s.localInstallationStatus === "pending" ||
+                      s.localInstallationStatus === "discovering-tools",
+                  );
+                  const isReady = hasCredentials && !isServerInstalling;
+                  return (
+                    <DropdownMenuItem
+                      key={catalog.id}
+                      disabled={isServerInstalling}
+                      onSelect={(e) => {
+                        if (!isReady) e.preventDefault();
+                      }}
+                      onClick={() =>
+                        isReady
+                          ? onConfigureTool(catalog)
+                          : onInstall(catalog.id)
+                      }
+                    >
+                      <McpCatalogIcon
+                        icon={catalog.icon}
+                        catalogId={catalog.id}
+                        size={14}
+                      />
+                      <span className="flex-1 truncate">{catalog.name}</span>
+                      {isServerInstalling ? (
+                        <Loader2 className="size-3 animate-spin text-muted-foreground" />
+                      ) : isReady ? (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary">
+                          Add
                         </span>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleRemove(catalog.id);
-                          }}
-                          className="absolute right-8 opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-destructive/15 hover:text-destructive text-muted-foreground transition-all"
+                      ) : (
+                        <Badge
+                          variant="outline"
+                          className="text-[10px] px-1.5 py-0"
                         >
-                          <XIcon className="size-3" />
-                        </button>
-                        <ChevronDown className="size-3 -rotate-90 text-muted-foreground" />
-                      </DropdownMenuItem>
-                    );
-                  })}
-                </DropdownMenuGroup>
+                          Install
+                        </Badge>
+                      )}
+                    </DropdownMenuItem>
+                  );
+                })}
+              </DropdownMenuGroup>
+            )}
+
+            {connectedFiltered.length === 0 &&
+              availableCatalogs.length === 0 && (
+                <div className="py-4 text-center text-xs text-muted-foreground">
+                  No tools found
+                </div>
               )}
+          </div>
 
-              {/* Available servers */}
-              {availableCatalogs.length > 0 && (
-                <DropdownMenuGroup>
-                  {connectedFiltered.length > 0 && <DropdownMenuSeparator />}
-                  <DropdownMenuLabel>Available</DropdownMenuLabel>
-                  {availableCatalogs.map((catalog) => {
-                    const servers = allCredentials?.[catalog.id] ?? [];
-                    const hasCredentials =
-                      catalog.serverType === "builtin" || servers.length > 0;
-                    const isServerInstalling = servers.some(
-                      (s) =>
-                        s.localInstallationStatus === "pending" ||
-                        s.localInstallationStatus === "discovering-tools",
-                    );
-                    const isReady = hasCredentials && !isServerInstalling;
-                    return (
-                      <DropdownMenuItem
-                        key={catalog.id}
-                        disabled={isServerInstalling}
-                        onClick={() =>
-                          isReady
-                            ? onConfigureTool(catalog)
-                            : installer.triggerInstallByCatalogId(catalog.id)
-                        }
-                      >
-                        <McpCatalogIcon
-                          icon={catalog.icon}
-                          catalogId={catalog.id}
-                          size={14}
-                        />
-                        <span className="flex-1 truncate">{catalog.name}</span>
-                        {isServerInstalling ? (
-                          <Loader2 className="size-3 animate-spin text-muted-foreground" />
-                        ) : isReady ? (
-                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary">
-                            Add
-                          </span>
-                        ) : (
-                          <Badge
-                            variant="outline"
-                            className="text-[10px] px-1.5 py-0"
-                          >
-                            Install
-                          </Badge>
-                        )}
-                      </DropdownMenuItem>
-                    );
-                  })}
-                </DropdownMenuGroup>
-              )}
-
-              {connectedFiltered.length === 0 &&
-                availableCatalogs.length === 0 && (
-                  <div className="py-4 text-center text-xs text-muted-foreground">
-                    No tools found
-                  </div>
-                )}
-            </div>
-
-            <DropdownMenuSeparator />
-            <DropdownMenuItem asChild>
-              <a href="/mcp/registry" target="_blank" rel="noopener noreferrer">
-                <Plus className="size-3.5" />
-                Add New Server
-              </a>
-            </DropdownMenuItem>
-          </DropdownMenuSubContent>
-        </DropdownMenuPortal>
-      </DropdownMenuSub>
-
-      {/* Install dialogs */}
-      <RemoteServerInstallDialog
-        isOpen={installer.isDialogOpened("remote-install")}
-        onClose={installer.closeRemoteInstall}
-        onConfirm={installer.handleRemoteServerInstallConfirm}
-        catalogItem={installer.selectedCatalogItem}
-        isInstalling={installer.isInstalling}
-        isReauth={installer.isReauth}
-      />
-      <OAuthConfirmationDialog
-        open={installer.isDialogOpened("oauth")}
-        onOpenChange={(open) => {
-          if (!open) installer.closeOAuth();
-        }}
-        serverName={installer.selectedCatalogItem?.name || ""}
-        onConfirm={installer.handleOAuthConfirm}
-        onCancel={installer.closeOAuth}
-        catalogId={installer.selectedCatalogItem?.id}
-      />
-      <NoAuthInstallDialog
-        isOpen={installer.isDialogOpened("no-auth")}
-        onClose={installer.closeNoAuth}
-        onInstall={installer.handleNoAuthConfirm}
-        catalogItem={installer.noAuthCatalogItem}
-        isInstalling={installer.isInstalling}
-      />
-      {installer.localServerCatalogItem && (
-        <LocalServerInstallDialog
-          isOpen={installer.isDialogOpened("local-install")}
-          onClose={installer.closeLocalInstall}
-          onConfirm={installer.handleLocalServerInstallConfirm}
-          catalogItem={installer.localServerCatalogItem}
-          isInstalling={installer.isInstalling}
-          isReauth={installer.isReauth}
-        />
-      )}
-    </>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem asChild>
+            <a href="/mcp/registry" target="_blank" rel="noopener noreferrer">
+              <Plus className="size-3.5" />
+              Add New Server
+            </a>
+          </DropdownMenuItem>
+        </DropdownMenuSubContent>
+      </DropdownMenuPortal>
+    </DropdownMenuSub>
   );
 }
 
@@ -859,6 +878,32 @@ function SubagentsSubMenu({ agentId }: { agentId: string }) {
       </DropdownMenuSubTrigger>
       <DropdownMenuPortal>
         <DropdownMenuSubContent className="w-56">
+          {/* Scope filter toggles */}
+          <div className="flex gap-1 px-2 py-1">
+            {scopeTabs.map((s) => {
+              const active = scopeFilters[s.key];
+              return (
+                <button
+                  key={s.key}
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleScope(s.key);
+                  }}
+                  className={cn(
+                    "px-2.5 py-1 rounded-md text-[11px] font-medium transition-all border",
+                    active
+                      ? "bg-primary/10 text-primary border-primary/20"
+                      : "text-muted-foreground border-border opacity-60",
+                  )}
+                >
+                  {s.label}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Search */}
           <div className="px-2 py-1">
             <div className="relative">
               <Search className="absolute left-2 top-1/2 -translate-y-1/2 size-3 text-muted-foreground pointer-events-none" />
@@ -893,6 +938,15 @@ function SubagentsSubMenu({ agentId }: { agentId: string }) {
                       size={14}
                     />
                     <span className="flex-1 truncate">{a.name}</span>
+                    <AgentBadge
+                      type={
+                        (a as unknown as Record<string, unknown>).scope as
+                          | "personal"
+                          | "team"
+                          | "org"
+                      }
+                      className="text-[10px] px-1.5 py-0"
+                    />
                     <Check className="size-3.5 text-primary" />
                   </DropdownMenuItem>
                 ))}
@@ -918,9 +972,15 @@ function SubagentsSubMenu({ agentId }: { agentId: string }) {
                       size={14}
                     />
                     <span className="flex-1 truncate">{a.name}</span>
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary">
-                      Add
-                    </span>
+                    <AgentBadge
+                      type={
+                        (a as unknown as Record<string, unknown>).scope as
+                          | "personal"
+                          | "team"
+                          | "org"
+                      }
+                      className="text-[10px] px-1.5 py-0"
+                    />
                   </DropdownMenuItem>
                 ))}
               </DropdownMenuGroup>

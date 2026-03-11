@@ -139,7 +139,7 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async ({ organizationId, body }, reply) => {
       if (body.defaultAgentId) {
         const agent = await AgentModel.findById(body.defaultAgentId);
-        if (!agent) {
+        if (!agent || agent.organizationId !== organizationId) {
           throw new ApiError(404, "Agent not found");
         }
       }

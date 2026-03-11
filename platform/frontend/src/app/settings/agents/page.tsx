@@ -66,7 +66,7 @@ export default function AgentSettingsPage() {
   const hasChanges = hasModelChanges || hasAgentChanges;
 
   const handleSave = async () => {
-    const mutations: Promise<unknown>[] = [];
+    const payload: Record<string, unknown> = {};
 
     if (hasModelChanges) {
       let resolvedProvider: string | null = null;
@@ -78,23 +78,15 @@ export default function AgentSettingsPage() {
           }
         }
       }
-      mutations.push(
-        updateMutation.mutateAsync({
-          defaultLlmModel: defaultModel || null,
-          defaultLlmProvider: resolvedProvider,
-        }),
-      );
+      payload.defaultLlmModel = defaultModel || null;
+      payload.defaultLlmProvider = resolvedProvider;
     }
 
     if (hasAgentChanges) {
-      mutations.push(
-        updateMutation.mutateAsync({
-          defaultAgentId: defaultAgentId || null,
-        }),
-      );
+      payload.defaultAgentId = defaultAgentId || null;
     }
 
-    await Promise.allSettled(mutations);
+    await updateMutation.mutateAsync(payload);
   };
 
   const handleCancel = () => {

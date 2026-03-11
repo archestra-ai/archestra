@@ -3,4 +3,4 @@ UPDATE "organization_role"
 SET
   "permission" = REPLACE("permission"::text, '"appearance"', '"appearanceSettings"')::text,
   "updated_at" = NOW()
-WHERE "permission"::text LIKE '%"appearance"%';
+WHERE "permission"::text LIKE '%"appearance":%';

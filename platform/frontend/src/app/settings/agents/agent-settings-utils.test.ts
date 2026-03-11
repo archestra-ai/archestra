@@ -82,7 +82,11 @@ describe("detectChanges", () => {
   it("detects no changes when state matches server", () => {
     const org = { defaultLlmModel: "gpt-4o", defaultAgentId: "agent-1" };
     const result = detectChanges(
-      { selectedApiKeyId: "key-1", defaultModel: "gpt-4o", defaultAgentId: "agent-1" },
+      {
+        selectedApiKeyId: "key-1",
+        defaultModel: "gpt-4o",
+        defaultAgentId: "agent-1",
+      },
       org,
     );
     expect(result).toEqual({
@@ -95,7 +99,11 @@ describe("detectChanges", () => {
   it("detects model change", () => {
     const org = { defaultLlmModel: "gpt-4o", defaultAgentId: "agent-1" };
     const result = detectChanges(
-      { selectedApiKeyId: "key-1", defaultModel: "gpt-4o-mini", defaultAgentId: "agent-1" },
+      {
+        selectedApiKeyId: "key-1",
+        defaultModel: "gpt-4o-mini",
+        defaultAgentId: "agent-1",
+      },
       org,
     );
     expect(result).toEqual({
@@ -108,7 +116,11 @@ describe("detectChanges", () => {
   it("detects agent change", () => {
     const org = { defaultLlmModel: "gpt-4o", defaultAgentId: "agent-1" };
     const result = detectChanges(
-      { selectedApiKeyId: "key-1", defaultModel: "gpt-4o", defaultAgentId: "agent-2" },
+      {
+        selectedApiKeyId: "key-1",
+        defaultModel: "gpt-4o",
+        defaultAgentId: "agent-2",
+      },
       org,
     );
     expect(result).toEqual({
@@ -121,7 +133,11 @@ describe("detectChanges", () => {
   it("detects both model and agent changes", () => {
     const org = { defaultLlmModel: "gpt-4o", defaultAgentId: "agent-1" };
     const result = detectChanges(
-      { selectedApiKeyId: "key-1", defaultModel: "gpt-4o-mini", defaultAgentId: "agent-2" },
+      {
+        selectedApiKeyId: "key-1",
+        defaultModel: "gpt-4o-mini",
+        defaultAgentId: "agent-2",
+      },
       org,
     );
     expect(result).toEqual({
@@ -155,7 +171,11 @@ describe("buildSavePayload", () => {
   it("builds payload with model change only", () => {
     const org = { defaultLlmModel: "gpt-4o", defaultAgentId: "agent-1" };
     const payload = buildSavePayload(
-      { selectedApiKeyId: "key-1", defaultModel: "gpt-4o-mini", defaultAgentId: "agent-1" },
+      {
+        selectedApiKeyId: "key-1",
+        defaultModel: "gpt-4o-mini",
+        defaultAgentId: "agent-1",
+      },
       org,
       apiKeys,
     );
@@ -168,7 +188,11 @@ describe("buildSavePayload", () => {
   it("builds payload with agent change only", () => {
     const org = { defaultLlmModel: "gpt-4o", defaultAgentId: "agent-1" };
     const payload = buildSavePayload(
-      { selectedApiKeyId: "key-1", defaultModel: "gpt-4o", defaultAgentId: "agent-2" },
+      {
+        selectedApiKeyId: "key-1",
+        defaultModel: "gpt-4o",
+        defaultAgentId: "agent-2",
+      },
       org,
       apiKeys,
     );
@@ -180,7 +204,11 @@ describe("buildSavePayload", () => {
   it("builds payload with both changes", () => {
     const org = { defaultLlmModel: "gpt-4o", defaultAgentId: "agent-1" };
     const payload = buildSavePayload(
-      { selectedApiKeyId: "key-2", defaultModel: "claude-sonnet-4-20250514", defaultAgentId: "" },
+      {
+        selectedApiKeyId: "key-2",
+        defaultModel: "claude-sonnet-4-20250514",
+        defaultAgentId: "",
+      },
       org,
       apiKeys,
     );
@@ -194,7 +222,11 @@ describe("buildSavePayload", () => {
   it("returns empty payload when no changes", () => {
     const org = { defaultLlmModel: "gpt-4o", defaultAgentId: "agent-1" };
     const payload = buildSavePayload(
-      { selectedApiKeyId: "key-1", defaultModel: "gpt-4o", defaultAgentId: "agent-1" },
+      {
+        selectedApiKeyId: "key-1",
+        defaultModel: "gpt-4o",
+        defaultAgentId: "agent-1",
+      },
       org,
       apiKeys,
     );

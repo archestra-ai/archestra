@@ -325,7 +325,7 @@ function ChatSessionHook({
   // Always keep the session ref up-to-date with the latest values (including
   // function references from useChat which change every render). This is a ref
   // update only — no state changes, no re-renders.
-  const sessionRef = useRef<ChatSession>(null!);
+  const sessionRef = useRef<ChatSession>(null as unknown as ChatSession);
   sessionRef.current = {
     conversationId,
     messages,

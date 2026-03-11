@@ -95,6 +95,8 @@ interface ArchestraPromptInputProps {
   selectorAgentId?: string | null;
   /** Callback when agent changes */
   onAgentChange?: (agentId: string) => void;
+  /** Callback when model selector opens/closes */
+  onModelSelectorOpenChange?: (open: boolean) => void;
 }
 
 // Inner component that has access to the controller context
@@ -122,6 +124,7 @@ const PromptInputContent = ({
   isPlaywrightSetupVisible = false,
   selectorAgentId,
   onAgentChange,
+  onModelSelectorOpenChange,
 }: Omit<ArchestraPromptInputProps, "onSubmit"> & {
   onSubmit: ArchestraPromptInputProps["onSubmit"];
 }) => {
@@ -278,6 +281,7 @@ const PromptInputContent = ({
                     <ModelSelector
                       selectedModel={selectedModel}
                       onModelChange={onModelChange}
+                      onOpenChange={onModelSelectorOpenChange}
                       apiKeyId={
                         conversationId
                           ? currentConversationChatApiKeyId
@@ -393,6 +397,7 @@ const PromptInputContent = ({
                 selectedModel={selectedModel}
                 onModelChange={onModelChange}
                 onOpenChange={(open) => {
+                  onModelSelectorOpenChange?.(open);
                   if (!open) {
                     setTimeout(() => {
                       textareaRef.current?.focus();
@@ -482,6 +487,7 @@ const ArchestraPromptInput = ({
   isPlaywrightSetupVisible,
   selectorAgentId,
   onAgentChange,
+  onModelSelectorOpenChange,
 }: ArchestraPromptInputProps) => {
   return (
     <div className="flex size-full flex-col justify-end">
@@ -510,6 +516,7 @@ const ArchestraPromptInput = ({
           isPlaywrightSetupVisible={isPlaywrightSetupVisible}
           selectorAgentId={selectorAgentId}
           onAgentChange={onAgentChange}
+          onModelSelectorOpenChange={onModelSelectorOpenChange}
         />
       </PromptInputProvider>
     </div>

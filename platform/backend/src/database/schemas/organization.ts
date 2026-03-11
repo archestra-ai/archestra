@@ -71,6 +71,12 @@ const organizationsTable = pgTable("organization", {
 
   /** LLM model used for reranking (e.g. "gpt-4o") */
   rerankerModel: text("reranker_model"),
+
+  /** Organization-wide default LLM model ID (e.g. "gpt-4o") */
+  defaultLlmModel: text("default_llm_model"),
+
+  /** Provider for the default LLM model (e.g. "openai") */
+  defaultLlmProvider: text("default_llm_provider"),
 });
 
 export default organizationsTable;

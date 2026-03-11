@@ -91,6 +91,8 @@ const extendedFields = {
   compressionScope: OrganizationCompressionScopeSchema,
   globalToolPolicy: GlobalToolPolicySchema,
   embeddingModel: z.string().nullable(),
+  defaultLlmModel: z.string().nullable(),
+  defaultLlmProvider: z.string().nullable(),
 };
 
 export const SelectOrganizationSchema = createSelectSchema(
@@ -117,6 +119,8 @@ export const UpdateLlmSettingsSchema = z.object({
   convertToolResultsToToon: z.boolean().optional(),
   compressionScope: OrganizationCompressionScopeSchema.optional(),
   limitCleanupInterval: OrganizationLimitCleanupIntervalSchema.optional(),
+  defaultLlmModel: z.string().nullable().optional(),
+  defaultLlmProvider: z.string().nullable().optional(),
 });
 
 export const UpdateKnowledgeSettingsSchema = z.object({

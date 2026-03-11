@@ -50,6 +50,7 @@ import {
   useModelsByProvider,
 } from "@/lib/chat-models.query";
 import { useSyncChatModels } from "@/lib/chat-settings.query";
+import { resolveAutoSelectedModel } from "@/lib/use-chat-preferences";
 import { cn } from "@/lib/utils";
 
 /** Modalities that can be filtered (excludes "text" since all models support it) */
@@ -670,23 +671,15 @@ export function ModelSelector({
   // Only triggers when the model is genuinely unavailable — keeps the user's
   // selection stable across API key changes if the model is still valid.
   useEffect(() => {
-    if (isLoading || allAvailableModels.length === 0) return;
-    // Don't auto-select when parent hasn't resolved the model yet (empty string)
-    if (!selectedModel) return;
-    if (isModelAvailable) return;
-
-    const bestModel = allAvailableModels.find((m) => m.isBest);
-    const modelToSelect = bestModel ?? allAvailableModels[0];
-    if (modelToSelect && modelToSelect.id !== selectedModel) {
-      onModelChange(modelToSelect.id);
+    const modelToSelect = resolveAutoSelectedModel({
+      selectedModel,
+      availableModels: allAvailableModels,
+      isLoading,
+    });
+    if (modelToSelect) {
+      onModelChange(modelToSelect);
     }
-  }, [
-    isLoading,
-    allAvailableModels,
-    isModelAvailable,
-    selectedModel,
-    onModelChange,
-  ]);
+  }, [isLoading, allAvailableModels, selectedModel, onModelChange]);
 
   // If loading, show loading state
   if (isLoading) {

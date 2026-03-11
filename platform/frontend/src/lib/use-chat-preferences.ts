@@ -100,6 +100,51 @@ export function saveApiKey(provider: string, keyId: string): void {
   }
 }
 
+// ===== Model auto-selection logic =====
+
+interface AutoSelectableModel {
+  id: string;
+  isBest?: boolean;
+}
+
+interface ResolveAutoSelectParams {
+  selectedModel: string;
+  availableModels: AutoSelectableModel[];
+  isLoading: boolean;
+}
+
+/**
+ * Determine whether the model selector should auto-select a different model.
+ * Returns the model ID to switch to, or null if no change is needed.
+ *
+ * Auto-selection only triggers when the selected model is genuinely unavailable
+ * (e.g., the API key changed and the model isn't offered by the new provider).
+ * It does NOT trigger just because the API key changed — this prevents a race
+ * condition during initialization where the null→keyId transition was
+ * incorrectly treated as a "key change" and overwrote the user's saved model.
+ */
+export function resolveAutoSelectedModel(
+  params: ResolveAutoSelectParams,
+): string | null {
+  const { selectedModel, availableModels, isLoading } = params;
+
+  // Not ready yet — wait for models to load
+  if (isLoading || availableModels.length === 0) return null;
+
+  // Parent hasn't resolved the model yet (empty string during init)
+  if (!selectedModel) return null;
+
+  // Current model is available — no change needed
+  if (availableModels.some((m) => m.id === selectedModel)) return null;
+
+  // Model is unavailable — pick the best or first available
+  const best = availableModels.find((m) => m.isBest);
+  const fallback = best ?? availableModels[0];
+
+  // Only return a change if it's actually different
+  return fallback && fallback.id !== selectedModel ? fallback.id : null;
+}
+
 // ===== Model resolution logic =====
 
 interface ModelInfo {

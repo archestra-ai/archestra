@@ -38,22 +38,22 @@ Full access to core resources and settings, but cannot manage users, roles, or i
 |----------|--------|
 | Agents | `read`, `create`, `update`, `delete`, `team-admin` |
 | Agent Triggers | `read`, `create`, `update`, `delete` |
-| MCP Gateways | `read`, `create`, `update`, `delete`, `team-admin` |
 | LLM Proxies | `read`, `create`, `update`, `delete`, `team-admin` |
-| Tools & Policies | `read`, `create`, `update`, `delete` |
-| Logs | `read` |
-| Chats | `read`, `create`, `update`, `delete` |
 | LLM Providers | `read`, `create`, `update`, `delete` |
 | LLM Limits | `read`, `create`, `update`, `delete` |
 | LLM Settings | `read`, `update` |
 | LLM Costs | `read` |
+| MCP Gateways | `read`, `create`, `update`, `delete`, `team-admin` |
+| Tools & Policies | `read`, `create`, `update`, `delete` |
 | MCP Registry | `read`, `create`, `update`, `delete` |
 | MCP Server Installations | `read`, `create`, `update`, `delete` |
 | MCP Server Installation Requests | `read`, `create`, `update`, `delete` |
-| Dual LLM Configs | `read` |
-| Dual LLM Results | `read` |
 | Knowledge Bases | `read`, `create`, `update`, `delete` |
 | Knowledge Settings | `read`, `update` |
+| Dual LLM Configs | `read` |
+| Dual LLM Results | `read` |
+| Chats | `read`, `create`, `update`, `delete` |
+| Logs | `read` |
 | Teams | `read` |
 | Secrets | `read` |
 | Appearance | `read`, `update` |
@@ -66,16 +66,16 @@ Can manage agents, tools, and chat, with read-only access to most other resource
 | Resource | Actions |
 |----------|--------|
 | Agents | `read`, `create`, `update`, `delete` |
-| MCP Gateways | `read`, `create`, `update`, `delete` |
 | LLM Proxies | `read`, `create`, `update`, `delete` |
-| Tools & Policies | `read`, `create`, `update`, `delete` |
-| Chats | `read`, `create`, `update`, `delete` |
 | LLM Providers | `read` |
+| MCP Gateways | `read`, `create`, `update`, `delete` |
+| Tools & Policies | `read`, `create`, `update`, `delete` |
 | MCP Registry | `read` |
 | MCP Server Installations | `read`, `create`, `delete` |
 | MCP Server Installation Requests | `read`, `create`, `update` |
-| Dual LLM Results | `read` |
 | Knowledge Bases | `read` |
+| Dual LLM Results | `read` |
+| Chats | `read`, `create`, `update`, `delete` |
 | Teams | `read` |
 
 

@@ -29,20 +29,16 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   agentTrigger: ["read", "create", "update", "delete"],
   agentSettings: ["read", "update"],
 
-  // Core Resources
-  mcpGateway: ["read", "create", "update", "delete", "team-admin", "admin"],
-  llmProxy: ["read", "create", "update", "delete", "team-admin", "admin"],
-  toolPolicy: ["read", "create", "update", "delete"],
-  log: ["read"],
-  chat: ["read", "create", "update", "delete"],
-
   // LLM
+  llmProxy: ["read", "create", "update", "delete", "team-admin", "admin"],
   llmProvider: ["read", "create", "update", "delete"],
   llmLimit: ["read", "create", "update", "delete"],
   llmSettings: ["read", "update"],
   llmCost: ["read"],
 
   // MCP
+  mcpGateway: ["read", "create", "update", "delete", "team-admin", "admin"],
+  toolPolicy: ["read", "create", "update", "delete"],
   mcpRegistry: ["read", "create", "update", "delete"],
   mcpServerInstallation: ["read", "create", "update", "delete", "admin"],
   mcpServerInstallationRequest: ["read", "create", "update", "delete", "admin"],
@@ -54,6 +50,10 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   // Dual LLM
   dualLlmConfig: ["read", "create", "update", "delete"],
   dualLlmResult: ["read", "create", "update", "delete"],
+
+  // Other
+  chat: ["read", "create", "update", "delete"],
+  log: ["read"],
 
   // Administration (overrides better-auth defaults to add "read" where needed)
   member: ["read", "create", "update", "delete"],
@@ -75,31 +75,31 @@ export const editorPermissions: Record<Resource, Action[]> = {
   agentTrigger: ["read", "create", "update", "delete"],
   agentSettings: [],
 
-  // Core Resources
-  mcpGateway: ["read", "create", "update", "delete", "team-admin"],
-  llmProxy: ["read", "create", "update", "delete", "team-admin"],
-  toolPolicy: ["read", "create", "update", "delete"],
-  log: ["read"],
-  chat: ["read", "create", "update", "delete"],
-
   // LLM
+  llmProxy: ["read", "create", "update", "delete", "team-admin"],
   llmProvider: ["read", "create", "update", "delete"],
   llmLimit: ["read", "create", "update", "delete"],
   llmSettings: ["read", "update"],
   llmCost: ["read"],
 
   // MCP
+  mcpGateway: ["read", "create", "update", "delete", "team-admin"],
+  toolPolicy: ["read", "create", "update", "delete"],
   mcpRegistry: ["read", "create", "update", "delete"],
   mcpServerInstallation: ["read", "create", "update", "delete"],
   mcpServerInstallationRequest: ["read", "create", "update", "delete"],
+
+  // Knowledge
+  knowledgeBase: ["read", "create", "update", "delete"],
+  knowledgeSettings: ["read", "update"],
 
   // Dual LLM
   dualLlmConfig: ["read"],
   dualLlmResult: ["read"],
 
-  // Knowledge
-  knowledgeBase: ["read", "create", "update", "delete"],
-  knowledgeSettings: ["read", "update"],
+  // Other
+  chat: ["read", "create", "update", "delete"],
+  log: ["read"],
 
   // Administration
   team: ["read"],
@@ -125,31 +125,31 @@ export const memberPermissions: Record<Resource, Action[]> = {
   agentTrigger: [],
   agentSettings: [],
 
-  // Core Resources
-  mcpGateway: ["read", "create", "update", "delete"],
-  llmProxy: ["read", "create", "update", "delete"],
-  toolPolicy: ["read", "create", "update", "delete"],
-  log: [],
-  chat: ["read", "create", "update", "delete"],
-
   // LLM
+  llmProxy: ["read", "create", "update", "delete"],
   llmProvider: ["read"],
   llmLimit: [],
   llmSettings: [],
   llmCost: [],
 
   // MCP
+  mcpGateway: ["read", "create", "update", "delete"],
+  toolPolicy: ["read", "create", "update", "delete"],
   mcpRegistry: ["read"],
   mcpServerInstallation: ["read", "create", "delete"],
   mcpServerInstallationRequest: ["read", "create", "update"],
+
+  // Knowledge
+  knowledgeBase: ["read"],
+  knowledgeSettings: [],
 
   // Dual LLM
   dualLlmConfig: [],
   dualLlmResult: ["read"],
 
-  // Knowledge
-  knowledgeBase: ["read"],
-  knowledgeSettings: [],
+  // Other
+  chat: ["read", "create", "update", "delete"],
+  log: [],
 
   // Administration
   team: ["read"],

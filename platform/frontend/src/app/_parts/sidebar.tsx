@@ -485,7 +485,7 @@ export function AppSidebar() {
           />
         )}
       </SidebarContent>
-      <SidebarFooter>
+      <SidebarFooter className="gap-0">
         {isAuthenticated && permissionMap && (
           <NavSecondary
             items={filteredFooterNavItems}
@@ -493,12 +493,12 @@ export function AppSidebar() {
             searchParams={searchParams}
             permissionMap={permissionMap}
             starCount={formattedStarCount}
-            className="group-data-[collapsible=icon]:p-0"
+            className="pb-0 group-data-[collapsible=icon]:p-0"
           />
         )}
         <SidebarWarningsAccordion />
         <SignedIn>
-          <SidebarGroup className="mt-auto group-data-[collapsible=icon]:p-0">
+          <SidebarGroup className="mt-auto pt-0 group-data-[collapsible=icon]:p-0">
             <SidebarGroupContent>
               <div
                 data-testid={E2eTestId.SidebarUserProfile}

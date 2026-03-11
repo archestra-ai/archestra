@@ -1241,7 +1241,7 @@ export function AgentDialog({
                       )}{" "}
                       can draw from when responding
                     </p>
-                    <Popover>
+                    <Popover modal>
                       <PopoverTrigger asChild>
                         <Button
                           variant="outline"

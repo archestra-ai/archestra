@@ -48,7 +48,7 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { useIsAuthenticated } from "@/lib/auth.hook";
-import { usePermissionMap } from "@/lib/auth.query";
+import { useHasPermissions, usePermissionMap } from "@/lib/auth.query";
 import config from "@/lib/config";
 import { useEnterpriseFeature } from "@/lib/config.query";
 import { useGithubStars } from "@/lib/github.query";
@@ -187,18 +187,22 @@ const contentNavGroups: NavGroup[] = [
         customIsActive: (pathname: string) =>
           pathname.startsWith("/llm/logs") || pathname.startsWith("/mcp/logs"),
       },
-      {
-        title: "Connect",
-        url: "/connection",
-        icon: Cable,
-      },
-      {
-        title: "Settings",
-        url: "/settings/account",
-        icon: Settings,
-        customIsActive: (pathname: string) => pathname.startsWith("/settings"),
-      },
     ],
+  },
+];
+
+// Items pinned to the sidebar footer (above user profile)
+const footerNavItems: NavItem[] = [
+  {
+    title: "Connect",
+    url: "/connection",
+    icon: Cable,
+  },
+  {
+    title: "Settings",
+    url: "/settings/account",
+    icon: Settings,
+    customIsActive: (pathname: string) => pathname.startsWith("/settings"),
   },
 ];
 
@@ -409,6 +413,15 @@ export function AppSidebar() {
   const formattedStarCount = starCount ?? "";
   const permissionMap = usePermissionMap(requiredPagePermissionsMap);
   const knowledgeBaseEnabled = useEnterpriseFeature("knowledgeBase");
+  // Connect page requires at least one of these (OR logic)
+  const { data: canReadAgent } = useHasPermissions({ agent: ["read"] });
+  const { data: canReadLlmProxy } = useHasPermissions({
+    llmProxy: ["read"],
+  });
+  const { data: canReadMcpGateway } = useHasPermissions({
+    mcpGateway: ["read"],
+  });
+  const showConnect = canReadAgent || canReadLlmProxy || canReadMcpGateway;
 
   // Filter nav groups based on enterprise features
   const filteredNavGroups = React.useMemo(() => {
@@ -419,12 +432,26 @@ export function AppSidebar() {
     }));
   }, [knowledgeBaseEnabled]);
 
+  // Filter footer items based on permissions
+  const filteredFooterNavItems = React.useMemo(() => {
+    return footerNavItems.filter((item) => {
+      if (item.title === "Connect") return showConnect;
+      return true;
+    });
+  }, [showConnect]);
+
   return (
     <Sidebar collapsible="icon">
-      <SidebarHeader className="pt-4 group-data-[collapsible=icon]:pt-2 group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:items-center">
-        <div className="group-data-[collapsible=icon]:hidden">
-          <AppLogo centered={false} />
+      <SidebarHeader className="pt-4 group-data-[collapsible=icon]:pt-2 group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:items-center group-data-[collapsible=icon]:gap-1">
+        <div className="flex items-center justify-between group-data-[collapsible=icon]:hidden">
+          <Link href="/chat">
+            <AppLogo centered={false} />
+          </Link>
+          <SidebarTrigger className="size-7 cursor-pointer" />
         </div>
+        <Link href="/chat" className="hidden group-data-[collapsible=icon]:flex">
+          <img src="/logo.png" alt="Logo" className="size-7" />
+        </Link>
         <SidebarTrigger className="hidden group-data-[collapsible=icon]:flex size-8 cursor-pointer" />
       </SidebarHeader>
       <SidebarContent>
@@ -459,6 +486,16 @@ export function AppSidebar() {
         )}
       </SidebarContent>
       <SidebarFooter>
+        {isAuthenticated && permissionMap && (
+          <NavSecondary
+            items={filteredFooterNavItems}
+            pathname={pathname}
+            searchParams={searchParams}
+            permissionMap={permissionMap}
+            starCount={formattedStarCount}
+            className="group-data-[collapsible=icon]:p-0"
+          />
+        )}
         <SidebarWarningsAccordion />
         <SignedIn>
           <SidebarGroup className="mt-auto group-data-[collapsible=icon]:p-0">

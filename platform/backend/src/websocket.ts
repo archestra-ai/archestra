@@ -189,7 +189,7 @@ class WebSocketService {
 
         this.clientContexts.set(ws, clientContext);
 
-        logger.info(
+        logger.trace(
           {
             connections: this.wss?.clients.size,
             userId: clientContext.userId,
@@ -220,7 +220,7 @@ class WebSocketService {
           this.unsubscribeMcpLogs(ws);
           this.unsubscribeMcpExec(ws);
           this.unsubscribeMcpDeploymentStatuses(ws);
-          logger.info(
+          logger.trace(
             `WebSocket client disconnected. Remaining connections: ${this.wss?.clients.size}`,
           );
           this.clientContexts.delete(ws);

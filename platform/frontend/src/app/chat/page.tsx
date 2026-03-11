@@ -79,7 +79,6 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty";
-import { useSidebar } from "@/components/ui/sidebar";
 import { TypingText } from "@/components/ui/typing-text";
 import { Version } from "@/components/version";
 import { useDefaultAgentId, useInternalAgents } from "@/lib/agent.query";
@@ -134,7 +133,6 @@ export default function ChatPage() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const { open: sidebarOpen } = useSidebar();
 
   const [conversationId, setConversationId] = useState<string | undefined>(
     () => searchParams.get(CONVERSATION_QUERY_PARAM) || undefined,
@@ -436,10 +434,6 @@ export default function ChatPage() {
     return undefined;
   }, [initialModel, modelsByProvider]);
 
-  // Whether the current initial model matches the org default
-  const isInitialModelDefault =
-    !!organization?.defaultLlmModel &&
-    initialModel === organization.defaultLlmModel;
 
   const chatSession = useChatSession(conversationId);
 
@@ -1629,11 +1623,9 @@ export default function ChatPage() {
                 )}
                 <div className="flex-1 flex items-center justify-center p-4">
                   <div className="w-full max-w-4xl space-y-24">
-                    {!sidebarOpen && (
-                      <div className="flex justify-center scale-150">
-                        <AppLogo />
-                      </div>
-                    )}
+                    <div className="flex justify-center scale-150">
+                      <AppLogo />
+                    </div>
                     <ArchestraPromptInput
                       onSubmit={handleInitialSubmit}
                       status={
@@ -1668,7 +1660,6 @@ export default function ChatPage() {
                       isPlaywrightSetupVisible={isPlaywrightSetupVisible}
                       selectorAgentId={initialAgentId}
                       onAgentChange={handleInitialAgentChange}
-                      isDefaultModel={isInitialModelDefault}
                     />
                   </div>
                 </div>

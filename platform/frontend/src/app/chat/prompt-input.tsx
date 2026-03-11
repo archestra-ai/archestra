@@ -11,7 +11,7 @@ import {
 import type { ChatStatus } from "ai";
 import { MoreVerticalIcon, PaperclipIcon } from "lucide-react";
 import type { FormEvent } from "react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { ModelSelectorLogo } from "@/components/ai-elements/model-selector";
 import {
   PromptInput,
@@ -53,6 +53,7 @@ import { useProfile } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth.query";
 import { conversationStorageKeys } from "@/lib/chat-utils";
 import { useIsMobile } from "@/lib/use-mobile.hook";
+import { useModelSelectorDisplay } from "@/lib/use-model-selector-display.hook";
 
 interface ArchestraPromptInputProps {
   onSubmit: (
@@ -100,8 +101,6 @@ interface ArchestraPromptInputProps {
   onAgentChange?: (agentId: string) => void;
   /** Callback when model selector opens/closes */
   onModelSelectorOpenChange?: (open: boolean) => void;
-  /** Whether the current model is the org default (show collapsed logo) */
-  isDefaultModel?: boolean;
 }
 
 // Inner component that has access to the controller context
@@ -130,7 +129,6 @@ const PromptInputContent = ({
   selectorAgentId,
   onAgentChange,
   onModelSelectorOpenChange,
-  isDefaultModel = false,
 }: Omit<ArchestraPromptInputProps, "onSubmit"> & {
   onSubmit: ArchestraPromptInputProps["onSubmit"];
 }) => {
@@ -139,14 +137,10 @@ const PromptInputContent = ({
   const controller = usePromptInputController();
   const attachments = usePromptInputAttachments();
 
-  // Track whether user expanded the full model/key selectors from the default logo
-  const [showFullSelector, setShowFullSelector] = useState(false);
-  // Reset when isDefaultModel changes back to true (e.g. navigating to /chat)
-  useEffect(() => {
-    if (isDefaultModel) setShowFullSelector(false);
-  }, [isDefaultModel]);
+  // Collapsed/expanded state for the model selector (defaults to collapsed = provider icon only)
+  const { isCollapsed: showDefaultLogo, expand: expandModelSelector } =
+    useModelSelectorDisplay({ conversationId });
 
-  const showDefaultLogo = isDefaultModel && !showFullSelector;
   const logoProvider = currentProvider
     ? providerToLogoProvider[currentProvider]
     : null;
@@ -273,7 +267,7 @@ const PromptInputContent = ({
                 variant="ghost"
                 size="sm"
                 className="h-8 px-2"
-                onClick={() => setShowFullSelector(true)}
+                onClick={expandModelSelector}
               >
                 <ModelSelectorLogo provider={logoProvider} className="size-4" />
               </Button>
@@ -428,7 +422,7 @@ const PromptInputContent = ({
                   variant="ghost"
                   size="sm"
                   className="h-8 px-2"
-                  onClick={() => setShowFullSelector(true)}
+                  onClick={expandModelSelector}
                 >
                   <ModelSelectorLogo
                     provider={logoProvider}
@@ -533,7 +527,6 @@ const ArchestraPromptInput = ({
   isPlaywrightSetupVisible,
   selectorAgentId,
   onAgentChange,
-  isDefaultModel,
   onModelSelectorOpenChange,
 }: ArchestraPromptInputProps) => {
   return (
@@ -563,7 +556,6 @@ const ArchestraPromptInput = ({
           isPlaywrightSetupVisible={isPlaywrightSetupVisible}
           selectorAgentId={selectorAgentId}
           onAgentChange={onAgentChange}
-          isDefaultModel={isDefaultModel}
           onModelSelectorOpenChange={onModelSelectorOpenChange}
         />
       </PromptInputProvider>

@@ -145,12 +145,11 @@ export const MODEL_MARKER_PATTERNS: Record<
 > = {
   anthropic: {
     fastest: ["haiku-4", "haiku"],
-    best: ["opus", "sonnet"],
+    best: ["opus-4-6", "opus-4-5", "opus-4", "opus", "sonnet"],
   },
   openai: {
     fastest: ["gpt-4o-mini", "gpt-3.5"],
-    // "4o-2" matches "gpt-4o-2024..." but not "gpt-4o-mini-..."
-    best: ["o1", "o3", "4o-2", "gpt-4-turbo"],
+    best: ["gpt-5.4", "gpt-5.3", "gpt-5.2", "gpt-5", "o3", "o1", "4o-2", "gpt-4-turbo"],
   },
   gemini: {
     fastest: ["flash"],
@@ -246,8 +245,8 @@ export const FAST_MODELS: Record<SupportedProvider, string> = {
  * Using Record<SupportedProvider, string> ensures a compile-time error when a new provider is added.
  */
 export const DEFAULT_MODELS: Record<SupportedProvider, string> = {
-  anthropic: "claude-opus-4-1-20250805",
-  openai: "gpt-4o",
+  anthropic: "claude-opus-4-6-20250918",
+  openai: "gpt-5.4",
   openrouter: "openrouter/auto",
   gemini: "gemini-2.5-pro",
   cohere: "command-r-08-2024",

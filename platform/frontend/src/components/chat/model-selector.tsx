@@ -20,7 +20,7 @@ import {
   Video,
   XIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   ModelSelectorContent,
   ModelSelectorEmpty,
@@ -651,7 +651,7 @@ export function ModelSelector({
     onModelChange(modelId);
   };
 
-  // All available models flattened
+  // All available models flattened (filtered by apiKeyId)
   const allAvailableModels = useMemo(
     () =>
       availableProviders.flatMap(
@@ -664,30 +664,6 @@ export function ModelSelector({
     [allAvailableModels],
   );
   const isModelAvailable = allAvailableModelIds.includes(selectedModel);
-
-  // Auto-select the "best" model (or first) when models load and selected model
-  // is not in the available list (e.g. after switching API keys)
-  const prevApiKeyIdRef = useRef(apiKeyId);
-  useEffect(() => {
-    if (isLoading || allAvailableModels.length === 0) return;
-    // Only auto-select when apiKeyId changes or selected model is unavailable
-    const apiKeyChanged = prevApiKeyIdRef.current !== apiKeyId;
-    prevApiKeyIdRef.current = apiKeyId;
-    if (!apiKeyChanged && isModelAvailable) return;
-
-    const bestModel = allAvailableModels.find((m) => m.isBest);
-    const modelToSelect = bestModel ?? allAvailableModels[0];
-    if (modelToSelect && modelToSelect.id !== selectedModel) {
-      onModelChange(modelToSelect.id);
-    }
-  }, [
-    isLoading,
-    apiKeyId,
-    allAvailableModels,
-    isModelAvailable,
-    selectedModel,
-    onModelChange,
-  ]);
 
   // If loading, show loading state
   if (isLoading) {

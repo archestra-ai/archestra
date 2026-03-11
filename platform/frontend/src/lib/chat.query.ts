@@ -177,8 +177,30 @@ export function useUpdateConversation() {
     },
     onSuccess: (data, variables) => {
       if (!data) return;
-      // Optimistically update the conversation cache to avoid flicker
-      queryClient.setQueryData(["conversation", variables.id], data);
+      // Merge only the fields this mutation updated into the cache.
+      // Using a full replacement (`setQueryData(key, data)`) causes flicker when
+      // concurrent mutations race (e.g. model change + API key auto-select):
+      // the slower response can overwrite fields the faster mutation already set.
+      queryClient.setQueryData(
+        ["conversation", variables.id],
+        (old: typeof data | undefined) => {
+          if (!old) return data;
+          const merged = { ...old };
+          if (variables.title !== undefined) merged.title = data.title;
+          if (variables.selectedModel !== undefined)
+            merged.selectedModel = data.selectedModel;
+          if (variables.selectedProvider !== undefined)
+            merged.selectedProvider = data.selectedProvider;
+          if (variables.chatApiKeyId !== undefined)
+            merged.chatApiKeyId = data.chatApiKeyId;
+          if (variables.agentId !== undefined) {
+            merged.agentId = data.agentId;
+            merged.agent = data.agent;
+          }
+          if (variables.pinnedAt !== undefined) merged.pinnedAt = data.pinnedAt;
+          return merged;
+        },
+      );
       queryClient.invalidateQueries({ queryKey: ["conversations"] });
       if (variables.agentId) {
         // Agent changed — invalidate tools-related queries

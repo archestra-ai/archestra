@@ -28,7 +28,7 @@ import {
   KnowledgeBaseConnectorModel,
   KnowledgeBaseModel,
   LimitModel,
-  McpServerModel,
+
   TeamModel,
   ToolInvocationPolicyModel,
   ToolModel,
@@ -83,6 +83,7 @@ const TOOL_GET_LLM_PROXY_NAME = "get_llm_proxy";
 const TOOL_GET_MCP_GATEWAY_NAME = "get_mcp_gateway";
 const TOOL_LIST_AGENTS_NAME = "list_agents";
 const TOOL_EDIT_AGENT_NAME = "edit_agent";
+const TOOL_EDIT_MCP_NAME = "edit_mcp";
 
 /**
  * Convert a name to a URL-safe slug for tool naming
@@ -126,6 +127,7 @@ const TOOL_GET_LLM_PROXY_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_T
 const TOOL_GET_MCP_GATEWAY_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_GET_MCP_GATEWAY_NAME}`;
 const TOOL_LIST_AGENTS_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_LIST_AGENTS_NAME}`;
 const TOOL_EDIT_AGENT_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_EDIT_AGENT_NAME}`;
+const TOOL_EDIT_MCP_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_EDIT_MCP_NAME}`;
 
 /**
  * Context for the Archestra MCP server
@@ -1603,15 +1605,24 @@ export async function executeArchestraTool(
     );
 
     try {
-      // Note: We don't have access to request.user.id in this context,
-      // so we'll call findAll without the user ID
-      const allServers = await McpServerModel.findAll();
+      const catalogItems = await InternalMcpCatalogModel.findAll({
+        expandSecrets: false,
+      });
+
+      const items = catalogItems.map((c) => ({
+        id: c.id,
+        name: c.name,
+        icon: c.icon,
+        description: c.description,
+        scope: c.scope,
+        teams: c.teams?.map((t) => ({ id: t.id, name: t.name })) ?? [],
+      }));
 
       return {
         content: [
           {
             type: "text",
-            text: JSON.stringify(allServers, null, 2),
+            text: JSON.stringify(items, null, 2),
           },
         ],
         isError: false,
@@ -1653,24 +1664,7 @@ export async function executeArchestraTool(
         };
       }
 
-      // Get the MCP server first to check if it has a catalogId
-      const mcpServer = await McpServerModel.findById(mcpServerId);
-      if (!mcpServer) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: "MCP server not found",
-            },
-          ],
-          isError: true,
-        };
-      }
-
-      // Query tools by catalogId — all MCP servers have a catalogId
-      const tools = mcpServer.catalogId
-        ? await ToolModel.findByCatalogId(mcpServer.catalogId)
-        : [];
+      const tools = await ToolModel.findByCatalogId(mcpServerId);
 
       return {
         content: [
@@ -2004,6 +1998,122 @@ export async function executeArchestraTool(
       return {
         content: [
           { type: "text", text: `Error editing agent: ${message}` },
+        ],
+        isError: true,
+      };
+    }
+  }
+
+  if (toolName === TOOL_EDIT_MCP_FULL_NAME) {
+    logger.info(
+      { agentId: contextAgent.id, editArgs: args },
+      "edit_mcp tool called",
+    );
+
+    try {
+      const id = args?.id as string | undefined;
+      if (!id) {
+        return {
+          content: [
+            { type: "text", text: "Error: MCP server catalog id is required." },
+          ],
+          isError: true,
+        };
+      }
+
+      if (!context.userId || !organizationId) {
+        return {
+          content: [
+            { type: "text", text: "Error: user/organization context not available." },
+          ],
+          isError: true,
+        };
+      }
+
+      const existing = await InternalMcpCatalogModel.findById(id);
+      if (!existing) {
+        return {
+          content: [{ type: "text", text: "Error: MCP server not found." }],
+          isError: true,
+        };
+      }
+
+      // Check permissions: admins can edit any, non-admins only their own personal items
+      const isAdmin = await userHasPermission(
+        context.userId,
+        organizationId,
+        "mcpServerInstallation",
+        "admin",
+      );
+
+      if (!isAdmin) {
+        if (
+          existing.scope !== "personal" ||
+          existing.authorId !== context.userId
+        ) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: "Error: you can only edit your own personal MCP servers.",
+              },
+            ],
+            isError: true,
+          };
+        }
+      }
+
+      const updateData: Record<string, unknown> = {};
+      if (args?.name !== undefined) updateData.name = args.name;
+      if (args?.icon !== undefined) updateData.icon = args.icon;
+      if (args?.description !== undefined)
+        updateData.description = args.description;
+
+      if (Object.keys(updateData).length === 0) {
+        return {
+          content: [
+            { type: "text", text: "No fields to update. Provide name, icon, or description." },
+          ],
+          isError: true,
+        };
+      }
+
+      const updated = await InternalMcpCatalogModel.update(
+        existing.id,
+        updateData as Parameters<typeof InternalMcpCatalogModel.update>[1],
+      );
+
+      if (!updated) {
+        return {
+          content: [{ type: "text", text: "Error: failed to update MCP server." }],
+          isError: true,
+        };
+      }
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: [
+              "Successfully updated MCP server.",
+              "",
+              `Name: ${updated.name}`,
+              `ID: ${updated.id}`,
+              `Icon: ${updated.icon || "None"}`,
+              `Description: ${updated.description || "None"}`,
+            ].join("\n"),
+          },
+        ],
+        isError: false,
+      };
+    } catch (error) {
+      logger.error({ err: error }, "Error editing MCP server");
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Error editing MCP server: ${error instanceof Error ? error.message : "Unknown error"}`,
+          },
         ],
         isError: true,
       };
@@ -3098,7 +3208,8 @@ export function getArchestraMcpTools(): Tool[] {
     {
       name: TOOL_GET_MCP_SERVERS_FULL_NAME,
       title: "Get MCP Servers",
-      description: "List all installed MCP servers with their catalog names",
+      description:
+        "List all MCP servers from the catalog. Returns catalog item IDs that can be used with mcpServerIds in create_agent/edit_agent.",
       inputSchema: {
         type: "object",
         properties: {},
@@ -3110,13 +3221,14 @@ export function getArchestraMcpTools(): Tool[] {
     {
       name: TOOL_GET_MCP_SERVER_TOOLS_FULL_NAME,
       title: "Get MCP Server Tools",
-      description: "Get all tools available for a specific MCP server",
+      description:
+        "Get all tools available for a specific MCP server by its catalog ID (from get_mcp_servers).",
       inputSchema: {
         type: "object",
         properties: {
           mcpServerId: {
             type: "string",
-            description: "The ID of the MCP server to get tools for",
+            description: "The catalog ID of the MCP server",
           },
         },
         required: ["mcpServerId"],
@@ -3294,6 +3406,37 @@ export function getArchestraMcpTools(): Tool[] {
       _meta: {},
     },
     {
+      name: TOOL_EDIT_MCP_FULL_NAME,
+      title: "Edit MCP Server",
+      description:
+        "Edit an MCP server's name, icon, or description. Only these three fields can be changed — no other configuration is modified. Use get_mcp_servers to look up IDs by name.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          id: {
+            type: "string",
+            description:
+              "The catalog ID of the MCP server to edit. Use get_mcp_servers to look up by name.",
+          },
+          name: {
+            type: "string",
+            description: "New display name for the MCP server",
+          },
+          icon: {
+            type: "string",
+            description: "An emoji character to use as the MCP server icon",
+          },
+          description: {
+            type: "string",
+            description: "New description for the MCP server",
+          },
+        },
+        required: ["id"],
+      },
+      annotations: {},
+      _meta: {},
+    },
+    {
       name: TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
       title: "Query Knowledge Sources",
       description:
@@ -3462,12 +3605,7 @@ async function assignMcpServerTools(
   const results: McpServerResult[] = [];
   for (const mcpServerId of mcpServerIds) {
     try {
-      const server = await McpServerModel.findById(mcpServerId);
-      if (!server) {
-        results.push({ id: mcpServerId, status: "not_found" });
-        continue;
-      }
-      const tools = await ToolModel.findByCatalogId(server.catalogId!);
+      const tools = await ToolModel.findByCatalogId(mcpServerId);
       if (tools.length === 0) {
         results.push({ id: mcpServerId, status: "no_tools" });
         continue;

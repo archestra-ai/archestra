@@ -817,7 +817,15 @@ class ToolModel {
         createdAt: schema.toolsTable.createdAt,
       })
       .from(schema.toolsTable)
-      .where(eq(schema.toolsTable.catalogId, catalogId))
+      .where(
+        and(
+          eq(schema.toolsTable.catalogId, catalogId),
+          ne(
+            schema.toolsTable.name,
+            TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
+          ),
+        ),
+      )
       .orderBy(desc(schema.toolsTable.createdAt));
 
     const toolIds = allTools.map((tool) => tool.id);

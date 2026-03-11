@@ -1491,7 +1491,7 @@ describe("ToolModel", () => {
       expect(toolNames).toContain(TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME);
     });
 
-    test("findByCatalogId includes query_knowledge_sources (always visible in catalog)", async ({
+    test("findByCatalogId excludes query_knowledge_sources (auto-injected, not user-assignable)", async ({
       makeAgent,
       seedAndAssignArchestraTools,
     }) => {
@@ -1502,7 +1502,9 @@ describe("ToolModel", () => {
       const tools = await ToolModel.findByCatalogId(ARCHESTRA_MCP_CATALOG_ID);
       const toolNames = tools.map((t) => t.name);
 
-      expect(toolNames).toContain(TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME);
+      expect(toolNames).not.toContain(
+        TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
+      );
       expect(toolNames).toContain(TOOL_ARTIFACT_WRITE_FULL_NAME);
     });
 

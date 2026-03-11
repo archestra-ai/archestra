@@ -160,7 +160,7 @@ export function EditIdentityProviderDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
+      <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Edit Identity Provider</DialogTitle>
           <DialogDescription>
@@ -169,17 +169,12 @@ export function EditIdentityProviderDialog({
         </DialogHeader>
 
         <Form {...form}>
-          <form
-            onSubmit={form.handleSubmit(onSubmit)}
-            className="flex flex-col flex-1 min-h-0"
-          >
-            <div className="flex-1 overflow-y-auto py-4">
-              {providerType === "saml" ? (
-                <SamlConfigForm form={form} />
-              ) : (
-                <OidcConfigForm form={form} />
-              )}
-            </div>
+          <form onSubmit={form.handleSubmit(onSubmit)}>
+            {providerType === "saml" ? (
+              <SamlConfigForm form={form} />
+            ) : (
+              <OidcConfigForm form={form} />
+            )}
 
             <DialogStickyFooter>
               <div className="flex w-full justify-between">

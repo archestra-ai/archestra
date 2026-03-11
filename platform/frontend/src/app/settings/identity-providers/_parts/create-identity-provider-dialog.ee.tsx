@@ -100,7 +100,7 @@ export function CreateIdentityProviderDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
+      <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
             {providerName
@@ -115,21 +115,16 @@ export function CreateIdentityProviderDialog({
         </DialogHeader>
 
         <Form {...form}>
-          <form
-            onSubmit={form.handleSubmit(onSubmit)}
-            className="flex flex-col flex-1 min-h-0"
-          >
-            <div className="flex-1 overflow-y-auto py-4">
-              {currentProviderType === "saml" ? (
-                <SamlConfigForm form={form} hideProviderId={hideProviderId} />
-              ) : (
-                <OidcConfigForm
-                  form={form}
-                  hidePkce={hidePkce}
-                  hideProviderId={hideProviderId}
-                />
-              )}
-            </div>
+          <form onSubmit={form.handleSubmit(onSubmit)}>
+            {currentProviderType === "saml" ? (
+              <SamlConfigForm form={form} hideProviderId={hideProviderId} />
+            ) : (
+              <OidcConfigForm
+                form={form}
+                hidePkce={hidePkce}
+                hideProviderId={hideProviderId}
+              />
+            )}
 
             <DialogStickyFooter>
               <Button type="button" variant="outline" onClick={handleClose}>

@@ -129,7 +129,7 @@ export default function AgentSettingsPage() {
                   }}
                   disabled={updateMutation.isPending || !hasPermission}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className="w-80">
                     <SelectValue placeholder="Select API key..." />
                   </SelectTrigger>
                   <SelectContent>

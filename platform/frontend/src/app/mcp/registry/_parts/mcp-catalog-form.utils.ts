@@ -43,6 +43,9 @@ export function transformFormToApiData(
       command: values.localConfig.command || undefined,
       arguments: argumentsArray.length > 0 ? argumentsArray : undefined,
       environment: values.localConfig.environment,
+      envFrom:
+        values.localConfig.envFrom?.filter((e) => e.name.trim().length > 0) ||
+        undefined,
       dockerImage: values.localConfig.dockerImage || undefined,
       transportType: values.localConfig.transportType || undefined,
       httpPort: values.localConfig.httpPort
@@ -236,6 +239,11 @@ export function transformCatalogItemToFormValues(
           required?: boolean;
           description?: string;
         }>;
+        envFrom?: Array<{
+          type: "secret" | "configMap";
+          name: string;
+          prefix?: string;
+        }>;
         dockerImage?: string;
         transportType?: "stdio" | "streamable-http";
         httpPort?: string;
@@ -279,6 +287,7 @@ export function transformCatalogItemToFormValues(
       command: item.localConfig.command || "",
       arguments: argumentsString,
       environment,
+      envFrom: item.localConfig.envFrom || [],
       dockerImage: item.localConfig.dockerImage || "",
       transportType: config.transportType || undefined,
       httpPort: config.httpPort?.toString() || undefined,
@@ -491,6 +500,7 @@ export function transformExternalCatalogToFormValues(
         httpPath: "/mcp",
         serviceAccount: normalizedServiceAccount,
         imagePullSecrets: [],
+        envFrom: [],
         environment,
       };
     } else {
@@ -503,6 +513,7 @@ export function transformExternalCatalogToFormValues(
         httpPath: "/mcp",
         serviceAccount: normalizedServiceAccount,
         imagePullSecrets: [],
+        envFrom: [],
         environment,
       };
     }
@@ -529,6 +540,7 @@ export function transformExternalCatalogToFormValues(
       command: "",
       arguments: "",
       environment: [],
+      envFrom: [],
       dockerImage: "",
       transportType: "stdio",
       httpPort: "",

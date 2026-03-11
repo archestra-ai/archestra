@@ -88985,6 +88985,33 @@
                               "additionalProperties": false
                             }
                           },
+                          "envFrom": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "secret",
+                                    "configMap"
+                                  ]
+                                },
+                                "name": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "prefix": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "name"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
                           "dockerImage": {
                             "type": "string"
                           },
@@ -89722,6 +89749,32 @@
                           ]
                         }
                       },
+                      "envFrom": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "secret",
+                                "configMap"
+                              ]
+                            },
+                            "name": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "prefix": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "name"
+                          ]
+                        }
+                      },
                       "dockerImage": {
                         "type": "string"
                       },
@@ -90180,6 +90233,33 @@
                               "key",
                               "type",
                               "promptOnInstallation"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "envFrom": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "secret",
+                                  "configMap"
+                                ]
+                              },
+                              "name": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "prefix": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "name"
                             ],
                             "additionalProperties": false
                           }
@@ -90936,6 +91016,33 @@
                             "additionalProperties": false
                           }
                         },
+                        "envFrom": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "secret",
+                                  "configMap"
+                                ]
+                              },
+                              "name": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "prefix": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "name"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
                         "dockerImage": {
                           "type": "string"
                         },
@@ -91667,6 +91774,32 @@
                           ]
                         }
                       },
+                      "envFrom": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "secret",
+                                "configMap"
+                              ]
+                            },
+                            "name": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "prefix": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "name"
+                          ]
+                        }
+                      },
                       "dockerImage": {
                         "type": "string"
                       },
@@ -92132,6 +92265,33 @@
                               "key",
                               "type",
                               "promptOnInstallation"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "envFrom": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "secret",
+                                  "configMap"
+                                ]
+                              },
+                              "name": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "prefix": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "name"
                             ],
                             "additionalProperties": false
                           }
@@ -104356,6 +104516,33 @@
                                       "additionalProperties": false
                                     }
                                   },
+                                  "envFrom": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "properties": {
+                                        "type": {
+                                          "type": "string",
+                                          "enum": [
+                                            "secret",
+                                            "configMap"
+                                          ]
+                                        },
+                                        "name": {
+                                          "type": "string",
+                                          "minLength": 1
+                                        },
+                                        "prefix": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "type",
+                                        "name"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  },
                                   "dockerImage": {
                                     "type": "string"
                                   },
@@ -104973,6 +105160,32 @@
                                   ]
                                 }
                               },
+                              "envFrom": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "type": {
+                                      "type": "string",
+                                      "enum": [
+                                        "secret",
+                                        "configMap"
+                                      ]
+                                    },
+                                    "name": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "prefix": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "type",
+                                    "name"
+                                  ]
+                                }
+                              },
                               "dockerImage": {
                                 "type": "string"
                               },
@@ -105320,6 +105533,33 @@
                                       "key",
                                       "type",
                                       "promptOnInstallation"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "envFrom": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "type": "string",
+                                        "enum": [
+                                          "secret",
+                                          "configMap"
+                                        ]
+                                      },
+                                      "name": {
+                                        "type": "string",
+                                        "minLength": 1
+                                      },
+                                      "prefix": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "type",
+                                      "name"
                                     ],
                                     "additionalProperties": false
                                   }
@@ -105975,6 +106215,33 @@
                                     "additionalProperties": false
                                   }
                                 },
+                                "envFrom": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "type": "string",
+                                        "enum": [
+                                          "secret",
+                                          "configMap"
+                                        ]
+                                      },
+                                      "name": {
+                                        "type": "string",
+                                        "minLength": 1
+                                      },
+                                      "prefix": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "type",
+                                      "name"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                },
                                 "dockerImage": {
                                   "type": "string"
                                 },
@@ -106595,6 +106862,32 @@
                                   ]
                                 }
                               },
+                              "envFrom": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "type": {
+                                      "type": "string",
+                                      "enum": [
+                                        "secret",
+                                        "configMap"
+                                      ]
+                                    },
+                                    "name": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "prefix": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "type",
+                                    "name"
+                                  ]
+                                }
+                              },
                               "dockerImage": {
                                 "type": "string"
                               },
@@ -106992,6 +107285,33 @@
                                       "key",
                                       "type",
                                       "promptOnInstallation"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "envFrom": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "type": "string",
+                                        "enum": [
+                                          "secret",
+                                          "configMap"
+                                        ]
+                                      },
+                                      "name": {
+                                        "type": "string",
+                                        "minLength": 1
+                                      },
+                                      "prefix": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "type",
+                                      "name"
                                     ],
                                     "additionalProperties": false
                                   }
@@ -107911,6 +108231,33 @@
                                     "additionalProperties": false
                                   }
                                 },
+                                "envFrom": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "type": "string",
+                                        "enum": [
+                                          "secret",
+                                          "configMap"
+                                        ]
+                                      },
+                                      "name": {
+                                        "type": "string",
+                                        "minLength": 1
+                                      },
+                                      "prefix": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "type",
+                                      "name"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                },
                                 "dockerImage": {
                                   "type": "string"
                                 },
@@ -108572,6 +108919,33 @@
                                       "key",
                                       "type",
                                       "promptOnInstallation"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "envFrom": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "type": "string",
+                                        "enum": [
+                                          "secret",
+                                          "configMap"
+                                        ]
+                                      },
+                                      "name": {
+                                        "type": "string",
+                                        "minLength": 1
+                                      },
+                                      "prefix": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "type",
+                                      "name"
                                     ],
                                     "additionalProperties": false
                                   }
@@ -109242,6 +109616,33 @@
                                       "key",
                                       "type",
                                       "promptOnInstallation"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "envFrom": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "type": "string",
+                                        "enum": [
+                                          "secret",
+                                          "configMap"
+                                        ]
+                                      },
+                                      "name": {
+                                        "type": "string",
+                                        "minLength": 1
+                                      },
+                                      "prefix": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "type",
+                                      "name"
                                     ],
                                     "additionalProperties": false
                                   }

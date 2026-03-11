@@ -25523,6 +25523,11 @@ export type GetInternalMcpCatalogResponses = {
                 default?: string | number | boolean;
                 mounted?: boolean;
             }>;
+            envFrom?: Array<{
+                type: 'secret' | 'configMap';
+                name: string;
+                prefix?: string;
+            }>;
             dockerImage?: string;
             serviceAccount?: string;
             transportType?: 'stdio' | 'streamable-http';
@@ -25631,6 +25636,11 @@ export type CreateInternalMcpCatalogItemData = {
                 description?: string;
                 default?: string | number | boolean;
                 mounted?: boolean;
+            }>;
+            envFrom?: Array<{
+                type: 'secret' | 'configMap';
+                name: string;
+                prefix?: string;
             }>;
             dockerImage?: string;
             transportType?: 'stdio' | 'streamable-http';
@@ -25799,6 +25809,11 @@ export type CreateInternalMcpCatalogItemResponses = {
                 description?: string;
                 default?: string | number | boolean;
                 mounted?: boolean;
+            }>;
+            envFrom?: Array<{
+                type: 'secret' | 'configMap';
+                name: string;
+                prefix?: string;
             }>;
             dockerImage?: string;
             serviceAccount?: string;
@@ -26059,6 +26074,11 @@ export type GetInternalMcpCatalogItemResponses = {
                 default?: string | number | boolean;
                 mounted?: boolean;
             }>;
+            envFrom?: Array<{
+                type: 'secret' | 'configMap';
+                name: string;
+                prefix?: string;
+            }>;
             dockerImage?: string;
             serviceAccount?: string;
             transportType?: 'stdio' | 'streamable-http';
@@ -26166,6 +26186,11 @@ export type UpdateInternalMcpCatalogItemData = {
                 description?: string;
                 default?: string | number | boolean;
                 mounted?: boolean;
+            }>;
+            envFrom?: Array<{
+                type: 'secret' | 'configMap';
+                name: string;
+                prefix?: string;
             }>;
             dockerImage?: string;
             transportType?: 'stdio' | 'streamable-http';
@@ -26336,6 +26361,11 @@ export type UpdateInternalMcpCatalogItemResponses = {
                 description?: string;
                 default?: string | number | boolean;
                 mounted?: boolean;
+            }>;
+            envFrom?: Array<{
+                type: 'secret' | 'configMap';
+                name: string;
+                prefix?: string;
             }>;
             dockerImage?: string;
             serviceAccount?: string;
@@ -29630,6 +29660,11 @@ export type GetMcpServerInstallationRequestsResponses = {
                     default?: string | number | boolean;
                     mounted?: boolean;
                 }>;
+                envFrom?: Array<{
+                    type: 'secret' | 'configMap';
+                    name: string;
+                    prefix?: string;
+                }>;
                 dockerImage?: string;
                 transportType?: 'stdio' | 'streamable-http';
                 httpPort?: number;
@@ -29720,6 +29755,11 @@ export type CreateMcpServerInstallationRequestData = {
                     description?: string;
                     default?: string | number | boolean;
                     mounted?: boolean;
+                }>;
+                envFrom?: Array<{
+                    type: 'secret' | 'configMap';
+                    name: string;
+                    prefix?: string;
                 }>;
                 dockerImage?: string;
                 transportType?: 'stdio' | 'streamable-http';
@@ -29865,6 +29905,11 @@ export type CreateMcpServerInstallationRequestResponses = {
                     description?: string;
                     default?: string | number | boolean;
                     mounted?: boolean;
+                }>;
+                envFrom?: Array<{
+                    type: 'secret' | 'configMap';
+                    name: string;
+                    prefix?: string;
                 }>;
                 dockerImage?: string;
                 transportType?: 'stdio' | 'streamable-http';
@@ -30110,6 +30155,11 @@ export type GetMcpServerInstallationRequestResponses = {
                     default?: string | number | boolean;
                     mounted?: boolean;
                 }>;
+                envFrom?: Array<{
+                    type: 'secret' | 'configMap';
+                    name: string;
+                    prefix?: string;
+                }>;
                 dockerImage?: string;
                 transportType?: 'stdio' | 'streamable-http';
                 httpPort?: number;
@@ -30200,6 +30250,11 @@ export type UpdateMcpServerInstallationRequestData = {
                     description?: string;
                     default?: string | number | boolean;
                     mounted?: boolean;
+                }>;
+                envFrom?: Array<{
+                    type: 'secret' | 'configMap';
+                    name: string;
+                    prefix?: string;
                 }>;
                 dockerImage?: string;
                 transportType?: 'stdio' | 'streamable-http';
@@ -30357,6 +30412,11 @@ export type UpdateMcpServerInstallationRequestResponses = {
                     description?: string;
                     default?: string | number | boolean;
                     mounted?: boolean;
+                }>;
+                envFrom?: Array<{
+                    type: 'secret' | 'configMap';
+                    name: string;
+                    prefix?: string;
                 }>;
                 dockerImage?: string;
                 transportType?: 'stdio' | 'streamable-http';
@@ -30525,6 +30585,11 @@ export type ApproveMcpServerInstallationRequestResponses = {
                     default?: string | number | boolean;
                     mounted?: boolean;
                 }>;
+                envFrom?: Array<{
+                    type: 'secret' | 'configMap';
+                    name: string;
+                    prefix?: string;
+                }>;
                 dockerImage?: string;
                 transportType?: 'stdio' | 'streamable-http';
                 httpPort?: number;
@@ -30692,6 +30757,11 @@ export type DeclineMcpServerInstallationRequestResponses = {
                     default?: string | number | boolean;
                     mounted?: boolean;
                 }>;
+                envFrom?: Array<{
+                    type: 'secret' | 'configMap';
+                    name: string;
+                    prefix?: string;
+                }>;
                 dockerImage?: string;
                 transportType?: 'stdio' | 'streamable-http';
                 httpPort?: number;
@@ -30858,6 +30928,11 @@ export type AddMcpServerInstallationRequestNoteResponses = {
                     description?: string;
                     default?: string | number | boolean;
                     mounted?: boolean;
+                }>;
+                envFrom?: Array<{
+                    type: 'secret' | 'configMap';
+                    name: string;
+                    prefix?: string;
                 }>;
                 dockerImage?: string;
                 transportType?: 'stdio' | 'streamable-http';

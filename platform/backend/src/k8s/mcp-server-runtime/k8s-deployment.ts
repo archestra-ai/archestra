@@ -793,6 +793,17 @@ export default class K8sDeployment {
               ? undefined // Let K8s decide (defaults to Always for :latest, IfNotPresent for others)
               : ("Never" as k8s.V1Container["imagePullPolicy"]), // For local images like "gaggimate-mcp:latest" without registry
           env: envVars,
+          // Inject all keys from existing K8s Secrets/ConfigMaps as env vars
+          ...(localConfig.envFrom?.length
+            ? {
+                envFrom: localConfig.envFrom.map((ref) => ({
+                  ...(ref.type === "secret"
+                    ? { secretRef: { name: ref.name } }
+                    : { configMapRef: { name: ref.name } }),
+                  ...(ref.prefix ? { prefix: ref.prefix } : {}),
+                })),
+              }
+            : {}),
           ...(localConfig.command
             ? {
                 command: [localConfig.command],
@@ -1049,7 +1060,7 @@ export default class K8sDeployment {
     }
 
     // 6. Merge environment variables (YAML env vars + system env vars)
-    // Also filter out YAML secretKeyRef entries for keys that don't have values
+    // Also filter out archestra-managed secretKeyRef entries for keys that don't have values
     if (deployment.spec?.template?.spec?.containers?.[0]) {
       const container = deployment.spec.template.spec.containers[0];
 
@@ -1062,15 +1073,21 @@ export default class K8sDeployment {
         }
       }
 
-      // Filter YAML env vars to remove secretKeyRef entries for keys without values
-      // This prevents "couldn't find key X in Secret" errors when secrets are optional/empty
+      // Filter YAML env vars to remove archestra-managed secretKeyRef entries for keys without values.
+      // Only filter entries that reference the archestra-managed K8s Secret — preserve user-added
+      // secretKeyRef entries that reference other secrets (e.g., ExternalSecrets, manually created secrets).
+      // This prevents "couldn't find key X in Secret" errors when archestra-managed secrets are optional/empty.
       if (container.env) {
         container.env = container.env.filter((envVar) => {
           // Keep all non-secretKeyRef env vars
           if (!envVar.valueFrom?.secretKeyRef) {
             return true;
           }
-          // Only keep secretKeyRef env vars if the key will be in the K8s Secret
+          // Keep secretKeyRef entries that reference a different secret (user-managed)
+          if (envVar.valueFrom.secretKeyRef.name !== k8sSecretName) {
+            return true;
+          }
+          // Only keep archestra-managed secretKeyRef if the key will be in the K8s Secret
           const secretKey = envVar.valueFrom.secretKeyRef.key;
           return secretKey && validSecretKeys.has(secretKey);
         });
@@ -1085,6 +1102,31 @@ export default class K8sDeployment {
           container.env = [...(container.env || []), envVar];
         }
       }
+    }
+
+    // 6b. Apply envFrom (existing K8s Secrets/ConfigMaps) if not already in YAML
+    if (
+      localConfig.envFrom?.length &&
+      deployment.spec?.template?.spec?.containers?.[0]
+    ) {
+      const container = deployment.spec.template.spec.containers[0];
+      const existingEnvFrom = container.envFrom || [];
+      const existingKeys = new Set(
+        existingEnvFrom.map((e) =>
+          e.secretRef?.name
+            ? `secret:${e.secretRef.name}`
+            : `configMap:${e.configMapRef?.name ?? ""}`,
+        ),
+      );
+      const newEnvFrom = localConfig.envFrom
+        .filter((ref) => !existingKeys.has(`${ref.type}:${ref.name}`))
+        .map((ref) => ({
+          ...(ref.type === "secret"
+            ? { secretRef: { name: ref.name } }
+            : { configMapRef: { name: ref.name } }),
+          ...(ref.prefix ? { prefix: ref.prefix } : {}),
+        }));
+      container.envFrom = [...existingEnvFrom, ...newEnvFrom];
     }
 
     // 7. Ensure command and args from localConfig are applied

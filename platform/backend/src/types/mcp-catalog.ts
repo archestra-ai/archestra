@@ -1,4 +1,5 @@
 import {
+  EnvFromSchema,
   ImagePullSecretConfigSchema,
   LocalConfigSchema,
   OAuthConfigSchema,
@@ -60,6 +61,7 @@ const LocalConfigSelectSchema = z.object({
       }),
     )
     .optional(),
+  envFrom: z.array(EnvFromSchema).optional(),
   dockerImage: z.string().optional(),
   serviceAccount: z.string().optional(),
   transportType: z.enum(["stdio", "streamable-http"]).optional(),

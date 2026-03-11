@@ -56,7 +56,9 @@ class QueryService {
         embeddingConfig.client.embeddings.create({
           model: embeddingConfig.model,
           input: queryText,
-          dimensions: embeddingConfig.dimensions,
+          ...(embeddingConfig.model.startsWith("nomic")
+            ? {}
+            : { dimensions: embeddingConfig.dimensions }),
         }),
       buildInteraction: (response) =>
         buildEmbeddingInteraction({
@@ -85,6 +87,7 @@ class QueryService {
     const vectorRows = await KbChunkModel.vectorSearch({
       connectorIds,
       queryEmbedding,
+      dimensions: embeddingConfig.dimensions,
       limit: overFetchLimit,
     });
 

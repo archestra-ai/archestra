@@ -66,7 +66,7 @@ class EmbeddingService {
         }
       }
 
-      await KbChunkModel.updateEmbeddings(allUpdates);
+      await KbChunkModel.updateEmbeddings(allUpdates, ctx.dimensions);
 
       await KbDocumentModel.update(documentId, {
         embeddingStatus: "completed",
@@ -207,7 +207,7 @@ class EmbeddingService {
       ([chunkId, embedding]) => ({ chunkId, embedding }),
     );
     if (successfulUpdates.length > 0) {
-      await KbChunkModel.updateEmbeddings(successfulUpdates);
+      await KbChunkModel.updateEmbeddings(successfulUpdates, ctx.dimensions);
     }
 
     for (const { documentId, chunkIds, chunkCount } of docChunkMap) {
@@ -249,7 +249,9 @@ class EmbeddingService {
             ctx.client.embeddings.create({
               model: ctx.model,
               input: texts,
-              dimensions: ctx.dimensions,
+              ...(ctx.model.startsWith("nomic")
+                ? {}
+                : { dimensions: ctx.dimensions }),
             }),
           buildInteraction: (resp) =>
             buildEmbeddingInteraction({

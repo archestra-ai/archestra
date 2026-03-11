@@ -1,6 +1,6 @@
 import {
   AUTO_PROVISIONED_INVITATION_STATUS,
-  EMBEDDING_DIMENSIONS,
+  getEmbeddingDimensions,
   RouteId,
 } from "@shared";
 import { and, eq, inArray, like } from "drizzle-orm";
@@ -272,7 +272,9 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         const response = await client.embeddings.create({
           model: body.embeddingModel,
           input: ["hello world"],
-          dimensions: EMBEDDING_DIMENSIONS,
+          ...(body.embeddingModel.startsWith("nomic")
+            ? {}
+            : { dimensions: getEmbeddingDimensions(body.embeddingModel) }),
         });
 
         if (response.data.length > 0) {

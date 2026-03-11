@@ -122474,6 +122474,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "embeddingDimensions": {
+                      "nullable": true,
+                      "type": "number"
+                    },
                     "embeddingChatApiKeyId": {
                       "nullable": true,
                       "type": "string",
@@ -122522,6 +122526,7 @@
                     "globalToolPolicy",
                     "allowChatFileUploads",
                     "embeddingModel",
+                    "embeddingDimensions",
                     "embeddingChatApiKeyId",
                     "rerankerChatApiKeyId",
                     "rerankerModel",

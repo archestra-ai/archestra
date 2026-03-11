@@ -982,7 +982,7 @@ async function fetchOidcJwksUrl(issuerUrl: string): Promise<string | null> {
  * Build a dynamic description for the query_knowledge_sources tool that includes
  * the agent's actual knowledge base names and connector sources.
  */
-async function buildKnowledgeSourcesDescription(
+export async function buildKnowledgeSourcesDescription(
   agentId: string,
 ): Promise<string | null> {
   const assignments = await AgentKnowledgeBaseModel.findByAgent(agentId);

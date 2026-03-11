@@ -173,11 +173,10 @@ const MessageThread = ({
                           message.parts
                             .slice(i + 1)
                             .every((p) => p.type !== "text");
-                        // Show citations on the assistant message AFTER the
-                        // tool result, not on the message that initiated the call.
+                        // Show citations on the last text part of the last
+                        // assistant message when any message has a KB tool call.
                         const showCitations =
                           isLastTextPartInMessage &&
-                          !hasKnowledgeBaseToolCall(message.parts) &&
                           hasKnowledgeBaseToolCall(allParts);
 
                         return (

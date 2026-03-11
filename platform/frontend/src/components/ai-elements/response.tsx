@@ -20,8 +20,24 @@ export function isSameOriginUrl(url: string): boolean {
   }
 }
 
+/**
+ * Fix orphaned list markers where the LLM outputs the number on its own line:
+ *   "3.\n\n**Title**" → "3. **Title**"
+ *   "3. \n**Title**"  → "3. **Title**"
+ * Handles any number of newlines and optional trailing spaces after the dot.
+ * Without this, Streamdown parses the number and content as separate blocks.
+ */
+function fixOrphanedListMarkers(text: string): string {
+  return text.replace(
+    /^(\d+)\.[ \t]*\n[\n\r]*(?=\S)(?!\d+[.)]\s)/gm,
+    "$1. ",
+  );
+}
+
 export const Response = memo(
-  ({ className, linkSafety, ...props }: ResponseProps) => {
+  ({ className, linkSafety, children, ...props }: ResponseProps) => {
+    const fixedChildren =
+      typeof children === "string" ? fixOrphanedListMarkers(children) : children;
     const mergedLinkSafety = useMemo(
       () => ({
         enabled: true,
@@ -62,7 +78,9 @@ export const Response = memo(
         )}
         linkSafety={mergedLinkSafety}
         {...props}
-      />
+      >
+        {fixedChildren}
+      </Streamdown>
     );
   },
   (prevProps, nextProps) => prevProps.children === nextProps.children,

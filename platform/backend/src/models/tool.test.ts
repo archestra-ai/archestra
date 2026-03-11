@@ -1491,6 +1491,50 @@ describe("ToolModel", () => {
       expect(toolNames).toContain(TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME);
     });
 
+    test("getMcpToolsByAgent includes query_knowledge_sources when agent has a directly-assigned connector", async ({
+      makeAgent,
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+      seedAndAssignArchestraTools,
+    }) => {
+      const org = await makeOrganization();
+      // Create a KB + connector so the connector exists in the DB
+      const kb = await makeKnowledgeBase(org.id);
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+
+      // Create agent WITHOUT a knowledge base, but with a direct connector assignment
+      const agent = await makeAgent({ organizationId: org.id });
+      await db
+        .insert(schema.agentConnectorAssignmentsTable)
+        .values({ agentId: agent.id, connectorId: connector.id });
+
+      await seedAndAssignArchestraTools(agent.id);
+
+      const tools = await ToolModel.getMcpToolsByAgent(agent.id);
+      const toolNames = tools.map((t) => t.name);
+
+      // query_knowledge_sources should be injected for direct connector assignments
+      expect(toolNames).toContain(TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME);
+      // Other default tools should still be present
+      expect(toolNames).toContain(TOOL_ARTIFACT_WRITE_FULL_NAME);
+      expect(toolNames).toContain(TOOL_TODO_WRITE_FULL_NAME);
+    });
+
+    test("getMcpToolsByAgent excludes query_knowledge_sources when agent has no knowledge base and no direct connectors", async ({
+      makeAgent,
+      seedAndAssignArchestraTools,
+    }) => {
+      // Create agent with neither KB nor direct connector assignments
+      const agent = await makeAgent();
+      await seedAndAssignArchestraTools(agent.id);
+
+      const tools = await ToolModel.getMcpToolsByAgent(agent.id);
+      const toolNames = tools.map((t) => t.name);
+
+      expect(toolNames).not.toContain(TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME);
+    });
+
     test("findByCatalogId excludes query_knowledge_sources (auto-injected, not user-assignable)", async ({
       makeAgent,
       seedAndAssignArchestraTools,

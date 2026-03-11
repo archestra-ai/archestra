@@ -1111,13 +1111,15 @@ export default class K8sDeployment {
     ) {
       const container = deployment.spec.template.spec.containers[0];
       const existingEnvFrom = container.envFrom || [];
-      const existingNames = new Set(
-        existingEnvFrom.map(
-          (e) => e.secretRef?.name || e.configMapRef?.name || "",
+      const existingKeys = new Set(
+        existingEnvFrom.map((e) =>
+          e.secretRef?.name
+            ? `secret:${e.secretRef.name}`
+            : `configMap:${e.configMapRef?.name ?? ""}`,
         ),
       );
       const newEnvFrom = localConfig.envFrom
-        .filter((ref) => !existingNames.has(ref.name))
+        .filter((ref) => !existingKeys.has(`${ref.type}:${ref.name}`))
         .map((ref) => ({
           ...(ref.type === "secret"
             ? { secretRef: { name: ref.name } }

@@ -41,6 +41,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -78,6 +79,29 @@ interface EnvironmentVariablesFormFieldProps<TFieldValues extends FieldValues> {
   showDescription?: boolean;
   /** When true, non-prompted secret values will be sourced from external secrets manager (Vault) */
   useExternalSecretsManager?: boolean;
+  /** Optional envFrom field array for injecting env from K8s Secrets/ConfigMaps */
+  envFrom?: {
+    // biome-ignore lint/suspicious/noExplicitAny: Generic field array types require any for flexibility
+    fields: FieldArrayWithId<any, any, "id">[];
+    append: (value: {
+      type: "secret" | "configMap";
+      name: string;
+      prefix: string;
+    }) => void;
+    remove: (index: number) => void;
+    // biome-ignore lint/suspicious/noExplicitAny: Generic form watch/setValue/register require any
+    watch: (name: any) => any;
+    setValue: (
+      // biome-ignore lint/suspicious/noExplicitAny: Generic form watch/setValue/register require any
+      name: any,
+      // biome-ignore lint/suspicious/noExplicitAny: Generic form watch/setValue/register require any
+      value: any,
+      options?: { shouldDirty: boolean },
+    ) => void;
+    // biome-ignore lint/suspicious/noExplicitAny: Generic form watch/setValue/register require any
+    register: (name: any) => any;
+    fieldNamePrefix: string;
+  };
 }
 
 export function EnvironmentVariablesFormField<
@@ -92,6 +116,7 @@ export function EnvironmentVariablesFormField<
   showLabel = true,
   showDescription = true,
   useExternalSecretsManager = false,
+  envFrom,
 }: EnvironmentVariablesFormFieldProps<TFieldValues>) {
   // State for external secret dialog
   const [dialogOpenForEnvIndex, setDialogOpenForEnvIndex] = useState<
@@ -461,6 +486,89 @@ export function EnvironmentVariablesFormField<
           </>
         );
       })()}
+
+      {/* Environment From K8s Secrets / ConfigMaps Section */}
+      {envFrom && (
+        <div className="space-y-1 mt-6">
+          <div className="flex items-center justify-between">
+            <FormLabel>Environment From K8s Secrets / ConfigMaps</FormLabel>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                envFrom.append({ type: "secret", name: "", prefix: "" })
+              }
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Add Source
+            </Button>
+          </div>
+          <FormDescription>
+            Inject all keys from existing K8s Secrets or ConfigMaps as
+            environment variables.
+          </FormDescription>
+
+          {envFrom.fields.map((field, index) => (
+            <div key={field.id} className="border rounded-lg p-3 space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <Select
+                  value={envFrom.watch(
+                    `${envFrom.fieldNamePrefix}.${index}.type`,
+                  )}
+                  onValueChange={(val) =>
+                    envFrom.setValue(
+                      `${envFrom.fieldNamePrefix}.${index}.type`,
+                      val,
+                      { shouldDirty: true },
+                    )
+                  }
+                >
+                  <SelectTrigger className="w-[200px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="secret">Secret</SelectItem>
+                    <SelectItem value="configMap">ConfigMap</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => envFrom.remove(index)}
+                >
+                  <Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" />
+                </Button>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label className="text-xs">
+                    Name <span className="text-destructive">*</span>
+                  </Label>
+                  <Input
+                    placeholder="my-k8s-secret"
+                    className="font-mono"
+                    {...envFrom.register(
+                      `${envFrom.fieldNamePrefix}.${index}.name`,
+                    )}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Prefix (optional)</Label>
+                  <Input
+                    placeholder="e.g. MY_PREFIX_"
+                    className="font-mono"
+                    {...envFrom.register(
+                      `${envFrom.fieldNamePrefix}.${index}.prefix`,
+                    )}
+                  />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Secret Files Section */}
       <div className="space-y-1 mt-6">

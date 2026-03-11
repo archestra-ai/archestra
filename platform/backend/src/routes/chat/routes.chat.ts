@@ -56,6 +56,10 @@ import {
   resolveSmartDefaultLlmForChat,
 } from "@/utils/llm-resolution";
 import { estimateMessagesSize } from "@/utils/message-size";
+import {
+  parseMaxInputTokens,
+  trimMessagesToTokenLimit,
+} from "./context-trimming";
 import { mapProviderError, ProviderError } from "./errors";
 import {
   stripImagesFromMessages,
@@ -331,7 +335,35 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             },
             stream: createUIMessageStream({
               execute: async ({ writer }) => {
-                const result = streamText(streamTextConfig);
+                // Try streamText. If provider returns a context length error (e.g. vLLM 400),
+                // trim messages to the reported limit and retry once.
+                let result = streamText(streamTextConfig);
+                try {
+                  await result.response;
+                } catch (error) {
+                  const maxTokens = parseMaxInputTokens(error);
+                  if (maxTokens !== null) {
+                    const trimmed = trimMessagesToTokenLimit(
+                      modelMessages,
+                      maxTokens,
+                    );
+                    logger.info(
+                      {
+                        maxTokens,
+                        originalMessages: modelMessages.length,
+                        trimmedMessages: trimmed.length,
+                        conversationId,
+                      },
+                      "[ContextTrimming] retrying with trimmed messages",
+                    );
+                    result = streamText({
+                      ...streamTextConfig,
+                      messages: trimmed,
+                    });
+                  } else {
+                    throw error;
+                  }
+                }
 
                 // Merge the stream text result into the UI message stream
                 writer.merge(

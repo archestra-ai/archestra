@@ -24,20 +24,22 @@ export const allAvailableActions: Record<Resource, Action[]> = {
    */
   ...(defaultStatements as unknown as Record<string, Action[]>),
 
-  // Core Resources
+  // Agents
   agent: ["read", "create", "update", "delete", "team-admin", "admin"],
+  agentTrigger: ["read", "create", "update", "delete"],
+  agentSettings: ["read", "update"],
+
+  // Core Resources
   mcpGateway: ["read", "create", "update", "delete", "team-admin", "admin"],
   llmProxy: ["read", "create", "update", "delete", "team-admin", "admin"],
   toolPolicy: ["read", "create", "update", "delete"],
   log: ["read"],
   chat: ["read", "create", "update", "delete"],
-  agentTrigger: ["read", "create", "update", "delete"],
 
   // LLM
   llmProvider: ["read", "create", "update", "delete"],
   llmLimit: ["read", "create", "update", "delete"],
   llmSettings: ["read", "update"],
-  agentSettings: ["read", "update"],
   llmCost: ["read"],
 
   // MCP
@@ -68,20 +70,22 @@ export const allAvailableActions: Record<Resource, Action[]> = {
 };
 
 export const editorPermissions: Record<Resource, Action[]> = {
-  // Core Resources
+  // Agents
   agent: ["read", "create", "update", "delete", "team-admin"],
+  agentTrigger: ["read", "create", "update", "delete"],
+  agentSettings: [],
+
+  // Core Resources
   mcpGateway: ["read", "create", "update", "delete", "team-admin"],
   llmProxy: ["read", "create", "update", "delete", "team-admin"],
   toolPolicy: ["read", "create", "update", "delete"],
   log: ["read"],
   chat: ["read", "create", "update", "delete"],
-  agentTrigger: ["read", "create", "update", "delete"],
 
   // LLM
   llmProvider: ["read", "create", "update", "delete"],
   llmLimit: ["read", "create", "update", "delete"],
   llmSettings: ["read", "update"],
-  agentSettings: [],
   llmCost: ["read"],
 
   // MCP
@@ -116,20 +120,22 @@ export const editorPermissions: Record<Resource, Action[]> = {
 };
 
 export const memberPermissions: Record<Resource, Action[]> = {
-  // Core Resources
+  // Agents
   agent: ["read", "create", "update", "delete"],
+  agentTrigger: [],
+  agentSettings: [],
+
+  // Core Resources
   mcpGateway: ["read", "create", "update", "delete"],
   llmProxy: ["read", "create", "update", "delete"],
   toolPolicy: ["read", "create", "update", "delete"],
   log: [],
   chat: ["read", "create", "update", "delete"],
-  agentTrigger: [],
 
   // LLM
   llmProvider: ["read"],
   llmLimit: [],
   llmSettings: [],
-  agentSettings: [],
   llmCost: [],
 
   // MCP

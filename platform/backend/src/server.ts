@@ -276,7 +276,7 @@ export const createFastifyInstance = () =>
   Fastify({
     loggerInstance: logger,
     disableRequestLogging: true,
-    trustProxy: true,
+    trustProxy: config.api.trustProxy,
   })
     .withTypeProvider<ZodTypeProvider>()
     .setValidatorCompiler(validatorCompiler)

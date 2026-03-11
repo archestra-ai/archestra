@@ -345,6 +345,15 @@ export default {
     corsOrigins: getCorsOrigins(),
     apiKeyAuthorizationHeaderName: "Authorization",
     /**
+     * Whether to trust reverse proxy headers (X-Forwarded-Proto, X-Forwarded-For, etc.).
+     * Must be enabled when running behind a load balancer or reverse proxy that terminates
+     * TLS (e.g. AWS ALB, nginx), otherwise Fastify reads request.protocol as "http" and
+     * OAuth metadata endpoints return http:// URLs instead of https://, breaking OAuth
+     * flows for clients that enforce HTTPS (e.g. Claude.ai MCP connector).
+     * Configurable via ARCHESTRA_TRUST_PROXY environment variable.
+     */
+    trustProxy: process.env.ARCHESTRA_TRUST_PROXY === "true",
+    /**
      * Maximum request body size for LLM proxy and chat routes.
      * Default Fastify limit is 1MB, which is too small for long conversations
      * with large context windows (100k+ tokens) or file attachments.

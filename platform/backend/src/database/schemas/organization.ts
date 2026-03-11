@@ -78,7 +78,11 @@ const organizationsTable = pgTable("organization", {
   /** Provider for the default LLM model (e.g. "openai") */
   defaultLlmProvider: text("default_llm_provider"),
 
-  /** Organization-wide default agent ID (fallback when member has no personal default) */
+  /**
+   * Organization-wide default agent ID (fallback when member has no personal default).
+   * FK to agents(id) ON DELETE SET NULL — enforced by migration only
+   * (Drizzle .references() causes TS circular inference: organization → agent → ... → organization).
+   */
   defaultAgentId: uuid("default_agent_id"),
 });
 

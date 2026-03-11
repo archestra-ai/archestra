@@ -34068,6 +34068,8 @@ export type GetOrganizationResponses = {
         embeddingChatApiKeyId: string | null;
         rerankerChatApiKeyId: string | null;
         rerankerModel: string | null;
+        defaultLlmModel: string | null;
+        defaultLlmProvider: string | null;
     };
 };
 
@@ -34248,6 +34250,8 @@ export type UpdateAppearanceResponses = {
         embeddingChatApiKeyId: string | null;
         rerankerChatApiKeyId: string | null;
         rerankerModel: string | null;
+        defaultLlmModel: string | null;
+        defaultLlmProvider: string | null;
     };
 };
 
@@ -34346,6 +34350,8 @@ export type UpdateSecuritySettingsResponses = {
         embeddingChatApiKeyId: string | null;
         rerankerChatApiKeyId: string | null;
         rerankerModel: string | null;
+        defaultLlmModel: string | null;
+        defaultLlmProvider: string | null;
     };
 };
 
@@ -34356,6 +34362,8 @@ export type UpdateLlmSettingsData = {
         convertToolResultsToToon?: boolean;
         compressionScope?: 'organization' | 'team';
         limitCleanupInterval?: '1h' | '12h' | '24h' | '1w' | '1m';
+        defaultLlmModel?: string | null;
+        defaultLlmProvider?: string | null;
     };
     path?: never;
     query?: never;
@@ -34445,6 +34453,8 @@ export type UpdateLlmSettingsResponses = {
         embeddingChatApiKeyId: string | null;
         rerankerChatApiKeyId: string | null;
         rerankerModel: string | null;
+        defaultLlmModel: string | null;
+        defaultLlmProvider: string | null;
     };
 };
 
@@ -34545,6 +34555,8 @@ export type UpdateKnowledgeSettingsResponses = {
         embeddingChatApiKeyId: string | null;
         rerankerChatApiKeyId: string | null;
         rerankerModel: string | null;
+        defaultLlmModel: string | null;
+        defaultLlmProvider: string | null;
     };
 };
 
@@ -34640,6 +34652,8 @@ export type DropEmbeddingConfigResponses = {
         embeddingChatApiKeyId: string | null;
         rerankerChatApiKeyId: string | null;
         rerankerModel: string | null;
+        defaultLlmModel: string | null;
+        defaultLlmProvider: string | null;
     };
 };
 
@@ -34818,6 +34832,8 @@ export type CompleteOnboardingResponses = {
         embeddingChatApiKeyId: string | null;
         rerankerChatApiKeyId: string | null;
         rerankerModel: string | null;
+        defaultLlmModel: string | null;
+        defaultLlmProvider: string | null;
     };
 };
 

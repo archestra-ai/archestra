@@ -214,6 +214,7 @@ export default function ChatPage() {
     useModelsByProvider();
   const { data: chatApiKeys = [], isLoading: isLoadingApiKeys } =
     useChatApiKeys();
+  const { data: organization } = useOrganization();
 
   // State for initial chat (when no conversation exists yet)
   const [initialAgentId, setInitialAgentId] = useState<string | null>(null);
@@ -274,13 +275,14 @@ export default function ChatPage() {
   }, [initialAgentId, searchParams, internalAgents, defaultAgentId]);
 
   // Initialize model and API key once agent is resolved.
-  // Priority: localStorage (user's explicit choice) > agent config > first available model.
-  // Separated from agent resolution but uses ref to avoid race conditions —
-  // the ref is written synchronously in the same render cycle, so this effect
-  // always sees the correct agent even when both effects fire together.
+  // Priority: localStorage (user's explicit choice) > agent config > org default > first available.
+  // Uses modelInitializedRef instead of checking initialModel to avoid a race condition:
+  // ModelSelector's auto-select fires before this effect and sets initialModel, which would
+  // cause an early return and skip the proper priority chain (org default, etc.).
+  const modelInitializedRef = useRef(false);
   useEffect(() => {
     if (!initialAgentId) return;
-    if (initialModel) return; // Already initialized
+    if (modelInitializedRef.current) return;
 
     const allModels = Object.values(modelsByProvider).flat();
 
@@ -308,6 +310,7 @@ export default function ChatPage() {
             break;
           }
         }
+        modelInitializedRef.current = true;
         return;
       }
       // Saved model no longer available — clear stale value and fall through
@@ -322,10 +325,27 @@ export default function ChatPage() {
       if (agentData.llmApiKeyId) {
         setInitialApiKeyId(agentData.llmApiKeyId as string);
       }
+      modelInitializedRef.current = true;
       return;
     }
 
-    // 3. Fall back to first available model (needs models loaded)
+    // 3. Organization default model
+    if (
+      organization?.defaultLlmModel &&
+      allModels.some((m) => m.id === organization.defaultLlmModel)
+    ) {
+      setInitialModel(organization.defaultLlmModel);
+      for (const [provider, models] of Object.entries(modelsByProvider)) {
+        if (models?.some((m) => m.id === organization.defaultLlmModel)) {
+          autoSelectKeyForProvider(provider);
+          break;
+        }
+      }
+      modelInitializedRef.current = true;
+      return;
+    }
+
+    // 4. Fall back to first available model (needs models loaded)
     if (allModels.length === 0) return;
 
     const providers = Object.keys(modelsByProvider);
@@ -336,20 +356,39 @@ export default function ChatPage() {
       if (models && models.length > 0) {
         setInitialModel(models[0].id);
         autoSelectKeyForProvider(firstProvider);
+        modelInitializedRef.current = true;
       }
     }
   }, [
     initialAgentId,
-    initialModel,
     initialApiKeyId,
     modelsByProvider,
     chatApiKeys,
+    organization?.defaultLlmModel,
   ]);
 
-  // Save model to localStorage when changed
+  // Don't persist to localStorage here — this callback is shared between
+  // user-initiated model picks and ModelSelector's auto-select on mount.
+  // localStorage is only written when the user explicitly opens the selector
+  // dialog and picks a model (via onOpenChange + onModelChange combo).
+  const modelSelectorWasOpenRef = useRef(false);
   const handleInitialModelChange = useCallback((modelId: string) => {
+    // After init, only accept explicit user selections (dialog was opened).
+    // This prevents ModelSelector's auto-select (triggered by apiKeyId changes)
+    // from overwriting the org default or user's prior choice.
+    if (modelInitializedRef.current && !modelSelectorWasOpenRef.current) {
+      return;
+    }
     setInitialModel(modelId);
-    saveModel(modelId);
+    if (modelSelectorWasOpenRef.current) {
+      saveModel(modelId);
+      modelSelectorWasOpenRef.current = false;
+    }
+  }, []);
+  const handleInitialModelSelectorOpenChange = useCallback((open: boolean) => {
+    if (open) {
+      modelSelectorWasOpenRef.current = true;
+    }
   }, []);
 
   // Handle provider change from API key selector - auto-select a model from new provider
@@ -377,10 +416,14 @@ export default function ChatPage() {
     return undefined;
   }, [initialModel, modelsByProvider]);
 
+  // Whether the current initial model matches the org default
+  const isInitialModelDefault =
+    !!organization?.defaultLlmModel &&
+    initialModel === organization.defaultLlmModel;
+
   const chatSession = useChatSession(conversationId);
 
   const { isLoading: isLoadingFeatures } = useConfig();
-  const { data: organization } = useOrganization();
   const { data: chatModels = [] } = useChatModels();
   // Check if user has any API keys (including system keys for keyless providers
   // like Vertex AI Gemini, vLLM, or Ollama which don't require secrets)
@@ -405,8 +448,10 @@ export default function ChatPage() {
       // Reset initial state when navigating to /chat without a conversation
       // This ensures a fresh state when user clicks "New chat" or navigates back
       if (!conversationParam) {
-        // Reset initialAgentId to trigger re-selection from useEffect
+        // Reset initial state to trigger re-selection from useEffects
         setInitialAgentId(null);
+        setInitialModel("");
+        modelInitializedRef.current = false;
       }
 
       // Focus textarea after navigation (e.g., from search dialog)
@@ -1610,6 +1655,9 @@ export default function ChatPage() {
                       }
                       selectedModel={initialModel}
                       onModelChange={handleInitialModelChange}
+                      onModelSelectorOpenChange={
+                        handleInitialModelSelectorOpenChange
+                      }
                       agentId={activeAgentId}
                       currentProvider={initialProvider}
                       textareaRef={textareaRef}
@@ -1632,6 +1680,7 @@ export default function ChatPage() {
                       isPlaywrightSetupVisible={isPlaywrightSetupVisible}
                       selectorAgentId={initialAgentId}
                       onAgentChange={handleInitialAgentChange}
+                      isDefaultModel={isInitialModelDefault}
                     />
                   </div>
                 </div>

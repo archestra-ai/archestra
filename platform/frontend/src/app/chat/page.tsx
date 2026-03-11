@@ -214,7 +214,7 @@ export default function ChatPage() {
     useModelsByProvider();
   const { data: chatApiKeys = [], isLoading: isLoadingApiKeys } =
     useChatApiKeys();
-  const { data: organization } = useOrganization();
+  const { data: organization, isPending: isOrgLoading } = useOrganization();
 
   // State for initial chat (when no conversation exists yet)
   const [initialAgentId, setInitialAgentId] = useState<string | null>(null);
@@ -234,6 +234,9 @@ export default function ChatPage() {
 
   useEffect(() => {
     if (internalAgents.length === 0) return;
+    // Wait for organization data to avoid race condition where agents load
+    // before org, causing the org default to be skipped
+    if (isOrgLoading) return;
 
     // Only process URL params once (don't re-apply after user clears selection)
     if (!urlParamsConsumedRef.current) {
@@ -295,6 +298,7 @@ export default function ChatPage() {
     internalAgents,
     defaultAgentId,
     organization?.defaultAgentId,
+    isOrgLoading,
   ]);
 
   // Initialize model and API key once agent is resolved.

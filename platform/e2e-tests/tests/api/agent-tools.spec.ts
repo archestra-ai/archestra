@@ -94,8 +94,10 @@ test.describe("Agent Tools API", () => {
       expect(result.pagination.hasNext).toBe(false);
       // All data should be returned
       expect(result.pagination.total).toBe(result.data.length);
-      // Verify we have the tools we assigned
-      expect(result.data.length).toBe(assignedTools.length);
+      // assignArchestraToolsToProfile assigns all archestra tools including
+      // query_knowledge_sources, but the API always excludes it (auto-injected).
+      expect(result.data.length).toBeGreaterThan(0);
+      expect(result.data.length).toBe(assignedTools.length - 1);
     });
 
     test("skipPagination respects other filters like agentId", async ({

@@ -553,12 +553,16 @@ export function ChatMessages({
                           if (hasKnowledgeBaseToolCall(message.parts ?? [])) {
                             citationParts = message.parts;
                           } else {
+                            // Search backwards for KB tool calls within the same
+                            // assistant turn — stop at the next user message to
+                            // avoid showing stale citations from prior turns.
                             for (
                               let prevIdx = idx - 1;
                               prevIdx >= 0;
                               prevIdx--
                             ) {
                               const prev = messages[prevIdx];
+                              if (prev.role === "user") break;
                               if (
                                 prev.role === "assistant" &&
                                 hasKnowledgeBaseToolCall(prev.parts ?? [])

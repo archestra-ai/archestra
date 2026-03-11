@@ -992,9 +992,11 @@ export function ToolChecklist({
   // frozen until remount or search query changes.
   const initialSelectedRef = useRef(selectedToolIds);
   const hasSelection = selectedToolIds.size > 0;
-  if (initialSelectedRef.current.size === 0 && hasSelection) {
-    initialSelectedRef.current = selectedToolIds;
-  }
+  useEffect(() => {
+    if (initialSelectedRef.current.size === 0 && hasSelection) {
+      initialSelectedRef.current = selectedToolIds;
+    }
+  }, [selectedToolIds, hasSelection]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: re-sort when initial selection loads (empty → populated)
   const filteredTools = useMemo(
     () => sortAndFilterTools(tools, initialSelectedRef.current, searchQuery),

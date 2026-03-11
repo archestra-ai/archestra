@@ -89,7 +89,7 @@
     "require-in-the-middle": "8.0.1",
     "simple-icons": "^16.10.0",
     "sonner": "^2.0.7",
-    "streamdown": "^2.0.1",
+    "streamdown": "^2.4.0",
     "tailwind-merge": "^3.4.0",
     "use-stick-to-bottom": "^1.1.1",
     "zod": "^4.3.4"

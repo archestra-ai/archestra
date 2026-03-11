@@ -991,13 +991,11 @@ export async function buildKnowledgeSourcesDescription(
   const kbIds = assignments.map((a) => a.knowledgeBaseId);
 
   const [knowledgeBases, connectors] = await Promise.all([
-    Promise.all(kbIds.map((id) => KnowledgeBaseModel.findById(id))),
+    KnowledgeBaseModel.findByIds(kbIds),
     KnowledgeBaseConnectorModel.findByKnowledgeBaseIds(kbIds),
   ]);
 
-  const kbNames = knowledgeBases
-    .filter((kb): kb is NonNullable<typeof kb> => kb !== null)
-    .map((kb) => kb.name);
+  const kbNames = knowledgeBases.map((kb) => kb.name);
   const connectorTypes = [...new Set(connectors.map((c) => c.connectorType))];
 
   let description =

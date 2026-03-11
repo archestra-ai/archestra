@@ -625,10 +625,109 @@ export async function seedRequiredStartingData(): Promise<void> {
   await seedPlaywrightCatalog();
   await migratePlaywrightToolsToDynamicCredential();
   await seedTestMcpServer();
+  await seedFilesystemMcpCatalog();
+  await seedMemoryMcpCatalog();
   await seedTeamTokens();
   await seedChatApiKeysFromEnv();
   // Ensure all existing members have a personal default chat agent
   await ensureExistingUsersHavePersonalChatAgents();
   // Clean up orphaned MCP HTTP sessions (older than 24h)
   await McpHttpSessionModel.deleteExpired();
+}
+
+/**
+ * Seeds Filesystem MCP server catalog entry.
+ * Provides secure file system operations for AI agents.
+ */
+const FILESYSTEM_MCP_CATALOG_ID = "filesystem-mcp-server";
+
+async function seedFilesystemMcpCatalog(): Promise<void> {
+  const existing = await InternalMcpCatalogModel.findByName("filesystem-mcp");
+  if (existing) {
+    logger.info("Filesystem MCP catalog already exists, skipping");
+    return;
+  }
+
+  const filesystemLocalConfig = {
+    command: "npx",
+    arguments: [
+      "-y",
+      "@modelcontextprotocol/server-filesystem",
+      "/home/mcp/workspace",
+    ],
+    transportType: "stdio" as const,
+    environment: [
+      {
+        key: "WORKSPACE_PATH",
+        type: "directory" as const,
+        promptOnInstallation: true,
+        required: true,
+        description: "Directory path for file operations (AI agents will have full access)",
+        default: "/home/mcp/workspace",
+      },
+    ],
+  };
+
+  await db
+    .insert(schema.internalMcpCatalogTable)
+    .values({
+      id: FILESYSTEM_MCP_CATALOG_ID,
+      name: "filesystem-mcp",
+      description:
+        "Secure file system operations for AI agents. Provides read_file, write_file, list_directory, search_files, and more. Configure workspace directory on installation.",
+      serverType: "local",
+      requiresAuth: false,
+      localConfig: filesystemLocalConfig,
+    })
+    .onConflictDoNothing();
+
+  logger.info("Seeded Filesystem MCP catalog");
+}
+
+/**
+ * Seeds Memory MCP server catalog entry.
+ * Knowledge graph-based persistent memory for AI agents.
+ */
+const MEMORY_MCP_CATALOG_ID = "memory-mcp-server";
+
+async function seedMemoryMcpCatalog(): Promise<void> {
+  const existing = await InternalMcpCatalogModel.findByName("memory-mcp");
+  if (existing) {
+    logger.info("Memory MCP catalog already exists, skipping");
+    return;
+  }
+
+  const memoryLocalConfig = {
+    command: "npx",
+    arguments: [
+      "-y",
+      "@modelcontextprotocol/server-memory",
+    ],
+    transportType: "stdio" as const,
+    environment: [
+      {
+        key: "MEMORY_FILE_PATH",
+        type: "file" as const,
+        promptOnInstallation: false,
+        required: false,
+        description: "Path to store persistent memory (default: ~/.mcp-memory.json)",
+        default: "/home/mcp/.mcp-memory.json",
+      },
+    ],
+  };
+
+  await db
+    .insert(schema.internalMcpCatalogTable)
+    .values({
+      id: MEMORY_MCP_CATALOG_ID,
+      name: "memory-mcp",
+      description:
+        "Knowledge graph-based persistent memory for AI agents. Enables storing and recalling information across conversations. Uses entities, relations, and observations for structured memory.",
+      serverType: "local",
+      requiresAuth: false,
+      localConfig: memoryLocalConfig,
+    })
+    .onConflictDoNothing();
+
+  logger.info("Seeded Memory MCP catalog");
 }

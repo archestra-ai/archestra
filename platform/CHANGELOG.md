@@ -1,5 +1,25 @@
 # Changelog
 
+## [1.1.7](https://github.com/archestra-ai/archestra/compare/platform-v1.1.6...platform-v1.1.7) (2026-03-11)
+
+
+### Features
+
+* add /settings/agents page, connector schedule options, fix N+1 & review feedback ([#3275](https://github.com/archestra-ai/archestra/issues/3275)) ([7dbf212](https://github.com/archestra-ai/archestra/commit/7dbf212677350305a79451636bca035a1aaeb34e))
+* configurable vector embeddings dimensionality ([#3282](https://github.com/archestra-ai/archestra/issues/3282)) ([b0a3b1f](https://github.com/archestra-ai/archestra/commit/b0a3b1fab9ba8cc5e816fcc88f56408aded8727b))
+* enhance archestra MCP tools - create/edit/list agents, edit MCP, catalog IDs ([#3283](https://github.com/archestra-ai/archestra/issues/3283)) ([979ac8e](https://github.com/archestra-ai/archestra/commit/979ac8e511bd324bb140c45901bdb2cfe002fff1))
+
+
+### Bug Fixes
+
+* fix showing search icon on registry ([#3272](https://github.com/archestra-ai/archestra/issues/3272)) ([280896f](https://github.com/archestra-ai/archestra/commit/280896fef84213e70ac804a3dece6d43f4299dfd))
+* inject `query_knowledge_sources` for direct connector assignments ([#3277](https://github.com/archestra-ai/archestra/issues/3277)) ([183e6d9](https://github.com/archestra-ai/archestra/commit/183e6d9710d6c47c2051872afde2c318c6da4542))
+
+
+### Miscellaneous Chores
+
+* change sidebarCollapsed perm to minimalisticView ([#3281](https://github.com/archestra-ai/archestra/issues/3281)) ([5e58c42](https://github.com/archestra-ai/archestra/commit/5e58c42e2af24c9204d55e2c97788b3161bdd3ae))
+
 ## [1.1.6](https://github.com/archestra-ai/archestra/compare/platform-v1.1.5...platform-v1.1.6) (2026-03-11)
 
 

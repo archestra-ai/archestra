@@ -249,7 +249,7 @@ export default function ChatPage() {
       }
     }
 
-    // Try to restore from localStorage, then member's default agent, then first internal agent
+    // Priority: localStorage > org default > member default > first available
     if (!initialAgentId) {
       const savedAgentId = getSavedAgent();
       const savedAgent = internalAgents.find((a) => a.id === savedAgentId);
@@ -257,6 +257,18 @@ export default function ChatPage() {
         setInitialAgentId(savedAgentId);
         resolvedAgentRef.current = savedAgent;
         return;
+      }
+      // Try org's default agent (admin-configured, overrides member default)
+      if (organization?.defaultAgentId) {
+        const orgDefaultAgent = internalAgents.find(
+          (a) => a.id === organization.defaultAgentId,
+        );
+        if (orgDefaultAgent) {
+          setInitialAgentId(organization.defaultAgentId);
+          saveAgent(organization.defaultAgentId);
+          resolvedAgentRef.current = orgDefaultAgent;
+          return;
+        }
       }
       // Try member's default agent
       if (defaultAgentId) {
@@ -267,18 +279,6 @@ export default function ChatPage() {
           setInitialAgentId(defaultAgentId);
           saveAgent(defaultAgentId);
           resolvedAgentRef.current = defaultAgent;
-          return;
-        }
-      }
-      // Try org's default agent
-      if (organization?.defaultAgentId) {
-        const orgDefaultAgent = internalAgents.find(
-          (a) => a.id === organization.defaultAgentId,
-        );
-        if (orgDefaultAgent) {
-          setInitialAgentId(organization.defaultAgentId);
-          saveAgent(organization.defaultAgentId);
-          resolvedAgentRef.current = orgDefaultAgent;
           return;
         }
       }

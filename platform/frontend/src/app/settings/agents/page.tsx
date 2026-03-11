@@ -170,7 +170,7 @@ export default function AgentSettingsPage() {
       />
       <SettingsBlock
         title="Default agent"
-        description="Select the default org-wide agent for new chat conversations. When set, this agent is preselected for all users who haven't chosen a personal default. Only organization-scoped agents are available."
+        description="Select the default org-wide agent for new chat conversations. When set, this agent is preselected for all users unless they explicitly choose a different one. Only organization-scoped agents are available."
         control={
           <WithPermissions
             permissions={{ agentSettings: ["update"] }}

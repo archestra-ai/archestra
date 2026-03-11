@@ -92,7 +92,7 @@ export const resourceLabels: Record<Resource, string> = {
   securitySettings: "Security Settings",
   llmSettings: "LLM Settings",
   agentTrigger: "Agent Triggers",
-  minimalisticView: "Sidebar Collapsed",
+  minimalisticView: "Minimalistic View",
 };
 
 export const resourceDescriptions: Record<Resource, string> = {
@@ -124,8 +124,7 @@ export const resourceDescriptions: Record<Resource, string> = {
     "Knowledge bases and connectors for RAG-based document retrieval",
   knowledgeSettings:
     "Knowledge settings (embedding and reranking models configuration)",
-  minimalisticView:
-    "Controls whether the sidebar is collapsed by default on page load",
+  minimalisticView: "Controls if the minimalistic view of the app is enabled",
   organization: "Organization (internal, used by authentication system)",
 };
 

@@ -10,11 +10,16 @@ import {
 // Mock confluence.js SDK
 const mockGetSpaces = vi.fn();
 const mockSearchContentByCQL = vi.fn();
+const capturedConfluenceConfigs: Record<string, unknown>[] = [];
 
 vi.mock("confluence.js", () => ({
   ConfluenceClient: class MockConfluenceClient {
     space = { getSpaces: mockGetSpaces };
     content = { searchContentByCQL: mockSearchContentByCQL };
+    // biome-ignore lint/suspicious/noExplicitAny: mock constructor
+    constructor(config: any) {
+      capturedConfluenceConfigs.push(config);
+    }
   },
 }));
 
@@ -34,6 +39,7 @@ describe("ConfluenceConnector", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    capturedConfluenceConfigs.length = 0;
     connector = new ConfluenceConnector();
   });
 
@@ -61,9 +67,9 @@ describe("ConfluenceConnector", () => {
       expect(result.error).toContain("isCloud");
     });
 
-    test("returns invalid when confluenceUrl is not a valid URL", async () => {
+    test("returns invalid when confluenceUrl uses unsupported protocol", async () => {
       const result = await connector.validateConfig({
-        confluenceUrl: "not-a-url",
+        confluenceUrl: "ftp://confluence.example.com",
         isCloud: true,
       });
       expect(result.valid).toBe(false);
@@ -74,6 +80,14 @@ describe("ConfluenceConnector", () => {
       const result = await connector.validateConfig({
         confluenceUrl: "https://confluence.mycompany.com",
         isCloud: false,
+      });
+      expect(result).toEqual({ valid: true });
+    });
+
+    test("accepts URL without protocol by prepending https://", async () => {
+      const result = await connector.validateConfig({
+        confluenceUrl: "mycompany.atlassian.net/wiki",
+        isCloud: true,
       });
       expect(result).toEqual({ valid: true });
     });
@@ -126,6 +140,46 @@ describe("ConfluenceConnector", () => {
 
       expect(result.success).toBe(false);
       expect(result.error).toContain("Invalid Confluence configuration");
+    });
+
+    test("uses basic auth for server when email is provided", async () => {
+      mockGetSpaces.mockResolvedValueOnce({ results: [] });
+
+      await connector.testConnection({
+        config: { ...validConfig, isCloud: false },
+        credentials: { email: "admin", apiToken: "password123" },
+      });
+
+      const config = capturedConfluenceConfigs[0];
+      expect(config?.authentication).toEqual({
+        basic: { email: "admin", apiToken: "password123" },
+      });
+    });
+
+    test("uses oauth2 (PAT) auth for server when email is not provided", async () => {
+      mockGetSpaces.mockResolvedValueOnce({ results: [] });
+
+      await connector.testConnection({
+        config: { ...validConfig, isCloud: false },
+        credentials: { apiToken: "pat-token-value" },
+      });
+
+      const config = capturedConfluenceConfigs[0];
+      expect(config?.authentication).toEqual({
+        oauth2: { accessToken: "pat-token-value" },
+      });
+    });
+
+    test("sets noCheckAtlassianToken", async () => {
+      mockGetSpaces.mockResolvedValueOnce({ results: [] });
+
+      await connector.testConnection({
+        config: { ...validConfig, isCloud: false },
+        credentials: { apiToken: "pat-token" },
+      });
+
+      const config = capturedConfluenceConfigs[0];
+      expect(config?.noCheckAtlassianToken).toBe(true);
     });
   });
 

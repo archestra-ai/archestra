@@ -150,6 +150,15 @@ div[role="option"] {
   cursor: pointer;
 }
 
+/* Fix emoji picker category headers using hardcoded bg-zinc-950 instead of theme popover color */
+div:has(> [data-testid="emoji-picker-list-header"]) {
+  background-color: var(--popover) !important;
+  backdrop-filter: none !important;
+}
+[data-testid="emoji-picker-list-header"] {
+  color: var(--muted-foreground) !important;
+}
+
 /* Thin scrollbar for sidebar */
 [data-sidebar="sidebar"] {
   scrollbar-width: thin;

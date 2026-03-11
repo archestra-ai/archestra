@@ -1,4 +1,5 @@
 import { ConfluenceClient } from "confluence.js";
+import type pino from "pino";
 import type {
   ConfluenceCheckpoint,
   ConfluenceConfig,
@@ -7,7 +8,11 @@ import type {
   ConnectorSyncBatch,
 } from "@/types/knowledge-connector";
 import { ConfluenceConfigSchema } from "@/types/knowledge-connector";
-import { BaseConnector, buildCheckpoint } from "../base-connector";
+import {
+  BaseConnector,
+  buildCheckpoint,
+  extractErrorMessage,
+} from "../base-connector";
 
 const DEFAULT_BATCH_SIZE = 50;
 
@@ -45,12 +50,26 @@ export class ConfluenceConnector extends BaseConnector {
       return { success: false, error: "Invalid Confluence configuration" };
     }
 
+    this.log.debug(
+      { baseUrl: parsed.confluenceUrl, isCloud: parsed.isCloud },
+      "[ConfluenceConnector] Testing connection",
+    );
+
     try {
-      const client = createConfluenceClient(parsed, params.credentials);
+      const client = createConfluenceClient(
+        parsed,
+        params.credentials,
+        this.log,
+      );
       await client.space.getSpaces({ limit: 1 });
+      this.log.debug("[ConfluenceConnector] Connection test successful");
       return { success: true };
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = extractErrorMessage(error);
+      this.log.error(
+        { error: message },
+        "[ConfluenceConnector] Connection test failed",
+      );
       return { success: false, error: `Connection failed: ${message}` };
     }
   }
@@ -68,7 +87,14 @@ export class ConfluenceConnector extends BaseConnector {
         type: "confluence" as const,
       };
       const cql = buildCql(parsed, checkpoint);
-      const client = createConfluenceClient(parsed, params.credentials);
+
+      this.log.debug({ cql }, "[ConfluenceConnector] Estimating total items");
+
+      const client = createConfluenceClient(
+        parsed,
+        params.credentials,
+        this.log,
+      );
 
       const result = await client.content.searchContentByCQL({
         cql,
@@ -78,7 +104,11 @@ export class ConfluenceConnector extends BaseConnector {
       // biome-ignore lint/suspicious/noExplicitAny: SDK type missing totalSize field
       const totalSize = (result as any).totalSize as number | undefined;
       return totalSize ?? null;
-    } catch {
+    } catch (error) {
+      this.log.warn(
+        { error: extractErrorMessage(error) },
+        "[ConfluenceConnector] Failed to estimate total items",
+      );
       return null;
     }
   }
@@ -100,62 +130,98 @@ export class ConfluenceConnector extends BaseConnector {
     };
     const batchSize = parsed.batchSize ?? DEFAULT_BATCH_SIZE;
     const cql = buildCql(parsed, checkpoint, params.startTime);
-    const client = createConfluenceClient(parsed, params.credentials);
+    const client = createConfluenceClient(parsed, params.credentials, this.log);
+
+    this.log.debug(
+      {
+        baseUrl: parsed.confluenceUrl,
+        isCloud: parsed.isCloud,
+        spaceKeys: parsed.spaceKeys,
+        cql,
+        checkpoint,
+      },
+      "[ConfluenceConnector] Starting sync",
+    );
 
     let cursor: string | undefined;
     let hasMore = true;
+    let batchIndex = 0;
 
     while (hasMore) {
       await this.rateLimit();
 
-      const searchResult = await client.content.searchContentByCQL({
-        cql,
-        cursor,
-        limit: batchSize,
-        expand: ["body.storage", "version", "space", "metadata.labels"],
-      });
+      try {
+        this.log.debug(
+          { batchIndex, cursor },
+          "[ConfluenceConnector] Fetching batch",
+        );
 
-      const results = searchResult.results ?? [];
-      const documents: ConnectorDocument[] = [];
+        const searchResult = await client.content.searchContentByCQL({
+          cql,
+          cursor,
+          limit: batchSize,
+          expand: ["body.storage", "version", "space", "metadata.labels"],
+        });
 
-      for (const page of results) {
-        if (shouldSkipPage(page, parsed.labelsToSkip)) {
-          continue;
+        const results = searchResult.results ?? [];
+        const documents: ConnectorDocument[] = [];
+
+        for (const page of results) {
+          if (shouldSkipPage(page, parsed.labelsToSkip)) {
+            continue;
+          }
+
+          documents.push(
+            pageToDocument(page, parsed.confluenceUrl, parsed.isCloud),
+          );
         }
 
-        documents.push(
-          pageToDocument(page, parsed.confluenceUrl, parsed.isCloud),
-        );
-      }
+        // Extract cursor from _links.next if available
+        // biome-ignore lint/suspicious/noExplicitAny: SDK links type
+        const links = (searchResult as any)._links;
+        const nextUrl: string | undefined = links?.next;
+        if (nextUrl) {
+          const cursorMatch = nextUrl.match(/cursor=([^&]+)/);
+          cursor = cursorMatch ? decodeURIComponent(cursorMatch[1]) : undefined;
+        } else {
+          cursor = undefined;
+        }
+        hasMore = results.length >= batchSize && !!cursor;
 
-      // Extract cursor from _links.next if available
-      // biome-ignore lint/suspicious/noExplicitAny: SDK links type
-      const links = (searchResult as any)._links;
-      const nextUrl: string | undefined = links?.next;
-      if (nextUrl) {
-        const cursorMatch = nextUrl.match(/cursor=([^&]+)/);
-        cursor = cursorMatch ? decodeURIComponent(cursorMatch[1]) : undefined;
-      } else {
-        cursor = undefined;
-      }
-      hasMore = results.length >= batchSize && !!cursor;
+        const lastPage = results[results.length - 1];
+        const rawModifiedAt: string | undefined = lastPage?.version?.when;
 
-      const lastPage = results[results.length - 1];
-      const rawModifiedAt: string | undefined = lastPage?.version?.when;
-
-      yield {
-        documents,
-        checkpoint: buildCheckpoint({
-          type: "confluence",
-          itemUpdatedAt: rawModifiedAt,
-          previousLastSyncedAt: checkpoint.lastSyncedAt,
-          extra: {
-            lastPageId: lastPage?.id ?? checkpoint.lastPageId,
-            lastRawModifiedAt: rawModifiedAt ?? checkpoint.lastRawModifiedAt,
+        this.log.debug(
+          {
+            batchIndex,
+            pageCount: results.length,
+            documentCount: documents.length,
+            hasMore,
           },
-        }),
-        hasMore,
-      };
+          "[ConfluenceConnector] Batch fetched",
+        );
+
+        batchIndex++;
+        yield {
+          documents,
+          checkpoint: buildCheckpoint({
+            type: "confluence",
+            itemUpdatedAt: rawModifiedAt,
+            previousLastSyncedAt: checkpoint.lastSyncedAt,
+            extra: {
+              lastPageId: lastPage?.id ?? checkpoint.lastPageId,
+              lastRawModifiedAt: rawModifiedAt ?? checkpoint.lastRawModifiedAt,
+            },
+          }),
+          hasMore,
+        };
+      } catch (error) {
+        this.log.error(
+          { batchIndex, error: extractErrorMessage(error) },
+          "[ConfluenceConnector] Batch fetch failed",
+        );
+        throw error;
+      }
     }
   }
 }
@@ -165,17 +231,43 @@ export class ConfluenceConnector extends BaseConnector {
 function createConfluenceClient(
   config: ConfluenceConfig,
   credentials: ConnectorCredentials,
+  log: pino.Logger,
 ) {
   const host = config.confluenceUrl.replace(/\/+$/, "");
   return new ConfluenceClient({
     host,
-    authentication: {
-      basic: {
-        email: credentials.email ?? "",
-        apiToken: credentials.apiToken,
+    noCheckAtlassianToken: true,
+    authentication: credentials.email
+      ? { basic: { email: credentials.email, apiToken: credentials.apiToken } }
+      : { oauth2: { accessToken: credentials.apiToken } },
+    apiPrefix: config.isCloud ? "/wiki/rest/" : "/rest/",
+    middlewares: {
+      onError: (error: unknown) => {
+        // biome-ignore lint/suspicious/noExplicitAny: Axios error shape
+        const err = error as any;
+        log.debug(
+          {
+            status: err?.response?.status,
+            method: err?.config?.method?.toUpperCase(),
+            url: err?.config?.url,
+            error: err?.message ?? String(error),
+          },
+          "[ConfluenceConnector] HTTP error",
+        );
+      },
+      onResponse: (response: unknown) => {
+        // biome-ignore lint/suspicious/noExplicitAny: Axios response shape
+        const res = response as any;
+        log.debug(
+          {
+            status: res?.status,
+            method: res?.config?.method?.toUpperCase(),
+            url: res?.config?.url,
+          },
+          "[ConfluenceConnector] HTTP response",
+        );
       },
     },
-    apiPrefix: config.isCloud ? "/wiki/rest/" : "/rest/",
   });
 }
 

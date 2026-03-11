@@ -24,12 +24,16 @@ export type ModelCapabilities = NonNullable<ChatModel["capabilities"]>;
 
 /**
  * Fetch available chat models from all configured providers.
+ * When apiKeyId is provided, only returns models linked to that specific key.
  */
-export function useChatModels() {
+export function useChatModels(params?: { apiKeyId?: string | null }) {
+  const apiKeyId = params?.apiKeyId;
   return useQuery({
-    queryKey: ["chat-models"],
+    queryKey: ["chat-models", apiKeyId ?? null],
     queryFn: async (): Promise<ChatModel[]> => {
-      const { data, error } = await getChatModels();
+      const { data, error } = await getChatModels({
+        query: apiKeyId ? { apiKeyId } : undefined,
+      });
       if (error) {
         handleApiError(error);
         return [];
@@ -42,9 +46,10 @@ export function useChatModels() {
 /**
  * Get models grouped by provider for UI display.
  * Returns models grouped by provider with loading/error states.
+ * When apiKeyId is provided, only returns models linked to that specific key.
  */
-export function useModelsByProvider() {
-  const query = useChatModels();
+export function useModelsByProvider(params?: { apiKeyId?: string | null }) {
+  const query = useChatModels(params);
 
   // Memoize to prevent creating new object reference on every render
   const modelsByProvider = useMemo(() => {

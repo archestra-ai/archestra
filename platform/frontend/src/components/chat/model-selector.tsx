@@ -20,7 +20,7 @@ import {
   Video,
   XIcon,
 } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ModelSelectorContent,
   ModelSelectorEmpty,
@@ -89,6 +89,8 @@ interface ModelSelectorProps {
   onClear?: () => void;
   /** Render trigger as an outline button instead of the default ghost prompt-input button */
   variant?: "default" | "outline";
+  /** When provided, only show models associated with this API key */
+  apiKeyId?: string | null;
 }
 
 /** Map our provider names to logo provider names
@@ -541,8 +543,11 @@ export function ModelSelector({
   onOpenChange: onOpenChangeProp,
   onClear,
   variant = "default",
+  apiKeyId,
 }: ModelSelectorProps) {
-  const { modelsByProvider, isPending: isLoading } = useModelsByProvider();
+  const { modelsByProvider, isPending: isLoading } = useModelsByProvider({
+    apiKeyId,
+  });
   const syncMutation = useSyncChatModels();
   const [open, setOpen] = useState(false);
   const [filters, setFilters] = useState<ModelFilters>(INITIAL_FILTERS);
@@ -646,15 +651,43 @@ export function ModelSelector({
     onModelChange(modelId);
   };
 
-  // Check if selectedModel is in the available models
-  const allAvailableModelIds = useMemo(
+  // All available models flattened
+  const allAvailableModels = useMemo(
     () =>
       availableProviders.flatMap(
-        (provider) => modelsByProvider[provider]?.map((m) => m.id) ?? [],
+        (provider) => modelsByProvider[provider] ?? [],
       ),
     [availableProviders, modelsByProvider],
   );
+  const allAvailableModelIds = useMemo(
+    () => allAvailableModels.map((m) => m.id),
+    [allAvailableModels],
+  );
   const isModelAvailable = allAvailableModelIds.includes(selectedModel);
+
+  // Auto-select the "best" model (or first) when models load and selected model
+  // is not in the available list (e.g. after switching API keys)
+  const prevApiKeyIdRef = useRef(apiKeyId);
+  useEffect(() => {
+    if (isLoading || allAvailableModels.length === 0) return;
+    // Only auto-select when apiKeyId changes or selected model is unavailable
+    const apiKeyChanged = prevApiKeyIdRef.current !== apiKeyId;
+    prevApiKeyIdRef.current = apiKeyId;
+    if (!apiKeyChanged && isModelAvailable) return;
+
+    const bestModel = allAvailableModels.find((m) => m.isBest);
+    const modelToSelect = bestModel ?? allAvailableModels[0];
+    if (modelToSelect && modelToSelect.id !== selectedModel) {
+      onModelChange(modelToSelect.id);
+    }
+  }, [
+    isLoading,
+    apiKeyId,
+    allAvailableModels,
+    isModelAvailable,
+    selectedModel,
+    onModelChange,
+  ]);
 
   // If loading, show loading state
   if (isLoading) {

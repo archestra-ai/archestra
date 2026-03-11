@@ -4,6 +4,7 @@ import {
   type Version2Client,
   type Version3Client,
 } from "jira.js";
+import type pino from "pino";
 import type {
   ConnectorCredentials,
   ConnectorDocument,
@@ -12,7 +13,11 @@ import type {
   JiraConfig,
 } from "@/types/knowledge-connector";
 import { JiraConfigSchema } from "@/types/knowledge-connector";
-import { BaseConnector, buildCheckpoint } from "../base-connector";
+import {
+  BaseConnector,
+  buildCheckpoint,
+  extractErrorMessage,
+} from "../base-connector";
 
 const BATCH_SIZE = 50;
 const SEARCH_FIELDS = [
@@ -59,17 +64,27 @@ export class JiraConnector extends BaseConnector {
       return { success: false, error: "Invalid Jira configuration" };
     }
 
+    this.log.info(
+      { baseUrl: parsed.jiraBaseUrl, isCloud: parsed.isCloud },
+      "[JiraConnector] Testing connection",
+    );
+
     try {
       if (parsed.isCloud) {
-        const client = createV3Client(parsed, params.credentials);
+        const client = createV3Client(parsed, params.credentials, this.log);
         await client.myself.getCurrentUser();
       } else {
-        const client = createV2Client(parsed, params.credentials);
+        const client = createV2Client(parsed, params.credentials, this.log);
         await client.myself.getCurrentUser();
       }
+      this.log.info("[JiraConnector] Connection test successful");
       return { success: true };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      this.log.error(
+        { error: message, ...extractJiraErrorDetails(error) },
+        "[JiraConnector] Connection test failed",
+      );
       return { success: false, error: `Connection failed: ${message}` };
     }
   }
@@ -88,9 +103,11 @@ export class JiraConnector extends BaseConnector {
       };
       const jql = buildJql(parsed, checkpoint);
 
+      this.log.info({ jql }, "[JiraConnector] Estimating total items");
+
       // Use classic JQL search with maxResults=0 to get total without fetching issues
       if (parsed.isCloud) {
-        const client = createV3Client(parsed, params.credentials);
+        const client = createV3Client(parsed, params.credentials, this.log);
         const result = await client.issueSearch.searchForIssuesUsingJql({
           jql,
           fields: ["summary"],
@@ -99,14 +116,21 @@ export class JiraConnector extends BaseConnector {
         return result.total ?? null;
       }
 
-      const client = createV2Client(parsed, params.credentials);
+      const client = createV2Client(parsed, params.credentials, this.log);
       const result = await client.issueSearch.searchForIssuesUsingJql({
         jql,
         fields: ["summary"],
         maxResults: 0,
       });
       return result.total ?? null;
-    } catch {
+    } catch (error) {
+      this.log.warn(
+        {
+          error: extractErrorMessage(error),
+          ...extractJiraErrorDetails(error),
+        },
+        "[JiraConnector] Failed to estimate total items",
+      );
       return null;
     }
   }
@@ -128,6 +152,17 @@ export class JiraConnector extends BaseConnector {
     };
     const jql = buildJql(parsed, checkpoint, params.startTime);
 
+    this.log.info(
+      {
+        baseUrl: parsed.jiraBaseUrl,
+        isCloud: parsed.isCloud,
+        projectKey: parsed.projectKey,
+        jql,
+        checkpoint,
+      },
+      "[JiraConnector] Starting sync",
+    );
+
     if (parsed.isCloud) {
       yield* this.syncCloud(parsed, params.credentials, jql, checkpoint);
     } else {
@@ -143,28 +178,58 @@ export class JiraConnector extends BaseConnector {
     jql: string,
     checkpoint: JiraCheckpoint,
   ): AsyncGenerator<ConnectorSyncBatch> {
-    const client = createV3Client(config, credentials);
+    const client = createV3Client(config, credentials, this.log);
     let nextPageToken: string | undefined;
     let hasMore = true;
+    let batchIndex = 0;
 
     while (hasMore) {
       await this.rateLimit();
 
-      const searchResult =
-        await client.issueSearch.searchForIssuesUsingJqlEnhancedSearchPost({
-          jql,
-          fields: SEARCH_FIELDS,
-          nextPageToken,
-          maxResults: BATCH_SIZE,
-        });
+      try {
+        this.log.debug(
+          { batchIndex, nextPageToken },
+          "[JiraConnector] Fetching cloud batch",
+        );
 
-      const issues = searchResult.issues ?? [];
-      const documents = issuesToDocuments(issues, config);
+        const searchResult =
+          await client.issueSearch.searchForIssuesUsingJqlEnhancedSearchPost({
+            jql,
+            fields: SEARCH_FIELDS,
+            nextPageToken,
+            maxResults: BATCH_SIZE,
+          });
 
-      nextPageToken = searchResult.nextPageToken ?? undefined;
-      hasMore = !!nextPageToken;
+        const issues = searchResult.issues ?? [];
+        const documents = issuesToDocuments(issues, config);
 
-      yield buildBatch(documents, issues, checkpoint, hasMore);
+        nextPageToken = searchResult.nextPageToken ?? undefined;
+        hasMore = !!nextPageToken;
+
+        this.log.info(
+          {
+            batchIndex,
+            issueCount: issues.length,
+            documentCount: documents.length,
+            hasMore,
+          },
+          "[JiraConnector] Cloud batch fetched",
+        );
+
+        batchIndex++;
+        yield buildBatch(documents, issues, checkpoint, hasMore);
+      } catch (error) {
+        this.log.error(
+          {
+            batchIndex,
+            host: config.jiraBaseUrl,
+            error: extractErrorMessage(error),
+            ...extractJiraErrorDetails(error),
+          },
+          "[JiraConnector] Cloud batch fetch failed",
+        );
+        throw error;
+      }
     }
   }
 
@@ -174,28 +239,61 @@ export class JiraConnector extends BaseConnector {
     jql: string,
     checkpoint: JiraCheckpoint,
   ): AsyncGenerator<ConnectorSyncBatch> {
-    const client = createV2Client(config, credentials);
-    let nextPageToken: string | undefined;
+    const client = createV2Client(config, credentials, this.log);
+    let startAt = 0;
     let hasMore = true;
+    let batchIndex = 0;
 
     while (hasMore) {
       await this.rateLimit();
 
-      const searchResult =
-        await client.issueSearch.searchForIssuesUsingJqlEnhancedSearchPost({
-          jql,
-          fields: SEARCH_FIELDS,
-          nextPageToken,
-          maxResults: BATCH_SIZE,
-        });
+      try {
+        this.log.debug(
+          { batchIndex, startAt },
+          "[JiraConnector] Fetching server batch",
+        );
 
-      const issues = searchResult.issues ?? [];
-      const documents = issuesToDocuments(issues, config);
+        const searchResult =
+          await client.issueSearch.searchForIssuesUsingJqlPost({
+            jql,
+            fields: SEARCH_FIELDS,
+            startAt,
+            maxResults: BATCH_SIZE,
+          });
 
-      nextPageToken = searchResult.nextPageToken ?? undefined;
-      hasMore = !!nextPageToken;
+        const issues = searchResult.issues ?? [];
+        const documents = issuesToDocuments(issues, config);
 
-      yield buildBatch(documents, issues, checkpoint, hasMore);
+        startAt += issues.length;
+        hasMore =
+          issues.length >= BATCH_SIZE &&
+          startAt < (searchResult.total ?? startAt);
+
+        this.log.info(
+          {
+            batchIndex,
+            issueCount: issues.length,
+            documentCount: documents.length,
+            total: searchResult.total,
+            hasMore,
+          },
+          "[JiraConnector] Server batch fetched",
+        );
+
+        batchIndex++;
+        yield buildBatch(documents, issues, checkpoint, hasMore);
+      } catch (error) {
+        this.log.error(
+          {
+            batchIndex,
+            host: config.jiraBaseUrl,
+            error: extractErrorMessage(error),
+            ...extractJiraErrorDetails(error),
+          },
+          "[JiraConnector] Server batch fetch failed",
+        );
+        throw error;
+      }
     }
   }
 }
@@ -205,6 +303,7 @@ export class JiraConnector extends BaseConnector {
 function createV3Client(
   config: JiraConfig,
   credentials: ConnectorCredentials,
+  log: pino.Logger,
 ): Version3Client {
   // @ts-expect-error jira.js@5.3.1 overload resolution broken: private 'client' property intersects to 'never'
   return createClient(ClientType.Version3, {
@@ -215,23 +314,53 @@ function createV3Client(
         apiToken: credentials.apiToken,
       },
     },
+    middlewares: buildJiraMiddlewares(log),
   }) as unknown as Version3Client;
 }
 
 function createV2Client(
   config: JiraConfig,
   credentials: ConnectorCredentials,
+  log: pino.Logger,
 ): Version2Client {
-  // @ts-expect-error jira.js@5.3.1 overload resolution broken: private 'client' property intersects to 'never'
   return createClient(ClientType.Version2, {
     host: config.jiraBaseUrl.replace(/\/+$/, ""),
-    authentication: {
-      basic: {
-        email: credentials.email,
-        apiToken: credentials.apiToken,
-      },
-    },
+    noCheckAtlassianToken: true,
+    authentication: credentials.email
+      ? { basic: { email: credentials.email, apiToken: credentials.apiToken } }
+      : { oauth2: { accessToken: credentials.apiToken } },
+    middlewares: buildJiraMiddlewares(log),
   }) as unknown as Version2Client;
+}
+
+function buildJiraMiddlewares(log: pino.Logger) {
+  return {
+    onError: (error: unknown) => {
+      // biome-ignore lint/suspicious/noExplicitAny: Axios error shape
+      const err = error as any;
+      log.debug(
+        {
+          status: err?.response?.status,
+          method: err?.config?.method?.toUpperCase(),
+          url: err?.config?.url,
+          error: err?.message ?? String(error),
+        },
+        "[JiraConnector] HTTP error",
+      );
+    },
+    onResponse: (response: unknown) => {
+      // biome-ignore lint/suspicious/noExplicitAny: Axios response shape
+      const res = response as any;
+      log.debug(
+        {
+          status: res?.status,
+          method: res?.config?.method?.toUpperCase(),
+          url: res?.config?.url,
+        },
+        "[JiraConnector] HTTP response",
+      );
+    },
+  };
 }
 
 function issuesToDocuments(
@@ -277,6 +406,64 @@ function buildBatch(
     }),
     hasMore,
   };
+}
+
+/**
+ * Extract HTTP status, URL, and response body from jira.js errors.
+ * The library wraps Axios errors, so we dig into the cause/response chain.
+ */
+function extractJiraErrorDetails(error: unknown): Record<string, unknown> {
+  const details: Record<string, unknown> = {};
+
+  if (!(error instanceof Error)) {
+    return details;
+  }
+
+  // jira.js wraps Axios errors — check for response properties
+  // biome-ignore lint/suspicious/noExplicitAny: error shape varies
+  const err = error as any;
+
+  // Axios-style: error.response.status / error.response.data
+  if (err.response) {
+    details.status = err.response.status;
+    details.statusText = err.response.statusText;
+    const cfg = err.response.config ?? err.config;
+    if (cfg?.url) {
+      details.url = cfg.baseURL
+        ? `${cfg.baseURL.replace(/\/+$/, "")}${cfg.url}`
+        : cfg.url;
+    }
+    if (err.response.data) {
+      try {
+        details.responseBody =
+          typeof err.response.data === "string"
+            ? err.response.data.slice(0, 1000)
+            : JSON.stringify(err.response.data).slice(0, 1000);
+      } catch {
+        details.responseBody = "[unserializable]";
+      }
+    }
+  }
+
+  // Fallback: request config without response (e.g. network error)
+  if (!details.url && err.config?.url) {
+    const cfg = err.config;
+    details.url = cfg.baseURL
+      ? `${cfg.baseURL.replace(/\/+$/, "")}${cfg.url}`
+      : cfg.url;
+  }
+
+  // Some errors store status directly
+  if (!details.status && err.status) {
+    details.status = err.status;
+  }
+
+  // Check cause chain
+  if (err.cause && !details.status) {
+    Object.assign(details, extractJiraErrorDetails(err.cause));
+  }
+
+  return details;
 }
 
 function parseJiraConfig(config: Record<string, unknown>): JiraConfig | null {

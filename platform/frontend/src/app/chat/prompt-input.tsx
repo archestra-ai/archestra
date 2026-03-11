@@ -278,6 +278,11 @@ const PromptInputContent = ({
                     <ModelSelector
                       selectedModel={selectedModel}
                       onModelChange={onModelChange}
+                      apiKeyId={
+                        conversationId
+                          ? currentConversationChatApiKeyId
+                          : initialApiKeyId
+                      }
                     />
                   </div>
                   {(conversationId || onApiKeyChange) && (
@@ -394,6 +399,11 @@ const PromptInputContent = ({
                     }, 100);
                   }
                 }}
+                apiKeyId={
+                  conversationId
+                    ? currentConversationChatApiKeyId
+                    : initialApiKeyId
+                }
               />
               {(conversationId || onApiKeyChange) && (
                 <ChatApiKeySelector

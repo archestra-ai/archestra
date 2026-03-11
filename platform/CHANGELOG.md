@@ -1,5 +1,51 @@
 # Changelog
 
+## [1.1.4](https://github.com/archestra-ai/archestra/compare/platform-v1.1.3...platform-v1.1.4) (2026-03-10)
+
+
+### Miscellaneous Chores
+
+* fix jira conn ([#3258](https://github.com/archestra-ai/archestra/issues/3258)) ([4a58742](https://github.com/archestra-ai/archestra/commit/4a587425ff8f65aa19d6f0ebdd4b30462b113cee))
+* include runId in all knowledge-connector task logs ([#3257](https://github.com/archestra-ai/archestra/issues/3257)) ([9c27ee2](https://github.com/archestra-ai/archestra/commit/9c27ee25877672918aa50f7bb9fa6c64c5ebe982))
+
+## [1.1.3](https://github.com/archestra-ai/archestra/compare/platform-v1.1.2...platform-v1.1.3) (2026-03-10)
+
+
+### Bug Fixes
+
+* chat model selector — filter by API key, auto-select best, group assigned-to tooltip ([#3250](https://github.com/archestra-ai/archestra/issues/3250)) ([3d9ac35](https://github.com/archestra-ai/archestra/commit/3d9ac35352f6ff93d59082735524e04184f68513))
+* persist selected model to localStorage in chat ([#3253](https://github.com/archestra-ai/archestra/issues/3253)) ([406faac](https://github.com/archestra-ai/archestra/commit/406faac9f49ca2d162d017ba46bc364fd18ca7bd))
+
+
+### Miscellaneous Chores
+
+* add debug logging to knowledge base connectors ([#3252](https://github.com/archestra-ai/archestra/issues/3252)) ([3cd7259](https://github.com/archestra-ai/archestra/commit/3cd725992c3e95129625559fd775b68d7bfa882f))
+* add drop embedding model ([#3254](https://github.com/archestra-ai/archestra/issues/3254)) ([0f8abc8](https://github.com/archestra-ai/archestra/commit/0f8abc854ad4b98f8026f39349c62374e23e2d57))
+
+## [1.1.2](https://github.com/archestra-ai/archestra/compare/platform-v1.1.1...platform-v1.1.2) (2026-03-10)
+
+
+### Bug Fixes
+
+* UI polish — connector dialogs, emoji picker, scope badges ([#3245](https://github.com/archestra-ai/archestra/issues/3245)) ([4e09e5a](https://github.com/archestra-ai/archestra/commit/4e09e5a3a663b0f557f8442017964e05898d2433))
+
+
+### Miscellaneous Chores
+
+* extract error messages ([#3242](https://github.com/archestra-ai/archestra/issues/3242)) ([e194e87](https://github.com/archestra-ai/archestra/commit/e194e87d8f541bcce92c72cf4ab872ca7fe05422))
+
+## [1.1.1](https://github.com/archestra-ai/archestra/compare/platform-v1.1.0...platform-v1.1.1) (2026-03-10)
+
+
+### Bug Fixes
+
+* vault-secrets init container crash due to config.ts import ([#3239](https://github.com/archestra-ai/archestra/issues/3239)) ([e8ca55c](https://github.com/archestra-ai/archestra/commit/e8ca55c1b76f4ade4980c7f697c9d477d5d138ec))
+
+
+### Miscellaneous Chores
+
+* update delete knowledge base dialog wording ([#3236](https://github.com/archestra-ai/archestra/issues/3236)) ([576a257](https://github.com/archestra-ai/archestra/commit/576a2572c628bf60c928e2351982ed7fe0a40bcf))
+
 ## [1.1.0](https://github.com/archestra-ai/archestra/compare/platform-v1.0.60...platform-v1.1.0) (2026-03-10)
 
 

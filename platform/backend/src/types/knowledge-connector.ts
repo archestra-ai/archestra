@@ -31,8 +31,11 @@ export type ConnectorCredentials = z.infer<typeof ConnectorCredentialsSchema>;
 
 // ===== Shared =====
 
-/** Use for any connector URL field — normalizes trailing slashes at parse time. */
-const connectorUrlSchema = z.string().transform(stripTrailingSlashes);
+/** Use for any connector URL field — prepends https:// if no protocol and normalizes trailing slashes at parse time. */
+const connectorUrlSchema = z
+  .string()
+  .transform(ensureProtocol)
+  .transform(stripTrailingSlashes);
 
 // ===== Jira Config & Checkpoint =====
 
@@ -166,6 +169,11 @@ export interface ConnectorSyncBatch {
 }
 
 // ===== Internal helpers =====
+
+function ensureProtocol(url: string): string {
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(url)) return url;
+  return `https://${url}`;
+}
 
 function stripTrailingSlashes(url: string): string {
   return url.replace(/\/+$/, "");

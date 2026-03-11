@@ -1,8 +1,4 @@
-import {
-  EmbeddingModelSchema,
-  OrganizationCustomFontSchema,
-  OrganizationThemeSchema,
-} from "@shared";
+import { OrganizationCustomFontSchema, OrganizationThemeSchema } from "@shared";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
@@ -94,7 +90,7 @@ const extendedFields = {
   limitCleanupInterval: OrganizationLimitCleanupIntervalSchema,
   compressionScope: OrganizationCompressionScopeSchema,
   globalToolPolicy: GlobalToolPolicySchema,
-  embeddingModel: EmbeddingModelSchema.nullable(),
+  embeddingModel: z.string().nullable(),
 };
 
 export const SelectOrganizationSchema = createSelectSchema(
@@ -124,7 +120,7 @@ export const UpdateLlmSettingsSchema = z.object({
 });
 
 export const UpdateKnowledgeSettingsSchema = z.object({
-  embeddingModel: EmbeddingModelSchema.optional(),
+  embeddingModel: z.string().min(1).optional(),
   embeddingChatApiKeyId: z.string().uuid().nullable().optional(),
   rerankerChatApiKeyId: z.string().uuid().nullable().optional(),
   rerankerModel: z.string().nullable().optional(),

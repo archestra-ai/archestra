@@ -1,4 +1,5 @@
-import logger from "@/logging";
+import type pino from "pino";
+import defaultLogger from "@/logging";
 import type {
   Connector,
   ConnectorCredentials,
@@ -42,11 +43,16 @@ export const REQUEST_TIMEOUT_MS = 30000;
 export abstract class BaseConnector implements Connector {
   abstract type: ConnectorType;
 
+  protected log: pino.Logger = defaultLogger;
   private rateLimitDelayMs: number;
   private itemFailures: ConnectorItemFailure[] = [];
 
   constructor(rateLimitDelayMs = DEFAULT_RATE_LIMIT_DELAY_MS) {
     this.rateLimitDelayMs = rateLimitDelayMs;
+  }
+
+  setLogger(log: pino.Logger): void {
+    this.log = log;
   }
 
   abstract validateConfig(
@@ -106,7 +112,7 @@ export abstract class BaseConnector implements Connector {
 
           if (attempt < maxRetries) {
             const delay = calculateBackoffDelay(attempt);
-            logger.warn(
+            this.log.warn(
               {
                 connectorType: this.type,
                 attempt: attempt + 1,
@@ -129,7 +135,7 @@ export abstract class BaseConnector implements Connector {
 
         if (isRetryableError(error) && attempt < maxRetries) {
           const delay = calculateBackoffDelay(attempt);
-          logger.warn(
+          this.log.warn(
             {
               connectorType: this.type,
               attempt: attempt + 1,
@@ -159,8 +165,8 @@ export abstract class BaseConnector implements Connector {
     try {
       return await params.fetch();
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      logger.warn(
+      const message = extractErrorMessage(error);
+      this.log.warn(
         {
           connectorType: this.type,
           itemId: params.itemId,
@@ -228,4 +234,30 @@ function calculateBackoffDelay(attempt: number): number {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Extract a meaningful error message from unknown errors.
+ * Handles plain objects thrown by libraries like confluence.js,
+ * which extract Axios response data instead of wrapping in Error instances.
+ */
+export function extractErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  if (typeof error === "string") {
+    return error;
+  }
+  if (error !== null && typeof error === "object") {
+    const obj = error as Record<string, unknown>;
+    if (typeof obj.message === "string") {
+      return obj.message;
+    }
+    try {
+      return JSON.stringify(error);
+    } catch {
+      return "[Unknown error object]";
+    }
+  }
+  return String(error);
 }

@@ -15,6 +15,10 @@ import type {
   ConnectorDocument,
 } from "@/types/knowledge-connector";
 import { chunkDocument } from "./chunker";
+import {
+  BaseConnector,
+  extractErrorMessage,
+} from "./connectors/base-connector";
 import { getConnector } from "./connectors/registry";
 
 /**
@@ -68,6 +72,11 @@ class ConnectorSyncService {
     // Bind runId to logger so every log line in this sync includes it
     const runLog = log.child({ runId: run.id, connectorId });
 
+    // Propagate the run-scoped logger into the connector implementation
+    if (connectorImpl instanceof BaseConnector) {
+      connectorImpl.setLogger(runLog);
+    }
+
     // Update connector lastSyncStatus to running
     await KnowledgeBaseConnectorModel.update(connectorId, {
       lastSyncStatus: "running",
@@ -88,7 +97,7 @@ class ConnectorSyncService {
     } catch (error) {
       runLog.warn(
         {
-          error: error instanceof Error ? error.message : String(error),
+          error: extractErrorMessage(error),
         },
         "[ConnectorSync] Failed to estimate total items, continuing without",
       );
@@ -130,10 +139,7 @@ class ConnectorSyncService {
             runLog.warn(
               {
                 documentId: doc.id,
-                error:
-                  docError instanceof Error
-                    ? docError.message
-                    : String(docError),
+                error: extractErrorMessage(docError),
               },
               "[ConnectorSync] Failed to ingest document",
             );
@@ -271,8 +277,7 @@ class ConnectorSyncService {
 
       return { runId: run.id, status: "success" };
     } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
+      const errorMessage = extractErrorMessage(error);
 
       await ConnectorRunModel.update(run.id, {
         status: "failed",
@@ -286,6 +291,7 @@ class ConnectorSyncService {
       await KnowledgeBaseConnectorModel.update(connectorId, {
         lastSyncStatus: "failed",
         lastSyncError: errorMessage,
+        lastSyncAt: new Date(),
       });
 
       runLog.error({ error: errorMessage }, "[ConnectorSync] Sync failed");

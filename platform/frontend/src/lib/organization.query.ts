@@ -392,6 +392,64 @@ export function useUpdateKnowledgeSettings(
 }
 
 /**
+ * Drop embedding configuration (deletes all KB documents, resets connector checkpoints)
+ */
+export function useDropEmbeddingConfig() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const { data: updatedOrganization, error } =
+        await archestraApiSdk.dropEmbeddingConfig();
+
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+
+      return updatedOrganization;
+    },
+    onSuccess: (updatedOrganization) => {
+      if (!updatedOrganization) return;
+      queryClient.setQueryData(organizationKeys.details(), updatedOrganization);
+      toast.success("Embedding configuration dropped");
+    },
+  });
+}
+
+/**
+ * Test embedding connection by embedding a sample text
+ */
+export function useTestEmbeddingConnection() {
+  return useMutation({
+    mutationFn: async (params: {
+      embeddingChatApiKeyId: string;
+      embeddingModel: string;
+    }) => {
+      const { data, error } = await archestraApiSdk.testEmbeddingConnection({
+        body: params,
+      });
+
+      if (error) {
+        handleApiError(error);
+        return { success: false, error: "Request failed" };
+      }
+
+      return data ?? { success: false, error: "No response" };
+    },
+    onSuccess: (result) => {
+      if (!result) return;
+      if (result.success) {
+        toast.success("Connection test successful");
+      } else {
+        toast.error("Connection test failed", {
+          description: result.error,
+        });
+      }
+    },
+  });
+}
+
+/**
  * Complete onboarding
  */
 export function useCompleteOnboarding() {

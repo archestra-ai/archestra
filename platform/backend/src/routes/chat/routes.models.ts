@@ -45,6 +45,8 @@ const ChatModelSchema = z.object({
   provider: SupportedProvidersSchema,
   createdAt: z.string().optional(),
   capabilities: ModelCapabilitiesSchema.optional(),
+  isBest: z.boolean().optional(),
+  isFastest: z.boolean().optional(),
 });
 
 export interface ModelInfo {
@@ -1094,12 +1096,13 @@ const chatModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["Chat"],
         querystring: z.object({
           provider: SupportedProvidersSchema.optional(),
+          apiKeyId: z.string().uuid().optional(),
         }),
         response: constructResponseSchema(z.array(ChatModelSchema)),
       },
     },
     async ({ query, organizationId, user }, reply) => {
-      const { provider } = query;
+      const { provider, apiKeyId } = query;
 
       // Trigger models.dev metadata sync in background if needed
       modelsDevClient.syncIfNeeded();
@@ -1117,6 +1120,7 @@ const chatModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         {
           organizationId,
           provider,
+          apiKeyId,
           apiKeyCount: apiKeys.length,
           apiKeys: apiKeys.map((k) => ({
             id: k.id,
@@ -1129,7 +1133,19 @@ const chatModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       );
 
       // Get models from database based on user's API keys
-      const apiKeyIds = apiKeys.map((k) => k.id);
+      // If a specific apiKeyId is provided and it's in the user's accessible keys,
+      // only return models for that key
+      const accessibleKeyIds = apiKeys.map((k) => k.id);
+      if (apiKeyId && !accessibleKeyIds.includes(apiKeyId)) {
+        logger.warn(
+          { apiKeyId, organizationId, userId: user.id },
+          "Requested apiKeyId not found in user's accessible keys, falling back to all keys",
+        );
+      }
+      const apiKeyIds =
+        apiKeyId && accessibleKeyIds.includes(apiKeyId)
+          ? [apiKeyId]
+          : accessibleKeyIds;
       const dbModels = await ApiKeyModelModel.getModelsForApiKeyIds(apiKeyIds);
 
       logger.info(
@@ -1144,15 +1160,17 @@ const chatModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Filter by provider if specified
       const filteredModels = provider
-        ? dbModels.filter((m) => m.provider === provider)
+        ? dbModels.filter((m) => m.model.provider === provider)
         : dbModels;
 
-      // Transform to response format with capabilities
-      const models = filteredModels.map((model) => ({
+      // Transform to response format with capabilities and markers
+      const models = filteredModels.map(({ model, isBest, isFastest }) => ({
         id: model.modelId,
         displayName: model.description || model.modelId,
         provider: model.provider,
         capabilities: ModelModel.toCapabilities(model),
+        isBest,
+        isFastest,
       }));
 
       logger.info(

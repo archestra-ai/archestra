@@ -10,16 +10,24 @@ import {
 // Mock jira.js SDK
 const mockGetCurrentUser = vi.fn();
 const mockEnhancedSearchPost = vi.fn();
+const mockSearchForIssuesUsingJql = vi.fn();
+const mockSearchForIssuesUsingJqlPost = vi.fn();
+const capturedConfigs: { type: string; config: Record<string, unknown> }[] = [];
 
 vi.mock("jira.js", () => ({
   ClientType: { Version2: "Version2", Version3: "Version3" },
   // biome-ignore lint/suspicious/noExplicitAny: mock factory
-  createClient: (_type: any, _config: any) => ({
-    myself: { getCurrentUser: mockGetCurrentUser },
-    issueSearch: {
-      searchForIssuesUsingJqlEnhancedSearchPost: mockEnhancedSearchPost,
-    },
-  }),
+  createClient: (type: any, config: any) => {
+    capturedConfigs.push({ type, config });
+    return {
+      myself: { getCurrentUser: mockGetCurrentUser },
+      issueSearch: {
+        searchForIssuesUsingJqlEnhancedSearchPost: mockEnhancedSearchPost,
+        searchForIssuesUsingJql: mockSearchForIssuesUsingJql,
+        searchForIssuesUsingJqlPost: mockSearchForIssuesUsingJqlPost,
+      },
+    };
+  },
 }));
 
 describe("JiraConnector", () => {
@@ -38,6 +46,7 @@ describe("JiraConnector", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    capturedConfigs.length = 0;
     connector = new JiraConnector();
   });
 
@@ -65,9 +74,9 @@ describe("JiraConnector", () => {
       expect(result.error).toContain("isCloud");
     });
 
-    test("returns invalid when jiraBaseUrl is not a valid URL", async () => {
+    test("returns invalid when jiraBaseUrl uses unsupported protocol", async () => {
       const result = await connector.validateConfig({
-        jiraBaseUrl: "not-a-url",
+        jiraBaseUrl: "ftp://jira.example.com",
         isCloud: true,
       });
       expect(result.valid).toBe(false);
@@ -78,6 +87,14 @@ describe("JiraConnector", () => {
       const result = await connector.validateConfig({
         jiraBaseUrl: "https://jira.mycompany.com",
         isCloud: false,
+      });
+      expect(result).toEqual({ valid: true });
+    });
+
+    test("accepts URL without protocol by prepending https://", async () => {
+      const result = await connector.validateConfig({
+        jiraBaseUrl: "mycompany.atlassian.net",
+        isCloud: true,
       });
       expect(result).toEqual({ valid: true });
     });
@@ -133,6 +150,68 @@ describe("JiraConnector", () => {
 
       expect(result.success).toBe(false);
       expect(result.error).toContain("Invalid Jira configuration");
+    });
+
+    test("uses basic auth for server when email is provided", async () => {
+      mockGetCurrentUser.mockResolvedValueOnce({ displayName: "User" });
+
+      await connector.testConnection({
+        config: { ...validConfig, isCloud: false },
+        credentials: { email: "admin", apiToken: "password123" },
+      });
+
+      const serverConfig = capturedConfigs.find(
+        (c) => c.type === "Version2",
+      )?.config;
+      expect(serverConfig?.authentication).toEqual({
+        basic: { email: "admin", apiToken: "password123" },
+      });
+    });
+
+    test("uses oauth2 (PAT) auth for server when email is not provided", async () => {
+      mockGetCurrentUser.mockResolvedValueOnce({ displayName: "User" });
+
+      await connector.testConnection({
+        config: { ...validConfig, isCloud: false },
+        credentials: { apiToken: "pat-token-value" },
+      });
+
+      const serverConfig = capturedConfigs.find(
+        (c) => c.type === "Version2",
+      )?.config;
+      expect(serverConfig?.authentication).toEqual({
+        oauth2: { accessToken: "pat-token-value" },
+      });
+    });
+
+    test("sets noCheckAtlassianToken for server instances", async () => {
+      mockGetCurrentUser.mockResolvedValueOnce({ displayName: "User" });
+
+      await connector.testConnection({
+        config: { ...validConfig, isCloud: false },
+        credentials: { apiToken: "pat-token" },
+      });
+
+      const serverConfig = capturedConfigs.find(
+        (c) => c.type === "Version2",
+      )?.config;
+      expect(serverConfig?.noCheckAtlassianToken).toBe(true);
+    });
+
+    test("uses basic auth for cloud instances", async () => {
+      mockGetCurrentUser.mockResolvedValueOnce({ displayName: "User" });
+
+      await connector.testConnection({
+        config: validConfig,
+        credentials,
+      });
+
+      const cloudConfig = capturedConfigs.find(
+        (c) => c.type === "Version3",
+      )?.config;
+      expect(cloudConfig?.authentication).toEqual({
+        basic: { email: "user@example.com", apiToken: "test-api-token" },
+      });
     });
   });
 
@@ -562,6 +641,124 @@ describe("JiraConnector", () => {
       });
 
       await expect(generator.next()).rejects.toThrow();
+    });
+  });
+
+  describe("sync (server / isCloud=false)", () => {
+    const serverConfig = {
+      jiraBaseUrl: "https://jira.mycompany.com",
+      isCloud: false,
+      projectKey: "SRV",
+    };
+
+    function makeIssue(
+      key: string,
+      summary: string,
+      description: unknown = "Description text",
+    ) {
+      return {
+        key,
+        fields: {
+          summary,
+          description,
+          comment: { comments: [] as Record<string, unknown>[] },
+          reporter: { displayName: "Reporter" },
+          assignee: { displayName: "Assignee" },
+          priority: { name: "Medium" },
+          status: { name: "Open" },
+          labels: [] as string[],
+          issuetype: { name: "Task" },
+          updated: "2024-01-15T10:00:00.000Z",
+        },
+      };
+    }
+
+    test("uses searchForIssuesUsingJqlPost instead of enhanced search", async () => {
+      mockSearchForIssuesUsingJqlPost.mockResolvedValueOnce({
+        issues: [makeIssue("SRV-1", "Server issue")],
+        startAt: 0,
+        maxResults: 50,
+        total: 1,
+      });
+
+      const batches: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: serverConfig,
+        credentials,
+        checkpoint: null,
+      })) {
+        batches.push(batch);
+      }
+
+      expect(mockSearchForIssuesUsingJqlPost).toHaveBeenCalledTimes(1);
+      expect(mockEnhancedSearchPost).not.toHaveBeenCalled();
+      expect(batches).toHaveLength(1);
+      expect(batches[0].documents).toHaveLength(1);
+      expect(batches[0].documents[0].id).toBe("SRV-1");
+    });
+
+    test("uses offset-based pagination with startAt", async () => {
+      const page1Issues = Array.from({ length: 50 }, (_, i) =>
+        makeIssue(`SRV-${i + 1}`, `Issue ${i + 1}`),
+      );
+      const page2Issues = [makeIssue("SRV-51", "Issue 51")];
+
+      mockSearchForIssuesUsingJqlPost
+        .mockResolvedValueOnce({
+          issues: page1Issues,
+          startAt: 0,
+          maxResults: 50,
+          total: 51,
+        })
+        .mockResolvedValueOnce({
+          issues: page2Issues,
+          startAt: 50,
+          maxResults: 50,
+          total: 51,
+        });
+
+      const batches: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: serverConfig,
+        credentials,
+        checkpoint: null,
+      })) {
+        batches.push(batch);
+      }
+
+      expect(batches).toHaveLength(2);
+      expect(batches[0].documents).toHaveLength(50);
+      expect(batches[0].hasMore).toBe(true);
+      expect(batches[1].documents).toHaveLength(1);
+      expect(batches[1].hasMore).toBe(false);
+
+      // Second call should use startAt=50
+      expect(mockSearchForIssuesUsingJqlPost).toHaveBeenCalledTimes(2);
+      expect(mockSearchForIssuesUsingJqlPost.mock.calls[1][0]).toEqual(
+        expect.objectContaining({ startAt: 50, maxResults: 50 }),
+      );
+    });
+
+    test("stops when fewer results than BATCH_SIZE returned", async () => {
+      mockSearchForIssuesUsingJqlPost.mockResolvedValueOnce({
+        issues: [makeIssue("SRV-1", "Only issue")],
+        startAt: 0,
+        maxResults: 50,
+        total: 1,
+      });
+
+      const batches: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: serverConfig,
+        credentials,
+        checkpoint: null,
+      })) {
+        batches.push(batch);
+      }
+
+      expect(batches).toHaveLength(1);
+      expect(batches[0].hasMore).toBe(false);
+      expect(mockSearchForIssuesUsingJqlPost).toHaveBeenCalledTimes(1);
     });
   });
 

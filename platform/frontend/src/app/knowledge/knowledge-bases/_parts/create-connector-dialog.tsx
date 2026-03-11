@@ -28,6 +28,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import { useCreateConnector } from "@/lib/connector.query";
 import { ConfluenceConfigFields } from "./confluence-config-fields";
 import { ConnectorTypeIcon } from "./connector-icons";
@@ -124,7 +125,7 @@ export function CreateConnectorDialog({
       connectorType: values.connectorType,
       config: config as archestraApiTypes.CreateConnectorData["body"]["config"],
       credentials: {
-        email: values.email,
+        ...(values.email && { email: values.email }),
         apiToken: values.apiToken,
       },
       schedule: values.schedule,
@@ -148,11 +149,13 @@ export function CreateConnectorDialog({
   };
 
   const urlConfig = getUrlConfig(connectorType);
+  const isCloud = form.watch("config.isCloud") as boolean | undefined;
   const needsEmail = connectorType === "jira" || connectorType === "confluence";
+  const emailRequired = needsEmail && isCloud !== false;
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+      <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col overflow-hidden">
         {step === "select" ? (
           <>
             <DialogHeader>
@@ -183,33 +186,39 @@ export function CreateConnectorDialog({
             </div>
           </>
         ) : (
-          <>
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7"
-                  onClick={handleBack}
-                >
-                  <ArrowLeft className="h-4 w-4" />
-                </Button>
-                Configure{" "}
-                {CONNECTOR_OPTIONS.find((o) => o.type === selectedType)?.label}{" "}
-                Connector
-              </DialogTitle>
-              <DialogDescription>
-                Enter the connection details for your{" "}
-                {CONNECTOR_OPTIONS.find((o) => o.type === selectedType)?.label}{" "}
-                instance.
-              </DialogDescription>
-            </DialogHeader>
+          <Form {...form}>
+            <form
+              onSubmit={form.handleSubmit(handleSubmit)}
+              className="flex flex-col overflow-hidden"
+            >
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    onClick={handleBack}
+                  >
+                    <ArrowLeft className="h-4 w-4" />
+                  </Button>
+                  Configure{" "}
+                  {
+                    CONNECTOR_OPTIONS.find((o) => o.type === selectedType)
+                      ?.label
+                  }{" "}
+                  Connector
+                </DialogTitle>
+                <DialogDescription>
+                  Enter the connection details for your{" "}
+                  {
+                    CONNECTOR_OPTIONS.find((o) => o.type === selectedType)
+                      ?.label
+                  }{" "}
+                  instance.
+                </DialogDescription>
+              </DialogHeader>
 
-            <Form {...form}>
-              <form
-                onSubmit={form.handleSubmit(handleSubmit)}
-                className="space-y-4"
-              >
+              <div className="space-y-4 overflow-y-auto py-4 pr-1">
                 <FormField
                   control={form.control}
                   name="name"
@@ -249,6 +258,30 @@ export function CreateConnectorDialog({
                   )}
                 />
 
+                {(connectorType === "jira" ||
+                  connectorType === "confluence") && (
+                  <FormField
+                    control={form.control}
+                    name="config.isCloud"
+                    render={({ field }) => (
+                      <FormItem className="flex items-center justify-between rounded-lg border p-3">
+                        <div className="space-y-0.5">
+                          <FormLabel>Cloud Instance</FormLabel>
+                          <FormDescription>
+                            Enable if this is a cloud-hosted instance.
+                          </FormDescription>
+                        </div>
+                        <FormControl>
+                          <Switch
+                            checked={(field.value as boolean) ?? true}
+                            onCheckedChange={field.onChange}
+                          />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+                )}
+
                 {connectorType === "github" && (
                   <FormField
                     control={form.control}
@@ -277,17 +310,36 @@ export function CreateConnectorDialog({
                   <FormField
                     control={form.control}
                     name="email"
-                    rules={{ required: "Email is required" }}
+                    rules={{
+                      validate: (value) => {
+                        const currentIsCloud = form.getValues("config.isCloud");
+                        if (currentIsCloud !== false && !value)
+                          return "Email is required";
+                        return true;
+                      },
+                    }}
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Email</FormLabel>
+                        <FormLabel>
+                          Email{!emailRequired && " (optional)"}
+                        </FormLabel>
                         <FormControl>
                           <Input
                             type="email"
-                            placeholder="user@example.com"
+                            placeholder={
+                              emailRequired
+                                ? "user@example.com"
+                                : "Required for basic auth, leave empty for PAT"
+                            }
                             {...field}
                           />
                         </FormControl>
+                        {!emailRequired && (
+                          <FormDescription>
+                            Leave empty to authenticate with a personal access
+                            token instead.
+                          </FormDescription>
+                        )}
                         <FormMessage />
                       </FormItem>
                     )}
@@ -299,20 +351,28 @@ export function CreateConnectorDialog({
                   name="apiToken"
                   rules={{
                     required: needsEmail
-                      ? "API token is required"
+                      ? emailRequired
+                        ? "API token is required"
+                        : "API token or personal access token is required"
                       : "Personal access token is required",
                   }}
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>
-                        {needsEmail ? "API Token" : "Personal Access Token"}
+                        {needsEmail
+                          ? emailRequired
+                            ? "API Token"
+                            : "API Token / Personal Access Token"
+                          : "Personal Access Token"}
                       </FormLabel>
                       <FormControl>
                         <Input
                           type="password"
                           placeholder={
                             needsEmail
-                              ? "Your API token"
+                              ? emailRequired
+                                ? "Your API token"
+                                : "Your API token or personal access token"
                               : "Your personal access token"
                           }
                           {...field}
@@ -331,10 +391,10 @@ export function CreateConnectorDialog({
                   <CollapsibleContent className="pt-4 space-y-4">
                     <SchedulePicker form={form} name="schedule" />
                     {connectorType === "jira" && (
-                      <JiraConfigFields form={form} hideUrl />
+                      <JiraConfigFields form={form} hideUrl hideIsCloud />
                     )}
                     {connectorType === "confluence" && (
-                      <ConfluenceConfigFields form={form} hideUrl />
+                      <ConfluenceConfigFields form={form} hideUrl hideIsCloud />
                     )}
                     {connectorType === "github" && (
                       <GithubConfigFields form={form} hideUrl />
@@ -344,20 +404,20 @@ export function CreateConnectorDialog({
                     )}
                   </CollapsibleContent>
                 </Collapsible>
+              </div>
 
-                <DialogFooter>
-                  <Button type="button" variant="outline" onClick={handleBack}>
-                    Back
-                  </Button>
-                  <Button type="submit" disabled={createConnector.isPending}>
-                    {createConnector.isPending
-                      ? "Creating..."
-                      : "Create Connector"}
-                  </Button>
-                </DialogFooter>
-              </form>
-            </Form>
-          </>
+              <DialogFooter className="pt-4">
+                <Button type="button" variant="outline" onClick={handleBack}>
+                  Back
+                </Button>
+                <Button type="submit" disabled={createConnector.isPending}>
+                  {createConnector.isPending
+                    ? "Creating..."
+                    : "Create Connector"}
+                </Button>
+              </DialogFooter>
+            </form>
+          </Form>
         )}
       </DialogContent>
     </Dialog>

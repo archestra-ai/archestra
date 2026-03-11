@@ -1,8 +1,4 @@
-import type {
-  EmbeddingModel,
-  OrganizationCustomFont,
-  OrganizationTheme,
-} from "@shared";
+import type { OrganizationCustomFont, OrganizationTheme } from "@shared";
 import {
   boolean,
   pgTable,
@@ -58,7 +54,7 @@ const organizationsTable = pgTable("organization", {
     .default(true),
 
   /** Embedding model for knowledge base RAG — set explicitly when user configures embedding */
-  embeddingModel: text("embedding_model").$type<EmbeddingModel>(),
+  embeddingModel: text("embedding_model"),
 
   /**
    * Chat API key used for generating embeddings (must be an OpenAI provider key).

@@ -2,6 +2,8 @@ import { describe, expect, test } from "@/test";
 import {
   ConfluenceConfigSchema,
   ConnectorConfigSchema,
+  GithubConfigSchema,
+  GitlabConfigSchema,
   JiraConfigSchema,
 } from "./knowledge-connector";
 
@@ -89,6 +91,116 @@ describe("knowledge-connector schemas", () => {
         isCloud: true,
       });
       expect(withSlash.confluenceUrl).toBe(withoutSlash.confluenceUrl);
+    });
+  });
+
+  describe("connectorUrlSchema protocol prepending", () => {
+    // Helper to parse a URL through connectorUrlSchema via JiraConfigSchema
+    function parseUrl(url: string): string {
+      return JiraConfigSchema.parse({
+        type: "jira",
+        jiraBaseUrl: url,
+        isCloud: true,
+      }).jiraBaseUrl;
+    }
+
+    test("prepends https:// when no protocol is provided", () => {
+      expect(parseUrl("mycompany.atlassian.net")).toBe(
+        "https://mycompany.atlassian.net",
+      );
+    });
+
+    test("prepends https:// for all connector types", () => {
+      expect(
+        ConfluenceConfigSchema.parse({
+          type: "confluence",
+          confluenceUrl: "mycompany.atlassian.net/wiki",
+          isCloud: true,
+        }).confluenceUrl,
+      ).toBe("https://mycompany.atlassian.net/wiki");
+
+      expect(
+        GithubConfigSchema.parse({
+          type: "github",
+          githubUrl: "api.github.com",
+          owner: "test-org",
+        }).githubUrl,
+      ).toBe("https://api.github.com");
+
+      expect(
+        GitlabConfigSchema.parse({
+          type: "gitlab",
+          gitlabUrl: "gitlab.com",
+        }).gitlabUrl,
+      ).toBe("https://gitlab.com");
+    });
+
+    test("preserves existing https:// protocol", () => {
+      expect(parseUrl("https://mycompany.atlassian.net")).toBe(
+        "https://mycompany.atlassian.net",
+      );
+    });
+
+    test("preserves existing http:// protocol", () => {
+      expect(parseUrl("http://jira.internal.company.com")).toBe(
+        "http://jira.internal.company.com",
+      );
+    });
+
+    test("preserves protocol case-insensitively", () => {
+      expect(parseUrl("HTTP://jira.example.com")).toBe(
+        "HTTP://jira.example.com",
+      );
+      expect(parseUrl("HTTPS://jira.example.com")).toBe(
+        "HTTPS://jira.example.com",
+      );
+      expect(parseUrl("Http://jira.example.com")).toBe(
+        "Http://jira.example.com",
+      );
+    });
+
+    test("preserves unsupported protocols without prepending", () => {
+      expect(parseUrl("ftp://files.example.com")).toBe(
+        "ftp://files.example.com",
+      );
+      expect(parseUrl("ssh://git.example.com")).toBe("ssh://git.example.com");
+    });
+
+    test("prepends https:// for URL with path but no protocol", () => {
+      expect(parseUrl("github.mycompany.com/api/v3")).toBe(
+        "https://github.mycompany.com/api/v3",
+      );
+    });
+
+    test("prepends https:// for URL with port but no protocol", () => {
+      expect(parseUrl("localhost:8080")).toBe("https://localhost:8080");
+    });
+
+    test("prepends https:// for URL with port and path but no protocol", () => {
+      expect(parseUrl("jira.local:8443/rest")).toBe(
+        "https://jira.local:8443/rest",
+      );
+    });
+
+    test("combines protocol prepending with trailing slash stripping", () => {
+      expect(parseUrl("mycompany.atlassian.net/")).toBe(
+        "https://mycompany.atlassian.net",
+      );
+      expect(parseUrl("mycompany.atlassian.net///")).toBe(
+        "https://mycompany.atlassian.net",
+      );
+    });
+
+    test("preserves path segments when stripping trailing slashes", () => {
+      expect(parseUrl("mycompany.atlassian.net/wiki/")).toBe(
+        "https://mycompany.atlassian.net/wiki",
+      );
+    });
+
+    test("produces identical output with and without protocol", () => {
+      expect(parseUrl("mycompany.atlassian.net")).toBe(
+        parseUrl("https://mycompany.atlassian.net"),
+      );
     });
   });
 

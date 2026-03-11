@@ -97,7 +97,10 @@ class EmbeddingService {
    * Per-document error isolation: if embedding fails, only the affected documents
    * are marked as "failed"; the rest still complete.
    */
-  async processDocuments(documentIds: string[]): Promise<void> {
+  async processDocuments(
+    documentIds: string[],
+    connectorRunId?: string,
+  ): Promise<void> {
     // 1. Load all documents in one query, filter to pending, gather chunks
     const documents = await KbDocumentModel.findByIds(documentIds);
     const documentsById = new Map(documents.map((d) => [d.id, d]));
@@ -112,12 +115,19 @@ class EmbeddingService {
     for (const documentId of documentIds) {
       const document = documentsById.get(documentId);
       if (!document) {
-        logger.warn({ documentId }, "[Embedder] Document not found");
+        logger.warn(
+          { documentId, runId: connectorRunId },
+          "[Embedder] Document not found",
+        );
         continue;
       }
       if (document.embeddingStatus !== "pending") {
         logger.debug(
-          { documentId, status: document.embeddingStatus },
+          {
+            documentId,
+            runId: connectorRunId,
+            status: document.embeddingStatus,
+          },
           "[Embedder] Document not pending, skipping",
         );
         continue;
@@ -150,7 +160,10 @@ class EmbeddingService {
     // 2. Get embedding config
     const orgConfig = await getDefaultOrgEmbeddingConfig();
     if (!orgConfig) {
-      logger.debug("[Embedder] No embedding API key configured, skipping");
+      logger.debug(
+        { runId: connectorRunId },
+        "[Embedder] No embedding API key configured, skipping",
+      );
       for (const { documentId } of docChunkMap) {
         await KbDocumentModel.update(documentId, {
           embeddingStatus: "pending",
@@ -176,6 +189,7 @@ class EmbeddingService {
       } catch (error) {
         logger.error(
           {
+            runId: connectorRunId,
             batchStart: i,
             batchSize: batch.length,
             error: error instanceof Error ? error.message : String(error),
@@ -203,7 +217,7 @@ class EmbeddingService {
           embeddingStatus: "failed",
         });
         logger.error(
-          { documentId },
+          { documentId, runId: connectorRunId },
           "[Embedder] Failed to embed document (batch failure)",
         );
       } else {
@@ -212,7 +226,7 @@ class EmbeddingService {
           chunkCount,
         });
         logger.info(
-          { documentId, chunkCount },
+          { documentId, runId: connectorRunId, chunkCount },
           "[Embedder] Document embeddings completed",
         );
       }

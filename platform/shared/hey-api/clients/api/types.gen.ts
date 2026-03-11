@@ -18169,6 +18169,7 @@ export type GetChatModelsData = {
     path?: never;
     query?: {
         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax';
+        apiKeyId?: string;
     };
     url: '/api/chat/models';
 };
@@ -18251,6 +18252,8 @@ export type GetChatModelsResponses = {
             isCustomPrice: boolean;
             priceSource: 'custom' | 'models_dev' | 'default';
         };
+        isBest?: boolean;
+        isFastest?: boolean;
     }>;
 };
 
@@ -28257,6 +28260,10 @@ export type UpdateConnectorData = {
             includeMergeRequests?: boolean;
             labelsToSkip?: Array<string>;
         };
+        credentials?: {
+            email?: string;
+            apiToken: string;
+        };
         schedule?: string;
         enabled?: boolean;
     };
@@ -34057,7 +34064,7 @@ export type GetOrganizationResponses = {
         compressionScope: 'organization' | 'team';
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
-        embeddingModel: 'text-embedding-3-small' | 'text-embedding-3-large';
+        embeddingModel: string | null;
         embeddingChatApiKeyId: string | null;
         rerankerChatApiKeyId: string | null;
         rerankerModel: string | null;
@@ -34237,7 +34244,7 @@ export type UpdateAppearanceResponses = {
         compressionScope: 'organization' | 'team';
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
-        embeddingModel: 'text-embedding-3-small' | 'text-embedding-3-large';
+        embeddingModel: string | null;
         embeddingChatApiKeyId: string | null;
         rerankerChatApiKeyId: string | null;
         rerankerModel: string | null;
@@ -34335,7 +34342,7 @@ export type UpdateSecuritySettingsResponses = {
         compressionScope: 'organization' | 'team';
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
-        embeddingModel: 'text-embedding-3-small' | 'text-embedding-3-large';
+        embeddingModel: string | null;
         embeddingChatApiKeyId: string | null;
         rerankerChatApiKeyId: string | null;
         rerankerModel: string | null;
@@ -34434,7 +34441,7 @@ export type UpdateLlmSettingsResponses = {
         compressionScope: 'organization' | 'team';
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
-        embeddingModel: 'text-embedding-3-small' | 'text-embedding-3-large';
+        embeddingModel: string | null;
         embeddingChatApiKeyId: string | null;
         rerankerChatApiKeyId: string | null;
         rerankerModel: string | null;
@@ -34445,7 +34452,7 @@ export type UpdateLlmSettingsResponse = UpdateLlmSettingsResponses[keyof UpdateL
 
 export type UpdateKnowledgeSettingsData = {
     body?: {
-        embeddingModel?: 'text-embedding-3-small' | 'text-embedding-3-large';
+        embeddingModel?: string;
         embeddingChatApiKeyId?: string | null;
         rerankerChatApiKeyId?: string | null;
         rerankerModel?: string | null;
@@ -34534,7 +34541,7 @@ export type UpdateKnowledgeSettingsResponses = {
         compressionScope: 'organization' | 'team';
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
-        embeddingModel: 'text-embedding-3-small' | 'text-embedding-3-large';
+        embeddingModel: string | null;
         embeddingChatApiKeyId: string | null;
         rerankerChatApiKeyId: string | null;
         rerankerModel: string | null;
@@ -34542,6 +34549,182 @@ export type UpdateKnowledgeSettingsResponses = {
 };
 
 export type UpdateKnowledgeSettingsResponse = UpdateKnowledgeSettingsResponses[keyof UpdateKnowledgeSettingsResponses];
+
+export type DropEmbeddingConfigData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/organization/knowledge-settings/drop-embedding';
+};
+
+export type DropEmbeddingConfigErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type DropEmbeddingConfigError = DropEmbeddingConfigErrors[keyof DropEmbeddingConfigErrors];
+
+export type DropEmbeddingConfigResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        name: string;
+        slug: string;
+        logo: string | null;
+        logoDark: string | null;
+        createdAt: string;
+        metadata: string | null;
+        limitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
+        onboardingComplete: boolean;
+        theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
+        customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
+        convertToolResultsToToon: boolean;
+        compressionScope: 'organization' | 'team';
+        globalToolPolicy: 'permissive' | 'restrictive';
+        allowChatFileUploads: boolean;
+        embeddingModel: string | null;
+        embeddingChatApiKeyId: string | null;
+        rerankerChatApiKeyId: string | null;
+        rerankerModel: string | null;
+    };
+};
+
+export type DropEmbeddingConfigResponse = DropEmbeddingConfigResponses[keyof DropEmbeddingConfigResponses];
+
+export type TestEmbeddingConnectionData = {
+    body: {
+        embeddingChatApiKeyId: string;
+        embeddingModel: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/organization/knowledge-settings/test-embedding';
+};
+
+export type TestEmbeddingConnectionErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type TestEmbeddingConnectionError = TestEmbeddingConnectionErrors[keyof TestEmbeddingConnectionErrors];
+
+export type TestEmbeddingConnectionResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+        error?: string;
+    };
+};
+
+export type TestEmbeddingConnectionResponse = TestEmbeddingConnectionResponses[keyof TestEmbeddingConnectionResponses];
 
 export type CompleteOnboardingData = {
     body: {
@@ -34631,7 +34814,7 @@ export type CompleteOnboardingResponses = {
         compressionScope: 'organization' | 'team';
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
-        embeddingModel: 'text-embedding-3-small' | 'text-embedding-3-large';
+        embeddingModel: string | null;
         embeddingChatApiKeyId: string | null;
         rerankerChatApiKeyId: string | null;
         rerankerModel: string | null;

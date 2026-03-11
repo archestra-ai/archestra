@@ -7,6 +7,8 @@ const {
   deleteInternalMcpCatalogItem,
   getDeploymentYamlPreview,
   getInternalMcpCatalog,
+  getInternalMcpCatalogLabelKeys,
+  getInternalMcpCatalogLabelValues,
   getInternalMcpCatalogTools,
   getK8sImagePullSecrets,
   resetDeploymentYaml,
@@ -21,6 +23,24 @@ export function useInternalMcpCatalog(params?: {
     queryKey: ["mcp-catalog"],
     queryFn: async () => (await getInternalMcpCatalog()).data ?? [],
     initialData: params?.initialData,
+  });
+}
+
+export function useMcpCatalogLabelKeys() {
+  return useQuery({
+    queryKey: ["mcp-catalog", "labels", "keys"],
+    queryFn: async () => (await getInternalMcpCatalogLabelKeys()).data ?? [],
+  });
+}
+
+export function useMcpCatalogLabelValues(params?: { key?: string }) {
+  const { key } = params || {};
+  return useQuery({
+    queryKey: ["mcp-catalog", "labels", "values", key],
+    queryFn: async () =>
+      (await getInternalMcpCatalogLabelValues({ query: key ? { key } : {} }))
+        .data ?? [],
+    enabled: !!key,
   });
 }
 

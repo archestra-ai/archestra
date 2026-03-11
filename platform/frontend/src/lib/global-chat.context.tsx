@@ -322,27 +322,11 @@ function ChatSessionHook({
     }
   }, [messages, status, conversationId, generateTitleMutation]);
 
-  // Update session in ref whenever state changes
-  useEffect(() => {
-    const session: ChatSession = {
-      conversationId,
-      messages,
-      sendMessage,
-      stop,
-      status,
-      error,
-      setMessages,
-      addToolResult,
-      addToolApprovalResponse,
-      pendingCustomServerToolCall,
-      setPendingCustomServerToolCall,
-      tokenUsage,
-    };
-
-    sessionsRef.current.set(conversationId, session);
-    // Notify that session has been updated so consumers re-render
-    notifySessionUpdate();
-  }, [
+  // Always keep the session ref up-to-date with the latest values (including
+  // function references from useChat which change every render). This is a ref
+  // update only — no state changes, no re-renders.
+  const sessionRef = useRef<ChatSession>(null!);
+  sessionRef.current = {
     conversationId,
     messages,
     sendMessage,
@@ -353,8 +337,24 @@ function ChatSessionHook({
     addToolResult,
     addToolApprovalResponse,
     pendingCustomServerToolCall,
+    setPendingCustomServerToolCall,
     tokenUsage,
-    sessionsRef,
+  };
+  sessionsRef.current.set(conversationId, sessionRef.current);
+
+  // Notify consumers only when observable data changes — NOT when useChat
+  // function references change. This breaks the infinite loop where:
+  // notifySessionUpdate → parent re-render → useChat new refs → effect → repeat.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional — these are trigger deps, not used in the callback
+  useEffect(() => {
+    notifySessionUpdate();
+  }, [
+    conversationId,
+    messages,
+    status,
+    error,
+    pendingCustomServerToolCall,
+    tokenUsage,
     notifySessionUpdate,
   ]);
 

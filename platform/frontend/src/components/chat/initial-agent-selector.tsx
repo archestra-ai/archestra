@@ -1738,16 +1738,24 @@ function ToolServerAvatarGroup({
     return (
       <Tooltip>
         <TooltipTrigger asChild>
-          <button
-            type="button"
-            className="flex size-5 shrink-0 items-center justify-center rounded-full bg-muted ml-1 hover:bg-muted/80 transition-colors"
+          {/* biome-ignore lint/a11y/useSemanticElements: can't use <button> — nested inside PopoverTrigger button */}
+          <span
+            role="button"
+            tabIndex={0}
+            className="flex size-5 shrink-0 items-center justify-center rounded-full bg-muted ml-1 hover:bg-muted/80 transition-colors cursor-pointer"
             onClick={(e) => {
               e.stopPropagation();
               onAdd?.();
             }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.stopPropagation();
+                onAdd?.();
+              }
+            }}
           >
             <Plus className="size-3 text-muted-foreground" />
-          </button>
+          </span>
         </TooltipTrigger>
         <TooltipContent side="top">Add tools</TooltipContent>
       </Tooltip>
@@ -1792,16 +1800,24 @@ function ToolServerAvatarGroup({
       {showAddButton && !hasNonBuiltInTools && (
         <Tooltip>
           <TooltipTrigger asChild>
-            <button
-              type="button"
-              className="flex size-5 shrink-0 items-center justify-center rounded-full bg-muted ring-1 ring-background ml-0.5 hover:bg-muted/80 transition-colors"
+            {/* biome-ignore lint/a11y/useSemanticElements: can't use <button> — nested inside PopoverTrigger button */}
+            <span
+              role="button"
+              tabIndex={0}
+              className="flex size-5 shrink-0 items-center justify-center rounded-full bg-muted ring-1 ring-background ml-0.5 hover:bg-muted/80 transition-colors cursor-pointer"
               onClick={(e) => {
                 e.stopPropagation();
                 onAdd?.();
               }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.stopPropagation();
+                  onAdd?.();
+                }
+              }}
             >
               <Plus className="size-3 text-muted-foreground" />
-            </button>
+            </span>
           </TooltipTrigger>
           <TooltipContent side="top">Add tools</TooltipContent>
         </Tooltip>

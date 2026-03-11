@@ -857,7 +857,7 @@ async function makeKnowledgeBase(
     .insert(schema.knowledgeBasesTable)
     .values({
       organizationId,
-      name: `Test KG ${crypto.randomUUID().substring(0, 8)}`,
+      name: `Test Knowledge Base ${crypto.randomUUID().substring(0, 8)}`,
       ...overrides,
     })
     .returning();

@@ -995,7 +995,7 @@ const createKnowledgeBase = async (request: APIRequestContext, name?: string) =>
     method: "post",
     urlSuffix: "/api/knowledge-bases",
     data: {
-      name: name ?? `Test KG ${crypto.randomUUID().slice(0, 8)}`,
+      name: name ?? `Test Knowledge Base ${crypto.randomUUID().slice(0, 8)}`,
     },
   });
 

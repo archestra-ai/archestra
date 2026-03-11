@@ -35,6 +35,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   useAssignConnectorToKnowledgeBases,
   useConnector,
   useConnectorKnowledgeBases,
@@ -215,21 +220,31 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
       description=""
       actionButton={
         <div className="flex flex-wrap items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleSync}
-            disabled={
-              syncConnector.isPending || connector.lastSyncStatus === "running"
-            }
-          >
-            <Play className="mr-2 h-4 w-4" />
-            {syncConnector.isPending
-              ? "Starting..."
-              : connector.lastSyncStatus === "running"
-                ? "Syncing..."
-                : "Sync Now"}
-          </Button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleSync}
+                  disabled={
+                    syncConnector.isPending ||
+                    connector.lastSyncStatus === "running"
+                  }
+                >
+                  <Play className="mr-2 h-4 w-4" />
+                  {syncConnector.isPending
+                    ? "Starting..."
+                    : connector.lastSyncStatus === "running"
+                      ? "Syncing..."
+                      : "Sync Now"}
+                </Button>
+              </span>
+            </TooltipTrigger>
+            {connector.lastSyncStatus === "running" && (
+              <TooltipContent>Sync run in progress</TooltipContent>
+            )}
+          </Tooltip>
           <Button
             variant="outline"
             size="sm"

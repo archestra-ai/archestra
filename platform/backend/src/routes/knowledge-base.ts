@@ -449,7 +449,20 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
-      return reply.send(connector);
+      // Auto-trigger initial sync
+      await taskQueueService.enqueue({
+        taskType: "connector_sync",
+        payload: { connectorId: connector.id },
+      });
+      await KnowledgeBaseConnectorModel.update(connector.id, {
+        lastSyncStatus: "running",
+      });
+
+      // Re-fetch to return updated status
+      const updatedConnector = await KnowledgeBaseConnectorModel.findById(
+        connector.id,
+      );
+      return reply.send(updatedConnector ?? connector);
     },
   );
 

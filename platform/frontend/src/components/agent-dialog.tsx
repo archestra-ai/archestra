@@ -63,9 +63,9 @@ import {
 import {
   Dialog,
   DialogContent,
-  DialogStickyFooter,
   DialogForm,
   DialogHeader,
+  DialogStickyFooter,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ExpandableText } from "@/components/ui/expandable-text";
@@ -1104,9 +1104,7 @@ export function AgentDialog({
           )}
         </DialogHeader>
 
-        <DialogForm
-          onSubmit={handleSave}
-        >
+        <DialogForm onSubmit={handleSave}>
           <div className="py-4 space-y-4">
             {agentType === "profile" && (
               <Alert variant="warning">

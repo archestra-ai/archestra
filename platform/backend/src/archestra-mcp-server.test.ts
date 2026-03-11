@@ -138,13 +138,7 @@ describe("getArchestraMcpTools", () => {
         query: {
           type: "string",
           description:
-            "A natural language query about the content stored in the knowledge sources. Ask about topics, concepts, or information — not about source systems (e.g. ask 'what tasks are in progress' rather than 'get jira data').",
-        },
-        mode: {
-          type: "string",
-          enum: ["local", "global", "hybrid", "naive"],
-          description:
-            "Query mode: 'local' uses only local context, 'global' uses global context across all documents, 'hybrid' combines both (recommended), 'naive' uses simple RAG without graph-based retrieval. Defaults to 'hybrid'.",
+            "A natural language query about the content you are looking for. Ask about topics, concepts, or information rather than about source systems.",
         },
       },
       required: ["query"],

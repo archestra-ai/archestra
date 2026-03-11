@@ -1349,7 +1349,7 @@ describe("ToolModel", () => {
   });
 
   describe("assignDefaultArchestraToolsToAgent", () => {
-    test("assigns all default tools including query_knowledge_sources, but getMcpToolsByAgent filters it out when agent has no KG", async ({
+    test("assigns all default tools including query_knowledge_sources, but getMcpToolsByAgent filters it out when agent has no knowledge sources", async ({
       makeAgent,
       seedAndAssignArchestraTools,
     }) => {
@@ -1367,7 +1367,7 @@ describe("ToolModel", () => {
       const assignedToolIds = await AgentToolModel.findToolIdsByAgent(agent.id);
       expect(assignedToolIds.length).toBeGreaterThanOrEqual(3);
 
-      // But getMcpToolsByAgent filters it out because the agent has no KG
+      // But getMcpToolsByAgent filters it out because the agent has no knowledge sources
       const mcpTools = await ToolModel.getMcpToolsByAgent(agent.id);
       const toolNames = mcpTools.map((t) => t.name);
 
@@ -1375,7 +1375,7 @@ describe("ToolModel", () => {
       expect(toolNames).toContain(TOOL_ARTIFACT_WRITE_FULL_NAME);
       expect(toolNames).toContain(TOOL_TODO_WRITE_FULL_NAME);
 
-      // query_knowledge_sources is filtered out at query time because agent has no KG
+      // query_knowledge_sources is filtered out at query time because agent has no knowledge sources
       expect(toolNames).not.toContain(TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME);
     });
 
@@ -1393,9 +1393,9 @@ describe("ToolModel", () => {
       const org = await makeOrganization();
       const kg = await makeKnowledgeBase(org.id);
 
-      // Create a new agent and assign the KG
+      // Create a new agent and assign the knowledge base
       const agent = await makeAgent({
-        name: "KG Enabled Agent",
+        name: "Knowledge Base Enabled Agent",
         organizationId: org.id,
       });
       await db
@@ -1450,7 +1450,7 @@ describe("ToolModel", () => {
   });
 
   describe("knowledge base tool visibility", () => {
-    test("getMcpToolsByAgent excludes query_knowledge_sources when agent has no KG assigned", async ({
+    test("getMcpToolsByAgent excludes query_knowledge_sources when agent has no knowledge base assigned", async ({
       makeAgent,
       seedAndAssignArchestraTools,
     }) => {
@@ -1467,7 +1467,7 @@ describe("ToolModel", () => {
       expect(toolNames).toContain(TOOL_TODO_WRITE_FULL_NAME);
     });
 
-    test("getMcpToolsByAgent includes query_knowledge_sources when agent has a KG assigned", async ({
+    test("getMcpToolsByAgent includes query_knowledge_sources when agent has a knowledge base assigned", async ({
       makeAgent,
       makeOrganization,
       makeKnowledgeBase,
@@ -1477,7 +1477,7 @@ describe("ToolModel", () => {
       const org = await makeOrganization();
       const kg = await makeKnowledgeBase(org.id);
 
-      // Create agent and assign the KG
+      // Create agent and assign the knowledge base
       const agent = await makeAgent({ organizationId: org.id });
       await db
         .insert(schema.agentKnowledgeBasesTable)
@@ -1523,7 +1523,7 @@ describe("ToolModel", () => {
       );
 
       // Tool is assigned (in junction table) but filtered out by getMcpToolsByAgent
-      // since the agent has no KG assigned
+      // since the agent has no knowledge base assigned
       const tools = await ToolModel.getMcpToolsByAgent(agent.id);
       const toolNames = tools.map((t) => t.name);
 

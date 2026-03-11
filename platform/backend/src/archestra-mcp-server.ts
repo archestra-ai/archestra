@@ -2949,20 +2949,14 @@ export function getArchestraMcpTools(): Tool[] {
       name: TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
       title: "Query Knowledge Sources",
       description:
-        "Query the organization's knowledge sources to retrieve information from ingested documents (uploaded files, Jira issues, Confluence pages, etc.). Uses graph-based retrieval augmented generation (GraphRAG) for accurate and contextual results. IMPORTANT: formulate queries about the actual content you are looking for, not about the source system. For example, instead of 'get information from jira', ask 'what tasks or issues are being tracked' or 'what are the open bugs'.",
+        "Query the organization's knowledge sources to retrieve relevant information. Use this tool when the user asks a question you cannot answer from your training data alone, or when they explicitly ask you to search internal documents and data sources. Formulate queries about the actual content you are looking for — ask about topics, concepts, or information rather than about source systems.",
       inputSchema: {
         type: "object",
         properties: {
           query: {
             type: "string",
             description:
-              "A natural language query about the content stored in the knowledge sources. Ask about topics, concepts, or information — not about source systems (e.g. ask 'what tasks are in progress' rather than 'get jira data').",
-          },
-          mode: {
-            type: "string",
-            enum: ["local", "global", "hybrid", "naive"],
-            description:
-              "Query mode: 'local' uses only local context, 'global' uses global context across all documents, 'hybrid' combines both (recommended), 'naive' uses simple RAG without graph-based retrieval. Defaults to 'hybrid'.",
+              "A natural language query about the content you are looking for. Ask about topics, concepts, or information rather than about source systems.",
           },
         },
         required: ["query"],

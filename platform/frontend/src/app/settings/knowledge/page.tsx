@@ -527,8 +527,7 @@ function KnowledgeSettingsContent() {
     : null;
   const serverRerankerKeyId = organization?.rerankerChatApiKeyId ?? null;
   const serverRerankerModel = organization?.rerankerModel ?? null;
-  const serverEmbeddingDimensions =
-    organization?.embeddingDimensions ?? null;
+  const serverEmbeddingDimensions = organization?.embeddingDimensions ?? null;
 
   const hasChanges =
     embeddingModel !== serverEmbeddingModel ||

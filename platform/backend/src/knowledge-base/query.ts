@@ -111,8 +111,10 @@ class QueryService {
       {
         vectorCount: vectorRows.length,
         fullTextCount: fullTextRows.length,
-        vectorOnlyCount: vectorRows.filter((r) => !fullTextIds.has(r.id)).length,
-        fullTextOnlyCount: fullTextRows.filter((r) => !vectorIds.has(r.id)).length,
+        vectorOnlyCount: vectorRows.filter((r) => !fullTextIds.has(r.id))
+          .length,
+        fullTextOnlyCount: fullTextRows.filter((r) => !vectorIds.has(r.id))
+          .length,
         bothCount: vectorRows.filter((r) => fullTextIds.has(r.id)).length,
       },
       "[QueryService] Search candidates retrieved",
@@ -145,11 +147,12 @@ class QueryService {
           id: r.id,
           score: r.score,
           title: r.title,
-          source: vectorIds.has(r.id) && fullTextIds.has(r.id)
-            ? "vector+fulltext"
-            : vectorIds.has(r.id)
-              ? "vector"
-              : "fulltext",
+          source:
+            vectorIds.has(r.id) && fullTextIds.has(r.id)
+              ? "vector+fulltext"
+              : vectorIds.has(r.id)
+                ? "vector"
+                : "fulltext",
           contentPreview: r.content.slice(0, 80),
         })),
       },

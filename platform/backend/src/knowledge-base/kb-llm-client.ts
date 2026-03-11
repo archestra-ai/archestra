@@ -45,7 +45,8 @@ export async function resolveEmbeddingConfig(
       baseURL: resolved.baseUrl ?? undefined,
     }),
     model: org.embeddingModel,
-    dimensions: org.embeddingDimensions ?? getEmbeddingDimensions(org.embeddingModel),
+    dimensions:
+      org.embeddingDimensions ?? getEmbeddingDimensions(org.embeddingModel),
   };
 }
 
@@ -117,7 +118,9 @@ export async function resolveApiKeyFromChatApiKey(
 
   // Fall back to the provider's default base URL when none is configured on the key
   const baseUrl =
-    chatApiKey.baseUrl || DEFAULT_PROVIDER_BASE_URLS[chatApiKey.provider] || null;
+    chatApiKey.baseUrl ||
+    DEFAULT_PROVIDER_BASE_URLS[chatApiKey.provider] ||
+    null;
 
   // Providers like Ollama don't require an API key — use a placeholder
   // since the OpenAI SDK requires a non-empty apiKey string

@@ -30,10 +30,10 @@ describe("permission.types", () => {
     }
   });
 
-  test("no category contains internal resources except for sidebarCollapsed", () => {
+  test("no category contains internal resources except for minimalisticView", () => {
     const allCategorizedResources = Object.values(resourceCategories).flat();
     for (const internal of internalResources) {
-      if (internal === "sidebarCollapsed") continue;
+      if (internal === "minimalisticView") continue;
       expect(allCategorizedResources).not.toContain(internal);
     }
   });

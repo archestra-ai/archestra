@@ -91,7 +91,7 @@ class OrganizationRoleModel {
     );
     const missingPermissions: string[] = [];
 
-    const resourcesToSkipValidation: Resource[] = ["sidebarCollapsed"];
+    const resourcesToSkipValidation: Resource[] = ["minimalisticView"];
 
     for (const [resource, actions] of Object.entries(rolePermissions)) {
       if (resourcesToSkipValidation.includes(resource as Resource)) continue;

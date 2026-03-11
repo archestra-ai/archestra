@@ -61,7 +61,7 @@ export const resources = [
   "member",
   "invitation",
   "team",
-  "sidebarCollapsed",
+  "minimalisticView",
 ] as const;
 
 export const resourceLabels: Record<Resource, string> = {
@@ -92,7 +92,7 @@ export const resourceLabels: Record<Resource, string> = {
   securitySettings: "Security Settings",
   llmSettings: "LLM Settings",
   agentTrigger: "Agent Triggers",
-  sidebarCollapsed: "Sidebar Collapsed",
+  minimalisticView: "Sidebar Collapsed",
 };
 
 export const resourceDescriptions: Record<Resource, string> = {
@@ -124,7 +124,7 @@ export const resourceDescriptions: Record<Resource, string> = {
     "Knowledge bases and connectors for RAG-based document retrieval",
   knowledgeSettings:
     "Knowledge settings (embedding and reranking models configuration)",
-  sidebarCollapsed:
+  minimalisticView:
     "Controls whether the sidebar is collapsed by default on page load",
   organization: "Organization (internal, used by authentication system)",
 };
@@ -135,7 +135,7 @@ export const resourceDescriptions: Record<Resource, string> = {
  */
 export const internalResources: Resource[] = [
   "organization",
-  "sidebarCollapsed",
+  "minimalisticView",
 ];
 
 /**
@@ -153,7 +153,7 @@ export const resourceCategories: Record<string, Resource[]> = {
   ],
   LLM: ["llmProxy", "llmProvider", "llmLimit", "llmSettings", "llmCost"],
   Knowledge: ["knowledgeBase", "knowledgeSettings"],
-  Other: ["chat", "log", "dualLlmConfig", "dualLlmResult", "sidebarCollapsed"],
+  Other: ["chat", "log", "dualLlmConfig", "dualLlmResult", "minimalisticView"],
   Administration: [
     "member",
     "ac",

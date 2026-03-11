@@ -63,7 +63,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   securitySettings: ["read", "update"],
 
   // UI behavior resources
-  sidebarCollapsed: ["read"],
+  minimalisticView: ["read"],
 
   // better-auth internal resource — not exposed to users, kept for ACL compatibility
   organization: ["update", "delete"],
@@ -113,7 +113,7 @@ export const editorPermissions: Record<Resource, Action[]> = {
   invitation: [],
   identityProvider: [],
   ac: [],
-  sidebarCollapsed: [],
+  minimalisticView: [],
   organization: [],
 };
 
@@ -153,7 +153,7 @@ export const memberPermissions: Record<Resource, Action[]> = {
   securitySettings: [],
 
   // UI behavior
-  sidebarCollapsed: ["read"],
+  minimalisticView: ["read"],
 
   /*
    * Empty arrays below are required for Record<Resource, Action[]> type compatibility.
@@ -169,7 +169,7 @@ export const memberPermissions: Record<Resource, Action[]> = {
 
 export const adminPermissions: Record<Resource, Action[]> = {
   ...allAvailableActions,
-  sidebarCollapsed: [],
+  minimalisticView: [],
 };
 
 export const predefinedPermissionsMap: Record<PredefinedRoleName, Permissions> =
@@ -304,7 +304,7 @@ export const permissionDescriptions: Record<string, string> = {
     "Modify knowledge settings (embedding and reranking models)",
 
   // UI behavior
-  "sidebarCollapsed:read": "Sidebar is collapsed by default on page load",
+  "minimalisticView:read": "Sidebar is collapsed by default on page load",
 };
 
 /**

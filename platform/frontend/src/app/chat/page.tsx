@@ -29,6 +29,7 @@ import { CreateCatalogDialog } from "@/app/mcp/registry/_parts/create-catalog-di
 import { CustomServerRequestDialog } from "@/app/mcp/registry/_parts/custom-server-request-dialog";
 import { AgentDialog } from "@/components/agent-dialog";
 import type { PromptInputProps } from "@/components/ai-elements/prompt-input";
+import { AppLogo } from "@/components/app-logo";
 import { ButtonWithTooltip } from "@/components/button-with-tooltip";
 import { BrowserPanel } from "@/components/chat/browser-panel";
 import { ChatMessages } from "@/components/chat/chat-messages";
@@ -46,9 +47,7 @@ import {
   type ChatApiKeyFormValues,
   PLACEHOLDER_KEY,
 } from "@/components/chat-api-key-form";
-import { AppLogo } from "@/components/app-logo";
 import { LoadingSpinner } from "@/components/loading";
-import { useSidebar } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -80,6 +79,7 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty";
+import { useSidebar } from "@/components/ui/sidebar";
 import { TruncatedTooltip } from "@/components/ui/truncated-tooltip";
 import { TypingText } from "@/components/ui/typing-text";
 import { Version } from "@/components/version";
@@ -188,7 +188,7 @@ export default function ChatPage() {
   const cannotCreateDueToNoTeams =
     !isAgentAdmin && (!teams || teams.length === 0);
 
-  const isMobile = useIsMobile();
+  const _isMobile = useIsMobile();
 
   // State for browser panel - initialize from localStorage
   const [isBrowserPanelOpen, setIsBrowserPanelOpen] = useState(() => {

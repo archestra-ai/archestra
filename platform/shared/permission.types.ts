@@ -61,6 +61,7 @@ export const resources = [
   "member",
   "invitation",
   "team",
+  "sidebarCollapsed",
 ] as const;
 
 export const resourceLabels: Record<Resource, string> = {
@@ -91,6 +92,7 @@ export const resourceLabels: Record<Resource, string> = {
   securitySettings: "Security Settings",
   llmSettings: "LLM Settings",
   agentTrigger: "Agent Triggers",
+  sidebarCollapsed: "Sidebar Collapsed",
 };
 
 export const resourceDescriptions: Record<Resource, string> = {
@@ -122,6 +124,8 @@ export const resourceDescriptions: Record<Resource, string> = {
     "Knowledge bases and connectors for RAG-based document retrieval",
   knowledgeSettings:
     "Knowledge settings (embedding and reranking models configuration)",
+  sidebarCollapsed:
+    "Controls whether the sidebar is collapsed by default on page load",
   organization: "Organization (internal, used by authentication system)",
 };
 
@@ -129,7 +133,10 @@ export const resourceDescriptions: Record<Resource, string> = {
  * Resources that are internal to better-auth and should not be shown
  * in user-facing documentation or the RBAC UI.
  */
-export const internalResources: Resource[] = ["organization"];
+export const internalResources: Resource[] = [
+  "organization",
+  "sidebarCollapsed",
+];
 
 /**
  * Groups resources by category for the RBAC UI (role builder and permissions card).
@@ -146,7 +153,7 @@ export const resourceCategories: Record<string, Resource[]> = {
   ],
   LLM: ["llmProxy", "llmProvider", "llmLimit", "llmSettings", "llmCost"],
   Knowledge: ["knowledgeBase", "knowledgeSettings"],
-  Other: ["chat", "log", "dualLlmConfig", "dualLlmResult"],
+  Other: ["chat", "log", "dualLlmConfig", "dualLlmResult", "sidebarCollapsed"],
   Administration: [
     "member",
     "ac",

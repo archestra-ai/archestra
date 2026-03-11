@@ -52,6 +52,7 @@ import { usePermissionMap } from "@/lib/auth.query";
 import config from "@/lib/config";
 import { useEnterpriseFeature } from "@/lib/config.query";
 import { useGithubStars } from "@/lib/github.query";
+import { cn } from "@/lib/utils";
 
 interface NavSubItem {
   title: string;
@@ -460,9 +461,22 @@ export function AppSidebar() {
       <SidebarFooter>
         <SidebarWarningsAccordion />
         <SignedIn>
-          <SidebarGroup className="mt-auto">
+          <SidebarGroup className="mt-auto group-data-[collapsible=icon]:p-0">
             <SidebarGroupContent>
-              <div data-testid={E2eTestId.SidebarUserProfile} className="overflow-hidden group-data-[collapsible=icon]:[&_button]:gap-0 group-data-[collapsible=icon]:[&_button]:p-0 group-data-[collapsible=icon]:[&_button>span:not([data-slot=avatar])]:hidden group-data-[collapsible=icon]:[&_button>svg]:hidden">
+              <div
+                data-testid={E2eTestId.SidebarUserProfile}
+                className={cn(
+                  "overflow-hidden",
+                  // Collapsed: hide text/chevron, show only avatar circle
+                  "group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:justify-center",
+                  "group-data-[collapsible=icon]:[&_button]:size-7 group-data-[collapsible=icon]:[&_button]:min-w-0 group-data-[collapsible=icon]:[&_button]:rounded-full group-data-[collapsible=icon]:[&_button]:p-0",
+                  "group-data-[collapsible=icon]:[&_[data-slot=avatar]]:size-7",
+                  "group-data-[collapsible=icon]:[&_[data-slot=avatar-fallback]]:text-[9px]",
+                  "group-data-[collapsible=icon]:[&_button>div]:gap-0",
+                  "group-data-[collapsible=icon]:[&_button>div>div:not([data-slot=avatar])]:hidden",
+                  "group-data-[collapsible=icon]:[&_button>svg]:hidden",
+                )}
+              >
                 <UserButton
                   size="default"
                   align="center"

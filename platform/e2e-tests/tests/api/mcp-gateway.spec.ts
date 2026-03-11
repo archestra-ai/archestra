@@ -1872,7 +1872,10 @@ test.describe("MCP Gateway - Knowledge Sources Tool Description", () => {
       (t: any) => t.name === TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
     );
 
-    expect(kbTool, "query_knowledge_sources tool not found in tools list").toBeDefined();
+    expect(
+      kbTool,
+      "query_knowledge_sources tool not found in tools list",
+    ).toBeDefined();
 
     // Verify dynamic description includes the KB name and connector type
     // biome-ignore lint/style/noNonNullAssertion: guarded by toBeDefined above

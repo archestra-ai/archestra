@@ -80,6 +80,7 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 import { useSidebar } from "@/components/ui/sidebar";
+import { TruncatedTooltip } from "@/components/ui/truncated-tooltip";
 import { TypingText } from "@/components/ui/typing-text";
 import { Version } from "@/components/version";
 import { useDefaultAgentId, useInternalAgents } from "@/lib/agent.query";
@@ -1315,30 +1316,31 @@ export default function ChatPage() {
               {/* Left side - conversation title */}
               {conversationId && conversation && (
                 <div className="flex items-center flex-shrink min-w-0">
-                  <h1
-                    className="text-base font-normal text-muted-foreground truncate max-w-[360px] cursor-default"
-                    title={getConversationDisplayTitle(
+                  <TruncatedTooltip
+                    content={getConversationDisplayTitle(
                       conversation.title,
                       conversation.messages,
                     )}
                   >
-                    {headerAnimatingTitles.has(conversation.id) ? (
-                      <TypingText
-                        text={getConversationDisplayTitle(
+                    <h1 className="text-base font-normal text-muted-foreground truncate max-w-[360px] cursor-default">
+                      {headerAnimatingTitles.has(conversation.id) ? (
+                        <TypingText
+                          text={getConversationDisplayTitle(
+                            conversation.title,
+                            conversation.messages,
+                          )}
+                          typingSpeed={35}
+                          showCursor
+                          cursorClassName="bg-muted-foreground"
+                        />
+                      ) : (
+                        getConversationDisplayTitle(
                           conversation.title,
                           conversation.messages,
-                        )}
-                        typingSpeed={35}
-                        showCursor
-                        cursorClassName="bg-muted-foreground"
-                      />
-                    ) : (
-                      getConversationDisplayTitle(
-                        conversation.title,
-                        conversation.messages,
-                      )
-                    )}
-                  </h1>
+                        )
+                      )}
+                    </h1>
+                  </TruncatedTooltip>
                 </div>
               )}
               {/* Right side - desktop: original buttons */}

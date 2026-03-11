@@ -8,7 +8,7 @@ test.describe("Knowledge Bases API", () => {
       deleteKnowledgeBase,
     }) => {
       const uniqueSuffix = crypto.randomUUID().slice(0, 8);
-      const name = `E2E KG Create ${uniqueSuffix}`;
+      const name = `E2E Knowledge Base Create ${uniqueSuffix}`;
 
       const response = await createKnowledgeBase(request, name);
       const kg = await response.json();
@@ -29,7 +29,7 @@ test.describe("Knowledge Bases API", () => {
       deleteKnowledgeBase,
     }) => {
       const uniqueSuffix = crypto.randomUUID().slice(0, 8);
-      const name = `E2E KG Get ${uniqueSuffix}`;
+      const name = `E2E Knowledge Base Get ${uniqueSuffix}`;
 
       const createResponse = await createKnowledgeBase(request, name);
       const created = await createResponse.json();
@@ -55,8 +55,8 @@ test.describe("Knowledge Bases API", () => {
       deleteKnowledgeBase,
     }) => {
       const uniqueSuffix = crypto.randomUUID().slice(0, 8);
-      const name1 = `E2E KG List A ${uniqueSuffix}`;
-      const name2 = `E2E KG List B ${uniqueSuffix}`;
+      const name1 = `E2E Knowledge Base List A ${uniqueSuffix}`;
+      const name2 = `E2E Knowledge Base List B ${uniqueSuffix}`;
 
       const res1 = await createKnowledgeBase(request, name1);
       const kg1 = await res1.json();
@@ -97,11 +97,11 @@ test.describe("Knowledge Bases API", () => {
       const uniqueSuffix = crypto.randomUUID().slice(0, 8);
       const createResponse = await createKnowledgeBase(
         request,
-        `E2E KG Update ${uniqueSuffix}`,
+        `E2E Knowledge Base Update ${uniqueSuffix}`,
       );
       const created = await createResponse.json();
 
-      const updatedName = `E2E KG Updated ${uniqueSuffix}`;
+      const updatedName = `E2E Knowledge Base Updated ${uniqueSuffix}`;
 
       const updateResponse = await makeApiRequest({
         request,
@@ -135,7 +135,7 @@ test.describe("Knowledge Bases API", () => {
       const uniqueSuffix = crypto.randomUUID().slice(0, 8);
       const createResponse = await createKnowledgeBase(
         request,
-        `E2E KG Delete ${uniqueSuffix}`,
+        `E2E Knowledge Base Delete ${uniqueSuffix}`,
       );
       const created = await createResponse.json();
 
@@ -212,7 +212,7 @@ test.describe("Knowledge Bases API", () => {
         method: "post",
         urlSuffix: "/api/knowledge-bases",
         data: {
-          name: "Member KG Attempt",
+          name: "Member Knowledge Base Attempt",
         },
         ignoreStatusCheck: true,
       });
@@ -229,7 +229,7 @@ test.describe("Knowledge Bases API", () => {
       // Create as admin
       const createResponse = await createKnowledgeBase(
         request,
-        `E2E KG RBAC Delete ${crypto.randomUUID().slice(0, 8)}`,
+        `E2E Knowledge Base RBAC Delete ${crypto.randomUUID().slice(0, 8)}`,
       );
       const kg = await createResponse.json();
 
@@ -257,7 +257,7 @@ test.describe("Knowledge Bases API", () => {
       const uniqueSuffix = crypto.randomUUID().slice(0, 8);
       const kgRes = await createKnowledgeBase(
         request,
-        `E2E KG Connector Create ${uniqueSuffix}`,
+        `E2E Knowledge Base Connector Create ${uniqueSuffix}`,
       );
       const kg = await kgRes.json();
 
@@ -288,7 +288,7 @@ test.describe("Knowledge Bases API", () => {
       const uniqueSuffix = crypto.randomUUID().slice(0, 8);
       const kgRes = await createKnowledgeBase(
         request,
-        `E2E KG Connector Get ${uniqueSuffix}`,
+        `E2E Knowledge Base Connector Get ${uniqueSuffix}`,
       );
       const kg = await kgRes.json();
 
@@ -321,7 +321,7 @@ test.describe("Knowledge Bases API", () => {
       const uniqueSuffix = crypto.randomUUID().slice(0, 8);
       const kgRes = await createKnowledgeBase(
         request,
-        `E2E KG Connector List ${uniqueSuffix}`,
+        `E2E Knowledge Base Connector List ${uniqueSuffix}`,
       );
       const kg = await kgRes.json();
 
@@ -367,7 +367,7 @@ test.describe("Knowledge Bases API", () => {
       const uniqueSuffix = crypto.randomUUID().slice(0, 8);
       const kgRes = await createKnowledgeBase(
         request,
-        `E2E KG Connector Update ${uniqueSuffix}`,
+        `E2E Knowledge Base Connector Update ${uniqueSuffix}`,
       );
       const kg = await kgRes.json();
 
@@ -420,7 +420,7 @@ test.describe("Knowledge Bases API", () => {
       const uniqueSuffix = crypto.randomUUID().slice(0, 8);
       const kgRes = await createKnowledgeBase(
         request,
-        `E2E KG Connector Delete ${uniqueSuffix}`,
+        `E2E Knowledge Base Connector Delete ${uniqueSuffix}`,
       );
       const kg = await kgRes.json();
 
@@ -461,7 +461,7 @@ test.describe("Knowledge Bases API", () => {
       const uniqueSuffix = crypto.randomUUID().slice(0, 8);
       const kgRes = await createKnowledgeBase(
         request,
-        `E2E KG Connector Invalid ${uniqueSuffix}`,
+        `E2E Knowledge Base Connector Invalid ${uniqueSuffix}`,
       );
       const kg = await kgRes.json();
 
@@ -484,7 +484,7 @@ test.describe("Knowledge Bases API", () => {
       await deleteKnowledgeBase(request, kg.id);
     });
 
-    test.skip("connectors are cascade-deleted when KG is deleted", async ({
+    test.skip("connectors are cascade-deleted when knowledge base is deleted", async ({
       request,
       makeApiRequest,
       createKnowledgeBase,
@@ -493,7 +493,7 @@ test.describe("Knowledge Bases API", () => {
       const uniqueSuffix = crypto.randomUUID().slice(0, 8);
       const kgRes = await createKnowledgeBase(
         request,
-        `E2E KG Cascade ${uniqueSuffix}`,
+        `E2E Knowledge Base Cascade ${uniqueSuffix}`,
       );
       const kg = await kgRes.json();
 
@@ -504,7 +504,7 @@ test.describe("Knowledge Bases API", () => {
       );
       const connector = await connRes.json();
 
-      // Delete the KG
+      // Delete the knowledge base
       const deleteResponse = await makeApiRequest({
         request,
         method: "delete",
@@ -513,7 +513,7 @@ test.describe("Knowledge Bases API", () => {
       const result = await deleteResponse.json();
       expect(result.success).toBe(true);
 
-      // Verify connector is gone (KG cascade-deleted the connector)
+      // Verify connector is gone (knowledge base cascade-deleted the connector)
       const getResponse = await makeApiRequest({
         request,
         method: "get",
@@ -535,7 +535,7 @@ test.describe("Knowledge Bases API", () => {
       const uniqueSuffix = crypto.randomUUID().slice(0, 8);
       const kgRes = await createKnowledgeBase(
         request,
-        `E2E KG Runs ${uniqueSuffix}`,
+        `E2E Knowledge Base Runs ${uniqueSuffix}`,
       );
       const kg = await kgRes.json();
 

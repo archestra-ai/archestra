@@ -45,20 +45,11 @@ export function useProfiles(
 }
 
 // Paginated hook for the agents page
-export function useProfilesPaginated(params?: {
-  initialData?: archestraApiTypes.GetAgentsResponses["200"];
-  limit?: number;
-  offset?: number;
-  sortBy?: "name" | "createdAt" | "toolsCount" | "subagentsCount" | "team";
-  sortDirection?: "asc" | "desc";
-  name?: string;
-  agentTypes?: ("profile" | "mcp_gateway" | "llm_proxy" | "agent")[];
-  scope?: "personal" | "team" | "org" | "built_in";
-  teamIds?: string[];
-  authorIds?: string[];
-  excludeAuthorIds?: string[];
-  labels?: string;
-}) {
+export function useProfilesPaginated(
+  params?: archestraApiTypes.GetAgentsData["query"] & {
+    initialData?: archestraApiTypes.GetAgentsResponses["200"];
+  },
+) {
   const {
     initialData,
     limit,

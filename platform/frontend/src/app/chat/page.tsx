@@ -265,11 +265,13 @@ export default function ChatPage() {
         );
         if (defaultAgent) {
           setInitialAgentId(defaultAgentId);
+          saveAgent(defaultAgentId);
           resolvedAgentRef.current = defaultAgent;
           return;
         }
       }
       setInitialAgentId(internalAgents[0].id);
+      saveAgent(internalAgents[0].id);
       resolvedAgentRef.current = internalAgents[0];
     }
   }, [initialAgentId, searchParams, internalAgents, defaultAgentId]);

@@ -1026,7 +1026,11 @@ export async function buildKnowledgeSourcesDescription(
     "or when they explicitly ask you to search internal documents and data sources.";
 
   if (kbNames.length > 0) {
-    description += ` Available knowledge bases: ${kbNames.join(", ")}.`;
+    const kbList = kbNames.join(", ");
+    description +=
+      kbList.length > 500
+        ? ` Available knowledge bases: ${kbList.slice(0, 500)}...`
+        : ` Available knowledge bases: ${kbList}.`;
   }
   if (connectorTypes.length > 0) {
     description += ` Connected sources: ${connectorTypes.join(", ")}.`;

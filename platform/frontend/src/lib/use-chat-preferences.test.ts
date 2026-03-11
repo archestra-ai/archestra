@@ -6,6 +6,7 @@ import {
   getSavedAgent,
   getSavedApiKey,
   getSavedModel,
+  resolveAutoSelectedModel,
   resolveInitialModel,
   saveAgent,
   saveApiKey,
@@ -177,5 +178,89 @@ describe("resolveInitialModel", () => {
     });
     expect(result?.source).toBe("localStorage");
     expect(result?.modelId).toBe("gpt-4o");
+  });
+});
+
+describe("resolveAutoSelectedModel", () => {
+  const models = [
+    { id: "gpt-4o", isBest: true },
+    { id: "gpt-4o-mini" },
+    { id: "claude-3-5-sonnet" },
+  ];
+
+  test("returns null while loading", () => {
+    expect(
+      resolveAutoSelectedModel({
+        selectedModel: "nonexistent",
+        availableModels: models,
+        isLoading: true,
+      }),
+    ).toBeNull();
+  });
+
+  test("returns null when no models available", () => {
+    expect(
+      resolveAutoSelectedModel({
+        selectedModel: "gpt-4o",
+        availableModels: [],
+        isLoading: false,
+      }),
+    ).toBeNull();
+  });
+
+  test("returns null when selectedModel is empty (parent still initializing)", () => {
+    expect(
+      resolveAutoSelectedModel({
+        selectedModel: "",
+        availableModels: models,
+        isLoading: false,
+      }),
+    ).toBeNull();
+  });
+
+  test("returns null when selected model is available (no change needed)", () => {
+    expect(
+      resolveAutoSelectedModel({
+        selectedModel: "gpt-4o",
+        availableModels: models,
+        isLoading: false,
+      }),
+    ).toBeNull();
+  });
+
+  test("selects best model when selected model is unavailable", () => {
+    expect(
+      resolveAutoSelectedModel({
+        selectedModel: "deleted-model",
+        availableModels: models,
+        isLoading: false,
+      }),
+    ).toBe("gpt-4o"); // isBest: true
+  });
+
+  test("selects first model when no best model and selected is unavailable", () => {
+    const noBestModels = [{ id: "model-a" }, { id: "model-b" }];
+    expect(
+      resolveAutoSelectedModel({
+        selectedModel: "deleted-model",
+        availableModels: noBestModels,
+        isLoading: false,
+      }),
+    ).toBe("model-a");
+  });
+
+  test("does NOT auto-select when model is available (race condition regression)", () => {
+    // This is the key regression test: during initialization, the API key
+    // transitions from null → "key1". The old code treated this as an
+    // "apiKey change" and force-selected the best model, overwriting
+    // the user's saved choice. The fix ensures we only auto-select
+    // when the model is genuinely unavailable.
+    expect(
+      resolveAutoSelectedModel({
+        selectedModel: "claude-3-5-sonnet", // user's saved model
+        availableModels: models, // model IS in the list
+        isLoading: false,
+      }),
+    ).toBeNull(); // should NOT switch to gpt-4o
   });
 });

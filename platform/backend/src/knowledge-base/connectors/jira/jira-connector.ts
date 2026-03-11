@@ -8,6 +8,7 @@ import type pino from "pino";
 import type {
   ConnectorCredentials,
   ConnectorDocument,
+  ConnectorItemFailure,
   ConnectorSyncBatch,
   JiraCheckpoint,
   JiraConfig,
@@ -214,7 +215,13 @@ export class JiraConnector extends BaseConnector {
         );
 
         batchIndex++;
-        yield buildBatch(documents, issues, checkpoint, hasMore);
+        yield buildBatch({
+          documents,
+          issues,
+          failures: this.flushFailures(),
+          checkpoint,
+          hasMore,
+        });
       } catch (error) {
         this.log.error(
           {
@@ -275,7 +282,13 @@ export class JiraConnector extends BaseConnector {
         );
 
         batchIndex++;
-        yield buildBatch(documents, issues, checkpoint, hasMore);
+        yield buildBatch({
+          documents,
+          issues,
+          failures: this.flushFailures(),
+          checkpoint,
+          hasMore,
+        });
       } catch (error) {
         this.log.error(
           {
@@ -377,18 +390,21 @@ function issuesToDocuments(
   return documents;
 }
 
-function buildBatch(
-  documents: ConnectorDocument[],
+function buildBatch(params: {
+  documents: ConnectorDocument[];
   // biome-ignore lint/suspicious/noExplicitAny: SDK issue types vary between v2/v3
-  issues: any[],
-  checkpoint: JiraCheckpoint,
-  hasMore: boolean,
-): ConnectorSyncBatch {
+  issues: any[];
+  failures: ConnectorItemFailure[];
+  checkpoint: JiraCheckpoint;
+  hasMore: boolean;
+}): ConnectorSyncBatch {
+  const { documents, issues, failures, checkpoint, hasMore } = params;
   const lastIssue = issues.length > 0 ? issues[issues.length - 1] : null;
   const rawUpdatedAt: string | undefined = lastIssue?.fields?.updated;
 
   return {
     documents,
+    failures,
     checkpoint: buildCheckpoint({
       type: "jira",
       itemUpdatedAt: rawUpdatedAt,
@@ -406,10 +422,13 @@ function buildBatch(
  * Extract HTTP status, URL, and response body from jira.js errors.
  * The library wraps Axios errors, so we dig into the cause/response chain.
  */
-function extractJiraErrorDetails(error: unknown): Record<string, unknown> {
+function extractJiraErrorDetails(
+  error: unknown,
+  depth = 0,
+): Record<string, unknown> {
   const details: Record<string, unknown> = {};
 
-  if (!(error instanceof Error)) {
+  if (depth > 5 || !(error instanceof Error)) {
     return details;
   }
 
@@ -452,9 +471,9 @@ function extractJiraErrorDetails(error: unknown): Record<string, unknown> {
     details.status = err.status;
   }
 
-  // Check cause chain
+  // Check cause chain (with depth limit to prevent stack overflow from circular refs)
   if (err.cause && !details.status) {
-    Object.assign(details, extractJiraErrorDetails(err.cause));
+    Object.assign(details, extractJiraErrorDetails(err.cause, depth + 1));
   }
 
   return details;

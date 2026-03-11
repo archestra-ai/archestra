@@ -9,7 +9,7 @@ import {
   ShieldCheck,
   TriangleAlert,
 } from "lucide-react";
-import { Fragment } from "react";
+import { Fragment, useMemo } from "react";
 import { Action, Actions } from "@/components/ai-elements/actions";
 import {
   Conversation,
@@ -66,6 +66,13 @@ const MessageThread = ({
   profileId?: string;
 }) => {
   const status: ChatStatus = "streaming" as ChatStatus;
+
+  const lastAssistantMessageIndex = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === "assistant") return i;
+    }
+    return -1;
+  }, [messages]);
 
   return (
     <div
@@ -161,12 +168,7 @@ const MessageThread = ({
                         }
                         const isLastAssistantMessage =
                           message.role === "assistant" &&
-                          idx ===
-                            messages.length -
-                              1 -
-                              [...messages]
-                                .reverse()
-                                .findIndex((m) => m.role === "assistant");
+                          idx === lastAssistantMessageIndex;
                         const isLastTextPartInMessage =
                           isLastAssistantMessage &&
                           message.parts

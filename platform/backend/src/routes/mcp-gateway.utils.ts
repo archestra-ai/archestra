@@ -1022,15 +1022,7 @@ export async function buildKnowledgeSourcesDescription(
     kbIds.length > 0
       ? KnowledgeBaseConnectorModel.findByKnowledgeBaseIds(kbIds)
       : [],
-    directConnectorIds.length > 0
-      ? Promise.all(
-          directConnectorIds.map((id) =>
-            KnowledgeBaseConnectorModel.findById(id),
-          ),
-        ).then((results) =>
-          results.filter((c): c is NonNullable<typeof c> => c !== null),
-        )
-      : [],
+    KnowledgeBaseConnectorModel.findByIds(directConnectorIds),
   ]);
 
   const kbNames = knowledgeBases.map((kb) => kb.name);

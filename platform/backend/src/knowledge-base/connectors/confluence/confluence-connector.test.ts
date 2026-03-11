@@ -10,12 +10,14 @@ import {
 // Mock confluence.js SDK
 const mockGetSpaces = vi.fn();
 const mockSearchContentByCQL = vi.fn();
+const mockSendRequest = vi.fn();
 const capturedConfluenceConfigs: Record<string, unknown>[] = [];
 
 vi.mock("confluence.js", () => ({
   ConfluenceClient: class MockConfluenceClient {
     space = { getSpaces: mockGetSpaces };
     content = { searchContentByCQL: mockSearchContentByCQL };
+    sendRequest = mockSendRequest;
     // biome-ignore lint/suspicious/noExplicitAny: mock constructor
     constructor(config: any) {
       capturedConfluenceConfigs.push(config);
@@ -524,6 +526,94 @@ describe("ConfluenceConnector", () => {
 
       const callArgs = mockSearchContentByCQL.mock.calls[0][0];
       expect(callArgs.limit).toBe(10);
+    });
+
+    test("Server/DC uses offset-based pagination via sendRequest", async () => {
+      const serverConfig = {
+        confluenceUrl: "https://confluence.mycompany.com",
+        isCloud: false,
+        spaceKeys: ["DEV"],
+      };
+
+      const page1 = Array.from({ length: 50 }, (_, i) =>
+        makePage(`${i + 1}`, `Page ${i + 1}`),
+      );
+      const page2 = Array.from({ length: 50 }, (_, i) =>
+        makePage(`${i + 51}`, `Page ${i + 51}`),
+      );
+      const page3 = [makePage("101", "Page 101")];
+
+      mockSendRequest
+        .mockResolvedValueOnce({
+          results: page1,
+          size: 50,
+          _links: {
+            next: "/rest/api/content/search?limit=50&start=50&cql=...",
+          },
+        })
+        .mockResolvedValueOnce({
+          results: page2,
+          size: 50,
+          _links: {
+            next: "/rest/api/content/search?limit=50&start=100&cql=...",
+          },
+        })
+        .mockResolvedValueOnce({
+          results: page3,
+          size: 1,
+        });
+
+      const batches: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: serverConfig,
+        credentials,
+        checkpoint: null,
+      })) {
+        batches.push(batch);
+      }
+
+      expect(batches).toHaveLength(3);
+      expect(batches[0].documents).toHaveLength(50);
+      expect(batches[0].hasMore).toBe(true);
+      expect(batches[1].documents).toHaveLength(50);
+      expect(batches[1].hasMore).toBe(true);
+      expect(batches[2].documents).toHaveLength(1);
+      expect(batches[2].hasMore).toBe(false);
+
+      // Verify start offset increments correctly
+      expect(mockSendRequest).toHaveBeenCalledTimes(3);
+      expect(mockSendRequest.mock.calls[0][0].params.start).toBe(0);
+      expect(mockSendRequest.mock.calls[1][0].params.start).toBe(50);
+      expect(mockSendRequest.mock.calls[2][0].params.start).toBe(100);
+
+      // Should NOT use searchContentByCQL for Server/DC
+      expect(mockSearchContentByCQL).not.toHaveBeenCalled();
+    });
+
+    test("Server/DC stops when _links.next is absent", async () => {
+      const serverConfig = {
+        confluenceUrl: "https://confluence.mycompany.com",
+        isCloud: false,
+        spaceKeys: ["DEV"],
+      };
+
+      mockSendRequest.mockResolvedValueOnce({
+        results: [makePage("1", "Only Page")],
+        size: 1,
+      });
+
+      const batches: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: serverConfig,
+        credentials,
+        checkpoint: null,
+      })) {
+        batches.push(batch);
+      }
+
+      expect(batches).toHaveLength(1);
+      expect(batches[0].hasMore).toBe(false);
+      expect(mockSendRequest).toHaveBeenCalledTimes(1);
     });
   });
 

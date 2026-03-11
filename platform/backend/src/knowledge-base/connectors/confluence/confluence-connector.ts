@@ -97,9 +97,17 @@ export class ConfluenceConnector extends BaseConnector {
         cql,
         limit: 1,
       });
-      // The REST API returns totalSize but the SDK type doesn't include it
+
+      // Server/DC returns totalSize in the response; Cloud does not.
       // biome-ignore lint/suspicious/noExplicitAny: SDK type missing totalSize field
-      const totalSize = (result as any).totalSize as number | undefined;
+      const rawResult = result as any;
+      const totalSize = rawResult.totalSize as number | undefined;
+
+      this.log.debug(
+        { totalSize, size: rawResult.size, start: rawResult.start },
+        "Estimate response",
+      );
+
       return totalSize ?? null;
     } catch (error) {
       this.log.warn(
@@ -141,6 +149,7 @@ export class ConfluenceConnector extends BaseConnector {
     );
 
     let cursor: string | undefined;
+    let start = 0;
     let hasMore = true;
     let batchIndex = 0;
 
@@ -148,14 +157,37 @@ export class ConfluenceConnector extends BaseConnector {
       await this.rateLimit();
 
       try {
-        this.log.debug({ batchIndex, cursor }, "Fetching batch");
+        this.log.debug({ batchIndex, cursor, start }, "Fetching batch");
 
-        const searchResult = await client.content.searchContentByCQL({
-          cql,
-          cursor,
-          limit: batchSize,
-          expand: ["body.storage", "version", "space", "metadata.labels"],
-        });
+        // biome-ignore lint/suspicious/noExplicitAny: SDK response type
+        let searchResult: any;
+
+        if (parsed.isCloud) {
+          // Cloud: cursor-based pagination via SDK
+          searchResult = await client.content.searchContentByCQL({
+            cql,
+            cursor,
+            limit: batchSize,
+            expand: ["body.storage", "version", "space", "metadata.labels"],
+          });
+        } else {
+          // Server/DC: offset-based pagination — the SDK's searchContentByCQL
+          // doesn't accept a 'start' param, so use sendRequest directly.
+          searchResult = await client.sendRequest(
+            {
+              url: "/api/content/search",
+              method: "GET",
+              params: {
+                cql,
+                start,
+                limit: batchSize,
+                expand: ["body.storage", "version", "space", "metadata.labels"],
+              },
+            },
+            // biome-ignore lint/suspicious/noExplicitAny: SDK requires callback arg
+            undefined as any,
+          );
+        }
 
         const results = searchResult.results ?? [];
         const documents: ConnectorDocument[] = [];
@@ -170,17 +202,26 @@ export class ConfluenceConnector extends BaseConnector {
           );
         }
 
-        // Extract cursor from _links.next if available
-        // biome-ignore lint/suspicious/noExplicitAny: SDK links type
-        const links = (searchResult as any)._links;
-        const nextUrl: string | undefined = links?.next;
-        if (nextUrl) {
-          const cursorMatch = nextUrl.match(/cursor=([^&]+)/);
-          cursor = cursorMatch ? decodeURIComponent(cursorMatch[1]) : undefined;
+        const nextUrl: string | undefined = searchResult._links?.next;
+
+        if (parsed.isCloud) {
+          // Cloud: extract cursor from _links.next
+          if (nextUrl) {
+            const cursorMatch = nextUrl.match(/cursor=([^&]+)/);
+            cursor = cursorMatch
+              ? decodeURIComponent(cursorMatch[1])
+              : undefined;
+          } else {
+            cursor = undefined;
+          }
+          hasMore = results.length >= batchSize && !!cursor;
         } else {
-          cursor = undefined;
+          // Server/DC: increment offset by actual results count.
+          // Confluence may return fewer results than requested due to server
+          // limits, so we rely on _links.next presence rather than count.
+          start += results.length;
+          hasMore = results.length > 0 && !!nextUrl;
         }
-        hasMore = results.length >= batchSize && !!cursor;
 
         const lastPage = results[results.length - 1];
         const rawModifiedAt: string | undefined = lastPage?.version?.when;

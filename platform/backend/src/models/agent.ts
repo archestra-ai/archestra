@@ -35,6 +35,7 @@ import type {
   SortingQuery,
   UpdateAgent,
 } from "@/types";
+import type { AgentScope, AgentScopeFilter } from "@/types/agent";
 import AgentConnectorAssignmentModel from "./agent-connector-assignment";
 import AgentKnowledgeBaseModel from "./agent-knowledge-base";
 import AgentLabelModel from "./agent-label";
@@ -182,7 +183,7 @@ class AgentModel {
       agentType?: "profile" | "mcp_gateway" | "llm_proxy" | "agent";
       agentTypes?: ("profile" | "mcp_gateway" | "llm_proxy" | "agent")[];
       excludeBuiltIn?: boolean;
-      scope?: "personal" | "team" | "org";
+      scope?: AgentScope;
     },
   ): Promise<Agent[]> {
     let query = db
@@ -505,7 +506,7 @@ class AgentModel {
       name?: string;
       agentType?: "profile" | "mcp_gateway" | "llm_proxy" | "agent";
       agentTypes?: ("profile" | "mcp_gateway" | "llm_proxy" | "agent")[];
-      scope?: "personal" | "team" | "org" | "built_in";
+      scope?: AgentScopeFilter;
       teamIds?: string[];
       authorIds?: string[];
       excludeAuthorIds?: string[];

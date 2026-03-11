@@ -4,6 +4,7 @@ import {
   TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
   TOOL_TODO_WRITE_FULL_NAME,
 } from "@shared";
+import { and, eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
 import AgentToolModel from "./agent-tool";
@@ -1533,6 +1534,141 @@ describe("ToolModel", () => {
       const toolNames = tools.map((t) => t.name);
 
       expect(toolNames).not.toContain(TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME);
+    });
+
+    test("getMcpToolsByAgent includes query_knowledge_sources when agent has both a knowledge base and a direct connector", async ({
+      makeAgent,
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+      seedAndAssignArchestraTools,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+
+      // Create agent with BOTH a knowledge base AND a direct connector assignment
+      const agent = await makeAgent({ organizationId: org.id });
+      await db
+        .insert(schema.agentKnowledgeBasesTable)
+        .values({ agentId: agent.id, knowledgeBaseId: kb.id });
+      await db
+        .insert(schema.agentConnectorAssignmentsTable)
+        .values({ agentId: agent.id, connectorId: connector.id });
+
+      await seedAndAssignArchestraTools(agent.id);
+
+      const tools = await ToolModel.getMcpToolsByAgent(agent.id);
+      const toolNames = tools.map((t) => t.name);
+
+      expect(toolNames).toContain(TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME);
+      // Should not have duplicates
+      const kbToolCount = toolNames.filter(
+        (n) => n === TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
+      ).length;
+      expect(kbToolCount).toBe(1);
+    });
+
+    test("getMcpToolsByAgent includes query_knowledge_sources with multiple direct connectors", async ({
+      makeAgent,
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+      seedAndAssignArchestraTools,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const connector1 = await makeKnowledgeBaseConnector(kb.id, org.id, {
+        connectorType: "jira",
+      });
+      const connector2 = await makeKnowledgeBaseConnector(kb.id, org.id, {
+        connectorType: "confluence",
+      });
+
+      // Agent with multiple direct connectors, no KB assignment
+      const agent = await makeAgent({ organizationId: org.id });
+      await db.insert(schema.agentConnectorAssignmentsTable).values([
+        { agentId: agent.id, connectorId: connector1.id },
+        { agentId: agent.id, connectorId: connector2.id },
+      ]);
+
+      await seedAndAssignArchestraTools(agent.id);
+
+      const tools = await ToolModel.getMcpToolsByAgent(agent.id);
+      const toolNames = tools.map((t) => t.name);
+
+      expect(toolNames).toContain(TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME);
+    });
+
+    test("getMcpToolsByAgent auto-injects query_knowledge_sources even with no other tools assigned", async ({
+      makeAgent,
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+      seedAndAssignArchestraTools,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+
+      // Seed the archestra tools (so query_knowledge_sources exists in DB)
+      // but do NOT assign them to the agent
+      const tempAgent = await makeAgent({ name: "Temp Agent for Seeding" });
+      await seedAndAssignArchestraTools(tempAgent.id);
+
+      // Agent with a direct connector but NO tools assigned
+      const agent = await makeAgent({ organizationId: org.id });
+      await db
+        .insert(schema.agentConnectorAssignmentsTable)
+        .values({ agentId: agent.id, connectorId: connector.id });
+
+      const tools = await ToolModel.getMcpToolsByAgent(agent.id);
+      const toolNames = tools.map((t) => t.name);
+
+      // query_knowledge_sources should still be auto-injected
+      expect(toolNames).toContain(TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME);
+      // No other tools should be present since none were assigned
+      expect(toolNames).toHaveLength(1);
+    });
+
+    test("getMcpToolsByAgent removes query_knowledge_sources after connector unassignment", async ({
+      makeAgent,
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+      seedAndAssignArchestraTools,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+
+      const agent = await makeAgent({ organizationId: org.id });
+      await db
+        .insert(schema.agentConnectorAssignmentsTable)
+        .values({ agentId: agent.id, connectorId: connector.id });
+      await seedAndAssignArchestraTools(agent.id);
+
+      // Verify tool is present
+      let tools = await ToolModel.getMcpToolsByAgent(agent.id);
+      expect(tools.map((t) => t.name)).toContain(
+        TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
+      );
+
+      // Unassign the connector
+      await db
+        .delete(schema.agentConnectorAssignmentsTable)
+        .where(
+          and(
+            eq(schema.agentConnectorAssignmentsTable.agentId, agent.id),
+            eq(schema.agentConnectorAssignmentsTable.connectorId, connector.id),
+          ),
+        );
+
+      // Tool should no longer appear
+      tools = await ToolModel.getMcpToolsByAgent(agent.id);
+      expect(tools.map((t) => t.name)).not.toContain(
+        TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
+      );
     });
 
     test("findByCatalogId excludes query_knowledge_sources (auto-injected, not user-assignable)", async ({

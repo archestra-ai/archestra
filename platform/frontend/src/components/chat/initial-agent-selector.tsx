@@ -1,12 +1,17 @@
 "use client";
 
-import type { archestraApiTypes } from "@shared";
+import {
+  type archestraApiTypes,
+  isBuiltInCatalogId,
+  type SupportedProvider,
+} from "@shared";
 import {
   BookOpen,
   Check,
   ChevronDown,
   ExternalLink,
   Loader2,
+  PaperclipIcon,
   Plus,
   Search,
   Settings,
@@ -22,7 +27,13 @@ import { RemoteServerInstallDialog } from "@/app/mcp/registry/_parts/remote-serv
 import { AgentBadge } from "@/components/agent-badge";
 import { AgentIcon } from "@/components/agent-icon";
 import { McpCatalogIcon } from "@/components/agent-tools-editor";
+import { ModelSelectorLogo } from "@/components/ai-elements/model-selector";
 import { PromptInputButton } from "@/components/ai-elements/prompt-input";
+import { ChatApiKeySelector } from "@/components/chat/chat-api-key-selector";
+import {
+  ModelSelector,
+  providerToLogoProvider,
+} from "@/components/chat/model-selector";
 import { OAuthConfirmationDialog } from "@/components/oauth-confirmation-dialog";
 import { TokenSelect } from "@/components/token-select";
 import { Badge } from "@/components/ui/badge";
@@ -42,7 +53,13 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import { OverlappedIcons } from "@/components/ui/overlapped-icons";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useInternalAgents, useUpdateProfile } from "@/lib/agent.query";
 import { useInvalidateToolAssignmentQueries } from "@/lib/agent-tools.hook";
 import {
@@ -52,6 +69,8 @@ import {
   useSyncAgentDelegations,
   useUnassignTool,
 } from "@/lib/agent-tools.query";
+import { useHasPermissions } from "@/lib/auth.query";
+import { useModelsByProvider } from "@/lib/chat-models.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import { useConnectors } from "@/lib/connector.query";
 import {
@@ -72,15 +91,47 @@ type CatalogItem =
 interface InitialAgentSelectorProps {
   currentAgentId: string | null;
   onAgentChange: (agentId: string) => void;
+  // Model selector props
+  selectedModel?: string;
+  onModelChange?: (model: string) => void;
+  // API key selector props
+  conversationId?: string;
+  currentConversationChatApiKeyId?: string | null;
+  currentProvider?: SupportedProvider;
+  initialApiKeyId?: string | null;
+  onApiKeyChange?: (apiKeyId: string) => void;
+  onProviderChange?: (provider: SupportedProvider, apiKeyId: string) => void;
+  messageCount?: number;
+  isModelsLoading?: boolean;
+  agentLlmApiKeyId?: string | null;
+  // Attach
+  onAttach?: () => void;
+  attachDisabled?: boolean;
+  attachDisabledReason?: string;
 }
 
 export function InitialAgentSelector({
   currentAgentId,
   onAgentChange,
+  selectedModel,
+  onModelChange,
+  conversationId,
+  currentConversationChatApiKeyId,
+  currentProvider,
+  initialApiKeyId,
+  onApiKeyChange,
+  onProviderChange,
+  messageCount,
+  isModelsLoading,
+  agentLlmApiKeyId,
+  onAttach,
+  attachDisabled,
+  attachDisabledReason,
 }: InitialAgentSelectorProps) {
   const { data: allAgents = [] } = useInternalAgents();
   const { data: session } = authClient.useSession();
   const userId = session?.user?.id;
+  const { data: isAdmin } = useHasPermissions({ agent: ["admin"] });
 
   const [agentSearch, setAgentSearch] = useState("");
   const [scopeFilters, setScopeFilters] = useState({
@@ -127,6 +178,39 @@ export function InitialAgentSelector({
     [allConnectors, connectorIds],
   );
 
+  const agentConnectorTypes = useMemo(() => {
+    const kbConnectorTypes = matchedKbs.flatMap(
+      (kb) => kb.connectors?.map((c) => c.connectorType) ?? [],
+    );
+    const directConnectorTypes = matchedConnectors.map((c) => c.connectorType);
+    return [...new Set([...kbConnectorTypes, ...directConnectorTypes])];
+  }, [matchedKbs, matchedConnectors]);
+
+  const effectiveAgentId = currentAgent?.id ?? currentAgentId;
+
+  const { data: catalogItems = [] } = useInternalMcpCatalog();
+  const { data: assignedToolsData } = useAllProfileTools({
+    filters: { agentId: effectiveAgentId ?? undefined },
+    skipPagination: true,
+    enabled: !!effectiveAgentId,
+  });
+
+  const assignedCatalogs = useMemo(() => {
+    const ids = new Set<string>();
+    for (const at of assignedToolsData?.data ?? []) {
+      if (at.tool.catalogId) ids.add(at.tool.catalogId);
+    }
+    return catalogItems.filter((c) => ids.has(c.id));
+  }, [assignedToolsData, catalogItems]);
+
+  const { data: triggerDelegations = [] } = useAgentDelegations(
+    effectiveAgentId ?? undefined,
+  );
+  const triggerSubagents = useMemo(() => {
+    const targetIds = new Set(triggerDelegations.map((d) => d.id));
+    return allAgents.filter((a) => targetIds.has(a.id));
+  }, [allAgents, triggerDelegations]);
+
   // Filter agents for the switch list
   const aq = agentSearch.toLowerCase().trim();
   const otherAgents = allAgents.filter((a) => a.id !== currentAgent?.id);
@@ -156,6 +240,28 @@ export function InitialAgentSelector({
     setAgentSearch("");
   };
 
+  // Resolve model info for the trigger (same logic as ModelSelector)
+  const { modelsByProvider } = useModelsByProvider({
+    apiKeyId: conversationId
+      ? currentConversationChatApiKeyId
+      : initialApiKeyId,
+  });
+
+  const selectedModelInfo = useMemo(() => {
+    if (!selectedModel) return null;
+    for (const [provider, models] of Object.entries(modelsByProvider)) {
+      const model = models.find((m) => m.id === selectedModel);
+      if (model) {
+        const logo =
+          providerToLogoProvider[
+            provider as keyof typeof providerToLogoProvider
+          ];
+        return { displayName: model.displayName, logo };
+      }
+    }
+    return { displayName: selectedModel, logo: null };
+  }, [selectedModel, modelsByProvider]);
+
   const scopeTabs = [
     { key: "my" as const, label: "My" },
     { key: "shared" as const, label: "Shared" },
@@ -182,6 +288,24 @@ export function InitialAgentSelector({
             <span className="truncate flex-1 text-left">
               {currentAgent?.name ?? "Select agent"}
             </span>
+            <ToolServerAvatarGroup
+              catalogs={assignedCatalogs}
+              subagents={triggerSubagents}
+              connectorTypes={agentConnectorTypes}
+              showAddButton
+            />
+            {selectedModelInfo?.logo && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="ml-1 shrink-0">
+                    <ModelSelectorLogo provider={selectedModelInfo.logo} />
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent side="top">
+                  {selectedModelInfo.displayName}
+                </TooltipContent>
+              </Tooltip>
+            )}
           </PromptInputButton>
         </DropdownMenuTrigger>
 
@@ -191,6 +315,18 @@ export function InitialAgentSelector({
           sideOffset={8}
           className="w-64"
         >
+          {/* Attach file */}
+          {onAttach && (
+            <DropdownMenuItem
+              disabled={attachDisabled}
+              onClick={onAttach}
+              title={attachDisabled ? attachDisabledReason : undefined}
+            >
+              <PaperclipIcon className="size-4" />
+              Attach image or file
+            </DropdownMenuItem>
+          )}
+
           {/* Current agent config submenu */}
           {currentAgent && (
             <DropdownMenuSub open={isInstallDialogOpen ? true : undefined}>
@@ -217,6 +353,54 @@ export function InitialAgentSelector({
                     knowledgeBases={matchedKbs}
                     connectors={matchedConnectors}
                   />
+
+                  {/* Model & API Key (admin only) */}
+                  {isAdmin &&
+                  ((selectedModel && onModelChange) ||
+                    conversationId ||
+                    onApiKeyChange) ? (
+                    <>
+                      <DropdownMenuSeparator />
+                      <div className="px-2 py-1.5">
+                        <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
+                          Model & API Key
+                        </span>
+                        {selectedModel && onModelChange && (
+                          <div className="mt-1">
+                            <ModelSelector
+                              selectedModel={selectedModel}
+                              onModelChange={onModelChange}
+                              variant="outline"
+                              apiKeyId={
+                                conversationId
+                                  ? currentConversationChatApiKeyId
+                                  : initialApiKeyId
+                              }
+                            />
+                          </div>
+                        )}
+                        {(conversationId || onApiKeyChange) && (
+                          <div className="mt-1">
+                            <ChatApiKeySelector
+                              variant="outline"
+                              conversationId={conversationId}
+                              currentProvider={currentProvider}
+                              currentConversationChatApiKeyId={
+                                conversationId
+                                  ? (currentConversationChatApiKeyId ?? null)
+                                  : (initialApiKeyId ?? null)
+                              }
+                              messageCount={messageCount}
+                              onApiKeyChange={onApiKeyChange}
+                              onProviderChange={onProviderChange}
+                              isModelsLoading={isModelsLoading}
+                              agentLlmApiKeyId={agentLlmApiKeyId}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    </>
+                  ) : null}
 
                   <DropdownMenuSeparator />
 
@@ -1309,5 +1493,94 @@ function KnowledgeSubMenu({
         </DropdownMenuSubContent>
       </DropdownMenuPortal>
     </DropdownMenuSub>
+  );
+}
+
+// ============================================================================
+// Avatar Components
+// ============================================================================
+
+const MAX_VISIBLE_AVATARS = 3;
+
+type SubagentItem = {
+  id: string;
+  name: string;
+  icon?: string | null;
+};
+
+function ToolServerAvatarGroup({
+  catalogs,
+  subagents = [],
+  connectorTypes = [],
+  showAddButton = false,
+}: {
+  catalogs: CatalogItem[];
+  subagents?: SubagentItem[];
+  connectorTypes?: string[];
+  showAddButton?: boolean;
+}) {
+  const hasNonBuiltInTools =
+    subagents.length > 0 || catalogs.some((c) => !isBuiltInCatalogId(c.id));
+  const totalCount = catalogs.length + subagents.length + connectorTypes.length;
+
+  if (totalCount === 0) {
+    if (!showAddButton) return null;
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <div className="flex size-5 shrink-0 items-center justify-center rounded-full bg-muted ml-1">
+            <Plus className="size-3 text-muted-foreground" />
+          </div>
+        </TooltipTrigger>
+        <TooltipContent side="top">Add tools</TooltipContent>
+      </Tooltip>
+    );
+  }
+
+  const icons = [
+    ...subagents.map((a) => ({
+      key: a.id,
+      icon: <AgentIcon icon={a.icon as string | null} size={12} />,
+      tooltip: a.name,
+    })),
+    ...catalogs.map((c) => ({
+      key: c.id,
+      icon: <McpCatalogIcon icon={c.icon} catalogId={c.id} size={12} />,
+      tooltip: c.name,
+    })),
+    ...connectorTypes.map((type) => ({
+      key: `connector-${type}`,
+      icon: <ConnectorTypeIcon type={type} className="h-3 w-3" />,
+      tooltip: type,
+    })),
+  ];
+
+  const hiddenItems = icons.slice(MAX_VISIBLE_AVATARS);
+  const overflowTooltip =
+    hiddenItems.length <= 5
+      ? hiddenItems.map((i) => i.tooltip).join(", ")
+      : `${hiddenItems
+          .slice(0, 5)
+          .map((i) => i.tooltip)
+          .join(", ")} and ${hiddenItems.length - 5} more`;
+
+  return (
+    <div className="flex items-center ml-1">
+      <OverlappedIcons
+        icons={icons}
+        maxVisible={MAX_VISIBLE_AVATARS}
+        overflowTooltip={overflowTooltip}
+      />
+      {showAddButton && !hasNonBuiltInTools && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <div className="flex size-5 shrink-0 items-center justify-center rounded-full bg-muted ring-1 ring-background ml-0.5">
+              <Plus className="size-3 text-muted-foreground" />
+            </div>
+          </TooltipTrigger>
+          <TooltipContent side="top">Add tools</TooltipContent>
+        </Tooltip>
+      )}
+    </div>
   );
 }

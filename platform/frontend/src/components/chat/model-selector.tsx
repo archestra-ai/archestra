@@ -97,7 +97,7 @@ interface ModelSelectorProps {
  * models.dev provider IDs
  * see https://github.com/anomalyco/models.dev/tree/dev/providers
  * */
-const providerToLogoProvider: Record<SupportedProvider, string> = {
+export const providerToLogoProvider: Record<SupportedProvider, string> = {
   openai: "openai",
   anthropic: "anthropic",
   gemini: "google",

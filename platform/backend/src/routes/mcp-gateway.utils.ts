@@ -147,7 +147,7 @@ export async function createAgentServer(
       });
       logger.info(
         { agentId, toolsCount: toolsList.length },
-        "✅ Saved tools/list request",
+        "Saved tools/list request",
       );
     } catch (dbError) {
       logger.warn({ err: dbError }, "Failed to persist tools/list request:");
@@ -979,14 +979,36 @@ async function fetchOidcJwksUrl(issuerUrl: string): Promise<string | null> {
 }
 
 /**
+ * TTL cache for buildKnowledgeSourcesDescription to avoid repeated DB queries
+ * on every tools/list request. Invalidated after 30 seconds.
+ */
+const kbDescriptionCache = new Map<
+  string,
+  { description: string | null; expiresAt: number }
+>();
+const KB_DESCRIPTION_CACHE_TTL_MS = 30_000;
+
+/**
  * Build a dynamic description for the query_knowledge_sources tool that includes
  * the agent's actual knowledge base names and connector sources.
+ * Results are cached per agentId with a 30s TTL.
  */
 export async function buildKnowledgeSourcesDescription(
   agentId: string,
 ): Promise<string | null> {
+  const cached = kbDescriptionCache.get(agentId);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.description;
+  }
+
   const assignments = await AgentKnowledgeBaseModel.findByAgent(agentId);
-  if (assignments.length === 0) return null;
+  if (assignments.length === 0) {
+    kbDescriptionCache.set(agentId, {
+      description: null,
+      expiresAt: Date.now() + KB_DESCRIPTION_CACHE_TTL_MS,
+    });
+    return null;
+  }
 
   const kbIds = assignments.map((a) => a.knowledgeBaseId);
 
@@ -1013,6 +1035,11 @@ export async function buildKnowledgeSourcesDescription(
   description +=
     " Formulate queries about the actual content you are looking for — " +
     "ask about topics, concepts, or information rather than about source systems.";
+
+  kbDescriptionCache.set(agentId, {
+    description,
+    expiresAt: Date.now() + KB_DESCRIPTION_CACHE_TTL_MS,
+  });
 
   return description;
 }

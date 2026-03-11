@@ -28,6 +28,7 @@ export function getSavedModel(): string | null {
  * Save the selected model ID to localStorage.
  */
 export function saveModel(modelId: string): void {
+  if (typeof window === "undefined") return;
   localStorage.setItem(CHAT_STORAGE_KEYS.selectedModel, modelId);
 }
 
@@ -35,6 +36,7 @@ export function saveModel(modelId: string): void {
  * Clear the saved model from localStorage (e.g., when it becomes stale).
  */
 export function clearSavedModel(): void {
+  if (typeof window === "undefined") return;
   localStorage.removeItem(CHAT_STORAGE_KEYS.selectedModel);
 }
 
@@ -50,6 +52,7 @@ export function getSavedAgent(): string | null {
  * Save the selected agent ID to localStorage.
  */
 export function saveAgent(agentId: string): void {
+  if (typeof window === "undefined") return;
   localStorage.setItem(CHAT_STORAGE_KEYS.selectedAgent, agentId);
 }
 
@@ -65,6 +68,7 @@ export function getSavedApiKey(provider: string): string | null {
  * Save the selected API key ID for a specific provider to localStorage.
  */
 export function saveApiKey(provider: string, keyId: string): void {
+  if (typeof window === "undefined") return;
   localStorage.setItem(getApiKeyStorageKey(provider), keyId);
 }
 

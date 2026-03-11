@@ -1,5 +1,27 @@
 # Changelog
 
+## [1.1.5](https://github.com/archestra-ai/archestra/compare/platform-v1.1.4...platform-v1.1.5) (2026-03-11)
+
+
+### Features
+
+* add default model setting for agents and new chats ([#3267](https://github.com/archestra-ai/archestra/issues/3267)) ([53c99d3](https://github.com/archestra-ai/archestra/commit/53c99d3fed4d3b149a4748ff20b11d19f1a3010d))
+* rework chat agent selector/editor ([#3261](https://github.com/archestra-ai/archestra/issues/3261)) ([b67b741](https://github.com/archestra-ai/archestra/commit/b67b7419a8ef11b650cf82cabb6d74c3b2c9676e))
+
+
+### Bug Fixes
+
+* chat-localstorage e2e test model trigger assertion ([#3270](https://github.com/archestra-ai/archestra/issues/3270)) ([8b4efbb](https://github.com/archestra-ai/archestra/commit/8b4efbb622d87d0a999ff07a857eab94013b7ccd))
+* support envFrom and preserve user-added env in self-hosted MCP server pods ([#3230](https://github.com/archestra-ai/archestra/issues/3230)) ([0ea9fce](https://github.com/archestra-ai/archestra/commit/0ea9fcedd0ef4f4012c86171004e34467f5f8aba))
+
+
+### Miscellaneous Chores
+
+* address PR [#3262](https://github.com/archestra-ai/archestra/issues/3262) review feedback ([#3266](https://github.com/archestra-ai/archestra/issues/3266)) ([4e2f175](https://github.com/archestra-ai/archestra/commit/4e2f1759fd9c2d31604e894f912367c000c5e75f))
+* **deps:** bump hono from 4.12.5 to 4.12.7 in /platform/mcp_server_docker_image ([#3263](https://github.com/archestra-ai/archestra/issues/3263)) ([51c4e8e](https://github.com/archestra-ai/archestra/commit/51c4e8ef5a4693cdb1f5bc4fe13391e65dd4ed37))
+* fix self-hosted confluence pagination ([#3271](https://github.com/archestra-ai/archestra/issues/3271)) ([c63708c](https://github.com/archestra-ai/archestra/commit/c63708c4a203052925c5999d45d7c856835665e9))
+* sticky footer dialogs, knowledge sources tool improvements, chat fixes ([#3262](https://github.com/archestra-ai/archestra/issues/3262)) ([527d16f](https://github.com/archestra-ai/archestra/commit/527d16f3b5c91ba2963ab5bac57959316ad8a948))
+
 ## [1.1.4](https://github.com/archestra-ai/archestra/compare/platform-v1.1.3...platform-v1.1.4) (2026-03-10)
 
 

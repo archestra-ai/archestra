@@ -20,7 +20,7 @@ import {
   Video,
   XIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ModelSelectorContent,
   ModelSelectorEmpty,
@@ -665,15 +665,15 @@ export function ModelSelector({
   );
   const isModelAvailable = allAvailableModelIds.includes(selectedModel);
 
-  // Auto-select the "best" model (or first) when models load and selected model
-  // is not in the available list (e.g. after switching API keys)
-  const prevApiKeyIdRef = useRef(apiKeyId);
+  // Auto-select the "best" model (or first) when the selected model is not
+  // in the available list (e.g. after switching API keys or on initial load).
+  // Only triggers when the model is genuinely unavailable — keeps the user's
+  // selection stable across API key changes if the model is still valid.
   useEffect(() => {
     if (isLoading || allAvailableModels.length === 0) return;
-    // Only auto-select when apiKeyId changes or selected model is unavailable
-    const apiKeyChanged = prevApiKeyIdRef.current !== apiKeyId;
-    prevApiKeyIdRef.current = apiKeyId;
-    if (!apiKeyChanged && isModelAvailable) return;
+    // Don't auto-select when parent hasn't resolved the model yet (empty string)
+    if (!selectedModel) return;
+    if (isModelAvailable) return;
 
     const bestModel = allAvailableModels.find((m) => m.isBest);
     const modelToSelect = bestModel ?? allAvailableModels[0];
@@ -682,7 +682,6 @@ export function ModelSelector({
     }
   }, [
     isLoading,
-    apiKeyId,
     allAvailableModels,
     isModelAvailable,
     selectedModel,

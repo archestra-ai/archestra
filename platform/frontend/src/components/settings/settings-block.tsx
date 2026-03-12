@@ -67,7 +67,6 @@ export function SettingsSaveBar({
         permissions={permissions}
         onClick={onSave}
         disabled={isSaving}
-        className="animate-pulse"
       >
         {isSaving ? "Saving..." : "Save"}
       </PermissionButton>

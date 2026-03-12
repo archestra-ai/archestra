@@ -1,9 +1,9 @@
 "use client";
 
 import {
+  type archestraApiTypes,
   CONNECTOR_TYPE_LABELS,
   getConnectorNamePlaceholder,
-  type archestraApiTypes,
 } from "@shared";
 import { ArrowLeft, ChevronDown } from "lucide-react";
 import { useState } from "react";

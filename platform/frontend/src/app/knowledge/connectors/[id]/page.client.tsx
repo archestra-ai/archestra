@@ -205,15 +205,23 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
           />
           <div>
             <span>{connector.name}</span>
-            <div>
-              <Badge variant="secondary" className="gap-1.5 capitalize mt-1">
-                <ConnectorTypeIcon
-                  type={connector.connectorType}
-                  className="h-3.5 w-3.5"
-                />
-                {connector.connectorType}
-              </Badge>
-            </div>
+            {connector.description ? (
+              <p className="text-sm font-normal text-muted-foreground mt-1 line-clamp-2 max-w-2xl">
+                {connector.description.length > 300
+                  ? `${connector.description.slice(0, 300)}…`
+                  : connector.description}
+              </p>
+            ) : (
+              <div>
+                <Badge variant="secondary" className="gap-1.5 capitalize mt-1">
+                  <ConnectorTypeIcon
+                    type={connector.connectorType}
+                    className="h-3.5 w-3.5"
+                  />
+                  {connector.connectorType}
+                </Badge>
+              </div>
+            )}
           </div>
         </div>
       }

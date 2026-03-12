@@ -68,6 +68,7 @@ const CONNECTOR_OPTIONS: {
 
 interface CreateConnectorFormValues {
   name: string;
+  description: string;
   connectorType: ConnectorType;
   config: Record<string, unknown>;
   email: string;
@@ -91,6 +92,7 @@ export function CreateConnectorDialog({
   const form = useForm<CreateConnectorFormValues>({
     defaultValues: {
       name: "",
+      description: "",
       connectorType: "jira",
       config: { type: "jira", isCloud: true },
       email: "",
@@ -122,6 +124,7 @@ export function CreateConnectorDialog({
     const config = transformConfigArrayFields(values.config);
     const result = await createConnector.mutateAsync({
       name: values.name,
+      description: values.description || null,
       connectorType: values.connectorType,
       config: config as archestraApiTypes.CreateConnectorData["body"]["config"],
       credentials: {
@@ -226,6 +229,28 @@ export function CreateConnectorDialog({
                       <FormControl>
                         <Input
                           placeholder="Engineering Jira Connector"
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="description"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>
+                        Description{" "}
+                        <span className="text-muted-foreground font-normal">
+                          (optional)
+                        </span>
+                      </FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder="A short description of this connector"
                           {...field}
                         />
                       </FormControl>

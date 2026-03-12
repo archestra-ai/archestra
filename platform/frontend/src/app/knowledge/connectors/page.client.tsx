@@ -153,6 +153,11 @@ function ConnectorCard({
                   />
                   {connector.connectorType}
                 </Badge>
+                {connector.description && (
+                  <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                    {connector.description}
+                  </p>
+                )}
               </div>
             </div>
             {/* biome-ignore lint/a11y/useKeyWithClickEvents: stopPropagation only prevents link navigation */}

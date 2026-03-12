@@ -54,6 +54,9 @@ export function CreateIdentityProviderDialog({
       issuer: "",
       domain: "",
       providerType: providerType,
+      roleMapping: {
+        rules: [],
+      },
       ...(providerType === "saml"
         ? {
             samlConfig: {

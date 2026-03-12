@@ -74,6 +74,9 @@ export function EditIdentityProviderDialog({
         },
         overrideUserInfo: true,
       },
+      roleMapping: {
+        rules: [],
+      },
     },
   });
 
@@ -88,8 +91,10 @@ export function EditIdentityProviderDialog({
         issuer: provider.issuer,
         domain: provider.domain,
         providerType: isSaml ? "saml" : "oidc",
-        // Include roleMapping and teamSyncConfig if they exist on the provider
-        ...(provider.roleMapping && { roleMapping: provider.roleMapping }),
+        roleMapping: {
+          rules: [],
+          ...provider.roleMapping,
+        },
         ...(provider.teamSyncConfig && {
           teamSyncConfig: provider.teamSyncConfig,
         }),

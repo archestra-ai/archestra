@@ -155,8 +155,8 @@ jobs:
           echo "✅ All validation checks passed"
 
   # Build Docker images for e2e tests (platform and MCP server base)
-  # Non-fork PRs: Push to GHCR (faster)
-  # Fork PRs: Upload as artifact (no package write permissions needed)
+  # Images are always exported as artifacts for fast co-located downloads in E2E jobs.
+  # Non-fork PRs also push to GHCR as a secondary output.
   platform-e2e-build:
     name: Build ${{ matrix.name }} Image
     runs-on: ${{ matrix.runner }}
@@ -206,18 +206,21 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Non-fork PRs: Build and push to GHCR (Platform image using custom action)
+      # Non-fork PRs: Build, push to GHCR, and load locally for artifact export
       - name: Build and push Platform image to GHCR
         if: ${{ !inputs.is-fork-pr && matrix.use-build-action }}
         uses: ./.github/actions/build-platform-docker-image
         with:
           context: ${{ matrix.context }}
           push: "true"
-          tags: ghcr.io/${{ github.repository }}/${{ matrix.image-name }}:${{ github.sha }}
+          load: "true"
+          tags: |
+            ghcr.io/${{ github.repository }}/${{ matrix.image-name }}:${{ github.sha }}
+            ${{ matrix.local-tag-prefix }}:${{ github.sha }}
           turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
           turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
 
-      # Non-fork PRs: Build and push to GHCR (MCP server base using docker/build-push-action)
+      # Non-fork PRs: Build, push to GHCR, and load locally (MCP server base)
       - name: Setup Blacksmith Builder
         if: ${{ !matrix.use-build-action }}
         uses: useblacksmith/setup-docker-builder@f9b57e1c7d5a57eed0b5609e1ffeadbf3bb0b726 # v1.1.0
@@ -230,7 +233,10 @@ jobs:
           file: ${{ matrix.dockerfile }}
           platforms: linux/amd64
           push: true
-          tags: ghcr.io/${{ github.repository }}/${{ matrix.image-name }}:${{ github.sha }}
+          load: true
+          tags: |
+            ghcr.io/${{ github.repository }}/${{ matrix.image-name }}:${{ github.sha }}
+            ${{ matrix.local-tag-prefix }}:${{ github.sha }}
 
       # Fork PRs: Build locally and export as artifact (Platform image)
       - name: Build Platform image locally
@@ -256,8 +262,8 @@ jobs:
           load: true
           tags: ${{ matrix.local-tag-prefix }}:${{ github.sha }}
 
+      # Always export as artifact for fast co-located downloads in E2E jobs
       - name: Export Docker image as tarball
-        if: ${{ inputs.is-fork-pr }}
         env:
           GIT_SHA: ${{ github.sha }}
           LOCAL_TAG_PREFIX: ${{ matrix.local-tag-prefix }}
@@ -267,7 +273,6 @@ jobs:
           ls -lh "/tmp/${TARBALL_NAME}"
 
       - name: Upload Docker image artifact
-        if: ${{ inputs.is-fork-pr }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: ${{ matrix.artifact-name }}
@@ -833,7 +838,7 @@ jobs:
         with:
           persist-credentials: false
 
-      # Platform image: Load from GHCR or artifact (already built by platform-e2e-build)
+      # Platform image: Load from artifact (already built by platform-e2e-build)
       - name: Load platform image
         id: load-platform-image
         if: ${{ github.event_name == 'merge_group' && matrix.image-source == 'platform-e2e-build' }}

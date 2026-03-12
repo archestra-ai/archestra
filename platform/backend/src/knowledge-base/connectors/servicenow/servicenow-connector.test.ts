@@ -495,6 +495,59 @@ describe("ServiceNowConnector", () => {
       expect(url).toContain("sysparm_limit=10");
     });
 
+    test("applies default 6-month initial sync window when no checkpoint", async () => {
+      mockFetch.mockResolvedValueOnce(
+        new Response(JSON.stringify({ result: [] }), { status: 200 }),
+      );
+
+      const batches = [];
+      for await (const batch of connector.sync({
+        config: validConfig,
+        credentials,
+        checkpoint: null,
+      })) {
+        batches.push(batch);
+      }
+
+      const url = decodeURIComponent(mockFetch.mock.calls[0][0] as string);
+      expect(url).toContain("sys_updated_on>");
+      // Should contain a date roughly 6 months ago
+      const match = url.match(/sys_updated_on>(\d{4}-\d{2}-\d{2})/);
+      expect(match).toBeTruthy();
+      const syncDate = new Date(match![1]);
+      const sixMonthsAgo = new Date();
+      sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+      // Allow 1 day tolerance
+      expect(Math.abs(syncDate.getTime() - sixMonthsAgo.getTime())).toBeLessThan(
+        86400000 * 2,
+      );
+    });
+
+    test("respects custom initialSyncMonths", async () => {
+      mockFetch.mockResolvedValueOnce(
+        new Response(JSON.stringify({ result: [] }), { status: 200 }),
+      );
+
+      const batches = [];
+      for await (const batch of connector.sync({
+        config: { ...validConfig, initialSyncMonths: 3 },
+        credentials,
+        checkpoint: null,
+      })) {
+        batches.push(batch);
+      }
+
+      const url = decodeURIComponent(mockFetch.mock.calls[0][0] as string);
+      const match = url.match(/sys_updated_on>(\d{4}-\d{2}-\d{2})/);
+      expect(match).toBeTruthy();
+      const syncDate = new Date(match![1]);
+      const threeMonthsAgo = new Date();
+      threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
+      expect(Math.abs(syncDate.getTime() - threeMonthsAgo.getTime())).toBeLessThan(
+        86400000 * 2,
+      );
+    });
+
     test("applies custom encoded query", async () => {
       mockFetch.mockResolvedValueOnce(
         new Response(JSON.stringify({ result: [] }), { status: 200 }),

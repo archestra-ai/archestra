@@ -105,6 +105,31 @@ export function ServiceNowConfigFields({
 
       <FormField
         control={form.control}
+        name={`${prefix}.initialSyncMonths`}
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>Initial Sync Period (months)</FormLabel>
+            <FormControl>
+              <Input
+                type="number"
+                placeholder="6"
+                min={1}
+                max={12}
+                {...field}
+                onChange={(e) => field.onChange(Number(e.target.value) || 6)}
+              />
+            </FormControl>
+            <FormDescription>
+              How many months of historical data to load on the first sync
+              (default: 6, max: 12).
+            </FormDescription>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
+
+      <FormField
+        control={form.control}
         name={`${prefix}.batchSize`}
         render={({ field }) => (
           <FormItem>

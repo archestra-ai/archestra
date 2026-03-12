@@ -117,7 +117,7 @@ export function CreateConnectorDialog({
       confluence: { type, isCloud: true },
       github: { type, githubUrl: "https://api.github.com" },
       gitlab: { type, gitlabUrl: "https://gitlab.com" },
-      servicenow: { type },
+      servicenow: { type, initialSyncMonths: 6 },
     };
     form.setValue("config", defaultConfigs[type]);
     setStep("configure");

@@ -138,6 +138,7 @@ export const ServiceNowConfigSchema = z.object({
   assignmentGroups: z.array(z.string()).optional(),
   query: z.string().optional(),
   batchSize: z.number().optional(),
+  initialSyncMonths: z.number().min(1).max(12).optional(),
 });
 export type ServiceNowConfig = z.infer<typeof ServiceNowConfigSchema>;
 

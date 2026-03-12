@@ -13,6 +13,7 @@ import {
 } from "../base-connector";
 
 const DEFAULT_BATCH_SIZE = 50;
+const DEFAULT_INITIAL_SYNC_MONTHS = 6;
 const API_PATH = "/api/now/table/incident";
 
 /** Fields requested from the ServiceNow Table API. */
@@ -304,11 +305,15 @@ function buildQuery(
     clauses.push(config.query);
   }
 
-  const syncFrom = checkpoint.lastSyncedAt ?? startTime?.toISOString();
-  if (syncFrom) {
-    const snDate = formatServiceNowDate(syncFrom);
-    clauses.push(`sys_updated_on>${snDate}`);
+  let syncFrom = checkpoint.lastSyncedAt ?? startTime?.toISOString();
+  if (!syncFrom) {
+    const months = config.initialSyncMonths ?? DEFAULT_INITIAL_SYNC_MONTHS;
+    const cutoff = new Date();
+    cutoff.setMonth(cutoff.getMonth() - months);
+    syncFrom = cutoff.toISOString();
   }
+  const snDate = formatServiceNowDate(syncFrom);
+  clauses.push(`sys_updated_on>${snDate}`);
 
   clauses.push("ORDERBYsys_updated_on");
 

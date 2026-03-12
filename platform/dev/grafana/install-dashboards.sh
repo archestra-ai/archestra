@@ -102,10 +102,8 @@ FOLDER_UID="archestra-dashboards"
 # Dashboard list — application-metrics uses provider-specific variant
 if [[ "$PG_PROVIDER" == "helm" ]]; then
   APP_METRICS_FILE="application-metrics.json"
-  APP_METRICS_PATH=""
 else
   APP_METRICS_FILE="application-metrics-${PG_PROVIDER}.json"
-  APP_METRICS_PATH="pg-variants/"
 fi
 
 DASHBOARDS=(
@@ -180,9 +178,9 @@ get_dashboard_json() {
   else
     # Try pg-variants path on GitHub for provider variants
     if [[ "$name" == "application-metrics-"* ]]; then
-      curl -sL "$GITHUB_RAW_BASE/pg-variants/$name"
+      curl -sfL "$GITHUB_RAW_BASE/pg-variants/$name"
     else
-      curl -sL "$GITHUB_RAW_BASE/$name"
+      curl -sfL "$GITHUB_RAW_BASE/$name"
     fi
   fi
 }
@@ -210,14 +208,14 @@ for name in "${DASHBOARDS[@]}"; do
   fi
 
   # Build the import payload: reset id/version, keep uid for idempotent upsert
-  payload=$(python3 -c "
-import json, sys
+  payload=$(FOLDER_UID="$folder_uid" python3 -c "
+import json, sys, os
 d = json.loads(sys.stdin.read())
 d['id'] = None
 d.pop('version', None)
 payload = {
     'dashboard': d,
-    'folderUid': '$folder_uid',
+    'folderUid': os.environ['FOLDER_UID'],
     'overwrite': True,
     'message': 'Installed by Archestra install-dashboards.sh'
 }

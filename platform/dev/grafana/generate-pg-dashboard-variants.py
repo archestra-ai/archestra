@@ -29,10 +29,11 @@ PG_PANEL_IDS = {501, 502, 503, 504, 505, 506, 507, 508, 509, 510, 511, 512}
 # Provider definitions
 # ---------------------------------------------------------------------------
 # Each provider defines:
-#   title_suffix: appended to dashboard title
-#   uid_suffix:   appended to dashboard UID
 #   description:  added to dashboard description
 #   panels:       dict of panel_id -> transform spec
+#
+# All variants share the same dashboard UID and title so they overwrite
+# each other on install — the customer sees one dashboard, not four.
 #
 # Panel transform spec:
 #   title:   override panel title (optional)
@@ -42,8 +43,6 @@ PG_PANEL_IDS = {501, 502, 503, 504, 505, 506, 507, 508, 509, 510, 511, 512}
 
 PROVIDERS = {
     "otel": {
-        "title_suffix": "",
-        "uid_suffix": "",
         "description": (
             "PostgreSQL metrics from the OpenTelemetry Collector PostgreSQL Receiver. "
             "Works with any PostgreSQL instance including AWS RDS, GCP Cloud SQL, "
@@ -178,8 +177,6 @@ PROVIDERS = {
         },
     },
     "cloudsql": {
-        "title_suffix": "",
-        "uid_suffix": "",
         "description": (
             "PostgreSQL metrics from GCP Cloud Monitoring via the Stackdriver Exporter. "
             "For Google Cloud SQL for PostgreSQL instances."
@@ -309,8 +306,6 @@ PROVIDERS = {
         },
     },
     "azure": {
-        "title_suffix": "",
-        "uid_suffix": "",
         "description": (
             "PostgreSQL metrics from Azure Monitor for Azure Database for PostgreSQL "
             "Flexible Server. Metric names follow the azure-metrics-exporter / "
@@ -464,10 +459,6 @@ def transform_dashboard(base: dict, provider_name: str, provider: dict) -> dict:
 
     # Update metadata
     # Keep same UID and title so variants overwrite each other on install
-    if provider["uid_suffix"]:
-        dashboard["uid"] = dashboard["uid"] + provider["uid_suffix"]
-    if provider["title_suffix"]:
-        dashboard["title"] = dashboard["title"] + " " + provider["title_suffix"]
     dashboard["description"] = (
         dashboard.get("description", "") + "\n\n" + provider["description"]
     ).strip()

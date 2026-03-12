@@ -224,6 +224,15 @@ class ConnectorSyncService {
           lastSyncStatus: "partial",
         });
 
+        const durationSeconds = (Date.now() - startTime) / 1000;
+        metrics.rag.reportConnectorSync({
+          connectorType: connector.connectorType,
+          status: "partial",
+          durationSeconds,
+          documentsProcessed,
+          documentsIngested,
+        });
+
         runLog.info(
           { documentsProcessed, documentsIngested },
           "Partial sync completed, continuation needed",
@@ -277,11 +286,10 @@ class ConnectorSyncService {
         }
       }
 
-      const durationSeconds = (Date.now() - startTime) / 1000;
       metrics.rag.reportConnectorSync({
         connectorType: connector.connectorType,
-        status: stoppedEarly ? "partial" : "success",
-        durationSeconds,
+        status: "success",
+        durationSeconds: (Date.now() - startTime) / 1000,
         documentsProcessed,
         documentsIngested,
       });

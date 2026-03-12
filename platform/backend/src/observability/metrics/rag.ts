@@ -98,6 +98,7 @@ export function initializeRagMetrics(): void {
     help: "Number of results returned per RAG query",
     labelNames: ["search_type"],
     buckets: [0, 1, 2, 5, 10, 20, 50],
+    enableExemplars: true,
   });
 
   logger.info("RAG metrics initialized");
@@ -108,7 +109,7 @@ export function initializeRagMetrics(): void {
  */
 export function reportConnectorSync(params: {
   connectorType: string;
-  status: string;
+  status: "success" | "failed" | "partial";
   durationSeconds: number;
   documentsProcessed: number;
   documentsIngested: number;
@@ -189,5 +190,9 @@ export function reportQuery(params: {
     value: params.durationSeconds,
     exemplarLabels,
   });
-  ragQueryResultsCount.observe(labels, params.resultCount);
+  ragQueryResultsCount.observe({
+    labels,
+    value: params.resultCount,
+    exemplarLabels,
+  });
 }

@@ -764,6 +764,9 @@ const startWorker = async () => {
     await initializeDatabase();
     cacheManager.start();
 
+    metrics.rag.initializeRagMetrics();
+    metrics.taskQueue.initializeTaskQueueMetrics();
+
     registerTaskHandlers(taskQueueService);
     await taskQueueService.seedPeriodicTasks();
     taskQueueService.startWorker();

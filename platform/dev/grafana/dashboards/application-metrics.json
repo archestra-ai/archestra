@@ -3575,9 +3575,24 @@
             "selected": true,
             "text": "postgresql",
             "value": "postgresql"
+          },
+          {
+            "selected": false,
+            "text": "pg",
+            "value": "pg"
+          },
+          {
+            "selected": false,
+            "text": "cnpg",
+            "value": "cnpg"
+          },
+          {
+            "selected": false,
+            "text": "ccp",
+            "value": "ccp"
           }
         ],
-        "query": "postgresql",
+        "query": "postgresql,pg,cnpg,ccp",
         "queryValue": "",
         "skipUrlSync": false,
         "type": "custom"

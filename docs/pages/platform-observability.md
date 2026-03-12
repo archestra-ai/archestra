@@ -304,7 +304,7 @@ We provide five Grafana dashboards for monitoring Archestra:
 - **[Application Metrics](https://github.com/archestra-ai/archestra/blob/main/platform/dev/grafana/dashboards/application-metrics.json)** — HTTP traffic, Node.js runtime health, task queue processing, and PostgreSQL database monitoring
 - **[RAG & Knowledge Base](https://github.com/archestra-ai/archestra/blob/main/platform/dev/grafana/dashboards/rag-knowledge-base.json)** — Connector sync monitoring, embedding pipeline, and RAG query performance
 
-To install all four dashboards at once, create a [Grafana Service Account](https://grafana.com/docs/grafana/latest/administration/service-accounts/) token with the **Editor** [basic role](https://grafana.com/docs/grafana/latest/administration/roles-and-permissions/#organization-roles), or the [`fixed:folders:writer`](https://grafana.com/docs/grafana/latest/administration/roles-and-permissions/access-control/rbac-fixed-basic-role-definitions/) RBAC role for more granular access, and run:
+To install all five dashboards at once, create a [Grafana Service Account](https://grafana.com/docs/grafana/latest/administration/service-accounts/) token with the **Editor** [basic role](https://grafana.com/docs/grafana/latest/administration/roles-and-permissions/#organization-roles), or the [`fixed:folders:writer`](https://grafana.com/docs/grafana/latest/administration/roles-and-permissions/access-control/rbac-fixed-basic-role-definitions/) RBAC role for more granular access, and run:
 
 ```bash
 GRAFANA_URL=https://your-grafana-instance GRAFANA_TOKEN=glsa_xxx \

@@ -150,6 +150,7 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <head>
         <PublicEnvScript />
+        <link rel="icon" href="/favicon.ico" />
       </head>
       <body
         className={`${latoFont.variable} ${interFont.variable} ${openSansFont.variable} ${robotoFont.variable} ${sourceSansFont.variable} ${jetbrainsMonoFont.variable} ${dmSansFont.variable} ${poppinsFont.variable} ${oxaniumFont.variable} ${montserratFont.variable} ${sourceCodeProFont.variable} ${merriweatherFont.variable} ${quicksandFont.variable} ${outfitFont.variable} ${plusJakartaSansFont.variable} ${libreBaskervilleFont.variable} font-sans antialiased`}

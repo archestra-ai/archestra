@@ -16,29 +16,25 @@ export function DynamicHead() {
     document.title = appearance?.appName || "Archestra.AI";
   }, [appearance?.appName, isFetched]);
 
-  // Update favicon
+  // Update favicon only after data has loaded to avoid flashing default
   useEffect(() => {
+    if (!isFetched) return;
+
     const link = document.querySelector(
       'link[rel="icon"]',
     ) as HTMLLinkElement | null;
 
-    if (!appearance?.favicon) {
-      if (link) link.href = "/favicon.ico";
-      return;
-    }
+    const href = appearance?.favicon || "/favicon.ico";
 
     if (link) {
-      link.href = appearance.favicon;
+      link.href = href;
     } else {
       const newLink = document.createElement("link");
       newLink.rel = "icon";
-      newLink.href = appearance.favicon;
+      newLink.href = href;
       document.head.appendChild(newLink);
-      return () => {
-        newLink.remove();
-      };
     }
-  }, [appearance?.favicon]);
+  }, [appearance?.favicon, isFetched]);
 
   // Update meta description, OG description, and OG title
   useEffect(() => {

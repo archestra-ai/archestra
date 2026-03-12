@@ -363,10 +363,16 @@ describe("resolveModelForAgent", () => {
       llmApiKeyId: "key-anthropic",
     };
 
-    const resultA = resolveModelForAgent({ agent: agentA, context: baseContext });
+    const resultA = resolveModelForAgent({
+      agent: agentA,
+      context: baseContext,
+    });
     expect(resultA?.modelId).toBe("gpt-4o");
 
-    const resultB = resolveModelForAgent({ agent: agentB, context: baseContext });
+    const resultB = resolveModelForAgent({
+      agent: agentB,
+      context: baseContext,
+    });
     expect(resultB?.modelId).toBe("claude-3-5-sonnet");
   });
 });

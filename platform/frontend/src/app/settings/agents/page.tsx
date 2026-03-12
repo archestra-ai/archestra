@@ -204,6 +204,7 @@ export default function AgentSettingsPage() {
       />
       <SettingsSaveBar
         hasChanges={changes.hasChanges}
+        disabledSave={selectedApiKeyId !== "" && defaultModel === ""}
         isSaving={updateMutation.isPending}
         permissions={{ agentSettings: ["update"] }}
         onSave={handleSave}

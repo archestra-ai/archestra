@@ -13,6 +13,12 @@ const apiKeys = [
     name: "Anthropic Key",
     scope: "org",
   },
+  {
+    id: "key-3",
+    provider: "anthropic",
+    name: "Anthropic Key 2",
+    scope: "org",
+  },
 ];
 
 describe("resolveInitialState", () => {
@@ -68,6 +74,32 @@ describe("resolveInitialState", () => {
     expect(state.selectedApiKeyId).toBe("");
   });
 
+  it("prefers exact API key ID over provider-based lookup", () => {
+    const org = {
+      defaultLlmModel: "claude-haiku-3",
+      defaultLlmProvider: "anthropic",
+      defaultLlmApiKeyId: "key-3",
+      defaultAgentId: null,
+    };
+    const state = resolveInitialState(org, apiKeys);
+    expect(state).toEqual({
+      selectedApiKeyId: "key-3",
+      defaultModel: "claude-haiku-3",
+      defaultAgentId: "",
+    });
+  });
+
+  it("falls back to provider when API key ID not found", () => {
+    const org = {
+      defaultLlmModel: "claude-haiku-3",
+      defaultLlmProvider: "anthropic",
+      defaultLlmApiKeyId: "deleted-key",
+      defaultAgentId: null,
+    };
+    const state = resolveInitialState(org, apiKeys);
+    expect(state.selectedApiKeyId).toBe("key-2");
+  });
+
   it("handles empty api keys list", () => {
     const org = {
       defaultLlmModel: "gpt-4o",
@@ -79,15 +111,20 @@ describe("resolveInitialState", () => {
 });
 
 describe("detectChanges", () => {
-  it("detects no changes when state matches server", () => {
-    const org = { defaultLlmModel: "gpt-4o", defaultAgentId: "agent-1" };
+  const saved = {
+    selectedApiKeyId: "key-1",
+    defaultModel: "gpt-4o",
+    defaultAgentId: "agent-1",
+  };
+
+  it("detects no changes when state matches saved", () => {
     const result = detectChanges(
       {
         selectedApiKeyId: "key-1",
         defaultModel: "gpt-4o",
         defaultAgentId: "agent-1",
       },
-      org,
+      saved,
     );
     expect(result).toEqual({
       hasModelChanges: false,
@@ -97,14 +134,13 @@ describe("detectChanges", () => {
   });
 
   it("detects model change", () => {
-    const org = { defaultLlmModel: "gpt-4o", defaultAgentId: "agent-1" };
     const result = detectChanges(
       {
         selectedApiKeyId: "key-1",
         defaultModel: "gpt-4o-mini",
         defaultAgentId: "agent-1",
       },
-      org,
+      saved,
     );
     expect(result).toEqual({
       hasModelChanges: true,
@@ -114,14 +150,13 @@ describe("detectChanges", () => {
   });
 
   it("detects agent change", () => {
-    const org = { defaultLlmModel: "gpt-4o", defaultAgentId: "agent-1" };
     const result = detectChanges(
       {
         selectedApiKeyId: "key-1",
         defaultModel: "gpt-4o",
         defaultAgentId: "agent-2",
       },
-      org,
+      saved,
     );
     expect(result).toEqual({
       hasModelChanges: false,
@@ -131,14 +166,13 @@ describe("detectChanges", () => {
   });
 
   it("detects both model and agent changes", () => {
-    const org = { defaultLlmModel: "gpt-4o", defaultAgentId: "agent-1" };
     const result = detectChanges(
       {
         selectedApiKeyId: "key-1",
         defaultModel: "gpt-4o-mini",
         defaultAgentId: "agent-2",
       },
-      org,
+      saved,
     );
     expect(result).toEqual({
       hasModelChanges: true,
@@ -147,20 +181,49 @@ describe("detectChanges", () => {
     });
   });
 
-  it("treats null server model as empty string", () => {
-    const org = { defaultLlmModel: null, defaultAgentId: null };
+  it("treats empty saved state as no changes when local is also empty", () => {
     const result = detectChanges(
       { selectedApiKeyId: "", defaultModel: "", defaultAgentId: "" },
-      org,
+      { selectedApiKeyId: "", defaultModel: "", defaultAgentId: "" },
     );
     expect(result.hasChanges).toBe(false);
   });
 
   it("detects change when clearing a previously set model", () => {
-    const org = { defaultLlmModel: "gpt-4o", defaultAgentId: null };
     const result = detectChanges(
       { selectedApiKeyId: "", defaultModel: "", defaultAgentId: "" },
-      org,
+      { selectedApiKeyId: "key-1", defaultModel: "gpt-4o", defaultAgentId: "" },
+    );
+    expect(result.hasModelChanges).toBe(true);
+    expect(result.hasChanges).toBe(true);
+  });
+
+  it("detects API key change even when model name is the same", () => {
+    const result = detectChanges(
+      {
+        selectedApiKeyId: "key-2",
+        defaultModel: "gpt-4o",
+        defaultAgentId: "agent-1",
+      },
+      saved,
+    );
+    expect(result.hasModelChanges).toBe(true);
+    expect(result.hasChanges).toBe(true);
+  });
+
+  it("detects change between two keys with same provider", () => {
+    const savedAnthropic = {
+      selectedApiKeyId: "key-2",
+      defaultModel: "claude-haiku-3",
+      defaultAgentId: "",
+    };
+    const result = detectChanges(
+      {
+        selectedApiKeyId: "key-3",
+        defaultModel: "claude-haiku-3",
+        defaultAgentId: "",
+      },
+      savedAnthropic,
     );
     expect(result.hasModelChanges).toBe(true);
     expect(result.hasChanges).toBe(true);
@@ -169,31 +232,40 @@ describe("detectChanges", () => {
 
 describe("buildSavePayload", () => {
   it("builds payload with model change only", () => {
-    const org = { defaultLlmModel: "gpt-4o", defaultAgentId: "agent-1" };
+    const saved = {
+      selectedApiKeyId: "key-1",
+      defaultModel: "gpt-4o",
+      defaultAgentId: "agent-1",
+    };
     const payload = buildSavePayload(
       {
         selectedApiKeyId: "key-1",
         defaultModel: "gpt-4o-mini",
         defaultAgentId: "agent-1",
       },
-      org,
+      saved,
       apiKeys,
     );
     expect(payload).toEqual({
       defaultLlmModel: "gpt-4o-mini",
       defaultLlmProvider: "openai",
+      defaultLlmApiKeyId: "key-1",
     });
   });
 
   it("builds payload with agent change only", () => {
-    const org = { defaultLlmModel: "gpt-4o", defaultAgentId: "agent-1" };
+    const saved = {
+      selectedApiKeyId: "key-1",
+      defaultModel: "gpt-4o",
+      defaultAgentId: "agent-1",
+    };
     const payload = buildSavePayload(
       {
         selectedApiKeyId: "key-1",
         defaultModel: "gpt-4o",
         defaultAgentId: "agent-2",
       },
-      org,
+      saved,
       apiKeys,
     );
     expect(payload).toEqual({
@@ -202,55 +274,95 @@ describe("buildSavePayload", () => {
   });
 
   it("builds payload with both changes", () => {
-    const org = { defaultLlmModel: "gpt-4o", defaultAgentId: "agent-1" };
+    const saved = {
+      selectedApiKeyId: "key-1",
+      defaultModel: "gpt-4o",
+      defaultAgentId: "agent-1",
+    };
     const payload = buildSavePayload(
       {
         selectedApiKeyId: "key-2",
         defaultModel: "claude-sonnet-4-20250514",
         defaultAgentId: "",
       },
-      org,
+      saved,
       apiKeys,
     );
     expect(payload).toEqual({
       defaultLlmModel: "claude-sonnet-4-20250514",
       defaultLlmProvider: "anthropic",
+      defaultLlmApiKeyId: "key-2",
       defaultAgentId: null,
     });
   });
 
+  it("builds payload when only API key changes (same model name)", () => {
+    const saved = {
+      selectedApiKeyId: "key-2",
+      defaultModel: "claude-haiku-3",
+      defaultAgentId: "",
+    };
+    const payload = buildSavePayload(
+      {
+        selectedApiKeyId: "key-3",
+        defaultModel: "claude-haiku-3",
+        defaultAgentId: "",
+      },
+      saved,
+      apiKeys,
+    );
+    expect(payload).toEqual({
+      defaultLlmModel: "claude-haiku-3",
+      defaultLlmProvider: "anthropic",
+      defaultLlmApiKeyId: "key-3",
+    });
+  });
+
   it("returns empty payload when no changes", () => {
-    const org = { defaultLlmModel: "gpt-4o", defaultAgentId: "agent-1" };
+    const saved = {
+      selectedApiKeyId: "key-1",
+      defaultModel: "gpt-4o",
+      defaultAgentId: "agent-1",
+    };
     const payload = buildSavePayload(
       {
         selectedApiKeyId: "key-1",
         defaultModel: "gpt-4o",
         defaultAgentId: "agent-1",
       },
-      org,
+      saved,
       apiKeys,
     );
     expect(payload).toEqual({});
   });
 
   it("sets provider to null when model is cleared", () => {
-    const org = { defaultLlmModel: "gpt-4o", defaultAgentId: null };
+    const saved = {
+      selectedApiKeyId: "key-1",
+      defaultModel: "gpt-4o",
+      defaultAgentId: "",
+    };
     const payload = buildSavePayload(
       { selectedApiKeyId: "key-1", defaultModel: "", defaultAgentId: "" },
-      org,
+      saved,
       apiKeys,
     );
     expect(payload).toEqual({
       defaultLlmModel: null,
       defaultLlmProvider: null,
+      defaultLlmApiKeyId: null,
     });
   });
 
   it("sets defaultAgentId to null when clearing agent", () => {
-    const org = { defaultLlmModel: "gpt-4o", defaultAgentId: "agent-1" };
+    const saved = {
+      selectedApiKeyId: "key-1",
+      defaultModel: "gpt-4o",
+      defaultAgentId: "agent-1",
+    };
     const payload = buildSavePayload(
       { selectedApiKeyId: "key-1", defaultModel: "gpt-4o", defaultAgentId: "" },
-      org,
+      saved,
       apiKeys,
     );
     expect(payload).toEqual({

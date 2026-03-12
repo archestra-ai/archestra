@@ -134,11 +134,15 @@ export type GitlabCheckpoint = z.infer<typeof GitlabCheckpointSchema>;
 export const ServiceNowConfigSchema = z.object({
   type: SERVICENOW,
   instanceUrl: connectorUrlSchema,
+  includeIncidents: z.boolean().optional(),
+  includeChanges: z.boolean().optional(),
+  includeChangeRequests: z.boolean().optional(),
+  includeProblems: z.boolean().optional(),
+  includeBusinessApps: z.boolean().optional(),
   states: z.array(z.string()).optional(),
   assignmentGroups: z.array(z.string()).optional(),
-  query: z.string().optional(),
   batchSize: z.number().optional(),
-  initialSyncMonths: z.number().min(1).max(12).optional(),
+  syncDataForLastMonths: z.number().min(1).max(12).optional(),
 });
 export type ServiceNowConfig = z.infer<typeof ServiceNowConfigSchema>;
 

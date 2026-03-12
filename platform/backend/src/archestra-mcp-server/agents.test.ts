@@ -3,6 +3,7 @@ import {
   ARCHESTRA_MCP_SERVER_NAME,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
 } from "@shared";
+import { AgentKnowledgeBaseModel } from "@/models";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { Agent } from "@/types";
 import { type ArchestraContext, executeArchestraTool } from ".";
@@ -126,5 +127,57 @@ describe("agent tool execution", () => {
     const parsed = JSON.parse((result.content[0] as any).text);
     expect(parsed).toHaveProperty("total");
     expect(parsed).toHaveProperty("agents");
+  });
+
+  test("list_agents includes tools and knowledge sources", async ({
+    makeAgent,
+    makeTool,
+    makeAgentTool,
+    makeKnowledgeBase,
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({
+      name: "Agent With Resources",
+      organizationId: org.id,
+      agentType: "agent",
+    });
+
+    // Assign a tool to the agent
+    const tool = await makeTool({
+      name: "test-search-tool",
+      description: "Searches documents",
+    });
+    await makeAgentTool(agent.id, tool.id);
+
+    // Create and assign a knowledge base
+    const kb = await makeKnowledgeBase(org.id, {
+      name: "Product Docs",
+    });
+    await AgentKnowledgeBaseModel.assign(agent.id, kb.id);
+
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}list_agents`,
+      { name: "Agent With Resources" },
+      {
+        agent: { id: agent.id, name: agent.name },
+      },
+    );
+    expect(result.isError).toBe(false);
+    const parsed = JSON.parse((result.content[0] as any).text);
+    expect(parsed.agents.length).toBeGreaterThanOrEqual(1);
+
+    const found = parsed.agents.find((a: any) => a.id === agent.id);
+    expect(found).toBeDefined();
+
+    // Verify tools
+    expect(found.tools).toEqual([
+      { name: "test-search-tool", description: "Searches documents" },
+    ]);
+
+    // Verify knowledge sources
+    expect(found.knowledgeSources).toEqual([
+      { name: "Product Docs", description: null, type: "knowledge_base" },
+    ]);
   });
 });

@@ -27826,11 +27826,15 @@ export type GetConnectorsResponses = {
             } | {
                 type: 'servicenow';
                 instanceUrl: unknown;
+                includeIncidents?: boolean;
+                includeChanges?: boolean;
+                includeChangeRequests?: boolean;
+                includeProblems?: boolean;
+                includeBusinessApps?: boolean;
                 states?: Array<string>;
                 assignmentGroups?: Array<string>;
-                query?: string;
                 batchSize?: number;
-                initialSyncMonths?: number;
+                syncDataForLastMonths?: number;
             };
             secretId: string | null;
             schedule: string;
@@ -27905,11 +27909,15 @@ export type CreateConnectorData = {
         } | {
             type: 'servicenow';
             instanceUrl: string;
+            includeIncidents?: boolean;
+            includeChanges?: boolean;
+            includeChangeRequests?: boolean;
+            includeProblems?: boolean;
+            includeBusinessApps?: boolean;
             states?: Array<string>;
             assignmentGroups?: Array<string>;
-            query?: string;
             batchSize?: number;
-            initialSyncMonths?: number;
+            syncDataForLastMonths?: number;
         };
         credentials: {
             email?: string;
@@ -28031,11 +28039,15 @@ export type CreateConnectorResponses = {
         } | {
             type: 'servicenow';
             instanceUrl: unknown;
+            includeIncidents?: boolean;
+            includeChanges?: boolean;
+            includeChangeRequests?: boolean;
+            includeProblems?: boolean;
+            includeBusinessApps?: boolean;
             states?: Array<string>;
             assignmentGroups?: Array<string>;
-            query?: string;
             batchSize?: number;
-            initialSyncMonths?: number;
+            syncDataForLastMonths?: number;
         };
         secretId: string | null;
         schedule: string;
@@ -28248,11 +28260,15 @@ export type GetConnectorResponses = {
         } | {
             type: 'servicenow';
             instanceUrl: unknown;
+            includeIncidents?: boolean;
+            includeChanges?: boolean;
+            includeChangeRequests?: boolean;
+            includeProblems?: boolean;
+            includeBusinessApps?: boolean;
             states?: Array<string>;
             assignmentGroups?: Array<string>;
-            query?: string;
             batchSize?: number;
-            initialSyncMonths?: number;
+            syncDataForLastMonths?: number;
         };
         secretId: string | null;
         schedule: string;
@@ -28313,11 +28329,15 @@ export type UpdateConnectorData = {
         } | {
             type: 'servicenow';
             instanceUrl: string;
+            includeIncidents?: boolean;
+            includeChanges?: boolean;
+            includeChangeRequests?: boolean;
+            includeProblems?: boolean;
+            includeBusinessApps?: boolean;
             states?: Array<string>;
             assignmentGroups?: Array<string>;
-            query?: string;
             batchSize?: number;
-            initialSyncMonths?: number;
+            syncDataForLastMonths?: number;
         };
         credentials?: {
             email?: string;
@@ -28440,11 +28460,15 @@ export type UpdateConnectorResponses = {
         } | {
             type: 'servicenow';
             instanceUrl: unknown;
+            includeIncidents?: boolean;
+            includeChanges?: boolean;
+            includeChangeRequests?: boolean;
+            includeProblems?: boolean;
+            includeBusinessApps?: boolean;
             states?: Array<string>;
             assignmentGroups?: Array<string>;
-            query?: string;
             batchSize?: number;
-            initialSyncMonths?: number;
+            syncDataForLastMonths?: number;
         };
         secretId: string | null;
         schedule: string;
@@ -34141,6 +34165,7 @@ export type GetOrganizationResponses = {
         rerankerModel: string | null;
         defaultLlmModel: string | null;
         defaultLlmProvider: string | null;
+        defaultLlmApiKeyId: string | null;
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;
@@ -34344,6 +34369,7 @@ export type UpdateAppearanceResponses = {
         rerankerModel: string | null;
         defaultLlmModel: string | null;
         defaultLlmProvider: string | null;
+        defaultLlmApiKeyId: string | null;
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;
@@ -34453,6 +34479,7 @@ export type UpdateSecuritySettingsResponses = {
         rerankerModel: string | null;
         defaultLlmModel: string | null;
         defaultLlmProvider: string | null;
+        defaultLlmApiKeyId: string | null;
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;
@@ -34563,6 +34590,7 @@ export type UpdateLlmSettingsResponses = {
         rerankerModel: string | null;
         defaultLlmModel: string | null;
         defaultLlmProvider: string | null;
+        defaultLlmApiKeyId: string | null;
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;
@@ -34580,6 +34608,7 @@ export type UpdateAgentSettingsData = {
     body?: {
         defaultLlmModel?: string | null;
         defaultLlmProvider?: string | null;
+        defaultLlmApiKeyId?: string | null;
         defaultAgentId?: string | null;
     };
     path?: never;
@@ -34673,6 +34702,7 @@ export type UpdateAgentSettingsResponses = {
         rerankerModel: string | null;
         defaultLlmModel: string | null;
         defaultLlmProvider: string | null;
+        defaultLlmApiKeyId: string | null;
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;
@@ -34785,6 +34815,7 @@ export type UpdateKnowledgeSettingsResponses = {
         rerankerModel: string | null;
         defaultLlmModel: string | null;
         defaultLlmProvider: string | null;
+        defaultLlmApiKeyId: string | null;
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;
@@ -34891,6 +34922,7 @@ export type DropEmbeddingConfigResponses = {
         rerankerModel: string | null;
         defaultLlmModel: string | null;
         defaultLlmProvider: string | null;
+        defaultLlmApiKeyId: string | null;
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;
@@ -35080,6 +35112,7 @@ export type CompleteOnboardingResponses = {
         rerankerModel: string | null;
         defaultLlmModel: string | null;
         defaultLlmProvider: string | null;
+        defaultLlmApiKeyId: string | null;
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;

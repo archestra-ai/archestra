@@ -54,7 +54,12 @@ All Archestra tools are prefixed with `archestra__` and are always trusted — t
 | `search_private_mcp_registry` | Search the private MCP registry for available MCP servers. |
 | `get_mcp_servers` | List all MCP servers from the catalog. |
 | `get_mcp_server_tools` | Get all tools available for a specific MCP server by its catalog ID (from get_mcp_servers). |
-| `edit_mcp` | Edit an MCP server's name, icon, or description. |
+| `edit_mcp_description` | Edit an MCP server's display information and metadata. |
+| `edit_mcp_config` | Edit an MCP server's technical configuration. |
+| `create_mcp_server` | Create a new MCP server in the private registry. |
+| `deploy_mcp_server` | Deploy (install) an MCP server from the catalog. |
+| `list_mcp_server_deployments` | List all deployed (installed) MCP server instances accessible to the current user. |
+| `get_mcp_server_logs` | Get recent container logs from a deployed local (K8s) MCP server. |
 | `create_mcp_server_installation_request` | Allows users from within the Archestra Platform chat UI to submit a request for an MCP server to be added to their Archestra Platform's internal MCP server registry. |
 
 ## Limits

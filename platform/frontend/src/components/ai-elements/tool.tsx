@@ -10,7 +10,7 @@ import {
   XCircleIcon,
 } from "lucide-react";
 import type { ComponentProps, ReactNode } from "react";
-import { createContext, useContext, useState } from "react";
+import { createContext, useContext, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -218,6 +218,7 @@ export const ToolOutput = ({
   ...props
 }: ToolOutputProps) => {
   const [isExpanded, setIsExpanded] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   if (!(output || errorText || conversations)) {
     return null;
@@ -266,7 +267,7 @@ export const ToolOutput = ({
     );
   }
 
-  let Output = <div>{output as ReactNode}</div>;
+  let Output: ReactNode;
 
   if (typeof output === "object" || typeof output === "string") {
     // If output is a string, try to parse it as JSON for proper formatting
@@ -283,7 +284,7 @@ export const ToolOutput = ({
         ? JSON.stringify(formattedOutput, null, 2)
         : String(formattedOutput);
     const lines = codeString.split("\n");
-    const MAX_LINES = 50;
+    const MAX_LINES = 20;
     const isLarge = lines.length > MAX_LINES;
 
     const displayCode =
@@ -309,7 +310,17 @@ export const ToolOutput = ({
               size="sm"
               onClick={(e) => {
                 e.stopPropagation();
+                const el = containerRef.current;
+                const scrollTop = el
+                  ? el.getBoundingClientRect().top
+                  : undefined;
                 setIsExpanded(!isExpanded);
+                if (el && scrollTop !== undefined) {
+                  requestAnimationFrame(() => {
+                    const newTop = el.getBoundingClientRect().top;
+                    window.scrollBy(0, newTop - scrollTop);
+                  });
+                }
               }}
               className="h-7 text-xs shadow-sm bg-background/80 backdrop-blur-sm hover:bg-background border"
             >
@@ -321,10 +332,16 @@ export const ToolOutput = ({
         )}
       </div>
     );
+  } else {
+    Output = <div>{String(output)}</div>;
   }
 
   return (
-    <div className={cn("space-y-2 p-4", className)} {...props}>
+    <div
+      ref={containerRef}
+      className={cn("space-y-2 p-4", className)}
+      {...props}
+    >
       <h4 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
         {label ?? (errorText ? "Error" : "Result")}
       </h4>

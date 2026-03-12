@@ -23,6 +23,7 @@ import {
   useUpdateAgentSettings,
 } from "@/lib/organization.query";
 import {
+  type AgentSettingsState,
   buildSavePayload,
   detectChanges,
   resolveInitialState,
@@ -37,6 +38,11 @@ export default function AgentSettingsPage() {
   const [defaultModel, setDefaultModel] = useState<string>("");
   const [defaultAgentId, setDefaultAgentId] = useState<string>("");
   const initializedRef = useRef(false);
+  const savedStateRef = useRef<AgentSettingsState>({
+    selectedApiKeyId: "",
+    defaultModel: "",
+    defaultAgentId: "",
+  });
 
   const { data: allModels, isPending: modelsLoading } = useChatModels({
     apiKeyId: selectedApiKeyId || null,
@@ -56,37 +62,40 @@ export default function AgentSettingsPage() {
     setSelectedApiKeyId(state.selectedApiKeyId);
     setDefaultModel(state.defaultModel);
     setDefaultAgentId(state.defaultAgentId);
+    savedStateRef.current = state;
     initializedRef.current = true;
   }, [organization, apiKeys]);
 
-  const changes = organization
-    ? detectChanges(
-        { selectedApiKeyId, defaultModel, defaultAgentId },
-        organization,
-      )
-    : { hasModelChanges: false, hasAgentChanges: false, hasChanges: false };
+  const availableKeys = apiKeys ?? [];
+
+  const localState: AgentSettingsState = {
+    selectedApiKeyId,
+    defaultModel,
+    defaultAgentId,
+  };
+
+  const changes = detectChanges(localState, savedStateRef.current);
 
   const handleSave = async () => {
-    if (!organization || !apiKeys) return;
+    if (!apiKeys) return;
     const payload = buildSavePayload(
-      { selectedApiKeyId, defaultModel, defaultAgentId },
-      organization,
+      localState,
+      savedStateRef.current,
       apiKeys,
     );
     await updateMutation.mutateAsync(payload);
-    // After successful save, allow re-sync from server on next org data change
+    // Update saved state to current local state after successful save
+    savedStateRef.current = { ...localState };
+    // Allow re-sync from server on next org data change
     initializedRef.current = false;
   };
 
   const handleCancel = () => {
-    if (!organization || !apiKeys) return;
-    const state = resolveInitialState(organization, apiKeys);
-    setSelectedApiKeyId(state.selectedApiKeyId);
-    setDefaultModel(state.defaultModel);
-    setDefaultAgentId(state.defaultAgentId);
+    const saved = savedStateRef.current;
+    setSelectedApiKeyId(saved.selectedApiKeyId);
+    setDefaultModel(saved.defaultModel);
+    setDefaultAgentId(saved.defaultAgentId);
   };
-
-  const availableKeys = apiKeys ?? [];
 
   const modelItems = useMemo(() => {
     if (!allModels) return [];
@@ -195,6 +204,7 @@ export default function AgentSettingsPage() {
       />
       <SettingsSaveBar
         hasChanges={changes.hasChanges}
+        disabledSave={selectedApiKeyId !== "" && defaultModel === ""}
         isSaving={updateMutation.isPending}
         permissions={{ agentSettings: ["update"] }}
         onSave={handleSave}

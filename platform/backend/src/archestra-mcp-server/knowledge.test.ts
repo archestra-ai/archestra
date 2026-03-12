@@ -141,6 +141,63 @@ describe("knowledge tool execution", () => {
     );
   });
 
+  test("query_knowledge_sources calls queryService with correct params for direct connector assignment (no KB)", async ({
+    makeAgent,
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    // Create a KB + connector so the connector exists in the DB
+    const kb = await makeKnowledgeBase(org.id);
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+
+    // Create agent with ONLY a direct connector assignment (no KB)
+    const agentWithConnector = await makeAgent({
+      name: "Agent With Direct Connector",
+      organizationId: org.id,
+      connectorIds: [connector.id],
+    });
+
+    const mockResults = [
+      {
+        chunkId: "chunk-1",
+        content: "Direct connector result",
+        score: 0.9,
+        metadata: { source: "jira" },
+      },
+    ];
+
+    const querySpy = vi
+      .spyOn(queryService, "query")
+      .mockResolvedValueOnce(mockResults as any);
+
+    const contextWithOrg: ArchestraContext = {
+      agent: { id: agentWithConnector.id, name: agentWithConnector.name },
+      organizationId: org.id,
+    };
+
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}query_knowledge_sources`,
+      { query: "jira tickets" },
+      contextWithOrg,
+    );
+
+    expect(result.isError).toBeUndefined();
+    const parsed = JSON.parse((result.content[0] as any).text);
+    expect(parsed.totalChunks).toBe(1);
+    expect(parsed.results).toEqual(mockResults);
+
+    // Verify queryService.query was called with the direct connector ID
+    expect(querySpy).toHaveBeenCalledOnce();
+    const callArgs = querySpy.mock.calls[0][0];
+    expect(callArgs.connectorIds).toContain(connector.id);
+    expect(callArgs.organizationId).toBe(org.id);
+    expect(callArgs.queryText).toBe("jira tickets");
+
+    querySpy.mockRestore();
+  });
+
   test("query_knowledge_sources returns error when organizationId is missing", async ({
     makeAgent,
     makeOrganization,

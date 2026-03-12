@@ -1,5 +1,36 @@
 # Changelog
 
+## [1.1.13](https://github.com/archestra-ai/archestra/compare/platform-v1.1.12...platform-v1.1.13) (2026-03-12)
+
+
+### Bug Fixes
+
+* fix setting default model for agents and new chats ([#3316](https://github.com/archestra-ai/archestra/issues/3316)) ([57288a2](https://github.com/archestra-ai/archestra/commit/57288a2fe9caf96e6cee59b16ce101362ba61de6))
+
+## [1.1.12](https://github.com/archestra-ai/archestra/compare/platform-v1.1.11...platform-v1.1.12) (2026-03-12)
+
+
+### Features
+
+* add MCP server management tools to Archestra MCP server ([#3319](https://github.com/archestra-ai/archestra/issues/3319)) ([0d607ea](https://github.com/archestra-ai/archestra/commit/0d607eada8fac2cc0f65b5239b8cee0d1440ef28))
+
+
+### Bug Fixes
+
+* archestra tools bypass custom tool selection filtering in chat ([#3318](https://github.com/archestra-ai/archestra/issues/3318)) ([5e03c0e](https://github.com/archestra-ai/archestra/commit/5e03c0e2ae8b2be13367f300db8e709b342db6fa))
+
+## [1.1.11](https://github.com/archestra-ai/archestra/compare/platform-v1.1.10...platform-v1.1.11) (2026-03-12)
+
+
+### Bug Fixes
+
+* improve error pass through ([#3315](https://github.com/archestra-ai/archestra/issues/3315)) ([92fbb40](https://github.com/archestra-ai/archestra/commit/92fbb40faf0ce6728860681ad4564ee6f5f7a8de))
+
+
+### Miscellaneous Chores
+
+* fix getting agent by name in get_agent tool ([#3314](https://github.com/archestra-ai/archestra/issues/3314)) ([9d5e319](https://github.com/archestra-ai/archestra/commit/9d5e3199e300545a26cdb0c12517599a175e944b))
+
 ## [1.1.10](https://github.com/archestra-ai/archestra/compare/platform-v1.1.9...platform-v1.1.10) (2026-03-12)
 
 

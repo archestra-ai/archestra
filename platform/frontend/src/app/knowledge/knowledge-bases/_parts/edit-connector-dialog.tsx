@@ -37,6 +37,7 @@ import { GitlabConfigFields } from "./gitlab-config-fields";
 import { JiraConfigFields } from "./jira-config-fields";
 import { SchedulePicker } from "./schedule-picker";
 import { ServiceNowConfigFields } from "./servicenow-config-fields";
+import { transformConfigArrayFields } from "./transform-config-array-fields";
 
 type ConnectorItem = Pick<
   archestraApiTypes.GetConnectorsResponses["200"]["data"][number],
@@ -111,8 +112,9 @@ export function EditConnectorDialog({
         name: values.name,
         description: values.description || null,
         enabled: values.enabled,
-        config:
-          values.config as archestraApiTypes.CreateConnectorData["body"]["config"],
+        config: transformConfigArrayFields(
+          values.config,
+        ) as archestraApiTypes.CreateConnectorData["body"]["config"],
         schedule: values.schedule,
         ...(hasCredentials && {
           credentials: {

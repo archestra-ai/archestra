@@ -91,7 +91,15 @@ class OrganizationRoleModel {
     );
     const missingPermissions: string[] = [];
 
+    const resourcesToSkipValidation: Resource[] = [
+      "simpleView",
+      "chatAgentPicker",
+      "chatProviderSettings",
+    ];
+
     for (const [resource, actions] of Object.entries(rolePermissions)) {
+      if (resourcesToSkipValidation.includes(resource as Resource)) continue;
+
       const userResourceActions = userPermissions[resource as Resource] || [];
 
       for (const action of actions) {

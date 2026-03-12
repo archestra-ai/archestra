@@ -3,7 +3,7 @@ title: Adding Knowledge Connectors
 category: Development
 order: 3
 description: Developer guide for implementing new knowledge base connectors in Archestra Platform
-lastUpdated: 2026-03-06
+lastUpdated: 2026-03-12
 ---
 
 <!--
@@ -358,11 +358,12 @@ Use `vi.mock()` to mock the external client library. See `backend/src/knowledge-
 
 ## Reference Implementations
 
-| Connector  | Files                                                                                                                                                                     |
-| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Jira       | `backend/src/knowledge-base/connectors/jira/jira-connector.ts`, `frontend/src/app/knowledge/knowledge-bases/_parts/jira-config-fields.tsx`                                |
-| Confluence | `backend/src/knowledge-base/connectors/confluence/confluence-connector.ts`, `frontend/src/app/knowledge/knowledge-bases/_parts/confluence-config-fields.tsx`               |
-| GitHub     | `backend/src/knowledge-base/connectors/github/github-connector.ts`, `frontend/src/app/knowledge/knowledge-bases/_parts/github-config-fields.tsx`                          |
-| GitLab     | `backend/src/knowledge-base/connectors/gitlab/gitlab-connector.ts`, `frontend/src/app/knowledge/knowledge-bases/_parts/gitlab-config-fields.tsx`                          |
+| Connector   | Files                                                                                                                                                                          |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Jira        | `backend/src/knowledge-base/connectors/jira/jira-connector.ts`, `frontend/src/app/knowledge/knowledge-bases/_parts/jira-config-fields.tsx`                                     |
+| Confluence  | `backend/src/knowledge-base/connectors/confluence/confluence-connector.ts`, `frontend/src/app/knowledge/knowledge-bases/_parts/confluence-config-fields.tsx`                    |
+| GitHub      | `backend/src/knowledge-base/connectors/github/github-connector.ts`, `frontend/src/app/knowledge/knowledge-bases/_parts/github-config-fields.tsx`                               |
+| GitLab      | `backend/src/knowledge-base/connectors/gitlab/gitlab-connector.ts`, `frontend/src/app/knowledge/knowledge-bases/_parts/gitlab-config-fields.tsx`                               |
+| ServiceNow  | `backend/src/knowledge-base/connectors/servicenow/servicenow-connector.ts`, `frontend/src/app/knowledge/knowledge-bases/_parts/servicenow-config-fields.tsx`                   |
 
-The Jira connector is the best starting point -- it demonstrates both Cloud and Server API handling, ADF text extraction, comment filtering, and JQL-based incremental sync. The GitHub and GitLab connectors demonstrate using official SDKs (`@octokit/rest` and `@gitbeaker/rest`) with separate issue/PR sync passes and label filtering.
+The Jira connector is the best starting point -- it demonstrates both Cloud and Server API handling, ADF text extraction, comment filtering, and JQL-based incremental sync. The GitHub and GitLab connectors demonstrate using official SDKs (`@octokit/rest` and `@gitbeaker/rest`) with separate issue/PR sync passes and label filtering. The ServiceNow connector demonstrates using raw `fetch` calls against the ServiceNow Table API with offset-based pagination.

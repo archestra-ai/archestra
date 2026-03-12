@@ -4,7 +4,6 @@ import { DARK_ONLY_THEMES, LIGHT_ONLY_THEMES, type ThemeId } from "@shared";
 import { Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useEffect } from "react";
-import { WithPermissions } from "@/components/roles/with-permissions";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -50,40 +49,26 @@ export function LightDarkToggle({ currentThemeId }: LightDarkToggleProps) {
       <CardContent>
         <div className="flex gap-2">
           <div className="flex-1">
-            <WithPermissions
-              permissions={{ appearance: ["update"] }}
-              noPermissionHandle="tooltip"
+            <Button
+              variant={theme === "light" ? "default" : "outline"}
+              className="w-full gap-2"
+              onClick={() => setTheme("light")}
+              disabled={isDarkOnly}
             >
-              {({ hasPermission }) => (
-                <Button
-                  variant={theme === "light" ? "default" : "outline"}
-                  className="w-full gap-2"
-                  onClick={() => setTheme("light")}
-                  disabled={isDarkOnly || !hasPermission}
-                >
-                  <Sun className="h-4 w-4" />
-                  Light
-                </Button>
-              )}
-            </WithPermissions>
+              <Sun className="h-4 w-4" />
+              Light
+            </Button>
           </div>
           <div className="flex-1">
-            <WithPermissions
-              permissions={{ appearance: ["update"] }}
-              noPermissionHandle="tooltip"
+            <Button
+              variant={theme === "dark" ? "default" : "outline"}
+              className="w-full gap-2"
+              onClick={() => setTheme("dark")}
+              disabled={isLightOnly}
             >
-              {({ hasPermission }) => (
-                <Button
-                  variant={theme === "dark" ? "default" : "outline"}
-                  className="w-full gap-2"
-                  onClick={() => setTheme("dark")}
-                  disabled={isLightOnly || !hasPermission}
-                >
-                  <Moon className="h-4 w-4" />
-                  Dark
-                </Button>
-              )}
-            </WithPermissions>
+              <Moon className="h-4 w-4" />
+              Dark
+            </Button>
           </div>
         </div>
       </CardContent>

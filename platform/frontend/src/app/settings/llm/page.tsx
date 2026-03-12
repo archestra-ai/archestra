@@ -4,7 +4,6 @@ import { archestraApiSdk, type archestraApiTypes } from "@shared";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { ModelSelector } from "@/components/chat/model-selector";
 import { WithPermissions } from "@/components/roles/with-permissions";
 import {
   SettingsBlock,
@@ -19,7 +18,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useModelsByProvider } from "@/lib/chat-models.query";
 import {
   useOrganization,
   useUpdateLlmSettings,
@@ -56,10 +54,8 @@ const COMPRESSION_MODE_LABELS: Record<CompressionMode, string> = {
 export default function LlmSettingsPage() {
   const { data: organization } = useOrganization();
   const { data: teams } = useTeams();
-  const { modelsByProvider } = useModelsByProvider();
   const queryClient = useQueryClient();
 
-  const [defaultModel, setDefaultModel] = useState<string>("");
   const [compressionMode, setCompressionMode] =
     useState<CompressionMode>("disabled");
   const [selectedTeamIds, setSelectedTeamIds] = useState<string[]>([]);
@@ -70,12 +66,6 @@ export default function LlmSettingsPage() {
     "LLM settings updated",
     "Failed to update LLM settings",
   );
-
-  // Sync default model from org data
-  useEffect(() => {
-    if (!organization) return;
-    setDefaultModel(organization.defaultLlmModel ?? "");
-  }, [organization]);
 
   // Sync state when both organization and teams data are loaded
   useEffect(() => {
@@ -125,11 +115,7 @@ export default function LlmSettingsPage() {
 
   const hasCleanupChanges = cleanupInterval !== serverCleanupInterval;
 
-  const serverDefaultModel = organization?.defaultLlmModel ?? "";
-  const hasDefaultModelChanges = defaultModel !== serverDefaultModel;
-
-  const hasChanges =
-    hasCompressionChanges || hasCleanupChanges || hasDefaultModelChanges;
+  const hasChanges = hasCompressionChanges || hasCleanupChanges;
 
   const handleSave = async () => {
     const mutations: Promise<unknown>[] = [];
@@ -187,25 +173,6 @@ export default function LlmSettingsPage() {
       );
     }
 
-    // Collect default model mutation
-    if (hasDefaultModelChanges) {
-      let resolvedProvider: string | null = null;
-      if (defaultModel) {
-        for (const [provider, models] of Object.entries(modelsByProvider)) {
-          if (models?.some((m) => m.id === defaultModel)) {
-            resolvedProvider = provider;
-            break;
-          }
-        }
-      }
-      mutations.push(
-        updateLlmSettingsMutation.mutateAsync({
-          defaultLlmModel: defaultModel || null,
-          defaultLlmProvider: resolvedProvider,
-        }),
-      );
-    }
-
     const results = await Promise.allSettled(mutations);
     const failures = results.filter((r) => r.status === "rejected");
     if (failures.length > 0 && failures.length < results.length) {
@@ -216,7 +183,6 @@ export default function LlmSettingsPage() {
   };
 
   const handleCancel = () => {
-    setDefaultModel(serverDefaultModel);
     setCompressionMode(serverCompressionMode);
     setCleanupInterval(serverCleanupInterval);
     setSelectedTeamIds(
@@ -228,26 +194,6 @@ export default function LlmSettingsPage() {
 
   return (
     <div className="space-y-6">
-      <SettingsBlock
-        title="Default model for agents and new chats"
-        description="Select the model that will be used by default when starting new chat conversations."
-        control={
-          <WithPermissions
-            permissions={{ llmSettings: ["update"] }}
-            noPermissionHandle="tooltip"
-          >
-            {({ hasPermission }) => (
-              <ModelSelector
-                selectedModel={defaultModel}
-                onModelChange={setDefaultModel}
-                onClear={() => setDefaultModel("")}
-                variant="outline"
-                disabled={updateLlmSettingsMutation.isPending || !hasPermission}
-              />
-            )}
-          </WithPermissions>
-        }
-      />
       <SettingsBlock
         title="Apply compression to tool results"
         description="Reduce LLM token usage up to 60% by using TOON (Token-Oriented Object Notation) compression for tool results."

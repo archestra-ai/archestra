@@ -324,15 +324,15 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ]);
       }
 
-      // Enrich connectors with assigned agents
+      // Enrich connectors with assigned agents (batch query to avoid N+1)
       const connectorIds = data.map((c) => c.id);
-      const agentAssignments = await Promise.all(
-        connectorIds.map((cId) =>
-          AgentConnectorAssignmentModel.findByConnector(cId),
-        ),
-      );
+      const agentIdsByConnector =
+        await AgentConnectorAssignmentModel.getAgentIdsForConnectors(
+          connectorIds,
+        );
+
       const allAgentIdsForConnectors = [
-        ...new Set(agentAssignments.flat().map((a) => a.agentId)),
+        ...new Set([...agentIdsByConnector.values()].flat()),
       ];
       const connectorAgentDetailsMap = new Map<
         string,
@@ -349,13 +349,6 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
             });
           }
         }
-      }
-
-      const agentIdsByConnector = new Map<string, string[]>();
-      for (const assignment of agentAssignments.flat()) {
-        const list = agentIdsByConnector.get(assignment.connectorId) ?? [];
-        list.push(assignment.agentId);
-        agentIdsByConnector.set(assignment.connectorId, list);
       }
 
       const enrichedData = data.map((connector) => ({
@@ -394,6 +387,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["Connectors"],
         body: z.object({
           name: z.string().min(1),
+          description: z.string().nullable().optional(),
           connectorType: ConnectorTypeSchema,
           config: ConnectorConfigSchema,
           credentials: ConnectorCredentialsSchema,
@@ -432,6 +426,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const connector = await KnowledgeBaseConnectorModel.create({
         organizationId,
         name: body.name,
+        description: body.description ?? null,
         connectorType: body.connectorType,
         config: body.config,
         secretId: secret.id,
@@ -495,6 +490,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({ id: z.string() }),
         body: z.object({
           name: z.string().min(1).optional(),
+          description: z.string().nullable().optional(),
           config: ConnectorConfigSchema.optional(),
           credentials: ConnectorCredentialsSchema.optional(),
           schedule: z.string().optional(),

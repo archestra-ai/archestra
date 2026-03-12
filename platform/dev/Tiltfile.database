@@ -23,6 +23,10 @@ helm_remote(
     'image.tag=latest',
     'global.security.allowInsecureImages=true',
 
+    # Enable postgres_exporter sidecar for Prometheus metrics (port 9187)
+    'metrics.enabled=true',
+    'metrics.service.ports.metrics=9187',
+
     # Increase resource limits to prevent health check timeouts
     # https://github.com/bitnami/charts/blob/main/bitnami/common/templates/_resources.tpl#L24C4-L24C9
     'primary.resourcesPreset=small',
@@ -40,7 +44,7 @@ helm_remote(
   ]
 )
 
-k8s_resource('postgresql', port_forwards=['5432:5432'], labels=['database'])
+k8s_resource('postgresql', port_forwards=['5432:5432', '9187:9187'], labels=['database'])
 
 # Database cleanup button (manual trigger only, for development)
 local_resource(

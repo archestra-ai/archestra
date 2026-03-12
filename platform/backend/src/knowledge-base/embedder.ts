@@ -1,5 +1,5 @@
 import type { EmbeddingModel } from "@shared";
-import { EMBEDDING_BATCH_SIZE } from "@shared";
+import { addNomicTaskPrefix, EMBEDDING_BATCH_SIZE } from "@shared";
 import OpenAI from "openai";
 import logger from "@/logging";
 import { KbChunkModel, KbDocumentModel } from "@/models";
@@ -54,7 +54,9 @@ class EmbeddingService {
 
       for (let i = 0; i < chunks.length; i += EMBEDDING_BATCH_SIZE) {
         const batch = chunks.slice(i, i + EMBEDDING_BATCH_SIZE);
-        const texts = batch.map((c) => c.content);
+        const texts = batch.map((c) =>
+          addNomicTaskPrefix(ctx.model, c.content, "search_document"),
+        );
 
         const response = await this.callEmbeddingApiWithRetry(ctx, texts);
 
@@ -66,7 +68,7 @@ class EmbeddingService {
         }
       }
 
-      await KbChunkModel.updateEmbeddings(allUpdates);
+      await KbChunkModel.updateEmbeddings(allUpdates, ctx.dimensions);
 
       await KbDocumentModel.update(documentId, {
         embeddingStatus: "completed",
@@ -181,7 +183,9 @@ class EmbeddingService {
       try {
         const response = await this.callEmbeddingApiWithRetry(
           ctx,
-          batch.map((c) => c.text),
+          batch.map((c) =>
+            addNomicTaskPrefix(ctx.model, c.text, "search_document"),
+          ),
         );
         for (let j = 0; j < batch.length; j++) {
           embeddingResults.set(batch[j].chunkId, response.data[j].embedding);
@@ -207,7 +211,7 @@ class EmbeddingService {
       ([chunkId, embedding]) => ({ chunkId, embedding }),
     );
     if (successfulUpdates.length > 0) {
-      await KbChunkModel.updateEmbeddings(successfulUpdates);
+      await KbChunkModel.updateEmbeddings(successfulUpdates, ctx.dimensions);
     }
 
     for (const { documentId, chunkIds, chunkCount } of docChunkMap) {
@@ -249,7 +253,9 @@ class EmbeddingService {
             ctx.client.embeddings.create({
               model: ctx.model,
               input: texts,
-              dimensions: ctx.dimensions,
+              ...(ctx.model.startsWith("nomic")
+                ? {}
+                : { dimensions: ctx.dimensions }),
             }),
           buildInteraction: (resp) =>
             buildEmbeddingInteraction({

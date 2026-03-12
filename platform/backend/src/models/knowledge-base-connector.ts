@@ -54,6 +54,7 @@ class KnowledgeBaseConnectorModel {
         id: schema.knowledgeBaseConnectorsTable.id,
         organizationId: schema.knowledgeBaseConnectorsTable.organizationId,
         name: schema.knowledgeBaseConnectorsTable.name,
+        description: schema.knowledgeBaseConnectorsTable.description,
         connectorType: schema.knowledgeBaseConnectorsTable.connectorType,
         config: schema.knowledgeBaseConnectorsTable.config,
         secretId: schema.knowledgeBaseConnectorsTable.secretId,
@@ -92,6 +93,7 @@ class KnowledgeBaseConnectorModel {
         id: schema.knowledgeBaseConnectorsTable.id,
         organizationId: schema.knowledgeBaseConnectorsTable.organizationId,
         name: schema.knowledgeBaseConnectorsTable.name,
+        description: schema.knowledgeBaseConnectorsTable.description,
         connectorType: schema.knowledgeBaseConnectorsTable.connectorType,
         config: schema.knowledgeBaseConnectorsTable.config,
         secretId: schema.knowledgeBaseConnectorsTable.secretId,
@@ -129,6 +131,15 @@ class KnowledgeBaseConnectorModel {
       .where(eq(schema.knowledgeBaseConnectorsTable.id, id));
 
     return result ?? null;
+  }
+
+  static async findByIds(ids: string[]): Promise<KnowledgeBaseConnector[]> {
+    if (ids.length === 0) return [];
+
+    return await db
+      .select()
+      .from(schema.knowledgeBaseConnectorsTable)
+      .where(inArray(schema.knowledgeBaseConnectorsTable.id, ids));
   }
 
   static async create(

@@ -21,6 +21,8 @@ import {
 import { formatCronSchedule } from "@/lib/format-cron";
 
 const PRESET_SCHEDULES = [
+  { label: "Every 30 minutes", value: "*/30 * * * *" },
+  { label: "Every hour", value: "0 * * * *" },
   { label: "Every 6 hours", value: "0 */6 * * *" },
   { label: "Every 12 hours", value: "0 */12 * * *" },
   { label: "Daily", value: "0 0 * * *" },

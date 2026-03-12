@@ -1,4 +1,4 @@
-import { EMBEDDING_DIMENSIONS } from "@shared";
+import { getEmbeddingColumnName } from "@shared";
 import { count, eq, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { InsertKbChunk, KbChunk } from "@/types";
@@ -50,9 +50,10 @@ class KbChunkModel {
   static async vectorSearch(params: {
     connectorIds: string[];
     queryEmbedding: number[];
+    dimensions: number;
     limit?: number;
   }): Promise<VectorSearchResult[]> {
-    const { connectorIds, queryEmbedding, limit = 10 } = params;
+    const { connectorIds, queryEmbedding, dimensions, limit = 10 } = params;
     if (connectorIds.length === 0) return [];
     const embeddingStr = `[${queryEmbedding.join(",")}]`;
     const ids = sql.join(
@@ -60,19 +61,20 @@ class KbChunkModel {
       sql`, `,
     );
 
-    const vectorCast = sql.raw(`::vector(${EMBEDDING_DIMENSIONS})`);
+    const col = sql.raw(getEmbeddingColumnName(dimensions));
+    const vectorCast = sql.raw(`::vector(${dimensions})`);
     const rows = await db.execute(sql`
       SELECT
         c.id, c.content, c.chunk_index AS "chunkIndex", c.document_id AS "documentId",
         d.title, d.source_url AS "sourceUrl", d.metadata,
         kbc.connector_type AS "connectorType",
-        1 - (c.embedding <=> ${embeddingStr}${vectorCast}) AS score
+        1 - (c.${col} <=> ${embeddingStr}${vectorCast}) AS score
       FROM kb_chunks c
       JOIN kb_documents d ON d.id = c.document_id
       LEFT JOIN knowledge_base_connectors kbc ON kbc.id = d.connector_id
       WHERE d.connector_id IN (${ids})
-        AND c.embedding IS NOT NULL
-      ORDER BY c.embedding <=> ${embeddingStr}${vectorCast}
+        AND c.${col} IS NOT NULL
+      ORDER BY c.${col} <=> ${embeddingStr}${vectorCast}
       LIMIT ${limit}
     `);
 
@@ -111,20 +113,22 @@ class KbChunkModel {
 
   static async updateEmbeddings(
     updates: Array<{ chunkId: string; embedding: number[] }>,
+    dimensions: number,
   ): Promise<void> {
     if (updates.length === 0) return;
 
+    const col = getEmbeddingColumnName(dimensions);
     const values = updates
       .map(
         (u) =>
-          `('${u.chunkId}'::uuid, '[${u.embedding.join(",")}]'::vector(${EMBEDDING_DIMENSIONS}))`,
+          `('${u.chunkId}'::uuid, '[${u.embedding.join(",")}]'::vector(${dimensions}))`,
       )
       .join(", ");
 
     await db.execute(
       sql.raw(`
         UPDATE kb_chunks AS c
-        SET embedding = v.embedding
+        SET ${col} = v.embedding
         FROM (VALUES ${values}) AS v(id, embedding)
         WHERE c.id = v.id
       `),

@@ -1,6 +1,8 @@
 import {
   AUTO_PROVISIONED_INVITATION_STATUS,
-  EMBEDDING_DIMENSIONS,
+  addNomicTaskPrefix,
+  EMBEDDING_COMPATIBLE_PROVIDERS,
+  getEmbeddingDimensions,
   RouteId,
 } from "@shared";
 import { and, eq, inArray, like } from "drizzle-orm";
@@ -10,6 +12,7 @@ import { z } from "zod";
 import db, { schema } from "@/database";
 import { resolveApiKeyFromChatApiKey } from "@/knowledge-base/kb-llm-client";
 import {
+  AgentModel,
   ChatApiKeyModel,
   InteractionModel,
   InvitationModel,
@@ -27,6 +30,7 @@ import {
   constructResponseSchema,
   PublicAppearanceSchema,
   SelectOrganizationSchema,
+  UpdateAgentSettingsSchema,
   UpdateAppearanceSchema,
   UpdateKnowledgeSettingsSchema,
   UpdateLlmSettingsSchema,
@@ -124,6 +128,42 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.patch(
+    "/api/organization/agent-settings",
+    {
+      schema: {
+        operationId: RouteId.UpdateAgentSettings,
+        description: "Update agent settings (default model, default agent)",
+        tags: ["Organization"],
+        body: UpdateAgentSettingsSchema,
+        response: constructResponseSchema(SelectOrganizationSchema),
+      },
+    },
+    async ({ organizationId, body }, reply) => {
+      if (body.defaultLlmApiKeyId) {
+        const apiKey = await ChatApiKeyModel.findById(body.defaultLlmApiKeyId);
+        if (!apiKey || apiKey.organizationId !== organizationId) {
+          throw new ApiError(404, "API key not found");
+        }
+      }
+
+      if (body.defaultAgentId) {
+        const agent = await AgentModel.findById(body.defaultAgentId);
+        if (!agent || agent.organizationId !== organizationId) {
+          throw new ApiError(404, "Agent not found");
+        }
+      }
+
+      const organization = await OrganizationModel.patch(organizationId, body);
+
+      if (!organization) {
+        throw new ApiError(404, "Organization not found");
+      }
+
+      return reply.send(organization);
+    },
+  );
+
+  fastify.patch(
     "/api/organization/knowledge-settings",
     {
       schema: {
@@ -150,7 +190,7 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
-      // Validate embedding API key is an OpenAI provider key
+      // Validate embedding API key uses an embedding-compatible provider
       if (body.embeddingChatApiKeyId) {
         const chatApiKey = await ChatApiKeyModel.findById(
           body.embeddingChatApiKeyId,
@@ -158,10 +198,10 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         if (!chatApiKey) {
           throw new ApiError(404, "Embedding API key not found");
         }
-        if (chatApiKey.provider !== "openai") {
+        if (!EMBEDDING_COMPATIBLE_PROVIDERS.has(chatApiKey.provider)) {
           throw new ApiError(
             400,
-            "Embedding API key must be an OpenAI provider key",
+            "Embedding API key must use a compatible provider (OpenAI or Ollama)",
           );
         }
       }
@@ -238,17 +278,17 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ body }, reply) => {
-      // Validate API key exists and is OpenAI provider
+      // Validate API key exists and uses an embedding-compatible provider
       const chatApiKey = await ChatApiKeyModel.findById(
         body.embeddingChatApiKeyId,
       );
       if (!chatApiKey) {
         throw new ApiError(404, "API key not found");
       }
-      if (chatApiKey.provider !== "openai") {
+      if (!EMBEDDING_COMPATIBLE_PROVIDERS.has(chatApiKey.provider)) {
         throw new ApiError(
           400,
-          "Embedding API key must be an OpenAI provider key",
+          "Embedding API key must use a compatible provider (OpenAI or Ollama)",
         );
       }
 
@@ -271,8 +311,16 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         const response = await client.embeddings.create({
           model: body.embeddingModel,
-          input: ["hello world"],
-          dimensions: EMBEDDING_DIMENSIONS,
+          input: [
+            addNomicTaskPrefix(
+              body.embeddingModel,
+              "hello world",
+              "search_document",
+            ),
+          ],
+          ...(body.embeddingModel.includes("nomic")
+            ? {}
+            : { dimensions: getEmbeddingDimensions(body.embeddingModel) }),
         });
 
         if (response.data.length > 0) {

@@ -99,9 +99,15 @@ function InviteByLinkCardContent({
                 disabled={createMutation.isPending}
                 data-testid={E2eTestId.InviteEmailInput}
               />
-              <p className="text-xs text-muted-foreground">
-                The email of the person you want to invite
-              </p>
+              {email && !isValidEmail ? (
+                <p className="text-xs text-destructive">
+                  Please enter a valid email address
+                </p>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  The email of the person you want to invite
+                </p>
+              )}
             </div>
 
             <div className="space-y-2">

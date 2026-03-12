@@ -20,6 +20,8 @@ import {
 } from "@/models";
 import { metrics } from "@/observability";
 import {
+  type AgentScope,
+  AgentScopeFilterSchema,
   AgentVersionsResponseSchema,
   ApiError,
   BuiltInAgentConfigSchema,
@@ -62,10 +64,9 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
               .describe(
                 "Filter by multiple agent types (comma-separated). Takes precedence over agentType if both provided.",
               ),
-            scope: z
-              .enum(["personal", "team", "org", "built_in"])
-              .optional()
-              .describe("Filter by scope: personal, team, org, or built_in."),
+            scope: AgentScopeFilterSchema.optional().describe(
+              "Filter by scope: personal, team, org, or built_in.",
+            ),
             teamIds: z
               .preprocess(
                 (val) => (typeof val === "string" ? val.split(",") : val),
@@ -214,13 +215,16 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
             .describe(
               "Exclude built-in agents from the results. Defaults to false.",
             ),
+          scope: AgentScopeFilterSchema.optional().describe(
+            "Filter by scope: personal, team, org, or built_in.",
+          ),
         }),
         response: constructResponseSchema(z.array(SelectAgentSchema)),
       },
     },
     async (
       {
-        query: { agentType, agentTypes, excludeBuiltIn },
+        query: { agentType, agentTypes, excludeBuiltIn, scope },
         user,
         organizationId,
       },
@@ -258,6 +262,8 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           agentType: agentTypes ? undefined : agentType,
           agentTypes,
           excludeBuiltIn,
+          scope:
+            scope && scope !== "built_in" ? (scope as AgentScope) : undefined,
         }),
       );
     },

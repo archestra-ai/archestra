@@ -25,6 +25,7 @@ interface EditableAssistantMessageProps {
   showActions: boolean;
   citationParts?: KnowledgeGraphCitationsProps["parts"];
   editDisabled?: boolean;
+  isStreaming?: boolean;
   onStartEdit: (partKey: string) => void;
   onCancelEdit: () => void;
   onSave: (
@@ -43,6 +44,7 @@ export function EditableAssistantMessage({
   showActions,
   citationParts,
   editDisabled = false,
+  isStreaming = false,
   onStartEdit,
   onCancelEdit,
   onSave,
@@ -168,7 +170,7 @@ export function EditableAssistantMessage({
     <Message from="assistant" className="group/message">
       <div className="relative flex flex-col items-start pb-8 w-full">
         <MessageContent>
-          <Response>{text}</Response>
+          <Response isStreaming={isStreaming}>{text}</Response>
           {citationParts && <KnowledgeGraphCitations parts={citationParts} />}
         </MessageContent>
         {showActions && (

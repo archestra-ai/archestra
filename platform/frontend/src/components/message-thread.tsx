@@ -3,14 +3,12 @@
 import type { ChatStatus, UIMessage } from "ai";
 import {
   Check,
-  CopyIcon,
   Paperclip,
   RefreshCcwIcon,
   ShieldCheck,
   TriangleAlert,
 } from "lucide-react";
-import { Fragment } from "react";
-import { Action, Actions } from "@/components/ai-elements/actions";
+import { Fragment, useMemo } from "react";
 import {
   Conversation,
   ConversationContent,
@@ -41,6 +39,7 @@ import {
   hasKnowledgeBaseToolCall,
   KnowledgeGraphCitations,
 } from "@/components/chat/knowledge-graph-citations";
+import { MessageActions } from "@/components/chat/message-actions";
 import { PolicyDeniedTool } from "@/components/chat/policy-denied-tool";
 import Divider from "@/components/divider";
 import { Button } from "@/components/ui/button";
@@ -66,6 +65,13 @@ const MessageThread = ({
   profileId?: string;
 }) => {
   const status: ChatStatus = "streaming" as ChatStatus;
+
+  const lastAssistantMessageIndex = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === "assistant") return i;
+    }
+    return -1;
+  }, [messages]);
 
   return (
     <div
@@ -161,12 +167,7 @@ const MessageThread = ({
                         }
                         const isLastAssistantMessage =
                           message.role === "assistant" &&
-                          idx ===
-                            messages.length -
-                              1 -
-                              [...messages]
-                                .reverse()
-                                .findIndex((m) => m.role === "assistant");
+                          idx === lastAssistantMessageIndex;
                         const isLastTextPartInMessage =
                           isLastAssistantMessage &&
                           message.parts
@@ -221,16 +222,10 @@ const MessageThread = ({
                             </Message>
                             {message.role === "assistant" &&
                               i === messages.length - 1 && (
-                                <Actions className="mt-2">
-                                  <Action
-                                    onClick={() =>
-                                      navigator.clipboard.writeText(part.text)
-                                    }
-                                    label="Copy"
-                                  >
-                                    <CopyIcon className="size-3" />
-                                  </Action>
-                                </Actions>
+                                <MessageActions
+                                  textToCopy={part.text}
+                                  className="-mt-1 w-fit"
+                                />
                               )}
                           </Fragment>
                         );

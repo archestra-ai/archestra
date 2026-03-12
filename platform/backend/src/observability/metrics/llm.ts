@@ -535,6 +535,32 @@ export function getObservableFetch(
       throw error;
     }
 
+    // When the upstream returns an error, log the raw body for debugging.
+    // The body may be lost by the time provider SDKs process the error
+    // (e.g. OpenAI SDK produces "500 status code (no body)" for non-standard formats).
+    if (!response.ok) {
+      try {
+        const cloned = response.clone();
+        const rawBody = await cloned.text();
+        if (rawBody) {
+          logger.error(
+            {
+              statusCode: response.status,
+              upstreamError: rawBody.slice(0, 2000),
+              provider,
+              model,
+            },
+            "Upstream provider returned an error response",
+          );
+        }
+      } catch (bodyError) {
+        logger.debug(
+          { err: bodyError },
+          "Failed to read upstream error response body",
+        );
+      }
+    }
+
     // Record token metrics
     if (
       response.ok &&

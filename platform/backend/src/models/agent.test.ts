@@ -1894,6 +1894,110 @@ describe("AgentModel", () => {
     });
   });
 
+  describe("findAll with scope filter", () => {
+    test("returns only org-scoped agents when scope is org", async () => {
+      await AgentModel.create({
+        name: "Org Agent",
+        teams: [],
+        scope: "org",
+        agentType: "agent",
+      });
+      await AgentModel.create({
+        name: "Personal Agent",
+        teams: [],
+        scope: "personal",
+        agentType: "agent",
+      });
+      await AgentModel.create({
+        name: "Team Agent",
+        teams: [],
+        scope: "team",
+        agentType: "agent",
+      });
+
+      const results = await AgentModel.findAll(undefined, true, {
+        agentType: "agent",
+        scope: "org",
+      });
+
+      expect(results).toHaveLength(1);
+      expect(results[0].name).toBe("Org Agent");
+    });
+
+    test("excludes personal and team agents when scope is org", async () => {
+      await AgentModel.create({
+        name: "Personal Agent",
+        teams: [],
+        scope: "personal",
+        agentType: "agent",
+      });
+      await AgentModel.create({
+        name: "Team Agent",
+        teams: [],
+        scope: "team",
+        agentType: "agent",
+      });
+
+      const results = await AgentModel.findAll(undefined, true, {
+        agentType: "agent",
+        scope: "org",
+      });
+
+      expect(results).toHaveLength(0);
+    });
+
+    test("excludes built-in agents when both scope and excludeBuiltIn are set", async () => {
+      await AgentModel.create({
+        name: "Org Agent",
+        teams: [],
+        scope: "org",
+        agentType: "agent",
+      });
+      await AgentModel.create({
+        name: BUILT_IN_AGENT_NAMES.POLICY_CONFIG,
+        teams: [],
+        scope: "org",
+        agentType: "agent",
+        builtInAgentConfig: {
+          name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
+          autoConfigureOnToolAssignment: false,
+        },
+      });
+
+      const results = await AgentModel.findAll(undefined, true, {
+        agentType: "agent",
+        scope: "org",
+        excludeBuiltIn: true,
+      });
+
+      expect(results).toHaveLength(1);
+      expect(results[0].name).toBe("Org Agent");
+    });
+
+    test("returns only personal agents when scope is personal", async () => {
+      await AgentModel.create({
+        name: "Org Agent",
+        teams: [],
+        scope: "org",
+        agentType: "agent",
+      });
+      await AgentModel.create({
+        name: "Personal Agent",
+        teams: [],
+        scope: "personal",
+        agentType: "agent",
+      });
+
+      const results = await AgentModel.findAll(undefined, true, {
+        agentType: "agent",
+        scope: "personal",
+      });
+
+      expect(results).toHaveLength(1);
+      expect(results[0].name).toBe("Personal Agent");
+    });
+  });
+
   describe("ensurePersonalChatAgent", () => {
     test("creates personal agent and sets member defaultAgentId", async ({
       makeUser,

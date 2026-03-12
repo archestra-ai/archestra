@@ -121,9 +121,10 @@ class ToolInvocationPolicyModel {
 
     const result = await db
       .delete(schema.toolInvocationPoliciesTable)
-      .where(eq(schema.toolInvocationPoliciesTable.id, id));
+      .where(eq(schema.toolInvocationPoliciesTable.id, id))
+      .returning({ id: schema.toolInvocationPoliciesTable.id });
 
-    const deleted = result.rowCount !== null && result.rowCount > 0;
+    const deleted = result.length > 0;
 
     if (deleted) {
       // Clear auto-configured timestamp for this tool
@@ -146,9 +147,10 @@ class ToolInvocationPolicyModel {
   static async deleteByToolId(toolId: string): Promise<number> {
     const result = await db
       .delete(schema.toolInvocationPoliciesTable)
-      .where(eq(schema.toolInvocationPoliciesTable.toolId, toolId));
+      .where(eq(schema.toolInvocationPoliciesTable.toolId, toolId))
+      .returning({ id: schema.toolInvocationPoliciesTable.id });
 
-    return result.rowCount ?? 0;
+    return result.length;
   }
 
   /**

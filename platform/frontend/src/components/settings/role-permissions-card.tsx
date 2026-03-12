@@ -34,6 +34,7 @@ const actionLabels: Record<Action, string> = {
   "team-admin": "Team Admin",
   admin: "Admin",
   cancel: "Cancel",
+  enable: "Enable",
 };
 
 export function RolePermissionsCard() {

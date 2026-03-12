@@ -87,6 +87,33 @@ class AgentConnectorAssignmentModel {
   }
 
   /**
+   * Batch fetch: for a list of connector IDs, return a map of connectorId → agentId[].
+   */
+  static async getAgentIdsForConnectors(
+    connectorIds: string[],
+  ): Promise<Map<string, string[]>> {
+    if (connectorIds.length === 0) return new Map();
+
+    const rows = await db
+      .select()
+      .from(schema.agentConnectorAssignmentsTable)
+      .where(
+        inArray(
+          schema.agentConnectorAssignmentsTable.connectorId,
+          connectorIds,
+        ),
+      );
+
+    const map = new Map<string, string[]>();
+    for (const row of rows) {
+      const list = map.get(row.connectorId) ?? [];
+      list.push(row.agentId);
+      map.set(row.connectorId, list);
+    }
+    return map;
+  }
+
+  /**
    * Batch fetch: for a list of agent IDs, return a map of agentId → connectorId[].
    */
   static async getConnectorIdsForAgents(

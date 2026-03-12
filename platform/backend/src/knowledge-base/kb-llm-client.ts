@@ -1,5 +1,5 @@
 import type { EmbeddingModel, SupportedProvider } from "@shared";
-import { getEmbeddingDimensions } from "@shared";
+import { DEFAULT_PROVIDER_BASE_URLS, getEmbeddingDimensions } from "@shared";
 import OpenAI from "openai";
 import { createDirectLLMModel, type LLMModel } from "@/clients/llm-client";
 import logger from "@/logging";
@@ -45,7 +45,8 @@ export async function resolveEmbeddingConfig(
       baseURL: resolved.baseUrl ?? undefined,
     }),
     model: org.embeddingModel,
-    dimensions: getEmbeddingDimensions(org.embeddingModel),
+    dimensions:
+      org.embeddingDimensions ?? getEmbeddingDimensions(org.embeddingModel),
   };
 }
 
@@ -113,10 +114,26 @@ export async function resolveApiKeyFromChatApiKey(
   provider: SupportedProvider;
 } | null> {
   const chatApiKey = await ChatApiKeyModel.findById(chatApiKeyId);
-  if (!chatApiKey?.secretId) return null;
+  if (!chatApiKey) return null;
+
+  // Fall back to the provider's default base URL when none is configured on the key
+  const baseUrl =
+    chatApiKey.baseUrl ||
+    DEFAULT_PROVIDER_BASE_URLS[chatApiKey.provider] ||
+    null;
+
+  // Providers like Ollama don't require an API key — use a placeholder
+  // since the OpenAI SDK requires a non-empty apiKey string
+  if (!chatApiKey.secretId) {
+    return {
+      apiKey: "unused",
+      baseUrl,
+      provider: chatApiKey.provider,
+    };
+  }
 
   const apiKey = await getSecretValueForLlmProviderApiKey(chatApiKey.secretId);
   if (!apiKey) return null;
 
-  return { apiKey, baseUrl: chatApiKey.baseUrl, provider: chatApiKey.provider };
+  return { apiKey, baseUrl, provider: chatApiKey.provider };
 }

@@ -22,6 +22,7 @@ const knowledgeBaseConnectorsTable = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     organizationId: text("organization_id").notNull(),
     name: text("name").notNull(),
+    description: text("description"),
     connectorType: text("connector_type").$type<ConnectorType>().notNull(),
     config: jsonb("config").$type<ConnectorConfig>().notNull(),
     secretId: uuid("secret_id").references(() => secretTable.id, {

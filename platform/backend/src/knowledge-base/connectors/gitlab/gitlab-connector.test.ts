@@ -12,6 +12,8 @@ const mockIssuesAll = vi.fn();
 const mockIssueNotesAll = vi.fn();
 const mockMergeRequestsAll = vi.fn();
 const mockMergeRequestNotesAll = vi.fn();
+const mockAllRepositoryTrees = vi.fn();
+const mockRepositoryFilesShow = vi.fn();
 
 vi.mock("@gitbeaker/rest", () => ({
   Gitlab: class MockGitlab {
@@ -22,6 +24,8 @@ vi.mock("@gitbeaker/rest", () => ({
     IssueNotes = { all: mockIssueNotesAll };
     MergeRequests = { all: mockMergeRequestsAll };
     MergeRequestNotes = { all: mockMergeRequestNotesAll };
+    Repositories = { allRepositoryTrees: mockAllRepositoryTrees };
+    RepositoryFiles = { show: mockRepositoryFilesShow };
   },
 }));
 
@@ -640,6 +644,140 @@ describe("GitlabConnector", () => {
         lastSyncedAt?: string;
       };
       expect(checkpoint.lastSyncedAt).toBe("2024-01-10T00:00:00.000Z");
+    });
+  });
+
+  describe("markdown file sync", () => {
+    const mockProject = {
+      id: 42,
+      name: "my-project",
+      path_with_namespace: "my-group/my-project",
+      web_url: "https://gitlab.com/my-group/my-project",
+    };
+
+    beforeEach(() => {
+      mockProjectsShow.mockResolvedValue(mockProject);
+    });
+
+    test("fetches and indexes markdown files when includeMarkdownFiles is true", async () => {
+      // Issues pass - empty
+      mockIssuesAll.mockResolvedValueOnce([]);
+      // MR pass - empty
+      mockMergeRequestsAll.mockResolvedValueOnce([]);
+
+      // Markdown: get repo tree
+      mockAllRepositoryTrees.mockResolvedValueOnce([
+        { type: "blob", path: "README.md" },
+        { type: "blob", path: "docs/guide.mdx" },
+        { type: "blob", path: "src/index.ts" },
+        { type: "tree", path: "docs" },
+      ]);
+
+      // Markdown: get file contents
+      mockRepositoryFilesShow
+        .mockResolvedValueOnce({
+          content: Buffer.from("# README\nHello world").toString("base64"),
+        })
+        .mockResolvedValueOnce({
+          content: Buffer.from("# Guide\nSome guide content").toString(
+            "base64",
+          ),
+        });
+
+      const batches: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: { ...validConfig, includeMarkdownFiles: true },
+        credentials,
+        checkpoint: null,
+      })) {
+        batches.push(batch);
+      }
+
+      const mdDocs = batches
+        .flatMap((b) => b.documents)
+        .filter((d) => d.metadata.kind === "markdown_file");
+
+      expect(mdDocs).toHaveLength(2);
+      expect(mdDocs[0].id).toBe("my-group/my-project#file:README.md");
+      expect(mdDocs[0].title).toBe("README.md (my-group/my-project)");
+      expect(mdDocs[0].content).toBe("# README\nHello world");
+      expect(mdDocs[0].sourceUrl).toContain("/-/blob/HEAD/README.md");
+      expect(mdDocs[0].metadata.filePath).toBe("README.md");
+
+      expect(mdDocs[1].id).toBe("my-group/my-project#file:docs/guide.mdx");
+      expect(mdDocs[1].content).toBe("# Guide\nSome guide content");
+    });
+
+    test("does not fetch markdown files when includeMarkdownFiles is not set", async () => {
+      mockIssuesAll.mockResolvedValueOnce([]);
+      mockMergeRequestsAll.mockResolvedValueOnce([]);
+
+      const batches: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: validConfig,
+        credentials,
+        checkpoint: null,
+      })) {
+        batches.push(batch);
+      }
+
+      expect(mockAllRepositoryTrees).not.toHaveBeenCalled();
+      expect(mockRepositoryFilesShow).not.toHaveBeenCalled();
+    });
+
+    test("continues when file content fetch fails", async () => {
+      mockIssuesAll.mockResolvedValueOnce([]);
+      mockMergeRequestsAll.mockResolvedValueOnce([]);
+
+      mockAllRepositoryTrees.mockResolvedValueOnce([
+        { type: "blob", path: "a.md" },
+        { type: "blob", path: "b.md" },
+      ]);
+
+      mockRepositoryFilesShow
+        .mockRejectedValueOnce(new Error("403 Forbidden"))
+        .mockResolvedValueOnce({
+          content: Buffer.from("# B file").toString("base64"),
+        });
+
+      const batches: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: { ...validConfig, includeMarkdownFiles: true },
+        credentials,
+        checkpoint: null,
+      })) {
+        batches.push(batch);
+      }
+
+      const mdBatch = batches.find((b) =>
+        b.documents.some((d) => d.metadata.kind === "markdown_file"),
+      );
+      expect(mdBatch).toBeDefined();
+      expect(mdBatch?.documents).toHaveLength(1);
+      expect(mdBatch?.documents[0].content).toBe("# B file");
+      expect(mdBatch?.failures).toHaveLength(1);
+      expect(mdBatch?.failures?.[0].itemId).toBe("a.md");
+    });
+
+    test("handles empty repo tree gracefully", async () => {
+      mockIssuesAll.mockResolvedValueOnce([]);
+      mockMergeRequestsAll.mockResolvedValueOnce([]);
+
+      mockAllRepositoryTrees.mockResolvedValueOnce([]);
+
+      const batches: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: { ...validConfig, includeMarkdownFiles: true },
+        credentials,
+        checkpoint: null,
+      })) {
+        batches.push(batch);
+      }
+
+      // Should complete without errors
+      expect(batches.length).toBeGreaterThan(0);
+      const lastBatch = batches[batches.length - 1];
+      expect(lastBatch.hasMore).toBe(false);
     });
   });
 

@@ -94,9 +94,10 @@ describe("useSettingsTabs", () => {
       member: ["read"],
       team: ["read"],
       ac: ["read"],
-      appearance: ["read"],
+      organizationSettings: ["read"],
       securitySettings: ["read"],
       llmSettings: ["read"],
+      agentSettings: ["read"],
     };
 
     const { result } = renderHook(() => useSettingsTabs(), {
@@ -107,11 +108,12 @@ describe("useSettingsTabs", () => {
       const labels = getTabLabels(result.current);
       expect(labels).toContain("Dual LLM");
       expect(labels).toContain("Security");
+      expect(labels).toContain("Agents");
       expect(labels).toContain("LLM");
       expect(labels).toContain("Users");
       expect(labels).toContain("Teams");
       expect(labels).toContain("Roles");
-      expect(labels).toContain("Appearance");
+      expect(labels).toContain("Organization");
     });
   });
 
@@ -254,9 +256,10 @@ describe("useSettingsTabs", () => {
       ac: ["read"],
       identityProvider: ["read"],
       secret: ["read"],
-      appearance: ["read"],
+      organizationSettings: ["read"],
       securitySettings: ["read"],
       llmSettings: ["read"],
+      agentSettings: ["read"],
     };
 
     const { result } = renderHook(() => useSettingsTabs(), {
@@ -268,15 +271,16 @@ describe("useSettingsTabs", () => {
       expect(labels).toEqual([
         "Your Account",
         "Authentication",
-        "Dual LLM",
         "Security",
+        "Agents",
         "LLM",
         "Users",
         "Teams",
         "Roles",
         "Identity Providers",
         "Secrets",
-        "Appearance",
+        "Organization",
+        "Dual LLM",
       ]);
     });
   });

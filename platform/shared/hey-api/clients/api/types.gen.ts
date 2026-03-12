@@ -11995,6 +11995,10 @@ export type GetAllAgentsData = {
          * Exclude built-in agents from the results. Defaults to false.
          */
         excludeBuiltIn?: boolean;
+        /**
+         * Filter by scope: personal, team, org, or built_in.
+         */
+        scope?: 'personal' | 'team' | 'org' | 'built_in';
     };
     url: '/api/agents/all';
 };
@@ -27253,7 +27257,7 @@ export type GetKnowledgeBasesResponses = {
             connectors: Array<{
                 id: string;
                 name: string;
-                connectorType: 'jira' | 'confluence' | 'github' | 'gitlab';
+                connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow';
             }>;
             totalDocsIndexed: number;
             assignedAgents: Array<{
@@ -27782,7 +27786,8 @@ export type GetConnectorsResponses = {
             id: string;
             organizationId: string;
             name: string;
-            connectorType: 'jira' | 'confluence' | 'github' | 'gitlab';
+            description: string | null;
+            connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow';
             config: {
                 type: 'jira';
                 jiraBaseUrl: unknown;
@@ -27807,6 +27812,7 @@ export type GetConnectorsResponses = {
                 repos?: Array<string>;
                 includeIssues?: boolean;
                 includePullRequests?: boolean;
+                includeMarkdownFiles?: boolean;
                 labelsToSkip?: Array<string>;
             } | {
                 type: 'gitlab';
@@ -27815,7 +27821,16 @@ export type GetConnectorsResponses = {
                 groupId?: string;
                 includeIssues?: boolean;
                 includeMergeRequests?: boolean;
+                includeMarkdownFiles?: boolean;
                 labelsToSkip?: Array<string>;
+            } | {
+                type: 'servicenow';
+                instanceUrl: unknown;
+                states?: Array<string>;
+                assignmentGroups?: Array<string>;
+                query?: string;
+                batchSize?: number;
+                initialSyncMonths?: number;
             };
             secretId: string | null;
             schedule: string;
@@ -27850,7 +27865,8 @@ export type GetConnectorsResponse = GetConnectorsResponses[keyof GetConnectorsRe
 export type CreateConnectorData = {
     body: {
         name: string;
-        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab';
+        description?: string | null;
+        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow';
         config: {
             type: 'jira';
             jiraBaseUrl: string;
@@ -27875,6 +27891,7 @@ export type CreateConnectorData = {
             repos?: Array<string>;
             includeIssues?: boolean;
             includePullRequests?: boolean;
+            includeMarkdownFiles?: boolean;
             labelsToSkip?: Array<string>;
         } | {
             type: 'gitlab';
@@ -27883,7 +27900,16 @@ export type CreateConnectorData = {
             groupId?: string;
             includeIssues?: boolean;
             includeMergeRequests?: boolean;
+            includeMarkdownFiles?: boolean;
             labelsToSkip?: Array<string>;
+        } | {
+            type: 'servicenow';
+            instanceUrl: string;
+            states?: Array<string>;
+            assignmentGroups?: Array<string>;
+            query?: string;
+            batchSize?: number;
+            initialSyncMonths?: number;
         };
         credentials: {
             email?: string;
@@ -27965,7 +27991,8 @@ export type CreateConnectorResponses = {
         id: string;
         organizationId: string;
         name: string;
-        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab';
+        description: string | null;
+        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow';
         config: {
             type: 'jira';
             jiraBaseUrl: unknown;
@@ -27990,6 +28017,7 @@ export type CreateConnectorResponses = {
             repos?: Array<string>;
             includeIssues?: boolean;
             includePullRequests?: boolean;
+            includeMarkdownFiles?: boolean;
             labelsToSkip?: Array<string>;
         } | {
             type: 'gitlab';
@@ -27998,7 +28026,16 @@ export type CreateConnectorResponses = {
             groupId?: string;
             includeIssues?: boolean;
             includeMergeRequests?: boolean;
+            includeMarkdownFiles?: boolean;
             labelsToSkip?: Array<string>;
+        } | {
+            type: 'servicenow';
+            instanceUrl: unknown;
+            states?: Array<string>;
+            assignmentGroups?: Array<string>;
+            query?: string;
+            batchSize?: number;
+            initialSyncMonths?: number;
         };
         secretId: string | null;
         schedule: string;
@@ -28171,7 +28208,8 @@ export type GetConnectorResponses = {
         id: string;
         organizationId: string;
         name: string;
-        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab';
+        description: string | null;
+        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow';
         config: {
             type: 'jira';
             jiraBaseUrl: unknown;
@@ -28196,6 +28234,7 @@ export type GetConnectorResponses = {
             repos?: Array<string>;
             includeIssues?: boolean;
             includePullRequests?: boolean;
+            includeMarkdownFiles?: boolean;
             labelsToSkip?: Array<string>;
         } | {
             type: 'gitlab';
@@ -28204,7 +28243,16 @@ export type GetConnectorResponses = {
             groupId?: string;
             includeIssues?: boolean;
             includeMergeRequests?: boolean;
+            includeMarkdownFiles?: boolean;
             labelsToSkip?: Array<string>;
+        } | {
+            type: 'servicenow';
+            instanceUrl: unknown;
+            states?: Array<string>;
+            assignmentGroups?: Array<string>;
+            query?: string;
+            batchSize?: number;
+            initialSyncMonths?: number;
         };
         secretId: string | null;
         schedule: string;
@@ -28226,6 +28274,7 @@ export type GetConnectorResponse = GetConnectorResponses[keyof GetConnectorRespo
 export type UpdateConnectorData = {
     body?: {
         name?: string;
+        description?: string | null;
         config?: {
             type: 'jira';
             jiraBaseUrl: string;
@@ -28250,6 +28299,7 @@ export type UpdateConnectorData = {
             repos?: Array<string>;
             includeIssues?: boolean;
             includePullRequests?: boolean;
+            includeMarkdownFiles?: boolean;
             labelsToSkip?: Array<string>;
         } | {
             type: 'gitlab';
@@ -28258,7 +28308,16 @@ export type UpdateConnectorData = {
             groupId?: string;
             includeIssues?: boolean;
             includeMergeRequests?: boolean;
+            includeMarkdownFiles?: boolean;
             labelsToSkip?: Array<string>;
+        } | {
+            type: 'servicenow';
+            instanceUrl: string;
+            states?: Array<string>;
+            assignmentGroups?: Array<string>;
+            query?: string;
+            batchSize?: number;
+            initialSyncMonths?: number;
         };
         credentials?: {
             email?: string;
@@ -28341,7 +28400,8 @@ export type UpdateConnectorResponses = {
         id: string;
         organizationId: string;
         name: string;
-        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab';
+        description: string | null;
+        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow';
         config: {
             type: 'jira';
             jiraBaseUrl: unknown;
@@ -28366,6 +28426,7 @@ export type UpdateConnectorResponses = {
             repos?: Array<string>;
             includeIssues?: boolean;
             includePullRequests?: boolean;
+            includeMarkdownFiles?: boolean;
             labelsToSkip?: Array<string>;
         } | {
             type: 'gitlab';
@@ -28374,7 +28435,16 @@ export type UpdateConnectorResponses = {
             groupId?: string;
             includeIssues?: boolean;
             includeMergeRequests?: boolean;
+            includeMarkdownFiles?: boolean;
             labelsToSkip?: Array<string>;
+        } | {
+            type: 'servicenow';
+            instanceUrl: unknown;
+            states?: Array<string>;
+            assignmentGroups?: Array<string>;
+            query?: string;
+            batchSize?: number;
+            initialSyncMonths?: number;
         };
         secretId: string | null;
         schedule: string;
@@ -33608,7 +33678,7 @@ export type GetRolesResponses = {
         role: string;
         name: string;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable'>;
         };
         createdAt: string;
         updatedAt: string | null;
@@ -33622,7 +33692,7 @@ export type CreateRoleData = {
     body: {
         name: string;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable'>;
         };
     };
     path?: never;
@@ -33699,7 +33769,7 @@ export type CreateRoleResponses = {
         role: string;
         name: string;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable'>;
         };
         createdAt: string;
         updatedAt: string | null;
@@ -33872,7 +33942,7 @@ export type GetRoleResponses = {
         role: string;
         name: string;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable'>;
         };
         createdAt: string;
         updatedAt: string | null;
@@ -33886,7 +33956,7 @@ export type UpdateRoleData = {
     body?: {
         name?: string;
         permission?: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable'>;
         };
     };
     path: {
@@ -33968,7 +34038,7 @@ export type UpdateRoleResponses = {
         role: string;
         name: string;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable'>;
         };
         createdAt: string;
         updatedAt: string | null;
@@ -34065,11 +34135,21 @@ export type GetOrganizationResponses = {
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
         embeddingModel: string | null;
+        embeddingDimensions: number | null;
         embeddingChatApiKeyId: string | null;
         rerankerChatApiKeyId: string | null;
         rerankerModel: string | null;
         defaultLlmModel: string | null;
         defaultLlmProvider: string | null;
+        defaultLlmApiKeyId: string | null;
+        defaultAgentId: string | null;
+        favicon: string | null;
+        appName: string | null;
+        ogDescription: string | null;
+        footerText: string | null;
+        chatPlaceholders: Array<string> | null;
+        iconLogo: string | null;
+        showTwoFactor: boolean;
     };
 };
 
@@ -34150,6 +34230,11 @@ export type GetPublicAppearanceResponses = {
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         logo: string | null;
         logoDark: string | null;
+        favicon: string | null;
+        iconLogo: string | null;
+        appName: string | null;
+        ogDescription: string | null;
+        footerText: string | null;
     };
 };
 
@@ -34161,6 +34246,13 @@ export type UpdateAppearanceData = {
         customFont?: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         logo?: string | null;
         logoDark?: string | null;
+        favicon?: string | null;
+        iconLogo?: string | null;
+        appName?: string | null;
+        ogDescription?: string | null;
+        footerText?: string | null;
+        chatPlaceholders?: Array<string> | null;
+        showTwoFactor?: boolean;
     };
     path?: never;
     query?: never;
@@ -34247,11 +34339,21 @@ export type UpdateAppearanceResponses = {
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
         embeddingModel: string | null;
+        embeddingDimensions: number | null;
         embeddingChatApiKeyId: string | null;
         rerankerChatApiKeyId: string | null;
         rerankerModel: string | null;
         defaultLlmModel: string | null;
         defaultLlmProvider: string | null;
+        defaultLlmApiKeyId: string | null;
+        defaultAgentId: string | null;
+        favicon: string | null;
+        appName: string | null;
+        ogDescription: string | null;
+        footerText: string | null;
+        chatPlaceholders: Array<string> | null;
+        iconLogo: string | null;
+        showTwoFactor: boolean;
     };
 };
 
@@ -34347,11 +34449,21 @@ export type UpdateSecuritySettingsResponses = {
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
         embeddingModel: string | null;
+        embeddingDimensions: number | null;
         embeddingChatApiKeyId: string | null;
         rerankerChatApiKeyId: string | null;
         rerankerModel: string | null;
         defaultLlmModel: string | null;
         defaultLlmProvider: string | null;
+        defaultLlmApiKeyId: string | null;
+        defaultAgentId: string | null;
+        favicon: string | null;
+        appName: string | null;
+        ogDescription: string | null;
+        footerText: string | null;
+        chatPlaceholders: Array<string> | null;
+        iconLogo: string | null;
+        showTwoFactor: boolean;
     };
 };
 
@@ -34362,8 +34474,6 @@ export type UpdateLlmSettingsData = {
         convertToolResultsToToon?: boolean;
         compressionScope?: 'organization' | 'team';
         limitCleanupInterval?: '1h' | '12h' | '24h' | '1w' | '1m';
-        defaultLlmModel?: string | null;
-        defaultLlmProvider?: string | null;
     };
     path?: never;
     query?: never;
@@ -34450,19 +34560,142 @@ export type UpdateLlmSettingsResponses = {
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
         embeddingModel: string | null;
+        embeddingDimensions: number | null;
         embeddingChatApiKeyId: string | null;
         rerankerChatApiKeyId: string | null;
         rerankerModel: string | null;
         defaultLlmModel: string | null;
         defaultLlmProvider: string | null;
+        defaultLlmApiKeyId: string | null;
+        defaultAgentId: string | null;
+        favicon: string | null;
+        appName: string | null;
+        ogDescription: string | null;
+        footerText: string | null;
+        chatPlaceholders: Array<string> | null;
+        iconLogo: string | null;
+        showTwoFactor: boolean;
     };
 };
 
 export type UpdateLlmSettingsResponse = UpdateLlmSettingsResponses[keyof UpdateLlmSettingsResponses];
 
+export type UpdateAgentSettingsData = {
+    body?: {
+        defaultLlmModel?: string | null;
+        defaultLlmProvider?: string | null;
+        defaultLlmApiKeyId?: string | null;
+        defaultAgentId?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/organization/agent-settings';
+};
+
+export type UpdateAgentSettingsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type UpdateAgentSettingsError = UpdateAgentSettingsErrors[keyof UpdateAgentSettingsErrors];
+
+export type UpdateAgentSettingsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        name: string;
+        slug: string;
+        logo: string | null;
+        logoDark: string | null;
+        createdAt: string;
+        metadata: string | null;
+        limitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
+        onboardingComplete: boolean;
+        theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
+        customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
+        convertToolResultsToToon: boolean;
+        compressionScope: 'organization' | 'team';
+        globalToolPolicy: 'permissive' | 'restrictive';
+        allowChatFileUploads: boolean;
+        embeddingModel: string | null;
+        embeddingDimensions: number | null;
+        embeddingChatApiKeyId: string | null;
+        rerankerChatApiKeyId: string | null;
+        rerankerModel: string | null;
+        defaultLlmModel: string | null;
+        defaultLlmProvider: string | null;
+        defaultLlmApiKeyId: string | null;
+        defaultAgentId: string | null;
+        favicon: string | null;
+        appName: string | null;
+        ogDescription: string | null;
+        footerText: string | null;
+        chatPlaceholders: Array<string> | null;
+        iconLogo: string | null;
+        showTwoFactor: boolean;
+    };
+};
+
+export type UpdateAgentSettingsResponse = UpdateAgentSettingsResponses[keyof UpdateAgentSettingsResponses];
+
 export type UpdateKnowledgeSettingsData = {
     body?: {
         embeddingModel?: string;
+        embeddingDimensions?: 1536 | 768;
         embeddingChatApiKeyId?: string | null;
         rerankerChatApiKeyId?: string | null;
         rerankerModel?: string | null;
@@ -34552,11 +34785,21 @@ export type UpdateKnowledgeSettingsResponses = {
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
         embeddingModel: string | null;
+        embeddingDimensions: number | null;
         embeddingChatApiKeyId: string | null;
         rerankerChatApiKeyId: string | null;
         rerankerModel: string | null;
         defaultLlmModel: string | null;
         defaultLlmProvider: string | null;
+        defaultLlmApiKeyId: string | null;
+        defaultAgentId: string | null;
+        favicon: string | null;
+        appName: string | null;
+        ogDescription: string | null;
+        footerText: string | null;
+        chatPlaceholders: Array<string> | null;
+        iconLogo: string | null;
+        showTwoFactor: boolean;
     };
 };
 
@@ -34649,11 +34892,21 @@ export type DropEmbeddingConfigResponses = {
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
         embeddingModel: string | null;
+        embeddingDimensions: number | null;
         embeddingChatApiKeyId: string | null;
         rerankerChatApiKeyId: string | null;
         rerankerModel: string | null;
         defaultLlmModel: string | null;
         defaultLlmProvider: string | null;
+        defaultLlmApiKeyId: string | null;
+        defaultAgentId: string | null;
+        favicon: string | null;
+        appName: string | null;
+        ogDescription: string | null;
+        footerText: string | null;
+        chatPlaceholders: Array<string> | null;
+        iconLogo: string | null;
+        showTwoFactor: boolean;
     };
 };
 
@@ -34829,11 +35082,21 @@ export type CompleteOnboardingResponses = {
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
         embeddingModel: string | null;
+        embeddingDimensions: number | null;
         embeddingChatApiKeyId: string | null;
         rerankerChatApiKeyId: string | null;
         rerankerModel: string | null;
         defaultLlmModel: string | null;
         defaultLlmProvider: string | null;
+        defaultLlmApiKeyId: string | null;
+        defaultAgentId: string | null;
+        favicon: string | null;
+        appName: string | null;
+        ogDescription: string | null;
+        footerText: string | null;
+        chatPlaceholders: Array<string> | null;
+        iconLogo: string | null;
+        showTwoFactor: boolean;
     };
 };
 
@@ -37632,7 +37895,7 @@ export type GetUserPermissionsResponses = {
      * Default Response
      */
     200: {
-        [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel'>;
+        [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable'>;
     };
 };
 

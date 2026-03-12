@@ -1,6 +1,10 @@
 "use client";
 
-import type { archestraApiTypes } from "@shared";
+import {
+  type archestraApiTypes,
+  CONNECTOR_TYPE_LABELS,
+  getConnectorNamePlaceholder,
+} from "@shared";
 import { ArrowLeft, ChevronDown } from "lucide-react";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
@@ -36,8 +40,9 @@ import { GithubConfigFields } from "./github-config-fields";
 import { GitlabConfigFields } from "./gitlab-config-fields";
 import { JiraConfigFields } from "./jira-config-fields";
 import { SchedulePicker } from "./schedule-picker";
+import { ServiceNowConfigFields } from "./servicenow-config-fields";
 
-type ConnectorType = "jira" | "confluence" | "github" | "gitlab";
+type ConnectorType = "jira" | "confluence" | "github" | "gitlab" | "servicenow";
 
 const CONNECTOR_OPTIONS: {
   type: ConnectorType;
@@ -46,28 +51,34 @@ const CONNECTOR_OPTIONS: {
 }[] = [
   {
     type: "jira",
-    label: "Jira",
+    label: CONNECTOR_TYPE_LABELS.jira,
     description: "Sync issues and projects from Jira",
   },
   {
     type: "confluence",
-    label: "Confluence",
+    label: CONNECTOR_TYPE_LABELS.confluence,
     description: "Sync pages and spaces from Confluence",
   },
   {
     type: "github",
-    label: "GitHub",
+    label: CONNECTOR_TYPE_LABELS.github,
     description: "Sync issues and pull requests from GitHub",
   },
   {
     type: "gitlab",
-    label: "GitLab",
+    label: CONNECTOR_TYPE_LABELS.gitlab,
     description: "Sync issues and merge requests from GitLab",
+  },
+  {
+    type: "servicenow",
+    label: "ServiceNow",
+    description: "Sync incidents from ServiceNow",
   },
 ];
 
 interface CreateConnectorFormValues {
   name: string;
+  description: string;
   connectorType: ConnectorType;
   config: Record<string, unknown>;
   email: string;
@@ -91,6 +102,7 @@ export function CreateConnectorDialog({
   const form = useForm<CreateConnectorFormValues>({
     defaultValues: {
       name: "",
+      description: "",
       connectorType: "jira",
       config: { type: "jira", isCloud: true },
       email: "",
@@ -109,6 +121,7 @@ export function CreateConnectorDialog({
       confluence: { type, isCloud: true },
       github: { type, githubUrl: "https://api.github.com" },
       gitlab: { type, gitlabUrl: "https://gitlab.com" },
+      servicenow: { type, initialSyncMonths: 6 },
     };
     form.setValue("config", defaultConfigs[type]);
     setStep("configure");
@@ -122,6 +135,7 @@ export function CreateConnectorDialog({
     const config = transformConfigArrayFields(values.config);
     const result = await createConnector.mutateAsync({
       name: values.name,
+      description: values.description || null,
       connectorType: values.connectorType,
       config: config as archestraApiTypes.CreateConnectorData["body"]["config"],
       credentials: {
@@ -225,7 +239,33 @@ export function CreateConnectorDialog({
                       <FormLabel>Name</FormLabel>
                       <FormControl>
                         <Input
-                          placeholder="Engineering Jira Connector"
+                          placeholder={
+                            selectedType
+                              ? getConnectorNamePlaceholder(selectedType)
+                              : ""
+                          }
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="description"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>
+                        Description{" "}
+                        <span className="text-muted-foreground font-normal">
+                          (optional)
+                        </span>
+                      </FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder="A short description of this connector"
                           {...field}
                         />
                       </FormControl>
@@ -343,6 +383,26 @@ export function CreateConnectorDialog({
                   />
                 )}
 
+                {connectorType === "servicenow" && (
+                  <FormField
+                    control={form.control}
+                    name="email"
+                    rules={{ required: "Username is required" }}
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Username</FormLabel>
+                        <FormControl>
+                          <Input placeholder="admin" {...field} />
+                        </FormControl>
+                        <FormDescription>
+                          Your ServiceNow username for basic authentication.
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
+
                 <FormField
                   control={form.control}
                   name="apiToken"
@@ -351,26 +411,32 @@ export function CreateConnectorDialog({
                       ? emailRequired
                         ? "API token is required"
                         : "API token or personal access token is required"
-                      : "Personal access token is required",
+                      : connectorType === "servicenow"
+                        ? "Password is required"
+                        : "Personal access token is required",
                   }}
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>
-                        {needsEmail
-                          ? emailRequired
-                            ? "API Token"
-                            : "API Token / Personal Access Token"
-                          : "Personal Access Token"}
+                        {connectorType === "servicenow"
+                          ? "Password"
+                          : needsEmail
+                            ? emailRequired
+                              ? "API Token"
+                              : "API Token / Personal Access Token"
+                            : "Personal Access Token"}
                       </FormLabel>
                       <FormControl>
                         <Input
                           type="password"
                           placeholder={
-                            needsEmail
-                              ? emailRequired
-                                ? "Your API token"
-                                : "Your API token or personal access token"
-                              : "Your personal access token"
+                            connectorType === "servicenow"
+                              ? "Your ServiceNow password"
+                              : needsEmail
+                                ? emailRequired
+                                  ? "Your API token"
+                                  : "Your API token or personal access token"
+                                : "Your personal access token"
                           }
                           {...field}
                         />
@@ -398,6 +464,9 @@ export function CreateConnectorDialog({
                     )}
                     {connectorType === "gitlab" && (
                       <GitlabConfigFields form={form} hideUrl />
+                    )}
+                    {connectorType === "servicenow" && (
+                      <ServiceNowConfigFields form={form} hideUrl />
                     )}
                   </CollapsibleContent>
                 </Collapsible>
@@ -434,6 +503,8 @@ function transformConfigArrayFields(
     "pageIds",
     "labelsToSkip",
     "commentEmailBlacklist",
+    "states",
+    "assignmentGroups",
   ];
   for (const key of stringArrayFields) {
     if (typeof result[key] === "string") {
@@ -492,6 +563,13 @@ function getUrlConfig(type: ConnectorType): {
         label: "GitLab URL",
         placeholder: "https://gitlab.com",
         description: "Use https://gitlab.com or your self-hosted GitLab URL.",
+      };
+    case "servicenow":
+      return {
+        fieldName: "config.instanceUrl",
+        label: "Instance URL",
+        placeholder: "https://your-instance.service-now.com",
+        description: "Your ServiceNow instance URL.",
       };
   }
 }

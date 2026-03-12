@@ -1,6 +1,6 @@
 "use client";
 
-import type { archestraApiTypes } from "@shared";
+import { type archestraApiTypes, getConnectorNamePlaceholder } from "@shared";
 import { ChevronDown } from "lucide-react";
 import { useEffect } from "react";
 import { useForm } from "react-hook-form";
@@ -36,14 +36,22 @@ import { GithubConfigFields } from "./github-config-fields";
 import { GitlabConfigFields } from "./gitlab-config-fields";
 import { JiraConfigFields } from "./jira-config-fields";
 import { SchedulePicker } from "./schedule-picker";
+import { ServiceNowConfigFields } from "./servicenow-config-fields";
 
 type ConnectorItem = Pick<
   archestraApiTypes.GetConnectorsResponses["200"]["data"][number],
-  "id" | "name" | "connectorType" | "config" | "schedule" | "enabled"
+  | "id"
+  | "name"
+  | "description"
+  | "connectorType"
+  | "config"
+  | "schedule"
+  | "enabled"
 >;
 
 interface EditConnectorFormValues {
   name: string;
+  description: string;
   enabled: boolean;
   config: Record<string, unknown>;
   email: string;
@@ -65,6 +73,7 @@ export function EditConnectorDialog({
   const form = useForm<EditConnectorFormValues>({
     defaultValues: {
       name: connector.name,
+      description: connector.description ?? "",
       enabled: connector.enabled,
       config: connector.config as Record<string, unknown>,
       email: "",
@@ -77,6 +86,7 @@ export function EditConnectorDialog({
     if (open) {
       form.reset({
         name: connector.name,
+        description: connector.description ?? "",
         enabled: connector.enabled,
         config: connector.config as Record<string, unknown>,
         email: "",
@@ -99,6 +109,7 @@ export function EditConnectorDialog({
       id: connector.id,
       body: {
         name: values.name,
+        description: values.description || null,
         enabled: values.enabled,
         config:
           values.config as archestraApiTypes.CreateConnectorData["body"]["config"],
@@ -165,7 +176,34 @@ export function EditConnectorDialog({
                   <FormItem>
                     <FormLabel>Name</FormLabel>
                     <FormControl>
-                      <Input placeholder="Connector name" {...field} />
+                      <Input
+                        placeholder={getConnectorNamePlaceholder(
+                          connector.connectorType,
+                        )}
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="description"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>
+                      Description{" "}
+                      <span className="text-muted-foreground font-normal">
+                        (optional)
+                      </span>
+                    </FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="A short description of this connector"
+                        {...field}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -246,22 +284,47 @@ export function EditConnectorDialog({
                 />
               )}
 
+              {connectorType === "servicenow" && (
+                <FormField
+                  control={form.control}
+                  name="email"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Username</FormLabel>
+                      <FormControl>
+                        <Input placeholder="admin" {...field} />
+                      </FormControl>
+                      <FormDescription>
+                        Leave empty to keep existing credentials unchanged.
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
+
               <FormField
                 control={form.control}
                 name="apiToken"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>
-                      {needsEmail
-                        ? emailRequired
-                          ? "API Token"
-                          : "API Token / Personal Access Token"
-                        : "Personal Access Token"}
+                      {connectorType === "servicenow"
+                        ? "Password"
+                        : needsEmail
+                          ? emailRequired
+                            ? "API Token"
+                            : "API Token / Personal Access Token"
+                          : "Personal Access Token"}
                     </FormLabel>
                     <FormControl>
                       <Input
                         type="password"
-                        placeholder="Leave empty to keep existing token"
+                        placeholder={
+                          connectorType === "servicenow"
+                            ? "Leave empty to keep existing password"
+                            : "Leave empty to keep existing token"
+                        }
                         {...field}
                       />
                     </FormControl>
@@ -291,6 +354,9 @@ export function EditConnectorDialog({
                   )}
                   {connectorType === "gitlab" && (
                     <GitlabConfigFields form={form} hideUrl />
+                  )}
+                  {connectorType === "servicenow" && (
+                    <ServiceNowConfigFields form={form} hideUrl />
                   )}
                 </CollapsibleContent>
               </Collapsible>
@@ -358,6 +424,14 @@ function getEditUrlConfig(type: ConnectorType): {
         placeholder: "https://gitlab.com",
         description: "Use https://gitlab.com or your self-hosted GitLab URL.",
         typeLabel: "GitLab",
+      };
+    case "servicenow":
+      return {
+        fieldName: "config.instanceUrl",
+        label: "Instance URL",
+        placeholder: "https://your-instance.service-now.com",
+        description: "Your ServiceNow instance URL.",
+        typeLabel: "ServiceNow",
       };
     default:
       return {

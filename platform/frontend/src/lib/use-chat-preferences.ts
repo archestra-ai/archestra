@@ -21,7 +21,11 @@ export function getApiKeyStorageKey(provider: string): string {
  */
 export function getSavedModel(): string | null {
   if (typeof window === "undefined") return null;
-  return localStorage.getItem(CHAT_STORAGE_KEYS.selectedModel);
+  try {
+    return localStorage.getItem(CHAT_STORAGE_KEYS.selectedModel);
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -29,7 +33,11 @@ export function getSavedModel(): string | null {
  */
 export function saveModel(modelId: string): void {
   if (typeof window === "undefined") return;
-  localStorage.setItem(CHAT_STORAGE_KEYS.selectedModel, modelId);
+  try {
+    localStorage.setItem(CHAT_STORAGE_KEYS.selectedModel, modelId);
+  } catch {
+    // QuotaExceededError or private browsing restriction
+  }
 }
 
 /**
@@ -37,7 +45,11 @@ export function saveModel(modelId: string): void {
  */
 export function clearSavedModel(): void {
   if (typeof window === "undefined") return;
-  localStorage.removeItem(CHAT_STORAGE_KEYS.selectedModel);
+  try {
+    localStorage.removeItem(CHAT_STORAGE_KEYS.selectedModel);
+  } catch {
+    // QuotaExceededError or private browsing restriction
+  }
 }
 
 /**
@@ -45,7 +57,11 @@ export function clearSavedModel(): void {
  */
 export function getSavedAgent(): string | null {
   if (typeof window === "undefined") return null;
-  return localStorage.getItem(CHAT_STORAGE_KEYS.selectedAgent);
+  try {
+    return localStorage.getItem(CHAT_STORAGE_KEYS.selectedAgent);
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -53,7 +69,11 @@ export function getSavedAgent(): string | null {
  */
 export function saveAgent(agentId: string): void {
   if (typeof window === "undefined") return;
-  localStorage.setItem(CHAT_STORAGE_KEYS.selectedAgent, agentId);
+  try {
+    localStorage.setItem(CHAT_STORAGE_KEYS.selectedAgent, agentId);
+  } catch {
+    // QuotaExceededError or private browsing restriction
+  }
 }
 
 /**
@@ -61,7 +81,11 @@ export function saveAgent(agentId: string): void {
  */
 export function getSavedApiKey(provider: string): string | null {
   if (typeof window === "undefined") return null;
-  return localStorage.getItem(getApiKeyStorageKey(provider));
+  try {
+    return localStorage.getItem(getApiKeyStorageKey(provider));
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -69,7 +93,56 @@ export function getSavedApiKey(provider: string): string | null {
  */
 export function saveApiKey(provider: string, keyId: string): void {
   if (typeof window === "undefined") return;
-  localStorage.setItem(getApiKeyStorageKey(provider), keyId);
+  try {
+    localStorage.setItem(getApiKeyStorageKey(provider), keyId);
+  } catch {
+    // QuotaExceededError or private browsing restriction
+  }
+}
+
+// ===== Model auto-selection logic =====
+
+interface AutoSelectableModel {
+  id: string;
+  isBest?: boolean;
+}
+
+interface ResolveAutoSelectParams {
+  selectedModel: string;
+  availableModels: AutoSelectableModel[];
+  isLoading: boolean;
+}
+
+/**
+ * Determine whether the model selector should auto-select a different model.
+ * Returns the model ID to switch to, or null if no change is needed.
+ *
+ * Auto-selection only triggers when the selected model is genuinely unavailable
+ * (e.g., the API key changed and the model isn't offered by the new provider).
+ * It does NOT trigger just because the API key changed — this prevents a race
+ * condition during initialization where the null→keyId transition was
+ * incorrectly treated as a "key change" and overwrote the user's saved model.
+ */
+export function resolveAutoSelectedModel(
+  params: ResolveAutoSelectParams,
+): string | null {
+  const { selectedModel, availableModels, isLoading } = params;
+
+  // Not ready yet — wait for models to load
+  if (isLoading || availableModels.length === 0) return null;
+
+  // Parent hasn't resolved the model yet (empty string during init)
+  if (!selectedModel) return null;
+
+  // Current model is available — no change needed
+  if (availableModels.some((m) => m.id === selectedModel)) return null;
+
+  // Model is unavailable — pick the best or first available
+  const best = availableModels.find((m) => m.isBest);
+  const fallback = best ?? availableModels[0];
+
+  // Only return a change if it's actually different
+  return fallback && fallback.id !== selectedModel ? fallback.id : null;
 }
 
 // ===== Model resolution logic =====

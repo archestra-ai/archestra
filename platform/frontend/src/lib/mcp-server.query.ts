@@ -27,6 +27,7 @@ export function useMcpServers(params?: {
   initialData?: archestraApiTypes.GetMcpServersResponses["200"];
   hasInstallingServers?: boolean;
   catalogId?: string;
+  enabled?: boolean;
 }) {
   return useQuery({
     // Include catalogId in queryKey only when provided to maintain cache separation
@@ -40,6 +41,7 @@ export function useMcpServers(params?: {
       return response.data ?? [];
     },
     initialData: params?.initialData,
+    enabled: params?.enabled,
     refetchInterval: params?.hasInstallingServers ? 2000 : false,
   });
 }

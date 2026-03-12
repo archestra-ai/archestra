@@ -1,6 +1,11 @@
 "use client";
 
-import { EMBEDDING_MODELS, PROVIDERS_WITH_OPTIONAL_API_KEY } from "@shared";
+import {
+  EMBEDDING_COMPATIBLE_PROVIDERS,
+  EMBEDDING_MODELS,
+  PROVIDERS_WITH_OPTIONAL_API_KEY,
+  SUPPORTED_EMBEDDING_DIMENSIONS,
+} from "@shared";
 import {
   AlertTriangle,
   Info,
@@ -73,7 +78,6 @@ const DEFAULT_FORM_VALUES: ChatApiKeyFormValues = {
 
 const EMBEDDING_DEFAULT_FORM_VALUES: ChatApiKeyFormValues = {
   ...DEFAULT_FORM_VALUES,
-  provider: "openai",
 };
 
 function AddApiKeyDialog({
@@ -146,7 +150,7 @@ function AddApiKeyDialog({
           <DialogTitle>Add LLM Provider Key</DialogTitle>
           <DialogDescription>
             {forEmbedding
-              ? "Add an OpenAI API key for knowledge base embeddings."
+              ? "Add an API key for knowledge base embeddings (OpenAI or Ollama)."
               : "Add an LLM provider API key for knowledge base reranking."}
           </DialogDescription>
         </DialogHeader>
@@ -154,8 +158,8 @@ function AddApiKeyDialog({
           <Alert variant="default" className="py-2">
             <Info className="h-4 w-4" />
             <AlertDescription className="text-xs">
-              Only OpenAI is currently supported for embeddings. The key must
-              have access to at least one of the following models:
+              OpenAI and Ollama are supported for embeddings. The key must have
+              access to at least one of the following models:
               <ul className="list-disc list-inside mt-1">
                 {Object.keys(EMBEDDING_MODELS).map((model) => (
                   <li key={model}>{model}</li>
@@ -172,7 +176,6 @@ function AddApiKeyDialog({
               form={form}
               isPending={createMutation.isPending}
               geminiVertexAiEnabled={geminiVertexAiEnabled}
-              disableProvider={forEmbedding}
               hideScopeAndPrimary
             />
           </div>
@@ -204,14 +207,14 @@ function ApiKeySelector({
   value,
   onChange,
   disabled,
-  filterProvider,
+  filterEmbeddingProviders,
   label,
   pulse,
 }: {
   value: string | null;
   onChange: (value: string | null) => void;
   disabled: boolean;
-  filterProvider?: string;
+  filterEmbeddingProviders?: boolean;
   label: string;
   pulse?: boolean;
 }) {
@@ -220,10 +223,14 @@ function ApiKeySelector({
   const prevSelectableCountRef = useRef<number | null>(null);
 
   const keys = apiKeys ?? [];
-  const openaiKeys = keys.filter((k) => k.provider === "openai");
-  const otherKeys = keys.filter((k) => k.provider !== "openai");
-  const isEmbeddingSelector = filterProvider === "openai";
-  const selectableKeys = isEmbeddingSelector ? openaiKeys : keys;
+  const compatibleKeys = keys.filter((k) =>
+    EMBEDDING_COMPATIBLE_PROVIDERS.has(k.provider),
+  );
+  const incompatibleKeys = keys.filter(
+    (k) => !EMBEDDING_COMPATIBLE_PROVIDERS.has(k.provider),
+  );
+  const isEmbeddingSelector = !!filterEmbeddingProviders;
+  const selectableKeys = isEmbeddingSelector ? compatibleKeys : keys;
   const hasSelectableKeys = selectableKeys.length > 0;
 
   // Auto-select the first key when transitioning from 0 → N selectable keys
@@ -289,23 +296,23 @@ function ApiKeySelector({
         <SelectContent>
           {isEmbeddingSelector ? (
             <>
-              {openaiKeys.map((key) => (
+              {compatibleKeys.map((key) => (
                 <SelectItem key={key.id} value={key.id}>
                   <div className="flex items-center gap-2">
                     <Key className="h-3 w-3" />
                     <span>{key.name}</span>
                     <span className="text-xs text-muted-foreground">
-                      ({key.scope})
+                      ({key.provider} - {key.scope})
                     </span>
                   </div>
                 </SelectItem>
               ))}
-              {otherKeys.length > 0 && (
+              {incompatibleKeys.length > 0 && (
                 <>
                   <div className="px-2 py-1.5 text-xs text-muted-foreground border-t mt-1 pt-2">
-                    Only OpenAI is supported for embeddings
+                    Only OpenAI and Ollama are supported for embeddings
                   </div>
-                  {otherKeys.map((key) => (
+                  {incompatibleKeys.map((key) => (
                     <SelectItem key={key.id} value={key.id} disabled>
                       <div className="flex items-center gap-2 opacity-50">
                         <Key className="h-3 w-3" />
@@ -495,6 +502,9 @@ function KnowledgeSettingsContent() {
     string | null
   >(null);
   const [rerankerModel, setRerankerModel] = useState<string | null>(null);
+  const [embeddingDimensions, setEmbeddingDimensions] = useState<number | null>(
+    null,
+  );
 
   useEffect(() => {
     if (organization) {
@@ -507,6 +517,7 @@ function KnowledgeSettingsContent() {
       setEmbeddingChatApiKeyId(organization.embeddingChatApiKeyId ?? null);
       setRerankerChatApiKeyId(organization.rerankerChatApiKeyId ?? null);
       setRerankerModel(organization.rerankerModel ?? null);
+      setEmbeddingDimensions(organization.embeddingDimensions ?? null);
     }
   }, [organization]);
 
@@ -516,20 +527,25 @@ function KnowledgeSettingsContent() {
     : null;
   const serverRerankerKeyId = organization?.rerankerChatApiKeyId ?? null;
   const serverRerankerModel = organization?.rerankerModel ?? null;
+  const serverEmbeddingDimensions = organization?.embeddingDimensions ?? null;
 
   const hasChanges =
     embeddingModel !== serverEmbeddingModel ||
     embeddingChatApiKeyId !== serverEmbeddingKeyId ||
     rerankerChatApiKeyId !== serverRerankerKeyId ||
-    rerankerModel !== serverRerankerModel;
+    rerankerModel !== serverRerankerModel ||
+    embeddingDimensions !== serverEmbeddingDimensions;
 
   // Embedding model is locked once both key and model have been saved
   const isEmbeddingModelLocked =
     !!serverEmbeddingKeyId && !!serverEmbeddingModel;
 
   // Check if keys exist for pulsing logic
-  const hasOpenAiKeys = useMemo(
-    () => (apiKeys ?? []).some((k) => k.provider === "openai"),
+  const hasEmbeddingKeys = useMemo(
+    () =>
+      (apiKeys ?? []).some((k) =>
+        EMBEDDING_COMPATIBLE_PROVIDERS.has(k.provider),
+      ),
     [apiKeys],
   );
   const hasAnyKeys = useMemo(() => (apiKeys ?? []).length > 0, [apiKeys]);
@@ -537,7 +553,7 @@ function KnowledgeSettingsContent() {
   const embeddingSetupStep = useSetupStep({
     selectedKeyId: embeddingChatApiKeyId,
     selectedModel: embeddingModel,
-    hasSelectableKeys: hasOpenAiKeys,
+    hasSelectableKeys: hasEmbeddingKeys,
   });
 
   const rerankerSetupStep = useSetupStep({
@@ -551,6 +567,8 @@ function KnowledgeSettingsContent() {
   const handleSave = async () => {
     await updateKnowledgeSettings.mutateAsync({
       embeddingModel: embeddingModel ?? undefined,
+      embeddingDimensions:
+        (embeddingDimensions as 1536 | 768 | null) ?? undefined,
       embeddingChatApiKeyId: embeddingChatApiKeyId ?? null,
       rerankerChatApiKeyId: rerankerChatApiKeyId ?? null,
       rerankerModel: rerankerModel ?? null,
@@ -560,6 +578,7 @@ function KnowledgeSettingsContent() {
   const handleCancel = () => {
     setEmbeddingModel(serverEmbeddingModel);
     setEmbeddingChatApiKeyId(serverEmbeddingKeyId);
+    setEmbeddingDimensions(serverEmbeddingDimensions);
     setRerankerChatApiKeyId(serverRerankerKeyId);
     setRerankerModel(serverRerankerModel);
   };
@@ -593,13 +612,13 @@ function KnowledgeSettingsContent() {
           </div>
           <p className="text-sm text-muted-foreground">
             Configure the API key and model used to generate vector embeddings
-            for knowledge base documents. Only OpenAI embedding models are
-            currently supported.
+            for knowledge base documents. OpenAI and Ollama providers are
+            supported.
           </p>
 
           <SettingsBlock
             title="LLM Provider API Key"
-            description="Select an OpenAI API key for generating embeddings."
+            description="Select an API key for generating embeddings (OpenAI or Ollama)."
             control={
               <WithPermissions
                 permissions={{ knowledgeSettings: ["update"] }}
@@ -610,7 +629,7 @@ function KnowledgeSettingsContent() {
                     value={embeddingChatApiKeyId}
                     onChange={setEmbeddingChatApiKeyId}
                     disabled={!hasPermission}
-                    filterProvider="openai"
+                    filterEmbeddingProviders
                     label="embedding API key"
                     pulse={
                       embeddingSetupStep === "add-key" ||
@@ -689,6 +708,46 @@ function KnowledgeSettingsContent() {
                       </p>
                     )}
                   </div>
+                )}
+              </WithPermissions>
+            }
+          />
+
+          <SettingsBlock
+            title="Embedding Dimensions"
+            description={
+              isEmbeddingModelLocked
+                ? "Embedding dimensions cannot be changed after configuration is saved."
+                : "Select the vector dimensions for embeddings. Must match the model's output dimensions (e.g. 1536 for OpenAI, 768 for nomic-embed-text)."
+            }
+            control={
+              <WithPermissions
+                permissions={{ knowledgeSettings: ["update"] }}
+                noPermissionHandle="tooltip"
+              >
+                {({ hasPermission }) => (
+                  <Select
+                    value={embeddingDimensions?.toString() ?? ""}
+                    onValueChange={(v) =>
+                      setEmbeddingDimensions(v ? Number(v) : null)
+                    }
+                    disabled={
+                      !hasPermission ||
+                      isEmbeddingModelLocked ||
+                      !embeddingChatApiKeyId
+                    }
+                  >
+                    <SelectTrigger className="w-80">
+                      <SelectValue placeholder="Select dimensions..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {SUPPORTED_EMBEDDING_DIMENSIONS.map((dim) => (
+                        <SelectItem key={dim} value={dim.toString()}>
+                          {dim}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 )}
               </WithPermissions>
             }

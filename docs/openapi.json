@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "1.1.4"
+    "version": "1.1.12"
   },
   "components": {
     "schemas": {
@@ -38098,6 +38098,21 @@
             "name": "excludeBuiltIn",
             "required": false,
             "description": "Exclude built-in agents from the results. Defaults to false."
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "personal",
+                "team",
+                "org",
+                "built_in"
+              ]
+            },
+            "in": "query",
+            "name": "scope",
+            "required": false,
+            "description": "Filter by scope: personal, team, org, or built_in."
           }
         ],
         "responses": {
@@ -95560,6 +95575,12 @@
                                       "enum": [
                                         "gitlab"
                                       ]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": [
+                                        "servicenow"
+                                      ]
                                     }
                                   ]
                                 }
@@ -97387,6 +97408,10 @@
                           "name": {
                             "type": "string"
                           },
+                          "description": {
+                            "nullable": true,
+                            "type": "string"
+                          },
                           "connectorType": {
                             "anyOf": [
                               {
@@ -97411,6 +97436,12 @@
                                 "type": "string",
                                 "enum": [
                                   "gitlab"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "servicenow"
                                 ]
                               }
                             ]
@@ -97526,6 +97557,9 @@
                                   "includePullRequests": {
                                     "type": "boolean"
                                   },
+                                  "includeMarkdownFiles": {
+                                    "type": "boolean"
+                                  },
                                   "labelsToSkip": {
                                     "type": "array",
                                     "items": {
@@ -97565,6 +97599,9 @@
                                   "includeMergeRequests": {
                                     "type": "boolean"
                                   },
+                                  "includeMarkdownFiles": {
+                                    "type": "boolean"
+                                  },
                                   "labelsToSkip": {
                                     "type": "array",
                                     "items": {
@@ -97575,6 +97612,46 @@
                                 "required": [
                                   "type",
                                   "gitlabUrl"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "servicenow"
+                                    ]
+                                  },
+                                  "instanceUrl": {},
+                                  "states": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "assignmentGroups": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "query": {
+                                    "type": "string"
+                                  },
+                                  "batchSize": {
+                                    "type": "number"
+                                  },
+                                  "initialSyncMonths": {
+                                    "type": "number",
+                                    "minimum": 1,
+                                    "maximum": 12
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "instanceUrl"
                                 ],
                                 "additionalProperties": false
                               }
@@ -97681,6 +97758,7 @@
                           "id",
                           "organizationId",
                           "name",
+                          "description",
                           "connectorType",
                           "config",
                           "secretId",
@@ -97975,6 +98053,10 @@
                     "type": "string",
                     "minLength": 1
                   },
+                  "description": {
+                    "nullable": true,
+                    "type": "string"
+                  },
                   "connectorType": {
                     "anyOf": [
                       {
@@ -97999,6 +98081,12 @@
                         "type": "string",
                         "enum": [
                           "gitlab"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
+                          "servicenow"
                         ]
                       }
                     ]
@@ -98118,6 +98206,9 @@
                           "includePullRequests": {
                             "type": "boolean"
                           },
+                          "includeMarkdownFiles": {
+                            "type": "boolean"
+                          },
                           "labelsToSkip": {
                             "type": "array",
                             "items": {
@@ -98158,6 +98249,9 @@
                           "includeMergeRequests": {
                             "type": "boolean"
                           },
+                          "includeMarkdownFiles": {
+                            "type": "boolean"
+                          },
                           "labelsToSkip": {
                             "type": "array",
                             "items": {
@@ -98168,6 +98262,47 @@
                         "required": [
                           "type",
                           "gitlabUrl"
+                        ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "servicenow"
+                            ]
+                          },
+                          "instanceUrl": {
+                            "type": "string"
+                          },
+                          "states": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "assignmentGroups": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "query": {
+                            "type": "string"
+                          },
+                          "batchSize": {
+                            "type": "number"
+                          },
+                          "initialSyncMonths": {
+                            "type": "number",
+                            "minimum": 1,
+                            "maximum": 12
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "instanceUrl"
                         ]
                       }
                     ]
@@ -98229,6 +98364,10 @@
                     "name": {
                       "type": "string"
                     },
+                    "description": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "connectorType": {
                       "anyOf": [
                         {
@@ -98253,6 +98392,12 @@
                           "type": "string",
                           "enum": [
                             "gitlab"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "servicenow"
                           ]
                         }
                       ]
@@ -98368,6 +98513,9 @@
                             "includePullRequests": {
                               "type": "boolean"
                             },
+                            "includeMarkdownFiles": {
+                              "type": "boolean"
+                            },
                             "labelsToSkip": {
                               "type": "array",
                               "items": {
@@ -98407,6 +98555,9 @@
                             "includeMergeRequests": {
                               "type": "boolean"
                             },
+                            "includeMarkdownFiles": {
+                              "type": "boolean"
+                            },
                             "labelsToSkip": {
                               "type": "array",
                               "items": {
@@ -98417,6 +98568,46 @@
                           "required": [
                             "type",
                             "gitlabUrl"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "servicenow"
+                              ]
+                            },
+                            "instanceUrl": {},
+                            "states": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "assignmentGroups": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "query": {
+                              "type": "string"
+                            },
+                            "batchSize": {
+                              "type": "number"
+                            },
+                            "initialSyncMonths": {
+                              "type": "number",
+                              "minimum": 1,
+                              "maximum": 12
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "instanceUrl"
                           ],
                           "additionalProperties": false
                         }
@@ -98500,6 +98691,7 @@
                     "id",
                     "organizationId",
                     "name",
+                    "description",
                     "connectorType",
                     "config",
                     "secretId",
@@ -98766,6 +98958,10 @@
                     "name": {
                       "type": "string"
                     },
+                    "description": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "connectorType": {
                       "anyOf": [
                         {
@@ -98790,6 +98986,12 @@
                           "type": "string",
                           "enum": [
                             "gitlab"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "servicenow"
                           ]
                         }
                       ]
@@ -98905,6 +99107,9 @@
                             "includePullRequests": {
                               "type": "boolean"
                             },
+                            "includeMarkdownFiles": {
+                              "type": "boolean"
+                            },
                             "labelsToSkip": {
                               "type": "array",
                               "items": {
@@ -98944,6 +99149,9 @@
                             "includeMergeRequests": {
                               "type": "boolean"
                             },
+                            "includeMarkdownFiles": {
+                              "type": "boolean"
+                            },
                             "labelsToSkip": {
                               "type": "array",
                               "items": {
@@ -98954,6 +99162,46 @@
                           "required": [
                             "type",
                             "gitlabUrl"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "servicenow"
+                              ]
+                            },
+                            "instanceUrl": {},
+                            "states": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "assignmentGroups": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "query": {
+                              "type": "string"
+                            },
+                            "batchSize": {
+                              "type": "number"
+                            },
+                            "initialSyncMonths": {
+                              "type": "number",
+                              "minimum": 1,
+                              "maximum": 12
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "instanceUrl"
                           ],
                           "additionalProperties": false
                         }
@@ -99040,6 +99288,7 @@
                     "id",
                     "organizationId",
                     "name",
+                    "description",
                     "connectorType",
                     "config",
                     "secretId",
@@ -99286,6 +99535,10 @@
                     "type": "string",
                     "minLength": 1
                   },
+                  "description": {
+                    "nullable": true,
+                    "type": "string"
+                  },
                   "config": {
                     "oneOf": [
                       {
@@ -99401,6 +99654,9 @@
                           "includePullRequests": {
                             "type": "boolean"
                           },
+                          "includeMarkdownFiles": {
+                            "type": "boolean"
+                          },
                           "labelsToSkip": {
                             "type": "array",
                             "items": {
@@ -99441,6 +99697,9 @@
                           "includeMergeRequests": {
                             "type": "boolean"
                           },
+                          "includeMarkdownFiles": {
+                            "type": "boolean"
+                          },
                           "labelsToSkip": {
                             "type": "array",
                             "items": {
@@ -99451,6 +99710,47 @@
                         "required": [
                           "type",
                           "gitlabUrl"
+                        ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "servicenow"
+                            ]
+                          },
+                          "instanceUrl": {
+                            "type": "string"
+                          },
+                          "states": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "assignmentGroups": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "query": {
+                            "type": "string"
+                          },
+                          "batchSize": {
+                            "type": "number"
+                          },
+                          "initialSyncMonths": {
+                            "type": "number",
+                            "minimum": 1,
+                            "maximum": 12
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "instanceUrl"
                         ]
                       }
                     ]
@@ -99509,6 +99809,10 @@
                     "name": {
                       "type": "string"
                     },
+                    "description": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "connectorType": {
                       "anyOf": [
                         {
@@ -99533,6 +99837,12 @@
                           "type": "string",
                           "enum": [
                             "gitlab"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "servicenow"
                           ]
                         }
                       ]
@@ -99648,6 +99958,9 @@
                             "includePullRequests": {
                               "type": "boolean"
                             },
+                            "includeMarkdownFiles": {
+                              "type": "boolean"
+                            },
                             "labelsToSkip": {
                               "type": "array",
                               "items": {
@@ -99687,6 +100000,9 @@
                             "includeMergeRequests": {
                               "type": "boolean"
                             },
+                            "includeMarkdownFiles": {
+                              "type": "boolean"
+                            },
                             "labelsToSkip": {
                               "type": "array",
                               "items": {
@@ -99697,6 +100013,46 @@
                           "required": [
                             "type",
                             "gitlabUrl"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "servicenow"
+                              ]
+                            },
+                            "instanceUrl": {},
+                            "states": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "assignmentGroups": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "query": {
+                              "type": "string"
+                            },
+                            "batchSize": {
+                              "type": "number"
+                            },
+                            "initialSyncMonths": {
+                              "type": "number",
+                              "minimum": 1,
+                              "maximum": 12
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "instanceUrl"
                           ],
                           "additionalProperties": false
                         }
@@ -99780,6 +100136,7 @@
                     "id",
                     "organizationId",
                     "name",
+                    "description",
                     "connectorType",
                     "config",
                     "secretId",
@@ -118864,7 +119221,8 @@
                               "delete",
                               "team-admin",
                               "admin",
-                              "cancel"
+                              "cancel",
+                              "enable"
                             ]
                           }
                         }
@@ -119139,7 +119497,8 @@
                           "delete",
                           "team-admin",
                           "admin",
-                          "cancel"
+                          "cancel",
+                          "enable"
                         ]
                       }
                     }
@@ -119187,7 +119546,8 @@
                             "delete",
                             "team-admin",
                             "admin",
-                            "cancel"
+                            "cancel",
+                            "enable"
                           ]
                         }
                       }
@@ -119497,7 +119857,8 @@
                             "delete",
                             "team-admin",
                             "admin",
-                            "cancel"
+                            "cancel",
+                            "enable"
                           ]
                         }
                       }
@@ -119771,7 +120132,8 @@
                           "delete",
                           "team-admin",
                           "admin",
-                          "cancel"
+                          "cancel",
+                          "enable"
                         ]
                       }
                     }
@@ -119839,7 +120201,8 @@
                             "delete",
                             "team-admin",
                             "admin",
-                            "cancel"
+                            "cancel",
+                            "enable"
                           ]
                         }
                       }
@@ -120452,6 +120815,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "embeddingDimensions": {
+                      "nullable": true,
+                      "type": "number"
+                    },
                     "embeddingChatApiKeyId": {
                       "nullable": true,
                       "type": "string",
@@ -120475,6 +120842,48 @@
                     "defaultLlmProvider": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "defaultLlmApiKeyId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "defaultAgentId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "favicon": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "appName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "ogDescription": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "footerText": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "chatPlaceholders": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "iconLogo": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "showTwoFactor": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -120494,11 +120903,21 @@
                     "globalToolPolicy",
                     "allowChatFileUploads",
                     "embeddingModel",
+                    "embeddingDimensions",
                     "embeddingChatApiKeyId",
                     "rerankerChatApiKeyId",
                     "rerankerModel",
                     "defaultLlmModel",
-                    "defaultLlmProvider"
+                    "defaultLlmProvider",
+                    "defaultLlmApiKeyId",
+                    "defaultAgentId",
+                    "favicon",
+                    "appName",
+                    "ogDescription",
+                    "footerText",
+                    "chatPlaceholders",
+                    "iconLogo",
+                    "showTwoFactor"
                   ],
                   "additionalProperties": false
                 }
@@ -120778,6 +121197,41 @@
                   "logoDark": {
                     "nullable": true,
                     "type": "string"
+                  },
+                  "favicon": {
+                    "nullable": true,
+                    "type": "string"
+                  },
+                  "iconLogo": {
+                    "nullable": true,
+                    "type": "string"
+                  },
+                  "appName": {
+                    "nullable": true,
+                    "type": "string",
+                    "maxLength": 100
+                  },
+                  "ogDescription": {
+                    "nullable": true,
+                    "type": "string",
+                    "maxLength": 500
+                  },
+                  "footerText": {
+                    "nullable": true,
+                    "type": "string",
+                    "maxLength": 500
+                  },
+                  "chatPlaceholders": {
+                    "nullable": true,
+                    "maxItems": 20,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "maxLength": 80
+                    }
+                  },
+                  "showTwoFactor": {
+                    "type": "boolean"
                   }
                 }
               }
@@ -120895,6 +121349,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "embeddingDimensions": {
+                      "nullable": true,
+                      "type": "number"
+                    },
                     "embeddingChatApiKeyId": {
                       "nullable": true,
                       "type": "string",
@@ -120918,6 +121376,48 @@
                     "defaultLlmProvider": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "defaultLlmApiKeyId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "defaultAgentId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "favicon": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "appName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "ogDescription": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "footerText": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "chatPlaceholders": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "iconLogo": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "showTwoFactor": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -120937,11 +121437,21 @@
                     "globalToolPolicy",
                     "allowChatFileUploads",
                     "embeddingModel",
+                    "embeddingDimensions",
                     "embeddingChatApiKeyId",
                     "rerankerChatApiKeyId",
                     "rerankerModel",
                     "defaultLlmModel",
-                    "defaultLlmProvider"
+                    "defaultLlmProvider",
+                    "defaultLlmApiKeyId",
+                    "defaultAgentId",
+                    "favicon",
+                    "appName",
+                    "ogDescription",
+                    "footerText",
+                    "chatPlaceholders",
+                    "iconLogo",
+                    "showTwoFactor"
                   ],
                   "additionalProperties": false
                 }
@@ -121221,13 +121731,38 @@
                     "logoDark": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "favicon": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "iconLogo": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "appName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "ogDescription": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "footerText": {
+                      "nullable": true,
+                      "type": "string"
                     }
                   },
                   "required": [
                     "theme",
                     "customFont",
                     "logo",
-                    "logoDark"
+                    "logoDark",
+                    "favicon",
+                    "iconLogo",
+                    "appName",
+                    "ogDescription",
+                    "footerText"
                   ],
                   "additionalProperties": false
                 }
@@ -121586,6 +122121,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "embeddingDimensions": {
+                      "nullable": true,
+                      "type": "number"
+                    },
                     "embeddingChatApiKeyId": {
                       "nullable": true,
                       "type": "string",
@@ -121609,6 +122148,48 @@
                     "defaultLlmProvider": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "defaultLlmApiKeyId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "defaultAgentId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "favicon": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "appName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "ogDescription": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "footerText": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "chatPlaceholders": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "iconLogo": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "showTwoFactor": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -121628,11 +122209,21 @@
                     "globalToolPolicy",
                     "allowChatFileUploads",
                     "embeddingModel",
+                    "embeddingDimensions",
                     "embeddingChatApiKeyId",
                     "rerankerChatApiKeyId",
                     "rerankerModel",
                     "defaultLlmModel",
-                    "defaultLlmProvider"
+                    "defaultLlmProvider",
+                    "defaultLlmApiKeyId",
+                    "defaultAgentId",
+                    "favicon",
+                    "appName",
+                    "ogDescription",
+                    "footerText",
+                    "chatPlaceholders",
+                    "iconLogo",
+                    "showTwoFactor"
                   ],
                   "additionalProperties": false
                 }
@@ -121885,14 +122476,6 @@
                       "1w",
                       "1m"
                     ]
-                  },
-                  "defaultLlmModel": {
-                    "nullable": true,
-                    "type": "string"
-                  },
-                  "defaultLlmProvider": {
-                    "nullable": true,
-                    "type": "string"
                   }
                 }
               }
@@ -122010,6 +122593,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "embeddingDimensions": {
+                      "nullable": true,
+                      "type": "number"
+                    },
                     "embeddingChatApiKeyId": {
                       "nullable": true,
                       "type": "string",
@@ -122033,6 +122620,48 @@
                     "defaultLlmProvider": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "defaultLlmApiKeyId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "defaultAgentId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "favicon": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "appName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "ogDescription": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "footerText": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "chatPlaceholders": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "iconLogo": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "showTwoFactor": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -122052,11 +122681,492 @@
                     "globalToolPolicy",
                     "allowChatFileUploads",
                     "embeddingModel",
+                    "embeddingDimensions",
                     "embeddingChatApiKeyId",
                     "rerankerChatApiKeyId",
                     "rerankerModel",
                     "defaultLlmModel",
-                    "defaultLlmProvider"
+                    "defaultLlmProvider",
+                    "defaultLlmApiKeyId",
+                    "defaultAgentId",
+                    "favicon",
+                    "appName",
+                    "ogDescription",
+                    "footerText",
+                    "chatPlaceholders",
+                    "iconLogo",
+                    "showTwoFactor"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/organization/agent-settings": {
+      "patch": {
+        "operationId": "updateAgentSettings",
+        "tags": [
+          "Organization"
+        ],
+        "description": "Update agent settings (default model, default agent)",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "defaultLlmModel": {
+                    "nullable": true,
+                    "type": "string"
+                  },
+                  "defaultLlmProvider": {
+                    "nullable": true,
+                    "type": "string"
+                  },
+                  "defaultLlmApiKeyId": {
+                    "nullable": true,
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "defaultAgentId": {
+                    "nullable": true,
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "slug": {
+                      "type": "string"
+                    },
+                    "logo": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "logoDark": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "metadata": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "limitCleanupInterval": {
+                      "nullable": true,
+                      "type": "string",
+                      "enum": [
+                        "1h",
+                        "12h",
+                        "24h",
+                        "1w",
+                        "1m"
+                      ]
+                    },
+                    "onboardingComplete": {
+                      "type": "boolean"
+                    },
+                    "theme": {
+                      "type": "string",
+                      "enum": [
+                        "modern-minimal",
+                        "clean-slate",
+                        "mono",
+                        "twitter",
+                        "tangerine",
+                        "bubblegum",
+                        "caffeine",
+                        "amber-minimal",
+                        "cosmic-night",
+                        "doom-64",
+                        "mocha-mousse",
+                        "nature",
+                        "sunset-horizon",
+                        "neo-brutalism",
+                        "vercel",
+                        "claude",
+                        "vintage-paper",
+                        "boxy-minimalistic",
+                        "catppuccin",
+                        "solarized-dark",
+                        "gruvbox-dark",
+                        "dracula-dark",
+                        "monokai-dark",
+                        "moonlight-dark"
+                      ]
+                    },
+                    "customFont": {
+                      "type": "string",
+                      "enum": [
+                        "lato",
+                        "inter",
+                        "open-sans",
+                        "roboto",
+                        "source-sans-pro",
+                        "jetbrains-mono"
+                      ]
+                    },
+                    "convertToolResultsToToon": {
+                      "type": "boolean"
+                    },
+                    "compressionScope": {
+                      "type": "string",
+                      "enum": [
+                        "organization",
+                        "team"
+                      ]
+                    },
+                    "globalToolPolicy": {
+                      "type": "string",
+                      "enum": [
+                        "permissive",
+                        "restrictive"
+                      ]
+                    },
+                    "allowChatFileUploads": {
+                      "type": "boolean"
+                    },
+                    "embeddingModel": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "embeddingDimensions": {
+                      "nullable": true,
+                      "type": "number"
+                    },
+                    "embeddingChatApiKeyId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "rerankerChatApiKeyId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "rerankerModel": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "defaultLlmModel": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "defaultLlmProvider": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "defaultLlmApiKeyId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "defaultAgentId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "favicon": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "appName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "ogDescription": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "footerText": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "chatPlaceholders": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "iconLogo": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "showTwoFactor": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name",
+                    "slug",
+                    "logo",
+                    "logoDark",
+                    "createdAt",
+                    "metadata",
+                    "limitCleanupInterval",
+                    "onboardingComplete",
+                    "theme",
+                    "customFont",
+                    "convertToolResultsToToon",
+                    "compressionScope",
+                    "globalToolPolicy",
+                    "allowChatFileUploads",
+                    "embeddingModel",
+                    "embeddingDimensions",
+                    "embeddingChatApiKeyId",
+                    "rerankerChatApiKeyId",
+                    "rerankerModel",
+                    "defaultLlmModel",
+                    "defaultLlmProvider",
+                    "defaultLlmApiKeyId",
+                    "defaultAgentId",
+                    "favicon",
+                    "appName",
+                    "ogDescription",
+                    "footerText",
+                    "chatPlaceholders",
+                    "iconLogo",
+                    "showTwoFactor"
                   ],
                   "additionalProperties": false
                 }
@@ -122293,6 +123403,22 @@
                     "type": "string",
                     "minLength": 1
                   },
+                  "embeddingDimensions": {
+                    "anyOf": [
+                      {
+                        "type": "number",
+                        "enum": [
+                          1536
+                        ]
+                      },
+                      {
+                        "type": "number",
+                        "enum": [
+                          768
+                        ]
+                      }
+                    ]
+                  },
                   "embeddingChatApiKeyId": {
                     "nullable": true,
                     "type": "string",
@@ -122425,6 +123551,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "embeddingDimensions": {
+                      "nullable": true,
+                      "type": "number"
+                    },
                     "embeddingChatApiKeyId": {
                       "nullable": true,
                       "type": "string",
@@ -122448,6 +123578,48 @@
                     "defaultLlmProvider": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "defaultLlmApiKeyId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "defaultAgentId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "favicon": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "appName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "ogDescription": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "footerText": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "chatPlaceholders": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "iconLogo": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "showTwoFactor": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -122467,11 +123639,21 @@
                     "globalToolPolicy",
                     "allowChatFileUploads",
                     "embeddingModel",
+                    "embeddingDimensions",
                     "embeddingChatApiKeyId",
                     "rerankerChatApiKeyId",
                     "rerankerModel",
                     "defaultLlmModel",
-                    "defaultLlmProvider"
+                    "defaultLlmProvider",
+                    "defaultLlmApiKeyId",
+                    "defaultAgentId",
+                    "favicon",
+                    "appName",
+                    "ogDescription",
+                    "footerText",
+                    "chatPlaceholders",
+                    "iconLogo",
+                    "showTwoFactor"
                   ],
                   "additionalProperties": false
                 }
@@ -122809,6 +123991,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "embeddingDimensions": {
+                      "nullable": true,
+                      "type": "number"
+                    },
                     "embeddingChatApiKeyId": {
                       "nullable": true,
                       "type": "string",
@@ -122832,6 +124018,48 @@
                     "defaultLlmProvider": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "defaultLlmApiKeyId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "defaultAgentId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "favicon": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "appName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "ogDescription": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "footerText": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "chatPlaceholders": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "iconLogo": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "showTwoFactor": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -122851,11 +124079,21 @@
                     "globalToolPolicy",
                     "allowChatFileUploads",
                     "embeddingModel",
+                    "embeddingDimensions",
                     "embeddingChatApiKeyId",
                     "rerankerChatApiKeyId",
                     "rerankerModel",
                     "defaultLlmModel",
-                    "defaultLlmProvider"
+                    "defaultLlmProvider",
+                    "defaultLlmApiKeyId",
+                    "defaultAgentId",
+                    "favicon",
+                    "appName",
+                    "ogDescription",
+                    "footerText",
+                    "chatPlaceholders",
+                    "iconLogo",
+                    "showTwoFactor"
                   ],
                   "additionalProperties": false
                 }
@@ -123482,6 +124720,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "embeddingDimensions": {
+                      "nullable": true,
+                      "type": "number"
+                    },
                     "embeddingChatApiKeyId": {
                       "nullable": true,
                       "type": "string",
@@ -123505,6 +124747,48 @@
                     "defaultLlmProvider": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "defaultLlmApiKeyId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "defaultAgentId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "favicon": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "appName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "ogDescription": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "footerText": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "chatPlaceholders": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "iconLogo": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "showTwoFactor": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -123524,11 +124808,21 @@
                     "globalToolPolicy",
                     "allowChatFileUploads",
                     "embeddingModel",
+                    "embeddingDimensions",
                     "embeddingChatApiKeyId",
                     "rerankerChatApiKeyId",
                     "rerankerModel",
                     "defaultLlmModel",
-                    "defaultLlmProvider"
+                    "defaultLlmProvider",
+                    "defaultLlmApiKeyId",
+                    "defaultAgentId",
+                    "favicon",
+                    "appName",
+                    "ogDescription",
+                    "footerText",
+                    "chatPlaceholders",
+                    "iconLogo",
+                    "showTwoFactor"
                   ],
                   "additionalProperties": false
                 }
@@ -132779,7 +134073,8 @@
                         "delete",
                         "team-admin",
                         "admin",
-                        "cancel"
+                        "cancel",
+                        "enable"
                       ]
                     }
                   }

@@ -50,6 +50,7 @@ interface SettingsSaveBarProps {
   permissions: Permissions;
   onSave: () => void;
   onCancel: () => void;
+  disabledSave?: boolean;
 }
 
 export function SettingsSaveBar({
@@ -58,6 +59,7 @@ export function SettingsSaveBar({
   permissions,
   onSave,
   onCancel,
+  disabledSave,
 }: SettingsSaveBarProps) {
   if (!hasChanges) return null;
 
@@ -66,8 +68,7 @@ export function SettingsSaveBar({
       <PermissionButton
         permissions={permissions}
         onClick={onSave}
-        disabled={isSaving}
-        className="animate-pulse"
+        disabled={isSaving || disabledSave}
       >
         {isSaving ? "Saving..." : "Save"}
       </PermissionButton>

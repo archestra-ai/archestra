@@ -59,6 +59,18 @@
     },
     {
       "asDropdown": false,
+      "icon": "dashboard",
+      "includeVars": true,
+      "keepTime": true,
+      "tags": [],
+      "targetBlank": false,
+      "title": "RAG & Knowledge Base",
+      "tooltip": "",
+      "type": "link",
+      "url": "/d/archestra-rag-knowledge-base/archestra-rag-knowledge-base"
+    },
+    {
+      "asDropdown": false,
       "icon": "doc",
       "includeVars": false,
       "keepTime": false,

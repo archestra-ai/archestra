@@ -82,7 +82,8 @@ export function extractCitations(
           }
         }
       }
-    } catch {
+    } catch (err) {
+      console.warn("Failed to extract citations from tool result", err);
       continue;
     }
 

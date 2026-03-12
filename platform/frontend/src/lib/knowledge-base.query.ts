@@ -33,7 +33,7 @@ export function useKnowledgeBaseConfigStatus() {
 
 // ===== Query hooks =====
 
-export function useKnowledgeBases() {
+export function useKnowledgeBases(params?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ["knowledge-bases"],
     queryFn: async () => {
@@ -44,6 +44,7 @@ export function useKnowledgeBases() {
       }
       return data;
     },
+    enabled: params?.enabled,
   });
 }
 

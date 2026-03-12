@@ -473,8 +473,8 @@ export default function StatisticsPage() {
           >
             <Info className="h-3 w-3" />
             <span>
-              Check open telemetry capabilities to get cost-related insights at
-              scale
+              Check Prometheus metrics capabilities to get cost-related insights
+              at scale
             </span>
           </a>
         </div>

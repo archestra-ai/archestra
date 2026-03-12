@@ -1241,7 +1241,7 @@ export function AgentDialog({
                       )}{" "}
                       can draw from when responding
                     </p>
-                    <Popover>
+                    <Popover modal>
                       <PopoverTrigger asChild>
                         <Button
                           variant="outline"
@@ -1366,8 +1366,12 @@ export function AgentDialog({
                                         <div className="truncate text-sm">
                                           {connector.name}
                                         </div>
-                                        <div className="truncate text-xs text-muted-foreground capitalize">
-                                          {connector.connectorType}
+                                        <div className="truncate text-xs text-muted-foreground">
+                                          {connector.description || (
+                                            <span className="capitalize">
+                                              {connector.connectorType}
+                                            </span>
+                                          )}
                                         </div>
                                       </div>
                                       <div className="ml-2 shrink-0">

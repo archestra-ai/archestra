@@ -35,9 +35,9 @@ export function useOrgTheme() {
   );
 
   const saveAppearance = useCallback(
-    (themeId: OrganizationTheme) => {
+    async (themeId: OrganizationTheme) => {
       setCurrentUITheme(themeId);
-      updateThemeMutation.mutate({
+      await updateThemeMutation.mutateAsync({
         theme: themeId,
       });
       applyThemeInLocalStorage(themeId);

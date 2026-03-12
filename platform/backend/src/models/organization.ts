@@ -117,6 +117,11 @@ class OrganizationModel {
         customFont: schema.organizationsTable.customFont,
         logo: schema.organizationsTable.logo,
         logoDark: schema.organizationsTable.logoDark,
+        favicon: schema.organizationsTable.favicon,
+        iconLogo: schema.organizationsTable.iconLogo,
+        appName: schema.organizationsTable.appName,
+        ogDescription: schema.organizationsTable.ogDescription,
+        footerText: schema.organizationsTable.footerText,
       })
       .from(schema.organizationsTable)
       .limit(1);
@@ -128,6 +133,11 @@ class OrganizationModel {
         customFont: "lato" as OrganizationCustomFont,
         logo: null,
         logoDark: null,
+        favicon: null,
+        iconLogo: null,
+        appName: null,
+        ogDescription: null,
+        footerText: null,
       };
     }
 

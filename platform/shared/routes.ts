@@ -292,6 +292,9 @@ export const RouteId = {
   // LLM Settings Routes (organization-level)
   UpdateLlmSettings: "updateLlmSettings",
 
+  // Agent Settings Routes (organization-level)
+  UpdateAgentSettings: "updateAgentSettings",
+
   // Knowledge Settings Routes (organization-level)
   UpdateKnowledgeSettings: "updateKnowledgeSettings",
   DropEmbeddingConfig: "dropEmbeddingConfig",

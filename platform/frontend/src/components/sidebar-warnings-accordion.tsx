@@ -4,6 +4,8 @@ import { DEFAULT_ADMIN_EMAIL } from "@shared";
 import { AlertTriangle } from "lucide-react";
 import Link from "next/link";
 import {
+  SidebarGroup,
+  SidebarGroupContent,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
@@ -40,33 +42,39 @@ export function SidebarWarningsAccordion() {
   }
 
   return (
-    <SidebarMenu>
-      {showDefaultCredsWarning && (
-        <SidebarMenuItem>
-          <SidebarMenuButton
-            asChild
-            className="text-destructive hover:text-destructive"
-          >
-            <Link href="/settings/auth">
-              <AlertTriangle className="shrink-0" />
-              <span>Change default credentials</span>
-            </Link>
-          </SidebarMenuButton>
-        </SidebarMenuItem>
-      )}
-      {showSecurityEngineWarning && (
-        <SidebarMenuItem>
-          <SidebarMenuButton
-            asChild
-            className="text-destructive hover:text-destructive"
-          >
-            <Link href="/mcp/tool-policies">
-              <AlertTriangle className="shrink-0" />
-              <span>Enable security engine</span>
-            </Link>
-          </SidebarMenuButton>
-        </SidebarMenuItem>
-      )}
-    </SidebarMenu>
+    <SidebarGroup className="py-0 group-data-[collapsible=icon]:p-0">
+      <SidebarGroupContent>
+        <SidebarMenu>
+          {showDefaultCredsWarning && (
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                asChild
+                tooltip="Change default credentials"
+                className="text-destructive hover:text-destructive"
+              >
+                <Link href="/settings/auth?highlight=change-password">
+                  <AlertTriangle className="shrink-0" />
+                  <span>Change default credentials</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          )}
+          {showSecurityEngineWarning && (
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                asChild
+                tooltip="Enable security engine"
+                className="text-destructive hover:text-destructive"
+              >
+                <Link href="/mcp/tool-policies">
+                  <AlertTriangle className="shrink-0" />
+                  <span>Enable security engine</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          )}
+        </SidebarMenu>
+      </SidebarGroupContent>
+    </SidebarGroup>
   );
 }

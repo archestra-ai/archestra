@@ -1,6 +1,7 @@
 import type { OrganizationCustomFont, OrganizationTheme } from "@shared";
 import {
   boolean,
+  integer,
   pgTable,
   text,
   timestamp,
@@ -56,8 +57,11 @@ const organizationsTable = pgTable("organization", {
   /** Embedding model for knowledge base RAG — set explicitly when user configures embedding */
   embeddingModel: text("embedding_model"),
 
+  /** Vector dimensions for the embedding column (1536 or 768) */
+  embeddingDimensions: integer("embedding_dimensions"),
+
   /**
-   * Chat API key used for generating embeddings (must be an OpenAI provider key).
+   * Chat API key used for generating embeddings (must use an embedding-compatible provider: OpenAI, Ollama).
    * FK to chat_api_keys(id) ON DELETE SET NULL — enforced by migration only
    * (Drizzle .references() causes TS circular inference: organization → chat-api-key → team → organization).
    */
@@ -77,6 +81,40 @@ const organizationsTable = pgTable("organization", {
 
   /** Provider for the default LLM model (e.g. "openai") */
   defaultLlmProvider: text("default_llm_provider"),
+
+  /**
+   * Chat API key used for the default LLM model.
+   * FK to chat_api_keys(id) ON DELETE SET NULL — enforced by migration only (same circular issue).
+   */
+  defaultLlmApiKeyId: uuid("default_llm_api_key_id"),
+
+  /**
+   * Organization-wide default agent ID (fallback when member has no personal default).
+   * FK to agents(id) ON DELETE SET NULL — enforced by migration only
+   * (Drizzle .references() causes TS circular inference: organization → agent → ... → organization).
+   */
+  defaultAgentId: uuid("default_agent_id"),
+
+  /** Custom favicon (base64 PNG, same validation as logo) */
+  favicon: text("favicon"),
+
+  /** Custom browser tab title */
+  appName: text("app_name"),
+
+  /** OpenGraph description for link previews */
+  ogDescription: text("og_description"),
+
+  /** Custom footer text (replaces version display) */
+  footerText: text("footer_text"),
+
+  /** Chat input placeholder texts (cycles with typing animation) */
+  chatPlaceholders: text("chat_placeholders").array(),
+
+  /** Square icon logo (28x28px recommended) for collapsed sidebar and chat loading indicator */
+  iconLogo: text("icon_logo"),
+
+  /** Organization-level 2FA visibility toggle */
+  showTwoFactor: boolean("show_two_factor").notNull().default(false),
 });
 
 export default organizationsTable;

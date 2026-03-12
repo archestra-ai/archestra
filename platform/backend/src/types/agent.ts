@@ -32,6 +32,15 @@ export type AgentType = z.infer<typeof AgentTypeSchema>;
 export const AgentScopeSchema = z.enum(["personal", "team", "org"]);
 export type AgentScope = z.infer<typeof AgentScopeSchema>;
 
+/** Scope filter for API queries — includes "built_in" as a virtual scope for filtering */
+export const AgentScopeFilterSchema = z.enum([
+  "personal",
+  "team",
+  "org",
+  "built_in",
+]);
+export type AgentScopeFilter = z.infer<typeof AgentScopeFilterSchema>;
+
 // Built-in agent config — discriminated union by name
 // Policy Configuration Subagent config
 const PolicyConfigAgentConfigSchema = z.object({

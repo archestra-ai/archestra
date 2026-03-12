@@ -20,7 +20,12 @@ const {
 
 // ===== Query hooks =====
 
-export function useConnectors(knowledgeBaseId?: string) {
+export function useConnectors(
+  params?: string | { knowledgeBaseId?: string; enabled?: boolean },
+) {
+  const knowledgeBaseId =
+    typeof params === "string" ? params : params?.knowledgeBaseId;
+  const enabled = typeof params === "object" ? params?.enabled : undefined;
   return useQuery({
     queryKey: knowledgeBaseId
       ? ["connectors", { knowledgeBaseId }]
@@ -35,6 +40,7 @@ export function useConnectors(knowledgeBaseId?: string) {
       }
       return data;
     },
+    enabled,
     refetchInterval: (query) => {
       const hasRunning = query.state.data?.data?.some(
         (c) => c.lastSyncStatus === "running",

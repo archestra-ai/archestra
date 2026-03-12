@@ -30,6 +30,7 @@ import {
   createPaginatedResult,
   type PaginatedResult,
 } from "@/database/utils/pagination";
+import logger from "@/logging";
 import type {
   ExtendedTool,
   InsertTool,
@@ -40,6 +41,7 @@ import type {
   ToolWithAssignments,
   UpdateTool,
 } from "@/types";
+import AgentConnectorAssignmentModel from "./agent-connector-assignment";
 import AgentTeamModel from "./agent-team";
 import AgentToolModel from "./agent-tool";
 import McpServerModel from "./mcp-server";
@@ -405,13 +407,13 @@ class ToolModel {
    * explicitly assigned like any other MCP server tools.
    */
   static async getMcpToolsByAgent(agentId: string): Promise<Tool[]> {
-    // Get tool IDs assigned via junction table (MCP tools) and agent's KB assignment
-    const [assignedToolIds, hasKnowledgeBase] = await Promise.all([
+    // Get tool IDs assigned via junction table (MCP tools) and agent's knowledge sources
+    const [assignedToolIds, hasKnowledgeSources] = await Promise.all([
       AgentToolModel.findToolIdsByAgent(agentId),
-      ToolModel.getAgentHasKnowledgeBase(agentId),
+      ToolModel.getAgentHasKnowledgeSources(agentId),
     ]);
 
-    if (assignedToolIds.length === 0 && !hasKnowledgeBase) {
+    if (assignedToolIds.length === 0 && !hasKnowledgeSources) {
       return [];
     }
 
@@ -436,9 +438,9 @@ class ToolModel {
             .orderBy(desc(schema.toolsTable.createdAt))
         : [];
 
-    // Auto-inject query_knowledge_sources when the agent has a knowledge base assigned,
-    // regardless of whether the tool was manually assigned
-    if (hasKnowledgeBase) {
+    // Auto-inject query_knowledge_sources when the agent has knowledge sources
+    // (knowledge bases or directly-assigned connectors)
+    if (hasKnowledgeSources) {
       const hasKbTool = tools.some(
         (t) => t.name === TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
       );
@@ -452,7 +454,7 @@ class ToolModel {
       }
     }
 
-    return ToolModel.filterUnavailableTools(tools, hasKnowledgeBase);
+    return ToolModel.filterUnavailableTools(tools, hasKnowledgeSources);
   }
 
   /**
@@ -623,7 +625,7 @@ class ToolModel {
 
     const existingToolsByName = new Map(existingTools.map((t) => [t.name, t]));
 
-    // Prepare tools to insert (only those that don't exist)
+    // Prepare tools to insert (only those that don't exist) and tools to update
     const toolsToInsert: InsertTool[] = [];
 
     for (const archestraTool of archestraTools) {
@@ -636,12 +638,52 @@ class ToolModel {
           catalogId,
           agentId: null,
         });
+      } else {
+        // Update description and parameters if they changed
+        const newDescription = archestraTool.description || null;
+        const descChanged = existingTool.description !== newDescription;
+        const paramsChanged =
+          JSON.stringify(existingTool.parameters) !==
+          JSON.stringify(archestraTool.inputSchema);
+
+        if (descChanged || paramsChanged) {
+          await db
+            .update(schema.toolsTable)
+            .set({
+              description: newDescription,
+              parameters: archestraTool.inputSchema,
+            })
+            .where(eq(schema.toolsTable.id, existingTool.id));
+        }
       }
     }
 
     // Bulk insert new tools if any
     if (toolsToInsert.length > 0) {
       await db.insert(schema.toolsTable).values(toolsToInsert).returning();
+    }
+
+    // Remove stale tools that no longer exist in the Archestra tool definitions
+    // FK constraints use onDelete: "cascade" so related records are cleaned up automatically
+    const allCatalogTools = await db
+      .select({ id: schema.toolsTable.id, name: schema.toolsTable.name })
+      .from(schema.toolsTable)
+      .where(eq(schema.toolsTable.catalogId, catalogId));
+
+    const staleTools = allCatalogTools.filter(
+      (t) => !archestraToolNames.includes(t.name),
+    );
+    if (staleTools.length > 0) {
+      await db.delete(schema.toolsTable).where(
+        inArray(
+          schema.toolsTable.id,
+          staleTools.map((t) => t.id),
+        ),
+      );
+      logger.info(
+        { staleToolNames: staleTools.map((t) => t.name) },
+        "Removed stale Archestra tools",
+      );
     }
   }
 
@@ -1812,30 +1854,34 @@ class ToolModel {
   // =============================================================================
 
   /**
-   * Check if an agent has any knowledge bases assigned.
+   * Check if an agent has any knowledge sources — either knowledge bases or
+   * directly-assigned connectors.
    */
-  private static async getAgentHasKnowledgeBase(
+  private static async getAgentHasKnowledgeSources(
     agentId: string,
   ): Promise<boolean> {
-    const rows = await db
-      .select({
-        knowledgeBaseId: schema.agentKnowledgeBasesTable.knowledgeBaseId,
-      })
-      .from(schema.agentKnowledgeBasesTable)
-      .where(eq(schema.agentKnowledgeBasesTable.agentId, agentId))
-      .limit(1);
-    return rows.length > 0;
+    const [kbRows, connectorIds] = await Promise.all([
+      db
+        .select({
+          knowledgeBaseId: schema.agentKnowledgeBasesTable.knowledgeBaseId,
+        })
+        .from(schema.agentKnowledgeBasesTable)
+        .where(eq(schema.agentKnowledgeBasesTable.agentId, agentId))
+        .limit(1),
+      AgentConnectorAssignmentModel.getConnectorIds(agentId),
+    ]);
+    return kbRows.length > 0 || connectorIds.length > 0;
   }
 
   /**
    * Filter out tools that should not be visible based on current configuration.
-   * Filters out the query_knowledge_sources tool when the agent has no knowledge base assigned.
+   * Filters out the query_knowledge_sources tool when the agent has no knowledge sources.
    */
   private static filterUnavailableTools<T extends { name: string }>(
     tools: T[],
-    hasKnowledgeBase: boolean,
+    hasKnowledgeSources: boolean,
   ): T[] {
-    if (hasKnowledgeBase) {
+    if (hasKnowledgeSources) {
       return tools;
     }
     return tools.filter(

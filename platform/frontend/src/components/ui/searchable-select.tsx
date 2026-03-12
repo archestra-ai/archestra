@@ -20,6 +20,7 @@ interface SearchableSelectProps {
   disabled?: boolean;
   allowCustom?: boolean;
   showSearchIcon?: boolean;
+  hint?: string;
 }
 
 export function SearchableSelect({
@@ -32,6 +33,7 @@ export function SearchableSelect({
   disabled = false,
   allowCustom = false,
   showSearchIcon = true,
+  hint,
 }: SearchableSelectProps) {
   const [open, setOpen] = React.useState(false);
   const [searchQuery, setSearchQuery] = React.useState("");
@@ -94,6 +96,11 @@ export function SearchableSelect({
             className="flex w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
           />
         </div>
+        {hint && (
+          <div className="px-3 pb-1.5 text-xs text-muted-foreground">
+            {hint}
+          </div>
+        )}
         <div className="max-h-[300px] overflow-y-auto p-1">
           {filteredItems.length === 0 ? (
             <div className="px-4 py-6 text-center text-sm text-muted-foreground">

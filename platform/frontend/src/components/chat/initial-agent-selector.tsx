@@ -6,6 +6,7 @@ import {
   ArrowLeft,
   Bot,
   Check,
+  Database,
   ExternalLink,
   Info,
   Loader2,
@@ -102,7 +103,11 @@ export function InitialAgentSelector({
   const [search, setSearch] = useState("");
   const [editingAgentId, setEditingAgentId] = useState<string | null>(null);
   const [dialogView, setDialogView] = useState<
-    "settings" | "add-tool" | "configure-tool" | "add-delegation"
+    | "settings"
+    | "add-tool"
+    | "configure-tool"
+    | "add-delegation"
+    | "edit-knowledge-sources"
   >("settings");
   const [selectedCatalog, setSelectedCatalog] = useState<CatalogItem | null>(
     null,
@@ -113,7 +118,12 @@ export function InitialAgentSelector({
   const installer = useMcpInstallOrchestrator();
 
   const filteredAgents = useMemo(() => {
-    let result = allAgents;
+    let result = allAgents.filter((a) => {
+      if (a.scope === "personal") {
+        return a.authorId === userId;
+      }
+      return true;
+    });
     if (search) {
       const lower = search.toLowerCase();
       result = result.filter(
@@ -126,11 +136,9 @@ export function InitialAgentSelector({
     return [...result].sort((a, b) => {
       if (a.id === currentAgentId) return -1;
       if (b.id === currentAgentId) return 1;
-      const sa = (a as unknown as Record<string, unknown>).scope as string;
-      const sb = (b as unknown as Record<string, unknown>).scope as string;
-      return (scopeOrder[sa] ?? 3) - (scopeOrder[sb] ?? 3);
+      return (scopeOrder[a.scope] ?? 3) - (scopeOrder[b.scope] ?? 3);
     });
-  }, [allAgents, search, currentAgentId]);
+  }, [allAgents, search, currentAgentId, userId]);
 
   const currentAgent = useMemo(
     () =>
@@ -147,11 +155,22 @@ export function InitialAgentSelector({
   }, [currentAgent, isAgentAdmin, userId]);
 
   const effectiveAgentId = currentAgent?.id ?? currentAgentId;
-  const { data: catalogItems = [] } = useInternalMcpCatalog();
+  const { data: canReadMcpRegistry } = useHasPermissions({
+    mcpRegistry: ["read"],
+  });
+  const { data: canReadToolPolicy } = useHasPermissions({
+    toolPolicy: ["read"],
+  });
+  const { data: canReadKnowledgeBase } = useHasPermissions({
+    knowledgeBase: ["read"],
+  });
+  const { data: catalogItems = [] } = useInternalMcpCatalog({
+    enabled: !!canReadMcpRegistry,
+  });
   const { data: assignedToolsData } = useAllProfileTools({
     filters: { agentId: effectiveAgentId ?? undefined },
     skipPagination: true,
-    enabled: !!effectiveAgentId,
+    enabled: !!effectiveAgentId && !!canReadToolPolicy,
   });
 
   const assignedCatalogs = useMemo(() => {
@@ -171,8 +190,12 @@ export function InitialAgentSelector({
   }, [allAgents, triggerDelegations]);
 
   // Knowledge base data for connector icons in avatar group
-  const { data: knowledgeBasesData } = useKnowledgeBases();
-  const { data: connectorsData } = useConnectors();
+  const { data: knowledgeBasesData } = useKnowledgeBases({
+    enabled: !!canReadKnowledgeBase,
+  });
+  const { data: connectorsData } = useConnectors({
+    enabled: !!canReadKnowledgeBase,
+  });
 
   const allKnowledgeBases = knowledgeBasesData?.data ?? [];
   const allConnectors = connectorsData?.data ?? [];
@@ -408,6 +431,9 @@ export function InitialAgentSelector({
                 setConfigureToolFrom("settings");
                 setDialogView("configure-tool");
               }}
+              onEditKnowledgeSources={() =>
+                setDialogView("edit-knowledge-sources")
+              }
               matchedKnowledgeBases={editingKbs}
               matchedConnectors={editingConnectors}
             />
@@ -448,6 +474,15 @@ export function InitialAgentSelector({
                 onDone={() => setDialogView("settings")}
               />
             )}
+
+          {dialogView === "edit-knowledge-sources" && editingAgent && (
+            <EditKnowledgeSourcesView
+              agent={editingAgent}
+              allKnowledgeBases={allKnowledgeBases}
+              allConnectors={allConnectors}
+              onBack={() => setDialogView("settings")}
+            />
+          )}
         </DialogContent>
       </Dialog>
 
@@ -557,6 +592,7 @@ function AgentSettingsView({
   agent,
   onAddTool,
   onEditTool,
+  onEditKnowledgeSources,
   matchedKnowledgeBases: matchedKbs,
   matchedConnectors,
 }: {
@@ -567,20 +603,20 @@ function AgentSettingsView({
     systemPrompt?: string | null;
     icon?: string | null;
     scope?: string;
+    knowledgeBaseIds?: string[];
+    connectorIds?: string[];
   } | null;
   onAddTool: () => void;
   onEditTool: (catalog: CatalogItem) => void;
+  onEditKnowledgeSources: () => void;
   matchedKnowledgeBases: archestraApiTypes.GetKnowledgeBasesResponses["200"]["data"];
   matchedConnectors: archestraApiTypes.GetConnectorsResponses["200"]["data"];
 }) {
   const updateProfile = useUpdateProfile();
   const { data: canReadAgents } = useHasPermissions({ agent: ["read"] });
 
-  const hasKnowledgeSources =
-    matchedKbs.length > 0 || matchedConnectors.length > 0;
   const [instructions, setInstructions] = useState(agent?.systemPrompt ?? "");
   const [isSaving, setIsSaving] = useState(false);
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isEditingName, setIsEditingName] = useState(false);
   const [editedName, setEditedName] = useState(agent?.name ?? "");
   const nameInputRef = useRef<HTMLInputElement | null>(null);
@@ -601,35 +637,20 @@ function AgentSettingsView({
     setIsEditingIcon(false);
   }, [agent?.id, agent?.systemPrompt, agent?.name, agent?.description]);
 
-  const saveInstructions = useCallback(
-    (value: string) => {
-      if (!agent) return;
-      setIsSaving(true);
-      updateProfile.mutateAsync(
-        {
-          id: agent.id,
-          data: { systemPrompt: value.trim() || null },
-        },
-        { onSettled: () => setIsSaving(false) },
-      );
-    },
-    [agent, updateProfile],
-  );
+  const instructionsChanged =
+    (instructions.trim() || null) !== (agent?.systemPrompt ?? null);
 
-  const handleInstructionsChange = useCallback(
-    (value: string) => {
-      setInstructions(value);
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-      debounceRef.current = setTimeout(() => saveInstructions(value), 400);
-    },
-    [saveInstructions],
-  );
-
-  useEffect(() => {
-    return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-    };
-  }, []);
+  const saveInstructions = useCallback(() => {
+    if (!agent || !instructionsChanged) return;
+    setIsSaving(true);
+    updateProfile.mutateAsync(
+      {
+        id: agent.id,
+        data: { systemPrompt: instructions.trim() || null },
+      },
+      { onSettled: () => setIsSaving(false) },
+    );
+  }, [agent, updateProfile, instructions, instructionsChanged]);
 
   const saveName = useCallback(
     (value: string) => {
@@ -672,6 +693,32 @@ function AgentSettingsView({
       if (!agent) return;
       updateProfile.mutateAsync({ id: agent.id, data: { icon } });
       setIsEditingIcon(false);
+    },
+    [agent, updateProfile],
+  );
+
+  const handleRemoveKnowledgeBase = useCallback(
+    (kbId: string) => {
+      if (!agent) return;
+      const currentIds = agent.knowledgeBaseIds ?? [];
+      updateProfile.mutateAsync({
+        id: agent.id,
+        data: { knowledgeBaseIds: currentIds.filter((id) => id !== kbId) },
+      });
+    },
+    [agent, updateProfile],
+  );
+
+  const handleRemoveConnector = useCallback(
+    (connectorId: string) => {
+      if (!agent) return;
+      const currentIds = agent.connectorIds ?? [];
+      updateProfile.mutateAsync({
+        id: agent.id,
+        data: {
+          connectorIds: currentIds.filter((id) => id !== connectorId),
+        },
+      });
     },
     [agent, updateProfile],
   );
@@ -803,7 +850,7 @@ function AgentSettingsView({
           <Label className="mb-1.5">Instructions</Label>
           <Textarea
             value={instructions}
-            onChange={(e) => handleInstructionsChange(e.target.value)}
+            onChange={(e) => setInstructions(e.target.value)}
             className="resize-none text-sm min-h-[80px] max-h-[200px]"
             placeholder="Tell the agent what to do..."
           />
@@ -818,9 +865,20 @@ function AgentSettingsView({
           />
         </div>
 
-        {hasKnowledgeSources && (
-          <div>
-            <Label className="mb-1.5">Knowledge sources</Label>
+        <div>
+          <div className="flex items-center justify-between mb-1.5">
+            <Label>Knowledge sources</Label>
+          </div>
+          {matchedKbs.length === 0 && matchedConnectors.length === 0 ? (
+            <button
+              type="button"
+              onClick={onEditKnowledgeSources}
+              className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed p-3 text-center transition-colors hover:bg-accent cursor-pointer text-muted-foreground"
+            >
+              <Database className="size-4" />
+              <span className="text-xs font-medium">Add knowledge sources</span>
+            </button>
+          ) : (
             <div className="space-y-2">
               {matchedKbs.map((kb) => {
                 const connectors = kb.connectors ?? [];
@@ -830,57 +888,103 @@ function AgentSettingsView({
                 return (
                   <div
                     key={kb.id}
-                    className="flex items-center justify-between gap-2 rounded-lg border bg-muted/30 p-3"
+                    className="group flex items-center justify-between gap-2 rounded-lg border bg-muted/30 p-3"
                   >
                     <span className="text-sm font-medium truncate">
                       {kb.name}
                     </span>
-                    {connectorTypes.length > 0 && (
-                      <OverlappedIcons
-                        icons={connectorTypes.map((type) => ({
-                          key: type,
-                          icon: (
-                            <ConnectorTypeIcon
-                              type={type}
-                              className="h-full w-full"
-                            />
-                          ),
-                          tooltip: type,
-                        }))}
-                        maxVisible={3}
-                        size="sm"
-                      />
-                    )}
+                    <div className="flex items-center gap-2">
+                      {connectorTypes.length > 0 && (
+                        <OverlappedIcons
+                          icons={connectorTypes.map((type) => ({
+                            key: type,
+                            icon: (
+                              <ConnectorTypeIcon
+                                type={type}
+                                className="h-full w-full"
+                              />
+                            ),
+                            tooltip: type,
+                          }))}
+                          maxVisible={3}
+                          size="sm"
+                        />
+                      )}
+                      <button
+                        type="button"
+                        className="hidden group-hover:flex h-5 w-5 items-center justify-center rounded-full bg-muted hover:bg-destructive hover:text-destructive-foreground transition-colors"
+                        onClick={() => handleRemoveKnowledgeBase(kb.id)}
+                        title={`Remove ${kb.name}`}
+                      >
+                        <XIcon className="size-3" />
+                      </button>
+                    </div>
                   </div>
                 );
               })}
               {matchedConnectors.map((connector) => (
                 <div
                   key={connector.id}
-                  className="flex items-center gap-2 rounded-lg border bg-muted/30 p-3 text-sm"
+                  className="group flex items-center gap-2 rounded-lg border bg-muted/30 p-3 text-sm"
                 >
                   <ConnectorTypeIcon
                     type={connector.connectorType}
                     className="h-4 w-4 shrink-0"
                   />
-                  <span className="truncate">{connector.name}</span>
+                  <div className="flex-1 min-w-0">
+                    <span className="truncate block">{connector.name}</span>
+                    {connector.description && (
+                      <span className="truncate block text-xs text-muted-foreground">
+                        {connector.description}
+                      </span>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    className="hidden group-hover:flex h-5 w-5 items-center justify-center rounded-full bg-muted hover:bg-destructive hover:text-destructive-foreground transition-colors"
+                    onClick={() => handleRemoveConnector(connector.id)}
+                    title={`Remove ${connector.name}`}
+                  >
+                    <XIcon className="size-3" />
+                  </button>
                 </div>
               ))}
+              <button
+                type="button"
+                onClick={onEditKnowledgeSources}
+                className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed p-2 text-center transition-colors hover:bg-accent cursor-pointer text-muted-foreground"
+              >
+                <Plus className="size-3.5" />
+                <span className="text-xs font-medium">Add</span>
+              </button>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
-      {canReadAgents && (
-        <div className="border-t px-4 py-3 shrink-0">
+      <div className="border-t px-4 py-3 shrink-0 flex items-center justify-between gap-3">
+        {canReadAgents ? (
           <a
             href={`/agents?edit=${agent.id}`}
-            className="text-sm text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1.5"
+            className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1.5"
           >
-            Full configuration →
+            Full configuration <ExternalLink className="size-3" />
           </a>
-        </div>
-      )}
+        ) : (
+          <div />
+        )}
+        {instructionsChanged && (
+          <Button
+            size="sm"
+            className="h-7 px-3 text-xs"
+            onClick={saveInstructions}
+            disabled={isSaving}
+          >
+            {isSaving && <Loader2 className="size-3 animate-spin mr-1.5" />}
+            Save
+          </Button>
+        )}
+      </div>
     </div>
   );
 }
@@ -1556,9 +1660,7 @@ function AddDelegationView({
     }
     const scopeOrder: Record<string, number> = { personal: 0, team: 1, org: 2 };
     return [...result].sort((a, b) => {
-      const sa = (a as unknown as Record<string, unknown>).scope as string;
-      const sb = (b as unknown as Record<string, unknown>).scope as string;
-      return (scopeOrder[sa] ?? 3) - (scopeOrder[sb] ?? 3);
+      return (scopeOrder[a.scope] ?? 3) - (scopeOrder[b.scope] ?? 3);
     });
   }, [allAgents, agentId, search]);
 
@@ -1679,6 +1781,260 @@ function AddDelegationView({
   );
 }
 
+// ============================================================================
+// Edit Knowledge Sources View
+// ============================================================================
+
+function EditKnowledgeSourcesView({
+  agent,
+  allKnowledgeBases,
+  allConnectors,
+  onBack,
+}: {
+  agent: {
+    id: string;
+    name: string;
+    knowledgeBaseIds?: string[];
+    connectorIds?: string[];
+  };
+  allKnowledgeBases: archestraApiTypes.GetKnowledgeBasesResponses["200"]["data"];
+  allConnectors: archestraApiTypes.GetConnectorsResponses["200"]["data"];
+  onBack: () => void;
+}) {
+  const updateProfile = useUpdateProfile();
+  const [search, setSearch] = useState("");
+
+  const selectedKbIds = useMemo(
+    () => new Set(agent.knowledgeBaseIds ?? []),
+    [agent.knowledgeBaseIds],
+  );
+  const selectedConnectorIds = useMemo(
+    () => new Set(agent.connectorIds ?? []),
+    [agent.connectorIds],
+  );
+
+  const filteredKbs = useMemo(() => {
+    if (!search) return allKnowledgeBases;
+    const lower = search.toLowerCase();
+    return allKnowledgeBases.filter(
+      (kb) =>
+        kb.name.toLowerCase().includes(lower) ||
+        kb.description?.toLowerCase().includes(lower),
+    );
+  }, [allKnowledgeBases, search]);
+
+  const filteredConnectors = useMemo(() => {
+    if (!search) return allConnectors;
+    const lower = search.toLowerCase();
+    return allConnectors.filter(
+      (c) =>
+        c.name.toLowerCase().includes(lower) ||
+        c.connectorType.toLowerCase().includes(lower),
+    );
+  }, [allConnectors, search]);
+
+  // Stable sort: use initial selection to avoid rows jumping on toggle
+  const initialSelectedKbIds = useRef(selectedKbIds);
+  const initialSelectedConnectorIds = useRef(selectedConnectorIds);
+
+  const sortedKbs = useMemo(() => {
+    return [...filteredKbs].sort((a, b) => {
+      const aSelected = initialSelectedKbIds.current.has(a.id) ? 0 : 1;
+      const bSelected = initialSelectedKbIds.current.has(b.id) ? 0 : 1;
+      return aSelected - bSelected;
+    });
+  }, [filteredKbs]);
+
+  const sortedConnectors = useMemo(() => {
+    return [...filteredConnectors].sort((a, b) => {
+      const aSelected = initialSelectedConnectorIds.current.has(a.id) ? 0 : 1;
+      const bSelected = initialSelectedConnectorIds.current.has(b.id) ? 0 : 1;
+      return aSelected - bSelected;
+    });
+  }, [filteredConnectors]);
+
+  const handleToggleKb = (kbId: string) => {
+    const currentIds = agent.knowledgeBaseIds ?? [];
+    const newIds = selectedKbIds.has(kbId)
+      ? currentIds.filter((id) => id !== kbId)
+      : [...currentIds, kbId];
+    updateProfile.mutate({
+      id: agent.id,
+      data: { knowledgeBaseIds: newIds },
+    });
+  };
+
+  const handleToggleConnector = (connectorId: string) => {
+    const currentIds = agent.connectorIds ?? [];
+    const newIds = selectedConnectorIds.has(connectorId)
+      ? currentIds.filter((id) => id !== connectorId)
+      : [...currentIds, connectorId];
+    updateProfile.mutate({
+      id: agent.id,
+      data: { connectorIds: newIds },
+    });
+  };
+
+  const hasItems = allKnowledgeBases.length > 0 || allConnectors.length > 0;
+  const totalSelected = selectedKbIds.size + selectedConnectorIds.size;
+
+  return (
+    <div className="flex flex-col h-full">
+      <DialogHeader
+        title="Knowledge Sources"
+        breadcrumbs={[agent.name]}
+        onBack={onBack}
+      />
+
+      {!hasItems ? (
+        <div className="flex-1 flex flex-col items-center justify-center gap-3 p-6 text-center">
+          <Database className="size-8 text-muted-foreground" />
+          <div>
+            <p className="text-sm font-medium">No knowledge sources</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Create knowledge bases or connectors to use them here.
+            </p>
+          </div>
+          <a
+            href="/knowledge/knowledge-bases"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs text-primary hover:underline flex items-center gap-1"
+          >
+            Go to Knowledge <ExternalLink className="size-3" />
+          </a>
+        </div>
+      ) : (
+        <>
+          <div className="px-4 pt-4 shrink-0 space-y-3">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Search knowledge sources..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="pl-9"
+                autoFocus
+              />
+            </div>
+            <div className="text-xs text-muted-foreground">
+              {totalSelected} source{totalSelected !== 1 ? "s" : ""} selected
+            </div>
+          </div>
+          <div className="flex-1 min-h-0 overflow-y-auto px-4 py-2 space-y-1">
+            {sortedKbs.length > 0 && (
+              <div className="space-y-1">
+                <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider pb-1 px-1">
+                  Knowledge Bases
+                </div>
+                {sortedKbs.map((kb) => {
+                  const isSelected = selectedKbIds.has(kb.id);
+                  const connectors = kb.connectors ?? [];
+                  const connectorTypes = [
+                    ...new Set(connectors.map((c) => c.connectorType)),
+                  ];
+                  return (
+                    <button
+                      key={kb.id}
+                      type="button"
+                      onClick={() => handleToggleKb(kb.id)}
+                      className={cn(
+                        "flex w-full items-center gap-3 rounded-lg border p-3 text-left transition-colors cursor-pointer",
+                        isSelected
+                          ? "border-primary bg-primary/5"
+                          : "hover:bg-accent",
+                      )}
+                    >
+                      <Database className="size-4 shrink-0 text-muted-foreground" />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-medium truncate">
+                          {kb.name}
+                        </div>
+                        {kb.description && (
+                          <div className="text-xs text-muted-foreground truncate">
+                            {kb.description}
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        {connectorTypes.length > 0 && (
+                          <OverlappedIcons
+                            icons={connectorTypes.map((type) => ({
+                              key: type,
+                              icon: (
+                                <ConnectorTypeIcon
+                                  type={type}
+                                  className="h-full w-full"
+                                />
+                              ),
+                              tooltip: type,
+                            }))}
+                            maxVisible={3}
+                            size="sm"
+                          />
+                        )}
+                        {isSelected && (
+                          <Check className="size-4 text-primary" />
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            {sortedConnectors.length > 0 && (
+              <div className="space-y-1">
+                {sortedKbs.length > 0 && (
+                  <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider pt-3 pb-1 px-1">
+                    Connectors
+                  </div>
+                )}
+                {sortedConnectors.map((connector) => {
+                  const isSelected = selectedConnectorIds.has(connector.id);
+                  return (
+                    <button
+                      key={connector.id}
+                      type="button"
+                      onClick={() => handleToggleConnector(connector.id)}
+                      className={cn(
+                        "flex w-full items-center gap-3 rounded-lg border p-3 text-left transition-colors cursor-pointer",
+                        isSelected
+                          ? "border-primary bg-primary/5"
+                          : "hover:bg-accent",
+                      )}
+                    >
+                      <ConnectorTypeIcon
+                        type={connector.connectorType}
+                        className="h-4 w-4 shrink-0"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-medium truncate">
+                          {connector.name}
+                        </div>
+                        <div className="text-xs text-muted-foreground truncate">
+                          {connector.description || connector.connectorType}
+                        </div>
+                      </div>
+                      {isSelected && (
+                        <Check className="size-4 text-primary shrink-0" />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            {sortedKbs.length === 0 && sortedConnectors.length === 0 && (
+              <div className="text-center py-8 text-sm text-muted-foreground">
+                No knowledge sources match your search
+              </div>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function AgentToolAvatars({ agentId }: { agentId: string }) {
   const { data: catalogItems = [] } = useInternalMcpCatalog();
   const { data: allAgents = [] } = useInternalAgents();
@@ -1737,16 +2093,17 @@ function ToolServerAvatarGroup({
     return (
       <Tooltip>
         <TooltipTrigger asChild>
-          <button
-            type="button"
-            className="flex size-5 shrink-0 items-center justify-center rounded-full bg-muted ml-1 hover:bg-muted/80 transition-colors"
+          {/* biome-ignore lint/a11y/noStaticElementInteractions: nested inside parent button */}
+          {/* biome-ignore lint/a11y/useKeyWithClickEvents: parent button handles keyboard */}
+          <div
+            className="flex size-5 shrink-0 items-center justify-center rounded-full bg-muted ml-1 hover:bg-muted/80 transition-colors cursor-pointer"
             onClick={(e) => {
               e.stopPropagation();
               onAdd?.();
             }}
           >
             <Plus className="size-3 text-muted-foreground" />
-          </button>
+          </div>
         </TooltipTrigger>
         <TooltipContent side="top">Add tools</TooltipContent>
       </Tooltip>
@@ -1791,16 +2148,17 @@ function ToolServerAvatarGroup({
       {showAddButton && !hasNonBuiltInTools && (
         <Tooltip>
           <TooltipTrigger asChild>
-            <button
-              type="button"
-              className="flex size-5 shrink-0 items-center justify-center rounded-full bg-muted ring-1 ring-background ml-0.5 hover:bg-muted/80 transition-colors"
+            {/* biome-ignore lint/a11y/noStaticElementInteractions: nested inside parent button */}
+            {/* biome-ignore lint/a11y/useKeyWithClickEvents: parent button handles keyboard */}
+            <div
+              className="flex size-5 shrink-0 items-center justify-center rounded-full bg-muted ring-1 ring-background ml-0.5 hover:bg-muted/80 transition-colors cursor-pointer"
               onClick={(e) => {
                 e.stopPropagation();
                 onAdd?.();
               }}
             >
               <Plus className="size-3 text-muted-foreground" />
-            </button>
+            </div>
           </TooltipTrigger>
           <TooltipContent side="top">Add tools</TooltipContent>
         </Tooltip>

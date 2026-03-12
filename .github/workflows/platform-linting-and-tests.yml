@@ -14,7 +14,7 @@ on:
         type: boolean
         default: false
       is-fork-pr:
-        description: "Whether this PR is from a fork (uses artifacts instead of GHCR)"
+        description: "Whether this is a fork PR (fork PRs don't have access to Docker Hub secrets for CVE scanning)"
         required: false
         type: boolean
         default: false
@@ -65,6 +65,7 @@ jobs:
           persist-credentials: ${{ inputs.is-release-please-pr }} # zizmor: ignore[artipacked]
           ref: ${{ inputs.is-release-please-pr && github.head_ref || '' }}
           token: ${{ steps.generate-token.outputs.token || github.token }}
+          fetch-depth: 1
 
       - name: Setup environment
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
@@ -155,15 +156,13 @@ jobs:
           echo "✅ All validation checks passed"
 
   # Build Docker images for e2e tests (platform and MCP server base)
-  # Non-fork PRs: Push to GHCR (faster)
-  # Fork PRs: Upload as artifact (no package write permissions needed)
+  # Images are exported as artifacts for fast co-located downloads in E2E jobs.
   platform-e2e-build:
     name: Build ${{ matrix.name }} Image
     runs-on: ${{ matrix.runner }}
-    if: ${{ inputs.should-skip-running-and-always-succeed != true && inputs.is-release-please-pr != true }}
+    if: ${{ inputs.should-skip-running-and-always-succeed != true }}
     permissions:
       contents: read
-      packages: write
     strategy:
       fail-fast: false
       matrix:
@@ -172,7 +171,6 @@ jobs:
             runner: blacksmith-16vcpu-ubuntu-2404
             context: ./platform
             dockerfile: ""
-            image-name: platform
             artifact-name: platform-docker-image
             tarball-name: platform-image.tar.gz
             local-tag-prefix: archestra-platform
@@ -181,7 +179,6 @@ jobs:
             runner: blacksmith-4vcpu-ubuntu-2404
             context: ./platform/mcp_server_docker_image
             dockerfile: ./platform/mcp_server_docker_image/Dockerfile
-            image-name: mcp-server-base
             artifact-name: mcp-server-base-docker-image
             tarball-name: mcp-server-base-image.tar.gz
             local-tag-prefix: mcp-server-base
@@ -191,6 +188,7 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
+          fetch-depth: 1
 
       - name: Setup environment
         if: ${{ matrix.use-build-action }}
@@ -198,66 +196,32 @@ jobs:
         with:
           working-directory: ./platform
 
-      - name: Login to GHCR
-        if: ${{ !inputs.is-fork-pr }}
-        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      # Non-fork PRs: Build and push to GHCR (Platform image using custom action)
-      - name: Build and push Platform image to GHCR
-        if: ${{ !inputs.is-fork-pr && matrix.use-build-action }}
+      - name: Build Platform image
+        if: ${{ matrix.use-build-action }}
         uses: ./.github/actions/build-platform-docker-image
         with:
           context: ${{ matrix.context }}
-          push: "true"
-          tags: ghcr.io/${{ github.repository }}/${{ matrix.image-name }}:${{ github.sha }}
-          turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
-          turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
-
-      # Non-fork PRs: Build and push to GHCR (MCP server base using docker/build-push-action)
-      - name: Setup Blacksmith Builder
-        if: ${{ !matrix.use-build-action }}
-        uses: useblacksmith/setup-docker-builder@f9b57e1c7d5a57eed0b5609e1ffeadbf3bb0b726 # v1.1.0
-
-      - name: Build and push MCP server base image to GHCR
-        if: ${{ !inputs.is-fork-pr && !matrix.use-build-action }}
-        uses: useblacksmith/build-push-action@30c71162f16ea2c27c3e21523255d209b8b538c1 # v2
-        with:
-          context: ${{ matrix.context }}
-          file: ${{ matrix.dockerfile }}
-          platforms: linux/amd64
-          push: true
-          tags: ghcr.io/${{ github.repository }}/${{ matrix.image-name }}:${{ github.sha }}
-
-      # Fork PRs: Build locally and export as artifact (Platform image)
-      - name: Build Platform image locally
-        if: ${{ inputs.is-fork-pr && matrix.use-build-action }}
-        uses: ./.github/actions/build-platform-docker-image
-        with:
-          context: ${{ matrix.context }}
-          push: "false"
           load: "true"
           tags: ${{ matrix.local-tag-prefix }}:${{ github.sha }}
           turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
           turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
 
-      # Fork PRs: Build locally and export as artifact (MCP server base)
-      - name: Build MCP server base image locally
-        if: ${{ inputs.is-fork-pr && !matrix.use-build-action }}
+      - name: Setup Blacksmith Builder
+        if: ${{ !matrix.use-build-action }}
+        uses: useblacksmith/setup-docker-builder@f9b57e1c7d5a57eed0b5609e1ffeadbf3bb0b726 # v1.1.0
+
+      - name: Build MCP server base image
+        if: ${{ !matrix.use-build-action }}
         uses: useblacksmith/build-push-action@30c71162f16ea2c27c3e21523255d209b8b538c1 # v2
         with:
           context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
           platforms: linux/amd64
-          push: false
           load: true
           tags: ${{ matrix.local-tag-prefix }}:${{ github.sha }}
 
+      # Export as artifact for fast co-located downloads in E2E jobs
       - name: Export Docker image as tarball
-        if: ${{ inputs.is-fork-pr }}
         env:
           GIT_SHA: ${{ github.sha }}
           LOCAL_TAG_PREFIX: ${{ matrix.local-tag-prefix }}
@@ -267,7 +231,6 @@ jobs:
           ls -lh "/tmp/${TARBALL_NAME}"
 
       - name: Upload Docker image artifact
-        if: ${{ inputs.is-fork-pr }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: ${{ matrix.artifact-name }}
@@ -281,11 +244,10 @@ jobs:
     name: Platform E2E Tests (${{ matrix.name }})
     needs: [platform-e2e-build]
     # Run even when platform-e2e-build is skipped (on PRs) so job succeeds rather than being skipped
-    if: ${{ !cancelled() && inputs.is-release-please-pr != true }}
+    if: ${{ !cancelled() }}
     runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
-      packages: read
     strategy:
       fail-fast: false
       matrix:
@@ -350,6 +312,7 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
+          fetch-depth: 1
 
       - name: Setup environment
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
@@ -361,17 +324,11 @@ jobs:
         id: load-platform-image
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         uses: ./.github/actions/load-platform-image
-        with:
-          is-fork-pr: ${{ inputs.is-fork-pr }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Load MCP server base image
         id: load-mcp-server-base-image
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         uses: ./.github/actions/load-mcp-server-base-image
-        with:
-          is-fork-pr: ${{ inputs.is-fork-pr }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Archestra Platform
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
@@ -436,17 +393,17 @@ jobs:
   platform-quickstart-e2e-tests:
     name: Platform E2E Tests (Quickstart)
     needs: [platform-e2e-build]
-    if: ${{ !cancelled() && inputs.is-release-please-pr != true }}
+    if: ${{ !cancelled() }}
     runs-on: blacksmith-16vcpu-ubuntu-2404
     permissions:
       contents: read
-      packages: read
     steps:
       - name: Checkout repository
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
+          fetch-depth: 1
 
       - name: Setup environment
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
@@ -458,9 +415,6 @@ jobs:
         id: load-platform-image
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         uses: ./.github/actions/load-platform-image
-        with:
-          is-fork-pr: ${{ inputs.is-fork-pr }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       # Note: We intentionally don't load/use a custom MCP server base image for quickstart tests.
       # The embedded Kind cluster inside the quickstart container cannot easily access images
@@ -628,17 +582,17 @@ jobs:
   platform-vault-k8s-e2e-tests:
     name: Platform E2E Tests (Vault K8s)
     needs: [platform-e2e-build]
-    if: ${{ !cancelled() && inputs.is-release-please-pr != true }}
+    if: ${{ !cancelled() }}
     runs-on: blacksmith-16vcpu-ubuntu-2404
     permissions:
       contents: read
-      packages: read
     steps:
       - name: Checkout repository
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
+          fetch-depth: 1
 
       - name: Setup environment
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
@@ -650,9 +604,6 @@ jobs:
         id: load-platform-image
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         uses: ./.github/actions/load-platform-image
-        with:
-          is-fork-pr: ${{ inputs.is-fork-pr }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install Kind cluster
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
@@ -748,7 +699,7 @@ jobs:
   platform-e2e-merge-reports:
     name: Merge E2E Test Reports
     needs: [platform-e2e-tests, platform-quickstart-e2e-tests, platform-vault-k8s-e2e-tests]
-    if: ${{ always() && !cancelled() && inputs.should-skip-running-and-always-succeed != true && inputs.is-release-please-pr != true }}
+    if: ${{ always() && !cancelled() && inputs.should-skip-running-and-always-succeed != true }}
     runs-on: blacksmith-2vcpu-ubuntu-2404
     permissions:
       contents: read
@@ -758,6 +709,7 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
+          fetch-depth: 1
 
       - name: Setup environment
         uses: ./.github/actions/setup-env
@@ -807,7 +759,7 @@ jobs:
     name: Docker Image Scanning (${{ matrix.name }})
     needs: [platform-e2e-build]
     # Run even when platform-e2e-build is skipped (on PRs) so job succeeds rather than being skipped
-    if: ${{ !cancelled() && inputs.is-release-please-pr != true }}
+    if: ${{ !cancelled() }}
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -825,22 +777,19 @@ jobs:
             dockerfile: ./platform/mcp_server_docker_image/Dockerfile
     permissions:
       contents: read
-      packages: read
     steps:
       - name: Checkout repository
         if: ${{ github.event_name == 'merge_group' }}
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
+          fetch-depth: 1
 
-      # Platform image: Load from GHCR or artifact (already built by platform-e2e-build)
+      # Platform image: Load from artifact (already built by platform-e2e-build)
       - name: Load platform image
         id: load-platform-image
         if: ${{ github.event_name == 'merge_group' && matrix.image-source == 'platform-e2e-build' }}
         uses: ./.github/actions/load-platform-image
-        with:
-          is-fork-pr: ${{ inputs.is-fork-pr }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       # Other images: Build locally for scanning (single arch, no push)
       - name: Setup Blacksmith Builder
@@ -896,6 +845,7 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
+          fetch-depth: 1
 
       - name: Linting
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}

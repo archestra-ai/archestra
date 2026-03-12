@@ -9,7 +9,7 @@ import {
   MEMBER_PASSWORD,
 } from "../../consts";
 import { expect, test } from "../../fixtures";
-import { loginViaApi } from "../../utils";
+import { expandSidebar, loginViaApi } from "../../utils";
 
 test.describe(
   "Multi-user authentication",
@@ -44,6 +44,7 @@ test.describe(
             await goToPage(page, "/chat");
             await page.waitForLoadState("domcontentloaded");
           }
+          await expandSidebar(page);
           await expect(
             page.getByTestId(E2eTestId.SidebarUserProfile).getByText(email),
           ).toBeVisible({ timeout: 10_000 });

@@ -11,7 +11,7 @@ import {
 import type { ChatStatus } from "ai";
 import { MoreVerticalIcon, PaperclipIcon } from "lucide-react";
 import type { FormEvent } from "react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { ModelSelectorLogo } from "@/components/ai-elements/model-selector";
 import {
   PromptInput,
@@ -52,7 +52,10 @@ import {
 import { useProfile } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth.query";
 import { conversationStorageKeys } from "@/lib/chat-utils";
+import { useOrganization } from "@/lib/organization.query";
+import { useTypingAnimation } from "@/lib/typing-animation.hook";
 import { useIsMobile } from "@/lib/use-mobile.hook";
+import { useModelSelectorDisplay } from "@/lib/use-model-selector-display.hook";
 
 interface ArchestraPromptInputProps {
   onSubmit: (
@@ -100,8 +103,6 @@ interface ArchestraPromptInputProps {
   onAgentChange?: (agentId: string) => void;
   /** Callback when model selector opens/closes */
   onModelSelectorOpenChange?: (open: boolean) => void;
-  /** Whether the current model is the org default (show collapsed logo) */
-  isDefaultModel?: boolean;
 }
 
 // Inner component that has access to the controller context
@@ -130,7 +131,6 @@ const PromptInputContent = ({
   selectorAgentId,
   onAgentChange,
   onModelSelectorOpenChange,
-  isDefaultModel = false,
 }: Omit<ArchestraPromptInputProps, "onSubmit"> & {
   onSubmit: ArchestraPromptInputProps["onSubmit"];
 }) => {
@@ -139,14 +139,10 @@ const PromptInputContent = ({
   const controller = usePromptInputController();
   const attachments = usePromptInputAttachments();
 
-  // Track whether user expanded the full model/key selectors from the default logo
-  const [showFullSelector, setShowFullSelector] = useState(false);
-  // Reset when isDefaultModel changes back to true (e.g. navigating to /chat)
-  useEffect(() => {
-    if (isDefaultModel) setShowFullSelector(false);
-  }, [isDefaultModel]);
+  // Collapsed/expanded state for the model selector (defaults to collapsed = provider icon only)
+  const { isCollapsed: showDefaultLogo, expand: expandModelSelector } =
+    useModelSelectorDisplay({ conversationId });
 
-  const showDefaultLogo = isDefaultModel && !showFullSelector;
   const logoProvider = currentProvider
     ? providerToLogoProvider[currentProvider]
     : null;
@@ -163,6 +159,24 @@ const PromptInputContent = ({
   // Check if user can update organization settings (to show settings link in tooltip)
   const { data: canUpdateOrganization } = useHasPermissions({
     securitySettings: ["update"],
+  });
+
+  // Chat placeholders from organization settings
+  const { data: orgData } = useOrganization();
+  const chatPlaceholders = useMemo(
+    () => orgData?.chatPlaceholders,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [orgData?.chatPlaceholders],
+  );
+  const { text: animatedPlaceholder, isAnimating } =
+    useTypingAnimation(chatPlaceholders);
+
+  // RBAC: check if user can see agent picker and provider settings in chat
+  const { data: canSeeAgentPicker } = useHasPermissions({
+    chatAgentPicker: ["enable"],
+  });
+  const { data: canSeeProviderSettings } = useHasPermissions({
+    chatProviderSettings: ["enable"],
   });
 
   const storageKey = conversationId
@@ -253,7 +267,13 @@ const PromptInputContent = ({
           />
         ) : (
           <PromptInputTextarea
-            placeholder="What would you like to get done?"
+            placeholder={
+              conversationId
+                ? "Ask a follow-up..."
+                : isAnimating
+                  ? animatedPlaceholder
+                  : "What would you like to get done?"
+            }
             ref={textareaRef}
             className="px-4"
             autoFocus
@@ -273,7 +293,7 @@ const PromptInputContent = ({
                 variant="ghost"
                 size="sm"
                 className="h-8 px-2"
-                onClick={() => setShowFullSelector(true)}
+                onClick={expandModelSelector}
               >
                 <ModelSelectorLogo provider={logoProvider} className="size-4" />
               </Button>
@@ -292,52 +312,58 @@ const PromptInputContent = ({
                 </PopoverTrigger>
                 <PopoverContent side="top" align="start" className="w-auto p-3">
                   <div className="flex flex-col gap-3">
-                    {selectorAgentId !== undefined && onAgentChange && (
-                      <div>
-                        <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1">
-                          Agent
-                        </p>
-                        <InitialAgentSelector
-                          currentAgentId={selectorAgentId}
-                          onAgentChange={onAgentChange}
-                        />
-                      </div>
-                    )}
-                    <div>
-                      <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1">
-                        Model
-                      </p>
-                      <ModelSelector
-                        selectedModel={selectedModel}
-                        onModelChange={onModelChange}
-                        onOpenChange={onModelSelectorOpenChange}
-                        apiKeyId={
-                          conversationId
-                            ? currentConversationChatApiKeyId
-                            : initialApiKeyId
-                        }
-                      />
-                    </div>
-                    {(conversationId || onApiKeyChange) && (
-                      <div>
-                        <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1">
-                          Provider API Key
-                        </p>
-                        <ChatApiKeySelector
-                          conversationId={conversationId}
-                          currentProvider={currentProvider}
-                          currentConversationChatApiKeyId={
-                            conversationId
-                              ? (currentConversationChatApiKeyId ?? null)
-                              : (initialApiKeyId ?? null)
-                          }
-                          messageCount={messageCount}
-                          onApiKeyChange={onApiKeyChange}
-                          onProviderChange={onProviderChange}
-                          isModelsLoading={isModelsLoading}
-                          agentLlmApiKeyId={agentLlmApiKeyId}
-                        />
-                      </div>
+                    {canSeeAgentPicker &&
+                      selectorAgentId !== undefined &&
+                      onAgentChange && (
+                        <div>
+                          <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1">
+                            Agent
+                          </p>
+                          <InitialAgentSelector
+                            currentAgentId={selectorAgentId}
+                            onAgentChange={onAgentChange}
+                          />
+                        </div>
+                      )}
+                    {canSeeProviderSettings && (
+                      <>
+                        <div>
+                          <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1">
+                            Model
+                          </p>
+                          <ModelSelector
+                            selectedModel={selectedModel}
+                            onModelChange={onModelChange}
+                            onOpenChange={onModelSelectorOpenChange}
+                            apiKeyId={
+                              conversationId
+                                ? currentConversationChatApiKeyId
+                                : initialApiKeyId
+                            }
+                          />
+                        </div>
+                        {(conversationId || onApiKeyChange) && (
+                          <div>
+                            <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1">
+                              Provider API Key
+                            </p>
+                            <ChatApiKeySelector
+                              conversationId={conversationId}
+                              currentProvider={currentProvider}
+                              currentConversationChatApiKeyId={
+                                conversationId
+                                  ? (currentConversationChatApiKeyId ?? null)
+                                  : (initialApiKeyId ?? null)
+                              }
+                              messageCount={messageCount}
+                              onApiKeyChange={onApiKeyChange}
+                              onProviderChange={onProviderChange}
+                              isModelsLoading={isModelsLoading}
+                              agentLlmApiKeyId={agentLlmApiKeyId}
+                            />
+                          </div>
+                        )}
+                      </>
                     )}
                     {tokensUsed > 0 && maxContextLength && (
                       <div>
@@ -416,19 +442,22 @@ const PromptInputContent = ({
           {/* Desktop: inline toolbar items */}
           {!isMobile && (
             <>
-              {selectorAgentId !== undefined && onAgentChange && (
-                <InitialAgentSelector
-                  currentAgentId={selectorAgentId}
-                  onAgentChange={onAgentChange}
-                />
-              )}
-              {showDefaultLogo && logoProvider ? (
+              {canSeeAgentPicker &&
+                selectorAgentId !== undefined &&
+                onAgentChange && (
+                  <InitialAgentSelector
+                    currentAgentId={selectorAgentId}
+                    onAgentChange={onAgentChange}
+                  />
+                )}
+              {!canSeeProviderSettings ? null : showDefaultLogo &&
+                logoProvider ? (
                 <Button
                   type="button"
                   variant="ghost"
                   size="sm"
                   className="h-8 px-2"
-                  onClick={() => setShowFullSelector(true)}
+                  onClick={expandModelSelector}
                 >
                   <ModelSelectorLogo
                     provider={logoProvider}
@@ -533,7 +562,6 @@ const ArchestraPromptInput = ({
   isPlaywrightSetupVisible,
   selectorAgentId,
   onAgentChange,
-  isDefaultModel,
   onModelSelectorOpenChange,
 }: ArchestraPromptInputProps) => {
   return (
@@ -563,7 +591,6 @@ const ArchestraPromptInput = ({
           isPlaywrightSetupVisible={isPlaywrightSetupVisible}
           selectorAgentId={selectorAgentId}
           onAgentChange={onAgentChange}
-          isDefaultModel={isDefaultModel}
           onModelSelectorOpenChange={onModelSelectorOpenChange}
         />
       </PromptInputProvider>

@@ -3,8 +3,10 @@
 import { type UIMessage, useChat } from "@ai-sdk/react";
 import {
   EXTERNAL_AGENT_ID_HEADER,
+  SWAP_AGENT_POKE_TEXT,
   TOOL_ARTIFACT_WRITE_FULL_NAME,
   TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_FULL_NAME,
+  TOOL_SWAP_AGENT_FULL_NAME,
   type TokenUsage,
 } from "@shared";
 import { useQueryClient } from "@tanstack/react-query";
@@ -227,6 +229,15 @@ function ChatSessionHook({
   const generateTitleMutation = useGenerateConversationTitle();
   // Track if title generation has been attempted for this conversation
   const titleGenerationAttemptedRef = useRef(false);
+  // Track when swap_agent was called so we can auto-poke the new agent on finish
+  const swapAgentPendingRef = useRef(false);
+  // Ref to hold sendMessage for use in onFinish callback
+  const sendMessageRef = useRef<
+    | ((
+        message: Parameters<ReturnType<typeof useChat>["sendMessage"]>[0],
+      ) => void)
+    | null
+  >(null);
 
   const {
     messages,
@@ -251,6 +262,19 @@ function ChatSessionHook({
         queryKey: ["conversation", conversationId],
       });
 
+      // After a swap_agent stop, poke the new agent so it responds.
+      // The new /api/chat POST re-reads the conversation from DB and
+      // loads the swapped agent's system prompt + tools.
+      if (swapAgentPendingRef.current) {
+        swapAgentPendingRef.current = false;
+        setTimeout(() => {
+          sendMessageRef.current?.({
+            role: "user",
+            parts: [{ type: "text", text: SWAP_AGENT_POKE_TEXT }],
+          });
+        }, 100);
+      }
+
       // Attempt to generate title after first assistant response
       // This will be checked when messages update in the effect below
     },
@@ -267,6 +291,17 @@ function ChatSessionHook({
         TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_FULL_NAME
       ) {
         setPendingCustomServerToolCall(toolCall);
+      }
+
+      // Detect swap_agent tool and flag for poke on finish.
+      // The backend's stopWhen: hasToolCall(...) stops the agentic loop
+      // after swap_agent executes, so the old agent won't continue.
+      // onFinish then sends a poke to trigger the new agent.
+      if (toolCall.toolName === TOOL_SWAP_AGENT_FULL_NAME) {
+        swapAgentPendingRef.current = true;
+        queryClient.invalidateQueries({
+          queryKey: ["conversation", conversationId],
+        });
       }
 
       // Detect artifact_write tool and invalidate conversation to fetch updated artifact
@@ -286,8 +321,17 @@ function ChatSessionHook({
         setTokenUsage(usage);
       }
     },
-    sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses,
+    sendAutomaticallyWhen: ({ messages: msgs }) => {
+      // Don't auto-resubmit after swap_agent — the poke in onFinish handles it
+      if (swapAgentPendingRef.current) return false;
+      return lastAssistantMessageIsCompleteWithApprovalResponses({
+        messages: msgs,
+      });
+    },
   } as Parameters<typeof useChat>[0]);
+
+  // Keep sendMessageRef up-to-date for onFinish callback
+  sendMessageRef.current = sendMessage;
 
   // Auto-generate title after first assistant response
   useEffect(() => {
@@ -322,25 +366,31 @@ function ChatSessionHook({
     }
   }, [messages, status, conversationId, generateTitleMutation]);
 
-  // Update session in ref whenever state changes
-  useEffect(() => {
-    const session: ChatSession = {
-      conversationId,
-      messages,
-      sendMessage,
-      stop,
-      status,
-      error,
-      setMessages,
-      addToolResult,
-      addToolApprovalResponse,
-      pendingCustomServerToolCall,
-      setPendingCustomServerToolCall,
-      tokenUsage,
-    };
+  // Always keep the session ref up-to-date with the latest values (including
+  // function references from useChat which change every render). This is a ref
+  // update only — no state changes, no re-renders.
+  const sessionRef = useRef<ChatSession>(null as unknown as ChatSession);
+  sessionRef.current = {
+    conversationId,
+    messages,
+    sendMessage,
+    stop,
+    status,
+    error,
+    setMessages,
+    addToolResult,
+    addToolApprovalResponse,
+    pendingCustomServerToolCall,
+    setPendingCustomServerToolCall,
+    tokenUsage,
+  };
 
-    sessionsRef.current.set(conversationId, session);
-    // Notify that session has been updated so consumers re-render
+  // Sync to the shared sessions map and notify consumers.
+  // All chat state values are listed as deps so the effect fires when any value
+  // changes, even though we read them through the ref for the latest snapshot.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional — deps trigger the sync, ref provides the snapshot
+  useEffect(() => {
+    sessionsRef.current.set(conversationId, sessionRef.current);
     notifySessionUpdate();
   }, [
     conversationId,

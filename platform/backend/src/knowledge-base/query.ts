@@ -1,7 +1,9 @@
+import { addNomicTaskPrefix, getEmbeddingColumnName } from "@shared";
 import config from "@/config";
 import logger from "@/logging";
 import { KbChunkModel } from "@/models";
 import type { VectorSearchResult } from "@/models/kb-chunk";
+import * as metrics from "@/observability/metrics";
 import type { AclEntry } from "@/types/kb-document";
 import {
   buildEmbeddingInteraction,
@@ -34,6 +36,7 @@ class QueryService {
     const { connectorIds, organizationId, queryText, limit = 10 } = params;
     if (connectorIds.length === 0) return [];
 
+    const queryStartTime = Date.now();
     const hybridEnabled = config.kb.hybridSearchEnabled;
     const overFetchLimit = hybridEnabled ? limit * 2 : limit;
 
@@ -55,8 +58,14 @@ class QueryService {
       callback: () =>
         embeddingConfig.client.embeddings.create({
           model: embeddingConfig.model,
-          input: queryText,
-          dimensions: embeddingConfig.dimensions,
+          input: addNomicTaskPrefix(
+            embeddingConfig.model,
+            queryText,
+            "search_query",
+          ),
+          ...(embeddingConfig.model.startsWith("nomic")
+            ? {}
+            : { dimensions: embeddingConfig.dimensions }),
         }),
       buildInteraction: (response) =>
         buildEmbeddingInteraction({
@@ -81,20 +90,38 @@ class QueryService {
     ]);
 
     const queryEmbedding = embeddingResponse.data[0].embedding;
+    const embeddingColumn = getEmbeddingColumnName(embeddingConfig.dimensions);
+
+    logger.info(
+      {
+        queryText,
+        model: embeddingConfig.model,
+        dimensions: embeddingConfig.dimensions,
+        embeddingColumn,
+        hybridEnabled,
+      },
+      "[QueryService] Starting search",
+    );
 
     const vectorRows = await KbChunkModel.vectorSearch({
       connectorIds,
       queryEmbedding,
+      dimensions: embeddingConfig.dimensions,
       limit: overFetchLimit,
     });
 
+    const vectorIds = new Set(vectorRows.map((r) => r.id));
+    const fullTextIds = new Set(fullTextRows.map((r) => r.id));
+
     logger.info(
       {
-        connectorIds,
-        queryText,
         vectorCount: vectorRows.length,
         fullTextCount: fullTextRows.length,
-        hybridEnabled,
+        vectorOnlyCount: vectorRows.filter((r) => !fullTextIds.has(r.id))
+          .length,
+        fullTextOnlyCount: fullTextRows.filter((r) => !vectorIds.has(r.id))
+          .length,
+        bothCount: vectorRows.filter((r) => fullTextIds.has(r.id)).length,
       },
       "[QueryService] Search candidates retrieved",
     );
@@ -110,6 +137,7 @@ class QueryService {
       topResults = vectorRows;
     }
 
+    const preRerankCount = topResults.length;
     topResults = await rerank({
       queryText,
       chunks: topResults,
@@ -119,16 +147,30 @@ class QueryService {
 
     logger.info(
       {
-        resultCount: topResults.length,
+        preRerankCount,
+        postRerankCount: topResults.length,
         results: topResults.map((r) => ({
           id: r.id,
           score: r.score,
           title: r.title,
+          source:
+            vectorIds.has(r.id) && fullTextIds.has(r.id)
+              ? "vector+fulltext"
+              : vectorIds.has(r.id)
+                ? "vector"
+                : "fulltext",
           contentPreview: r.content.slice(0, 80),
         })),
       },
-      "[QueryService] Final results",
+      "[QueryService] Final results (after rerank)",
     );
+
+    const searchType = hybridEnabled ? "hybrid" : "vector";
+    metrics.rag.reportQuery({
+      searchType,
+      durationSeconds: (Date.now() - queryStartTime) / 1000,
+      resultCount: topResults.length,
+    });
 
     return this.mapResults(topResults);
   }

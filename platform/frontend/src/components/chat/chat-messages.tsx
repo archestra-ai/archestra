@@ -1,15 +1,11 @@
 import type { UIMessage } from "@ai-sdk/react";
-import { TOOL_TODO_WRITE_FULL_NAME } from "@shared";
-import type { ChatStatus, DynamicToolUIPart, ToolUIPart } from "ai";
-import Image from "next/image";
 import {
-  Fragment,
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-} from "react";
+  SWAP_AGENT_POKE_TEXT,
+  TOOL_SWAP_AGENT_FULL_NAME,
+  TOOL_TODO_WRITE_FULL_NAME,
+} from "@shared";
+import type { ChatStatus, DynamicToolUIPart, ToolUIPart } from "ai";
+import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   Conversation,
   ConversationContent,
@@ -31,7 +27,7 @@ import {
   ToolOutput,
 } from "@/components/ai-elements/tool";
 import { Button } from "@/components/ui/button";
-import { useHasPermissions } from "@/lib/auth.query";
+import { useHasPermissions, useSession } from "@/lib/auth.query";
 import { useUpdateChatMessage } from "@/lib/chat-message.query";
 import {
   extractCatalogIdFromInstallUrl,
@@ -41,6 +37,7 @@ import {
   parsePolicyDenied,
 } from "@/lib/llmProviders/common";
 import { useMcpInstallOrchestrator } from "@/lib/mcp-install-orchestrator.hook";
+import { useOrganization } from "@/lib/organization.query";
 import { hasThinkingTags, parseThinkingTags } from "@/lib/parse-thinking";
 import { cn } from "@/lib/utils";
 import { AuthRequiredTool } from "./auth-required-tool";
@@ -72,8 +69,6 @@ interface ChatMessagesProps {
   agentName?: string;
   suggestedPrompt?: string | null;
   onSuggestedPromptClick?: () => void;
-  /** Hide the decorative arrow pointing to agent selector (e.g., when an overlay is shown) */
-  hideArrow?: boolean;
   /** Callback for tool approval responses (approve/deny) */
   onToolApprovalResponse?: (params: {
     id: string;
@@ -114,16 +109,19 @@ export function ChatMessages({
   onMessagesUpdate,
   onUserMessageEdit,
   error = null,
-  hideArrow = false,
   onToolApprovalResponse,
 }: ChatMessagesProps) {
   const isStreamingStalled = useStreamingStallDetection(messages, status);
+  const { data: session } = useSession();
+  const isDebugging = session?.user?.name?.endsWith("(debugging)") ?? false;
+
   // Track editing by messageId-partIndex to support multiple text parts per message
   const [editingPartKey, setEditingPartKey] = useState<string | null>(null);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const { data: userCanCreateAgent } = useHasPermissions({
     agent: ["create"],
   });
+  const { data: organization } = useOrganization();
   const orchestrator = useMcpInstallOrchestrator();
 
   // Initialize mutation hook with conversationId (use empty string as fallback for hook rules)
@@ -201,139 +199,6 @@ export function ChatMessages({
     }
   };
 
-  // Ref for the text position marker
-  const textMarkerRef = useRef<HTMLSpanElement>(null);
-
-  // Calculate arrow dimensions based on actual text position
-  const [arrowDimensions, setArrowDimensions] = useState({
-    width: 400,
-    height: 300,
-    pathD: "M 350 340 Q 300 340 250 340 L 100 340 Q 60 340 60 300 L 60 5",
-    visible: false,
-    left: 248,
-    top: 85,
-  });
-
-  const updateArrowDimensions = useCallback(() => {
-    if (!textMarkerRef.current) return;
-
-    // Get the parent container dimensions (changes when artifact panel opens/closes)
-    const parentContainer = textMarkerRef.current.closest(".flex-1");
-    if (!parentContainer) return;
-
-    const containerRect = parentContainer.getBoundingClientRect();
-    const containerWidth = containerRect.width;
-    const viewportHeight = window.innerHeight;
-
-    // Only show arrow if container has sufficient width and viewport has height
-    const isVisible = containerWidth >= 768 && viewportHeight >= 600;
-
-    if (!isVisible) {
-      setArrowDimensions((prev) => ({ ...prev, visible: false }));
-      return;
-    }
-
-    // Get the actual position of the text marker
-    const textRect = textMarkerRef.current.getBoundingClientRect();
-    const textX = textRect.left;
-    const textY = textRect.top;
-
-    // Agent selector position - dynamically find the actual button.
-    // The SVG path draws the arrowhead at internal coords (60, 5), so offset
-    // selectorX/Y so the arrowhead lands near the button's left edge, below the header.
-    const selectorEl = document.querySelector("[data-agent-selector]");
-    const selectorRect = selectorEl?.getBoundingClientRect();
-    const selectorX = selectorRect ? selectorRect.left - 8 : 248;
-    const selectorY = selectorRect ? selectorRect.bottom + 30 : 85;
-
-    // Calculate SVG dimensions - arrow should end at text marker position
-    const svgWidth = Math.max(textX - selectorX, 200); // Width from selector to text
-    const svgHeight = Math.max(textY - selectorY, 100); // Height from selector to text
-
-    // Path coordinates (relative to SVG origin)
-    // Arrow tip at top left
-    const _startX = 60;
-    const startY = 5;
-    // End point should be exactly at the text marker position
-    const endX = svgWidth; // No margin - end exactly at text
-    const endY = svgHeight - 10;
-    // Curve control point
-    const curveY = endY - 40;
-
-    setArrowDimensions({
-      width: svgWidth,
-      height: svgHeight,
-      pathD: `M ${endX} ${endY} Q ${endX - 50} ${endY} ${endX - 100} ${endY} L 100 ${endY} Q 60 ${endY} 60 ${curveY} L 60 ${startY}`,
-      visible: isVisible,
-      left: selectorX,
-      top: selectorY,
-    });
-  }, []);
-
-  useEffect(() => {
-    // Initial calculation after mount
-    const timer = setTimeout(updateArrowDimensions, 100);
-
-    // Update on window resize
-    window.addEventListener("resize", updateArrowDimensions);
-
-    // Use ResizeObserver to detect when the parent container changes size
-    // This will trigger when the artifact panel opens/closes or height changes
-    const resizeObserver = new ResizeObserver((entries) => {
-      // Check if height actually changed (not just width)
-      for (const _entry of entries) {
-        updateArrowDimensions();
-      }
-    });
-
-    // Find the main content area that actually resizes when artifact panel toggles
-    // Look for the parent that contains the overflow-y-auto class
-    const parentContainer =
-      textMarkerRef.current?.closest(".overflow-y-auto")?.parentElement
-        ?.parentElement;
-    if (parentContainer) {
-      resizeObserver.observe(parentContainer);
-    }
-
-    // Also observe the direct parent for vertical size changes
-    const directParent = textMarkerRef.current?.closest(".overflow-y-auto");
-    if (directParent) {
-      resizeObserver.observe(directParent);
-    }
-
-    // Also add a small delay and retry to ensure element is found
-    const retryTimer = setTimeout(() => {
-      if (!parentContainer && textMarkerRef.current) {
-        const container =
-          textMarkerRef.current.closest(".overflow-y-auto")?.parentElement
-            ?.parentElement;
-        if (container) {
-          resizeObserver.observe(container);
-        }
-        const direct = textMarkerRef.current.closest(".overflow-y-auto");
-        if (direct) {
-          resizeObserver.observe(direct);
-        }
-      }
-    }, 500);
-
-    return () => {
-      clearTimeout(timer);
-      clearTimeout(retryTimer);
-      window.removeEventListener("resize", updateArrowDimensions);
-      resizeObserver.disconnect();
-    };
-  }, [updateArrowDimensions]);
-
-  // Recalculate arrow when agent name changes
-  useEffect(() => {
-    if (agentName) {
-      // Small delay to ensure DOM has updated with new agent name
-      const timer = setTimeout(updateArrowDimensions, 50);
-      return () => clearTimeout(timer);
-    }
-  }, [agentName, updateArrowDimensions]);
-
   if (messages.length === 0) {
     // Don't show "start conversation" message while loading - prevents flash of empty state
     if (isLoadingConversation) {
@@ -344,55 +209,8 @@ export function ChatMessages({
     if (agentName) {
       return (
         <div className="flex items-center justify-center h-full relative">
-          {/* Custom bent arrow pointing to agent selector - hidden on mobile */}
-          {arrowDimensions.visible && !hideArrow && (
-            <svg
-              className="fixed pointer-events-none z-50"
-              width={arrowDimensions.width}
-              height={arrowDimensions.height}
-              style={{
-                top: `${arrowDimensions.top}px`,
-                left: `${arrowDimensions.left}px`,
-              }}
-              aria-hidden="true"
-            >
-              <title>Arrow pointing to agent selector</title>
-              <defs>
-                <marker
-                  id="arrowhead"
-                  markerWidth="10"
-                  markerHeight="7"
-                  refX="9"
-                  refY="3.5"
-                  orient="auto"
-                >
-                  <polygon
-                    points="0 0, 10 3.5, 0 7"
-                    fill="rgb(156, 163, 175)"
-                    strokeWidth="0"
-                    opacity="0.6"
-                  />
-                </marker>
-              </defs>
-              <path
-                d={arrowDimensions.pathD}
-                stroke="rgb(156, 163, 175)"
-                strokeWidth="2"
-                fill="none"
-                strokeDasharray="5,5"
-                markerEnd="url(#arrowhead)"
-                opacity="0.5"
-              />
-            </svg>
-          )}
-
           <div className="text-center space-y-6 max-w-2xl px-4 relative">
             <p className="text-lg text-muted-foreground relative">
-              <span
-                ref={textMarkerRef}
-                className="absolute -left-4 top-1/2 -translate-y-1/2 w-0 h-0"
-                aria-hidden="true"
-              />
               Chat with{" "}
               <span className="font-medium text-foreground truncate inline-block max-w-sm align-bottom">
                 {agentName}
@@ -471,6 +289,9 @@ export function ChatMessages({
       <ConversationContent>
         <div className="max-w-4xl mx-auto relative pb-8">
           {messages.map((message, idx) => {
+            // Hide the auto-poke message sent after agent swap
+            if (!isDebugging && isSwapAgentPokeMessage(message)) return null;
+
             const isDimmed =
               editingMessageIndex !== -1 && idx > editingMessageIndex;
             return (
@@ -537,6 +358,10 @@ export function ChatMessages({
                         }
 
                         const isLastTextPart = i === lastTextPartIndex;
+                        const isStreamingThisPart =
+                          status === "streaming" &&
+                          idx === messages.length - 1 &&
+                          isLastTextPart;
                         const showActions =
                           isLastAssistantInSequence &&
                           isLastTextPart &&
@@ -618,6 +443,10 @@ export function ChatMessages({
                                         ? citationParts
                                         : undefined
                                     }
+                                    isStreaming={
+                                      isStreamingThisPart &&
+                                      isLastParsedTextPart
+                                    }
                                     editDisabled={isResponseInProgress}
                                     onStartEdit={handleStartEdit}
                                     onCancelEdit={handleCancelEdit}
@@ -639,6 +468,7 @@ export function ChatMessages({
                               isEditing={editingPartKey === partKey}
                               showActions={showActions}
                               citationParts={citationParts}
+                              isStreaming={isStreamingThisPart}
                               editDisabled={isResponseInProgress}
                               onStartEdit={handleStartEdit}
                               onCancelEdit={handleCancelEdit}
@@ -836,6 +666,7 @@ export function ChatMessages({
                           toolResultPart={toolResultPart}
                           toolName={toolName}
                           agentId={agentId}
+                          isDebugging={isDebugging}
                           onToolApprovalResponse={onToolApprovalResponse}
                           onInstallMcp={orchestrator.triggerInstallByCatalogId}
                           onReauthMcp={
@@ -871,6 +702,7 @@ export function ChatMessages({
                             toolResultPart={toolResultPart}
                             toolName={toolName}
                             agentId={agentId}
+                            isDebugging={isDebugging}
                             onToolApprovalResponse={onToolApprovalResponse}
                             onInstallMcp={
                               orchestrator.triggerInstallByCatalogId
@@ -887,6 +719,7 @@ export function ChatMessages({
                     }
                   }
                 })}
+                <SwapAgentDivider message={message} />
               </div>
             );
           })}
@@ -896,11 +729,9 @@ export function ChatMessages({
             (status === "streaming" && isStreamingStalled)) && (
             <div className="absolute bottom-[-10] left-0">
               <Message from="assistant">
-                <Image
-                  src={"/logo.png"}
+                <img
+                  src={organization?.iconLogo || "/logo.png"}
                   alt="Loading logo"
-                  width={30}
-                  height={30}
                   className="object-contain h-6 w-auto animate-[bounce_700ms_ease_200ms_infinite]"
                 />
               </Message>
@@ -958,6 +789,7 @@ function MessageTool({
   toolResultPart,
   toolName,
   agentId,
+  isDebugging,
   onToolApprovalResponse,
   onInstallMcp,
   onReauthMcp,
@@ -966,6 +798,7 @@ function MessageTool({
   toolResultPart: ToolUIPart | DynamicToolUIPart | null;
   toolName: string;
   agentId?: string;
+  isDebugging?: boolean;
   onToolApprovalResponse?: (params: {
     id: string;
     approved: boolean;
@@ -1069,6 +902,12 @@ function MessageTool({
         />
       );
     }
+  }
+
+  // swap_agent is rendered as a divider after all message parts (see SwapAgentDivider below)
+  // Show the raw tool call when the user's name ends with "(debugging)"
+  if (!isDebugging && toolName === TOOL_SWAP_AGENT_FULL_NAME) {
+    return null;
   }
 
   if (toolName === TOOL_TODO_WRITE_FULL_NAME) {
@@ -1190,3 +1029,61 @@ const getHeaderState = ({
   if (toolResultPart) return "output-available";
   return state;
 };
+
+/**
+ * Renders a "Switched to {agent}" divider after all parts of a message
+ * that contains a swap_agent tool call.
+ */
+function isSwapAgentPokeMessage(message: UIMessage): boolean {
+  if (message.role !== "user") return false;
+  const textParts = message.parts?.filter((p) => p.type === "text") ?? [];
+  return (
+    textParts.length === 1 &&
+    (textParts[0] as { text: string }).text === SWAP_AGENT_POKE_TEXT
+  );
+}
+
+function SwapAgentDivider({ message }: { message: UIMessage }) {
+  if (message.role !== "assistant") return null;
+
+  for (const part of message.parts ?? []) {
+    if (!isToolPart(part)) continue;
+    const type = part.type as string;
+    if (
+      type !== TOOL_SWAP_AGENT_FULL_NAME &&
+      type !== `tool-${TOOL_SWAP_AGENT_FULL_NAME}`
+    )
+      continue;
+
+    // Try tool call args first (always available), then fall back to output
+    let agentName = "another agent";
+    const args = (part as Record<string, unknown>).args as
+      | Record<string, unknown>
+      | undefined;
+    if (args?.agent_name && typeof args.agent_name === "string") {
+      agentName = args.agent_name;
+    } else {
+      const output = part.output ?? part.state;
+      if (typeof output === "string") {
+        try {
+          const parsed = JSON.parse(output);
+          if (parsed?.agent_name) agentName = parsed.agent_name;
+        } catch {
+          // ignore
+        }
+      }
+    }
+
+    return (
+      <div className="flex items-center gap-3 py-2">
+        <div className="h-px flex-1 bg-border" />
+        <span className="text-xs text-muted-foreground">
+          Switched to {agentName}
+        </span>
+        <div className="h-px flex-1 bg-border" />
+      </div>
+    );
+  }
+
+  return null;
+}

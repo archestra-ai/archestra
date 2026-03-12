@@ -101,10 +101,13 @@ describe("QueryService", () => {
 
     // Embed the chunks
     const chunks = await KbChunkModel.findByDocument(doc.id);
-    await KbChunkModel.updateEmbeddings([
-      { chunkId: chunks[0].id, embedding: emb0 },
-      { chunkId: chunks[1].id, embedding: emb1 },
-    ]);
+    await KbChunkModel.updateEmbeddings(
+      [
+        { chunkId: chunks[0].id, embedding: emb0 },
+        { chunkId: chunks[1].id, embedding: emb1 },
+      ],
+      1536,
+    );
 
     // Mock query embedding - similar to emb0
     const queryEmb = makeFakeEmbedding(1.1);
@@ -247,7 +250,7 @@ describe("QueryService", () => {
       chunkId: c.id,
       embedding: makeFakeEmbedding(i),
     }));
-    await KbChunkModel.updateEmbeddings(updates);
+    await KbChunkModel.updateEmbeddings(updates, 1536);
 
     const queryEmb = makeFakeEmbedding(0);
     mockEmbeddingsCreate.mockResolvedValueOnce({

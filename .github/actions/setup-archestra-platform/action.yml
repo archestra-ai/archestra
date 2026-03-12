@@ -118,7 +118,7 @@ runs:
       uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
       with:
         path: /tmp/mcp-oauth-server.tar
-        key: mcp-oauth-server-0.0.1
+        key: mcp-oauth-server-0.0.1-${{ runner.arch }}
 
     - name: Pull MCP example OAuth server image
       if: ${{ inputs.deploy-e2e-dependencies == 'true' && steps.cache-oauth-image.outputs.cache-hit != 'true' }}

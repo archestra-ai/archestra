@@ -14,7 +14,7 @@ on:
         type: boolean
         default: false
       is-fork-pr:
-        description: "Whether this PR is from a fork (uses artifacts instead of GHCR)"
+        description: "Whether this is a fork PR (fork PRs don't have access to Docker Hub secrets for CVE scanning)"
         required: false
         type: boolean
         default: false

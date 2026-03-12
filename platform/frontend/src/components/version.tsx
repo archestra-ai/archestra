@@ -29,10 +29,10 @@ export function Version({ inline = false }: VersionProps) {
   }, [version, latestRelease?.tag_name]);
 
   const footerString = useMemo(() => {
-    if (footerText && version) return `${footerText} (v${version})`;
-    if (footerText) return footerText;
-    if (version) return `Version: ${version}`;
-    return null;
+    // Wait for version to load before rendering to avoid layout shift
+    if (!version) return null;
+    if (footerText) return `${footerText} (v${version})`;
+    return `Version: ${version}`;
   }, [footerText, version]);
 
   useEffect(() => {

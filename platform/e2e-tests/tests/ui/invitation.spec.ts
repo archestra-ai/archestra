@@ -2,7 +2,7 @@ import type { Page } from "@playwright/test";
 import { E2eTestId } from "@shared";
 import { ADMIN_EMAIL, ADMIN_PASSWORD } from "../../consts";
 import { expect, test } from "../../fixtures";
-import { clickButton, navigateAndVerifyAuth } from "../../utils";
+import { clickButton, expandSidebar, navigateAndVerifyAuth } from "../../utils";
 
 /**
  * Navigate to the users settings page and open the invite dialog.
@@ -152,6 +152,8 @@ test.describe(
 
         // Verify we're successfully logged in by checking for user elements
         // Look for the user button/menu that should appear when authenticated
+        // New members have collapsed sidebar by default, expand to see user name
+        await expandSidebar(newUserPage);
         await expect(
           newUserPage.getByRole("button", {
             name: new RegExp(uniqueName, "i"),

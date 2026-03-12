@@ -112,8 +112,7 @@ export function PersonalTokenCard() {
       <CardHeader>
         <CardTitle>MCP Gateway/A2A Gateway Token</CardTitle>
         <CardDescription>
-          Your personal token to authenticate with the MCP Gateway for profiles
-          you have access to through your team memberships.
+          Your personal token to authenticate with Agents / MCP Gateways.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">

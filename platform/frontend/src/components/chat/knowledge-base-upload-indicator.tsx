@@ -32,7 +32,7 @@ export function KnowledgeBaseUploadIndicator({
       <TooltipTrigger asChild>
         <div className="flex items-center gap-1.5 rounded-md bg-muted/50 px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground cursor-help">
           <DatabaseIcon className="size-3.5" />
-          <span>KG Upload</span>
+          <span>Knowledge Base Upload</span>
         </div>
       </TooltipTrigger>
       <TooltipContent side="top" className="max-w-xs">

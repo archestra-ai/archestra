@@ -22,8 +22,8 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
+  DialogStickyFooter,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Form } from "@/components/ui/form";
@@ -160,7 +160,7 @@ export function EditIdentityProviderDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
+      <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Edit Identity Provider</DialogTitle>
           <DialogDescription>
@@ -169,19 +169,14 @@ export function EditIdentityProviderDialog({
         </DialogHeader>
 
         <Form {...form}>
-          <form
-            onSubmit={form.handleSubmit(onSubmit)}
-            className="flex flex-col flex-1 overflow-hidden"
-          >
-            <div className="flex-1 overflow-y-auto py-4">
-              {providerType === "saml" ? (
-                <SamlConfigForm form={form} />
-              ) : (
-                <OidcConfigForm form={form} />
-              )}
-            </div>
+          <form onSubmit={form.handleSubmit(onSubmit)}>
+            {providerType === "saml" ? (
+              <SamlConfigForm form={form} />
+            ) : (
+              <OidcConfigForm form={form} />
+            )}
 
-            <DialogFooter className="mt-4">
+            <DialogStickyFooter>
               <div className="flex w-full justify-between">
                 <PermissionButton
                   type="button"
@@ -207,7 +202,7 @@ export function EditIdentityProviderDialog({
                   </PermissionButton>
                 </div>
               </div>
-            </DialogFooter>
+            </DialogStickyFooter>
           </form>
         </Form>
       </DialogContent>

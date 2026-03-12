@@ -7,11 +7,12 @@ type Teams = archestraApiTypes.GetTeamsResponses["200"];
 export type Team = Teams[number];
 export type TeamWithVaultPath = Team & { vaultPath?: string | null };
 
-export function useTeams(params?: { initialData?: Teams }) {
+export function useTeams(params?: { initialData?: Teams; enabled?: boolean }) {
   return useQuery({
     queryKey: ["teams"],
     queryFn: async () => (await getTeams()).data ?? [],
     initialData: params?.initialData,
+    enabled: params?.enabled,
   });
 }
 

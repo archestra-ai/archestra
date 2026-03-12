@@ -1,4 +1,7 @@
-import { BUILT_IN_AGENT_IDS } from "@shared";
+import {
+  BUILT_IN_AGENT_IDS,
+  TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
+} from "@shared";
 import {
   and,
   asc,
@@ -8,6 +11,7 @@ import {
   getTableColumns,
   inArray,
   isNotNull,
+  ne,
   or,
   type SQL,
   sql,
@@ -799,6 +803,11 @@ class AgentToolModel {
         sql`${schema.toolsTable.name} NOT LIKE 'archestra\\_\\_%' ESCAPE '\\'`,
       );
     }
+
+    // Always exclude the knowledge sources tool (auto-injected, not user-assignable)
+    whereConditions.push(
+      ne(schema.toolsTable.name, TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME),
+    );
 
     const whereClause =
       whereConditions.length > 0 ? and(...whereConditions) : undefined;

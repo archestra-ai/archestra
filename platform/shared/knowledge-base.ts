@@ -12,13 +12,37 @@ export const DEFAULT_EMBEDDING_MODEL: EmbeddingModel = "text-embedding-3-small";
 /** Maximum number of chunks to embed per OpenAI API call */
 export const EMBEDDING_BATCH_SIZE = 100;
 
-/** Vector dimensions used for pgvector index and embedding API calls */
+/** Default vector dimensions (used for the primary `embedding` column) */
 export const EMBEDDING_DIMENSIONS = 1536;
+
+/**
+ * Providers whose API keys can be used for embedding.
+ * These providers expose an OpenAI-compatible `/v1/embeddings` endpoint.
+ */
+export const EMBEDDING_COMPATIBLE_PROVIDERS = new Set(["openai", "ollama"]);
+
+/**
+ * Supported embedding column sizes. Each entry maps to a dedicated
+ * `vector(N)` column and HNSW index in the `kb_chunks` table.
+ */
+export const SUPPORTED_EMBEDDING_DIMENSIONS = [1536, 768] as const;
+export type SupportedEmbeddingDimension =
+  (typeof SUPPORTED_EMBEDDING_DIMENSIONS)[number];
+
+/**
+ * Maps a dimension size to its database column name.
+ * - 1536 → "embedding" (original column, kept for backward compatibility)
+ * - 768  → "embedding_768"
+ */
+export function getEmbeddingColumnName(dimensions: number): string {
+  if (dimensions === 1536) return "embedding";
+  return `embedding_${dimensions}`;
+}
 
 interface EmbeddingModelMeta {
   label: string;
   description: string;
-  dimensions: number;
+  dimensions: SupportedEmbeddingDimension;
 }
 
 /**
@@ -28,16 +52,19 @@ interface EmbeddingModelMeta {
  */
 export const EMBEDDING_MODELS: Record<string, EmbeddingModelMeta> = {
   "text-embedding-3-small": {
-    // https://developers.openai.com/api/docs/guides/embeddings/#embedding-models
     label: "text-embedding-3-small",
     description: "Best cost/quality ratio (1536 dims)",
-    dimensions: EMBEDDING_DIMENSIONS,
+    dimensions: 1536,
   },
   "text-embedding-3-large": {
-    // https://developers.openai.com/api/docs/guides/embeddings/#embedding-models
     label: "text-embedding-3-large",
     description: "Higher quality, 3072 dims, reduced to 1536 dims",
-    dimensions: EMBEDDING_DIMENSIONS,
+    dimensions: 1536,
+  },
+  "nomic-embed-text": {
+    label: "nomic-embed-text",
+    description: "Open-source model, 768 dims (Ollama compatible)",
+    dimensions: 768,
   },
 };
 

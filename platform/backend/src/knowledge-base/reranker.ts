@@ -47,10 +47,20 @@ Score each passage from 0 (completely irrelevant) to 10 (perfectly relevant). Re
     scores: z.array(
       z.object({
         index: z.number(),
-        score: z.number().min(0).max(10),
+        score: z.number().describe("Relevance score from 0 to 10"),
       }),
     ),
   });
+
+  logger.info(
+    {
+      provider: rerankerConfig.provider,
+      model: rerankerConfig.modelName,
+      chunkCount: chunks.length,
+      queryText,
+    },
+    "[Reranker] Calling LLM for reranking",
+  );
 
   try {
     const result = await withKbObservability({

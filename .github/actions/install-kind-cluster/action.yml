@@ -3,6 +3,7 @@ description: |
   Creates a Kind cluster with a pinned node image for deterministic behavior.
   Wraps helm/kind-action with a known-good kindest/node version.
   NetworkPolicy enforcement is provided by kindnet's built-in support (Kind >= v0.24.0).
+  The node image is cached as a tarball to avoid repeated pulls from Docker Hub.
 
 inputs:
   config:
@@ -17,6 +18,18 @@ inputs:
 runs:
   using: composite
   steps:
+    - name: Cache Kind node image
+      id: cache-kind-node
+      uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+      with:
+        path: /tmp/kindest-node.tar
+        key: kindest-node-v1.34.3-${{ runner.arch }}
+
+    - name: Pre-load Kind node image from cache
+      if: ${{ steps.cache-kind-node.outputs.cache-hit == 'true' }}
+      shell: bash
+      run: docker load < /tmp/kindest-node.tar
+
     - name: Install Kind cluster
       uses: helm/kind-action@92086f6be054225fa813e0a4b13787fc9088faab # v1.13.0
       with:
@@ -28,3 +41,11 @@ runs:
         node_image: kindest/node:v1.34.3@sha256:08497ee19eace7b4b5348db5c6a1591d7752b164530a36f855cb0f2bdcbadd48
         install_only: false
         wait: 300s
+
+    - name: Save Kind node image to cache
+      if: ${{ steps.cache-kind-node.outputs.cache-hit != 'true' }}
+      shell: bash
+      run: |
+        # Tag the digest-referenced image with a simple tag so docker save works
+        docker tag kindest/node@sha256:08497ee19eace7b4b5348db5c6a1591d7752b164530a36f855cb0f2bdcbadd48 kindest/node:v1.34.3
+        docker save kindest/node:v1.34.3 > /tmp/kindest-node.tar

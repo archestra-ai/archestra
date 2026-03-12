@@ -278,6 +278,96 @@ describe("KnowledgeBaseConnectorModel", () => {
     });
   });
 
+  describe("findByIds", () => {
+    test("returns connectors matching the given IDs", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const connector1 = await makeKnowledgeBaseConnector(kb.id, org.id, {
+        name: "Connector 1",
+      });
+      const connector2 = await makeKnowledgeBaseConnector(kb.id, org.id, {
+        name: "Connector 2",
+      });
+
+      const results = await KnowledgeBaseConnectorModel.findByIds([
+        connector1.id,
+        connector2.id,
+      ]);
+
+      expect(results).toHaveLength(2);
+      const ids = results.map((r) => r.id);
+      expect(ids).toContain(connector1.id);
+      expect(ids).toContain(connector2.id);
+    });
+
+    test("returns empty array for empty input", async () => {
+      const results = await KnowledgeBaseConnectorModel.findByIds([]);
+      expect(results).toHaveLength(0);
+    });
+
+    test("returns only matching connectors and ignores non-existent IDs", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+
+      const results = await KnowledgeBaseConnectorModel.findByIds([
+        connector.id,
+        "00000000-0000-0000-0000-000000000000",
+      ]);
+
+      expect(results).toHaveLength(1);
+      expect(results[0].id).toBe(connector.id);
+    });
+
+    test("does not return connectors not in the ID list", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const connector1 = await makeKnowledgeBaseConnector(kb.id, org.id, {
+        name: "Included",
+      });
+      await makeKnowledgeBaseConnector(kb.id, org.id, { name: "Excluded" });
+
+      const results = await KnowledgeBaseConnectorModel.findByIds([
+        connector1.id,
+      ]);
+
+      expect(results).toHaveLength(1);
+      expect(results[0].name).toBe("Included");
+    });
+
+    test("returns connectors across different organizations", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org1 = await makeOrganization();
+      const org2 = await makeOrganization();
+      const kb1 = await makeKnowledgeBase(org1.id);
+      const kb2 = await makeKnowledgeBase(org2.id);
+      const connector1 = await makeKnowledgeBaseConnector(kb1.id, org1.id);
+      const connector2 = await makeKnowledgeBaseConnector(kb2.id, org2.id);
+
+      const results = await KnowledgeBaseConnectorModel.findByIds([
+        connector1.id,
+        connector2.id,
+      ]);
+
+      expect(results).toHaveLength(2);
+    });
+  });
+
   describe("create", () => {
     test("creates a new connector with required fields", async ({
       makeOrganization,
@@ -623,6 +713,120 @@ describe("KnowledgeBaseConnectorModel", () => {
         connector.id,
         kb.id,
       );
+    });
+  });
+
+  describe("checkpoint management", () => {
+    test("checkpoint can be set and persisted", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+
+      const checkpoint = {
+        type: "jira" as const,
+        lastSyncedAt: "2026-03-10T15:30:00.000Z",
+        lastIssueKey: "PROJ-123",
+      };
+
+      const updated = await KnowledgeBaseConnectorModel.update(connector.id, {
+        checkpoint,
+      });
+
+      expect(updated?.checkpoint).toEqual(checkpoint);
+    });
+
+    test("checkpoint is reset to null when config is updated with checkpoint: null", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+
+      // Set a checkpoint
+      await KnowledgeBaseConnectorModel.update(connector.id, {
+        checkpoint: {
+          type: "jira",
+          lastSyncedAt: "2026-03-10T15:30:00.000Z",
+          lastIssueKey: "PROJ-123",
+        },
+      });
+
+      // Update config + reset checkpoint (as the route handler does)
+      const updated = await KnowledgeBaseConnectorModel.update(connector.id, {
+        config: {
+          type: "jira",
+          jiraBaseUrl: "https://new-instance.atlassian.net",
+          isCloud: true,
+          projectKey: "NEW",
+        },
+        checkpoint: null,
+      });
+
+      expect(updated?.checkpoint).toBeNull();
+      expect((updated?.config as Record<string, unknown>).jiraBaseUrl).toBe(
+        "https://new-instance.atlassian.net",
+      );
+    });
+
+    test("checkpoint is preserved when only non-config fields are updated", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+
+      const checkpoint = {
+        type: "jira" as const,
+        lastSyncedAt: "2026-03-10T15:30:00.000Z",
+        lastIssueKey: "PROJ-123",
+      };
+
+      await KnowledgeBaseConnectorModel.update(connector.id, { checkpoint });
+
+      // Update only name - checkpoint should be preserved
+      const updated = await KnowledgeBaseConnectorModel.update(connector.id, {
+        name: "Renamed Connector",
+      });
+
+      expect(updated?.name).toBe("Renamed Connector");
+      expect(updated?.checkpoint).toEqual(checkpoint);
+    });
+
+    test("resetCheckpointsByOrganization resets all connectors in the org", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org1 = await makeOrganization();
+      const org2 = await makeOrganization();
+      const kb1 = await makeKnowledgeBase(org1.id);
+      const kb2 = await makeKnowledgeBase(org2.id);
+      const c1 = await makeKnowledgeBaseConnector(kb1.id, org1.id);
+      const c2 = await makeKnowledgeBaseConnector(kb2.id, org2.id);
+
+      const checkpoint = {
+        type: "jira" as const,
+        lastSyncedAt: "2026-03-10T15:30:00.000Z",
+      };
+
+      await KnowledgeBaseConnectorModel.update(c1.id, { checkpoint });
+      await KnowledgeBaseConnectorModel.update(c2.id, { checkpoint });
+
+      await KnowledgeBaseConnectorModel.resetCheckpointsByOrganization(org1.id);
+
+      const after1 = await KnowledgeBaseConnectorModel.findById(c1.id);
+      const after2 = await KnowledgeBaseConnectorModel.findById(c2.id);
+
+      expect(after1?.checkpoint).toBeNull();
+      expect(after2?.checkpoint).toEqual(checkpoint);
     });
   });
 

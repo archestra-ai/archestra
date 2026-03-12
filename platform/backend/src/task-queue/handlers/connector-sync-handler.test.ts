@@ -1,4 +1,6 @@
-import { beforeEach, describe, expect, test, vi } from "vitest";
+import { randomUUID } from "node:crypto";
+import { vi } from "vitest";
+import { beforeEach, describe, expect, test } from "@/test";
 
 const mockExecuteSync = vi.hoisted(() => vi.fn());
 vi.mock("@/knowledge-base", () => ({
@@ -24,37 +26,23 @@ vi.mock("@/entrypoints/_shared/log-capture", () => ({
   }),
 }));
 
-vi.mock("@/logging", () => ({
-  default: {
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    debug: vi.fn(),
-  },
-}));
-
-vi.mock("@/config", () => ({
-  default: {
-    kb: {
-      connectorSyncMaxDurationSeconds: undefined,
-    },
-  },
-}));
-
 import { handleConnectorSync } from "./connector-sync-handler";
 
 describe("handleConnectorSync", () => {
+  let connectorId: string;
+
   beforeEach(() => {
+    connectorId = randomUUID();
     vi.clearAllMocks();
   });
 
   test("calls executeSync with the connector ID", async () => {
     mockExecuteSync.mockResolvedValue({ status: "complete" });
 
-    await handleConnectorSync({ connectorId: "conn-1" });
+    await handleConnectorSync({ connectorId });
 
     expect(mockExecuteSync).toHaveBeenCalledWith(
-      "conn-1",
+      connectorId,
       expect.objectContaining({
         logger: expect.any(Object),
         getLogOutput: expect.any(Function),
@@ -65,12 +53,12 @@ describe("handleConnectorSync", () => {
   test("enqueues continuation with incremented count on partial result", async () => {
     mockExecuteSync.mockResolvedValue({ status: "partial" });
 
-    await handleConnectorSync({ connectorId: "conn-1", continuationCount: 3 });
+    await handleConnectorSync({ connectorId, continuationCount: 3 });
 
     expect(mockEnqueue).toHaveBeenCalledWith({
       taskType: "connector_sync",
       payload: {
-        connectorId: "conn-1",
+        connectorId,
         continuationCount: 4,
       },
     });
@@ -79,7 +67,7 @@ describe("handleConnectorSync", () => {
   test("does not enqueue when continuation count >= 50", async () => {
     mockExecuteSync.mockResolvedValue({ status: "partial" });
 
-    await handleConnectorSync({ connectorId: "conn-1", continuationCount: 50 });
+    await handleConnectorSync({ connectorId, continuationCount: 50 });
 
     expect(mockEnqueue).not.toHaveBeenCalled();
   });

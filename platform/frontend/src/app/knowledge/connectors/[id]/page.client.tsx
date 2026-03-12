@@ -35,6 +35,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   useAssignConnectorToKnowledgeBases,
   useConnector,
   useConnectorKnowledgeBases,
@@ -200,36 +205,54 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
           />
           <div>
             <span>{connector.name}</span>
-            <div>
-              <Badge variant="secondary" className="gap-1.5 capitalize mt-1">
-                <ConnectorTypeIcon
-                  type={connector.connectorType}
-                  className="h-3.5 w-3.5"
-                />
-                {connector.connectorType}
-              </Badge>
-            </div>
+            {connector.description ? (
+              <p className="text-sm font-normal text-muted-foreground mt-1 line-clamp-2 max-w-2xl">
+                {connector.description.length > 300
+                  ? `${connector.description.slice(0, 300)}…`
+                  : connector.description}
+              </p>
+            ) : (
+              <div>
+                <Badge variant="secondary" className="gap-1.5 capitalize mt-1">
+                  <ConnectorTypeIcon
+                    type={connector.connectorType}
+                    className="h-3.5 w-3.5"
+                  />
+                  {connector.connectorType}
+                </Badge>
+              </div>
+            )}
           </div>
         </div>
       }
       description=""
       actionButton={
         <div className="flex flex-wrap items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleSync}
-            disabled={
-              syncConnector.isPending || connector.lastSyncStatus === "running"
-            }
-          >
-            <Play className="mr-2 h-4 w-4" />
-            {syncConnector.isPending
-              ? "Starting..."
-              : connector.lastSyncStatus === "running"
-                ? "Syncing..."
-                : "Sync Now"}
-          </Button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleSync}
+                  disabled={
+                    syncConnector.isPending ||
+                    connector.lastSyncStatus === "running"
+                  }
+                >
+                  <Play className="mr-2 h-4 w-4" />
+                  {syncConnector.isPending
+                    ? "Starting..."
+                    : connector.lastSyncStatus === "running"
+                      ? "Syncing..."
+                      : "Sync Now"}
+                </Button>
+              </span>
+            </TooltipTrigger>
+            {connector.lastSyncStatus === "running" && (
+              <TooltipContent>Sync run in progress</TooltipContent>
+            )}
+          </Tooltip>
           <Button
             variant="outline"
             size="sm"

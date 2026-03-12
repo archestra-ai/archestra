@@ -24,22 +24,21 @@ export const allAvailableActions: Record<Resource, Action[]> = {
    */
   ...(defaultStatements as unknown as Record<string, Action[]>),
 
-  // Core Resources
+  // Agents
   agent: ["read", "create", "update", "delete", "team-admin", "admin"],
-  mcpGateway: ["read", "create", "update", "delete", "team-admin", "admin"],
-  llmProxy: ["read", "create", "update", "delete", "team-admin", "admin"],
-  toolPolicy: ["read", "create", "update", "delete"],
-  log: ["read"],
-  chat: ["read", "create", "update", "delete"],
   agentTrigger: ["read", "create", "update", "delete"],
+  agentSettings: ["read", "update"],
 
   // LLM
+  llmProxy: ["read", "create", "update", "delete", "team-admin", "admin"],
   llmProvider: ["read", "create", "update", "delete"],
   llmLimit: ["read", "create", "update", "delete"],
   llmSettings: ["read", "update"],
   llmCost: ["read"],
 
   // MCP
+  mcpGateway: ["read", "create", "update", "delete", "team-admin", "admin"],
+  toolPolicy: ["read", "create", "update", "delete"],
   mcpRegistry: ["read", "create", "update", "delete"],
   mcpServerInstallation: ["read", "create", "update", "delete", "admin"],
   mcpServerInstallationRequest: ["read", "create", "update", "delete", "admin"],
@@ -52,6 +51,10 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   dualLlmConfig: ["read", "create", "update", "delete"],
   dualLlmResult: ["read", "create", "update", "delete"],
 
+  // Other
+  chat: ["read", "create", "update", "delete"],
+  log: ["read"],
+
   // Administration (overrides better-auth defaults to add "read" where needed)
   member: ["read", "create", "update", "delete"],
   ac: ["read", "create", "update", "delete"],
@@ -59,46 +62,56 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   invitation: ["create", "cancel"],
   identityProvider: ["read", "create", "update", "delete"],
   secret: ["read", "update"],
-  appearance: ["read", "update"],
+  apiKey: ["read", "delete"],
+  organizationSettings: ["read", "update"],
   securitySettings: ["read", "update"],
+
+  // UI behavior resources
+  simpleView: ["enable"],
+  chatAgentPicker: ["enable"],
+  chatProviderSettings: ["enable"],
 
   // better-auth internal resource — not exposed to users, kept for ACL compatibility
   organization: ["update", "delete"],
 };
 
 export const editorPermissions: Record<Resource, Action[]> = {
-  // Core Resources
+  // Agents
   agent: ["read", "create", "update", "delete", "team-admin"],
-  mcpGateway: ["read", "create", "update", "delete", "team-admin"],
-  llmProxy: ["read", "create", "update", "delete", "team-admin"],
-  toolPolicy: ["read", "create", "update", "delete"],
-  log: ["read"],
-  chat: ["read", "create", "update", "delete"],
   agentTrigger: ["read", "create", "update", "delete"],
+  agentSettings: [],
 
   // LLM
+  llmProxy: ["read", "create", "update", "delete", "team-admin"],
   llmProvider: ["read", "create", "update", "delete"],
   llmLimit: ["read", "create", "update", "delete"],
   llmSettings: ["read", "update"],
   llmCost: ["read"],
 
   // MCP
+  mcpGateway: ["read", "create", "update", "delete", "team-admin"],
+  toolPolicy: ["read", "create", "update", "delete"],
   mcpRegistry: ["read", "create", "update", "delete"],
   mcpServerInstallation: ["read", "create", "update", "delete"],
   mcpServerInstallationRequest: ["read", "create", "update", "delete"],
-
-  // Dual LLM
-  dualLlmConfig: ["read"],
-  dualLlmResult: ["read"],
 
   // Knowledge
   knowledgeBase: ["read", "create", "update", "delete"],
   knowledgeSettings: ["read", "update"],
 
+  // Dual LLM
+  dualLlmConfig: ["read"],
+  dualLlmResult: ["read"],
+
+  // Other
+  chat: ["read", "create", "update", "delete"],
+  log: ["read"],
+
   // Administration
   team: ["read"],
   secret: ["read"],
-  appearance: ["read", "update"],
+  apiKey: ["read", "delete"],
+  organizationSettings: ["read", "update"],
   securitySettings: ["read", "update"],
 
   /*
@@ -110,43 +123,55 @@ export const editorPermissions: Record<Resource, Action[]> = {
   invitation: [],
   identityProvider: [],
   ac: [],
+  simpleView: [],
+  chatAgentPicker: ["enable"],
+  chatProviderSettings: ["enable"],
   organization: [],
 };
 
 export const memberPermissions: Record<Resource, Action[]> = {
-  // Core Resources
+  // Agents
   agent: ["read", "create", "update", "delete"],
-  mcpGateway: ["read", "create", "update", "delete"],
-  llmProxy: ["read", "create", "update", "delete"],
-  toolPolicy: ["read", "create", "update", "delete"],
-  log: [],
-  chat: ["read", "create", "update", "delete"],
   agentTrigger: [],
+  agentSettings: [],
 
   // LLM
+  llmProxy: ["read", "create", "update", "delete"],
   llmProvider: ["read"],
   llmLimit: [],
   llmSettings: [],
   llmCost: [],
 
   // MCP
+  mcpGateway: ["read", "create", "update", "delete"],
+  toolPolicy: ["read", "create", "update", "delete"],
   mcpRegistry: ["read"],
   mcpServerInstallation: ["read", "create", "delete"],
   mcpServerInstallationRequest: ["read", "create", "update"],
-
-  // Dual LLM
-  dualLlmConfig: [],
-  dualLlmResult: ["read"],
 
   // Knowledge
   knowledgeBase: ["read"],
   knowledgeSettings: [],
 
+  // Dual LLM
+  dualLlmConfig: [],
+  dualLlmResult: ["read"],
+
+  // Other
+  chat: ["read", "create", "update", "delete"],
+  log: [],
+
   // Administration
   team: ["read"],
   secret: [],
-  appearance: [],
+  apiKey: [],
+  organizationSettings: [],
   securitySettings: [],
+
+  // UI behavior
+  simpleView: ["enable"],
+  chatAgentPicker: [],
+  chatProviderSettings: [],
 
   /*
    * Empty arrays below are required for Record<Resource, Action[]> type compatibility.
@@ -160,9 +185,14 @@ export const memberPermissions: Record<Resource, Action[]> = {
   organization: [],
 };
 
+export const adminPermissions: Record<Resource, Action[]> = {
+  ...allAvailableActions,
+  simpleView: [],
+};
+
 export const predefinedPermissionsMap: Record<PredefinedRoleName, Permissions> =
   {
-    [ADMIN_ROLE_NAME]: allAvailableActions,
+    [ADMIN_ROLE_NAME]: adminPermissions,
     [EDITOR_ROLE_NAME]: editorPermissions,
     [MEMBER_ROLE_NAME]: memberPermissions,
   };
@@ -239,6 +269,8 @@ export const permissionDescriptions: Record<string, string> = {
   "llmLimit:delete": "Remove usage limits",
   "llmSettings:read": "View LLM settings (compression, cleanup interval)",
   "llmSettings:update": "Modify LLM settings",
+  "agentSettings:read": "View agent settings (default model, default agent)",
+  "agentSettings:update": "Modify agent settings",
   "llmCost:read": "View LLM usage cost statistics and analytics",
 
   // Other
@@ -278,8 +310,12 @@ export const permissionDescriptions: Record<string, string> = {
   "identityProvider:delete": "Remove identity providers",
   "secret:read": "View secrets manager configuration",
   "secret:update": "Modify secrets manager settings and test connectivity",
-  "appearance:read": "View white-labeling settings (theme, logo, fonts)",
-  "appearance:update": "Customize theme, logo, and font settings",
+  "apiKey:read": "View API keys",
+  "apiKey:delete": "Delete API keys",
+  "organizationSettings:read":
+    "View organization settings (appearance, authentication, etc)",
+  "organizationSettings:update":
+    "Customize organization appearance, authentication, etc",
   "securitySettings:read": "View security settings (tool policy, file uploads)",
   "securitySettings:update": "Modify security settings",
   "knowledgeBase:read": "View knowledge bases and connectors",
@@ -290,6 +326,11 @@ export const permissionDescriptions: Record<string, string> = {
     "View knowledge settings (embedding and reranking models)",
   "knowledgeSettings:update":
     "Modify knowledge settings (embedding and reranking models)",
+
+  // UI behavior
+  "simpleView:enable": "Sidebar is collapsed by default on page load",
+  "chatAgentPicker:enable": "Show agent picker in chat",
+  "chatProviderSettings:enable": "Show model and API key selectors in chat",
 };
 
 /**
@@ -740,13 +781,16 @@ export const requiredEndpointPermissionsMap: Partial<
     llmLimit: ["delete"],
   },
   [RouteId.UpdateAppearance]: {
-    appearance: ["update"],
+    organizationSettings: ["update"],
   },
   [RouteId.UpdateSecuritySettings]: {
     securitySettings: ["update"],
   },
   [RouteId.UpdateLlmSettings]: {
     llmSettings: ["update"],
+  },
+  [RouteId.UpdateAgentSettings]: {
+    agentSettings: ["update"],
   },
   [RouteId.UpdateKnowledgeSettings]: {
     knowledgeSettings: ["update"],
@@ -967,11 +1011,12 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/settings/dual-llm": { dualLlmConfig: ["read"] },
   "/settings/security": { securitySettings: ["read"] },
   "/settings/llm": { llmSettings: ["read"] },
+  "/settings/agents": { agentSettings: ["read"] },
   "/settings/knowledge": { knowledgeSettings: ["read"] },
   "/settings/users": { member: ["read"] },
   "/settings/teams": { team: ["read"] },
   "/settings/roles": { ac: ["read"] },
   "/settings/identity-providers": { identityProvider: ["read"] },
   "/settings/secrets": { secret: ["read"] },
-  "/settings/appearance": { appearance: ["read"] },
+  "/settings/organization": { organizationSettings: ["read"] },
 };

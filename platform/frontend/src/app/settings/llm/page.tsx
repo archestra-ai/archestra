@@ -114,6 +114,7 @@ export default function LlmSettingsPage() {
         JSON.stringify(serverTeamIds));
 
   const hasCleanupChanges = cleanupInterval !== serverCleanupInterval;
+
   const hasChanges = hasCompressionChanges || hasCleanupChanges;
 
   const handleSave = async () => {

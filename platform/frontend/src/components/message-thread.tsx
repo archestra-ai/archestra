@@ -3,14 +3,12 @@
 import type { ChatStatus, UIMessage } from "ai";
 import {
   Check,
-  CopyIcon,
   Paperclip,
   RefreshCcwIcon,
   ShieldCheck,
   TriangleAlert,
 } from "lucide-react";
 import { Fragment, useMemo } from "react";
-import { Action, Actions } from "@/components/ai-elements/actions";
 import {
   Conversation,
   ConversationContent,
@@ -41,6 +39,7 @@ import {
   hasKnowledgeBaseToolCall,
   KnowledgeGraphCitations,
 } from "@/components/chat/knowledge-graph-citations";
+import { MessageActions } from "@/components/chat/message-actions";
 import { PolicyDeniedTool } from "@/components/chat/policy-denied-tool";
 import Divider from "@/components/divider";
 import { Button } from "@/components/ui/button";
@@ -66,7 +65,13 @@ const MessageThread = ({
   profileId?: string;
 }) => {
   const status: ChatStatus = "streaming" as ChatStatus;
-  const allParts = useMemo(() => messages.flatMap((m) => m.parts), [messages]);
+
+  const lastAssistantMessageIndex = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === "assistant") return i;
+    }
+    return -1;
+  }, [messages]);
 
   return (
     <div
@@ -162,20 +167,37 @@ const MessageThread = ({
                         }
                         const isLastAssistantMessage =
                           message.role === "assistant" &&
-                          idx ===
-                            messages.length -
-                              1 -
-                              [...messages]
-                                .reverse()
-                                .findIndex((m) => m.role === "assistant");
+                          idx === lastAssistantMessageIndex;
                         const isLastTextPartInMessage =
                           isLastAssistantMessage &&
                           message.parts
                             .slice(i + 1)
                             .every((p) => p.type !== "text");
-                        const showCitations =
-                          isLastTextPartInMessage &&
-                          hasKnowledgeBaseToolCall(allParts);
+                        // Show citations on the last text part of the last
+                        // assistant message, scoped to the current assistant turn
+                        // (stop at the next user message to avoid stale citations).
+                        let citationParts: typeof message.parts | undefined;
+                        if (isLastTextPartInMessage) {
+                          if (hasKnowledgeBaseToolCall(message.parts ?? [])) {
+                            citationParts = message.parts;
+                          } else {
+                            for (
+                              let prevIdx = idx - 1;
+                              prevIdx >= 0;
+                              prevIdx--
+                            ) {
+                              const prev = messages[prevIdx];
+                              if (prev.role === "user") break;
+                              if (
+                                prev.role === "assistant" &&
+                                hasKnowledgeBaseToolCall(prev.parts ?? [])
+                              ) {
+                                citationParts = prev.parts;
+                                break;
+                              }
+                            }
+                          }
+                        }
 
                         return (
                           <Fragment key={`${message.id}-${i}`}>
@@ -191,23 +213,19 @@ const MessageThread = ({
                                     ? preserveNewlines(part.text)
                                     : part.text}
                                 </Response>
-                                {showCitations && (
-                                  <KnowledgeGraphCitations parts={allParts} />
+                                {citationParts && (
+                                  <KnowledgeGraphCitations
+                                    parts={citationParts}
+                                  />
                                 )}
                               </MessageContent>
                             </Message>
                             {message.role === "assistant" &&
                               i === messages.length - 1 && (
-                                <Actions className="mt-2">
-                                  <Action
-                                    onClick={() =>
-                                      navigator.clipboard.writeText(part.text)
-                                    }
-                                    label="Copy"
-                                  >
-                                    <CopyIcon className="size-3" />
-                                  </Action>
-                                </Actions>
+                                <MessageActions
+                                  textToCopy={part.text}
+                                  className="-mt-1 w-fit"
+                                />
                               )}
                           </Fragment>
                         );

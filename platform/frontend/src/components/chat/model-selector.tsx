@@ -20,7 +20,7 @@ import {
   Video,
   XIcon,
 } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ModelSelectorContent,
   ModelSelectorEmpty,
@@ -50,6 +50,7 @@ import {
   useModelsByProvider,
 } from "@/lib/chat-models.query";
 import { useSyncChatModels } from "@/lib/chat-settings.query";
+import { resolveAutoSelectedModel } from "@/lib/use-chat-preferences";
 import { cn } from "@/lib/utils";
 
 /** Modalities that can be filtered (excludes "text" since all models support it) */
@@ -97,7 +98,7 @@ interface ModelSelectorProps {
  * models.dev provider IDs
  * see https://github.com/anomalyco/models.dev/tree/dev/providers
  * */
-const providerToLogoProvider: Record<SupportedProvider, string> = {
+export const providerToLogoProvider: Record<SupportedProvider, string> = {
   openai: "openai",
   anthropic: "anthropic",
   gemini: "google",
@@ -664,6 +665,22 @@ export function ModelSelector({
     [allAvailableModels],
   );
   const isModelAvailable = allAvailableModelIds.includes(selectedModel);
+
+  // Auto-select the "best" model (or first) when the selected model is not
+  // in the available list (e.g. after switching API keys or on initial load).
+  // Only triggers when the model is genuinely unavailable — keeps the user's
+  // selection stable across API key changes if the model is still valid.
+  useEffect(() => {
+    const modelToSelect = resolveAutoSelectedModel({
+      selectedModel,
+      availableModels: allAvailableModels,
+      isLoading,
+    });
+    if (modelToSelect) {
+      onModelChange(modelToSelect);
+    }
+  }, [isLoading, allAvailableModels, selectedModel, onModelChange]);
+
 
   // If loading, show loading state
   if (isLoading) {

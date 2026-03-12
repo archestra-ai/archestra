@@ -21,9 +21,9 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogForm,
   DialogHeader,
+  DialogStickyFooter,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -642,7 +642,7 @@ export function LocalServerInstallDialog({
             </div>
           )}
 
-          <DialogFooter>
+          <DialogStickyFooter>
             {canInstall && (
               <Button
                 type="button"
@@ -668,7 +668,7 @@ export function LocalServerInstallDialog({
                       : "Install"}
               </Button>
             )}
-          </DialogFooter>
+          </DialogStickyFooter>
         </DialogForm>
       </DialogContent>
     </Dialog>

@@ -558,7 +558,7 @@ The [Knowledge Base](/docs/platform-knowledge-bases) enterprise feature requires
 
 **Cloud-managed databases:**
 
-- **AWS RDS** — pgvector is available as a [trusted extension](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/CHAP_PostgreSQL.html#PostgreSQL.Concepts.General.Extensions). Enable it via `CREATE EXTENSION vector` without superuser.
+- **AWS RDS** — pgvector is available but is [not a trusted extension](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/PostgreSQL.Concepts.General.FeatureSupport.Extensions.html#PostgreSQL.Concepts.General.Extensions.Trusted), so it must be installed by a user with the `rds_superuser` role. Connect as the RDS master user and run `CREATE EXTENSION vector`.
 - **Google Cloud SQL** — pgvector is [supported natively](https://cloud.google.com/sql/docs/postgres/extensions#pgvector). Enable it via the Cloud SQL console or `CREATE EXTENSION vector`.
 - **Azure Database for PostgreSQL** — pgvector is [available as an extension](https://learn.microsoft.com/en-us/azure/postgresql/flexible-server/concepts-extensions). Allow-list it in server parameters, then run `CREATE EXTENSION vector`.
 

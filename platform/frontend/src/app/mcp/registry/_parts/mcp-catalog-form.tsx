@@ -128,6 +128,7 @@ export function McpCatalogForm({
             command: "",
             arguments: "",
             environment: [],
+            envFrom: [],
             dockerImage: "",
             transportType: "stdio",
             httpPort: "",
@@ -189,6 +190,16 @@ export function McpCatalogForm({
   const { fields, append, remove } = useFieldArray({
     control: form.control,
     name: "localConfig.environment",
+  });
+
+  // Use field array for envFrom (existing K8s Secrets/ConfigMaps)
+  const {
+    fields: envFromFields,
+    append: appendEnvFrom,
+    remove: removeEnvFrom,
+  } = useFieldArray({
+    control: form.control,
+    name: "localConfig.envFrom",
   });
 
   // Use field array for imagePullSecrets
@@ -609,6 +620,15 @@ export function McpCatalogForm({
               fieldNamePrefix="localConfig.environment"
               form={form}
               useExternalSecretsManager={showByosOption}
+              envFrom={{
+                fields: envFromFields,
+                append: appendEnvFrom,
+                remove: removeEnvFrom,
+                watch: form.watch,
+                setValue: form.setValue,
+                register: form.register,
+                fieldNamePrefix: "localConfig.envFrom",
+              }}
             />
           </div>
         )}

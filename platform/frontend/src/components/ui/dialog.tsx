@@ -130,6 +130,23 @@ function DialogDescription({
   );
 }
 
+function DialogStickyFooter({
+  className,
+  ...props
+}: React.ComponentProps<"div">) {
+  return (
+    <div
+      data-slot="dialog-footer"
+      className={cn(
+        // Counteract DialogContent's p-6 padding: -mx-6/px-6 extend to edges, bottom-[-24px] sticks to bottom
+        "sticky bottom-[-24px] bg-background pt-4 pb-4 border-t -mx-6 px-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end",
+        className,
+      )}
+      {...props}
+    />
+  );
+}
+
 /**
  * A form wrapper for dialog content that enables Enter key submission.
  *
@@ -181,6 +198,7 @@ export {
   DialogHeader,
   DialogOverlay,
   DialogPortal,
+  DialogStickyFooter,
   DialogTitle,
   DialogTrigger,
 };

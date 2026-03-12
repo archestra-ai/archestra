@@ -1,0 +1,1 @@
+ALTER TABLE "knowledge_base_connectors" ADD COLUMN "description" text;

@@ -11,6 +11,7 @@ import {
 const mockGetCurrentUser = vi.fn();
 const mockEnhancedSearchPost = vi.fn();
 const mockSearchForIssuesUsingJql = vi.fn();
+const mockSearchForIssuesUsingJqlPost = vi.fn();
 const capturedConfigs: { type: string; config: Record<string, unknown> }[] = [];
 
 vi.mock("jira.js", () => ({
@@ -23,6 +24,7 @@ vi.mock("jira.js", () => ({
       issueSearch: {
         searchForIssuesUsingJqlEnhancedSearchPost: mockEnhancedSearchPost,
         searchForIssuesUsingJql: mockSearchForIssuesUsingJql,
+        searchForIssuesUsingJqlPost: mockSearchForIssuesUsingJqlPost,
       },
     };
   },
@@ -639,6 +641,124 @@ describe("JiraConnector", () => {
       });
 
       await expect(generator.next()).rejects.toThrow();
+    });
+  });
+
+  describe("sync (server / isCloud=false)", () => {
+    const serverConfig = {
+      jiraBaseUrl: "https://jira.mycompany.com",
+      isCloud: false,
+      projectKey: "SRV",
+    };
+
+    function makeIssue(
+      key: string,
+      summary: string,
+      description: unknown = "Description text",
+    ) {
+      return {
+        key,
+        fields: {
+          summary,
+          description,
+          comment: { comments: [] as Record<string, unknown>[] },
+          reporter: { displayName: "Reporter" },
+          assignee: { displayName: "Assignee" },
+          priority: { name: "Medium" },
+          status: { name: "Open" },
+          labels: [] as string[],
+          issuetype: { name: "Task" },
+          updated: "2024-01-15T10:00:00.000Z",
+        },
+      };
+    }
+
+    test("uses searchForIssuesUsingJqlPost instead of enhanced search", async () => {
+      mockSearchForIssuesUsingJqlPost.mockResolvedValueOnce({
+        issues: [makeIssue("SRV-1", "Server issue")],
+        startAt: 0,
+        maxResults: 50,
+        total: 1,
+      });
+
+      const batches: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: serverConfig,
+        credentials,
+        checkpoint: null,
+      })) {
+        batches.push(batch);
+      }
+
+      expect(mockSearchForIssuesUsingJqlPost).toHaveBeenCalledTimes(1);
+      expect(mockEnhancedSearchPost).not.toHaveBeenCalled();
+      expect(batches).toHaveLength(1);
+      expect(batches[0].documents).toHaveLength(1);
+      expect(batches[0].documents[0].id).toBe("SRV-1");
+    });
+
+    test("uses offset-based pagination with startAt", async () => {
+      const page1Issues = Array.from({ length: 50 }, (_, i) =>
+        makeIssue(`SRV-${i + 1}`, `Issue ${i + 1}`),
+      );
+      const page2Issues = [makeIssue("SRV-51", "Issue 51")];
+
+      mockSearchForIssuesUsingJqlPost
+        .mockResolvedValueOnce({
+          issues: page1Issues,
+          startAt: 0,
+          maxResults: 50,
+          total: 51,
+        })
+        .mockResolvedValueOnce({
+          issues: page2Issues,
+          startAt: 50,
+          maxResults: 50,
+          total: 51,
+        });
+
+      const batches: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: serverConfig,
+        credentials,
+        checkpoint: null,
+      })) {
+        batches.push(batch);
+      }
+
+      expect(batches).toHaveLength(2);
+      expect(batches[0].documents).toHaveLength(50);
+      expect(batches[0].hasMore).toBe(true);
+      expect(batches[1].documents).toHaveLength(1);
+      expect(batches[1].hasMore).toBe(false);
+
+      // Second call should use startAt=50
+      expect(mockSearchForIssuesUsingJqlPost).toHaveBeenCalledTimes(2);
+      expect(mockSearchForIssuesUsingJqlPost.mock.calls[1][0]).toEqual(
+        expect.objectContaining({ startAt: 50, maxResults: 50 }),
+      );
+    });
+
+    test("stops when fewer results than BATCH_SIZE returned", async () => {
+      mockSearchForIssuesUsingJqlPost.mockResolvedValueOnce({
+        issues: [makeIssue("SRV-1", "Only issue")],
+        startAt: 0,
+        maxResults: 50,
+        total: 1,
+      });
+
+      const batches: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: serverConfig,
+        credentials,
+        checkpoint: null,
+      })) {
+        batches.push(batch);
+      }
+
+      expect(batches).toHaveLength(1);
+      expect(batches[0].hasMore).toBe(false);
+      expect(mockSearchForIssuesUsingJqlPost).toHaveBeenCalledTimes(1);
     });
   });
 

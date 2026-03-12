@@ -1,7 +1,10 @@
 import type { UIMessage } from "@ai-sdk/react";
-import { TOOL_TODO_WRITE_FULL_NAME } from "@shared";
+import {
+  SWAP_AGENT_POKE_TEXT,
+  TOOL_SWAP_AGENT_FULL_NAME,
+  TOOL_TODO_WRITE_FULL_NAME,
+} from "@shared";
 import type { ChatStatus, DynamicToolUIPart, ToolUIPart } from "ai";
-import Image from "next/image";
 import {
   Fragment,
   useCallback,
@@ -41,6 +44,7 @@ import {
   parsePolicyDenied,
 } from "@/lib/llmProviders/common";
 import { useMcpInstallOrchestrator } from "@/lib/mcp-install-orchestrator.hook";
+import { useOrganization } from "@/lib/organization.query";
 import { hasThinkingTags, parseThinkingTags } from "@/lib/parse-thinking";
 import { cn } from "@/lib/utils";
 import { AuthRequiredTool } from "./auth-required-tool";
@@ -124,6 +128,7 @@ export function ChatMessages({
   const { data: userCanCreateAgent } = useHasPermissions({
     agent: ["create"],
   });
+  const { data: organization } = useOrganization();
   const orchestrator = useMcpInstallOrchestrator();
 
   // Initialize mutation hook with conversationId (use empty string as fallback for hook rules)
@@ -471,6 +476,9 @@ export function ChatMessages({
       <ConversationContent>
         <div className="max-w-4xl mx-auto relative pb-8">
           {messages.map((message, idx) => {
+            // Hide the auto-poke message sent after agent swap
+            if (isSwapAgentPokeMessage(message)) return null;
+
             const isDimmed =
               editingMessageIndex !== -1 && idx > editingMessageIndex;
             return (
@@ -541,11 +549,38 @@ export function ChatMessages({
                           isLastAssistantInSequence &&
                           isLastTextPart &&
                           status !== "streaming";
-                        const citationParts =
+                        // Show citations on the last text part of the last
+                        // assistant message, only after streaming completes
+                        // to avoid citations jumping between messages.
+                        let citationParts: typeof message.parts | undefined;
+                        if (
+                          isLastAssistantInSequence &&
                           isLastTextPart &&
-                          hasKnowledgeBaseToolCall(message.parts)
-                            ? message.parts
-                            : undefined;
+                          !isResponseInProgress
+                        ) {
+                          if (hasKnowledgeBaseToolCall(message.parts ?? [])) {
+                            citationParts = message.parts;
+                          } else {
+                            // Search backwards for KB tool calls within the same
+                            // assistant turn — stop at the next user message to
+                            // avoid showing stale citations from prior turns.
+                            for (
+                              let prevIdx = idx - 1;
+                              prevIdx >= 0;
+                              prevIdx--
+                            ) {
+                              const prev = messages[prevIdx];
+                              if (prev.role === "user") break;
+                              if (
+                                prev.role === "assistant" &&
+                                hasKnowledgeBaseToolCall(prev.parts ?? [])
+                              ) {
+                                citationParts = prev.parts;
+                                break;
+                              }
+                            }
+                          }
+                        }
 
                         // Check for <think> tags (used by Qwen and similar models)
                         if (hasThinkingTags(part.text)) {
@@ -860,6 +895,7 @@ export function ChatMessages({
                     }
                   }
                 })}
+                <SwapAgentDivider message={message} />
               </div>
             );
           })}
@@ -869,11 +905,9 @@ export function ChatMessages({
             (status === "streaming" && isStreamingStalled)) && (
             <div className="absolute bottom-[-10] left-0">
               <Message from="assistant">
-                <Image
-                  src={"/logo.png"}
+                <img
+                  src={organization?.iconLogo || "/logo.png"}
                   alt="Loading logo"
-                  width={30}
-                  height={30}
                   className="object-contain h-6 w-auto animate-[bounce_700ms_ease_200ms_infinite]"
                 />
               </Message>
@@ -1044,6 +1078,11 @@ function MessageTool({
     }
   }
 
+  // swap_agent is rendered as a divider after all message parts (see SwapAgentDivider below)
+  if (toolName === TOOL_SWAP_AGENT_FULL_NAME) {
+    return null;
+  }
+
   if (toolName === TOOL_TODO_WRITE_FULL_NAME) {
     return (
       <TodoWriteTool
@@ -1163,3 +1202,53 @@ const getHeaderState = ({
   if (toolResultPart) return "output-available";
   return state;
 };
+
+/**
+ * Renders a "Switched to {agent}" divider after all parts of a message
+ * that contains a swap_agent tool call.
+ */
+function isSwapAgentPokeMessage(message: UIMessage): boolean {
+  if (message.role !== "user") return false;
+  const textParts = message.parts?.filter((p) => p.type === "text") ?? [];
+  return (
+    textParts.length === 1 &&
+    (textParts[0] as { text: string }).text === SWAP_AGENT_POKE_TEXT
+  );
+}
+
+function SwapAgentDivider({ message }: { message: UIMessage }) {
+  if (message.role !== "assistant") return null;
+
+  for (const part of message.parts ?? []) {
+    if (!isToolPart(part)) continue;
+    const type = part.type as string;
+    if (
+      type !== TOOL_SWAP_AGENT_FULL_NAME &&
+      type !== `tool-${TOOL_SWAP_AGENT_FULL_NAME}`
+    )
+      continue;
+
+    const output = part.output ?? part.state;
+    let agentName = "another agent";
+    if (typeof output === "string") {
+      try {
+        const parsed = JSON.parse(output);
+        if (parsed?.agent_name) agentName = parsed.agent_name;
+      } catch {
+        // ignore
+      }
+    }
+
+    return (
+      <div className="flex items-center gap-3 py-2">
+        <div className="h-px flex-1 bg-border" />
+        <span className="text-xs text-muted-foreground">
+          Switched to {agentName}
+        </span>
+        <div className="h-px flex-1 bg-border" />
+      </div>
+    );
+  }
+
+  return null;
+}

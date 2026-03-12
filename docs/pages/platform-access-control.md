@@ -3,7 +3,7 @@ title: "Access Control"
 category: Administration
 description: "Role-based access control (RBAC) system for managing user permissions in Archestra"
 order: 1
-lastUpdated: 2026-03-08
+lastUpdated: 2026-03-12
 ---
 <!--
 Check ../docs_writer_prompt.md before changing this file.
@@ -37,27 +37,30 @@ Full access to core resources and settings, but cannot manage users, roles, or i
 | Resource | Actions |
 |----------|--------|
 | Agents | `read`, `create`, `update`, `delete`, `team-admin` |
-| MCP Gateways | `read`, `create`, `update`, `delete`, `team-admin` |
-| LLM Proxies | `read`, `create`, `update`, `delete`, `team-admin` |
-| Tools & Policies | `read`, `create`, `update`, `delete` |
-| Logs | `read` |
-| Chats | `read`, `create`, `update`, `delete` |
 | Agent Triggers | `read`, `create`, `update`, `delete` |
+| LLM Proxies | `read`, `create`, `update`, `delete`, `team-admin` |
 | LLM Providers | `read`, `create`, `update`, `delete` |
 | LLM Limits | `read`, `create`, `update`, `delete` |
 | LLM Settings | `read`, `update` |
 | LLM Costs | `read` |
+| MCP Gateways | `read`, `create`, `update`, `delete`, `team-admin` |
+| Tools & Policies | `read`, `create`, `update`, `delete` |
 | MCP Registry | `read`, `create`, `update`, `delete` |
 | MCP Server Installations | `read`, `create`, `update`, `delete` |
 | MCP Server Installation Requests | `read`, `create`, `update`, `delete` |
-| Dual LLM Configs | `read` |
-| Dual LLM Results | `read` |
 | Knowledge Bases | `read`, `create`, `update`, `delete` |
 | Knowledge Settings | `read`, `update` |
+| Dual LLM Configs | `read` |
+| Dual LLM Results | `read` |
+| Chats | `read`, `create`, `update`, `delete` |
+| Logs | `read` |
 | Teams | `read` |
 | Secrets | `read` |
-| Appearance | `read`, `update` |
+| API Keys | `read`, `delete` |
+| Organization Settings | `read`, `update` |
 | Security Settings | `read`, `update` |
+| Chat Agent Picker | `enable` |
+| Chat Provider Settings | `enable` |
 
 ### Member
 
@@ -66,17 +69,18 @@ Can manage agents, tools, and chat, with read-only access to most other resource
 | Resource | Actions |
 |----------|--------|
 | Agents | `read`, `create`, `update`, `delete` |
-| MCP Gateways | `read`, `create`, `update`, `delete` |
 | LLM Proxies | `read`, `create`, `update`, `delete` |
-| Tools & Policies | `read`, `create`, `update`, `delete` |
-| Chats | `read`, `create`, `update`, `delete` |
 | LLM Providers | `read` |
+| MCP Gateways | `read`, `create`, `update`, `delete` |
+| Tools & Policies | `read`, `create`, `update`, `delete` |
 | MCP Registry | `read` |
 | MCP Server Installations | `read`, `create`, `delete` |
 | MCP Server Installation Requests | `read`, `create`, `update` |
-| Dual LLM Results | `read` |
 | Knowledge Bases | `read` |
+| Dual LLM Results | `read` |
+| Chats | `read`, `create`, `update`, `delete` |
 | Teams | `read` |
+| Simple View | `enable` |
 
 
 ## Custom Roles
@@ -99,16 +103,20 @@ The following table lists all available permissions that can be assigned to cust
 | `agent:delete` | Delete agents |
 | `agent:team-admin` | Manage team assignments for agents |
 | `agent:admin` | Full administrative control over all agents, bypassing team restrictions |
+| `agentSettings:read` | View agent settings (default model, default agent) |
+| `agentSettings:update` | Modify agent settings |
 | `agentTrigger:read` | View agent trigger configurations (Slack, MS Teams, email) |
 | `agentTrigger:create` | Set up new agent triggers |
 | `agentTrigger:update` | Modify agent trigger configurations |
 | `agentTrigger:delete` | Remove agent triggers |
-| `appearance:read` | View white-labeling settings (theme, logo, fonts) |
-| `appearance:update` | Customize theme, logo, and font settings |
+| `apiKey:read` | View API keys |
+| `apiKey:delete` | Delete API keys |
 | `chat:read` | View and access chat conversations |
 | `chat:create` | Start new chat conversations |
 | `chat:update` | Edit chat messages and conversation settings |
 | `chat:delete` | Delete chat conversations |
+| `chatAgentPicker:enable` | Show agent picker in chat |
+| `chatProviderSettings:enable` | Show model and API key selectors in chat |
 | `dualLlmConfig:read` | View dual LLM security configurations |
 | `dualLlmConfig:create` | Create new dual LLM configurations |
 | `dualLlmConfig:update` | Modify dual LLM configurations |
@@ -171,10 +179,13 @@ The following table lists all available permissions that can be assigned to cust
 | `member:create` | Add new members to the organization |
 | `member:update` | Change member roles and settings |
 | `member:delete` | Remove members from the organization |
+| `organizationSettings:read` | View organization settings (appearance, authentication, etc) |
+| `organizationSettings:update` | Customize organization appearance, authentication, etc |
 | `secret:read` | View secrets manager configuration |
 | `secret:update` | Modify secrets manager settings and test connectivity |
 | `securitySettings:read` | View security settings (tool policy, file uploads) |
 | `securitySettings:update` | Modify security settings |
+| `simpleView:enable` | Sidebar is collapsed by default on page load |
 | `team:read` | View teams and their members |
 | `team:create` | Create new teams |
 | `team:update` | Modify team settings |

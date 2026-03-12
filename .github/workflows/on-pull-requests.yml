@@ -69,6 +69,7 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
+          fetch-depth: 1
 
       - name: Request changes on PR
         if: steps.check-context.outputs.should_check == 'true' && steps.check-freeze.outputs.frozen == 'true'
@@ -96,6 +97,7 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
+          fetch-depth: 1
 
       - name: Lint PR title
         uses: grafana/shared-workflows/actions/lint-pr-title@19d8fb5687bb386849f7f53673c5f429e6387cf5 # v1.2.0
@@ -114,6 +116,7 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
+          fetch-depth: 1
 
       # From zizmor action docs:
       # https://github.com/zizmorcore/zizmor-action?tab=readme-ov-file#usage-with-github-advanced-security-recommended
@@ -142,6 +145,7 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
+          fetch-depth: 1
 
       - name: Setup environment
         uses: ./.github/actions/setup-env
@@ -176,7 +180,6 @@ jobs:
     if: github.event_name == 'pull_request'
     permissions:
       contents: write
-      packages: write # Required for pushing platform image to GHCR (non-fork PRs only)
       security-events: write
       id-token: write # Required for Workload Identity Federation
       pull-requests: write # Required for Docker Scout to write a comment to a PR
@@ -187,7 +190,6 @@ jobs:
       # This handles the case where release-please bumps the version in package.json,
       # causing generated files (like docs/openapi.json) to be out of date
       is-release-please-pr: ${{ startsWith(github.head_ref, 'release-please--') }}
-      # Fork PRs use GitHub artifacts instead of GHCR (no packages:write permission for forks)
       is-fork-pr: ${{ github.event.pull_request.head.repo.fork == true }}
     secrets:
       TURBOREPO_REMOTE_CACHING_TOKEN: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
@@ -204,7 +206,6 @@ jobs:
     name: Platform Linting and Tests (Required)
     permissions:
       contents: write
-      packages: write # Required for pushing platform image to GHCR (non-fork PRs only)
       security-events: write
       id-token: write # Required for Workload Identity Federation
       pull-requests: write # Required for Docker Scout to write a comment to a PR
@@ -214,9 +215,6 @@ jobs:
       # They should always succeed quickly in pull requests
       # while on merge queues they should run normally and fail if needed
       should-skip-running-and-always-succeed: ${{ github.event_name == 'pull_request' }}
-      # Fork PRs use GitHub artifacts instead of GHCR (no packages:write permission for forks)
-      # In merge_group events, github.event.pull_request is not available, so this evaluates to false
-      # (merge_group runs in base repo context with full permissions, so GHCR works)
       is-fork-pr: ${{ github.event.pull_request.head.repo.fork == true }}
     secrets:
       TURBOREPO_REMOTE_CACHING_TOKEN: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}

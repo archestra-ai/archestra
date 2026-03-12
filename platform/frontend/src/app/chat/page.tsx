@@ -24,12 +24,12 @@ import {
   useRef,
   useState,
 } from "react";
-import { createPortal } from "react-dom";
 import { useForm } from "react-hook-form";
 import { CreateCatalogDialog } from "@/app/mcp/registry/_parts/create-catalog-dialog";
 import { CustomServerRequestDialog } from "@/app/mcp/registry/_parts/custom-server-request-dialog";
 import { AgentDialog } from "@/components/agent-dialog";
 import type { PromptInputProps } from "@/components/ai-elements/prompt-input";
+import { AppLogo } from "@/components/app-logo";
 import { ButtonWithTooltip } from "@/components/button-with-tooltip";
 import { BrowserPanel } from "@/components/chat/browser-panel";
 import { ChatMessages } from "@/components/chat/chat-messages";
@@ -114,16 +114,20 @@ import {
   getPendingActions,
 } from "@/lib/pending-tool-state";
 import { useTeams } from "@/lib/team.query";
+import {
+  clearSavedModel,
+  getSavedAgent,
+  getSavedModel,
+  saveAgent,
+  saveModel,
+} from "@/lib/use-chat-preferences";
 import { useIsMobile } from "@/lib/use-mobile.hook";
 import { cn } from "@/lib/utils";
 import ArchestraPromptInput from "./prompt-input";
 
 const CONVERSATION_QUERY_PARAM = "conversation";
 
-const LocalStorageKeys = {
-  browserOpen: "archestra-chat-browser-open",
-  selectedChatModel: "archestra-chat-selected-chat-model",
-} as const;
+const BROWSER_OPEN_KEY = "archestra-chat-browser-open";
 
 export default function ChatPage() {
   const queryClient = useQueryClient();
@@ -176,47 +180,52 @@ export default function ChatPage() {
   const { data: canCreateAgent } = useHasPermissions({
     agent: ["create"],
   });
-  const { data: teams } = useTeams();
+  const { data: canReadAgent } = useHasPermissions({
+    agent: ["read"],
+  });
+  const { data: canReadLlmProvider } = useHasPermissions({
+    llmProvider: ["read"],
+  });
+  const { data: canReadTeams } = useHasPermissions({
+    team: ["read"],
+  });
+  const { data: teams } = useTeams({ enabled: !!canReadTeams });
 
   // Non-admin users with no teams cannot create agents
   const cannotCreateDueToNoTeams =
     !isAgentAdmin && (!teams || teams.length === 0);
 
-  const isMobile = useIsMobile();
-
-  // Portal target for rendering actions into the mobile app shell header
-  const [mobileHeaderEl, setMobileHeaderEl] = useState<HTMLElement | null>(
-    null,
-  );
-  useEffect(() => {
-    setMobileHeaderEl(document.getElementById("mobile-header-actions"));
-  }, []);
+  const _isMobile = useIsMobile();
 
   // State for browser panel - initialize from localStorage
   const [isBrowserPanelOpen, setIsBrowserPanelOpen] = useState(() => {
     if (typeof window !== "undefined") {
-      return localStorage.getItem(LocalStorageKeys.browserOpen) === "true";
+      return localStorage.getItem(BROWSER_OPEN_KEY) === "true";
     }
     return false;
   });
 
+  const hasChatAccess = canReadAgent !== false && canReadLlmProvider !== false;
+
   // Fetch internal agents for dialog editing
   const { data: internalAgents = [], isPending: isLoadingAgents } =
-    useInternalAgents();
+    useInternalAgents({ enabled: hasChatAccess });
   const { data: defaultAgentId } = useDefaultAgentId();
 
   // Fetch profiles and models for initial chat (no conversation)
   const { modelsByProvider, isPending: isModelsLoading } =
     useModelsByProvider();
   const { data: chatApiKeys = [], isLoading: isLoadingApiKeys } =
-    useChatApiKeys();
+    useChatApiKeys({ enabled: hasChatAccess });
+  const { data: organization, isPending: isOrgLoading } = useOrganization();
 
   // State for initial chat (when no conversation exists yet)
   const [initialAgentId, setInitialAgentId] = useState<string | null>(null);
   const [initialModel, setInitialModel] = useState<string>("");
   const [initialApiKeyId, setInitialApiKeyId] = useState<string | null>(null);
-  // Track if URL params have been consumed (so we don't re-apply them after user clears selection)
-  const urlParamsConsumedRef = useRef(false);
+  // Track which agentId URL param has been consumed (so we don't re-apply the same one after user clears selection,
+  // but do apply a new one when navigating from a different agent page)
+  const urlParamsConsumedRef = useRef<string | null>(null);
 
   // Version history dialog state
   const [versionHistoryAgent, setVersionHistoryAgent] = useState<
@@ -229,24 +238,43 @@ export default function ChatPage() {
 
   useEffect(() => {
     if (internalAgents.length === 0) return;
+    // Wait for organization data to avoid race condition where agents load
+    // before org, causing the org default to be skipped
+    if (isOrgLoading) return;
 
-    // Only process URL params once (don't re-apply after user clears selection)
-    if (!urlParamsConsumedRef.current) {
-      const urlAgentId = searchParams.get("agentId");
-      if (urlAgentId) {
-        const matchingAgent = internalAgents.find((a) => a.id === urlAgentId);
-        if (matchingAgent) {
-          setInitialAgentId(urlAgentId);
-          resolvedAgentRef.current = matchingAgent;
-          urlParamsConsumedRef.current = true;
-          return;
-        }
+    // Process URL agentId param, but only if it's a new value (not one we already consumed).
+    // This allows navigating from different agent pages while preventing re-application
+    // after the user manually changes the agent.
+    const urlAgentId = searchParams.get("agentId");
+    if (urlAgentId && urlAgentId !== urlParamsConsumedRef.current) {
+      const matchingAgent = internalAgents.find((a) => a.id === urlAgentId);
+      if (matchingAgent) {
+        setInitialAgentId(urlAgentId);
+        resolvedAgentRef.current = matchingAgent;
+        urlParamsConsumedRef.current = urlAgentId;
+        return;
       }
     }
 
-    // Try to restore from localStorage, then member's default agent, then first internal agent
-    if (!initialAgentId) {
-      const savedAgentId = localStorage.getItem("selected-chat-agent");
+    // Priority: org default > localStorage > member default > first available
+    // Org default always wins when set (admin-configured for the whole org).
+    // localStorage only overrides when no org default is configured.
+    // Also skip if a URL param was consumed but state hasn't flushed yet.
+    if (!initialAgentId && !urlParamsConsumedRef.current) {
+      // Try org's default agent first (admin-configured, takes precedence)
+      if (organization?.defaultAgentId) {
+        const orgDefaultAgent = internalAgents.find(
+          (a) => a.id === organization.defaultAgentId,
+        );
+        if (orgDefaultAgent) {
+          setInitialAgentId(organization.defaultAgentId);
+          saveAgent(organization.defaultAgentId);
+          resolvedAgentRef.current = orgDefaultAgent;
+          return;
+        }
+      }
+      // Try localStorage (user's previous selection, only when no org default)
+      const savedAgentId = getSavedAgent();
       const savedAgent = internalAgents.find((a) => a.id === savedAgentId);
       if (savedAgent) {
         setInitialAgentId(savedAgentId);
@@ -260,23 +288,33 @@ export default function ChatPage() {
         );
         if (defaultAgent) {
           setInitialAgentId(defaultAgentId);
+          saveAgent(defaultAgentId);
           resolvedAgentRef.current = defaultAgent;
           return;
         }
       }
       setInitialAgentId(internalAgents[0].id);
+      saveAgent(internalAgents[0].id);
       resolvedAgentRef.current = internalAgents[0];
     }
-  }, [initialAgentId, searchParams, internalAgents, defaultAgentId]);
+  }, [
+    initialAgentId,
+    searchParams,
+    internalAgents,
+    defaultAgentId,
+    organization?.defaultAgentId,
+    isOrgLoading,
+  ]);
 
   // Initialize model and API key once agent is resolved.
-  // Priority: localStorage (user's explicit choice) > agent config > first available model.
-  // Separated from agent resolution but uses ref to avoid race conditions —
-  // the ref is written synchronously in the same render cycle, so this effect
-  // always sees the correct agent even when both effects fire together.
+  // Priority: localStorage (user's explicit choice) > agent config > org default > first available.
+  // Uses modelInitializedRef instead of checking initialModel to avoid a race condition:
+  // ModelSelector's auto-select fires before this effect and sets initialModel, which would
+  // cause an early return and skip the proper priority chain (org default, etc.).
+  const modelInitializedRef = useRef(false);
   useEffect(() => {
     if (!initialAgentId) return;
-    if (initialModel) return; // Already initialized
+    if (modelInitializedRef.current) return;
 
     const allModels = Object.values(modelsByProvider).flat();
 
@@ -290,9 +328,7 @@ export default function ChatPage() {
     };
 
     // 1. User's explicit selection from localStorage takes priority
-    const savedModelId = localStorage.getItem(
-      LocalStorageKeys.selectedChatModel,
-    );
+    const savedModelId = getSavedModel();
     if (savedModelId) {
       // Wait for models to load so we can validate the saved model still exists
       if (allModels.length === 0) return;
@@ -306,10 +342,11 @@ export default function ChatPage() {
             break;
           }
         }
+        modelInitializedRef.current = true;
         return;
       }
       // Saved model no longer available — clear stale value and fall through
-      localStorage.removeItem(LocalStorageKeys.selectedChatModel);
+      clearSavedModel();
     }
 
     // 2. Agent-configured model as fallback
@@ -320,10 +357,27 @@ export default function ChatPage() {
       if (agentData.llmApiKeyId) {
         setInitialApiKeyId(agentData.llmApiKeyId as string);
       }
+      modelInitializedRef.current = true;
       return;
     }
 
-    // 3. Fall back to first available model (needs models loaded)
+    // 3. Organization default model
+    if (
+      organization?.defaultLlmModel &&
+      allModels.some((m) => m.id === organization.defaultLlmModel)
+    ) {
+      setInitialModel(organization.defaultLlmModel);
+      for (const [provider, models] of Object.entries(modelsByProvider)) {
+        if (models?.some((m) => m.id === organization.defaultLlmModel)) {
+          autoSelectKeyForProvider(provider);
+          break;
+        }
+      }
+      modelInitializedRef.current = true;
+      return;
+    }
+
+    // 4. Fall back to first available model (needs models loaded)
     if (allModels.length === 0) return;
 
     const providers = Object.keys(modelsByProvider);
@@ -334,20 +388,39 @@ export default function ChatPage() {
       if (models && models.length > 0) {
         setInitialModel(models[0].id);
         autoSelectKeyForProvider(firstProvider);
+        modelInitializedRef.current = true;
       }
     }
   }, [
     initialAgentId,
-    initialModel,
     initialApiKeyId,
     modelsByProvider,
     chatApiKeys,
+    organization?.defaultLlmModel,
   ]);
 
-  // Save model to localStorage when changed
+  // Don't persist to localStorage here — this callback is shared between
+  // user-initiated model picks and ModelSelector's auto-select on mount.
+  // localStorage is only written when the user explicitly opens the selector
+  // dialog and picks a model (via onOpenChange + onModelChange combo).
+  const modelSelectorWasOpenRef = useRef(false);
   const handleInitialModelChange = useCallback((modelId: string) => {
+    // After init, only accept explicit user selections (dialog was opened).
+    // This prevents ModelSelector's auto-select (triggered by apiKeyId changes)
+    // from overwriting the org default or user's prior choice.
+    if (modelInitializedRef.current && !modelSelectorWasOpenRef.current) {
+      return;
+    }
     setInitialModel(modelId);
-    localStorage.setItem(LocalStorageKeys.selectedChatModel, modelId);
+    if (modelSelectorWasOpenRef.current) {
+      saveModel(modelId);
+      modelSelectorWasOpenRef.current = false;
+    }
+  }, []);
+  const handleInitialModelSelectorOpenChange = useCallback((open: boolean) => {
+    if (open) {
+      modelSelectorWasOpenRef.current = true;
+    }
   }, []);
 
   // Handle API key change - preselect best model for the new key's provider
@@ -358,7 +431,7 @@ export default function ChatPage() {
         const bestModel =
           providerModels.find((m) => m.isBest) ?? providerModels[0];
         setInitialModel(bestModel.id);
-        localStorage.setItem(LocalStorageKeys.selectedChatModel, bestModel.id);
+        saveModel(bestModel.id);
       }
     },
     [modelsByProvider],
@@ -378,7 +451,6 @@ export default function ChatPage() {
   const chatSession = useChatSession(conversationId);
 
   const { isLoading: isLoadingFeatures } = useConfig();
-  const { data: organization } = useOrganization();
   const { data: chatModels = [] } = useChatModels();
   // Check if user has any API keys (including system keys for keyless providers
   // like Vertex AI Gemini, vLLM, or Ollama which don't require secrets)
@@ -403,8 +475,10 @@ export default function ChatPage() {
       // Reset initial state when navigating to /chat without a conversation
       // This ensures a fresh state when user clicks "New chat" or navigates back
       if (!conversationParam) {
-        // Reset initialAgentId to trigger re-selection from useEffect
+        // Reset initial state to trigger re-selection from useEffects
         setInitialAgentId(null);
+        setInitialModel("");
+        modelInitializedRef.current = false;
       }
 
       // Focus textarea after navigation (e.g., from search dialog)
@@ -519,7 +593,7 @@ export default function ChatPage() {
       });
 
       // Persist to localStorage so it's restored on next visit
-      localStorage.setItem(LocalStorageKeys.selectedChatModel, model);
+      saveModel(model);
     },
     [conversation, chatModels],
   );
@@ -540,7 +614,7 @@ export default function ChatPage() {
         });
 
         // Persist to localStorage so it's restored on next visit
-        localStorage.setItem(LocalStorageKeys.selectedChatModel, bestModel.id);
+        saveModel(bestModel.id);
       }
     },
     [conversation, modelsByProvider],
@@ -575,7 +649,9 @@ export default function ChatPage() {
   const {
     isLoading: isPlaywrightCheckLoading,
     isRequired: isPlaywrightSetupRequired,
-  } = usePlaywrightSetupRequired(playwrightSetupAgentId, conversationId);
+  } = usePlaywrightSetupRequired(playwrightSetupAgentId, conversationId, {
+    enabled: hasChatAccess,
+  });
   // Treat both loading and required as "visible" for disabling submit, hiding arrow, etc.
   const isPlaywrightSetupVisible =
     isPlaywrightSetupRequired || isPlaywrightCheckLoading;
@@ -922,13 +998,13 @@ export default function ChatPage() {
   const toggleBrowserPanel = useCallback(() => {
     const newValue = !isBrowserPanelOpen;
     setIsBrowserPanelOpen(newValue);
-    localStorage.setItem(LocalStorageKeys.browserOpen, String(newValue));
+    localStorage.setItem(BROWSER_OPEN_KEY, String(newValue));
   }, [isBrowserPanelOpen]);
 
   // Close browser panel handler (also persists to localStorage)
   const closeBrowserPanel = useCallback(() => {
     setIsBrowserPanelOpen(false);
-    localStorage.setItem(LocalStorageKeys.browserOpen, "false");
+    localStorage.setItem(BROWSER_OPEN_KEY, "false");
   }, []);
 
   // Handle creating conversation from browser URL input (when no conversation exists)
@@ -982,7 +1058,7 @@ export default function ChatPage() {
   const handleInitialAgentChange = useCallback(
     (agentId: string) => {
       setInitialAgentId(agentId);
-      localStorage.setItem("selected-chat-agent", agentId);
+      saveAgent(agentId);
 
       // Apply agent's LLM config if present
       const selectedAgent = internalAgents.find((a) => a.id === agentId);
@@ -1156,6 +1232,41 @@ export default function ChatPage() {
 
   // Check if the conversation's agent was deleted
   const isAgentDeleted = conversationId && conversation && !conversation.agent;
+
+  // If user lacks permission to read agents or LLM providers, show access denied
+  // Must check before loading state since disabled queries stay in pending state
+  if (canReadAgent === false || canReadLlmProvider === false) {
+    const missingPermissions: string[] = [];
+    if (canReadAgent === false) missingPermissions.push("agent:read");
+    if (canReadLlmProvider === false)
+      missingPermissions.push("llmProvider:read");
+    return (
+      <Empty className="h-full">
+        <EmptyHeader>
+          <EmptyMedia variant="icon">
+            <AlertTriangle />
+          </EmptyMedia>
+          <EmptyTitle>Access restricted</EmptyTitle>
+          <EmptyDescription>
+            You don&apos;t have the required permissions to use the chat. Ask
+            your administrator to grant you the following:
+          </EmptyDescription>
+        </EmptyHeader>
+        <EmptyContent>
+          <div className="flex flex-col items-center gap-1">
+            {missingPermissions.map((p) => (
+              <code
+                key={p}
+                className="rounded bg-muted px-2 py-1 text-sm font-mono"
+              >
+                {p}
+              </code>
+            ))}
+          </div>
+        </EmptyContent>
+      </Empty>
+    );
+  }
 
   // Show loading spinner while essential data is loading
   if (isLoadingApiKeyCheck || isLoadingAgents || isPlaywrightCheckLoading) {
@@ -1559,42 +1670,6 @@ export default function ChatPage() {
                   }
                 }}
               >
-                {/* Browser toggle - portaled to mobile header bar, inline on desktop */}
-                {isMobile && mobileHeaderEl
-                  ? createPortal(
-                      <Button
-                        variant={
-                          isBrowserPanelOpen && !isPlaywrightSetupVisible
-                            ? "secondary"
-                            : "ghost"
-                        }
-                        size="sm"
-                        onClick={toggleBrowserPanel}
-                        className="text-xs -mr-2"
-                        disabled={isPlaywrightSetupVisible}
-                      >
-                        <Globe className="h-3 w-3 mr-1" />
-                        Browser
-                      </Button>,
-                      mobileHeaderEl,
-                    )
-                  : null}
-                <div className="hidden md:flex justify-end p-2">
-                  <Button
-                    variant={
-                      isBrowserPanelOpen && !isPlaywrightSetupVisible
-                        ? "secondary"
-                        : "ghost"
-                    }
-                    size="sm"
-                    onClick={toggleBrowserPanel}
-                    className="text-xs"
-                    disabled={isPlaywrightSetupVisible}
-                  >
-                    <Globe className="h-3 w-3 mr-1" />
-                    Browser
-                  </Button>
-                </div>
                 {isPlaywrightSetupRequired && (
                   <PlaywrightInstallDialog
                     agentId={playwrightSetupAgentId}
@@ -1602,7 +1677,10 @@ export default function ChatPage() {
                   />
                 )}
                 <div className="flex-1 flex items-center justify-center p-4">
-                  <div className="w-full max-w-4xl">
+                  <div className="w-full max-w-4xl space-y-24">
+                    <div className="flex justify-center scale-150">
+                      <AppLogo />
+                    </div>
                     <ArchestraPromptInput
                       onSubmit={handleInitialSubmit}
                       status={
@@ -1612,6 +1690,9 @@ export default function ChatPage() {
                       }
                       selectedModel={initialModel}
                       onModelChange={handleInitialModelChange}
+                      onModelSelectorOpenChange={
+                        handleInitialModelSelectorOpenChange
+                      }
                       agentId={activeAgentId}
                       currentProvider={initialProvider}
                       textareaRef={textareaRef}

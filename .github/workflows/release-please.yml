@@ -83,15 +83,15 @@ jobs:
 
   build-and-push-platform-docker-image-to-dockerhub:
     name: Build and push platform Docker image to Docker Hub
-    # The platform Docker image references the MCP server base image via ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE.
-    # This job depends on build-and-push-mcp-server-docker-image to ensure the MCP server base image is published
-    # first. If the MCP server image build fails, this job won't run, preventing the platform image from
-    # referencing a non-existent MCP server base image tag.
+    # The platform Docker image references the MCP server base image tag via
+    # ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE env var, but does NOT use it as a FROM base image.
+    # The tag is baked as a default value at build time, so the MCP server image doesn't need to
+    # exist yet. Both images are built in parallel and the publish-github-release job gates on
+    # all artifacts being ready before un-drafting the release.
     if: needs.release-please.outputs.platform_release_created
     uses: ./.github/workflows/build-dockerhub-image.yml
     needs:
       - release-please
-      - build-and-push-mcp-server-docker-image
     permissions:
       contents: read
       id-token: write
@@ -109,12 +109,13 @@ jobs:
 
   publish-platform-helm-chart:
     name: Publish platform Helm chart
-    # Depends on platform Docker image being published first, as the Helm chart references it
+    # The Helm chart only references the version tag (not image content), so it can run
+    # in parallel with Docker image builds. The publish-github-release job ensures all
+    # artifacts are ready before the release is made visible.
     if: needs.release-please.outputs.platform_release_created
     uses: ./.github/workflows/publish-platform-helm-chart.yml
     needs:
       - release-please
-      - build-and-push-platform-docker-image-to-dockerhub
     permissions:
       contents: write
       id-token: write # Required for Workload Identity Federation
@@ -127,13 +128,13 @@ jobs:
 
   publish-github-release:
     name: Publish GitHub Release
-    # Un-drafts the GitHub release only after all artifacts (Docker image + Helm chart) are published.
-    # Depends on both jobs explicitly for safety against future reordering, even though
-    # publish-platform-helm-chart already transitively depends on the Docker image job.
+    # Un-drafts the GitHub release and triggers the website deploy only after ALL artifacts
+    # (MCP server image, platform Docker image, Helm chart) are published.
     if: needs.release-please.outputs.platform_release_created
     runs-on: blacksmith-2vcpu-ubuntu-2404
     needs:
       - release-please
+      - build-and-push-mcp-server-docker-image
       - build-and-push-platform-docker-image-to-dockerhub
       - publish-platform-helm-chart
     permissions:
@@ -153,13 +154,7 @@ jobs:
           TAG_NAME: ${{ needs.release-please.outputs.platform_tag_name }}
         run: gh release edit "$TAG_NAME" --draft=false
 
-  trigger-website-deploy:
-    name: Trigger Website Deploy
-    # Depends on the GitHub release being published, which guarantees all artifacts are ready
-    if: needs.release-please.outputs.platform_release_created
-    uses: ./.github/workflows/trigger-website-deploy.yml
-    needs:
-      - release-please
-      - publish-github-release
-    secrets:
-      WEBSITE_VERCEL_DEPLOY_HOOK_URL: ${{ secrets.WEBSITE_VERCEL_DEPLOY_HOOK_URL }}
+      - name: Trigger website deploy
+        env:
+          VERCEL_DEPLOY_HOOK_URL: ${{ secrets.WEBSITE_VERCEL_DEPLOY_HOOK_URL }}
+        run: curl -X POST "$VERCEL_DEPLOY_HOOK_URL"

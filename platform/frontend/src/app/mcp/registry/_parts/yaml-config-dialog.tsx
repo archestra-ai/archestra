@@ -15,6 +15,7 @@ import {
   DialogFooter,
   DialogForm,
   DialogHeader,
+  DialogStickyFooter,
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
@@ -212,25 +213,23 @@ export function YamlConfigContent({
             />
           ))}
 
-        {(!hideHeader || hasYamlChanged) && (
-          <DialogFooter
-            className={
-              hideHeader
-                ? "sticky bottom-[-24px] bg-background pt-4 pb-6 -mx-6 px-6 border-t mt-6"
-                : undefined
-            }
-          >
-            <Button variant="outline" onClick={handleClose} type="button">
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              disabled={updateMutation.isPending || !hasYamlChanged}
-            >
-              {updateMutation.isPending ? "Saving..." : "Save Changes"}
-            </Button>
-          </DialogFooter>
-        )}
+        {(!hideHeader || hasYamlChanged) &&
+          (() => {
+            const Footer = hideHeader ? DialogStickyFooter : DialogFooter;
+            return (
+              <Footer>
+                <Button variant="outline" onClick={handleClose} type="button">
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={updateMutation.isPending || !hasYamlChanged}
+                >
+                  {updateMutation.isPending ? "Saving..." : "Save Changes"}
+                </Button>
+              </Footer>
+            );
+          })()}
       </DialogForm>
     </>
   );

@@ -44,6 +44,7 @@ import {
   DialogFooter,
   DialogForm,
   DialogHeader,
+  DialogStickyFooter,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { InlineTag } from "@/components/ui/inline-tag";
@@ -488,7 +489,7 @@ export function ProviderSettingsApiKeys() {
                   geminiVertexAiEnabled={geminiVertexAiEnabled}
                 />
               </div>
-              <DialogFooter>
+              <DialogStickyFooter>
                 <Button
                   type="button"
                   variant="outline"
@@ -505,7 +506,7 @@ export function ProviderSettingsApiKeys() {
                   )}
                   Test & Create
                 </Button>
-              </DialogFooter>
+              </DialogStickyFooter>
             </DialogForm>
           </DialogContent>
         </Dialog>
@@ -532,7 +533,7 @@ export function ProviderSettingsApiKeys() {
                   />
                 )}
               </div>
-              <DialogFooter>
+              <DialogStickyFooter>
                 <Button
                   type="button"
                   variant="outline"
@@ -549,7 +550,7 @@ export function ProviderSettingsApiKeys() {
                   )}
                   Test & Save
                 </Button>
-              </DialogFooter>
+              </DialogStickyFooter>
             </DialogForm>
           </DialogContent>
         </Dialog>

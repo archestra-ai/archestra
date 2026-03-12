@@ -148,6 +148,13 @@ vi.mock("@/lib/chat.query", () => ({
   }),
 }));
 
+vi.mock("@/lib/organization.query", () => ({
+  useOrganization: () => ({
+    data: null,
+    isLoading: false,
+  }),
+}));
+
 // Mock for useHasPermissions - default to non-admin
 const mockUseHasPermissions = vi.fn().mockReturnValue({
   data: false,
@@ -304,7 +311,13 @@ describe("ArchestraPromptInput", () => {
       expect(screen.getByTestId("prompt-input")).toBeInTheDocument();
     });
 
-    it("should render model selector", () => {
+    it("should render model selector when user has provider settings permission", () => {
+      mockUseHasPermissions.mockReturnValue({
+        data: true,
+        isPending: false,
+        isLoading: false,
+      });
+
       render(
         <ArchestraPromptInput {...defaultProps} allowFileUploads={true} />,
       );

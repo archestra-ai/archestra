@@ -1,5 +1,5 @@
 import { ConfluenceClient } from "confluence.js";
-import logger from "@/logging";
+import type pino from "pino";
 import type {
   ConfluenceCheckpoint,
   ConfluenceConfig,
@@ -50,22 +50,23 @@ export class ConfluenceConnector extends BaseConnector {
       return { success: false, error: "Invalid Confluence configuration" };
     }
 
-    logger.debug(
+    this.log.debug(
       { baseUrl: parsed.confluenceUrl, isCloud: parsed.isCloud },
-      "[ConfluenceConnector] Testing connection",
+      "Testing connection",
     );
 
     try {
-      const client = createConfluenceClient(parsed, params.credentials);
+      const client = createConfluenceClient(
+        parsed,
+        params.credentials,
+        this.log,
+      );
       await client.space.getSpaces({ limit: 1 });
-      logger.debug("[ConfluenceConnector] Connection test successful");
+      this.log.debug("Connection test successful");
       return { success: true };
     } catch (error) {
       const message = extractErrorMessage(error);
-      logger.error(
-        { error: message },
-        "[ConfluenceConnector] Connection test failed",
-      );
+      this.log.error({ error: message }, "Connection test failed");
       return { success: false, error: `Connection failed: ${message}` };
     }
   }
@@ -84,22 +85,34 @@ export class ConfluenceConnector extends BaseConnector {
       };
       const cql = buildCql(parsed, checkpoint);
 
-      logger.debug({ cql }, "[ConfluenceConnector] Estimating total items");
+      this.log.debug({ cql }, "Estimating total items");
 
-      const client = createConfluenceClient(parsed, params.credentials);
+      const client = createConfluenceClient(
+        parsed,
+        params.credentials,
+        this.log,
+      );
 
       const result = await client.content.searchContentByCQL({
         cql,
         limit: 1,
       });
-      // The REST API returns totalSize but the SDK type doesn't include it
+
+      // Server/DC returns totalSize in the response; Cloud does not.
       // biome-ignore lint/suspicious/noExplicitAny: SDK type missing totalSize field
-      const totalSize = (result as any).totalSize as number | undefined;
+      const rawResult = result as any;
+      const totalSize = rawResult.totalSize as number | undefined;
+
+      this.log.debug(
+        { totalSize, size: rawResult.size, start: rawResult.start },
+        "Estimate response",
+      );
+
       return totalSize ?? null;
     } catch (error) {
-      logger.warn(
+      this.log.warn(
         { error: extractErrorMessage(error) },
-        "[ConfluenceConnector] Failed to estimate total items",
+        "Failed to estimate total items",
       );
       return null;
     }
@@ -122,9 +135,9 @@ export class ConfluenceConnector extends BaseConnector {
     };
     const batchSize = parsed.batchSize ?? DEFAULT_BATCH_SIZE;
     const cql = buildCql(parsed, checkpoint, params.startTime);
-    const client = createConfluenceClient(parsed, params.credentials);
+    const client = createConfluenceClient(parsed, params.credentials, this.log);
 
-    logger.debug(
+    this.log.debug(
       {
         baseUrl: parsed.confluenceUrl,
         isCloud: parsed.isCloud,
@@ -132,10 +145,11 @@ export class ConfluenceConnector extends BaseConnector {
         cql,
         checkpoint,
       },
-      "[ConfluenceConnector] Starting sync",
+      "Starting sync",
     );
 
     let cursor: string | undefined;
+    let start = 0;
     let hasMore = true;
     let batchIndex = 0;
 
@@ -143,17 +157,37 @@ export class ConfluenceConnector extends BaseConnector {
       await this.rateLimit();
 
       try {
-        logger.debug(
-          { batchIndex, cursor },
-          "[ConfluenceConnector] Fetching batch",
-        );
+        this.log.debug({ batchIndex, cursor, start }, "Fetching batch");
 
-        const searchResult = await client.content.searchContentByCQL({
-          cql,
-          cursor,
-          limit: batchSize,
-          expand: ["body.storage", "version", "space", "metadata.labels"],
-        });
+        // biome-ignore lint/suspicious/noExplicitAny: SDK response type
+        let searchResult: any;
+
+        if (parsed.isCloud) {
+          // Cloud: cursor-based pagination via SDK
+          searchResult = await client.content.searchContentByCQL({
+            cql,
+            cursor,
+            limit: batchSize,
+            expand: ["body.storage", "version", "space", "metadata.labels"],
+          });
+        } else {
+          // Server/DC: offset-based pagination — the SDK's searchContentByCQL
+          // doesn't accept a 'start' param, so use sendRequest directly.
+          searchResult = await client.sendRequest(
+            {
+              url: "/api/content/search",
+              method: "GET",
+              params: {
+                cql,
+                start,
+                limit: batchSize,
+                expand: ["body.storage", "version", "space", "metadata.labels"],
+              },
+            },
+            // biome-ignore lint/suspicious/noExplicitAny: SDK requires callback arg
+            undefined as any,
+          );
+        }
 
         const results = searchResult.results ?? [];
         const documents: ConnectorDocument[] = [];
@@ -168,34 +202,44 @@ export class ConfluenceConnector extends BaseConnector {
           );
         }
 
-        // Extract cursor from _links.next if available
-        // biome-ignore lint/suspicious/noExplicitAny: SDK links type
-        const links = (searchResult as any)._links;
-        const nextUrl: string | undefined = links?.next;
-        if (nextUrl) {
-          const cursorMatch = nextUrl.match(/cursor=([^&]+)/);
-          cursor = cursorMatch ? decodeURIComponent(cursorMatch[1]) : undefined;
+        const nextUrl: string | undefined = searchResult._links?.next;
+
+        if (parsed.isCloud) {
+          // Cloud: extract cursor from _links.next
+          if (nextUrl) {
+            const cursorMatch = nextUrl.match(/cursor=([^&]+)/);
+            cursor = cursorMatch
+              ? decodeURIComponent(cursorMatch[1])
+              : undefined;
+          } else {
+            cursor = undefined;
+          }
+          hasMore = results.length >= batchSize && !!cursor;
         } else {
-          cursor = undefined;
+          // Server/DC: increment offset by actual results count.
+          // Confluence may return fewer results than requested due to server
+          // limits, so we rely on _links.next presence rather than count.
+          start += results.length;
+          hasMore = results.length > 0 && !!nextUrl;
         }
-        hasMore = results.length >= batchSize && !!cursor;
 
         const lastPage = results[results.length - 1];
         const rawModifiedAt: string | undefined = lastPage?.version?.when;
 
-        logger.debug(
+        this.log.debug(
           {
             batchIndex,
             pageCount: results.length,
             documentCount: documents.length,
             hasMore,
           },
-          "[ConfluenceConnector] Batch fetched",
+          "Batch fetched",
         );
 
         batchIndex++;
         yield {
           documents,
+          failures: this.flushFailures(),
           checkpoint: buildCheckpoint({
             type: "confluence",
             itemUpdatedAt: rawModifiedAt,
@@ -208,9 +252,9 @@ export class ConfluenceConnector extends BaseConnector {
           hasMore,
         };
       } catch (error) {
-        logger.error(
+        this.log.error(
           { batchIndex, error: extractErrorMessage(error) },
-          "[ConfluenceConnector] Batch fetch failed",
+          "Batch fetch failed",
         );
         throw error;
       }
@@ -223,6 +267,7 @@ export class ConfluenceConnector extends BaseConnector {
 function createConfluenceClient(
   config: ConfluenceConfig,
   credentials: ConnectorCredentials,
+  log: pino.Logger,
 ) {
   const host = config.confluenceUrl.replace(/\/+$/, "");
   return new ConfluenceClient({
@@ -232,6 +277,33 @@ function createConfluenceClient(
       ? { basic: { email: credentials.email, apiToken: credentials.apiToken } }
       : { oauth2: { accessToken: credentials.apiToken } },
     apiPrefix: config.isCloud ? "/wiki/rest/" : "/rest/",
+    middlewares: {
+      onError: (error: unknown) => {
+        // biome-ignore lint/suspicious/noExplicitAny: Axios error shape
+        const err = error as any;
+        log.debug(
+          {
+            status: err?.response?.status,
+            method: err?.config?.method?.toUpperCase(),
+            url: err?.config?.url,
+            error: err?.message ?? String(error),
+          },
+          "HTTP error",
+        );
+      },
+      onResponse: (response: unknown) => {
+        // biome-ignore lint/suspicious/noExplicitAny: Axios response shape
+        const res = response as any;
+        log.debug(
+          {
+            status: res?.status,
+            method: res?.config?.method?.toUpperCase(),
+            url: res?.config?.url,
+          },
+          "HTTP response",
+        );
+      },
+    },
   });
 }
 

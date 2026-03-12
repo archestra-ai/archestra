@@ -5,7 +5,7 @@ import {
   MCP_SERVER_TOOL_NAME_SEPARATOR,
   parseFullToolName,
   slugify,
-  TOOL_QUERY_KNOWLEDGE_BASE_FULL_NAME,
+  TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
 } from "@shared";
 import {
   and,
@@ -40,6 +40,7 @@ import type {
   ToolWithAssignments,
   UpdateTool,
 } from "@/types";
+import AgentConnectorAssignmentModel from "./agent-connector-assignment";
 import AgentTeamModel from "./agent-team";
 import AgentToolModel from "./agent-tool";
 import McpServerModel from "./mcp-server";
@@ -375,10 +376,7 @@ class ToolModel {
    * All tools are linked via the agent_tools junction table.
    */
   static async getToolsByAgent(agentId: string): Promise<Tool[]> {
-    const [assignedToolIds, hasKnowledgeBase] = await Promise.all([
-      AgentToolModel.findToolIdsByAgent(agentId),
-      ToolModel.getAgentHasKnowledgeBase(agentId),
-    ]);
+    const assignedToolIds = await AgentToolModel.findToolIdsByAgent(agentId);
 
     if (assignedToolIds.length === 0) {
       return [];
@@ -387,10 +385,16 @@ class ToolModel {
     const tools = await db
       .select()
       .from(schema.toolsTable)
-      .where(inArray(schema.toolsTable.id, assignedToolIds))
+      .where(
+        and(
+          inArray(schema.toolsTable.id, assignedToolIds),
+          // Always hide query_knowledge_sources from UI — it's auto-injected behind the scenes
+          ne(schema.toolsTable.name, TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME),
+        ),
+      )
       .orderBy(desc(schema.toolsTable.createdAt));
 
-    return ToolModel.filterUnavailableTools(tools, hasKnowledgeBase);
+    return tools;
   }
 
   /**
@@ -402,13 +406,13 @@ class ToolModel {
    * explicitly assigned like any other MCP server tools.
    */
   static async getMcpToolsByAgent(agentId: string): Promise<Tool[]> {
-    // Get tool IDs assigned via junction table (MCP tools) and agent's KB assignment
-    const [assignedToolIds, hasKnowledgeBase] = await Promise.all([
+    // Get tool IDs assigned via junction table (MCP tools) and agent's knowledge sources
+    const [assignedToolIds, hasKnowledgeSources] = await Promise.all([
       AgentToolModel.findToolIdsByAgent(agentId),
-      ToolModel.getAgentHasKnowledgeBase(agentId),
+      ToolModel.getAgentHasKnowledgeSources(agentId),
     ]);
 
-    if (assignedToolIds.length === 0 && !hasKnowledgeBase) {
+    if (assignedToolIds.length === 0 && !hasKnowledgeSources) {
       return [];
     }
 
@@ -433,15 +437,15 @@ class ToolModel {
             .orderBy(desc(schema.toolsTable.createdAt))
         : [];
 
-    // Auto-inject query_knowledge_base when the agent has a knowledge base assigned,
-    // regardless of whether the tool was manually assigned
-    if (hasKnowledgeBase) {
+    // Auto-inject query_knowledge_sources when the agent has knowledge sources
+    // (knowledge bases or directly-assigned connectors)
+    if (hasKnowledgeSources) {
       const hasKbTool = tools.some(
-        (t) => t.name === TOOL_QUERY_KNOWLEDGE_BASE_FULL_NAME,
+        (t) => t.name === TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
       );
       if (!hasKbTool) {
         const kbTool = await ToolModel.findByName(
-          TOOL_QUERY_KNOWLEDGE_BASE_FULL_NAME,
+          TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
         );
         if (kbTool) {
           tools.push(kbTool as (typeof tools)[number]);
@@ -449,7 +453,7 @@ class ToolModel {
       }
     }
 
-    return ToolModel.filterUnavailableTools(tools, hasKnowledgeBase);
+    return ToolModel.filterUnavailableTools(tools, hasKnowledgeSources);
   }
 
   /**
@@ -620,7 +624,7 @@ class ToolModel {
 
     const existingToolsByName = new Map(existingTools.map((t) => [t.name, t]));
 
-    // Prepare tools to insert (only those that don't exist)
+    // Prepare tools to insert (only those that don't exist) and tools to update
     const toolsToInsert: InsertTool[] = [];
 
     for (const archestraTool of archestraTools) {
@@ -633,6 +637,23 @@ class ToolModel {
           catalogId,
           agentId: null,
         });
+      } else {
+        // Update description and parameters if they changed
+        const newDescription = archestraTool.description || null;
+        const descChanged = existingTool.description !== newDescription;
+        const paramsChanged =
+          JSON.stringify(existingTool.parameters) !==
+          JSON.stringify(archestraTool.inputSchema);
+
+        if (descChanged || paramsChanged) {
+          await db
+            .update(schema.toolsTable)
+            .set({
+              description: newDescription,
+              parameters: archestraTool.inputSchema,
+            })
+            .where(eq(schema.toolsTable.id, existingTool.id));
+        }
       }
     }
 
@@ -668,9 +689,9 @@ class ToolModel {
    * Default tools are those listed in {@link DEFAULT_ARCHESTRA_TOOL_NAMES}:
    * - artifact_write: for artifact management
    * - todo_write: for task tracking
-   * - query_knowledge_base: for querying the knowledge base
+   * - query_knowledge_sources: for querying the knowledge base
    *
-   * All default tools are always assigned. The query_knowledge_base tool
+   * All default tools are always assigned. The query_knowledge_sources tool
    * is filtered out at query time if the agent has no knowledge base assigned.
    *
    * Only tools that have already been seeded (via {@link seedArchestraTools})
@@ -807,7 +828,12 @@ class ToolModel {
         createdAt: schema.toolsTable.createdAt,
       })
       .from(schema.toolsTable)
-      .where(eq(schema.toolsTable.catalogId, catalogId))
+      .where(
+        and(
+          eq(schema.toolsTable.catalogId, catalogId),
+          ne(schema.toolsTable.name, TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME),
+        ),
+      )
       .orderBy(desc(schema.toolsTable.createdAt));
 
     const toolIds = allTools.map((tool) => tool.id);
@@ -1552,9 +1578,9 @@ class ToolModel {
     }
 
     // Hide knowledge base tool in global tool listings (no agent context).
-    // The tool is only visible when queried per-agent and the agent has a KG assigned.
+    // The tool is only visible when queried per-agent and the agent has a knowledge base assigned.
     toolWhereConditions.push(
-      ne(schema.toolsTable.name, TOOL_QUERY_KNOWLEDGE_BASE_FULL_NAME),
+      ne(schema.toolsTable.name, TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME),
     );
 
     // Apply access control filtering for users that are not agent admins
@@ -1804,33 +1830,39 @@ class ToolModel {
   // =============================================================================
 
   /**
-   * Check if an agent has any knowledge bases assigned.
+   * Check if an agent has any knowledge sources — either knowledge bases or
+   * directly-assigned connectors.
    */
-  private static async getAgentHasKnowledgeBase(
+  private static async getAgentHasKnowledgeSources(
     agentId: string,
   ): Promise<boolean> {
-    const rows = await db
-      .select({
-        knowledgeBaseId: schema.agentKnowledgeBasesTable.knowledgeBaseId,
-      })
-      .from(schema.agentKnowledgeBasesTable)
-      .where(eq(schema.agentKnowledgeBasesTable.agentId, agentId))
-      .limit(1);
-    return rows.length > 0;
+    const [kbRows, connectorIds] = await Promise.all([
+      db
+        .select({
+          knowledgeBaseId: schema.agentKnowledgeBasesTable.knowledgeBaseId,
+        })
+        .from(schema.agentKnowledgeBasesTable)
+        .where(eq(schema.agentKnowledgeBasesTable.agentId, agentId))
+        .limit(1),
+      AgentConnectorAssignmentModel.getConnectorIds(agentId),
+    ]);
+    return kbRows.length > 0 || connectorIds.length > 0;
   }
 
   /**
    * Filter out tools that should not be visible based on current configuration.
-   * Filters out the query_knowledge_base tool when the agent has no knowledge base assigned.
+   * Filters out the query_knowledge_sources tool when the agent has no knowledge sources.
    */
   private static filterUnavailableTools<T extends { name: string }>(
     tools: T[],
-    hasKnowledgeBase: boolean,
+    hasKnowledgeSources: boolean,
   ): T[] {
-    if (hasKnowledgeBase) {
+    if (hasKnowledgeSources) {
       return tools;
     }
-    return tools.filter((t) => t.name !== TOOL_QUERY_KNOWLEDGE_BASE_FULL_NAME);
+    return tools.filter(
+      (t) => t.name !== TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
+    );
   }
 }
 

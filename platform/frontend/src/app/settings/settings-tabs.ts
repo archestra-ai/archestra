@@ -12,11 +12,11 @@ export function useSettingsTabs() {
   return [
     { label: "Your Account", href: "/settings/account" },
     { label: "Authentication", href: "/settings/auth" },
-    ...(permissionMap?.["/settings/dual-llm"]
-      ? [{ label: "Dual LLM", href: "/settings/dual-llm" }]
-      : []),
     ...(permissionMap?.["/settings/security"]
       ? [{ label: "Security", href: "/settings/security" }]
+      : []),
+    ...(permissionMap?.["/settings/agents"]
+      ? [{ label: "Agents", href: "/settings/agents" }]
       : []),
     ...(permissionMap?.["/settings/llm"]
       ? [{ label: "LLM", href: "/settings/llm" }]
@@ -40,8 +40,11 @@ export function useSettingsTabs() {
     ...(secretsType?.type === "Vault" && permissionMap?.["/settings/secrets"]
       ? [{ label: "Secrets", href: "/settings/secrets" }]
       : []),
-    ...(permissionMap?.["/settings/appearance"]
-      ? [{ label: "Appearance", href: "/settings/appearance" }]
+    ...(permissionMap?.["/settings/organization"]
+      ? [{ label: "Organization", href: "/settings/organization" }]
+      : []),
+    ...(permissionMap?.["/settings/dual-llm"]
+      ? [{ label: "Dual LLM", href: "/settings/dual-llm" }]
       : []),
   ];
 }

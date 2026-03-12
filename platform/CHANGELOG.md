@@ -1,5 +1,67 @@
 # Changelog
 
+## [1.1.7](https://github.com/archestra-ai/archestra/compare/platform-v1.1.6...platform-v1.1.7) (2026-03-11)
+
+
+### Features
+
+* add /settings/agents page, connector schedule options, fix N+1 & review feedback ([#3275](https://github.com/archestra-ai/archestra/issues/3275)) ([7dbf212](https://github.com/archestra-ai/archestra/commit/7dbf212677350305a79451636bca035a1aaeb34e))
+* configurable vector embeddings dimensionality ([#3282](https://github.com/archestra-ai/archestra/issues/3282)) ([b0a3b1f](https://github.com/archestra-ai/archestra/commit/b0a3b1fab9ba8cc5e816fcc88f56408aded8727b))
+* enhance archestra MCP tools - create/edit/list agents, edit MCP, catalog IDs ([#3283](https://github.com/archestra-ai/archestra/issues/3283)) ([979ac8e](https://github.com/archestra-ai/archestra/commit/979ac8e511bd324bb140c45901bdb2cfe002fff1))
+
+
+### Bug Fixes
+
+* fix showing search icon on registry ([#3272](https://github.com/archestra-ai/archestra/issues/3272)) ([280896f](https://github.com/archestra-ai/archestra/commit/280896fef84213e70ac804a3dece6d43f4299dfd))
+* inject `query_knowledge_sources` for direct connector assignments ([#3277](https://github.com/archestra-ai/archestra/issues/3277)) ([183e6d9](https://github.com/archestra-ai/archestra/commit/183e6d9710d6c47c2051872afde2c318c6da4542))
+
+
+### Miscellaneous Chores
+
+* change sidebarCollapsed perm to minimalisticView ([#3281](https://github.com/archestra-ai/archestra/issues/3281)) ([5e58c42](https://github.com/archestra-ai/archestra/commit/5e58c42e2af24c9204d55e2c97788b3161bdd3ae))
+
+## [1.1.6](https://github.com/archestra-ai/archestra/compare/platform-v1.1.5...platform-v1.1.6) (2026-03-11)
+
+
+### Bug Fixes
+
+* hide Browser button on initial chat, collapsible sidebar with tooltips ([#3273](https://github.com/archestra-ai/archestra/issues/3273)) ([76a326d](https://github.com/archestra-ai/archestra/commit/76a326d56462a1412636357f10b578a9e05501e6))
+
+
+### Miscellaneous Chores
+
+* adjust test to sidebarCollapsed perm ([#3278](https://github.com/archestra-ai/archestra/issues/3278)) ([e7cbf34](https://github.com/archestra-ai/archestra/commit/e7cbf348702954dc820fb9939fbad10363fd010c))
+
+## [1.1.5](https://github.com/archestra-ai/archestra/compare/platform-v1.1.4...platform-v1.1.5) (2026-03-11)
+
+
+### Features
+
+* add default model setting for agents and new chats ([#3267](https://github.com/archestra-ai/archestra/issues/3267)) ([53c99d3](https://github.com/archestra-ai/archestra/commit/53c99d3fed4d3b149a4748ff20b11d19f1a3010d))
+* rework chat agent selector/editor ([#3261](https://github.com/archestra-ai/archestra/issues/3261)) ([b67b741](https://github.com/archestra-ai/archestra/commit/b67b7419a8ef11b650cf82cabb6d74c3b2c9676e))
+
+
+### Bug Fixes
+
+* chat-localstorage e2e test model trigger assertion ([#3270](https://github.com/archestra-ai/archestra/issues/3270)) ([8b4efbb](https://github.com/archestra-ai/archestra/commit/8b4efbb622d87d0a999ff07a857eab94013b7ccd))
+* support envFrom and preserve user-added env in self-hosted MCP server pods ([#3230](https://github.com/archestra-ai/archestra/issues/3230)) ([0ea9fce](https://github.com/archestra-ai/archestra/commit/0ea9fcedd0ef4f4012c86171004e34467f5f8aba))
+
+
+### Miscellaneous Chores
+
+* address PR [#3262](https://github.com/archestra-ai/archestra/issues/3262) review feedback ([#3266](https://github.com/archestra-ai/archestra/issues/3266)) ([4e2f175](https://github.com/archestra-ai/archestra/commit/4e2f1759fd9c2d31604e894f912367c000c5e75f))
+* **deps:** bump hono from 4.12.5 to 4.12.7 in /platform/mcp_server_docker_image ([#3263](https://github.com/archestra-ai/archestra/issues/3263)) ([51c4e8e](https://github.com/archestra-ai/archestra/commit/51c4e8ef5a4693cdb1f5bc4fe13391e65dd4ed37))
+* fix self-hosted confluence pagination ([#3271](https://github.com/archestra-ai/archestra/issues/3271)) ([c63708c](https://github.com/archestra-ai/archestra/commit/c63708c4a203052925c5999d45d7c856835665e9))
+* sticky footer dialogs, knowledge sources tool improvements, chat fixes ([#3262](https://github.com/archestra-ai/archestra/issues/3262)) ([527d16f](https://github.com/archestra-ai/archestra/commit/527d16f3b5c91ba2963ab5bac57959316ad8a948))
+
+## [1.1.4](https://github.com/archestra-ai/archestra/compare/platform-v1.1.3...platform-v1.1.4) (2026-03-10)
+
+
+### Miscellaneous Chores
+
+* fix jira conn ([#3258](https://github.com/archestra-ai/archestra/issues/3258)) ([4a58742](https://github.com/archestra-ai/archestra/commit/4a587425ff8f65aa19d6f0ebdd4b30462b113cee))
+* include runId in all knowledge-connector task logs ([#3257](https://github.com/archestra-ai/archestra/issues/3257)) ([9c27ee2](https://github.com/archestra-ai/archestra/commit/9c27ee25877672918aa50f7bb9fa6c64c5ebe982))
+
 ## [1.1.3](https://github.com/archestra-ai/archestra/compare/platform-v1.1.2...platform-v1.1.3) (2026-03-10)
 
 

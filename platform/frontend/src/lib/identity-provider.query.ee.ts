@@ -22,7 +22,7 @@ export function usePublicIdentityProviders() {
     queryKey: identityProviderKeys.public,
     queryFn: async () => {
       const { data } = await archestraApiSdk.getPublicIdentityProviders();
-      return data;
+      return data ?? [];
     },
     retry: false, // Don't retry on auth pages to avoid repeated 401 errors
     throwOnError: false, // Don't throw errors to prevent crashes
@@ -40,7 +40,7 @@ export function useIdentityProviders() {
     queryKey: identityProviderKeys.all,
     queryFn: async () => {
       const { data } = await archestraApiSdk.getIdentityProviders();
-      return data;
+      return data ?? [];
     },
     retry: false,
     throwOnError: false,
@@ -58,7 +58,7 @@ export function useIdentityProvider(id: string) {
       const { data } = await archestraApiSdk.getIdentityProvider({
         path: { id },
       });
-      return data;
+      return data ?? null;
     },
     retry: false,
     throwOnError: false,

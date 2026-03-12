@@ -1,16 +1,17 @@
 "use client";
 
 import { type archestraApiTypes, isBuiltInCatalogId } from "@shared";
+import { useQueries } from "@tanstack/react-query";
 import {
   ArrowLeft,
   Bot,
   Check,
+  Database,
   ExternalLink,
   Info,
   Loader2,
   Plus,
   Search,
-  User,
   XIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -20,6 +21,7 @@ import { NoAuthInstallDialog } from "@/app/mcp/registry/_parts/no-auth-install-d
 import { RemoteServerInstallDialog } from "@/app/mcp/registry/_parts/remote-server-install-dialog";
 import { AgentBadge } from "@/components/agent-badge";
 import { AgentIcon } from "@/components/agent-icon";
+import { AgentIconPicker } from "@/components/agent-icon-picker";
 import { McpCatalogIcon, ToolChecklist } from "@/components/agent-tools-editor";
 import { PromptInputButton } from "@/components/ai-elements/prompt-input";
 import { OAuthConfirmationDialog } from "@/components/oauth-confirmation-dialog";
@@ -32,18 +34,26 @@ import {
   DialogClose,
   DialogContent,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { OverlappedIcons } from "@/components/ui/overlapped-icons";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useInternalAgents, useUpdateProfile } from "@/lib/agent.query";
+import {
+  useCreateProfile,
+  useInternalAgents,
+  useUpdateProfile,
+} from "@/lib/agent.query";
 import { useInvalidateToolAssignmentQueries } from "@/lib/agent-tools.hook";
 import {
   useAgentDelegations,
@@ -57,24 +67,20 @@ import { useHasPermissions } from "@/lib/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import { useConnectors } from "@/lib/connector.query";
 import {
+  fetchCatalogTools,
   useCatalogTools,
   useInternalMcpCatalog,
 } from "@/lib/internal-mcp-catalog.query";
 import { useKnowledgeBases } from "@/lib/knowledge-base.query";
-import { useMcpInstallOrchestrator } from "@/lib/mcp-install-orchestrator.hook";
+import {
+  type McpInstallOrchestrator,
+  useMcpInstallOrchestrator,
+} from "@/lib/mcp-install-orchestrator.hook";
 import {
   useMcpServers,
   useMcpServersGroupedByCatalog,
 } from "@/lib/mcp-server.query";
 import { cn } from "@/lib/utils";
-
-type ScopeFilter = "my" | "others" | "team" | "org";
-type DialogView =
-  | "settings"
-  | "change"
-  | "add-tool"
-  | "configure-tool"
-  | "add-delegation";
 
 type CatalogItem =
   archestraApiTypes.GetInternalMcpCatalogResponses["200"][number];
@@ -90,28 +96,33 @@ export function InitialAgentSelector({
 }: InitialAgentSelectorProps) {
   const { data: allAgents = [] } = useInternalAgents();
   const { data: session } = authClient.useSession();
+  const userId = session?.user?.id;
+  const { data: isAgentAdmin } = useHasPermissions({ agent: ["admin"] });
+  const createProfile = useCreateProfile();
   const [open, setOpen] = useState(false);
-  const [view, setView] = useState<DialogView>("settings");
   const [search, setSearch] = useState("");
-  const [scopeFilters, setScopeFilters] = useState<Set<ScopeFilter>>(
-    () => new Set<ScopeFilter>(["my", "team", "org"]),
-  );
+  const [editingAgentId, setEditingAgentId] = useState<string | null>(null);
+  const [dialogView, setDialogView] = useState<
+    | "settings"
+    | "add-tool"
+    | "configure-tool"
+    | "add-delegation"
+    | "edit-knowledge-sources"
+  >("settings");
   const [selectedCatalog, setSelectedCatalog] = useState<CatalogItem | null>(
     null,
   );
-
-  const userId = session?.user?.id;
+  const [configureToolFrom, setConfigureToolFrom] = useState<
+    "settings" | "add-tool"
+  >("settings");
+  const installer = useMcpInstallOrchestrator();
 
   const filteredAgents = useMemo(() => {
     let result = allAgents.filter((a) => {
-      const scope = (a as unknown as Record<string, unknown>).scope as string;
-      const authorId = (a as unknown as Record<string, unknown>)
-        .authorId as string;
-      if (scope === "personal") {
-        if (authorId === userId) return scopeFilters.has("my");
-        return scopeFilters.has("others");
+      if (a.scope === "personal") {
+        return a.authorId === userId;
       }
-      return scopeFilters.has(scope as ScopeFilter);
+      return true;
     });
     if (search) {
       const lower = search.toLowerCase();
@@ -123,11 +134,11 @@ export function InitialAgentSelector({
     }
     const scopeOrder: Record<string, number> = { personal: 0, team: 1, org: 2 };
     return [...result].sort((a, b) => {
-      const sa = (a as unknown as Record<string, unknown>).scope as string;
-      const sb = (b as unknown as Record<string, unknown>).scope as string;
-      return (scopeOrder[sa] ?? 3) - (scopeOrder[sb] ?? 3);
+      if (a.id === currentAgentId) return -1;
+      if (b.id === currentAgentId) return 1;
+      return (scopeOrder[a.scope] ?? 3) - (scopeOrder[b.scope] ?? 3);
     });
-  }, [allAgents, search, scopeFilters, userId]);
+  }, [allAgents, search, currentAgentId, userId]);
 
   const currentAgent = useMemo(
     () =>
@@ -135,12 +146,31 @@ export function InitialAgentSelector({
     [allAgents, currentAgentId],
   );
 
+  const canEditCurrentAgent = useMemo(() => {
+    if (!currentAgent) return false;
+    if (isAgentAdmin) return true;
+    const authorId = (currentAgent as unknown as Record<string, unknown>)
+      .authorId as string;
+    return authorId === userId;
+  }, [currentAgent, isAgentAdmin, userId]);
+
   const effectiveAgentId = currentAgent?.id ?? currentAgentId;
-  const { data: catalogItems = [] } = useInternalMcpCatalog();
+  const { data: canReadMcpRegistry } = useHasPermissions({
+    mcpRegistry: ["read"],
+  });
+  const { data: canReadToolPolicy } = useHasPermissions({
+    toolPolicy: ["read"],
+  });
+  const { data: canReadKnowledgeBase } = useHasPermissions({
+    knowledgeBase: ["read"],
+  });
+  const { data: catalogItems = [] } = useInternalMcpCatalog({
+    enabled: !!canReadMcpRegistry,
+  });
   const { data: assignedToolsData } = useAllProfileTools({
     filters: { agentId: effectiveAgentId ?? undefined },
     skipPagination: true,
-    enabled: !!effectiveAgentId,
+    enabled: !!effectiveAgentId && !!canReadToolPolicy,
   });
 
   const assignedCatalogs = useMemo(() => {
@@ -160,8 +190,12 @@ export function InitialAgentSelector({
   }, [allAgents, triggerDelegations]);
 
   // Knowledge base data for connector icons in avatar group
-  const { data: knowledgeBasesData } = useKnowledgeBases();
-  const { data: connectorsData } = useConnectors();
+  const { data: knowledgeBasesData } = useKnowledgeBases({
+    enabled: !!canReadKnowledgeBase,
+  });
+  const { data: connectorsData } = useConnectors({
+    enabled: !!canReadKnowledgeBase,
+  });
 
   const allKnowledgeBases = knowledgeBasesData?.data ?? [];
   const allConnectors = connectorsData?.data ?? [];
@@ -190,200 +224,319 @@ export function InitialAgentSelector({
 
   const handleAgentSelect = (agentId: string) => {
     onAgentChange(agentId);
-    setView("settings");
+    setOpen(false);
     setSearch("");
-    setScopeFilters(new Set(["my", "team", "org"]));
   };
 
-  const resetToSettings = useCallback(() => {
-    setView("settings");
-    setSearch("");
-    setScopeFilters(new Set(["my", "team", "org"]));
+  const editingAgent = useMemo(
+    () => allAgents.find((a) => a.id === editingAgentId) ?? null,
+    [allAgents, editingAgentId],
+  );
+
+  const editingKbs = useMemo(() => {
+    const ids = editingAgent?.knowledgeBaseIds ?? [];
+    return allKnowledgeBases.filter((k) => ids.includes(k.id));
+  }, [allKnowledgeBases, editingAgent?.knowledgeBaseIds]);
+
+  const editingConnectors = useMemo(() => {
+    const ids = editingAgent?.connectorIds ?? [];
+    return allConnectors.filter((c) => ids.includes(c.id));
+  }, [allConnectors, editingAgent?.connectorIds]);
+
+  const closeDialog = () => {
+    setEditingAgentId(null);
+    setDialogView("settings");
     setSelectedCatalog(null);
-  }, []);
-
-  const handleOpenChange = (newOpen: boolean) => {
-    setOpen(newOpen);
-    if (!newOpen) resetToSettings();
-  };
-
-  const handleSelectCatalog = (catalog: CatalogItem) => {
-    setSelectedCatalog(catalog);
-    setView("configure-tool");
   };
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogTrigger asChild>
-        <PromptInputButton
-          role="combobox"
-          aria-expanded={open}
-          data-agent-selector
-          className="max-w-[300px] min-w-0"
-        >
-          <AgentIcon
-            icon={
-              (currentAgent as unknown as Record<string, unknown>)?.icon as
-                | string
-                | null
-            }
-            size={16}
-          />
-          <span className="truncate flex-1 text-left">
-            {currentAgent?.name ?? "Select agent"}
-          </span>
-          <ToolServerAvatarGroup
-            catalogs={assignedCatalogs}
-            subagents={triggerSubagents}
-            connectorTypes={agentConnectorTypes}
-            showAddButton
-          />
-        </PromptInputButton>
-      </DialogTrigger>
-      <DialogContent
-        className="max-w-3xl h-[600px] p-0 gap-0 overflow-hidden flex flex-col"
-        onCloseAutoFocus={(e) => e.preventDefault()}
-        showCloseButton={false}
+    <>
+      <Popover
+        open={open}
+        onOpenChange={(newOpen) => {
+          setOpen(newOpen);
+          if (!newOpen) setSearch("");
+        }}
       >
-        <DialogTitle className="sr-only">
-          {view === "settings" && "Agent Settings"}
-          {view === "change" && "Select Agent"}
-          {view === "add-tool" && "Add Tools"}
-          {view === "configure-tool" && "Configure Tools"}
-          {view === "add-delegation" && "Call an Agent"}
-        </DialogTitle>
-
-        {view === "settings" && (
-          <AgentSettingsView
-            agent={currentAgent}
-            onChangeAgent={() => setView("change")}
-            onAddTool={() => setView("add-tool")}
-            onEditTool={handleSelectCatalog}
-            matchedKnowledgeBases={matchedKbs}
-            matchedConnectors={matchedConnectors}
-          />
-        )}
-
-        {view === "change" && (
-          <div className="flex flex-col h-full">
-            <DialogHeader
-              title="Select Agent"
-              onBack={resetToSettings}
-              extra={
-                <div className="flex items-center gap-1">
-                  {(
-                    [
-                      { value: "my", label: "My Personal" },
-                      { value: "team", label: "Team" },
-                      { value: "org", label: "Organization" },
-                      { value: "others", label: "Others' Personal" },
-                    ] as const
-                  ).map((option) => (
-                    <Button
-                      key={option.value}
-                      variant={
-                        scopeFilters.has(option.value) ? "secondary" : "ghost"
-                      }
-                      size="sm"
-                      className="text-xs h-7 px-2.5"
-                      onClick={() => {
-                        setScopeFilters((prev) => {
-                          const next = new Set(prev);
-                          if (next.has(option.value)) {
-                            next.delete(option.value);
-                          } else {
-                            next.add(option.value);
-                          }
-                          return next;
-                        });
-                      }}
-                    >
-                      {option.label}
-                    </Button>
-                  ))}
-                </div>
+        <PopoverTrigger asChild>
+          <PromptInputButton
+            role="combobox"
+            aria-expanded={open}
+            data-agent-selector
+            className="max-w-[300px] min-w-0"
+          >
+            <AgentIcon
+              icon={
+                (currentAgent as unknown as Record<string, unknown>)?.icon as
+                  | string
+                  | null
               }
+              size={16}
             />
-            <div className="px-4 pt-4 shrink-0">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  placeholder="Search agents..."
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  className="pl-9"
-                  autoFocus
-                />
-              </div>
-            </div>
-            <div className="px-4 pt-4 pb-4 flex-1 min-h-0 overflow-y-auto">
-              {filteredAgents.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-8">
-                  No agents found.
-                </p>
-              ) : (
-                <div className="grid grid-cols-3 gap-3">
-                  {filteredAgents.map((agent) => (
-                    <AgentCard
-                      key={agent.id}
-                      agent={agent}
-                      isSelected={currentAgentId === agent.id}
-                      onSelect={() => handleAgentSelect(agent.id)}
-                      currentUserId={userId}
-                    />
-                  ))}
-                  <a
-                    href="/agents?create=true"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex h-full min-h-[120px] flex-col items-center justify-center gap-2 rounded-lg border border-dashed p-4 text-center transition-colors hover:bg-accent cursor-pointer text-muted-foreground"
-                  >
-                    <ExternalLink className="size-5" />
-                    <span className="text-xs font-medium">Create Agent</span>
-                  </a>
-                </div>
-              )}
+            <span className="truncate flex-1 text-left">
+              {currentAgent?.name ?? "Select agent"}
+            </span>
+            <ToolServerAvatarGroup
+              catalogs={assignedCatalogs}
+              subagents={triggerSubagents}
+              connectorTypes={agentConnectorTypes}
+              showAddButton={canEditCurrentAgent}
+              onAdd={() => {
+                if (currentAgentId) {
+                  setEditingAgentId(currentAgentId);
+                  setDialogView("add-tool");
+                }
+              }}
+            />
+          </PromptInputButton>
+        </PopoverTrigger>
+        <PopoverContent
+          side="bottom"
+          align="start"
+          sideOffset={8}
+          className="w-64 p-0 rounded-xl"
+        >
+          <div className="p-2">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+              <Input
+                placeholder="Search..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="h-8 pl-8 text-sm rounded-lg border-0 bg-muted/50 focus-visible:ring-1"
+                autoFocus
+              />
             </div>
           </div>
-        )}
+          <div className="max-h-[300px] overflow-y-auto px-1.5 pb-1.5">
+            {filteredAgents.length === 0 ? (
+              <div className="py-6 text-center text-xs text-muted-foreground">
+                No agents found
+              </div>
+            ) : (
+              filteredAgents.map((agent) => {
+                const isSelected = currentAgentId === agent.id;
+                const authorId = (agent as unknown as Record<string, unknown>)
+                  .authorId as string;
+                const canEdit = isAgentAdmin || authorId === userId;
+                return (
+                  <div
+                    key={agent.id}
+                    className={cn(
+                      "group flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 transition-colors hover:bg-accent",
+                      isSelected && "bg-accent",
+                    )}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => handleAgentSelect(agent.id)}
+                      className="flex flex-1 items-center gap-2.5 text-left cursor-pointer min-w-0"
+                    >
+                      <div
+                        className={cn(
+                          "flex h-7 w-7 shrink-0 items-center justify-center rounded-md",
+                          isSelected
+                            ? "bg-primary/10 ring-1 ring-primary/20"
+                            : "bg-muted",
+                        )}
+                      >
+                        <AgentIcon
+                          icon={
+                            (agent as unknown as Record<string, unknown>)
+                              .icon as string | null
+                          }
+                          size={14}
+                        />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-medium truncate">
+                          {agent.name}
+                        </div>
+                        {agent.description && (
+                          <div className="text-[11px] text-muted-foreground truncate">
+                            {agent.description}
+                          </div>
+                        )}
+                      </div>
+                      {isSelected && (
+                        <Check className="h-3.5 w-3.5 shrink-0 text-primary" />
+                      )}
+                    </button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 px-1.5 text-[11px] hidden group-hover:flex shrink-0"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (canEdit) {
+                          setOpen(false);
+                          setEditingAgentId(agent.id);
+                        } else {
+                          const agentData = agent as unknown as Record<
+                            string,
+                            unknown
+                          >;
+                          createProfile.mutate(
+                            {
+                              name: `Copy ${agent.name}`,
+                              scope: "personal",
+                              agentType: "agent",
+                              description: agent.description,
+                              systemPrompt:
+                                (agentData.systemPrompt as string) ?? undefined,
+                              icon: (agentData.icon as string) ?? undefined,
+                            },
+                            {
+                              onSuccess: (newAgent) => {
+                                if (newAgent?.id) {
+                                  onAgentChange(newAgent.id);
+                                  setOpen(false);
+                                  setEditingAgentId(newAgent.id);
+                                }
+                              },
+                            },
+                          );
+                        }
+                      }}
+                    >
+                      {canEdit ? "Edit" : "Clone"}
+                    </Button>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </PopoverContent>
+      </Popover>
 
-        {view === "add-tool" && currentAgent && (
-          <AddToolView
-            agentId={currentAgent.id}
-            onBack={resetToSettings}
-            onSelectCatalog={handleSelectCatalog}
-            onAddDelegation={() => setView("add-delegation")}
-          />
-        )}
+      <Dialog
+        open={!!editingAgentId}
+        onOpenChange={(isOpen) => {
+          if (!isOpen) closeDialog();
+        }}
+      >
+        <DialogContent
+          className="max-w-3xl h-[600px] p-0 gap-0 overflow-hidden flex flex-col"
+          onCloseAutoFocus={(e) => e.preventDefault()}
+          showCloseButton={false}
+        >
+          <DialogTitle className="sr-only">Agent Settings</DialogTitle>
 
-        {view === "add-delegation" && currentAgent && (
-          <AddDelegationView
-            agentId={currentAgent.id}
-            onBack={() => setView("add-tool")}
-            onDone={resetToSettings}
-          />
-        )}
+          {dialogView === "settings" && (
+            <AgentSettingsView
+              agent={editingAgent}
+              onAddTool={() => setDialogView("add-tool")}
+              onEditTool={(catalog) => {
+                setSelectedCatalog(catalog);
+                setConfigureToolFrom("settings");
+                setDialogView("configure-tool");
+              }}
+              onEditKnowledgeSources={() =>
+                setDialogView("edit-knowledge-sources")
+              }
+              matchedKnowledgeBases={editingKbs}
+              matchedConnectors={editingConnectors}
+            />
+          )}
 
-        {view === "configure-tool" && currentAgent && selectedCatalog && (
-          <ConfigureToolView
-            agentId={currentAgent.id}
-            catalog={selectedCatalog}
-            onBack={() => setView("add-tool")}
-            onDone={resetToSettings}
-          />
-        )}
-      </DialogContent>
-    </Dialog>
+          {dialogView === "add-tool" && editingAgent && (
+            <AddToolView
+              agentId={editingAgent.id}
+              agentName={editingAgent.name}
+              onBack={() => setDialogView("settings")}
+              onAddDelegation={() => setDialogView("add-delegation")}
+              onSelectCatalog={(catalog) => {
+                setSelectedCatalog(catalog);
+                setConfigureToolFrom("add-tool");
+                setDialogView("configure-tool");
+              }}
+              installer={installer}
+            />
+          )}
+
+          {dialogView === "add-delegation" && editingAgent && (
+            <AddDelegationView
+              agentId={editingAgent.id}
+              agentName={editingAgent.name}
+              onBack={() => setDialogView("add-tool")}
+              onDone={() => setDialogView("settings")}
+            />
+          )}
+
+          {dialogView === "configure-tool" &&
+            editingAgent &&
+            selectedCatalog && (
+              <ConfigureToolView
+                agentId={editingAgent.id}
+                agentName={editingAgent.name}
+                catalog={selectedCatalog}
+                onBack={() => setDialogView(configureToolFrom)}
+                onDone={() => setDialogView("settings")}
+              />
+            )}
+
+          {dialogView === "edit-knowledge-sources" && editingAgent && (
+            <EditKnowledgeSourcesView
+              agent={editingAgent}
+              allKnowledgeBases={allKnowledgeBases}
+              allConnectors={allConnectors}
+              onBack={() => setDialogView("settings")}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <RemoteServerInstallDialog
+        isOpen={installer.isDialogOpened("remote-install")}
+        onClose={installer.closeRemoteInstall}
+        onConfirm={installer.handleRemoteServerInstallConfirm}
+        catalogItem={installer.selectedCatalogItem}
+        isInstalling={installer.isInstalling}
+        isReauth={installer.isReauth}
+      />
+
+      <OAuthConfirmationDialog
+        open={installer.isDialogOpened("oauth")}
+        onOpenChange={(open) => {
+          if (!open) installer.closeOAuth();
+        }}
+        serverName={installer.selectedCatalogItem?.name || ""}
+        onConfirm={installer.handleOAuthConfirm}
+        onCancel={installer.closeOAuth}
+        catalogId={installer.selectedCatalogItem?.id}
+      />
+
+      <NoAuthInstallDialog
+        isOpen={installer.isDialogOpened("no-auth")}
+        onClose={installer.closeNoAuth}
+        onInstall={installer.handleNoAuthConfirm}
+        catalogItem={installer.noAuthCatalogItem}
+        isInstalling={installer.isInstalling}
+      />
+
+      {installer.localServerCatalogItem && (
+        <LocalServerInstallDialog
+          isOpen={installer.isDialogOpened("local-install")}
+          onClose={installer.closeLocalInstall}
+          onConfirm={installer.handleLocalServerInstallConfirm}
+          catalogItem={installer.localServerCatalogItem}
+          isInstalling={installer.isInstalling}
+          isReauth={installer.isReauth}
+        />
+      )}
+    </>
   );
 }
 
 // Reusable dialog header with back button and close
 function DialogHeader({
   title,
+  breadcrumbs,
   onBack,
   extra,
 }: {
   title: string;
+  breadcrumbs?: string[];
   onBack: () => void;
   extra?: React.ReactNode;
 }) {
@@ -398,7 +551,29 @@ function DialogHeader({
         <ArrowLeft className="size-4" />
         Back
       </Button>
-      <span className="text-sm font-medium">{title}</span>
+      {breadcrumbs?.length ? (
+        <div className="flex items-center gap-1.5 text-sm min-w-0">
+          {breadcrumbs.map((crumb, i) => (
+            <span key={crumb} className="flex items-center gap-1.5 min-w-0">
+              {i === 0 ? (
+                <button
+                  type="button"
+                  onClick={onBack}
+                  className="text-muted-foreground hover:text-foreground transition-colors truncate"
+                >
+                  {crumb}
+                </button>
+              ) : (
+                <span className="text-muted-foreground truncate">{crumb}</span>
+              )}
+              <span className="text-muted-foreground">/</span>
+            </span>
+          ))}
+          <span className="font-medium truncate">{title}</span>
+        </div>
+      ) : (
+        <span className="text-sm font-medium">{title}</span>
+      )}
       <div className="flex-1" />
       {extra}
       <DialogClose className="rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2">
@@ -415,9 +590,9 @@ function DialogHeader({
 
 function AgentSettingsView({
   agent,
-  onChangeAgent,
   onAddTool,
   onEditTool,
+  onEditKnowledgeSources,
   matchedKnowledgeBases: matchedKbs,
   matchedConnectors,
 }: {
@@ -428,56 +603,139 @@ function AgentSettingsView({
     systemPrompt?: string | null;
     icon?: string | null;
     scope?: string;
+    knowledgeBaseIds?: string[];
+    connectorIds?: string[];
   } | null;
-  onChangeAgent: () => void;
   onAddTool: () => void;
   onEditTool: (catalog: CatalogItem) => void;
+  onEditKnowledgeSources: () => void;
   matchedKnowledgeBases: archestraApiTypes.GetKnowledgeBasesResponses["200"]["data"];
   matchedConnectors: archestraApiTypes.GetConnectorsResponses["200"]["data"];
 }) {
   const updateProfile = useUpdateProfile();
   const { data: canReadAgents } = useHasPermissions({ agent: ["read"] });
 
-  const hasKnowledgeSources =
-    matchedKbs.length > 0 || matchedConnectors.length > 0;
   const [instructions, setInstructions] = useState(agent?.systemPrompt ?? "");
   const [isSaving, setIsSaving] = useState(false);
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [editedName, setEditedName] = useState(agent?.name ?? "");
+  const nameInputRef = useRef<HTMLInputElement | null>(null);
+  const [isEditingDescription, setIsEditingDescription] = useState(false);
+  const [editedDescription, setEditedDescription] = useState(
+    agent?.description ?? "",
+  );
+  const descInputRef = useRef<HTMLInputElement | null>(null);
+  const [isEditingIcon, setIsEditingIcon] = useState(false);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: agent?.id ensures reset when switching agents
   useEffect(() => {
     setInstructions(agent?.systemPrompt ?? "");
-  }, [agent?.id, agent?.systemPrompt]);
+    setEditedName(agent?.name ?? "");
+    setIsEditingName(false);
+    setEditedDescription(agent?.description ?? "");
+    setIsEditingDescription(false);
+    setIsEditingIcon(false);
+  }, [agent?.id, agent?.systemPrompt, agent?.name, agent?.description]);
 
-  const saveInstructions = useCallback(
+  const instructionsChanged =
+    (instructions.trim() || null) !== (agent?.systemPrompt ?? null);
+
+  const saveInstructions = useCallback(() => {
+    if (!agent || !instructionsChanged) return;
+    setIsSaving(true);
+    updateProfile.mutateAsync(
+      {
+        id: agent.id,
+        data: { systemPrompt: instructions.trim() || null },
+      },
+      { onSettled: () => setIsSaving(false) },
+    );
+  }, [agent, updateProfile, instructions, instructionsChanged]);
+
+  const saveName = useCallback(
     (value: string) => {
-      if (!agent) return;
+      const trimmed = value.trim();
+      if (!agent || !trimmed || trimmed === agent.name) {
+        setEditedName(agent?.name ?? "");
+        setIsEditingName(false);
+        return;
+      }
       setIsSaving(true);
       updateProfile.mutateAsync(
-        {
-          id: agent.id,
-          data: { systemPrompt: value.trim() || null },
-        },
+        { id: agent.id, data: { name: trimmed } },
         { onSettled: () => setIsSaving(false) },
       );
+      setIsEditingName(false);
     },
     [agent, updateProfile],
   );
 
-  const handleInstructionsChange = useCallback(
+  const saveDescription = useCallback(
     (value: string) => {
-      setInstructions(value);
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-      debounceRef.current = setTimeout(() => saveInstructions(value), 400);
+      const trimmed = value.trim();
+      if (!agent || trimmed === (agent.description ?? "")) {
+        setEditedDescription(agent?.description ?? "");
+        setIsEditingDescription(false);
+        return;
+      }
+      setIsSaving(true);
+      updateProfile.mutateAsync(
+        { id: agent.id, data: { description: trimmed || null } },
+        { onSettled: () => setIsSaving(false) },
+      );
+      setIsEditingDescription(false);
     },
-    [saveInstructions],
+    [agent, updateProfile],
+  );
+
+  const saveIcon = useCallback(
+    (icon: string | null) => {
+      if (!agent) return;
+      updateProfile.mutateAsync({ id: agent.id, data: { icon } });
+      setIsEditingIcon(false);
+    },
+    [agent, updateProfile],
+  );
+
+  const handleRemoveKnowledgeBase = useCallback(
+    (kbId: string) => {
+      if (!agent) return;
+      const currentIds = agent.knowledgeBaseIds ?? [];
+      updateProfile.mutateAsync({
+        id: agent.id,
+        data: { knowledgeBaseIds: currentIds.filter((id) => id !== kbId) },
+      });
+    },
+    [agent, updateProfile],
+  );
+
+  const handleRemoveConnector = useCallback(
+    (connectorId: string) => {
+      if (!agent) return;
+      const currentIds = agent.connectorIds ?? [];
+      updateProfile.mutateAsync({
+        id: agent.id,
+        data: {
+          connectorIds: currentIds.filter((id) => id !== connectorId),
+        },
+      });
+    },
+    [agent, updateProfile],
   );
 
   useEffect(() => {
-    return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-    };
-  }, []);
+    if (isEditingName) {
+      nameInputRef.current?.focus();
+      nameInputRef.current?.select();
+    }
+  }, [isEditingName]);
+
+  useEffect(() => {
+    if (isEditingDescription) {
+      descInputRef.current?.focus();
+      descInputRef.current?.select();
+    }
+  }, [isEditingDescription]);
 
   if (!agent) {
     return (
@@ -490,26 +748,87 @@ function AgentSettingsView({
   return (
     <div className="flex flex-col h-full">
       <div className="flex items-center justify-between border-b px-4 py-3 shrink-0">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted">
-            <AgentIcon icon={agent.icon as string | null} size={24} />
-          </div>
-          <div>
-            <div className="font-semibold text-sm">{agent.name}</div>
-            {agent.description && (
-              <div className="text-xs text-muted-foreground line-clamp-1">
-                {agent.description}
+        <div className="flex items-center gap-3 flex-1 min-w-0">
+          {isEditingIcon ? (
+            <AgentIconPicker
+              value={(agent.icon as string | null) ?? null}
+              onChange={saveIcon}
+              className="h-10 w-10"
+            />
+          ) : (
+            <button
+              type="button"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted cursor-pointer"
+              onDoubleClick={() => setIsEditingIcon(true)}
+            >
+              <AgentIcon icon={agent.icon as string | null} size={24} />
+            </button>
+          )}
+          <div className="flex-1 min-w-0">
+            {isEditingName ? (
+              <Input
+                ref={nameInputRef}
+                value={editedName}
+                onChange={(e) => setEditedName(e.target.value)}
+                onBlur={() => saveName(editedName)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") saveName(editedName);
+                  if (e.key === "Escape") {
+                    setEditedName(agent.name);
+                    setIsEditingName(false);
+                  }
+                }}
+                className="h-7 text-sm font-semibold px-1.5 -ml-1.5"
+              />
+            ) : (
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  className="font-semibold text-sm cursor-pointer"
+                  onDoubleClick={() => setIsEditingName(true)}
+                >
+                  {agent.name}
+                </button>
+                <AgentBadge
+                  type={
+                    (agent.scope as "personal" | "team" | "org") ?? "personal"
+                  }
+                  className="text-[10px] px-1.5 py-0"
+                />
               </div>
             )}
+            {!isEditingName &&
+              (isEditingDescription ? (
+                <Input
+                  ref={descInputRef}
+                  value={editedDescription}
+                  onChange={(e) => setEditedDescription(e.target.value)}
+                  onBlur={() => saveDescription(editedDescription)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") saveDescription(editedDescription);
+                    if (e.key === "Escape") {
+                      setEditedDescription(agent.description ?? "");
+                      setIsEditingDescription(false);
+                    }
+                  }}
+                  placeholder="Add a description..."
+                  className="h-6 text-xs px-1.5 -ml-1.5 mt-0.5 text-muted-foreground"
+                />
+              ) : (
+                <button
+                  type="button"
+                  className="text-xs text-muted-foreground line-clamp-1 cursor-pointer"
+                  onDoubleClick={() => setIsEditingDescription(true)}
+                >
+                  {agent.description || "Add a description..."}
+                </button>
+              ))}
           </div>
         </div>
         <div className="flex items-center gap-2">
           {isSaving && (
             <Loader2 className="size-3.5 animate-spin text-muted-foreground" />
           )}
-          <Button variant="outline" size="sm" onClick={onChangeAgent}>
-            Change
-          </Button>
           <DialogClose className="rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2">
             <XIcon className="size-4" />
             <span className="sr-only">Close</span>
@@ -531,7 +850,7 @@ function AgentSettingsView({
           <Label className="mb-1.5">Instructions</Label>
           <Textarea
             value={instructions}
-            onChange={(e) => handleInstructionsChange(e.target.value)}
+            onChange={(e) => setInstructions(e.target.value)}
             className="resize-none text-sm min-h-[80px] max-h-[200px]"
             placeholder="Tell the agent what to do..."
           />
@@ -546,9 +865,20 @@ function AgentSettingsView({
           />
         </div>
 
-        {hasKnowledgeSources && (
-          <div>
-            <Label className="mb-1.5">Knowledge sources</Label>
+        <div>
+          <div className="flex items-center justify-between mb-1.5">
+            <Label>Knowledge sources</Label>
+          </div>
+          {matchedKbs.length === 0 && matchedConnectors.length === 0 ? (
+            <button
+              type="button"
+              onClick={onEditKnowledgeSources}
+              className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed p-3 text-center transition-colors hover:bg-accent cursor-pointer text-muted-foreground"
+            >
+              <Database className="size-4" />
+              <span className="text-xs font-medium">Add knowledge sources</span>
+            </button>
+          ) : (
             <div className="space-y-2">
               {matchedKbs.map((kb) => {
                 const connectors = kb.connectors ?? [];
@@ -558,57 +888,103 @@ function AgentSettingsView({
                 return (
                   <div
                     key={kb.id}
-                    className="flex items-center justify-between gap-2 rounded-lg border bg-muted/30 p-3"
+                    className="group flex items-center justify-between gap-2 rounded-lg border bg-muted/30 p-3"
                   >
                     <span className="text-sm font-medium truncate">
                       {kb.name}
                     </span>
-                    {connectorTypes.length > 0 && (
-                      <OverlappedIcons
-                        icons={connectorTypes.map((type) => ({
-                          key: type,
-                          icon: (
-                            <ConnectorTypeIcon
-                              type={type}
-                              className="h-full w-full"
-                            />
-                          ),
-                          tooltip: type,
-                        }))}
-                        maxVisible={3}
-                        size="sm"
-                      />
-                    )}
+                    <div className="flex items-center gap-2">
+                      {connectorTypes.length > 0 && (
+                        <OverlappedIcons
+                          icons={connectorTypes.map((type) => ({
+                            key: type,
+                            icon: (
+                              <ConnectorTypeIcon
+                                type={type}
+                                className="h-full w-full"
+                              />
+                            ),
+                            tooltip: type,
+                          }))}
+                          maxVisible={3}
+                          size="sm"
+                        />
+                      )}
+                      <button
+                        type="button"
+                        className="hidden group-hover:flex h-5 w-5 items-center justify-center rounded-full bg-muted hover:bg-destructive hover:text-destructive-foreground transition-colors"
+                        onClick={() => handleRemoveKnowledgeBase(kb.id)}
+                        title={`Remove ${kb.name}`}
+                      >
+                        <XIcon className="size-3" />
+                      </button>
+                    </div>
                   </div>
                 );
               })}
               {matchedConnectors.map((connector) => (
                 <div
                   key={connector.id}
-                  className="flex items-center gap-2 rounded-lg border bg-muted/30 p-3 text-sm"
+                  className="group flex items-center gap-2 rounded-lg border bg-muted/30 p-3 text-sm"
                 >
                   <ConnectorTypeIcon
                     type={connector.connectorType}
                     className="h-4 w-4 shrink-0"
                   />
-                  <span className="truncate">{connector.name}</span>
+                  <div className="flex-1 min-w-0">
+                    <span className="truncate block">{connector.name}</span>
+                    {connector.description && (
+                      <span className="truncate block text-xs text-muted-foreground">
+                        {connector.description}
+                      </span>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    className="hidden group-hover:flex h-5 w-5 items-center justify-center rounded-full bg-muted hover:bg-destructive hover:text-destructive-foreground transition-colors"
+                    onClick={() => handleRemoveConnector(connector.id)}
+                    title={`Remove ${connector.name}`}
+                  >
+                    <XIcon className="size-3" />
+                  </button>
                 </div>
               ))}
+              <button
+                type="button"
+                onClick={onEditKnowledgeSources}
+                className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed p-2 text-center transition-colors hover:bg-accent cursor-pointer text-muted-foreground"
+              >
+                <Plus className="size-3.5" />
+                <span className="text-xs font-medium">Add</span>
+              </button>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
-      {canReadAgents && (
-        <div className="border-t px-4 py-3 shrink-0">
+      <div className="border-t px-4 py-3 shrink-0 flex items-center justify-between gap-3">
+        {canReadAgents ? (
           <a
             href={`/agents?edit=${agent.id}`}
-            className="text-sm text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1.5"
+            className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1.5"
           >
-            Full configuration →
+            Full configuration <ExternalLink className="size-3" />
           </a>
-        </div>
-      )}
+        ) : (
+          <div />
+        )}
+        {instructionsChanged && (
+          <Button
+            size="sm"
+            className="h-7 px-3 text-xs"
+            onClick={saveInstructions}
+            disabled={isSaving}
+          >
+            {isSaving && <Loader2 className="size-3 animate-spin mr-1.5" />}
+            Save
+          </Button>
+        )}
+      </div>
     </div>
   );
 }
@@ -766,20 +1142,25 @@ function AssignedToolsGrid({
 
 function AddToolView({
   agentId,
+  agentName,
   onBack,
-  onSelectCatalog,
   onAddDelegation,
+  onSelectCatalog,
+  installer,
 }: {
   agentId: string;
+  agentName: string;
   onBack: () => void;
-  onSelectCatalog: (catalog: CatalogItem) => void;
   onAddDelegation: () => void;
+  onSelectCatalog: (catalog: CatalogItem) => void;
+  installer: McpInstallOrchestrator;
 }) {
   const { data: catalogItems = [], isPending } = useInternalMcpCatalog();
   const allCredentials = useMcpServersGroupedByCatalog();
   const [search, setSearch] = useState("");
-
-  const installer = useMcpInstallOrchestrator();
+  const assignTool = useAssignTool();
+  const invalidateAllQueries = useInvalidateToolAssignmentQueries();
+  const [addingCatalogId, setAddingCatalogId] = useState<string | null>(null);
 
   const { data: assignedToolsData } = useAllProfileTools({
     filters: { agentId },
@@ -810,6 +1191,69 @@ function AddToolView({
   // Enable polling while servers are installing
   useMcpServers({ hasInstallingServers });
 
+  // Pre-fetch tool counts for ready catalogs to detect empty ones
+  const readyCatalogIds = useMemo(() => {
+    return catalogItems
+      .filter((c) => {
+        const servers = allCredentials?.[c.id] ?? [];
+        const hasCredentials = c.serverType === "builtin" || servers.length > 0;
+        const isInstalling = servers.some(
+          (s) =>
+            s.localInstallationStatus === "pending" ||
+            s.localInstallationStatus === "discovering-tools",
+        );
+        return hasCredentials && !isInstalling;
+      })
+      .map((c) => c.id);
+  }, [catalogItems, allCredentials]);
+
+  const toolCountQueries = useQueries({
+    queries: readyCatalogIds.map((id) => ({
+      queryKey: ["mcp-catalog", id, "tools"],
+      queryFn: () => fetchCatalogTools(id),
+      staleTime: 60_000,
+    })),
+  });
+
+  const emptyToolCatalogIds = useMemo(() => {
+    const ids = new Set<string>();
+    readyCatalogIds.forEach((id, i) => {
+      const q = toolCountQueries[i];
+      if (q.isSuccess && q.data.length === 0) ids.add(id);
+    });
+    return ids;
+  }, [readyCatalogIds, toolCountQueries]);
+
+  const handleAddAllTools = async (catalog: CatalogItem) => {
+    setAddingCatalogId(catalog.id);
+    try {
+      const tools = await fetchCatalogTools(catalog.id);
+      if (tools.length === 0) return;
+      const servers = allCredentials?.[catalog.id] ?? [];
+      const isLocal = catalog.serverType === "local";
+      const isBuiltin = catalog.serverType === "builtin";
+      const credentialId = servers[0]?.id;
+      await Promise.all(
+        tools.map((tool) =>
+          assignTool.mutateAsync({
+            agentId,
+            toolId: tool.id,
+            credentialSourceMcpServerId:
+              !isLocal && !isBuiltin ? (credentialId ?? undefined) : undefined,
+            executionSourceMcpServerId: isLocal
+              ? (credentialId ?? undefined)
+              : undefined,
+            skipInvalidation: true,
+          }),
+        ),
+      );
+      invalidateAllQueries(agentId);
+      onBack();
+    } finally {
+      setAddingCatalogId(null);
+    }
+  };
+
   const filteredCatalogs = useMemo(() => {
     let items = catalogItems;
     if (search) {
@@ -829,7 +1273,11 @@ function AddToolView({
 
   return (
     <div className="flex flex-col h-full">
-      <DialogHeader title="Add Tools" onBack={onBack} />
+      <DialogHeader
+        title="Add Tools"
+        breadcrumbs={[agentName]}
+        onBack={onBack}
+      />
       <div className="px-4 pt-4 shrink-0">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -880,59 +1328,89 @@ function AddToolView({
               );
               const isReady = hasCredentials && !isServerInstalling;
               const isAssigned = assignedCatalogIds.has(catalog.id);
+              const isAdding = addingCatalogId === catalog.id;
+              const hasNoTools = emptyToolCatalogIds.has(catalog.id);
+              const showSelectLink =
+                isReady && !isAssigned && !isAdding && !hasNoTools;
               return (
-                <button
-                  key={catalog.id}
-                  type="button"
-                  disabled={isAssigned || isServerInstalling}
-                  onClick={() =>
-                    isAssigned
-                      ? undefined
-                      : isReady
-                        ? onSelectCatalog(catalog)
-                        : installer.triggerInstallByCatalogId(catalog.id)
-                  }
-                  className={cn(
-                    "relative flex flex-col items-center gap-2 rounded-lg border p-4 text-center transition-colors",
-                    isAssigned
-                      ? "opacity-50 cursor-default border-primary/30"
-                      : "cursor-pointer hover:bg-accent",
-                    isServerInstalling && "opacity-60 cursor-wait",
-                  )}
-                >
-                  {isAssigned && (
-                    <div className="absolute top-2 right-2">
-                      <Check className="h-4 w-4 text-primary" />
+                <div key={catalog.id} className="group relative flex flex-col">
+                  <button
+                    type="button"
+                    disabled={
+                      isAssigned || isServerInstalling || isAdding || hasNoTools
+                    }
+                    onClick={() =>
+                      isAssigned
+                        ? undefined
+                        : isReady
+                          ? handleAddAllTools(catalog)
+                          : installer.triggerInstallByCatalogId(catalog.id)
+                    }
+                    className={cn(
+                      "relative flex flex-col items-center gap-2 rounded-lg border p-4 text-center transition-colors flex-1",
+                      isAssigned
+                        ? "opacity-50 cursor-default border-primary/30"
+                        : hasNoTools
+                          ? "opacity-50 cursor-default"
+                          : "cursor-pointer hover:bg-accent",
+                      (isServerInstalling || isAdding) &&
+                        "opacity-60 cursor-wait",
+                    )}
+                  >
+                    {isAssigned && (
+                      <div className="absolute top-2 right-2">
+                        <Check className="h-4 w-4 text-primary" />
+                      </div>
+                    )}
+                    <McpCatalogIcon
+                      icon={catalog.icon}
+                      catalogId={catalog.id}
+                      size={28}
+                    />
+                    <span className="text-sm font-medium truncate w-full">
+                      {catalog.name}
+                    </span>
+                    {catalog.description && !hasNoTools && (
+                      <p className="text-xs text-muted-foreground line-clamp-2 w-full">
+                        {catalog.description}
+                      </p>
+                    )}
+                    {hasNoTools && (
+                      <p className="text-xs text-muted-foreground">
+                        No tools found
+                      </p>
+                    )}
+                    {(isServerInstalling || isAdding) && (
+                      <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                        {isAdding ? "Adding..." : "Installing..."}
+                      </span>
+                    )}
+                    {!isAssigned && !hasCredentials && !isServerInstalling && (
+                      <Badge
+                        variant="outline"
+                        className="text-[10px] px-1.5 py-0"
+                      >
+                        Install
+                      </Badge>
+                    )}
+                  </button>
+                  {showSelectLink && (
+                    <div className="hidden group-hover:flex flex-col absolute left-0 right-0 bottom-0 rounded-b-lg z-10">
+                      <div className="h-4 bg-gradient-to-t from-background to-transparent" />
+                      <button
+                        type="button"
+                        className="flex w-full items-center justify-center px-2 py-1 text-[11px] text-muted-foreground hover:text-foreground cursor-pointer bg-background rounded-b-lg"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onSelectCatalog(catalog);
+                        }}
+                      >
+                        Select specific tools
+                      </button>
                     </div>
                   )}
-                  <McpCatalogIcon
-                    icon={catalog.icon}
-                    catalogId={catalog.id}
-                    size={28}
-                  />
-                  <span className="text-sm font-medium truncate w-full">
-                    {catalog.name}
-                  </span>
-                  {catalog.description && (
-                    <p className="text-xs text-muted-foreground line-clamp-2 w-full">
-                      {catalog.description}
-                    </p>
-                  )}
-                  {isServerInstalling && (
-                    <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                      Installing...
-                    </span>
-                  )}
-                  {!isAssigned && !hasCredentials && !isServerInstalling && (
-                    <Badge
-                      variant="outline"
-                      className="text-[10px] px-1.5 py-0"
-                    >
-                      Install
-                    </Badge>
-                  )}
-                </button>
+                </div>
               );
             })}
             {!search && (
@@ -949,45 +1427,6 @@ function AddToolView({
           </div>
         )}
       </div>
-
-      <RemoteServerInstallDialog
-        isOpen={installer.isDialogOpened("remote-install")}
-        onClose={installer.closeRemoteInstall}
-        onConfirm={installer.handleRemoteServerInstallConfirm}
-        catalogItem={installer.selectedCatalogItem}
-        isInstalling={installer.isInstalling}
-        isReauth={installer.isReauth}
-      />
-
-      <OAuthConfirmationDialog
-        open={installer.isDialogOpened("oauth")}
-        onOpenChange={(open) => {
-          if (!open) installer.closeOAuth();
-        }}
-        serverName={installer.selectedCatalogItem?.name || ""}
-        onConfirm={installer.handleOAuthConfirm}
-        onCancel={installer.closeOAuth}
-        catalogId={installer.selectedCatalogItem?.id}
-      />
-
-      <NoAuthInstallDialog
-        isOpen={installer.isDialogOpened("no-auth")}
-        onClose={installer.closeNoAuth}
-        onInstall={installer.handleNoAuthConfirm}
-        catalogItem={installer.noAuthCatalogItem}
-        isInstalling={installer.isInstalling}
-      />
-
-      {installer.localServerCatalogItem && (
-        <LocalServerInstallDialog
-          isOpen={installer.isDialogOpened("local-install")}
-          onClose={installer.closeLocalInstall}
-          onConfirm={installer.handleLocalServerInstallConfirm}
-          catalogItem={installer.localServerCatalogItem}
-          isInstalling={installer.isInstalling}
-          isReauth={installer.isReauth}
-        />
-      )}
     </div>
   );
 }
@@ -998,11 +1437,13 @@ function AddToolView({
 
 function ConfigureToolView({
   agentId,
+  agentName,
   catalog,
   onBack,
   onDone,
 }: {
   agentId: string;
+  agentName: string;
   catalog: CatalogItem;
   onBack: () => void;
   onDone: () => void;
@@ -1119,7 +1560,11 @@ function ConfigureToolView({
 
   return (
     <div className="flex flex-col h-full">
-      <DialogHeader title={catalog.name} onBack={onBack} />
+      <DialogHeader
+        title={catalog.name}
+        breadcrumbs={[agentName, "Add Tools"]}
+        onBack={onBack}
+      />
 
       <div className="flex flex-col flex-1 min-h-0">
         {showCredentialSelector && (
@@ -1184,22 +1629,19 @@ function ConfigureToolView({
 
 function AddDelegationView({
   agentId,
+  agentName,
   onBack,
   onDone,
 }: {
   agentId: string;
+  agentName: string;
   onBack: () => void;
   onDone: () => void;
 }) {
   const { data: allAgents = [] } = useInternalAgents();
-  const { data: session } = authClient.useSession();
   const { data: delegations = [] } = useAgentDelegations(agentId);
   const syncDelegations = useSyncAgentDelegations();
-  const [scopeFilters, setScopeFilters] = useState<Set<ScopeFilter>>(
-    () => new Set<ScopeFilter>(["my", "team", "org"]),
-  );
   const [search, setSearch] = useState("");
-  const currentUserId = session?.user?.id;
 
   const delegatedIds = useMemo(
     () => new Set(delegations.map((d) => d.id)),
@@ -1208,16 +1650,6 @@ function AddDelegationView({
 
   const filteredAgents = useMemo(() => {
     let result = allAgents.filter((a) => a.id !== agentId);
-    result = result.filter((a) => {
-      const scope = (a as unknown as Record<string, unknown>).scope as string;
-      const authorId = (a as unknown as Record<string, unknown>)
-        .authorId as string;
-      if (scope === "personal") {
-        if (authorId === currentUserId) return scopeFilters.has("my");
-        return scopeFilters.has("others");
-      }
-      return scopeFilters.has(scope as ScopeFilter);
-    });
     if (search) {
       const lower = search.toLowerCase();
       result = result.filter(
@@ -1228,11 +1660,9 @@ function AddDelegationView({
     }
     const scopeOrder: Record<string, number> = { personal: 0, team: 1, org: 2 };
     return [...result].sort((a, b) => {
-      const sa = (a as unknown as Record<string, unknown>).scope as string;
-      const sb = (b as unknown as Record<string, unknown>).scope as string;
-      return (scopeOrder[sa] ?? 3) - (scopeOrder[sb] ?? 3);
+      return (scopeOrder[a.scope] ?? 3) - (scopeOrder[b.scope] ?? 3);
     });
-  }, [allAgents, agentId, search, scopeFilters, currentUserId]);
+  }, [allAgents, agentId, search]);
 
   const handleToggle = (targetAgentId: string) => {
     const isAdding = !delegatedIds.has(targetAgentId);
@@ -1255,40 +1685,9 @@ function AddDelegationView({
   return (
     <div className="flex flex-col h-full">
       <DialogHeader
-        title="Call an Agent"
+        title="Call Sub-agent"
+        breadcrumbs={[agentName, "Add Tools"]}
         onBack={onBack}
-        extra={
-          <div className="flex items-center gap-1">
-            {(
-              [
-                { value: "my", label: "My Personal" },
-                { value: "team", label: "Team" },
-                { value: "org", label: "Organization" },
-                { value: "others", label: "Others' Personal" },
-              ] as const
-            ).map((option) => (
-              <Button
-                key={option.value}
-                variant={scopeFilters.has(option.value) ? "secondary" : "ghost"}
-                size="sm"
-                className="text-xs h-7 px-2.5"
-                onClick={() => {
-                  setScopeFilters((prev) => {
-                    const next = new Set(prev);
-                    if (next.has(option.value)) {
-                      next.delete(option.value);
-                    } else {
-                      next.add(option.value);
-                    }
-                    return next;
-                  });
-                }}
-              >
-                {option.label}
-              </Button>
-            ))}
-          </div>
-        }
       />
       <div className="px-4 pt-4 shrink-0">
         <div className="relative">
@@ -1383,79 +1782,256 @@ function AddDelegationView({
 }
 
 // ============================================================================
-// Agent Card (for change agent view)
+// Edit Knowledge Sources View
 // ============================================================================
 
-function AgentCard({
+function EditKnowledgeSourcesView({
   agent,
-  isSelected,
-  onSelect,
-  currentUserId,
+  allKnowledgeBases,
+  allConnectors,
+  onBack,
 }: {
   agent: {
     id: string;
     name: string;
-    description?: string | null;
-    scope: string;
+    knowledgeBaseIds?: string[];
+    connectorIds?: string[];
   };
-  isSelected: boolean;
-  onSelect: () => void;
-  currentUserId?: string;
+  allKnowledgeBases: archestraApiTypes.GetKnowledgeBasesResponses["200"]["data"];
+  allConnectors: archestraApiTypes.GetConnectorsResponses["200"]["data"];
+  onBack: () => void;
 }) {
+  const updateProfile = useUpdateProfile();
+  const [search, setSearch] = useState("");
+
+  const selectedKbIds = useMemo(
+    () => new Set(agent.knowledgeBaseIds ?? []),
+    [agent.knowledgeBaseIds],
+  );
+  const selectedConnectorIds = useMemo(
+    () => new Set(agent.connectorIds ?? []),
+    [agent.connectorIds],
+  );
+
+  const filteredKbs = useMemo(() => {
+    if (!search) return allKnowledgeBases;
+    const lower = search.toLowerCase();
+    return allKnowledgeBases.filter(
+      (kb) =>
+        kb.name.toLowerCase().includes(lower) ||
+        kb.description?.toLowerCase().includes(lower),
+    );
+  }, [allKnowledgeBases, search]);
+
+  const filteredConnectors = useMemo(() => {
+    if (!search) return allConnectors;
+    const lower = search.toLowerCase();
+    return allConnectors.filter(
+      (c) =>
+        c.name.toLowerCase().includes(lower) ||
+        c.connectorType.toLowerCase().includes(lower),
+    );
+  }, [allConnectors, search]);
+
+  // Stable sort: use initial selection to avoid rows jumping on toggle
+  const initialSelectedKbIds = useRef(selectedKbIds);
+  const initialSelectedConnectorIds = useRef(selectedConnectorIds);
+
+  const sortedKbs = useMemo(() => {
+    return [...filteredKbs].sort((a, b) => {
+      const aSelected = initialSelectedKbIds.current.has(a.id) ? 0 : 1;
+      const bSelected = initialSelectedKbIds.current.has(b.id) ? 0 : 1;
+      return aSelected - bSelected;
+    });
+  }, [filteredKbs]);
+
+  const sortedConnectors = useMemo(() => {
+    return [...filteredConnectors].sort((a, b) => {
+      const aSelected = initialSelectedConnectorIds.current.has(a.id) ? 0 : 1;
+      const bSelected = initialSelectedConnectorIds.current.has(b.id) ? 0 : 1;
+      return aSelected - bSelected;
+    });
+  }, [filteredConnectors]);
+
+  const handleToggleKb = (kbId: string) => {
+    const currentIds = agent.knowledgeBaseIds ?? [];
+    const newIds = selectedKbIds.has(kbId)
+      ? currentIds.filter((id) => id !== kbId)
+      : [...currentIds, kbId];
+    updateProfile.mutate({
+      id: agent.id,
+      data: { knowledgeBaseIds: newIds },
+    });
+  };
+
+  const handleToggleConnector = (connectorId: string) => {
+    const currentIds = agent.connectorIds ?? [];
+    const newIds = selectedConnectorIds.has(connectorId)
+      ? currentIds.filter((id) => id !== connectorId)
+      : [...currentIds, connectorId];
+    updateProfile.mutate({
+      id: agent.id,
+      data: { connectorIds: newIds },
+    });
+  };
+
+  const hasItems = allKnowledgeBases.length > 0 || allConnectors.length > 0;
+  const totalSelected = selectedKbIds.size + selectedConnectorIds.size;
+
   return (
-    <button
-      type="button"
-      onClick={onSelect}
-      className={cn(
-        "flex h-full min-h-[120px] flex-col items-start gap-2 rounded-lg border p-4 text-left transition-colors hover:bg-accent cursor-pointer",
-        isSelected && "border-primary bg-accent",
-      )}
-    >
-      <div className="flex w-full items-center gap-2">
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-muted">
-          <AgentIcon
-            icon={
-              (agent as unknown as Record<string, unknown>).icon as
-                | string
-                | null
-            }
-            size={16}
-          />
+    <div className="flex flex-col h-full">
+      <DialogHeader
+        title="Knowledge Sources"
+        breadcrumbs={[agent.name]}
+        onBack={onBack}
+      />
+
+      {!hasItems ? (
+        <div className="flex-1 flex flex-col items-center justify-center gap-3 p-6 text-center">
+          <Database className="size-8 text-muted-foreground" />
+          <div>
+            <p className="text-sm font-medium">No knowledge sources</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Create knowledge bases or connectors to use them here.
+            </p>
+          </div>
+          <a
+            href="/knowledge/knowledge-bases"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs text-primary hover:underline flex items-center gap-1"
+          >
+            Go to Knowledge <ExternalLink className="size-3" />
+          </a>
         </div>
-        <span className="text-sm font-medium truncate flex-1">
-          {agent.name}
-        </span>
-        {isSelected && <Check className="h-4 w-4 shrink-0 text-primary" />}
-      </div>
-      {agent.description && (
-        <p className="text-xs text-muted-foreground line-clamp-2 w-full">
-          {agent.description}
-        </p>
+      ) : (
+        <>
+          <div className="px-4 pt-4 shrink-0 space-y-3">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Search knowledge sources..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="pl-9"
+                autoFocus
+              />
+            </div>
+            <div className="text-xs text-muted-foreground">
+              {totalSelected} source{totalSelected !== 1 ? "s" : ""} selected
+            </div>
+          </div>
+          <div className="flex-1 min-h-0 overflow-y-auto px-4 py-2 space-y-1">
+            {sortedKbs.length > 0 && (
+              <div className="space-y-1">
+                <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider pb-1 px-1">
+                  Knowledge Bases
+                </div>
+                {sortedKbs.map((kb) => {
+                  const isSelected = selectedKbIds.has(kb.id);
+                  const connectors = kb.connectors ?? [];
+                  const connectorTypes = [
+                    ...new Set(connectors.map((c) => c.connectorType)),
+                  ];
+                  return (
+                    <button
+                      key={kb.id}
+                      type="button"
+                      onClick={() => handleToggleKb(kb.id)}
+                      className={cn(
+                        "flex w-full items-center gap-3 rounded-lg border p-3 text-left transition-colors cursor-pointer",
+                        isSelected
+                          ? "border-primary bg-primary/5"
+                          : "hover:bg-accent",
+                      )}
+                    >
+                      <Database className="size-4 shrink-0 text-muted-foreground" />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-medium truncate">
+                          {kb.name}
+                        </div>
+                        {kb.description && (
+                          <div className="text-xs text-muted-foreground truncate">
+                            {kb.description}
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        {connectorTypes.length > 0 && (
+                          <OverlappedIcons
+                            icons={connectorTypes.map((type) => ({
+                              key: type,
+                              icon: (
+                                <ConnectorTypeIcon
+                                  type={type}
+                                  className="h-full w-full"
+                                />
+                              ),
+                              tooltip: type,
+                            }))}
+                            maxVisible={3}
+                            size="sm"
+                          />
+                        )}
+                        {isSelected && (
+                          <Check className="size-4 text-primary" />
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            {sortedConnectors.length > 0 && (
+              <div className="space-y-1">
+                {sortedKbs.length > 0 && (
+                  <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider pt-3 pb-1 px-1">
+                    Connectors
+                  </div>
+                )}
+                {sortedConnectors.map((connector) => {
+                  const isSelected = selectedConnectorIds.has(connector.id);
+                  return (
+                    <button
+                      key={connector.id}
+                      type="button"
+                      onClick={() => handleToggleConnector(connector.id)}
+                      className={cn(
+                        "flex w-full items-center gap-3 rounded-lg border p-3 text-left transition-colors cursor-pointer",
+                        isSelected
+                          ? "border-primary bg-primary/5"
+                          : "hover:bg-accent",
+                      )}
+                    >
+                      <ConnectorTypeIcon
+                        type={connector.connectorType}
+                        className="h-4 w-4 shrink-0"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-medium truncate">
+                          {connector.name}
+                        </div>
+                        <div className="text-xs text-muted-foreground truncate">
+                          {connector.description || connector.connectorType}
+                        </div>
+                      </div>
+                      {isSelected && (
+                        <Check className="size-4 text-primary shrink-0" />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            {sortedKbs.length === 0 && sortedConnectors.length === 0 && (
+              <div className="text-center py-8 text-sm text-muted-foreground">
+                No knowledge sources match your search
+              </div>
+            )}
+          </div>
+        </>
       )}
-      <div className="flex items-center gap-2 w-full mt-auto">
-        <AgentBadge
-          type={agent.scope as "personal" | "team" | "org"}
-          className="text-[10px] px-1.5 py-0"
-        />
-        {agent.scope === "personal" &&
-          (agent as unknown as Record<string, unknown>).authorId !==
-            currentUserId &&
-          Boolean((agent as unknown as Record<string, unknown>).authorName) && (
-            <Badge
-              variant="secondary"
-              className="text-[10px] gap-1 px-1.5 py-0"
-            >
-              <User className="h-2.5 w-2.5" />
-              {
-                (agent as unknown as Record<string, unknown>)
-                  .authorName as string
-              }
-            </Badge>
-          )}
-        <div className="flex-1" />
-        <AgentToolAvatars agentId={agent.id} />
-      </div>
-    </button>
+    </div>
   );
 }
 
@@ -1500,11 +2076,13 @@ function ToolServerAvatarGroup({
   subagents = [],
   connectorTypes = [],
   showAddButton = false,
+  onAdd,
 }: {
   catalogs: CatalogItem[];
   subagents?: SubagentItem[];
   connectorTypes?: string[];
   showAddButton?: boolean;
+  onAdd?: () => void;
 }) {
   const hasNonBuiltInTools =
     subagents.length > 0 || catalogs.some((c) => !isBuiltInCatalogId(c.id));
@@ -1515,9 +2093,16 @@ function ToolServerAvatarGroup({
     return (
       <Tooltip>
         <TooltipTrigger asChild>
-          <div className="flex size-5 shrink-0 items-center justify-center rounded-full bg-muted ml-1">
+          <button
+            type="button"
+            className="flex size-5 shrink-0 items-center justify-center rounded-full bg-muted ml-1 hover:bg-muted/80 transition-colors cursor-pointer"
+            onClick={(e) => {
+              e.stopPropagation();
+              onAdd?.();
+            }}
+          >
             <Plus className="size-3 text-muted-foreground" />
-          </div>
+          </button>
         </TooltipTrigger>
         <TooltipContent side="top">Add tools</TooltipContent>
       </Tooltip>
@@ -1562,9 +2147,16 @@ function ToolServerAvatarGroup({
       {showAddButton && !hasNonBuiltInTools && (
         <Tooltip>
           <TooltipTrigger asChild>
-            <div className="flex size-5 shrink-0 items-center justify-center rounded-full bg-muted ring-1 ring-background ml-0.5">
+            <button
+              type="button"
+              className="flex size-5 shrink-0 items-center justify-center rounded-full bg-muted ring-1 ring-background ml-0.5 hover:bg-muted/80 transition-colors cursor-pointer"
+              onClick={(e) => {
+                e.stopPropagation();
+                onAdd?.();
+              }}
+            >
               <Plus className="size-3 text-muted-foreground" />
-            </div>
+            </button>
           </TooltipTrigger>
           <TooltipContent side="top">Add tools</TooltipContent>
         </Tooltip>

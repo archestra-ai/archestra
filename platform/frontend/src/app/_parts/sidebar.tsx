@@ -44,13 +44,16 @@ import {
   SidebarMenuSubButton,
   SidebarMenuSubItem,
   SidebarRail,
+  SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
 import { useIsAuthenticated } from "@/lib/auth.hook";
-import { usePermissionMap } from "@/lib/auth.query";
+import { useHasPermissions, usePermissionMap } from "@/lib/auth.query";
 import config from "@/lib/config";
 import { useEnterpriseFeature } from "@/lib/config.query";
 import { useGithubStars } from "@/lib/github.query";
+import { useOrganization } from "@/lib/organization.query";
+import { cn } from "@/lib/utils";
 
 interface NavSubItem {
   title: string;
@@ -185,17 +188,6 @@ const contentNavGroups: NavGroup[] = [
         customIsActive: (pathname: string) =>
           pathname.startsWith("/llm/logs") || pathname.startsWith("/mcp/logs"),
       },
-      {
-        title: "Connect",
-        url: "/connection",
-        icon: Cable,
-      },
-      {
-        title: "Settings",
-        url: "/settings/account",
-        icon: Settings,
-        customIsActive: (pathname: string) => pathname.startsWith("/settings"),
-      },
     ],
   },
 ];
@@ -222,6 +214,7 @@ const NavPrimary = ({
     <SidebarMenuItem key={item.title}>
       <SidebarMenuButton
         asChild
+        tooltip={item.title}
         isActive={
           item.customIsActive?.(pathname, searchParams) ??
           pathname.startsWith(item.url)
@@ -321,6 +314,7 @@ const NavSecondary = ({
             <SidebarMenuItem key={item.title}>
               <SidebarMenuButton
                 asChild
+                tooltip={item.title}
                 isActive={
                   item.customIsActive?.(pathname, searchParams) ??
                   pathname.startsWith(item.url)
@@ -336,7 +330,7 @@ const NavSecondary = ({
           {!config.enterpriseFeatures.fullWhiteLabeling && (
             <>
               <SidebarMenuItem>
-                <SidebarMenuButton asChild>
+                <SidebarMenuButton asChild tooltip="Star us on GitHub">
                   <a
                     href={COMMUNITY_GITHUB_URL}
                     target="_blank"
@@ -354,7 +348,7 @@ const NavSecondary = ({
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>
-                <SidebarMenuButton asChild>
+                <SidebarMenuButton asChild tooltip="Documentation">
                   <a
                     href={COMMUNITY_DOCS_URL}
                     target="_blank"
@@ -366,7 +360,7 @@ const NavSecondary = ({
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>
-                <SidebarMenuButton asChild>
+                <SidebarMenuButton asChild tooltip="Talk to developers">
                   <a
                     href={COMMUNITY_SLACK_URL}
                     target="_blank"
@@ -378,7 +372,7 @@ const NavSecondary = ({
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>
-                <SidebarMenuButton asChild>
+                <SidebarMenuButton asChild tooltip="Report a bug">
                   <a
                     href={COMMUNITY_BUG_REPORT_URL}
                     target="_blank"
@@ -404,7 +398,17 @@ export function AppSidebar() {
   const { data: starCount } = useGithubStars();
   const formattedStarCount = starCount ?? "";
   const permissionMap = usePermissionMap(requiredPagePermissionsMap);
+  const { data: organization } = useOrganization();
   const knowledgeBaseEnabled = useEnterpriseFeature("knowledgeBase");
+  // Connect page requires at least one of these (OR logic)
+  const { data: canReadAgent } = useHasPermissions({ agent: ["read"] });
+  const { data: canReadLlmProxy } = useHasPermissions({
+    llmProxy: ["read"],
+  });
+  const { data: canReadMcpGateway } = useHasPermissions({
+    mcpGateway: ["read"],
+  });
+  const showConnect = canReadAgent || canReadLlmProxy || canReadMcpGateway;
 
   // Filter nav groups based on enterprise features
   const filteredNavGroups = React.useMemo(() => {
@@ -415,10 +419,53 @@ export function AppSidebar() {
     }));
   }, [knowledgeBaseEnabled]);
 
+  // Build additional links for UserButton popout menu
+  const userMenuLinks = React.useMemo(() => {
+    const links: {
+      href: string;
+      icon?: React.ReactNode;
+      label: React.ReactNode;
+      separator?: boolean;
+    }[] = [];
+
+    if (showConnect) {
+      links.push({
+        href: "/connection",
+        icon: <Cable className="h-4 w-4" />,
+        label: "Connect",
+      });
+    }
+
+    links.push({
+      href: "/settings/account",
+      icon: <Settings className="h-4 w-4" />,
+      label: "Settings",
+      separator: true,
+    });
+
+    return links;
+  }, [showConnect]);
+
   return (
-    <Sidebar>
-      <SidebarHeader className="pt-4">
-        <AppLogo centered={false} />
+    <Sidebar collapsible="icon">
+      <SidebarHeader className="pt-4 group-data-[collapsible=icon]:pt-2 group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:items-center group-data-[collapsible=icon]:gap-1">
+        <div className="flex items-center justify-between group-data-[collapsible=icon]:hidden">
+          <Link href="/chat">
+            <AppLogo centered={false} />
+          </Link>
+          <SidebarTrigger className="size-7 cursor-pointer" />
+        </div>
+        <Link
+          href="/chat"
+          className="hidden group-data-[collapsible=icon]:flex"
+        >
+          <img
+            src={organization?.iconLogo || "/logo.png"}
+            alt="Logo"
+            className="size-7"
+          />
+        </Link>
+        <SidebarTrigger className="hidden group-data-[collapsible=icon]:flex size-8 cursor-pointer" />
       </SidebarHeader>
       <SidebarContent>
         {isAuthenticated && permissionMap && (
@@ -454,14 +501,29 @@ export function AppSidebar() {
       <SidebarFooter>
         <SidebarWarningsAccordion />
         <SignedIn>
-          <SidebarGroup className="mt-auto">
+          <SidebarGroup className="mt-auto p-0">
             <SidebarGroupContent>
-              <div data-testid={E2eTestId.SidebarUserProfile}>
+              <div
+                data-testid={E2eTestId.SidebarUserProfile}
+                className={cn(
+                  "overflow-hidden",
+                  // Collapsed: hide text/chevron, show only avatar circle
+                  "group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:justify-center",
+                  "group-data-[collapsible=icon]:[&_button]:size-7 group-data-[collapsible=icon]:[&_button]:min-w-0 group-data-[collapsible=icon]:[&_button]:rounded-full group-data-[collapsible=icon]:[&_button]:p-0",
+                  "group-data-[collapsible=icon]:[&_[data-slot=avatar]]:size-7",
+                  "group-data-[collapsible=icon]:[&_[data-slot=avatar-fallback]]:text-[9px]",
+                  "group-data-[collapsible=icon]:[&_button>div]:gap-0",
+                  "group-data-[collapsible=icon]:[&_button>div>div:not([data-slot=avatar])]:hidden",
+                  "group-data-[collapsible=icon]:[&_button>svg]:hidden",
+                )}
+              >
                 <UserButton
                   size="default"
                   align="center"
+                  side="top"
                   className="w-full bg-transparent hover:bg-transparent text-foreground"
                   disableDefaultLinks
+                  additionalLinks={userMenuLinks}
                 />
               </div>
             </SidebarGroupContent>

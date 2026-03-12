@@ -1,4 +1,4 @@
-import { count, desc, eq } from "drizzle-orm";
+import { count, desc, eq, inArray } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type {
   InsertKnowledgeBase,
@@ -38,6 +38,14 @@ class KnowledgeBaseModel {
       .where(eq(schema.knowledgeBasesTable.id, id));
 
     return result ?? null;
+  }
+
+  static async findByIds(ids: string[]): Promise<KnowledgeBase[]> {
+    if (ids.length === 0) return [];
+    return await db
+      .select()
+      .from(schema.knowledgeBasesTable)
+      .where(inArray(schema.knowledgeBasesTable.id, ids));
   }
 
   static async create(data: InsertKnowledgeBase): Promise<KnowledgeBase> {

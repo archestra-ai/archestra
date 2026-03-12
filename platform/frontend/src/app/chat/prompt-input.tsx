@@ -11,7 +11,8 @@ import {
 import type { ChatStatus } from "ai";
 import { MoreVerticalIcon, PaperclipIcon } from "lucide-react";
 import type { FormEvent } from "react";
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
+import { ModelSelectorLogo } from "@/components/ai-elements/model-selector";
 import {
   PromptInput,
   PromptInputAttachment,
@@ -28,12 +29,14 @@ import {
   usePromptInputAttachments,
   usePromptInputController,
 } from "@/components/ai-elements/prompt-input";
-
 import { ChatApiKeySelector } from "@/components/chat/chat-api-key-selector";
 import { ContextIndicator } from "@/components/chat/context-indicator";
 import { InitialAgentSelector } from "@/components/chat/initial-agent-selector";
 import { KnowledgeBaseUploadIndicator } from "@/components/chat/knowledge-base-upload-indicator";
-import { ModelSelector } from "@/components/chat/model-selector";
+import {
+  ModelSelector,
+  providerToLogoProvider,
+} from "@/components/chat/model-selector";
 import { PlaywrightInstallInline } from "@/components/chat/playwright-install-dialog";
 import { Button } from "@/components/ui/button";
 import {
@@ -49,7 +52,10 @@ import {
 import { useProfile } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth.query";
 import { conversationStorageKeys } from "@/lib/chat-utils";
+import { useOrganization } from "@/lib/organization.query";
+import { useTypingAnimation } from "@/lib/typing-animation.hook";
 import { useIsMobile } from "@/lib/use-mobile.hook";
+import { useModelSelectorDisplay } from "@/lib/use-model-selector-display.hook";
 
 interface ArchestraPromptInputProps {
   onSubmit: (
@@ -95,6 +101,8 @@ interface ArchestraPromptInputProps {
   selectorAgentId?: string | null;
   /** Callback when agent changes */
   onAgentChange?: (agentId: string) => void;
+  /** Callback when model selector opens/closes */
+  onModelSelectorOpenChange?: (open: boolean) => void;
 }
 
 // Inner component that has access to the controller context
@@ -122,6 +130,7 @@ const PromptInputContent = ({
   isPlaywrightSetupVisible = false,
   selectorAgentId,
   onAgentChange,
+  onModelSelectorOpenChange,
 }: Omit<ArchestraPromptInputProps, "onSubmit"> & {
   onSubmit: ArchestraPromptInputProps["onSubmit"];
 }) => {
@@ -129,6 +138,14 @@ const PromptInputContent = ({
   const textareaRef = externalTextareaRef ?? internalTextareaRef;
   const controller = usePromptInputController();
   const attachments = usePromptInputAttachments();
+
+  // Collapsed/expanded state for the model selector (defaults to collapsed = provider icon only)
+  const { isCollapsed: showDefaultLogo, expand: expandModelSelector } =
+    useModelSelectorDisplay({ conversationId });
+
+  const logoProvider = currentProvider
+    ? providerToLogoProvider[currentProvider]
+    : null;
 
   // Derive file upload capabilities from model input modalities
   const modelSupportsFiles = supportsFileUploads(inputModalities);
@@ -142,6 +159,24 @@ const PromptInputContent = ({
   // Check if user can update organization settings (to show settings link in tooltip)
   const { data: canUpdateOrganization } = useHasPermissions({
     securitySettings: ["update"],
+  });
+
+  // Chat placeholders from organization settings
+  const { data: orgData } = useOrganization();
+  const chatPlaceholders = useMemo(
+    () => orgData?.chatPlaceholders,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [orgData?.chatPlaceholders],
+  );
+  const { text: animatedPlaceholder, isAnimating } =
+    useTypingAnimation(chatPlaceholders);
+
+  // RBAC: check if user can see agent picker and provider settings in chat
+  const { data: canSeeAgentPicker } = useHasPermissions({
+    chatAgentPicker: ["enable"],
+  });
+  const { data: canSeeProviderSettings } = useHasPermissions({
+    chatProviderSettings: ["enable"],
   });
 
   const storageKey = conversationId
@@ -232,7 +267,13 @@ const PromptInputContent = ({
           />
         ) : (
           <PromptInputTextarea
-            placeholder="What would you like to get done?"
+            placeholder={
+              conversationId
+                ? "Ask a follow-up..."
+                : isAnimating
+                  ? animatedPlaceholder
+                  : "What would you like to get done?"
+            }
             ref={textareaRef}
             className="px-4"
             autoFocus
@@ -245,83 +286,101 @@ const PromptInputContent = ({
       <PromptInputFooter>
         <PromptInputTools className="gap-0.5">
           {/* Mobile: vertical three-dots menu for collapsed toolbar items */}
-          {isMobile && (
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 px-2"
-                >
-                  <MoreVerticalIcon className="size-4" />
-                  <span className="sr-only">More options</span>
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent side="top" align="start" className="w-auto p-3">
-                <div className="flex flex-col gap-3">
-                  {selectorAgentId !== undefined && onAgentChange && (
-                    <div>
-                      <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1">
-                        Agent
-                      </p>
-                      <InitialAgentSelector
-                        currentAgentId={selectorAgentId}
-                        onAgentChange={onAgentChange}
-                      />
-                    </div>
-                  )}
-                  <div>
-                    <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1">
-                      Model
-                    </p>
-                    <ModelSelector
-                      selectedModel={selectedModel}
-                      onModelChange={onModelChange}
-                      apiKeyId={
-                        conversationId
-                          ? currentConversationChatApiKeyId
-                          : initialApiKeyId
-                      }
-                    />
+          {isMobile &&
+            (showDefaultLogo && logoProvider ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-8 px-2"
+                onClick={expandModelSelector}
+              >
+                <ModelSelectorLogo provider={logoProvider} className="size-4" />
+              </Button>
+            ) : (
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 px-2"
+                  >
+                    <MoreVerticalIcon className="size-4" />
+                    <span className="sr-only">More options</span>
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent side="top" align="start" className="w-auto p-3">
+                  <div className="flex flex-col gap-3">
+                    {canSeeAgentPicker &&
+                      selectorAgentId !== undefined &&
+                      onAgentChange && (
+                        <div>
+                          <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1">
+                            Agent
+                          </p>
+                          <InitialAgentSelector
+                            currentAgentId={selectorAgentId}
+                            onAgentChange={onAgentChange}
+                          />
+                        </div>
+                      )}
+                    {canSeeProviderSettings && (
+                      <>
+                        <div>
+                          <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1">
+                            Model
+                          </p>
+                          <ModelSelector
+                            selectedModel={selectedModel}
+                            onModelChange={onModelChange}
+                            onOpenChange={onModelSelectorOpenChange}
+                            apiKeyId={
+                              conversationId
+                                ? currentConversationChatApiKeyId
+                                : initialApiKeyId
+                            }
+                          />
+                        </div>
+                        {(conversationId || onApiKeyChange) && (
+                          <div>
+                            <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1">
+                              Provider API Key
+                            </p>
+                            <ChatApiKeySelector
+                              conversationId={conversationId}
+                              currentProvider={currentProvider}
+                              currentConversationChatApiKeyId={
+                                conversationId
+                                  ? (currentConversationChatApiKeyId ?? null)
+                                  : (initialApiKeyId ?? null)
+                              }
+                              messageCount={messageCount}
+                              onApiKeyChange={onApiKeyChange}
+                              onProviderChange={onProviderChange}
+                              isModelsLoading={isModelsLoading}
+                              agentLlmApiKeyId={agentLlmApiKeyId}
+                            />
+                          </div>
+                        )}
+                      </>
+                    )}
+                    {tokensUsed > 0 && maxContextLength && (
+                      <div>
+                        <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1">
+                          Context
+                        </p>
+                        <ContextIndicator
+                          tokensUsed={tokensUsed}
+                          maxTokens={maxContextLength}
+                          size="sm"
+                        />
+                      </div>
+                    )}
                   </div>
-                  {(conversationId || onApiKeyChange) && (
-                    <div>
-                      <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1">
-                        Provider API Key
-                      </p>
-                      <ChatApiKeySelector
-                        conversationId={conversationId}
-                        currentProvider={currentProvider}
-                        currentConversationChatApiKeyId={
-                          conversationId
-                            ? (currentConversationChatApiKeyId ?? null)
-                            : (initialApiKeyId ?? null)
-                        }
-                        messageCount={messageCount}
-                        onApiKeyChange={onApiKeyChange}
-                        onProviderChange={onProviderChange}
-                        isModelsLoading={isModelsLoading}
-                        agentLlmApiKeyId={agentLlmApiKeyId}
-                      />
-                    </div>
-                  )}
-                  {tokensUsed > 0 && maxContextLength && (
-                    <div>
-                      <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1">
-                        Context
-                      </p>
-                      <ContextIndicator
-                        tokensUsed={tokensUsed}
-                        maxTokens={maxContextLength}
-                        size="sm"
-                      />
-                    </div>
-                  )}
-                </div>
-              </PopoverContent>
-            </Popover>
-          )}
+                </PopoverContent>
+              </Popover>
+            ))}
 
           {/* File attachment button - always visible */}
           {showFileUploadButton ? (
@@ -383,50 +442,71 @@ const PromptInputContent = ({
           {/* Desktop: inline toolbar items */}
           {!isMobile && (
             <>
-              {selectorAgentId !== undefined && onAgentChange && (
-                <InitialAgentSelector
-                  currentAgentId={selectorAgentId}
-                  onAgentChange={onAgentChange}
-                />
-              )}
-              <ModelSelector
-                selectedModel={selectedModel}
-                onModelChange={onModelChange}
-                onOpenChange={(open) => {
-                  if (!open) {
-                    setTimeout(() => {
-                      textareaRef.current?.focus();
-                    }, 100);
-                  }
-                }}
-                apiKeyId={
-                  conversationId
-                    ? currentConversationChatApiKeyId
-                    : initialApiKeyId
-                }
-              />
-              {(conversationId || onApiKeyChange) && (
-                <ChatApiKeySelector
-                  conversationId={conversationId}
-                  currentProvider={currentProvider}
-                  currentConversationChatApiKeyId={
-                    conversationId
-                      ? (currentConversationChatApiKeyId ?? null)
-                      : (initialApiKeyId ?? null)
-                  }
-                  messageCount={messageCount}
-                  onApiKeyChange={onApiKeyChange}
-                  onProviderChange={onProviderChange}
-                  isModelsLoading={isModelsLoading}
-                  agentLlmApiKeyId={agentLlmApiKeyId}
-                  onOpenChange={(open) => {
-                    if (!open) {
-                      setTimeout(() => {
-                        textareaRef.current?.focus();
-                      }, 100);
+              {canSeeAgentPicker &&
+                selectorAgentId !== undefined &&
+                onAgentChange && (
+                  <InitialAgentSelector
+                    currentAgentId={selectorAgentId}
+                    onAgentChange={onAgentChange}
+                  />
+                )}
+              {!canSeeProviderSettings ? null : showDefaultLogo &&
+                logoProvider ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 px-2"
+                  onClick={expandModelSelector}
+                >
+                  <ModelSelectorLogo
+                    provider={logoProvider}
+                    className="size-4"
+                  />
+                </Button>
+              ) : (
+                <>
+                  <ModelSelector
+                    selectedModel={selectedModel}
+                    onModelChange={onModelChange}
+                    onOpenChange={(open) => {
+                      onModelSelectorOpenChange?.(open);
+                      if (!open) {
+                        setTimeout(() => {
+                          textareaRef.current?.focus();
+                        }, 100);
+                      }
+                    }}
+                    apiKeyId={
+                      conversationId
+                        ? currentConversationChatApiKeyId
+                        : initialApiKeyId
                     }
-                  }}
-                />
+                  />
+                  {(conversationId || onApiKeyChange) && (
+                    <ChatApiKeySelector
+                      conversationId={conversationId}
+                      currentProvider={currentProvider}
+                      currentConversationChatApiKeyId={
+                        conversationId
+                          ? (currentConversationChatApiKeyId ?? null)
+                          : (initialApiKeyId ?? null)
+                      }
+                      messageCount={messageCount}
+                      onApiKeyChange={onApiKeyChange}
+                      onProviderChange={onProviderChange}
+                      isModelsLoading={isModelsLoading}
+                      agentLlmApiKeyId={agentLlmApiKeyId}
+                      onOpenChange={(open) => {
+                        if (!open) {
+                          setTimeout(() => {
+                            textareaRef.current?.focus();
+                          }, 100);
+                        }
+                      }}
+                    />
+                  )}
+                </>
               )}
               {tokensUsed > 0 && maxContextLength && (
                 <ContextIndicator
@@ -482,6 +562,7 @@ const ArchestraPromptInput = ({
   isPlaywrightSetupVisible,
   selectorAgentId,
   onAgentChange,
+  onModelSelectorOpenChange,
 }: ArchestraPromptInputProps) => {
   return (
     <div className="flex size-full flex-col justify-end">
@@ -510,6 +591,7 @@ const ArchestraPromptInput = ({
           isPlaywrightSetupVisible={isPlaywrightSetupVisible}
           selectorAgentId={selectorAgentId}
           onAgentChange={onAgentChange}
+          onModelSelectorOpenChange={onModelSelectorOpenChange}
         />
       </PromptInputProvider>
     </div>

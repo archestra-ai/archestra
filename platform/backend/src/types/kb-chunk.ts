@@ -7,6 +7,7 @@ import { AclEntrySchema } from "./kb-document";
 const extendedFields = {
   acl: z.array(AclEntrySchema),
   embedding: z.array(z.number()).nullable(),
+  embedding768: z.array(z.number()).nullable(),
 };
 
 export const SelectKbChunkSchema = createSelectSchema(
@@ -16,6 +17,7 @@ export const SelectKbChunkSchema = createSelectSchema(
 export const InsertKbChunkSchema = createInsertSchema(schema.kbChunksTable, {
   acl: z.array(AclEntrySchema).optional(),
   embedding: z.array(z.number()).nullable().optional(),
+  embedding768: z.array(z.number()).nullable().optional(),
 }).omit({ id: true, createdAt: true, searchVector: true });
 
 export type KbChunk = z.infer<typeof SelectKbChunkSchema>;

@@ -15,7 +15,10 @@ import type {
   ConnectorDocument,
 } from "@/types/knowledge-connector";
 import { chunkDocument } from "./chunker";
-import { extractErrorMessage } from "./connectors/base-connector";
+import {
+  BaseConnector,
+  extractErrorMessage,
+} from "./connectors/base-connector";
 import { getConnector } from "./connectors/registry";
 
 /**
@@ -52,8 +55,13 @@ class ConnectorSyncService {
       await ConnectorRunModel.interruptActiveRuns(connectorId);
     if (interrupted > 0) {
       log.info(
-        { connectorId, interrupted },
-        "[ConnectorSync] Interrupted stale running runs",
+        {
+          connectorId,
+          connectorName: connector.name,
+          connectorType: connector.connectorType,
+          interrupted,
+        },
+        "Interrupted stale running runs",
       );
     }
 
@@ -66,8 +74,18 @@ class ConnectorSyncService {
       documentsIngested: 0,
     });
 
-    // Bind runId to logger so every log line in this sync includes it
-    const runLog = log.child({ runId: run.id, connectorId });
+    // Bind runId, connectorName, and connectorType to logger so every log line in this sync includes them
+    const runLog = log.child({
+      runId: run.id,
+      connectorId,
+      connectorName: connector.name,
+      connectorType: connector.connectorType,
+    });
+
+    // Propagate the run-scoped logger into the connector implementation
+    if (connectorImpl instanceof BaseConnector) {
+      connectorImpl.setLogger(runLog);
+    }
 
     // Update connector lastSyncStatus to running
     await KnowledgeBaseConnectorModel.update(connectorId, {
@@ -84,14 +102,14 @@ class ConnectorSyncService {
 
       if (totalItems !== null && totalItems > 0) {
         await ConnectorRunModel.update(run.id, { totalItems });
-        runLog.info({ totalItems }, "[ConnectorSync] Estimated total items");
+        runLog.info({ totalItems }, "Estimated total items");
       }
     } catch (error) {
       runLog.warn(
         {
           error: extractErrorMessage(error),
         },
-        "[ConnectorSync] Failed to estimate total items, continuing without",
+        "Failed to estimate total items, continuing without",
       );
     }
 
@@ -133,7 +151,7 @@ class ConnectorSyncService {
                 documentId: doc.id,
                 error: extractErrorMessage(docError),
               },
-              "[ConnectorSync] Failed to ingest document",
+              "Failed to ingest document",
             );
           }
         }
@@ -179,7 +197,7 @@ class ConnectorSyncService {
                 maxDurationMs: options.maxDurationMs,
                 documentsProcessed,
               },
-              "[ConnectorSync] Time budget exceeded, stopping early for continuation",
+              "Time budget exceeded, stopping early for continuation",
             );
             break;
           }
@@ -207,7 +225,7 @@ class ConnectorSyncService {
 
         runLog.info(
           { documentsProcessed, documentsIngested },
-          "[ConnectorSync] Partial sync completed, continuation needed",
+          "Partial sync completed, continuation needed",
         );
 
         return { runId: run.id, status: "partial" };
@@ -264,7 +282,7 @@ class ConnectorSyncService {
           documentsIngested,
           batchCount,
         },
-        "[ConnectorSync] Sync completed successfully",
+        "Sync completed successfully",
       );
 
       return { runId: run.id, status: "success" };
@@ -286,7 +304,7 @@ class ConnectorSyncService {
         lastSyncAt: new Date(),
       });
 
-      runLog.error({ error: errorMessage }, "[ConnectorSync] Sync failed");
+      runLog.error({ error: errorMessage }, "Sync failed");
 
       return { runId: run.id, status: "failed" };
     }
@@ -322,7 +340,7 @@ class ConnectorSyncService {
             documentId: doc.id,
             existingDocId: existing.id,
           },
-          "[ConnectorSync] Document unchanged, skipping",
+          "Document unchanged, skipping",
         );
         return { ingested: false, documentId: null };
       }
@@ -355,7 +373,7 @@ class ConnectorSyncService {
           documentId: doc.id,
           kbDocumentId: existing.id,
         },
-        "[ConnectorSync] Updated existing document with new content",
+        "Updated existing document with new content",
       );
       return { ingested: true, documentId: existing.id };
     }
@@ -388,7 +406,7 @@ class ConnectorSyncService {
       {
         documentId: doc.id,
       },
-      "[ConnectorSync] Document ingested into kb_documents",
+      "Document ingested into kb_documents",
     );
     return { ingested: true, documentId: created.id };
   }
@@ -417,7 +435,7 @@ class ConnectorSyncService {
 
     log.debug(
       { documentId, chunkCount: chunks.length },
-      "[ConnectorSync] Document chunked and stored",
+      "Document chunked and stored",
     );
   }
 
@@ -434,7 +452,7 @@ class ConnectorSyncService {
       throw new Error(`Secret not found: ${secretId}`);
     }
 
-    log.debug({ secretId }, "[ConnectorSync] Credentials loaded");
+    log.debug({ secretId }, "Credentials loaded");
 
     const data = secret.secret as Record<string, unknown>;
     return {

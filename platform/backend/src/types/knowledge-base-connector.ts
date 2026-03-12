@@ -78,6 +78,7 @@ export const UpdateKnowledgeBaseConnectorSchema = createUpdateSchema(
   },
 ).pick({
   name: true,
+  description: true,
   config: true,
   secretId: true,
   schedule: true,

@@ -14,8 +14,8 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
+  DialogStickyFooter,
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
@@ -39,11 +39,18 @@ import { SchedulePicker } from "./schedule-picker";
 
 type ConnectorItem = Pick<
   archestraApiTypes.GetConnectorsResponses["200"]["data"][number],
-  "id" | "name" | "connectorType" | "config" | "schedule" | "enabled"
+  | "id"
+  | "name"
+  | "description"
+  | "connectorType"
+  | "config"
+  | "schedule"
+  | "enabled"
 >;
 
 interface EditConnectorFormValues {
   name: string;
+  description: string;
   enabled: boolean;
   config: Record<string, unknown>;
   email: string;
@@ -65,6 +72,7 @@ export function EditConnectorDialog({
   const form = useForm<EditConnectorFormValues>({
     defaultValues: {
       name: connector.name,
+      description: connector.description ?? "",
       enabled: connector.enabled,
       config: connector.config as Record<string, unknown>,
       email: "",
@@ -77,6 +85,7 @@ export function EditConnectorDialog({
     if (open) {
       form.reset({
         name: connector.name,
+        description: connector.description ?? "",
         enabled: connector.enabled,
         config: connector.config as Record<string, unknown>,
         email: "",
@@ -99,6 +108,7 @@ export function EditConnectorDialog({
       id: connector.id,
       body: {
         name: values.name,
+        description: values.description || null,
         enabled: values.enabled,
         config:
           values.config as archestraApiTypes.CreateConnectorData["body"]["config"],
@@ -118,7 +128,7 @@ export function EditConnectorDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col overflow-hidden">
+      <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <div className="flex h-7 w-7 items-center justify-center rounded-md bg-muted">
@@ -132,11 +142,8 @@ export function EditConnectorDialog({
         </DialogHeader>
 
         <Form {...form}>
-          <form
-            onSubmit={form.handleSubmit(handleSubmit)}
-            className="flex flex-col overflow-hidden"
-          >
-            <div className="space-y-4 overflow-y-auto py-1 pr-1">
+          <form onSubmit={form.handleSubmit(handleSubmit)}>
+            <div className="space-y-4">
               <FormField
                 control={form.control}
                 name="enabled"
@@ -168,7 +175,32 @@ export function EditConnectorDialog({
                   <FormItem>
                     <FormLabel>Name</FormLabel>
                     <FormControl>
-                      <Input placeholder="Connector name" {...field} />
+                      <Input
+                        placeholder="Engineering Jira Connector"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="description"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>
+                      Description{" "}
+                      <span className="text-muted-foreground font-normal">
+                        (optional)
+                      </span>
+                    </FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="A short description of this connector"
+                        {...field}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -299,7 +331,7 @@ export function EditConnectorDialog({
               </Collapsible>
             </div>
 
-            <DialogFooter className="pt-4">
+            <DialogStickyFooter>
               <Button
                 type="button"
                 variant="outline"
@@ -310,7 +342,7 @@ export function EditConnectorDialog({
               <Button type="submit" disabled={updateConnector.isPending}>
                 {updateConnector.isPending ? "Saving..." : "Save Changes"}
               </Button>
-            </DialogFooter>
+            </DialogStickyFooter>
           </form>
         </Form>
       </DialogContent>

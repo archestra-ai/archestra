@@ -22,8 +22,8 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
+  DialogStickyFooter,
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
@@ -94,7 +94,7 @@ export function ManageUsersDialog({
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent
-        className="max-w-5xl h-[85vh] flex flex-col"
+        className="max-w-5xl h-[85vh] flex flex-col overflow-y-auto"
         data-testid={E2eTestId.ManageCredentialsDialog}
       >
         <ManageUsersContent
@@ -401,11 +401,11 @@ export function ManageUsersContent({
       </div>
 
       {!hideHeader && (
-        <DialogFooter>
+        <DialogStickyFooter>
           <Button variant="outline" onClick={onClose}>
             Close
           </Button>
-        </DialogFooter>
+        </DialogStickyFooter>
       )}
     </>
   );

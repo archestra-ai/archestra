@@ -38,6 +38,7 @@ import { cn } from "@/lib/utils";
 export function usePlaywrightSetupRequired(
   agentId: string | undefined,
   conversationId: string | undefined,
+  options?: { enabled?: boolean },
 ) {
   // Track pending tool actions reactively (for pre-conversation state)
   const [pendingActionsVersion, setPendingActionsVersion] = useState(0);
@@ -59,6 +60,7 @@ export function usePlaywrightSetupRequired(
   // (no mutations) to avoid interfering with install state in the dialog/right panel
   const { data: playwrightServers = [] } = useMcpServers({
     catalogId: PLAYWRIGHT_MCP_CATALOG_ID,
+    enabled: options?.enabled,
   });
   const { data: session } = authClient.useSession();
   const isPlaywrightInstalledByCurrentUser = playwrightServers.some(

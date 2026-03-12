@@ -2,6 +2,7 @@ import config from "@/config";
 import { createCapturingLogger } from "@/entrypoints/_shared/log-capture";
 import { connectorSyncService } from "@/knowledge-base";
 import logger from "@/logging";
+import { KnowledgeBaseConnectorModel } from "@/models";
 import { taskQueueService } from "@/task-queue";
 
 const MAX_CONTINUATIONS = 50;
@@ -15,6 +16,11 @@ export async function handleConnectorSync(
   if (!connectorId) {
     throw new Error("Missing connectorId in connector_sync payload");
   }
+
+  // Load connector metadata for structured logging
+  const connector = await KnowledgeBaseConnectorModel.findById(connectorId);
+  const connectorName = connector?.name;
+  const connectorType = connector?.connectorType;
 
   const { logger: capturingLogger, getLogOutput } = createCapturingLogger();
 
@@ -39,13 +45,25 @@ export async function handleConnectorSync(
         },
       });
       logger.info(
-        { connectorId, continuationCount: continuationCount + 1 },
-        "[ConnectorSyncHandler] Enqueued continuation",
+        {
+          connectorId,
+          connectorName,
+          connectorType,
+          runId: result.runId,
+          continuationCount: continuationCount + 1,
+        },
+        "Enqueued sync continuation",
       );
     } else {
       logger.warn(
-        { connectorId, maxContinuations: MAX_CONTINUATIONS },
-        "[ConnectorSyncHandler] Max continuations reached",
+        {
+          connectorId,
+          connectorName,
+          connectorType,
+          runId: result.runId,
+          maxContinuations: MAX_CONTINUATIONS,
+        },
+        "Max sync continuations reached",
       );
     }
   }

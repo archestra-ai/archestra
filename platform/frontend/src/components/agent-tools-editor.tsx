@@ -987,12 +987,17 @@ export function ToolChecklist({
   const [searchQuery, setSearchQuery] = useState("");
 
   // Snapshot the initial selection for sort order so tools don't jump
-  // around as the user toggles checkboxes. Re-sorts only when the
-  // component remounts (e.g. popover re-opens) or search query changes.
+  // around as the user toggles checkboxes. Updates synchronously during
+  // render when the selection transitions from empty to populated (async
+  // data load), then stays frozen until remount.
   const initialSelectedRef = useRef(selectedToolIds);
+  if (initialSelectedRef.current.size === 0 && selectedToolIds.size > 0) {
+    initialSelectedRef.current = selectedToolIds;
+  }
+  // biome-ignore lint/correctness/useExhaustiveDependencies: selectedToolIds.size > 0 triggers re-sort when selection transitions from empty to populated
   const filteredTools = useMemo(
     () => sortAndFilterTools(tools, initialSelectedRef.current, searchQuery),
-    [tools, searchQuery],
+    [tools, searchQuery, selectedToolIds.size > 0],
   );
 
   const allSelected = filteredTools.every((tool) =>

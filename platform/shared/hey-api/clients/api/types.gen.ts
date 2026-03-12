@@ -11995,6 +11995,10 @@ export type GetAllAgentsData = {
          * Exclude built-in agents from the results. Defaults to false.
          */
         excludeBuiltIn?: boolean;
+        /**
+         * Filter by scope: personal, team, org, or built_in.
+         */
+        scope?: 'personal' | 'team' | 'org' | 'built_in';
     };
     url: '/api/agents/all';
 };
@@ -25523,6 +25527,11 @@ export type GetInternalMcpCatalogResponses = {
                 default?: string | number | boolean;
                 mounted?: boolean;
             }>;
+            envFrom?: Array<{
+                type: 'secret' | 'configMap';
+                name: string;
+                prefix?: string;
+            }>;
             dockerImage?: string;
             serviceAccount?: string;
             transportType?: 'stdio' | 'streamable-http';
@@ -25631,6 +25640,11 @@ export type CreateInternalMcpCatalogItemData = {
                 description?: string;
                 default?: string | number | boolean;
                 mounted?: boolean;
+            }>;
+            envFrom?: Array<{
+                type: 'secret' | 'configMap';
+                name: string;
+                prefix?: string;
             }>;
             dockerImage?: string;
             transportType?: 'stdio' | 'streamable-http';
@@ -25799,6 +25813,11 @@ export type CreateInternalMcpCatalogItemResponses = {
                 description?: string;
                 default?: string | number | boolean;
                 mounted?: boolean;
+            }>;
+            envFrom?: Array<{
+                type: 'secret' | 'configMap';
+                name: string;
+                prefix?: string;
             }>;
             dockerImage?: string;
             serviceAccount?: string;
@@ -26059,6 +26078,11 @@ export type GetInternalMcpCatalogItemResponses = {
                 default?: string | number | boolean;
                 mounted?: boolean;
             }>;
+            envFrom?: Array<{
+                type: 'secret' | 'configMap';
+                name: string;
+                prefix?: string;
+            }>;
             dockerImage?: string;
             serviceAccount?: string;
             transportType?: 'stdio' | 'streamable-http';
@@ -26166,6 +26190,11 @@ export type UpdateInternalMcpCatalogItemData = {
                 description?: string;
                 default?: string | number | boolean;
                 mounted?: boolean;
+            }>;
+            envFrom?: Array<{
+                type: 'secret' | 'configMap';
+                name: string;
+                prefix?: string;
             }>;
             dockerImage?: string;
             transportType?: 'stdio' | 'streamable-http';
@@ -26336,6 +26365,11 @@ export type UpdateInternalMcpCatalogItemResponses = {
                 description?: string;
                 default?: string | number | boolean;
                 mounted?: boolean;
+            }>;
+            envFrom?: Array<{
+                type: 'secret' | 'configMap';
+                name: string;
+                prefix?: string;
             }>;
             dockerImage?: string;
             serviceAccount?: string;
@@ -27752,6 +27786,7 @@ export type GetConnectorsResponses = {
             id: string;
             organizationId: string;
             name: string;
+            description: string | null;
             connectorType: 'jira' | 'confluence' | 'github' | 'gitlab';
             config: {
                 type: 'jira';
@@ -27820,6 +27855,7 @@ export type GetConnectorsResponse = GetConnectorsResponses[keyof GetConnectorsRe
 export type CreateConnectorData = {
     body: {
         name: string;
+        description?: string | null;
         connectorType: 'jira' | 'confluence' | 'github' | 'gitlab';
         config: {
             type: 'jira';
@@ -27935,6 +27971,7 @@ export type CreateConnectorResponses = {
         id: string;
         organizationId: string;
         name: string;
+        description: string | null;
         connectorType: 'jira' | 'confluence' | 'github' | 'gitlab';
         config: {
             type: 'jira';
@@ -28141,6 +28178,7 @@ export type GetConnectorResponses = {
         id: string;
         organizationId: string;
         name: string;
+        description: string | null;
         connectorType: 'jira' | 'confluence' | 'github' | 'gitlab';
         config: {
             type: 'jira';
@@ -28196,6 +28234,7 @@ export type GetConnectorResponse = GetConnectorResponses[keyof GetConnectorRespo
 export type UpdateConnectorData = {
     body?: {
         name?: string;
+        description?: string | null;
         config?: {
             type: 'jira';
             jiraBaseUrl: string;
@@ -28311,6 +28350,7 @@ export type UpdateConnectorResponses = {
         id: string;
         organizationId: string;
         name: string;
+        description: string | null;
         connectorType: 'jira' | 'confluence' | 'github' | 'gitlab';
         config: {
             type: 'jira';
@@ -29630,6 +29670,11 @@ export type GetMcpServerInstallationRequestsResponses = {
                     default?: string | number | boolean;
                     mounted?: boolean;
                 }>;
+                envFrom?: Array<{
+                    type: 'secret' | 'configMap';
+                    name: string;
+                    prefix?: string;
+                }>;
                 dockerImage?: string;
                 transportType?: 'stdio' | 'streamable-http';
                 httpPort?: number;
@@ -29720,6 +29765,11 @@ export type CreateMcpServerInstallationRequestData = {
                     description?: string;
                     default?: string | number | boolean;
                     mounted?: boolean;
+                }>;
+                envFrom?: Array<{
+                    type: 'secret' | 'configMap';
+                    name: string;
+                    prefix?: string;
                 }>;
                 dockerImage?: string;
                 transportType?: 'stdio' | 'streamable-http';
@@ -29865,6 +29915,11 @@ export type CreateMcpServerInstallationRequestResponses = {
                     description?: string;
                     default?: string | number | boolean;
                     mounted?: boolean;
+                }>;
+                envFrom?: Array<{
+                    type: 'secret' | 'configMap';
+                    name: string;
+                    prefix?: string;
                 }>;
                 dockerImage?: string;
                 transportType?: 'stdio' | 'streamable-http';
@@ -30110,6 +30165,11 @@ export type GetMcpServerInstallationRequestResponses = {
                     default?: string | number | boolean;
                     mounted?: boolean;
                 }>;
+                envFrom?: Array<{
+                    type: 'secret' | 'configMap';
+                    name: string;
+                    prefix?: string;
+                }>;
                 dockerImage?: string;
                 transportType?: 'stdio' | 'streamable-http';
                 httpPort?: number;
@@ -30200,6 +30260,11 @@ export type UpdateMcpServerInstallationRequestData = {
                     description?: string;
                     default?: string | number | boolean;
                     mounted?: boolean;
+                }>;
+                envFrom?: Array<{
+                    type: 'secret' | 'configMap';
+                    name: string;
+                    prefix?: string;
                 }>;
                 dockerImage?: string;
                 transportType?: 'stdio' | 'streamable-http';
@@ -30357,6 +30422,11 @@ export type UpdateMcpServerInstallationRequestResponses = {
                     description?: string;
                     default?: string | number | boolean;
                     mounted?: boolean;
+                }>;
+                envFrom?: Array<{
+                    type: 'secret' | 'configMap';
+                    name: string;
+                    prefix?: string;
                 }>;
                 dockerImage?: string;
                 transportType?: 'stdio' | 'streamable-http';
@@ -30525,6 +30595,11 @@ export type ApproveMcpServerInstallationRequestResponses = {
                     default?: string | number | boolean;
                     mounted?: boolean;
                 }>;
+                envFrom?: Array<{
+                    type: 'secret' | 'configMap';
+                    name: string;
+                    prefix?: string;
+                }>;
                 dockerImage?: string;
                 transportType?: 'stdio' | 'streamable-http';
                 httpPort?: number;
@@ -30692,6 +30767,11 @@ export type DeclineMcpServerInstallationRequestResponses = {
                     default?: string | number | boolean;
                     mounted?: boolean;
                 }>;
+                envFrom?: Array<{
+                    type: 'secret' | 'configMap';
+                    name: string;
+                    prefix?: string;
+                }>;
                 dockerImage?: string;
                 transportType?: 'stdio' | 'streamable-http';
                 httpPort?: number;
@@ -30858,6 +30938,11 @@ export type AddMcpServerInstallationRequestNoteResponses = {
                     description?: string;
                     default?: string | number | boolean;
                     mounted?: boolean;
+                }>;
+                envFrom?: Array<{
+                    type: 'secret' | 'configMap';
+                    name: string;
+                    prefix?: string;
                 }>;
                 dockerImage?: string;
                 transportType?: 'stdio' | 'streamable-http';
@@ -33533,7 +33618,7 @@ export type GetRolesResponses = {
         role: string;
         name: string;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable'>;
         };
         createdAt: string;
         updatedAt: string | null;
@@ -33547,7 +33632,7 @@ export type CreateRoleData = {
     body: {
         name: string;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable'>;
         };
     };
     path?: never;
@@ -33624,7 +33709,7 @@ export type CreateRoleResponses = {
         role: string;
         name: string;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable'>;
         };
         createdAt: string;
         updatedAt: string | null;
@@ -33797,7 +33882,7 @@ export type GetRoleResponses = {
         role: string;
         name: string;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable'>;
         };
         createdAt: string;
         updatedAt: string | null;
@@ -33811,7 +33896,7 @@ export type UpdateRoleData = {
     body?: {
         name?: string;
         permission?: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable'>;
         };
     };
     path: {
@@ -33893,7 +33978,7 @@ export type UpdateRoleResponses = {
         role: string;
         name: string;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable'>;
         };
         createdAt: string;
         updatedAt: string | null;
@@ -33990,9 +34075,20 @@ export type GetOrganizationResponses = {
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
         embeddingModel: string | null;
+        embeddingDimensions: number | null;
         embeddingChatApiKeyId: string | null;
         rerankerChatApiKeyId: string | null;
         rerankerModel: string | null;
+        defaultLlmModel: string | null;
+        defaultLlmProvider: string | null;
+        defaultAgentId: string | null;
+        favicon: string | null;
+        appName: string | null;
+        ogDescription: string | null;
+        footerText: string | null;
+        chatPlaceholders: Array<string> | null;
+        iconLogo: string | null;
+        showTwoFactor: boolean;
     };
 };
 
@@ -34073,6 +34169,11 @@ export type GetPublicAppearanceResponses = {
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         logo: string | null;
         logoDark: string | null;
+        favicon: string | null;
+        iconLogo: string | null;
+        appName: string | null;
+        ogDescription: string | null;
+        footerText: string | null;
     };
 };
 
@@ -34084,6 +34185,13 @@ export type UpdateAppearanceData = {
         customFont?: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         logo?: string | null;
         logoDark?: string | null;
+        favicon?: string | null;
+        iconLogo?: string | null;
+        appName?: string | null;
+        ogDescription?: string | null;
+        footerText?: string | null;
+        chatPlaceholders?: Array<string> | null;
+        showTwoFactor?: boolean;
     };
     path?: never;
     query?: never;
@@ -34170,9 +34278,20 @@ export type UpdateAppearanceResponses = {
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
         embeddingModel: string | null;
+        embeddingDimensions: number | null;
         embeddingChatApiKeyId: string | null;
         rerankerChatApiKeyId: string | null;
         rerankerModel: string | null;
+        defaultLlmModel: string | null;
+        defaultLlmProvider: string | null;
+        defaultAgentId: string | null;
+        favicon: string | null;
+        appName: string | null;
+        ogDescription: string | null;
+        footerText: string | null;
+        chatPlaceholders: Array<string> | null;
+        iconLogo: string | null;
+        showTwoFactor: boolean;
     };
 };
 
@@ -34268,9 +34387,20 @@ export type UpdateSecuritySettingsResponses = {
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
         embeddingModel: string | null;
+        embeddingDimensions: number | null;
         embeddingChatApiKeyId: string | null;
         rerankerChatApiKeyId: string | null;
         rerankerModel: string | null;
+        defaultLlmModel: string | null;
+        defaultLlmProvider: string | null;
+        defaultAgentId: string | null;
+        favicon: string | null;
+        appName: string | null;
+        ogDescription: string | null;
+        footerText: string | null;
+        chatPlaceholders: Array<string> | null;
+        iconLogo: string | null;
+        showTwoFactor: boolean;
     };
 };
 
@@ -34367,17 +34497,139 @@ export type UpdateLlmSettingsResponses = {
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
         embeddingModel: string | null;
+        embeddingDimensions: number | null;
         embeddingChatApiKeyId: string | null;
         rerankerChatApiKeyId: string | null;
         rerankerModel: string | null;
+        defaultLlmModel: string | null;
+        defaultLlmProvider: string | null;
+        defaultAgentId: string | null;
+        favicon: string | null;
+        appName: string | null;
+        ogDescription: string | null;
+        footerText: string | null;
+        chatPlaceholders: Array<string> | null;
+        iconLogo: string | null;
+        showTwoFactor: boolean;
     };
 };
 
 export type UpdateLlmSettingsResponse = UpdateLlmSettingsResponses[keyof UpdateLlmSettingsResponses];
 
+export type UpdateAgentSettingsData = {
+    body?: {
+        defaultLlmModel?: string | null;
+        defaultLlmProvider?: string | null;
+        defaultAgentId?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/organization/agent-settings';
+};
+
+export type UpdateAgentSettingsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type UpdateAgentSettingsError = UpdateAgentSettingsErrors[keyof UpdateAgentSettingsErrors];
+
+export type UpdateAgentSettingsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        name: string;
+        slug: string;
+        logo: string | null;
+        logoDark: string | null;
+        createdAt: string;
+        metadata: string | null;
+        limitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
+        onboardingComplete: boolean;
+        theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
+        customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
+        convertToolResultsToToon: boolean;
+        compressionScope: 'organization' | 'team';
+        globalToolPolicy: 'permissive' | 'restrictive';
+        allowChatFileUploads: boolean;
+        embeddingModel: string | null;
+        embeddingDimensions: number | null;
+        embeddingChatApiKeyId: string | null;
+        rerankerChatApiKeyId: string | null;
+        rerankerModel: string | null;
+        defaultLlmModel: string | null;
+        defaultLlmProvider: string | null;
+        defaultAgentId: string | null;
+        favicon: string | null;
+        appName: string | null;
+        ogDescription: string | null;
+        footerText: string | null;
+        chatPlaceholders: Array<string> | null;
+        iconLogo: string | null;
+        showTwoFactor: boolean;
+    };
+};
+
+export type UpdateAgentSettingsResponse = UpdateAgentSettingsResponses[keyof UpdateAgentSettingsResponses];
+
 export type UpdateKnowledgeSettingsData = {
     body?: {
         embeddingModel?: string;
+        embeddingDimensions?: 1536 | 768;
         embeddingChatApiKeyId?: string | null;
         rerankerChatApiKeyId?: string | null;
         rerankerModel?: string | null;
@@ -34467,9 +34719,20 @@ export type UpdateKnowledgeSettingsResponses = {
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
         embeddingModel: string | null;
+        embeddingDimensions: number | null;
         embeddingChatApiKeyId: string | null;
         rerankerChatApiKeyId: string | null;
         rerankerModel: string | null;
+        defaultLlmModel: string | null;
+        defaultLlmProvider: string | null;
+        defaultAgentId: string | null;
+        favicon: string | null;
+        appName: string | null;
+        ogDescription: string | null;
+        footerText: string | null;
+        chatPlaceholders: Array<string> | null;
+        iconLogo: string | null;
+        showTwoFactor: boolean;
     };
 };
 
@@ -34562,9 +34825,20 @@ export type DropEmbeddingConfigResponses = {
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
         embeddingModel: string | null;
+        embeddingDimensions: number | null;
         embeddingChatApiKeyId: string | null;
         rerankerChatApiKeyId: string | null;
         rerankerModel: string | null;
+        defaultLlmModel: string | null;
+        defaultLlmProvider: string | null;
+        defaultAgentId: string | null;
+        favicon: string | null;
+        appName: string | null;
+        ogDescription: string | null;
+        footerText: string | null;
+        chatPlaceholders: Array<string> | null;
+        iconLogo: string | null;
+        showTwoFactor: boolean;
     };
 };
 
@@ -34740,9 +35014,20 @@ export type CompleteOnboardingResponses = {
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
         embeddingModel: string | null;
+        embeddingDimensions: number | null;
         embeddingChatApiKeyId: string | null;
         rerankerChatApiKeyId: string | null;
         rerankerModel: string | null;
+        defaultLlmModel: string | null;
+        defaultLlmProvider: string | null;
+        defaultAgentId: string | null;
+        favicon: string | null;
+        appName: string | null;
+        ogDescription: string | null;
+        footerText: string | null;
+        chatPlaceholders: Array<string> | null;
+        iconLogo: string | null;
+        showTwoFactor: boolean;
     };
 };
 
@@ -37541,7 +37826,7 @@ export type GetUserPermissionsResponses = {
      * Default Response
      */
     200: {
-        [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel'>;
+        [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable'>;
     };
 };
 

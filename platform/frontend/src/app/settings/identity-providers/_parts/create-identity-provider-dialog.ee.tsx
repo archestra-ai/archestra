@@ -12,8 +12,8 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
+  DialogStickyFooter,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Form } from "@/components/ui/form";
@@ -100,7 +100,7 @@ export function CreateIdentityProviderDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
+      <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
             {providerName
@@ -115,23 +115,18 @@ export function CreateIdentityProviderDialog({
         </DialogHeader>
 
         <Form {...form}>
-          <form
-            onSubmit={form.handleSubmit(onSubmit)}
-            className="flex flex-col flex-1 overflow-hidden"
-          >
-            <div className="flex-1 overflow-y-auto py-4">
-              {currentProviderType === "saml" ? (
-                <SamlConfigForm form={form} hideProviderId={hideProviderId} />
-              ) : (
-                <OidcConfigForm
-                  form={form}
-                  hidePkce={hidePkce}
-                  hideProviderId={hideProviderId}
-                />
-              )}
-            </div>
+          <form onSubmit={form.handleSubmit(onSubmit)}>
+            {currentProviderType === "saml" ? (
+              <SamlConfigForm form={form} hideProviderId={hideProviderId} />
+            ) : (
+              <OidcConfigForm
+                form={form}
+                hidePkce={hidePkce}
+                hideProviderId={hideProviderId}
+              />
+            )}
 
-            <DialogFooter className="mt-4">
+            <DialogStickyFooter>
               <Button type="button" variant="outline" onClick={handleClose}>
                 Cancel
               </Button>
@@ -144,7 +139,7 @@ export function CreateIdentityProviderDialog({
                   ? "Creating..."
                   : "Create Provider"}
               </PermissionButton>
-            </DialogFooter>
+            </DialogStickyFooter>
           </form>
         </Form>
       </DialogContent>

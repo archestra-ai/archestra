@@ -87,4 +87,56 @@ describe("tool assignment tool execution", () => {
     expect(parsed.failed).toEqual([]);
     expect(parsed.duplicates).toEqual([]);
   });
+
+  test("bulk_assign_tools_to_agents assigns real tools to real agents", async ({
+    makeAgent,
+    makeTool,
+  }) => {
+    const agent1 = await makeAgent({ name: "Agent One" });
+    const agent2 = await makeAgent({ name: "Agent Two" });
+    const tool1 = await makeTool({ name: "assign_test_tool_1" });
+    const tool2 = await makeTool({ name: "assign_test_tool_2" });
+
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}bulk_assign_tools_to_agents`,
+      {
+        assignments: [
+          { agentId: agent1.id, toolId: tool1.id },
+          { agentId: agent1.id, toolId: tool2.id },
+          { agentId: agent2.id, toolId: tool1.id },
+        ],
+      },
+      mockContext,
+    );
+    expect(result.isError).toBe(false);
+    const parsed = JSON.parse((result.content[0] as any).text);
+    expect(parsed.succeeded.length).toBe(3);
+    expect(parsed.failed.length).toBe(0);
+  });
+
+  test("bulk_assign_tools_to_agents detects duplicates on second assignment", async ({
+    makeAgent,
+    makeTool,
+  }) => {
+    const agent = await makeAgent({ name: "Dup Agent" });
+    const tool = await makeTool({ name: "dup_test_tool" });
+
+    // First assignment succeeds
+    await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}bulk_assign_tools_to_agents`,
+      { assignments: [{ agentId: agent.id, toolId: tool.id }] },
+      mockContext,
+    );
+
+    // Second assignment should be a duplicate
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}bulk_assign_tools_to_agents`,
+      { assignments: [{ agentId: agent.id, toolId: tool.id }] },
+      mockContext,
+    );
+    expect(result.isError).toBe(false);
+    const parsed = JSON.parse((result.content[0] as any).text);
+    expect(parsed.duplicates.length).toBe(1);
+    expect(parsed.succeeded.length).toBe(0);
+  });
 });

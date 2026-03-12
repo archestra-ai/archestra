@@ -208,7 +208,7 @@ export async function handleTool(
       const limitValue = args?.limit_value as number;
       const model = args?.model as string[] | undefined;
       const mcpServerName = args?.mcp_server_name as string | undefined;
-      const toolName = args?.tool_name as string | undefined;
+      const limitToolName = args?.tool_name as string | undefined;
 
       // Validate required fields
       if (!entityType || !entityId || !limitType || limitValue === undefined) {
@@ -251,7 +251,7 @@ export async function handleTool(
         };
       }
 
-      if (limitType === "tool_calls" && (!mcpServerName || !toolName)) {
+      if (limitType === "tool_calls" && (!mcpServerName || !limitToolName)) {
         return {
           content: [
             {
@@ -271,7 +271,7 @@ export async function handleTool(
         limitValue,
         model,
         mcpServerName,
-        toolName,
+        toolName: limitToolName,
       });
 
       return {

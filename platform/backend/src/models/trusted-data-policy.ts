@@ -93,9 +93,10 @@ class TrustedDataPolicyModel {
 
     const result = await db
       .delete(schema.trustedDataPoliciesTable)
-      .where(eq(schema.trustedDataPoliciesTable.id, id));
+      .where(eq(schema.trustedDataPoliciesTable.id, id))
+      .returning({ id: schema.trustedDataPoliciesTable.id });
 
-    const deleted = result.rowCount !== null && result.rowCount > 0;
+    const deleted = result.length > 0;
 
     if (deleted) {
       // Clear auto-configured timestamp for this tool
@@ -118,9 +119,10 @@ class TrustedDataPolicyModel {
   static async deleteByToolId(toolId: string): Promise<number> {
     const result = await db
       .delete(schema.trustedDataPoliciesTable)
-      .where(eq(schema.trustedDataPoliciesTable.toolId, toolId));
+      .where(eq(schema.trustedDataPoliciesTable.toolId, toolId))
+      .returning({ id: schema.trustedDataPoliciesTable.id });
 
-    return result.rowCount ?? 0;
+    return result.length;
   }
 
   /**

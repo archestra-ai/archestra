@@ -312,7 +312,10 @@ export async function handleTool(
 
   if (toolName === TOOL_ARTIFACT_WRITE_FULL_NAME) {
     logger.info(
-      { agentId: contextAgent.id, artifactArgs: args, context },
+      {
+        agentId: contextAgent.id,
+        contentLength: (args?.content as string)?.length,
+      },
       "artifact_write tool called",
     );
 

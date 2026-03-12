@@ -118,4 +118,116 @@ describe("chat tool execution", () => {
       "requires conversation context",
     );
   });
+
+  test("artifact_write succeeds with real conversation context", async ({
+    makeConversation,
+    makeUser,
+    makeOrganization,
+    makeMember,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "admin" });
+
+    const conversation = await makeConversation(testAgent.id, {
+      userId: user.id,
+      organizationId: org.id,
+    });
+
+    const contextWithConvo: ArchestraContext = {
+      agent: { id: testAgent.id, name: testAgent.name },
+      conversationId: conversation.id,
+      userId: user.id,
+      organizationId: org.id,
+    };
+
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}artifact_write`,
+      { content: "# Test Artifact\n\nSome **markdown** content." },
+      contextWithConvo,
+    );
+    expect(result.isError).toBe(false);
+    expect((result.content[0] as any).text).toContain(
+      "Successfully updated conversation artifact",
+    );
+  });
+
+  test("swap_agent succeeds with real conversation and target agent", async ({
+    makeAgent,
+    makeConversation,
+    makeUser,
+    makeOrganization,
+    makeMember,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "admin" });
+
+    const targetAgent = await makeAgent({
+      name: "Swap Target Agent",
+      agentType: "agent",
+      organizationId: org.id,
+    });
+
+    const conversation = await makeConversation(testAgent.id, {
+      userId: user.id,
+      organizationId: org.id,
+    });
+
+    const contextWithConvo: ArchestraContext = {
+      agent: { id: testAgent.id, name: testAgent.name },
+      conversationId: conversation.id,
+      userId: user.id,
+      organizationId: org.id,
+    };
+
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}swap_agent`,
+      { agent_name: "Swap Target Agent" },
+      contextWithConvo,
+    );
+    expect(result.isError).toBe(false);
+    const parsed = JSON.parse((result.content[0] as any).text);
+    expect(parsed.success).toBe(true);
+    expect(parsed.agent_id).toBe(targetAgent.id);
+    expect(parsed.agent_name).toBe("Swap Target Agent");
+  });
+
+  test("swap_agent returns error when swapping to same agent", async ({
+    makeAgent,
+    makeConversation,
+    makeUser,
+    makeOrganization,
+    makeMember,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "admin" });
+
+    const sameAgent = await makeAgent({
+      name: "Same Agent Swap Test",
+      agentType: "agent",
+      organizationId: org.id,
+    });
+
+    const conversation = await makeConversation(sameAgent.id, {
+      userId: user.id,
+      organizationId: org.id,
+    });
+
+    const contextWithConvo: ArchestraContext = {
+      agent: { id: sameAgent.id, name: sameAgent.name },
+      conversationId: conversation.id,
+      userId: user.id,
+      organizationId: org.id,
+    };
+
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}swap_agent`,
+      { agent_name: "Same Agent Swap Test" },
+      contextWithConvo,
+    );
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain("Already using agent");
+  });
 });

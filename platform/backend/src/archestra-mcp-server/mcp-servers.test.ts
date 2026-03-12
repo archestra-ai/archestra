@@ -123,4 +123,104 @@ describe("mcp server tool execution", () => {
       "dialog for adding or requesting",
     );
   });
+
+  test("get_mcp_servers returns real catalog items", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      name: "Test MCP Server",
+      description: "A test server",
+    });
+
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}get_mcp_servers`,
+      {},
+      mockContext,
+    );
+    expect(result.isError).toBe(false);
+    const parsed = JSON.parse((result.content[0] as any).text);
+    const found = parsed.find((item: any) => item.id === catalog.id);
+    expect(found).toBeDefined();
+    expect(found.name).toBe("Test MCP Server");
+    expect(found.description).toBe("A test server");
+  });
+
+  test("search_private_mcp_registry finds matching catalog item", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      name: "UniqueSearchableServer",
+      description: "Unique description for search",
+    });
+
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}search_private_mcp_registry`,
+      { query: "UniqueSearchableServer" },
+      mockContext,
+    );
+    expect(result.isError).toBe(false);
+    const text = (result.content[0] as any).text;
+    expect(text).toContain("UniqueSearchableServer");
+    expect(text).toContain(catalog.id);
+  });
+
+  test("get_mcp_server_tools returns tools for a catalog item", async ({
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      name: "Server With Tools",
+    });
+    await makeTool({ catalogId: catalog.id, name: "test_tool_1" });
+    await makeTool({ catalogId: catalog.id, name: "test_tool_2" });
+
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}get_mcp_server_tools`,
+      { mcpServerId: catalog.id },
+      mockContext,
+    );
+    expect(result.isError).toBe(false);
+    const parsed = JSON.parse((result.content[0] as any).text);
+    expect(parsed.length).toBe(2);
+    const names = parsed.map((t: any) => t.name);
+    expect(names).toContain("test_tool_1");
+    expect(names).toContain("test_tool_2");
+  });
+
+  test("edit_mcp updates an existing catalog item", async ({
+    makeInternalMcpCatalog,
+    makeUser,
+    makeOrganization,
+    makeMember,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "admin" });
+
+    const catalog = await makeInternalMcpCatalog({
+      name: "Original Name",
+      description: "Original description",
+    });
+
+    const contextWithAuth: ArchestraContext = {
+      ...mockContext,
+      userId: user.id,
+      organizationId: org.id,
+    };
+
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}edit_mcp`,
+      {
+        id: catalog.id,
+        name: "Updated Name",
+        description: "Updated description",
+      },
+      contextWithAuth,
+    );
+    expect(result.isError).toBe(false);
+    const text = (result.content[0] as any).text;
+    expect(text).toContain("Successfully updated MCP server");
+    expect(text).toContain("Updated Name");
+    expect(text).toContain("Updated description");
+  });
 });

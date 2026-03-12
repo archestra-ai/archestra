@@ -204,4 +204,129 @@ describe("policy tool execution", () => {
     const fetched = JSON.parse((getResult.content[0] as any).text);
     expect(fetched.id).toBe(created.id);
   });
+
+  test("full tool invocation policy CRUD lifecycle", async ({ makeTool }) => {
+    const tool = await makeTool();
+
+    // Create
+    const createResult = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_tool_invocation_policy`,
+      {
+        toolId: tool.id,
+        conditions: [{ key: "url", operator: "contains", value: "internal" }],
+        action: "block_always",
+        reason: "block internal URLs",
+      },
+      mockContext,
+    );
+    expect(createResult.isError).toBe(false);
+    const created = JSON.parse((createResult.content[0] as any).text);
+    expect(created.id).toBeDefined();
+    expect(created.action).toBe("block_always");
+
+    // Update
+    const updateResult = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}update_tool_invocation_policy`,
+      {
+        id: created.id,
+        action: "block_when_context_is_untrusted",
+        reason: "updated reason",
+      },
+      mockContext,
+    );
+    expect(updateResult.isError).toBe(false);
+    const updated = JSON.parse((updateResult.content[0] as any).text);
+    expect(updated.action).toBe("block_when_context_is_untrusted");
+
+    // Verify in list
+    const listResult = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}get_tool_invocation_policies`,
+      {},
+      mockContext,
+    );
+    expect(listResult.isError).toBe(false);
+    const list = JSON.parse((listResult.content[0] as any).text);
+    expect(list.some((p: any) => p.id === created.id)).toBe(true);
+
+    // Delete
+    const deleteResult = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}delete_tool_invocation_policy`,
+      { id: created.id },
+      mockContext,
+    );
+    expect(deleteResult.isError).toBe(false);
+    const deleteData = JSON.parse((deleteResult.content[0] as any).text);
+    expect(deleteData.success).toBe(true);
+
+    // Verify deleted
+    const getAfterDelete = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}get_tool_invocation_policy`,
+      { id: created.id },
+      mockContext,
+    );
+    expect(getAfterDelete.isError).toBe(true);
+    expect((getAfterDelete.content[0] as any).text).toContain("not found");
+  });
+
+  test("full trusted data policy CRUD lifecycle", async ({ makeTool }) => {
+    const tool = await makeTool();
+
+    // Create
+    const createResult = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_trusted_data_policy`,
+      {
+        toolId: tool.id,
+        conditions: [{ key: "source", operator: "equal", value: "internal" }],
+        action: "mark_as_trusted",
+        description: "trust internal sources",
+      },
+      mockContext,
+    );
+    expect(createResult.isError).toBe(false);
+    const created = JSON.parse((createResult.content[0] as any).text);
+    expect(created.id).toBeDefined();
+
+    // Update
+    const updateResult = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}update_trusted_data_policy`,
+      {
+        id: created.id,
+        action: "mark_as_untrusted",
+        description: "updated description",
+      },
+      mockContext,
+    );
+    expect(updateResult.isError).toBe(false);
+    const updated = JSON.parse((updateResult.content[0] as any).text);
+    expect(updated.action).toBe("mark_as_untrusted");
+
+    // Verify in list
+    const listResult = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}get_trusted_data_policies`,
+      {},
+      mockContext,
+    );
+    expect(listResult.isError).toBe(false);
+    const list = JSON.parse((listResult.content[0] as any).text);
+    expect(list.some((p: any) => p.id === created.id)).toBe(true);
+
+    // Delete
+    const deleteResult = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}delete_trusted_data_policy`,
+      { id: created.id },
+      mockContext,
+    );
+    expect(deleteResult.isError).toBe(false);
+    const deleteData = JSON.parse((deleteResult.content[0] as any).text);
+    expect(deleteData.success).toBe(true);
+
+    // Verify deleted
+    const getAfterDelete = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}get_trusted_data_policy`,
+      { id: created.id },
+      mockContext,
+    );
+    expect(getAfterDelete.isError).toBe(true);
+    expect((getAfterDelete.content[0] as any).text).toContain("not found");
+  });
 });

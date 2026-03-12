@@ -12,7 +12,7 @@ describe("slugify", () => {
   });
 
   test("replaces special characters with underscores", () => {
-    expect(slugify("My Agent (v2)!")).toBe("my_agent_v2_");
+    expect(slugify("My Agent (v2)!")).toBe("my_agent_v2");
   });
 
   test("strips leading and trailing underscores", () => {

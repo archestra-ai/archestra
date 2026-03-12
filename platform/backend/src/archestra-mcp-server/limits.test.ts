@@ -175,4 +175,137 @@ describe("limit tool execution", () => {
     expect((result.content[0] as any).text).toContain("Token usage for agent");
     expect((result.content[0] as any).text).toContain("Total Input Tokens");
   });
+
+  test("full limit CRUD lifecycle", async () => {
+    // Create a token_cost limit
+    const createResult = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_limit`,
+      {
+        entity_type: "agent",
+        entity_id: testAgent.id,
+        limit_type: "token_cost",
+        limit_value: 1000,
+        model: ["gpt-4o"],
+      },
+      mockContext,
+    );
+    expect(createResult.isError).toBe(false);
+    const createText = (createResult.content[0] as any).text;
+    expect(createText).toContain("Successfully created limit");
+    expect(createText).toContain("Limit Type: token_cost");
+    expect(createText).toContain("Limit Value: 1000");
+
+    // Extract the limit ID
+    const idMatch = createText.match(/Limit ID: (.+)/);
+    expect(idMatch).toBeTruthy();
+    const limitId = idMatch?.[1].trim();
+
+    // Get limits and verify the created limit appears
+    const getResult = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}get_limits`,
+      { entity_type: "agent", entity_id: testAgent.id },
+      mockContext,
+    );
+    expect(getResult.isError).toBe(false);
+    const getText = (getResult.content[0] as any).text;
+    expect(getText).toContain("Found 1 limit(s)");
+    expect(getText).toContain(limitId);
+    expect(getText).toContain("token_cost");
+
+    // Update the limit value
+    const updateResult = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}update_limit`,
+      { id: limitId, limit_value: 2000 },
+      mockContext,
+    );
+    expect(updateResult.isError).toBe(false);
+    expect((updateResult.content[0] as any).text).toContain(
+      "Successfully updated limit",
+    );
+    expect((updateResult.content[0] as any).text).toContain(
+      "Limit Value: 2000",
+    );
+
+    // Delete the limit
+    const deleteResult = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}delete_limit`,
+      { id: limitId },
+      mockContext,
+    );
+    expect(deleteResult.isError).toBe(false);
+    expect((deleteResult.content[0] as any).text).toContain(
+      "Successfully deleted limit",
+    );
+
+    // Verify the limit is gone
+    const verifyResult = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}get_limits`,
+      { entity_type: "agent", entity_id: testAgent.id },
+      mockContext,
+    );
+    expect(verifyResult.isError).toBe(false);
+    expect((verifyResult.content[0] as any).text).toContain("No limits found");
+  });
+
+  test("create_limit succeeds for mcp_server_calls type", async () => {
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_limit`,
+      {
+        entity_type: "agent",
+        entity_id: testAgent.id,
+        limit_type: "mcp_server_calls",
+        limit_value: 100,
+        mcp_server_name: "test-server",
+      },
+      mockContext,
+    );
+    expect(result.isError).toBe(false);
+    expect((result.content[0] as any).text).toContain(
+      "Successfully created limit",
+    );
+    expect((result.content[0] as any).text).toContain(
+      "MCP Server: test-server",
+    );
+  });
+
+  test("create_limit succeeds for tool_calls type", async () => {
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_limit`,
+      {
+        entity_type: "agent",
+        entity_id: testAgent.id,
+        limit_type: "tool_calls",
+        limit_value: 50,
+        mcp_server_name: "test-server",
+        tool_name: "test-tool",
+      },
+      mockContext,
+    );
+    expect(result.isError).toBe(false);
+    expect((result.content[0] as any).text).toContain(
+      "Successfully created limit",
+    );
+    expect((result.content[0] as any).text).toContain(
+      "MCP Server: test-server",
+    );
+    expect((result.content[0] as any).text).toContain("Tool: test-tool");
+  });
+
+  test("update_limit returns error for nonexistent limit", async () => {
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}update_limit`,
+      { id: crypto.randomUUID(), limit_value: 999 },
+      mockContext,
+    );
+    expect(result.isError).toBe(true);
+  });
+
+  test("delete_limit returns error for nonexistent limit", async () => {
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}delete_limit`,
+      { id: crypto.randomUUID() },
+      mockContext,
+    );
+    expect(result.isError).toBe(true);
+  });
 });

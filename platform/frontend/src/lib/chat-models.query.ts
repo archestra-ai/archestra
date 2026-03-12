@@ -77,6 +77,7 @@ export function useModelsByProvider(params?: { apiKeyId?: string | null }) {
   return {
     ...query,
     modelsByProvider,
+    isPlaceholderData: query.isPlaceholderData,
   };
 }
 

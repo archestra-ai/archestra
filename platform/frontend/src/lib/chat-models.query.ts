@@ -3,7 +3,12 @@ import {
   type archestraApiTypes,
   type SupportedProvider,
 } from "@shared";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { useMemo } from "react";
 import { toast } from "sonner";
 import { handleApiError } from "./utils";
@@ -40,6 +45,9 @@ export function useChatModels(params?: { apiKeyId?: string | null }) {
       }
       return data ?? [];
     },
+    // Keep showing previous models while fetching for a new apiKeyId,
+    // preventing display name flicker (e.g. "Claude Opus 4.1" → raw ID → back).
+    placeholderData: keepPreviousData,
   });
 }
 

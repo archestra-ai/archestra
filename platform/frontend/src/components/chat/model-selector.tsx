@@ -652,7 +652,7 @@ export function ModelSelector({
     onModelChange(modelId);
   };
 
-  // All available models flattened
+  // All available models flattened (filtered by apiKeyId)
   const allAvailableModels = useMemo(
     () =>
       availableProviders.flatMap(

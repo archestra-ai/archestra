@@ -48,6 +48,20 @@ describe("proxy", () => {
     vi.restoreAllMocks();
   });
 
+  describe("root redirect", () => {
+    it("should redirect / to /chat", () => {
+      const request = createMockRequest({
+        method: "GET",
+        url: "/",
+      });
+
+      const response = proxy(request);
+
+      expect(response.status).toBe(307);
+      expect(response.headers.get("location")).toContain("/chat");
+    });
+  });
+
   describe("regular requests", () => {
     it("should pass through regular GET requests", () => {
       const request = createMockRequest({

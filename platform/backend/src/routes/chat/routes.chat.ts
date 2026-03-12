@@ -335,11 +335,25 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             },
             stream: createUIMessageStream({
               execute: async ({ writer }) => {
-                // Try streamText. If provider returns a context length error (e.g. vLLM 400),
-                // trim messages to the reported limit and retry once.
+                // Stream tokens to the client in real-time while also
+                // handling context-length errors from vLLM/LiteLLM.
+                //
+                // Context-length errors (400) are rejected by the provider
+                // before any tokens are emitted. We detect this by reading
+                // the first chunk from textStream — if the provider rejects,
+                // the iterator throws immediately. We then parse the error,
+                // trim messages, and retry with a new streamText call.
+                //
+                // For successful requests, the first chunk arrives quickly
+                // and we proceed to merge the full stream to the client.
                 let result = streamText(streamTextConfig);
+
+                // Try reading the first text chunk to detect immediate provider errors.
+                // Context-length errors fire before any tokens, so this catches them
+                // without blocking normal streaming (first token arrives in ~100-500ms).
                 try {
-                  await result.response;
+                  const reader = result.textStream[Symbol.asyncIterator]();
+                  await reader.next();
                 } catch (error) {
                   const maxTokens = parseMaxInputTokens(error);
                   if (maxTokens !== null) {

@@ -223,8 +223,9 @@ export default function ChatPage() {
   const [initialAgentId, setInitialAgentId] = useState<string | null>(null);
   const [initialModel, setInitialModel] = useState<string>("");
   const [initialApiKeyId, setInitialApiKeyId] = useState<string | null>(null);
-  // Track if URL params have been consumed (so we don't re-apply them after user clears selection)
-  const urlParamsConsumedRef = useRef(false);
+  // Track which agentId URL param has been consumed (so we don't re-apply the same one after user clears selection,
+  // but do apply a new one when navigating from a different agent page)
+  const urlParamsConsumedRef = useRef<string | null>(null);
 
   // Version history dialog state
   const [versionHistoryAgent, setVersionHistoryAgent] = useState<
@@ -241,24 +242,25 @@ export default function ChatPage() {
     // before org, causing the org default to be skipped
     if (isOrgLoading) return;
 
-    // Only process URL params once (don't re-apply after user clears selection)
-    if (!urlParamsConsumedRef.current) {
-      const urlAgentId = searchParams.get("agentId");
-      if (urlAgentId) {
-        const matchingAgent = internalAgents.find((a) => a.id === urlAgentId);
-        if (matchingAgent) {
-          setInitialAgentId(urlAgentId);
-          resolvedAgentRef.current = matchingAgent;
-          urlParamsConsumedRef.current = true;
-          return;
-        }
+    // Process URL agentId param, but only if it's a new value (not one we already consumed).
+    // This allows navigating from different agent pages while preventing re-application
+    // after the user manually changes the agent.
+    const urlAgentId = searchParams.get("agentId");
+    if (urlAgentId && urlAgentId !== urlParamsConsumedRef.current) {
+      const matchingAgent = internalAgents.find((a) => a.id === urlAgentId);
+      if (matchingAgent) {
+        setInitialAgentId(urlAgentId);
+        resolvedAgentRef.current = matchingAgent;
+        urlParamsConsumedRef.current = urlAgentId;
+        return;
       }
     }
 
     // Priority: org default > localStorage > member default > first available
     // Org default always wins when set (admin-configured for the whole org).
     // localStorage only overrides when no org default is configured.
-    if (!initialAgentId) {
+    // Also skip if a URL param was consumed but state hasn't flushed yet.
+    if (!initialAgentId && !urlParamsConsumedRef.current) {
       // Try org's default agent first (admin-configured, takes precedence)
       if (organization?.defaultAgentId) {
         const orgDefaultAgent = internalAgents.find(

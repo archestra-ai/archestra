@@ -1,7 +1,7 @@
 "use client";
 
 import { Key } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { WithPermissions } from "@/components/roles/with-permissions";
 import {
   SettingsBlock,
@@ -96,6 +96,26 @@ export default function AgentSettingsPage() {
     }));
   }, [allModels]);
 
+  const agentItems = useMemo(() => {
+    const items = [
+      { value: "__personal__", label: "User's personal agent" },
+    ];
+    for (const agent of orgAgents ?? []) {
+      items.push({
+        value: agent.id,
+        label: agent.icon ? `${agent.icon} ${agent.name}` : agent.name,
+      });
+    }
+    return items;
+  }, [orgAgents]);
+
+  const handleAgentChange = useCallback(
+    (value: string) => {
+      setDefaultAgentId(value === "__personal__" ? "" : value);
+    },
+    [],
+  );
+
   return (
     <div className="space-y-6">
       <SettingsBlock
@@ -164,27 +184,16 @@ export default function AgentSettingsPage() {
             noPermissionHandle="tooltip"
           >
             {({ hasPermission }) => (
-              <Select
+              <SearchableSelect
                 value={defaultAgentId || "__personal__"}
-                onValueChange={(value) =>
-                  setDefaultAgentId(value === "__personal__" ? "" : value)
-                }
+                onValueChange={handleAgentChange}
+                placeholder="Select agent..."
+                searchPlaceholder="Search agents..."
+                items={agentItems}
+                className="w-80"
                 disabled={updateMutation.isPending || !hasPermission}
-              >
-                <SelectTrigger className="w-80">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__personal__">
-                    User&apos;s personal agent
-                  </SelectItem>
-                  {(orgAgents ?? []).map((agent) => (
-                    <SelectItem key={agent.id} value={agent.id}>
-                      {agent.icon ? `${agent.icon} ${agent.name}` : agent.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                hint="Only org-wide agents are shown"
+              />
             )}
           </WithPermissions>
         }

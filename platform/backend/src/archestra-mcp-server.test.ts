@@ -126,6 +126,23 @@ describe("getArchestraMcpTools", () => {
     expect(tool?.title).toBe("Get LLM Proxy Token Usage");
   });
 
+  test("should have swap_agent tool", () => {
+    const tools = getArchestraMcpTools();
+    const tool = tools.find((t) => t.name.endsWith("swap_agent"));
+    expect(tool).toBeDefined();
+    expect(tool?.title).toBe("Swap Agent");
+    expect(tool?.inputSchema).toEqual({
+      type: "object",
+      properties: {
+        agent_name: {
+          type: "string",
+          description: "The name of the agent to switch to.",
+        },
+      },
+      required: ["agent_name"],
+    });
+  });
+
   test("should have query_knowledge_sources tool", () => {
     const tools = getArchestraMcpTools();
     const tool = tools.find((t) => t.name.endsWith("query_knowledge_sources"));
@@ -1332,6 +1349,132 @@ describe("executeArchestraTool", () => {
       expect(result.isError).toBe(false);
       const policies = JSON.parse((result.content[0] as any).text);
       expect(policies.length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  describe("swap_agent tool", () => {
+    const swapToolName = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}swap_agent`;
+
+    test("should return error when agent_name is missing", async () => {
+      const result = await executeArchestraTool(swapToolName, {}, mockContext);
+
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain(
+        "agent_name parameter is required",
+      );
+    });
+
+    test("should return error without conversation context", async () => {
+      const result = await executeArchestraTool(
+        swapToolName,
+        { agent_name: "Some Agent" },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain("conversation context");
+    });
+
+    test("should return error when swapping to current agent", async ({
+      makeUser,
+      makeOrganization,
+      makeAgent,
+      makeTeam,
+      makeConversation,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      const team = await makeTeam(org.id, user.id);
+      const currentAgent = await makeAgent({
+        name: "Current Agent",
+        agentType: "agent",
+        organizationId: org.id,
+        teams: [team.id],
+      });
+      const conversation = await makeConversation(currentAgent.id, {
+        userId: user.id,
+        organizationId: org.id,
+      });
+
+      const result = await executeArchestraTool(
+        swapToolName,
+        { agent_name: "Current Agent" },
+        {
+          agent: { id: currentAgent.id, name: currentAgent.name },
+          conversationId: conversation.id,
+          userId: user.id,
+          organizationId: org.id,
+        },
+      );
+
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain("Already using agent");
+    });
+
+    test("should return error when agent not found", async ({
+      makeUser,
+      makeOrganization,
+      makeConversation,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      const conversation = await makeConversation(testAgent.id, {
+        userId: user.id,
+        organizationId: org.id,
+      });
+
+      const result = await executeArchestraTool(
+        swapToolName,
+        { agent_name: "Nonexistent Agent 12345" },
+        {
+          ...mockContext,
+          conversationId: conversation.id,
+          userId: user.id,
+          organizationId: org.id,
+        },
+      );
+
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain("No agent found");
+    });
+
+    test("should swap agent successfully", async ({
+      makeUser,
+      makeOrganization,
+      makeAgent,
+      makeTeam,
+      makeConversation,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      const team = await makeTeam(org.id, user.id);
+      const targetAgent = await makeAgent({
+        name: "Target Agent",
+        agentType: "agent",
+        organizationId: org.id,
+        teams: [team.id],
+      });
+      const conversation = await makeConversation(testAgent.id, {
+        userId: user.id,
+        organizationId: org.id,
+      });
+
+      const result = await executeArchestraTool(
+        swapToolName,
+        { agent_name: "Target Agent" },
+        {
+          ...mockContext,
+          conversationId: conversation.id,
+          userId: user.id,
+          organizationId: org.id,
+        },
+      );
+
+      expect(result.isError).toBe(false);
+      const parsed = JSON.parse((result.content[0] as any).text);
+      expect(parsed.success).toBe(true);
+      expect(parsed.agent_name).toBe("Target Agent");
+      expect(parsed.agent_id).toBe(targetAgent.id);
     });
   });
 

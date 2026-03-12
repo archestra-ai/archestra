@@ -11,6 +11,7 @@ import {
   MCP_CATALOG_INSTALL_QUERY_PARAM,
   MCP_CATALOG_REAUTH_QUERY_PARAM,
   MCP_CATALOG_SERVER_QUERY_PARAM,
+  parseFullToolName,
 } from "@shared";
 import config from "@/config";
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
@@ -293,6 +294,12 @@ class McpClient {
         if (targetToolName === toolCall.name) {
           // No prefix match with catalogName; attempt to strip using mcpServerName instead.
           targetToolName = this.stripServerPrefix(toolCall.name, mcpServerName);
+        }
+
+        if (targetToolName === toolCall.name) {
+          // Neither prefix matched (e.g. server name contains "__" separator).
+          // Fall back to parseFullToolName which uses lastIndexOf to split correctly.
+          targetToolName = parseFullToolName(toolCall.name).toolName;
         }
 
         // Resolve the actual tool name from the server (preserving original casing).

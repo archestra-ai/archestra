@@ -1,5 +1,9 @@
 import type { UIMessage } from "@ai-sdk/react";
-import { TOOL_TODO_WRITE_FULL_NAME } from "@shared";
+import {
+  SWAP_AGENT_POKE_TEXT,
+  TOOL_SWAP_AGENT_FULL_NAME,
+  TOOL_TODO_WRITE_FULL_NAME,
+} from "@shared";
 import type { ChatStatus, DynamicToolUIPart, ToolUIPart } from "ai";
 import Image from "next/image";
 import {
@@ -471,6 +475,9 @@ export function ChatMessages({
       <ConversationContent>
         <div className="max-w-4xl mx-auto relative pb-8">
           {messages.map((message, idx) => {
+            // Hide the auto-poke message sent after agent swap
+            if (isSwapAgentPokeMessage(message)) return null;
+
             const isDimmed =
               editingMessageIndex !== -1 && idx > editingMessageIndex;
             return (
@@ -887,6 +894,7 @@ export function ChatMessages({
                     }
                   }
                 })}
+                <SwapAgentDivider message={message} />
               </div>
             );
           })}
@@ -1071,6 +1079,11 @@ function MessageTool({
     }
   }
 
+  // swap_agent is rendered as a divider after all message parts (see SwapAgentDivider below)
+  if (toolName === TOOL_SWAP_AGENT_FULL_NAME) {
+    return null;
+  }
+
   if (toolName === TOOL_TODO_WRITE_FULL_NAME) {
     return (
       <TodoWriteTool
@@ -1190,3 +1203,53 @@ const getHeaderState = ({
   if (toolResultPart) return "output-available";
   return state;
 };
+
+/**
+ * Renders a "Switched to {agent}" divider after all parts of a message
+ * that contains a swap_agent tool call.
+ */
+function isSwapAgentPokeMessage(message: UIMessage): boolean {
+  if (message.role !== "user") return false;
+  const textParts = message.parts?.filter((p) => p.type === "text") ?? [];
+  return (
+    textParts.length === 1 &&
+    (textParts[0] as { text: string }).text === SWAP_AGENT_POKE_TEXT
+  );
+}
+
+function SwapAgentDivider({ message }: { message: UIMessage }) {
+  if (message.role !== "assistant") return null;
+
+  for (const part of message.parts ?? []) {
+    if (!isToolPart(part)) continue;
+    const type = part.type as string;
+    if (
+      type !== TOOL_SWAP_AGENT_FULL_NAME &&
+      type !== `tool-${TOOL_SWAP_AGENT_FULL_NAME}`
+    )
+      continue;
+
+    const output = part.output ?? part.state;
+    let agentName = "another agent";
+    if (typeof output === "string") {
+      try {
+        const parsed = JSON.parse(output);
+        if (parsed?.agent_name) agentName = parsed.agent_name;
+      } catch {
+        // ignore
+      }
+    }
+
+    return (
+      <div className="flex items-center gap-3 py-2">
+        <div className="h-px flex-1 bg-border" />
+        <span className="text-xs text-muted-foreground">
+          Switched to {agentName}
+        </span>
+        <div className="h-px flex-1 bg-border" />
+      </div>
+    );
+  }
+
+  return null;
+}

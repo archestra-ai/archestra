@@ -37,7 +37,8 @@ Dashboards installed:
   - GenAI Observability    LLM request metrics, token usage, cost, latency, traces
   - MCP Monitoring         MCP tool call metrics, error rates, duration, traces
   - Agent Sessions         Session-level audit trail with LLM/MCP/log drill-down
-  - Application Metrics    HTTP traffic, Node.js runtime health, resource usage
+  - Application Metrics    HTTP traffic, Node.js runtime, task queue, PostgreSQL
+  - RAG & Knowledge Base   Connector syncs, embedding pipeline, query performance
 EOF
 }
 
@@ -59,6 +60,7 @@ DASHBOARDS=(
   "mcp-monitoring.json"
   "agent-sessions.json"
   "application-metrics.json"
+  "rag-knowledge-base.json"
 )
 
 GITHUB_RAW_BASE="https://raw.githubusercontent.com/archestra-ai/archestra/main/platform/dev/grafana/dashboards"

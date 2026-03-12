@@ -556,6 +556,8 @@ const startWebServer = async () => {
     metrics.llm.initializeMetrics(labelKeys);
     metrics.mcp.initializeMcpMetrics(labelKeys);
     metrics.agentExecution.initializeAgentExecutionMetrics(labelKeys);
+    metrics.rag.initializeRagMetrics();
+    metrics.taskQueue.initializeTaskQueueMetrics();
 
     // Start metrics server
     await startMetricsServer();
@@ -761,6 +763,16 @@ const startWorker = async () => {
   try {
     await initializeDatabase();
     cacheManager.start();
+
+    // Set OpenMetrics content type to enable exemplar support
+    const promClient = await import("prom-client");
+    // eslint-disable-next-line -- default register is typed as Registry<PrometheusContentType> but setContentType accepts both at runtime
+    (promClient.default.register.setContentType as (ct: string) => void)(
+      promClient.default.Registry.OPENMETRICS_CONTENT_TYPE,
+    );
+
+    metrics.rag.initializeRagMetrics();
+    metrics.taskQueue.initializeTaskQueueMetrics();
 
     registerTaskHandlers(taskQueueService);
     await taskQueueService.seedPeriodicTasks();

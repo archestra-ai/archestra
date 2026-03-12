@@ -1173,7 +1173,7 @@ export const openaiAdapterFactory: LLMProvider<
     }
 
     // Use observable fetch for request duration metrics if agent is provided
-    const customFetch = options.agent
+    const baseFetch = options.agent
       ? metrics.llm.getObservableFetch(
           "openai",
           options.agent,
@@ -1181,6 +1181,57 @@ export const openaiAdapterFactory: LLMProvider<
           options.externalAgentId,
         )
       : undefined;
+
+    // Wrap fetch to normalize non-OpenAI error responses (e.g. LiteLLM/vLLM)
+    // into OpenAI-compatible format so the SDK surfaces the real error message
+    // instead of "500 status code (no body)".
+    const customFetch = async (
+      url: string | URL | Request,
+      init?: RequestInit,
+    ): Promise<Response> => {
+      const response = await (baseFetch ?? fetch)(url, init);
+
+      if (!response.ok) {
+        const contentType = response.headers.get("content-type") || "";
+        // Only intercept JSON responses — SSE streams are handled differently
+        if (contentType.includes("application/json")) {
+          try {
+            const cloned = response.clone();
+            const rawBody = await cloned.text();
+            if (rawBody) {
+              const parsed = JSON.parse(rawBody);
+              // If the body already has an OpenAI-compatible error.message, leave it
+              if (parsed?.error?.message) {
+                return response;
+              }
+              // Re-wrap non-standard error body into OpenAI format
+              const errorMessage = parsed?.message || rawBody;
+              const formattedBody = JSON.stringify({
+                error: {
+                  message:
+                    typeof errorMessage === "string"
+                      ? errorMessage
+                      : JSON.stringify(errorMessage),
+                  type: "upstream_error",
+                  code: response.status,
+                },
+              });
+              return new Response(formattedBody, {
+                status: response.status,
+                statusText: response.statusText,
+                headers: new Headers({
+                  "content-type": "application/json",
+                }),
+              });
+            }
+          } catch {
+            // Can't parse body — return original response
+          }
+        }
+      }
+
+      return response;
+    };
 
     return new OpenAIProvider({
       apiKey,
@@ -1225,13 +1276,23 @@ export const openaiAdapterFactory: LLMProvider<
   },
 
   extractErrorMessage(error: unknown): string {
-    // OpenAI SDK error structure
+    // OpenAI SDK APIError — has .error.message with the upstream error
     const openaiMessage = get(error, "error.message");
     if (typeof openaiMessage === "string") {
       return openaiMessage;
     }
 
     if (error instanceof Error) {
+      // Node.js stream termination produces a bare "terminated" message.
+      // Make it actionable for users (common with LiteLLM/vLLM proxies).
+      if (error.message === "terminated") {
+        const status = get(error, "status");
+        if (typeof status === "number") {
+          return `Upstream provider returned HTTP ${status} and closed the connection`;
+        }
+        return "Upstream provider closed the connection unexpectedly";
+      }
+
       return error.message;
     }
 

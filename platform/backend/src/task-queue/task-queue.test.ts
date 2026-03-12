@@ -33,6 +33,18 @@ vi.mock("@/config", () => ({
   },
 }));
 
+// Mock observability metrics (avoid importing tracing which requires config.observability.otel)
+vi.mock("@/observability/metrics", () => ({
+  taskQueue: {
+    reportTaskEnqueued: vi.fn(),
+    reportTaskCompleted: vi.fn(),
+    reportTaskFailed: vi.fn(),
+    reportTaskDead: vi.fn(),
+    reportActiveTaskChange: vi.fn(),
+    reportStuckTasksReset: vi.fn(),
+  },
+}));
+
 // Suppress logger output during tests
 vi.mock("@/logging", () => ({
   default: {

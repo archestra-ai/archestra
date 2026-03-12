@@ -1,6 +1,7 @@
 "use client";
 
 import type { archestraApiTypes } from "@shared";
+import { getConnectorNamePlaceholder } from "@shared/knowledge-base";
 import { ChevronDown } from "lucide-react";
 import { useEffect } from "react";
 import { useForm } from "react-hook-form";
@@ -47,13 +48,6 @@ type ConnectorItem = Pick<
   | "schedule"
   | "enabled"
 >;
-
-const CONNECTOR_TYPE_LABELS: Record<string, string> = {
-  jira: "Jira",
-  confluence: "Confluence",
-  github: "GitHub",
-  gitlab: "GitLab",
-};
 
 interface EditConnectorFormValues {
   name: string;
@@ -183,7 +177,9 @@ export function EditConnectorDialog({
                     <FormLabel>Name</FormLabel>
                     <FormControl>
                       <Input
-                        placeholder={`Engineering ${CONNECTOR_TYPE_LABELS[connector.connectorType] ?? connector.connectorType} Connector`}
+                        placeholder={getConnectorNamePlaceholder(
+                          connector.connectorType,
+                        )}
                         {...field}
                       />
                     </FormControl>

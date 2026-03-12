@@ -1,6 +1,10 @@
 "use client";
 
 import type { archestraApiTypes } from "@shared";
+import {
+  CONNECTOR_TYPE_LABELS,
+  getConnectorNamePlaceholder,
+} from "@shared/knowledge-base";
 import { ArrowLeft, ChevronDown } from "lucide-react";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
@@ -46,22 +50,22 @@ const CONNECTOR_OPTIONS: {
 }[] = [
   {
     type: "jira",
-    label: "Jira",
+    label: CONNECTOR_TYPE_LABELS.jira,
     description: "Sync issues and projects from Jira",
   },
   {
     type: "confluence",
-    label: "Confluence",
+    label: CONNECTOR_TYPE_LABELS.confluence,
     description: "Sync pages and spaces from Confluence",
   },
   {
     type: "github",
-    label: "GitHub",
+    label: CONNECTOR_TYPE_LABELS.github,
     description: "Sync issues and pull requests from GitHub",
   },
   {
     type: "gitlab",
-    label: "GitLab",
+    label: CONNECTOR_TYPE_LABELS.gitlab,
     description: "Sync issues and merge requests from GitLab",
   },
 ];
@@ -228,7 +232,11 @@ export function CreateConnectorDialog({
                       <FormLabel>Name</FormLabel>
                       <FormControl>
                         <Input
-                          placeholder={`Engineering ${CONNECTOR_OPTIONS.find((o) => o.type === selectedType)?.label ?? ""} Connector`}
+                          placeholder={
+                            selectedType
+                              ? getConnectorNamePlaceholder(selectedType)
+                              : ""
+                          }
                           {...field}
                         />
                       </FormControl>

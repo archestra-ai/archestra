@@ -143,12 +143,11 @@ export function resolveInitialModel(
     allModels.some((m) => m.id === organization.defaultLlmModel)
   ) {
     const provider = findProviderForModel(organization.defaultLlmModel);
-    const apiKeyId = organization.defaultLlmApiKeyId
-      ? chatApiKeys.some((k) => k.id === organization.defaultLlmApiKeyId)
-        ? organization.defaultLlmApiKeyId
-        : provider
-          ? findKeyForProvider(provider)
-          : null
+    const orgKeyAvailable =
+      organization.defaultLlmApiKeyId &&
+      chatApiKeys.some((k) => k.id === organization.defaultLlmApiKeyId);
+    const apiKeyId: string | null = orgKeyAvailable
+      ? organization.defaultLlmApiKeyId!
       : provider
         ? findKeyForProvider(provider)
         : null;

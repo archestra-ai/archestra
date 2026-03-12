@@ -150,6 +150,23 @@ describe("resolveInitialModel", () => {
     });
   });
 
+  test("org default with no API key configured uses provider key", () => {
+    const result = resolveInitialModel({
+      modelsByProvider: baseModels,
+      agent: null,
+      chatApiKeys: baseChatApiKeys,
+      organization: {
+        defaultLlmModel: "gpt-4o",
+        defaultLlmApiKeyId: null,
+      },
+    });
+    expect(result).toEqual({
+      modelId: "gpt-4o",
+      apiKeyId: "key-openai",
+      source: "organization",
+    });
+  });
+
   test("skips org default when model is not in available models", () => {
     const result = resolveInitialModel({
       modelsByProvider: baseModels,

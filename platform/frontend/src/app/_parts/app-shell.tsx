@@ -46,13 +46,14 @@ export function AppShell({ children }: AppShellProps) {
     );
   }
 
-  // Wait for permission check before rendering sidebar to avoid flash
+  // Wait for permission check before rendering sidebar to avoid flash.
+  // Don't render Version here — the full-width layout has a different center
+  // than the sidebar layout, causing the footer to visibly jump on load.
   if (!permissionLoaded) {
     return (
       <main className="h-screen w-full flex flex-col bg-background min-w-0 relative">
         <div className="flex-1 min-w-0 flex flex-col">
           <div className="flex-1 flex flex-col">{children}</div>
-          <Version />
         </div>
         <Toaster />
       </main>

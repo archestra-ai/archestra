@@ -2,7 +2,7 @@
 
 import { X } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   LabelFilterBadges,
   LabelKeyRowBase,
@@ -413,13 +413,15 @@ function AgentLabelKeyRow({
   selectedValues: string[];
   onToggleValue: (key: string, value: string) => void;
 }) {
-  const { data: values } = useLabelValues({ key: labelKey });
+  const [open, setOpen] = useState(false);
+  const { data: values } = useLabelValues({ key: open ? labelKey : undefined });
   return (
     <LabelKeyRowBase
       labelKey={labelKey}
       selectedValues={selectedValues}
       onToggleValue={onToggleValue}
       values={values}
+      onOpenChange={setOpen}
     />
   );
 }

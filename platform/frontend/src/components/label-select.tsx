@@ -57,7 +57,7 @@ export function LabelSelect({
         params.delete("labels");
       }
       params.set("page", "1");
-      router.push(`${pathname}?${params.toString()}`, { scroll: false });
+      router.replace(`${pathname}?${params.toString()}`, { scroll: false });
     },
     [searchParams, router, pathname],
   );
@@ -130,13 +130,23 @@ export function LabelKeyRowBase({
   selectedValues,
   onToggleValue,
   values,
+  onOpenChange,
 }: {
   labelKey: string;
   selectedValues: string[];
   onToggleValue: (key: string, value: string) => void;
   values: string[] | undefined;
+  onOpenChange?: (open: boolean) => void;
 }) {
   const [open, setOpen] = useState(false);
+
+  const handleOpenChange = useCallback(
+    (newOpen: boolean) => {
+      setOpen(newOpen);
+      onOpenChange?.(newOpen);
+    },
+    [onOpenChange],
+  );
   const [search, setSearch] = useState("");
 
   const filteredValues = useMemo(() => {
@@ -147,7 +157,7 @@ export function LabelKeyRowBase({
   }, [values, search]);
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={handleOpenChange}>
       <PopoverTrigger asChild>
         <button
           type="button"

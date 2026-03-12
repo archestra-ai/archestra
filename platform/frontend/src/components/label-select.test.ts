@@ -86,7 +86,8 @@ describe("serializeLabels", () => {
     const original = "env:prod|staging;team:backend";
     const parsed = parseLabelsParam(original);
     expect(parsed).not.toBeNull();
-    const serialized = serializeLabels(parsed!);
+    if (!parsed) return;
+    const serialized = serializeLabels(parsed);
     expect(parseLabelsParam(serialized)).toEqual(parsed);
   });
 });

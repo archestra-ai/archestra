@@ -969,14 +969,9 @@ export function InternalMCPCatalog({
     const normalizedQuery = query.trim().toLowerCase();
     if (!normalizedQuery) return items;
 
-    return items.filter((item) => {
-      const labelText =
-        typeof item.name === "string" ? item.name.toLowerCase() : "";
-      return (
-        item.name.toLowerCase().includes(normalizedQuery) ||
-        labelText.includes(normalizedQuery)
-      );
-    });
+    return items.filter((item) =>
+      item.name.toLowerCase().includes(normalizedQuery),
+    );
   };
 
   const labelsParam = searchParams.get("labels");
@@ -1413,13 +1408,17 @@ function McpCatalogLabelKeyRow({
   selectedValues: string[];
   onToggleValue: (key: string, value: string) => void;
 }) {
-  const { data: values } = useMcpCatalogLabelValues({ key: labelKey });
+  const [open, setOpen] = useState(false);
+  const { data: values } = useMcpCatalogLabelValues({
+    key: open ? labelKey : undefined,
+  });
   return (
     <LabelKeyRowBase
       labelKey={labelKey}
       selectedValues={selectedValues}
       onToggleValue={onToggleValue}
       values={values}
+      onOpenChange={setOpen}
     />
   );
 }

@@ -556,6 +556,8 @@ const startWebServer = async () => {
     metrics.llm.initializeMetrics(labelKeys);
     metrics.mcp.initializeMcpMetrics(labelKeys);
     metrics.agentExecution.initializeAgentExecutionMetrics(labelKeys);
+    metrics.rag.initializeRagMetrics();
+    metrics.taskQueue.initializeTaskQueueMetrics();
 
     // Start metrics server
     await startMetricsServer();

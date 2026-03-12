@@ -7,6 +7,7 @@ import {
   KbDocumentModel,
   KnowledgeBaseConnectorModel,
 } from "@/models";
+import { metrics } from "@/observability";
 import { secretManager } from "@/secrets-manager";
 import { taskQueueService } from "@/task-queue";
 import type { AclEntry } from "@/types/kb-document";
@@ -276,6 +277,15 @@ class ConnectorSyncService {
         }
       }
 
+      const durationSeconds = (Date.now() - startTime) / 1000;
+      metrics.rag.reportConnectorSync({
+        connectorType: connector.connectorType,
+        status: stoppedEarly ? "partial" : "success",
+        durationSeconds,
+        documentsProcessed,
+        documentsIngested,
+      });
+
       runLog.info(
         {
           documentsProcessed,
@@ -302,6 +312,15 @@ class ConnectorSyncService {
         lastSyncStatus: "failed",
         lastSyncError: errorMessage,
         lastSyncAt: new Date(),
+      });
+
+      const durationSeconds = (Date.now() - startTime) / 1000;
+      metrics.rag.reportConnectorSync({
+        connectorType: connector.connectorType,
+        status: "failed",
+        durationSeconds,
+        documentsProcessed,
+        documentsIngested,
       });
 
       runLog.error({ error: errorMessage }, "Sync failed");
@@ -364,6 +383,7 @@ class ConnectorSyncService {
         documentId: existing.id,
         title: doc.title,
         content: doc.content,
+        connectorType,
         acl: existing.acl as AclEntry[],
         log,
       });
@@ -398,6 +418,7 @@ class ConnectorSyncService {
       documentId: created.id,
       title: doc.title,
       content: doc.content,
+      connectorType,
       acl: [],
       log,
     });
@@ -415,10 +436,11 @@ class ConnectorSyncService {
     documentId: string;
     title: string;
     content: string;
+    connectorType: string;
     acl: AclEntry[];
     log: pino.Logger;
   }): Promise<void> {
-    const { documentId, title, content, acl, log } = params;
+    const { documentId, title, content, connectorType, acl, log } = params;
 
     const chunks = await chunkDocument({ title, content });
 
@@ -432,6 +454,8 @@ class ConnectorSyncService {
         acl,
       })),
     );
+
+    metrics.rag.reportChunksCreated(connectorType, chunks.length);
 
     log.debug(
       { documentId, chunkCount: chunks.length },

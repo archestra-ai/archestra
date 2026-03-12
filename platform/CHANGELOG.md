@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.13](https://github.com/archestra-ai/archestra/compare/platform-v1.1.12...platform-v1.1.13) (2026-03-12)
+
+
+### Bug Fixes
+
+* fix setting default model for agents and new chats ([#3316](https://github.com/archestra-ai/archestra/issues/3316)) ([57288a2](https://github.com/archestra-ai/archestra/commit/57288a2fe9caf96e6cee59b16ce101362ba61de6))
+
 ## [1.1.12](https://github.com/archestra-ai/archestra/compare/platform-v1.1.11...platform-v1.1.12) (2026-03-12)
 
 

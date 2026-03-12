@@ -13,8 +13,18 @@ Install Archestra Grafana dashboards into an "Archestra" folder.
 Idempotent — creates new dashboards or updates existing ones.
 
 Usage:
-  GRAFANA_URL=<url> GRAFANA_TOKEN=<token> ./install-dashboards.sh
-  GRAFANA_URL=<url> GRAFANA_USER=<user> GRAFANA_PASS=<pass> ./install-dashboards.sh
+  GRAFANA_URL=<url> GRAFANA_TOKEN=<token> ./install-dashboards.sh [--postgres-provider <provider>]
+  GRAFANA_URL=<url> GRAFANA_USER=<user> GRAFANA_PASS=<pass> ./install-dashboards.sh [--postgres-provider <provider>]
+
+Options:
+  --postgres-provider <provider>  PostgreSQL metrics provider for the Application Metrics dashboard.
+                                  Determines which metric names are used in the PostgreSQL panels.
+                                  Options:
+                                    helm      Bitnami postgres_exporter sidecar (pg_* prefix) [default]
+                                    otel      OTel Collector PostgreSQL Receiver (postgresql_* prefix)
+                                              Works with any PostgreSQL: AWS RDS, Cloud SQL, Azure, self-hosted
+                                    cloudsql  GCP Cloud Monitoring via Stackdriver Exporter
+                                    azure     Azure Monitor for Azure Database for PostgreSQL
 
 Environment variables:
   GRAFANA_URL    Grafana base URL (default: http://localhost:3000)
@@ -23,8 +33,11 @@ Environment variables:
   GRAFANA_PASS   Basic auth password (alternative to GRAFANA_TOKEN)
 
 Examples:
-  # Service Account token
+  # Service Account token (default: helm postgres_exporter metrics)
   GRAFANA_URL=https://example.grafana.net GRAFANA_TOKEN=glsa_xxx ./install-dashboards.sh
+
+  # OTel PostgreSQL Receiver metrics (for RDS, Cloud SQL, or any direct DB connection)
+  GRAFANA_URL=https://example.grafana.net GRAFANA_TOKEN=glsa_xxx ./install-dashboards.sh --postgres-provider otel
 
   # Basic auth (local development)
   GRAFANA_URL=http://localhost:3000 GRAFANA_USER=admin GRAFANA_PASS=admin ./install-dashboards.sh
@@ -42,10 +55,41 @@ Dashboards installed:
 EOF
 }
 
-if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
-  usage
-  exit 0
-fi
+# ──────────────────────────────────────────────
+# Parse arguments
+# ──────────────────────────────────────────────
+PG_PROVIDER="helm"
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    --postgres-provider)
+      if [[ -z "${2:-}" ]]; then
+        echo "Error: --postgres-provider requires a value (helm, otel, cloudsql, azure)" >&2
+        exit 1
+      fi
+      PG_PROVIDER="$2"
+      shift 2
+      ;;
+    *)
+      echo "Unknown option: $1" >&2
+      usage >&2
+      exit 1
+      ;;
+  esac
+done
+
+# Validate provider
+case "$PG_PROVIDER" in
+  helm|otel|cloudsql|azure) ;;
+  *)
+    echo "Error: Invalid --postgres-provider '$PG_PROVIDER'. Must be one of: helm, otel, cloudsql, azure" >&2
+    exit 1
+    ;;
+esac
 
 GRAFANA_URL="${GRAFANA_URL:-http://localhost:3000}"
 GRAFANA_URL="${GRAFANA_URL%/}"  # strip trailing slash to avoid double-slash in API paths
@@ -55,11 +99,20 @@ GRAFANA_PASS="${GRAFANA_PASS:-}"
 FOLDER_TITLE="Archestra"
 FOLDER_UID="archestra-dashboards"
 
+# Dashboard list — application-metrics uses provider-specific variant
+if [[ "$PG_PROVIDER" == "helm" ]]; then
+  APP_METRICS_FILE="application-metrics.json"
+  APP_METRICS_PATH=""
+else
+  APP_METRICS_FILE="application-metrics-${PG_PROVIDER}.json"
+  APP_METRICS_PATH="pg-variants/"
+fi
+
 DASHBOARDS=(
   "genai-observability.json"
   "mcp-monitoring.json"
   "agent-sessions.json"
-  "application-metrics.json"
+  "$APP_METRICS_FILE"
   "rag-knowledge-base.json"
 )
 
@@ -119,10 +172,18 @@ LOCAL_DIR="$SCRIPT_DIR/dashboards"
 
 get_dashboard_json() {
   local name="$1"
-  if [[ -f "$LOCAL_DIR/$name" ]]; then
+  # For provider variants, check pg-variants subdirectory
+  if [[ "$name" == "application-metrics-"* && -f "$LOCAL_DIR/pg-variants/$name" ]]; then
+    cat "$LOCAL_DIR/pg-variants/$name"
+  elif [[ -f "$LOCAL_DIR/$name" ]]; then
     cat "$LOCAL_DIR/$name"
   else
-    curl -sL "$GITHUB_RAW_BASE/$name"
+    # Try pg-variants path on GitHub for provider variants
+    if [[ "$name" == "application-metrics-"* ]]; then
+      curl -sL "$GITHUB_RAW_BASE/pg-variants/$name"
+    else
+      curl -sL "$GITHUB_RAW_BASE/$name"
+    fi
   fi
 }
 
@@ -131,6 +192,9 @@ get_dashboard_json() {
 # ──────────────────────────────────────────────
 echo ""
 echo "Installing dashboards into '$FOLDER_TITLE' folder..."
+if [[ "$PG_PROVIDER" != "helm" ]]; then
+  echo "  PostgreSQL metrics provider: $PG_PROVIDER"
+fi
 
 created=0
 updated=0

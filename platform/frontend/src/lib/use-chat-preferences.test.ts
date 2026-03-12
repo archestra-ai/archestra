@@ -55,7 +55,10 @@ describe("resolveInitialModel", () => {
       modelsByProvider: baseModels,
       agent: { llmModel: "claude-3-5-sonnet", llmApiKeyId: "agent-key" },
       chatApiKeys: baseChatApiKeys,
-      organization: { defaultLlmModel: "gpt-4o", defaultLlmApiKeyId: "key-openai" },
+      organization: {
+        defaultLlmModel: "gpt-4o",
+        defaultLlmApiKeyId: "key-openai",
+      },
     });
     expect(result).toEqual({
       modelId: "claude-3-5-sonnet",
@@ -69,7 +72,10 @@ describe("resolveInitialModel", () => {
       modelsByProvider: baseModels,
       agent: { llmModel: null, llmApiKeyId: null },
       chatApiKeys: baseChatApiKeys,
-      organization: { defaultLlmModel: "gpt-4o", defaultLlmApiKeyId: "key-openai" },
+      organization: {
+        defaultLlmModel: "gpt-4o",
+        defaultLlmApiKeyId: "key-openai",
+      },
     });
     expect(result).toEqual({
       modelId: "gpt-4o",
@@ -132,7 +138,10 @@ describe("resolveInitialModel", () => {
       modelsByProvider: baseModels,
       agent: null,
       chatApiKeys: baseChatApiKeys,
-      organization: { defaultLlmModel: "gpt-4o", defaultLlmApiKeyId: "deleted-key" },
+      organization: {
+        defaultLlmModel: "gpt-4o",
+        defaultLlmApiKeyId: "deleted-key",
+      },
     });
     expect(result).toEqual({
       modelId: "gpt-4o",
@@ -146,7 +155,10 @@ describe("resolveInitialModel", () => {
       modelsByProvider: baseModels,
       agent: null,
       chatApiKeys: baseChatApiKeys,
-      organization: { defaultLlmModel: "deleted-model", defaultLlmApiKeyId: "key-openai" },
+      organization: {
+        defaultLlmModel: "deleted-model",
+        defaultLlmApiKeyId: "key-openai",
+      },
     });
     expect(result?.source).toBe("fallback");
     expect(result?.modelId).toBe("gpt-4o");

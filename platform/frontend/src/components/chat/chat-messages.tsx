@@ -5,7 +5,14 @@ import {
   TOOL_TODO_WRITE_FULL_NAME,
 } from "@shared";
 import type { ChatStatus, DynamicToolUIPart, ToolUIPart } from "ai";
-import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+  Fragment,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   Conversation,
   ConversationContent,
@@ -28,7 +35,9 @@ import {
 } from "@/components/ai-elements/tool";
 import { Button } from "@/components/ui/button";
 import { useHasPermissions, useSession } from "@/lib/auth.query";
+import { useProfileToolsWithIds } from "@/lib/chat.query";
 import { useUpdateChatMessage } from "@/lib/chat-message.query";
+import { useInternalMcpCatalog } from "@/lib/internal-mcp-catalog.query";
 import {
   extractCatalogIdFromInstallUrl,
   extractIdsFromReauthUrl,
@@ -124,6 +133,27 @@ export function ChatMessages({
   });
   const { data: organization } = useOrganization();
   const orchestrator = useMcpInstallOrchestrator();
+
+  // Build tool name → icon map from agent tools + catalog data
+  const { data: agentTools } = useProfileToolsWithIds(agentId);
+  const { data: catalogItems } = useInternalMcpCatalog({ enabled: !!agentId });
+  const toolIconMap = useMemo(() => {
+    const map = new Map<string, { icon?: string | null; catalogId?: string }>();
+    if (!agentTools || !catalogItems) return map;
+    const catalogMap = new Map(catalogItems.map((c) => [c.id, c]));
+    for (const tool of agentTools) {
+      if (tool.catalogId) {
+        const catalog = catalogMap.get(tool.catalogId);
+        if (catalog) {
+          map.set(tool.name, {
+            icon: catalog.icon,
+            catalogId: catalog.id,
+          });
+        }
+      }
+    }
+    return map;
+  }, [agentTools, catalogItems]);
 
   // Initialize mutation hook with conversationId (use empty string as fallback for hook rules)
   const updateChatMessageMutation = useUpdateChatMessage(conversationId || "");
@@ -319,6 +349,7 @@ export function ChatMessages({
                             toolResultPart: entry.toolResultPart,
                             errorText: entry.errorText,
                           }))}
+                          toolIconMap={toolIconMap}
                           onToolApprovalResponse={onToolApprovalResponse}
                         />
                       );

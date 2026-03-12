@@ -3,6 +3,7 @@
 import type { DynamicToolUIPart, ToolUIPart } from "ai";
 import { BotIcon } from "lucide-react";
 import { useState } from "react";
+import { McpCatalogIcon } from "@/components/agent-tools-editor";
 import {
   Tool,
   ToolContent,
@@ -48,11 +49,15 @@ function CompactCircle({
   state,
   isExpanded,
   onClick,
+  icon,
+  catalogId,
 }: {
   toolName: string;
   state: "running" | "completed";
   isExpanded: boolean;
   onClick: () => void;
+  icon?: string | null;
+  catalogId?: string;
 }) {
   return (
     <TooltipProvider delayDuration={200}>
@@ -69,7 +74,11 @@ function CompactCircle({
                 : "bg-background",
             )}
           >
-            <BotIcon className="size-3.5 text-muted-foreground" />
+            {icon || catalogId ? (
+              <McpCatalogIcon icon={icon} catalogId={catalogId} size={16} />
+            ) : (
+              <BotIcon className="size-3.5 text-muted-foreground" />
+            )}
             <span
               className={cn(
                 "absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full border-2 border-background",
@@ -88,11 +97,18 @@ function CompactCircle({
   );
 }
 
+export type ToolIconMap = Map<
+  string,
+  { icon?: string | null; catalogId?: string }
+>;
+
 export function CompactToolGroup({
   tools,
+  toolIconMap,
   onToolApprovalResponse,
 }: {
   tools: CompactToolEntry[];
+  toolIconMap?: ToolIconMap;
   onToolApprovalResponse?: (params: {
     id: string;
     approved: boolean;
@@ -110,15 +126,20 @@ export function CompactToolGroup({
   return (
     <div className="mb-4">
       <div className="flex flex-wrap gap-1.5 items-center">
-        {tools.map((tool) => (
-          <CompactCircle
-            key={tool.key}
-            toolName={tool.toolName}
-            state={getToolState(tool.part, tool.toolResultPart)}
-            isExpanded={expandedKey === tool.key}
-            onClick={() => handleToggle(tool.key)}
-          />
-        ))}
+        {tools.map((tool) => {
+          const iconInfo = toolIconMap?.get(tool.toolName);
+          return (
+            <CompactCircle
+              key={tool.key}
+              toolName={tool.toolName}
+              state={getToolState(tool.part, tool.toolResultPart)}
+              isExpanded={expandedKey === tool.key}
+              onClick={() => handleToggle(tool.key)}
+              icon={iconInfo?.icon}
+              catalogId={iconInfo?.catalogId}
+            />
+          );
+        })}
       </div>
       {expandedTool && (
         <div className="mt-2">

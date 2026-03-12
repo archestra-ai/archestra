@@ -248,7 +248,6 @@ jobs:
     runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
-      packages: read
     strategy:
       fail-fast: false
       matrix:
@@ -398,7 +397,6 @@ jobs:
     runs-on: blacksmith-16vcpu-ubuntu-2404
     permissions:
       contents: read
-      packages: read
     steps:
       - name: Checkout repository
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
@@ -588,7 +586,6 @@ jobs:
     runs-on: blacksmith-16vcpu-ubuntu-2404
     permissions:
       contents: read
-      packages: read
     steps:
       - name: Checkout repository
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
@@ -780,7 +777,6 @@ jobs:
             dockerfile: ./platform/mcp_server_docker_image/Dockerfile
     permissions:
       contents: read
-      packages: read
     steps:
       - name: Checkout repository
         if: ${{ github.event_name == 'merge_group' }}

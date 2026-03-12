@@ -729,6 +729,7 @@ function DeleteAgentDialog({
               type="submit"
               variant="destructive"
               disabled={deleteAgent.isPending}
+              autoFocus
             >
               {deleteAgent.isPending ? "Deleting..." : "Delete Agent"}
             </Button>

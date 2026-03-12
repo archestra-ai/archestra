@@ -753,6 +753,7 @@ function AgentsCanvasViewInner() {
             <AlertDialogAction
               onClick={confirmDelete}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              autoFocus
             >
               Delete
             </AlertDialogAction>

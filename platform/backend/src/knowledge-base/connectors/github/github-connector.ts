@@ -311,6 +311,7 @@ export class GithubConnector extends BaseConnector {
     );
 
     let treeSha: string;
+    let branch = "main";
     try {
       const refResponse = await octokit.rest.git.getRef({
         owner: repo.owner,
@@ -326,6 +327,7 @@ export class GithubConnector extends BaseConnector {
           ref: "heads/master",
         });
         treeSha = refResponse.data.object.sha;
+        branch = "master";
       } catch (err) {
         this.log.warn(
           {
@@ -411,7 +413,7 @@ export class GithubConnector extends BaseConnector {
         });
 
         if (content !== null) {
-          documents.push(markdownFileToDocument(file.path, content, repo));
+          documents.push(markdownFileToDocument(file.path, content, repo, branch));
         }
       }
 
@@ -577,13 +579,14 @@ function markdownFileToDocument(
   filePath: string,
   content: string,
   repo: { owner: string; name: string; htmlUrl: string },
+  branch: string,
 ): ConnectorDocument {
   const fileName = filePath.split("/").pop() ?? filePath;
   return {
     id: `${repo.name}#file:${filePath}`,
     title: `${fileName} (${repo.owner}/${repo.name})`,
     content,
-    sourceUrl: `${repo.htmlUrl}/blob/main/${filePath}`,
+    sourceUrl: `${repo.htmlUrl}/blob/${branch}/${filePath}`,
     metadata: {
       repo: `${repo.owner}/${repo.name}`,
       filePath,

@@ -734,7 +734,15 @@ describe("GithubConnector", () => {
       });
 
       mockGetTree.mockResolvedValueOnce({
-        data: { tree: [] },
+        data: {
+          tree: [{ type: "blob", path: "README.md", sha: "sha1" }],
+        },
+      });
+
+      mockGetContent.mockResolvedValueOnce({
+        data: {
+          content: Buffer.from("# Hello").toString("base64"),
+        },
       });
 
       const batches: ConnectorSyncBatch[] = [];
@@ -750,6 +758,12 @@ describe("GithubConnector", () => {
       expect(mockGetRef).toHaveBeenCalledWith(
         expect.objectContaining({ ref: "heads/master" }),
       );
+
+      const mdDocs = batches
+        .flatMap((b) => b.documents)
+        .filter((d) => d.metadata.kind === "markdown_file");
+      expect(mdDocs).toHaveLength(1);
+      expect(mdDocs[0].sourceUrl).toContain("/blob/master/README.md");
     });
 
     test("continues when file content fetch fails", async () => {

@@ -11,7 +11,7 @@ import {
 import type { ChatStatus } from "ai";
 import { MoreVerticalIcon, PaperclipIcon } from "lucide-react";
 import type { FormEvent } from "react";
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { ModelSelectorLogo } from "@/components/ai-elements/model-selector";
 import {
   PromptInput,
@@ -52,6 +52,8 @@ import {
 import { useProfile } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth.query";
 import { conversationStorageKeys } from "@/lib/chat-utils";
+import { useOrganization } from "@/lib/organization.query";
+import { useTypingAnimation } from "@/lib/typing-animation.hook";
 import { useIsMobile } from "@/lib/use-mobile.hook";
 import { useModelSelectorDisplay } from "@/lib/use-model-selector-display.hook";
 
@@ -159,6 +161,24 @@ const PromptInputContent = ({
     securitySettings: ["update"],
   });
 
+  // Chat placeholders from organization settings
+  const { data: orgData } = useOrganization();
+  const chatPlaceholders = useMemo(
+    () => orgData?.chatPlaceholders,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [orgData?.chatPlaceholders],
+  );
+  const { text: animatedPlaceholder, isAnimating } =
+    useTypingAnimation(chatPlaceholders);
+
+  // RBAC: check if user can see agent picker and provider settings in chat
+  const { data: canSeeAgentPicker } = useHasPermissions({
+    chatAgentPicker: ["enable"],
+  });
+  const { data: canSeeProviderSettings } = useHasPermissions({
+    chatProviderSettings: ["enable"],
+  });
+
   const storageKey = conversationId
     ? conversationStorageKeys(conversationId).draft
     : `archestra_chat_draft_new_${agentId}`;
@@ -247,7 +267,13 @@ const PromptInputContent = ({
           />
         ) : (
           <PromptInputTextarea
-            placeholder="What would you like to get done?"
+            placeholder={
+              conversationId
+                ? "Ask a follow-up..."
+                : isAnimating
+                  ? animatedPlaceholder
+                  : "What would you like to get done?"
+            }
             ref={textareaRef}
             className="px-4"
             autoFocus
@@ -286,52 +312,58 @@ const PromptInputContent = ({
                 </PopoverTrigger>
                 <PopoverContent side="top" align="start" className="w-auto p-3">
                   <div className="flex flex-col gap-3">
-                    {selectorAgentId !== undefined && onAgentChange && (
-                      <div>
-                        <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1">
-                          Agent
-                        </p>
-                        <InitialAgentSelector
-                          currentAgentId={selectorAgentId}
-                          onAgentChange={onAgentChange}
-                        />
-                      </div>
-                    )}
-                    <div>
-                      <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1">
-                        Model
-                      </p>
-                      <ModelSelector
-                        selectedModel={selectedModel}
-                        onModelChange={onModelChange}
-                        onOpenChange={onModelSelectorOpenChange}
-                        apiKeyId={
-                          conversationId
-                            ? currentConversationChatApiKeyId
-                            : initialApiKeyId
-                        }
-                      />
-                    </div>
-                    {(conversationId || onApiKeyChange) && (
-                      <div>
-                        <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1">
-                          Provider API Key
-                        </p>
-                        <ChatApiKeySelector
-                          conversationId={conversationId}
-                          currentProvider={currentProvider}
-                          currentConversationChatApiKeyId={
-                            conversationId
-                              ? (currentConversationChatApiKeyId ?? null)
-                              : (initialApiKeyId ?? null)
-                          }
-                          messageCount={messageCount}
-                          onApiKeyChange={onApiKeyChange}
-                          onProviderChange={onProviderChange}
-                          isModelsLoading={isModelsLoading}
-                          agentLlmApiKeyId={agentLlmApiKeyId}
-                        />
-                      </div>
+                    {canSeeAgentPicker &&
+                      selectorAgentId !== undefined &&
+                      onAgentChange && (
+                        <div>
+                          <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1">
+                            Agent
+                          </p>
+                          <InitialAgentSelector
+                            currentAgentId={selectorAgentId}
+                            onAgentChange={onAgentChange}
+                          />
+                        </div>
+                      )}
+                    {canSeeProviderSettings && (
+                      <>
+                        <div>
+                          <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1">
+                            Model
+                          </p>
+                          <ModelSelector
+                            selectedModel={selectedModel}
+                            onModelChange={onModelChange}
+                            onOpenChange={onModelSelectorOpenChange}
+                            apiKeyId={
+                              conversationId
+                                ? currentConversationChatApiKeyId
+                                : initialApiKeyId
+                            }
+                          />
+                        </div>
+                        {(conversationId || onApiKeyChange) && (
+                          <div>
+                            <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1">
+                              Provider API Key
+                            </p>
+                            <ChatApiKeySelector
+                              conversationId={conversationId}
+                              currentProvider={currentProvider}
+                              currentConversationChatApiKeyId={
+                                conversationId
+                                  ? (currentConversationChatApiKeyId ?? null)
+                                  : (initialApiKeyId ?? null)
+                              }
+                              messageCount={messageCount}
+                              onApiKeyChange={onApiKeyChange}
+                              onProviderChange={onProviderChange}
+                              isModelsLoading={isModelsLoading}
+                              agentLlmApiKeyId={agentLlmApiKeyId}
+                            />
+                          </div>
+                        )}
+                      </>
                     )}
                     {tokensUsed > 0 && maxContextLength && (
                       <div>
@@ -410,13 +442,16 @@ const PromptInputContent = ({
           {/* Desktop: inline toolbar items */}
           {!isMobile && (
             <>
-              {selectorAgentId !== undefined && onAgentChange && (
-                <InitialAgentSelector
-                  currentAgentId={selectorAgentId}
-                  onAgentChange={onAgentChange}
-                />
-              )}
-              {showDefaultLogo && logoProvider ? (
+              {canSeeAgentPicker &&
+                selectorAgentId !== undefined &&
+                onAgentChange && (
+                  <InitialAgentSelector
+                    currentAgentId={selectorAgentId}
+                    onAgentChange={onAgentChange}
+                  />
+                )}
+              {!canSeeProviderSettings ? null : showDefaultLogo &&
+                logoProvider ? (
                 <Button
                   type="button"
                   variant="ghost"

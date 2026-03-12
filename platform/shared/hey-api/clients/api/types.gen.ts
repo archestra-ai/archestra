@@ -33612,7 +33612,7 @@ export type GetRolesResponses = {
         role: string;
         name: string;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable'>;
         };
         createdAt: string;
         updatedAt: string | null;
@@ -33626,7 +33626,7 @@ export type CreateRoleData = {
     body: {
         name: string;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable'>;
         };
     };
     path?: never;
@@ -33703,7 +33703,7 @@ export type CreateRoleResponses = {
         role: string;
         name: string;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable'>;
         };
         createdAt: string;
         updatedAt: string | null;
@@ -33876,7 +33876,7 @@ export type GetRoleResponses = {
         role: string;
         name: string;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable'>;
         };
         createdAt: string;
         updatedAt: string | null;
@@ -33890,7 +33890,7 @@ export type UpdateRoleData = {
     body?: {
         name?: string;
         permission?: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable'>;
         };
     };
     path: {
@@ -33972,7 +33972,7 @@ export type UpdateRoleResponses = {
         role: string;
         name: string;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable'>;
         };
         createdAt: string;
         updatedAt: string | null;
@@ -34076,6 +34076,13 @@ export type GetOrganizationResponses = {
         defaultLlmModel: string | null;
         defaultLlmProvider: string | null;
         defaultAgentId: string | null;
+        favicon: string | null;
+        appName: string | null;
+        ogDescription: string | null;
+        footerText: string | null;
+        chatPlaceholders: Array<string> | null;
+        iconLogo: string | null;
+        showTwoFactor: boolean;
     };
 };
 
@@ -34156,6 +34163,11 @@ export type GetPublicAppearanceResponses = {
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         logo: string | null;
         logoDark: string | null;
+        favicon: string | null;
+        iconLogo: string | null;
+        appName: string | null;
+        ogDescription: string | null;
+        footerText: string | null;
     };
 };
 
@@ -34167,6 +34179,13 @@ export type UpdateAppearanceData = {
         customFont?: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         logo?: string | null;
         logoDark?: string | null;
+        favicon?: string | null;
+        iconLogo?: string | null;
+        appName?: string | null;
+        ogDescription?: string | null;
+        footerText?: string | null;
+        chatPlaceholders?: Array<string> | null;
+        showTwoFactor?: boolean;
     };
     path?: never;
     query?: never;
@@ -34260,6 +34279,13 @@ export type UpdateAppearanceResponses = {
         defaultLlmModel: string | null;
         defaultLlmProvider: string | null;
         defaultAgentId: string | null;
+        favicon: string | null;
+        appName: string | null;
+        ogDescription: string | null;
+        footerText: string | null;
+        chatPlaceholders: Array<string> | null;
+        iconLogo: string | null;
+        showTwoFactor: boolean;
     };
 };
 
@@ -34362,6 +34388,13 @@ export type UpdateSecuritySettingsResponses = {
         defaultLlmModel: string | null;
         defaultLlmProvider: string | null;
         defaultAgentId: string | null;
+        favicon: string | null;
+        appName: string | null;
+        ogDescription: string | null;
+        footerText: string | null;
+        chatPlaceholders: Array<string> | null;
+        iconLogo: string | null;
+        showTwoFactor: boolean;
     };
 };
 
@@ -34465,6 +34498,13 @@ export type UpdateLlmSettingsResponses = {
         defaultLlmModel: string | null;
         defaultLlmProvider: string | null;
         defaultAgentId: string | null;
+        favicon: string | null;
+        appName: string | null;
+        ogDescription: string | null;
+        footerText: string | null;
+        chatPlaceholders: Array<string> | null;
+        iconLogo: string | null;
+        showTwoFactor: boolean;
     };
 };
 
@@ -34568,6 +34608,13 @@ export type UpdateAgentSettingsResponses = {
         defaultLlmModel: string | null;
         defaultLlmProvider: string | null;
         defaultAgentId: string | null;
+        favicon: string | null;
+        appName: string | null;
+        ogDescription: string | null;
+        footerText: string | null;
+        chatPlaceholders: Array<string> | null;
+        iconLogo: string | null;
+        showTwoFactor: boolean;
     };
 };
 
@@ -34673,6 +34720,13 @@ export type UpdateKnowledgeSettingsResponses = {
         defaultLlmModel: string | null;
         defaultLlmProvider: string | null;
         defaultAgentId: string | null;
+        favicon: string | null;
+        appName: string | null;
+        ogDescription: string | null;
+        footerText: string | null;
+        chatPlaceholders: Array<string> | null;
+        iconLogo: string | null;
+        showTwoFactor: boolean;
     };
 };
 
@@ -34772,6 +34826,13 @@ export type DropEmbeddingConfigResponses = {
         defaultLlmModel: string | null;
         defaultLlmProvider: string | null;
         defaultAgentId: string | null;
+        favicon: string | null;
+        appName: string | null;
+        ogDescription: string | null;
+        footerText: string | null;
+        chatPlaceholders: Array<string> | null;
+        iconLogo: string | null;
+        showTwoFactor: boolean;
     };
 };
 
@@ -34954,6 +35015,13 @@ export type CompleteOnboardingResponses = {
         defaultLlmModel: string | null;
         defaultLlmProvider: string | null;
         defaultAgentId: string | null;
+        favicon: string | null;
+        appName: string | null;
+        ogDescription: string | null;
+        footerText: string | null;
+        chatPlaceholders: Array<string> | null;
+        iconLogo: string | null;
+        showTwoFactor: boolean;
     };
 };
 
@@ -37752,7 +37820,7 @@ export type GetUserPermissionsResponses = {
      * Default Response
      */
     200: {
-        [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel'>;
+        [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable'>;
     };
 };
 

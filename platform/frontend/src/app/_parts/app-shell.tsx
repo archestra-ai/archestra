@@ -11,7 +11,7 @@ import { useHasPermissions } from "@/lib/auth.query";
 import { AppSidebar } from "./sidebar";
 
 const SIDEBAR_COLLAPSED_PERMISSION: Permissions = {
-  minimalisticView: ["read"],
+  simpleView: ["enable"],
 };
 
 interface AppShellProps {

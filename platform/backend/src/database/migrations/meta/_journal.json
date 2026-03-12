@@ -1254,6 +1254,13 @@
       "when": 1773248640399,
       "tag": "0178_high_black_crow",
       "breakpoints": true
+    },
+    {
+      "idx": 179,
+      "version": "7",
+      "when": 1773281972468,
+      "tag": "0179_tearful_cobalt_man",
+      "breakpoints": true
     }
   ]
 }

@@ -4,6 +4,24 @@ import type { APIRequestContext, APIResponse } from "@playwright/test";
 import type { TestFixtures } from "./fixtures";
 import { expect, test } from "./fixtures";
 
+// Helper to clean up appearance fields after tests
+const cleanupAppearance = async (
+  request: APIRequestContext,
+  makeApiRequest: TestFixtures["makeApiRequest"],
+  data: Record<string, unknown>,
+) => {
+  try {
+    await makeApiRequest({
+      request,
+      method: "patch",
+      urlSuffix: "/api/organization/appearance",
+      data,
+    });
+  } catch {
+    // Ignore cleanup errors
+  }
+};
+
 // Test constants
 const VALID_PNG_BASE64 =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/58BAwAI/AL+hc2rNAAAAABJRU5ErkJggg==";
@@ -173,6 +191,251 @@ test.describe("Organization API logo validation", () => {
       expect(body.logo).toBeNull();
       expect(body).toHaveProperty("id");
       expect(body).toHaveProperty("name");
+    });
+  });
+});
+
+test.describe("Organization settings - new fields", () => {
+  test("should update and retrieve appName", async ({
+    request,
+    makeApiRequest,
+  }) => {
+    const response = await makeApiRequest({
+      request,
+      method: "patch",
+      urlSuffix: "/api/organization/appearance",
+      data: { appName: "My Custom App" },
+    });
+
+    expect(response.status()).toBe(200);
+    const body = await response.json();
+    expect(body.appName).toBe("My Custom App");
+
+    await cleanupAppearance(request, makeApiRequest, { appName: null });
+  });
+
+  test("should reject appName exceeding 100 characters", async ({
+    request,
+    makeApiRequest,
+  }) => {
+    const response = await makeApiRequest({
+      request,
+      method: "patch",
+      urlSuffix: "/api/organization/appearance",
+      data: { appName: "a".repeat(101) },
+      ignoreStatusCheck: true,
+    });
+
+    expect(response.status()).toBe(400);
+  });
+
+  test("should update and retrieve ogDescription", async ({
+    request,
+    makeApiRequest,
+  }) => {
+    const response = await makeApiRequest({
+      request,
+      method: "patch",
+      urlSuffix: "/api/organization/appearance",
+      data: { ogDescription: "Custom OG description" },
+    });
+
+    expect(response.status()).toBe(200);
+    const body = await response.json();
+    expect(body.ogDescription).toBe("Custom OG description");
+
+    await cleanupAppearance(request, makeApiRequest, { ogDescription: null });
+  });
+
+  test("should update and retrieve footerText", async ({
+    request,
+    makeApiRequest,
+  }) => {
+    const response = await makeApiRequest({
+      request,
+      method: "patch",
+      urlSuffix: "/api/organization/appearance",
+      data: { footerText: "© 2026 Custom Footer" },
+    });
+
+    expect(response.status()).toBe(200);
+    const body = await response.json();
+    expect(body.footerText).toBe("© 2026 Custom Footer");
+
+    await cleanupAppearance(request, makeApiRequest, { footerText: null });
+  });
+
+  test("should reject footerText exceeding 500 characters", async ({
+    request,
+    makeApiRequest,
+  }) => {
+    const response = await makeApiRequest({
+      request,
+      method: "patch",
+      urlSuffix: "/api/organization/appearance",
+      data: { footerText: "a".repeat(501) },
+      ignoreStatusCheck: true,
+    });
+
+    expect(response.status()).toBe(400);
+  });
+
+  test("should update and retrieve chatPlaceholders", async ({
+    request,
+    makeApiRequest,
+  }) => {
+    const placeholders = ["Ask me anything", "How can I help?"];
+    const response = await makeApiRequest({
+      request,
+      method: "patch",
+      urlSuffix: "/api/organization/appearance",
+      data: { chatPlaceholders: placeholders },
+    });
+
+    expect(response.status()).toBe(200);
+    const body = await response.json();
+    expect(body.chatPlaceholders).toEqual(placeholders);
+
+    await cleanupAppearance(request, makeApiRequest, {
+      chatPlaceholders: null,
+    });
+  });
+
+  test("should reject chatPlaceholders exceeding 20 entries", async ({
+    request,
+    makeApiRequest,
+  }) => {
+    const response = await makeApiRequest({
+      request,
+      method: "patch",
+      urlSuffix: "/api/organization/appearance",
+      data: {
+        chatPlaceholders: Array.from({ length: 21 }, (_, i) => `Item ${i}`),
+      },
+      ignoreStatusCheck: true,
+    });
+
+    expect(response.status()).toBe(400);
+  });
+
+  test("should reject chatPlaceholders with entry exceeding 80 chars", async ({
+    request,
+    makeApiRequest,
+  }) => {
+    const response = await makeApiRequest({
+      request,
+      method: "patch",
+      urlSuffix: "/api/organization/appearance",
+      data: { chatPlaceholders: ["a".repeat(81)] },
+      ignoreStatusCheck: true,
+    });
+
+    expect(response.status()).toBe(400);
+  });
+
+  test("should update showTwoFactor toggle", async ({
+    request,
+    makeApiRequest,
+  }) => {
+    const response = await makeApiRequest({
+      request,
+      method: "patch",
+      urlSuffix: "/api/organization/appearance",
+      data: { showTwoFactor: true },
+    });
+
+    expect(response.status()).toBe(200);
+    const body = await response.json();
+    expect(body.showTwoFactor).toBe(true);
+
+    // Reset
+    await cleanupAppearance(request, makeApiRequest, { showTwoFactor: false });
+  });
+
+  test("should accept favicon as valid PNG", async ({
+    request,
+    makeApiRequest,
+  }) => {
+    const response = await makeApiRequest({
+      request,
+      method: "patch",
+      urlSuffix: "/api/organization/appearance",
+      data: { favicon: VALID_PNG_BASE64 },
+    });
+
+    expect(response.status()).toBe(200);
+    const body = await response.json();
+    expect(body.favicon).toBe(VALID_PNG_BASE64);
+
+    await cleanupAppearance(request, makeApiRequest, { favicon: null });
+  });
+
+  test("should update multiple fields at once", async ({
+    request,
+    makeApiRequest,
+  }) => {
+    const response = await makeApiRequest({
+      request,
+      method: "patch",
+      urlSuffix: "/api/organization/appearance",
+      data: {
+        appName: "Multi-update Test",
+        footerText: "Test Footer",
+        showTwoFactor: true,
+        chatPlaceholders: ["Hello", "World"],
+      },
+    });
+
+    expect(response.status()).toBe(200);
+    const body = await response.json();
+    expect(body.appName).toBe("Multi-update Test");
+    expect(body.footerText).toBe("Test Footer");
+    expect(body.showTwoFactor).toBe(true);
+    expect(body.chatPlaceholders).toEqual(["Hello", "World"]);
+
+    // Cleanup
+    await cleanupAppearance(request, makeApiRequest, {
+      appName: null,
+      footerText: null,
+      showTwoFactor: false,
+      chatPlaceholders: null,
+    });
+  });
+
+  test("public appearance endpoint should include new fields", async ({
+    request,
+    makeApiRequest,
+  }) => {
+    // Set values first
+    await makeApiRequest({
+      request,
+      method: "patch",
+      urlSuffix: "/api/organization/appearance",
+      data: {
+        appName: "Public Test",
+        ogDescription: "Public OG",
+        favicon: VALID_PNG_BASE64,
+      },
+    });
+
+    // Fetch public appearance (unauthenticated endpoint)
+    const response = await makeApiRequest({
+      request,
+      method: "get",
+      urlSuffix: "/api/organization/public-appearance",
+    });
+
+    expect(response.status()).toBe(200);
+    const body = await response.json();
+    expect(body.appName).toBe("Public Test");
+    expect(body.ogDescription).toBe("Public OG");
+    expect(body.favicon).toBe(VALID_PNG_BASE64);
+
+    // Cleanup
+    await cleanupAppearance(request, makeApiRequest, {
+      appName: null,
+      ogDescription: null,
+      favicon: null,
     });
   });
 });

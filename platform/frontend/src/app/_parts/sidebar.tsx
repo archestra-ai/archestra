@@ -52,6 +52,7 @@ import { useHasPermissions, usePermissionMap } from "@/lib/auth.query";
 import config from "@/lib/config";
 import { useEnterpriseFeature } from "@/lib/config.query";
 import { useGithubStars } from "@/lib/github.query";
+import { useOrganization } from "@/lib/organization.query";
 import { cn } from "@/lib/utils";
 
 interface NavSubItem {
@@ -188,21 +189,6 @@ const contentNavGroups: NavGroup[] = [
           pathname.startsWith("/llm/logs") || pathname.startsWith("/mcp/logs"),
       },
     ],
-  },
-];
-
-// Items pinned to the sidebar footer (above user profile)
-const footerNavItems: NavItem[] = [
-  {
-    title: "Connect",
-    url: "/connection",
-    icon: Cable,
-  },
-  {
-    title: "Settings",
-    url: "/settings/account",
-    icon: Settings,
-    customIsActive: (pathname: string) => pathname.startsWith("/settings"),
   },
 ];
 
@@ -412,6 +398,7 @@ export function AppSidebar() {
   const { data: starCount } = useGithubStars();
   const formattedStarCount = starCount ?? "";
   const permissionMap = usePermissionMap(requiredPagePermissionsMap);
+  const { data: organization } = useOrganization();
   const knowledgeBaseEnabled = useEnterpriseFeature("knowledgeBase");
   // Connect page requires at least one of these (OR logic)
   const { data: canReadAgent } = useHasPermissions({ agent: ["read"] });
@@ -432,12 +419,31 @@ export function AppSidebar() {
     }));
   }, [knowledgeBaseEnabled]);
 
-  // Filter footer items based on permissions
-  const filteredFooterNavItems = React.useMemo(() => {
-    return footerNavItems.filter((item) => {
-      if (item.title === "Connect") return showConnect;
-      return true;
+  // Build additional links for UserButton popout menu
+  const userMenuLinks = React.useMemo(() => {
+    const links: {
+      href: string;
+      icon?: React.ReactNode;
+      label: React.ReactNode;
+      separator?: boolean;
+    }[] = [];
+
+    if (showConnect) {
+      links.push({
+        href: "/connection",
+        icon: <Cable className="h-4 w-4" />,
+        label: "Connect",
+      });
+    }
+
+    links.push({
+      href: "/settings/account",
+      icon: <Settings className="h-4 w-4" />,
+      label: "Settings",
+      separator: true,
     });
+
+    return links;
   }, [showConnect]);
 
   return (
@@ -453,7 +459,11 @@ export function AppSidebar() {
           href="/chat"
           className="hidden group-data-[collapsible=icon]:flex"
         >
-          <img src="/logo.png" alt="Logo" className="size-7" />
+          <img
+            src={organization?.iconLogo || "/logo.png"}
+            alt="Logo"
+            className="size-7"
+          />
         </Link>
         <SidebarTrigger className="hidden group-data-[collapsible=icon]:flex size-8 cursor-pointer" />
       </SidebarHeader>
@@ -488,20 +498,10 @@ export function AppSidebar() {
           />
         )}
       </SidebarContent>
-      <SidebarFooter className="gap-0">
-        {isAuthenticated && permissionMap && (
-          <NavSecondary
-            items={filteredFooterNavItems}
-            pathname={pathname}
-            searchParams={searchParams}
-            permissionMap={permissionMap}
-            starCount={formattedStarCount}
-            className="pb-0 group-data-[collapsible=icon]:p-0"
-          />
-        )}
+      <SidebarFooter>
         <SidebarWarningsAccordion />
         <SignedIn>
-          <SidebarGroup className="mt-auto pt-0 group-data-[collapsible=icon]:p-0">
+          <SidebarGroup className="mt-auto p-0">
             <SidebarGroupContent>
               <div
                 data-testid={E2eTestId.SidebarUserProfile}
@@ -520,8 +520,10 @@ export function AppSidebar() {
                 <UserButton
                   size="default"
                   align="center"
+                  side="top"
                   className="w-full bg-transparent hover:bg-transparent text-foreground"
                   disableDefaultLinks
+                  additionalLinks={userMenuLinks}
                 />
               </div>
             </SidebarGroupContent>

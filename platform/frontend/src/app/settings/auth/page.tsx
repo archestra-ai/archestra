@@ -11,7 +11,9 @@ import { Suspense, useEffect, useRef, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { LoadingSpinner } from "@/components/loading";
 import { PersonalTokenCard } from "@/components/settings/personal-token-card";
+import { useHasPermissions } from "@/lib/auth.query";
 import config from "@/lib/config";
+import { useOrganization } from "@/lib/organization.query";
 import { cn } from "@/lib/utils";
 
 function AuthSettingsContent() {
@@ -19,6 +21,8 @@ function AuthSettingsContent() {
   const highlight = searchParams.get("highlight");
   const changePasswordRef = useRef<HTMLDivElement>(null);
   const [isPulsing, setIsPulsing] = useState(false);
+  const { data: organization } = useOrganization();
+  const { data: canReadApiKeys } = useHasPermissions({ apiKey: ["read"] });
 
   useEffect(() => {
     if (highlight === "change-password" && changePasswordRef.current) {
@@ -35,7 +39,7 @@ function AuthSettingsContent() {
   return (
     <div className="space-y-6">
       <PersonalTokenCard />
-      <ApiKeysCard classNames={{ base: "w-full" }} />
+      {canReadApiKeys && <ApiKeysCard classNames={{ base: "w-full" }} />}
       {!config.disableBasicAuth && (
         <div
           ref={changePasswordRef}
@@ -48,7 +52,9 @@ function AuthSettingsContent() {
           <ChangePasswordCard classNames={{ base: "w-full" }} />
         </div>
       )}
-      <TwoFactorCard classNames={{ base: "w-full" }} />
+      {organization?.showTwoFactor && (
+        <TwoFactorCard classNames={{ base: "w-full" }} />
+      )}
       <SessionsCard classNames={{ base: "w-full" }} />
     </div>
   );

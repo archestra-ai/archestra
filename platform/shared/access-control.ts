@@ -62,11 +62,14 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   invitation: ["create", "cancel"],
   identityProvider: ["read", "create", "update", "delete"],
   secret: ["read", "update"],
-  appearanceSettings: ["read", "update"],
+  apiKey: ["read", "delete"],
+  organizationSettings: ["read", "update"],
   securitySettings: ["read", "update"],
 
   // UI behavior resources
-  minimalisticView: ["read"],
+  simpleView: ["enable"],
+  chatAgentPicker: ["enable"],
+  chatProviderSettings: ["enable"],
 
   // better-auth internal resource — not exposed to users, kept for ACL compatibility
   organization: ["update", "delete"],
@@ -107,7 +110,8 @@ export const editorPermissions: Record<Resource, Action[]> = {
   // Administration
   team: ["read"],
   secret: ["read"],
-  appearanceSettings: ["read", "update"],
+  apiKey: ["read", "delete"],
+  organizationSettings: ["read", "update"],
   securitySettings: ["read", "update"],
 
   /*
@@ -119,7 +123,9 @@ export const editorPermissions: Record<Resource, Action[]> = {
   invitation: [],
   identityProvider: [],
   ac: [],
-  minimalisticView: [],
+  simpleView: [],
+  chatAgentPicker: ["enable"],
+  chatProviderSettings: ["enable"],
   organization: [],
 };
 
@@ -158,11 +164,14 @@ export const memberPermissions: Record<Resource, Action[]> = {
   // Administration
   team: ["read"],
   secret: [],
-  appearanceSettings: [],
+  apiKey: [],
+  organizationSettings: [],
   securitySettings: [],
 
   // UI behavior
-  minimalisticView: ["read"],
+  simpleView: ["enable"],
+  chatAgentPicker: [],
+  chatProviderSettings: [],
 
   /*
    * Empty arrays below are required for Record<Resource, Action[]> type compatibility.
@@ -178,7 +187,7 @@ export const memberPermissions: Record<Resource, Action[]> = {
 
 export const adminPermissions: Record<Resource, Action[]> = {
   ...allAvailableActions,
-  minimalisticView: [],
+  simpleView: [],
 };
 
 export const predefinedPermissionsMap: Record<PredefinedRoleName, Permissions> =
@@ -301,9 +310,12 @@ export const permissionDescriptions: Record<string, string> = {
   "identityProvider:delete": "Remove identity providers",
   "secret:read": "View secrets manager configuration",
   "secret:update": "Modify secrets manager settings and test connectivity",
-  "appearanceSettings:read":
-    "View white-labeling settings (theme, logo, fonts)",
-  "appearanceSettings:update": "Customize theme, logo, and font settings",
+  "apiKey:read": "View API keys",
+  "apiKey:delete": "Delete API keys",
+  "organizationSettings:read":
+    "View organization settings (appearance, authentication, etc)",
+  "organizationSettings:update":
+    "Customize organization appearance, authentication, etc",
   "securitySettings:read": "View security settings (tool policy, file uploads)",
   "securitySettings:update": "Modify security settings",
   "knowledgeBase:read": "View knowledge bases and connectors",
@@ -316,7 +328,9 @@ export const permissionDescriptions: Record<string, string> = {
     "Modify knowledge settings (embedding and reranking models)",
 
   // UI behavior
-  "minimalisticView:read": "Sidebar is collapsed by default on page load",
+  "simpleView:enable": "Sidebar is collapsed by default on page load",
+  "chatAgentPicker:enable": "Show agent picker in chat",
+  "chatProviderSettings:enable": "Show model and API key selectors in chat",
 };
 
 /**
@@ -767,7 +781,7 @@ export const requiredEndpointPermissionsMap: Partial<
     llmLimit: ["delete"],
   },
   [RouteId.UpdateAppearance]: {
-    appearanceSettings: ["update"],
+    organizationSettings: ["update"],
   },
   [RouteId.UpdateSecuritySettings]: {
     securitySettings: ["update"],
@@ -1004,5 +1018,5 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/settings/roles": { ac: ["read"] },
   "/settings/identity-providers": { identityProvider: ["read"] },
   "/settings/secrets": { secret: ["read"] },
-  "/settings/appearance": { appearanceSettings: ["read"] },
+  "/settings/organization": { organizationSettings: ["read"] },
 };

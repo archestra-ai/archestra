@@ -49,6 +49,7 @@ export function SidebarWarningsAccordion() {
             <SidebarMenuItem>
               <SidebarMenuButton
                 asChild
+                tooltip="Change default credentials"
                 className="text-destructive hover:text-destructive"
               >
                 <Link href="/settings/auth?highlight=change-password">
@@ -62,6 +63,7 @@ export function SidebarWarningsAccordion() {
             <SidebarMenuItem>
               <SidebarMenuButton
                 asChild
+                tooltip="Enable security engine"
                 className="text-destructive hover:text-destructive"
               >
                 <Link href="/mcp/tool-policies">

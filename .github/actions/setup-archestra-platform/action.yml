@@ -74,20 +74,6 @@ runs:
         config: ${{ inputs.kind-config-path }}
         cluster-name: ${{ inputs.kind-cluster-name }}
 
-    - name: Debug Kind cluster
-      shell: bash
-      run: |
-        echo "=== Kind version ==="
-        kind version
-        echo "=== Available clusters ==="
-        kind get clusters || echo "No clusters found"
-        echo "=== Docker containers ==="
-        docker ps -a | grep kind || echo "No kind containers found"
-        echo "=== Kubectl context ==="
-        kubectl config current-context || echo "No kubectl context"
-        echo "=== Kubectl cluster info ==="
-        kubectl cluster-info || echo "Cluster info failed"
-
     - name: Build Docker image
       if: ${{ inputs.build-platform-image == 'true' }}
       uses: ./.github/actions/build-platform-docker-image
@@ -112,39 +98,69 @@ runs:
           docker pull "${PLATFORM_IMAGE_TAG}"
         fi
 
-    - name: Load Docker image into Kind
+    - name: Cache MCP example OAuth server image
+      if: ${{ inputs.deploy-e2e-dependencies == 'true' }}
+      id: cache-oauth-image
+      uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+      with:
+        path: /tmp/mcp-oauth-server.tar
+        key: mcp-oauth-server-0.0.1-${{ runner.arch }}
+
+    - name: Pull MCP example OAuth server image
+      if: ${{ inputs.deploy-e2e-dependencies == 'true' && steps.cache-oauth-image.outputs.cache-hit != 'true' }}
+      shell: bash
+      run: |
+        MCP_OAUTH_IMAGE="europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-example-oauth-server:0.0.1"
+        docker pull "${MCP_OAUTH_IMAGE}"
+        docker save "${MCP_OAUTH_IMAGE}" > /tmp/mcp-oauth-server.tar
+
+    - name: Load cached MCP example OAuth server image
+      if: ${{ inputs.deploy-e2e-dependencies == 'true' && steps.cache-oauth-image.outputs.cache-hit == 'true' }}
+      shell: bash
+      run: docker load < /tmp/mcp-oauth-server.tar
+
+    - name: Load all images into Kind in parallel
       shell: bash
       env:
         PLATFORM_IMAGE_TAG: ${{ inputs.platform-image-tag }}
-        KIND_CLUSTER_NAME: ${{ inputs.kind-cluster-name }}
-      run: kind load docker-image "${PLATFORM_IMAGE_TAG}" --name "${KIND_CLUSTER_NAME}"
-
-    - name: Load MCP server base image into Kind
-      if: ${{ inputs.mcp-server-base-image-tag != '' }}
-      shell: bash
-      env:
         MCP_SERVER_BASE_IMAGE_TAG: ${{ inputs.mcp-server-base-image-tag }}
         KIND_CLUSTER_NAME: ${{ inputs.kind-cluster-name }}
+        DEPLOY_E2E_DEPS: ${{ inputs.deploy-e2e-dependencies }}
       run: |
-        echo "Loading MCP server base image into Kind cluster..."
-        kind load docker-image "${MCP_SERVER_BASE_IMAGE_TAG}" --name "${KIND_CLUSTER_NAME}"
-        echo "MCP server base image loaded into Kind"
+        PIDS=()
 
-    - name: Load MCP example OAuth server image into Kind
-      if: ${{ inputs.deploy-e2e-dependencies == 'true' }}
-      shell: bash
-      env:
-        KIND_CLUSTER_NAME: ${{ inputs.kind-cluster-name }}
-      run: |
-        MCP_OAUTH_IMAGE="europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-example-oauth-server:0.0.1"
-        echo "Pulling MCP example OAuth server image..."
-        docker pull "${MCP_OAUTH_IMAGE}"
-        echo "Loading MCP example OAuth server image into Kind cluster..."
-        kind load docker-image "${MCP_OAUTH_IMAGE}" --name "${KIND_CLUSTER_NAME}"
-        echo "MCP example OAuth server image loaded into Kind"
+        echo "Loading platform image into Kind..."
+        kind load docker-image "${PLATFORM_IMAGE_TAG}" --name "${KIND_CLUSTER_NAME}" &
+        PIDS+=($!)
 
-    - name: Deploy e2e dependencies and platform in parallel
-      if: ${{ inputs.deploy-e2e-dependencies == 'true' }}
+        if [ -n "${MCP_SERVER_BASE_IMAGE_TAG}" ]; then
+          echo "Loading MCP server base image into Kind..."
+          kind load docker-image "${MCP_SERVER_BASE_IMAGE_TAG}" --name "${KIND_CLUSTER_NAME}" &
+          PIDS+=($!)
+        fi
+
+        if [ "${DEPLOY_E2E_DEPS}" == "true" ]; then
+          MCP_OAUTH_IMAGE="europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-example-oauth-server:0.0.1"
+          echo "Loading MCP example OAuth server image into Kind..."
+          kind load docker-image "${MCP_OAUTH_IMAGE}" --name "${KIND_CLUSTER_NAME}" &
+          PIDS+=($!)
+        fi
+
+        echo "Waiting for all image loads to complete..."
+        FAILED=0
+        for pid in "${PIDS[@]}"; do
+          if ! wait "$pid"; then
+            FAILED=1
+          fi
+        done
+
+        if [ "$FAILED" -ne 0 ]; then
+          echo "One or more image loads failed"
+          exit 1
+        fi
+        echo "All images loaded into Kind successfully"
+
+    - name: Deploy with Helm
       shell: bash
       env:
         HELM_CHART_REF: ${{ inputs.helm-chart-ref }}
@@ -154,13 +170,17 @@ runs:
         PLATFORM_IMAGE_TAG: ${{ inputs.platform-image-tag }}
         MCP_SERVER_BASE_IMAGE_TAG: ${{ inputs.mcp-server-base-image-tag }}
         EXTRA_HELM_SET: ${{ inputs.extra-helm-set }}
+        DEPLOY_E2E_DEPS: ${{ inputs.deploy-e2e-dependencies }}
       run: |
-        # Start e2e-tests Helm install in background
-        echo "Starting e2e-tests Helm install in background..."
-        helm install e2e-tests "${PLATFORM_CONTEXT}/helm/e2e-tests" &
-        E2E_PID=$!
+        # Start e2e-tests Helm install in background (if needed)
+        E2E_PID=""
+        if [ "${DEPLOY_E2E_DEPS}" == "true" ]; then
+          echo "Starting e2e-tests Helm install in background..."
+          helm install e2e-tests "${PLATFORM_CONTEXT}/helm/e2e-tests" &
+          E2E_PID=$!
+        fi
 
-        # Determine chart reference for platform
+        # Determine chart reference
         if [ -n "${HELM_CHART_REF}" ]; then
           CHART_REF="${HELM_CHART_REF}"
           VERSION_FLAG=""
@@ -187,7 +207,6 @@ runs:
           done
         fi
 
-        # Deploy platform (this takes longer, so e2e-tests will finish during this)
         echo "Deploying Archestra Platform..."
         helm install archestra-platform "${CHART_REF}" \
           ${VERSION_FLAG} \
@@ -198,75 +217,15 @@ runs:
           --atomic --timeout=4m
 
         # Wait for e2e-tests to complete (should already be done by now)
-        echo "Waiting for e2e-tests Helm install to complete..."
-        if wait "$E2E_PID"; then
-          echo "e2e-tests Helm install completed successfully"
-        else
-          echo "e2e-tests Helm install failed"
-          exit 1
-        fi
-
-    - name: Deploy Archestra Platform with Helm
-      if: ${{ inputs.deploy-e2e-dependencies != 'true' }}
-      shell: bash
-      env:
-        HELM_CHART_REF: ${{ inputs.helm-chart-ref }}
-        HELM_CHART_VERSION: ${{ inputs.helm-chart-version }}
-        PLATFORM_CONTEXT: ${{ inputs.platform-context }}
-        HELM_VALUES_PATH: ${{ inputs.helm-values-path }}
-        PLATFORM_IMAGE_TAG: ${{ inputs.platform-image-tag }}
-        MCP_SERVER_BASE_IMAGE_TAG: ${{ inputs.mcp-server-base-image-tag }}
-        EXTRA_HELM_SET: ${{ inputs.extra-helm-set }}
-      run: |
-        # Determine chart reference: use helm-chart-ref if set, otherwise use local path
-        if [ -n "${HELM_CHART_REF}" ]; then
-          CHART_REF="${HELM_CHART_REF}"
-          VERSION_FLAG=""
-          if [ -n "${HELM_CHART_VERSION}" ]; then
-            VERSION_FLAG="--version ${HELM_CHART_VERSION}"
+        if [ -n "${E2E_PID}" ]; then
+          echo "Waiting for e2e-tests Helm install to complete..."
+          if wait "$E2E_PID"; then
+            echo "e2e-tests Helm install completed successfully"
+          else
+            echo "e2e-tests Helm install failed"
+            exit 1
           fi
-        else
-          CHART_REF="${PLATFORM_CONTEXT}/helm/archestra"
-          VERSION_FLAG=""
         fi
-
-        # Build MCP server base image override flag if provided
-        MCP_SET_FLAG=""
-        if [ -n "${MCP_SERVER_BASE_IMAGE_TAG}" ]; then
-          MCP_SET_FLAG="--set archestra.env.ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE=${MCP_SERVER_BASE_IMAGE_TAG}"
-        fi
-
-        # Build extra --set flags if provided (comma-separated key=value pairs)
-        EXTRA_SET_FLAGS=""
-        if [ -n "${EXTRA_HELM_SET}" ]; then
-          IFS=',' read -ra PAIRS <<< "${EXTRA_HELM_SET}"
-          for pair in "${PAIRS[@]}"; do
-            EXTRA_SET_FLAGS="${EXTRA_SET_FLAGS} --set ${pair}"
-          done
-        fi
-
-        helm install archestra-platform "${CHART_REF}" \
-          ${VERSION_FLAG} \
-          --values "${HELM_VALUES_PATH}" \
-          --set "archestra.image=${PLATFORM_IMAGE_TAG}" \
-          ${MCP_SET_FLAG} \
-          ${EXTRA_SET_FLAGS} \
-          --atomic --timeout=4m
-
-    - name: Verify deployment
-      shell: bash
-      run: |
-        echo "=== Kubernetes Pods ==="
-        kubectl get pods -o wide
-
-        echo "=== Kubernetes Services ==="
-        kubectl get services
-
-        echo "=== Archestra Platform Logs ==="
-        kubectl logs -l app.kubernetes.io/name=archestra-platform --tail=50
-
-        echo "=== Archestra Worker Logs ==="
-        kubectl logs -l app.kubernetes.io/name=archestra-platform-worker --tail=50 || echo "No worker logs"
 
     - name: Wait for services to be healthy
       shell: bash
@@ -288,19 +247,20 @@ runs:
           kubectl wait --for=condition=Ready pods -l app.kubernetes.io/name=wiremock --timeout=60s
 
           echo "Verifying Keycloak is accessible..."
+          # kubectl wait already confirmed the pod is Ready, so Keycloak should respond quickly.
           # Keycloak's /health/ready is on the management port (9000), NOT the main HTTP port (8080).
           # The NodePort service routes to 8080, so we check the OIDC discovery endpoint instead.
-          for i in $(seq 1 30); do
-            HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 http://localhost:30081/realms/archestra/.well-known/openid-configuration 2>/dev/null || echo "000")
+          for i in $(seq 1 10); do
+            HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 http://localhost:30081/realms/archestra/.well-known/openid-configuration 2>/dev/null || echo "000")
             if [ "$HTTP_CODE" = "200" ]; then
               echo "Keycloak is accessible (HTTP $HTTP_CODE)"
               break
             fi
-            echo "Keycloak returned HTTP $HTTP_CODE, retrying... ($i/30)"
-            sleep 5
+            echo "Keycloak returned HTTP $HTTP_CODE, retrying... ($i/10)"
+            sleep 2
           done
           if [ "$HTTP_CODE" != "200" ]; then
-            echo "ERROR: Keycloak not accessible after 30 attempts (last HTTP $HTTP_CODE)"
+            echo "ERROR: Keycloak not accessible after 10 attempts (last HTTP $HTTP_CODE)"
             kubectl get pods -l app.kubernetes.io/name=keycloak -o wide
             kubectl logs -l app.kubernetes.io/name=keycloak --tail=30 2>/dev/null || true
             exit 1

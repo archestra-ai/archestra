@@ -88,6 +88,27 @@ const organizationsTable = pgTable("organization", {
    * (Drizzle .references() causes TS circular inference: organization → agent → ... → organization).
    */
   defaultAgentId: uuid("default_agent_id"),
+
+  /** Custom favicon (base64 PNG, same validation as logo) */
+  favicon: text("favicon"),
+
+  /** Custom browser tab title */
+  appName: text("app_name"),
+
+  /** OpenGraph description for link previews */
+  ogDescription: text("og_description"),
+
+  /** Custom footer text (replaces version display) */
+  footerText: text("footer_text"),
+
+  /** Chat input placeholder texts (cycles with typing animation) */
+  chatPlaceholders: text("chat_placeholders").array(),
+
+  /** Square icon logo (28x28px recommended) for collapsed sidebar and chat loading indicator */
+  iconLogo: text("icon_logo"),
+
+  /** Organization-level 2FA visibility toggle */
+  showTwoFactor: boolean("show_two_factor").notNull().default(false),
 });
 
 export default organizationsTable;

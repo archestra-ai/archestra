@@ -97545,6 +97545,9 @@
                                   "includePullRequests": {
                                     "type": "boolean"
                                   },
+                                  "includeMarkdownFiles": {
+                                    "type": "boolean"
+                                  },
                                   "labelsToSkip": {
                                     "type": "array",
                                     "items": {
@@ -97582,6 +97585,9 @@
                                     "type": "boolean"
                                   },
                                   "includeMergeRequests": {
+                                    "type": "boolean"
+                                  },
+                                  "includeMarkdownFiles": {
                                     "type": "boolean"
                                   },
                                   "labelsToSkip": {
@@ -98142,6 +98148,9 @@
                           "includePullRequests": {
                             "type": "boolean"
                           },
+                          "includeMarkdownFiles": {
+                            "type": "boolean"
+                          },
                           "labelsToSkip": {
                             "type": "array",
                             "items": {
@@ -98180,6 +98189,9 @@
                             "type": "boolean"
                           },
                           "includeMergeRequests": {
+                            "type": "boolean"
+                          },
+                          "includeMarkdownFiles": {
                             "type": "boolean"
                           },
                           "labelsToSkip": {
@@ -98396,6 +98408,9 @@
                             "includePullRequests": {
                               "type": "boolean"
                             },
+                            "includeMarkdownFiles": {
+                              "type": "boolean"
+                            },
                             "labelsToSkip": {
                               "type": "array",
                               "items": {
@@ -98433,6 +98448,9 @@
                               "type": "boolean"
                             },
                             "includeMergeRequests": {
+                              "type": "boolean"
+                            },
+                            "includeMarkdownFiles": {
                               "type": "boolean"
                             },
                             "labelsToSkip": {
@@ -98938,6 +98956,9 @@
                             "includePullRequests": {
                               "type": "boolean"
                             },
+                            "includeMarkdownFiles": {
+                              "type": "boolean"
+                            },
                             "labelsToSkip": {
                               "type": "array",
                               "items": {
@@ -98975,6 +98996,9 @@
                               "type": "boolean"
                             },
                             "includeMergeRequests": {
+                              "type": "boolean"
+                            },
+                            "includeMarkdownFiles": {
                               "type": "boolean"
                             },
                             "labelsToSkip": {
@@ -99439,6 +99463,9 @@
                           "includePullRequests": {
                             "type": "boolean"
                           },
+                          "includeMarkdownFiles": {
+                            "type": "boolean"
+                          },
                           "labelsToSkip": {
                             "type": "array",
                             "items": {
@@ -99477,6 +99504,9 @@
                             "type": "boolean"
                           },
                           "includeMergeRequests": {
+                            "type": "boolean"
+                          },
+                          "includeMarkdownFiles": {
                             "type": "boolean"
                           },
                           "labelsToSkip": {
@@ -99690,6 +99720,9 @@
                             "includePullRequests": {
                               "type": "boolean"
                             },
+                            "includeMarkdownFiles": {
+                              "type": "boolean"
+                            },
                             "labelsToSkip": {
                               "type": "array",
                               "items": {
@@ -99727,6 +99760,9 @@
                               "type": "boolean"
                             },
                             "includeMergeRequests": {
+                              "type": "boolean"
+                            },
+                            "includeMarkdownFiles": {
                               "type": "boolean"
                             },
                             "labelsToSkip": {

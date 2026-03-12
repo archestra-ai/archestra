@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { usePublicAppearance } from "@/lib/appearance.query";
 import { useLatestGitHubRelease } from "@/lib/github-release.query";
@@ -18,18 +17,23 @@ export function Version({ inline = false }: VersionProps) {
   const { data: latestRelease } = useLatestGitHubRelease();
   const { data: organization } = useOrganization();
   const { data: appearance } = usePublicAppearance();
-  const pathname = usePathname();
   const [shouldHide, setShouldHide] = useState(false);
 
-  const isSettingsPage = pathname.startsWith("/settings");
-  const isChatPage = pathname.startsWith("/chat");
   // Prefer authenticated org data; fall back to public appearance for unauthenticated pages (e.g. sign-in)
   const footerText = organization?.footerText ?? appearance?.footerText;
+  const version = data?.version;
 
   const hasNewVersion = useMemo(() => {
-    if (!data?.version || !latestRelease?.tag_name) return false;
-    return hasNewerVersion(data.version, latestRelease.tag_name);
-  }, [data?.version, latestRelease?.tag_name]);
+    if (!version || !latestRelease?.tag_name) return false;
+    return hasNewerVersion(version, latestRelease.tag_name);
+  }, [version, latestRelease?.tag_name]);
+
+  const footerString = useMemo(() => {
+    if (footerText && version) return `${footerText} (v${version})`;
+    if (footerText) return footerText;
+    if (version) return `Version: ${version}`;
+    return null;
+  }, [footerText, version]);
 
   useEffect(() => {
     // Only check for hide-version class if not inline
@@ -57,52 +61,36 @@ export function Version({ inline = false }: VersionProps) {
     return null;
   }
 
-  // Show custom footer text when set and NOT on settings pages
-  if (footerText && !isSettingsPage) {
-    return (
-      <div
-        className={
-          inline
-            ? "text-xs text-muted-foreground"
-            : "text-xs text-muted-foreground text-center py-4"
-        }
-      >
-        {footerText}
-      </div>
-    );
-  }
-
-  // Hide version on chat pages when no custom footer text is set
-  if (isChatPage) {
+  if (!footerString) {
     return null;
   }
 
+  const className = inline
+    ? "text-xs text-muted-foreground"
+    : "text-xs text-muted-foreground text-center py-4";
+
+  // Custom footer text: show text with version, no upgrade link
+  if (footerText) {
+    return <div className={className}>{footerString}</div>;
+  }
+
+  // Default: show version with optional upgrade link
   return (
-    <>
-      {data?.version && (
-        <div
-          className={
-            inline
-              ? "text-xs text-muted-foreground"
-              : "text-xs text-muted-foreground text-center py-4"
-          }
-        >
-          Version: {data.version}
-          {hasNewVersion && latestRelease && (
-            <>
-              , new:{" "}
-              <Link
-                href={latestRelease.html_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="underline hover:text-foreground transition-colors"
-              >
-                {latestRelease.tag_name.replace(/^platform-/, "")}
-              </Link>
-            </>
-          )}
-        </div>
+    <div className={className}>
+      {footerString}
+      {hasNewVersion && latestRelease && (
+        <>
+          , new:{" "}
+          <Link
+            href={latestRelease.html_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline hover:text-foreground transition-colors"
+          >
+            {latestRelease.tag_name.replace(/^platform-/, "")}
+          </Link>
+        </>
       )}
-    </>
+    </div>
   );
 }

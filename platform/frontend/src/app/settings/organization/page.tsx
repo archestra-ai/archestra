@@ -192,8 +192,7 @@ export default function OrganizationSettingsPage() {
                   rows={2}
                 />
                 <p className="text-xs text-muted-foreground">
-                  Replaces version display in the footer. Always shows version
-                  on settings pages.
+                  Custom text shown in the footer alongside the version number.
                 </p>
               </div>
               <ChatPlaceholdersEditor

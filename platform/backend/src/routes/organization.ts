@@ -139,6 +139,13 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ organizationId, body }, reply) => {
+      if (body.defaultLlmApiKeyId) {
+        const apiKey = await ChatApiKeyModel.findById(body.defaultLlmApiKeyId);
+        if (!apiKey || apiKey.organizationId !== organizationId) {
+          throw new ApiError(404, "API key not found");
+        }
+      }
+
       if (body.defaultAgentId) {
         const agent = await AgentModel.findById(body.defaultAgentId);
         if (!agent || agent.organizationId !== organizationId) {

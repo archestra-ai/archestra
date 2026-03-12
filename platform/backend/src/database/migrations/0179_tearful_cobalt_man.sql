@@ -23,10 +23,11 @@ SET "permission" = (
 )::text
 WHERE jsonb_exists("permission"::jsonb, 'appearanceSettings');--> statement-breakpoint
 
--- Data migration: Add "chatAgentPicker" and "chatProviderSettings" with empty arrays to existing custom roles
+-- Data migration: Add "chatAgentPicker" and "chatProviderSettings" with ["enable"] to existing custom roles
+-- Using ["enable"] preserves existing behavior where all users could see the agent picker and provider settings
 UPDATE "organization_role"
 SET "permission" = (
   "permission"::jsonb
-  || '{"chatAgentPicker": [], "chatProviderSettings": []}'::jsonb
+  || '{"chatAgentPicker": ["enable"], "chatProviderSettings": ["enable"]}'::jsonb
 )::text
 WHERE NOT jsonb_exists("permission"::jsonb, 'chatAgentPicker');

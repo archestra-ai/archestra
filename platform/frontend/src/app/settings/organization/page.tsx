@@ -241,7 +241,7 @@ export default function OrganizationSettingsPage() {
             permissions={{ organizationSettings: ["update"] }}
             onClick={async () => {
               if (hasThemeChanges) {
-                saveAppearance?.(currentUITheme || DEFAULT_THEME);
+                await saveAppearance?.(currentUITheme || DEFAULT_THEME);
                 setHasThemeChanges(false);
               }
               if (hasFieldChanges) {

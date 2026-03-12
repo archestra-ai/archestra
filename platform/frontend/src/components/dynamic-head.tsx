@@ -34,34 +34,34 @@ export function DynamicHead() {
       newLink.rel = "icon";
       newLink.href = appearance.favicon;
       document.head.appendChild(newLink);
+      return () => {
+        newLink.remove();
+      };
     }
   }, [appearance?.favicon]);
 
-  // Update meta description and OG tags
+  // Update meta description, OG description, and OG title
   useEffect(() => {
     const description =
       appearance?.ogDescription || "Enterprise MCP Platform for AI Agents";
+    const title = appearance?.appName || "Archestra.AI";
 
-    let metaDesc = document.querySelector(
-      'meta[name="description"]',
-    ) as HTMLMetaElement | null;
-    if (!metaDesc) {
-      metaDesc = document.createElement("meta");
-      metaDesc.name = "description";
-      document.head.appendChild(metaDesc);
-    }
-    metaDesc.content = description;
-
-    let ogDesc = document.querySelector(
-      'meta[property="og:description"]',
-    ) as HTMLMetaElement | null;
-    if (!ogDesc) {
-      ogDesc = document.createElement("meta");
-      ogDesc.setAttribute("property", "og:description");
-      document.head.appendChild(ogDesc);
-    }
-    ogDesc.content = description;
-  }, [appearance?.ogDescription]);
+    upsertMeta("name", "description", description);
+    upsertMeta("property", "og:description", description);
+    upsertMeta("property", "og:title", title);
+  }, [appearance?.ogDescription, appearance?.appName]);
 
   return null;
+}
+
+function upsertMeta(attr: "name" | "property", value: string, content: string) {
+  let el = document.querySelector(
+    `meta[${attr}="${value}"]`,
+  ) as HTMLMetaElement | null;
+  if (!el) {
+    el = document.createElement("meta");
+    el.setAttribute(attr, value);
+    document.head.appendChild(el);
+  }
+  el.content = content;
 }

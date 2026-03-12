@@ -27830,6 +27830,7 @@ export type GetConnectorsResponses = {
                 assignmentGroups?: Array<string>;
                 query?: string;
                 batchSize?: number;
+                initialSyncMonths?: number;
             };
             secretId: string | null;
             schedule: string;
@@ -27908,6 +27909,7 @@ export type CreateConnectorData = {
             assignmentGroups?: Array<string>;
             query?: string;
             batchSize?: number;
+            initialSyncMonths?: number;
         };
         credentials: {
             email?: string;
@@ -28033,6 +28035,7 @@ export type CreateConnectorResponses = {
             assignmentGroups?: Array<string>;
             query?: string;
             batchSize?: number;
+            initialSyncMonths?: number;
         };
         secretId: string | null;
         schedule: string;
@@ -28249,6 +28252,7 @@ export type GetConnectorResponses = {
             assignmentGroups?: Array<string>;
             query?: string;
             batchSize?: number;
+            initialSyncMonths?: number;
         };
         secretId: string | null;
         schedule: string;
@@ -28313,6 +28317,7 @@ export type UpdateConnectorData = {
             assignmentGroups?: Array<string>;
             query?: string;
             batchSize?: number;
+            initialSyncMonths?: number;
         };
         credentials?: {
             email?: string;
@@ -28439,6 +28444,7 @@ export type UpdateConnectorResponses = {
             assignmentGroups?: Array<string>;
             query?: string;
             batchSize?: number;
+            initialSyncMonths?: number;
         };
         secretId: string | null;
         schedule: string;

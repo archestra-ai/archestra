@@ -97642,6 +97642,11 @@
                                   },
                                   "batchSize": {
                                     "type": "number"
+                                  },
+                                  "initialSyncMonths": {
+                                    "type": "number",
+                                    "minimum": 1,
+                                    "maximum": 12
                                   }
                                 },
                                 "required": [
@@ -98288,6 +98293,11 @@
                           },
                           "batchSize": {
                             "type": "number"
+                          },
+                          "initialSyncMonths": {
+                            "type": "number",
+                            "minimum": 1,
+                            "maximum": 12
                           }
                         },
                         "required": [
@@ -98588,6 +98598,11 @@
                             },
                             "batchSize": {
                               "type": "number"
+                            },
+                            "initialSyncMonths": {
+                              "type": "number",
+                              "minimum": 1,
+                              "maximum": 12
                             }
                           },
                           "required": [
@@ -99177,6 +99192,11 @@
                             },
                             "batchSize": {
                               "type": "number"
+                            },
+                            "initialSyncMonths": {
+                              "type": "number",
+                              "minimum": 1,
+                              "maximum": 12
                             }
                           },
                           "required": [
@@ -99721,6 +99741,11 @@
                           },
                           "batchSize": {
                             "type": "number"
+                          },
+                          "initialSyncMonths": {
+                            "type": "number",
+                            "minimum": 1,
+                            "maximum": 12
                           }
                         },
                         "required": [
@@ -100018,6 +100043,11 @@
                             },
                             "batchSize": {
                               "type": "number"
+                            },
+                            "initialSyncMonths": {
+                              "type": "number",
+                              "minimum": 1,
+                              "maximum": 12
                             }
                           },
                           "required": [

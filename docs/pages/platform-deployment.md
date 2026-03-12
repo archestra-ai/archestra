@@ -143,14 +143,23 @@ helm upgrade archestra-platform \
   --wait
 ```
 
-**Note**: `ARCHESTRA_AUTH_SECRET` is optional and will be auto-generated (64 characters) if not specified. If you need to set it manually, it must be at least 32 characters:
+**Auth secret configuration**: `ARCHESTRA_AUTH_SECRET` is optional. If you do not configure it, the Helm chart creates a `<release>-auth` Secret and auto-generates a 64-character `auth-secret` value on first install.
 
-```bash
-# Generate a secure secret
-openssl rand -base64 32
+If you manage secrets outside Helm, point the chart at an existing Kubernetes Secret:
 
-# Then add to your helm command:
---set archestra.env.ARCHESTRA_AUTH_SECRET=<your-generated-secret>
+```yaml
+archestra:
+  authSecret:
+    existingSecretName: archestra-auth
+    existingSecretKey: auth-secret
+```
+
+If you want Helm to manage the Secret but provide the value explicitly, set `archestra.authSecret.value` instead. The value must be at least 32 characters:
+
+```yaml
+archestra:
+  authSecret:
+    value: something-really-really-secret-12345
 ```
 
 #### MCP Server Runtime Configuration

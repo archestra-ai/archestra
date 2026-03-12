@@ -27812,6 +27812,7 @@ export type GetConnectorsResponses = {
                 repos?: Array<string>;
                 includeIssues?: boolean;
                 includePullRequests?: boolean;
+                includeMarkdownFiles?: boolean;
                 labelsToSkip?: Array<string>;
             } | {
                 type: 'gitlab';
@@ -27820,6 +27821,7 @@ export type GetConnectorsResponses = {
                 groupId?: string;
                 includeIssues?: boolean;
                 includeMergeRequests?: boolean;
+                includeMarkdownFiles?: boolean;
                 labelsToSkip?: Array<string>;
             };
             secretId: string | null;
@@ -27881,6 +27883,7 @@ export type CreateConnectorData = {
             repos?: Array<string>;
             includeIssues?: boolean;
             includePullRequests?: boolean;
+            includeMarkdownFiles?: boolean;
             labelsToSkip?: Array<string>;
         } | {
             type: 'gitlab';
@@ -27889,6 +27892,7 @@ export type CreateConnectorData = {
             groupId?: string;
             includeIssues?: boolean;
             includeMergeRequests?: boolean;
+            includeMarkdownFiles?: boolean;
             labelsToSkip?: Array<string>;
         };
         credentials: {
@@ -27997,6 +28001,7 @@ export type CreateConnectorResponses = {
             repos?: Array<string>;
             includeIssues?: boolean;
             includePullRequests?: boolean;
+            includeMarkdownFiles?: boolean;
             labelsToSkip?: Array<string>;
         } | {
             type: 'gitlab';
@@ -28005,6 +28010,7 @@ export type CreateConnectorResponses = {
             groupId?: string;
             includeIssues?: boolean;
             includeMergeRequests?: boolean;
+            includeMarkdownFiles?: boolean;
             labelsToSkip?: Array<string>;
         };
         secretId: string | null;
@@ -28204,6 +28210,7 @@ export type GetConnectorResponses = {
             repos?: Array<string>;
             includeIssues?: boolean;
             includePullRequests?: boolean;
+            includeMarkdownFiles?: boolean;
             labelsToSkip?: Array<string>;
         } | {
             type: 'gitlab';
@@ -28212,6 +28219,7 @@ export type GetConnectorResponses = {
             groupId?: string;
             includeIssues?: boolean;
             includeMergeRequests?: boolean;
+            includeMarkdownFiles?: boolean;
             labelsToSkip?: Array<string>;
         };
         secretId: string | null;
@@ -28259,6 +28267,7 @@ export type UpdateConnectorData = {
             repos?: Array<string>;
             includeIssues?: boolean;
             includePullRequests?: boolean;
+            includeMarkdownFiles?: boolean;
             labelsToSkip?: Array<string>;
         } | {
             type: 'gitlab';
@@ -28267,6 +28276,7 @@ export type UpdateConnectorData = {
             groupId?: string;
             includeIssues?: boolean;
             includeMergeRequests?: boolean;
+            includeMarkdownFiles?: boolean;
             labelsToSkip?: Array<string>;
         };
         credentials?: {
@@ -28376,6 +28386,7 @@ export type UpdateConnectorResponses = {
             repos?: Array<string>;
             includeIssues?: boolean;
             includePullRequests?: boolean;
+            includeMarkdownFiles?: boolean;
             labelsToSkip?: Array<string>;
         } | {
             type: 'gitlab';
@@ -28384,6 +28395,7 @@ export type UpdateConnectorResponses = {
             groupId?: string;
             includeIssues?: boolean;
             includeMergeRequests?: boolean;
+            includeMarkdownFiles?: boolean;
             labelsToSkip?: Array<string>;
         };
         secretId: string | null;

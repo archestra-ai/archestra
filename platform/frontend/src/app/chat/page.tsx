@@ -423,15 +423,15 @@ export default function ChatPage() {
     }
   }, []);
 
-  // Handle provider change from API key selector - auto-select a model from new provider
+  // Handle API key change - preselect best model for the new key's provider
   const handleInitialProviderChange = useCallback(
     (newProvider: SupportedProvider, _apiKeyId: string) => {
       const providerModels = modelsByProvider[newProvider];
       if (providerModels && providerModels.length > 0) {
-        // Fall back to first model for this provider
-        const firstModel = providerModels[0];
-        setInitialModel(firstModel.id);
-        saveModel(firstModel.id);
+        const bestModel =
+          providerModels.find((m) => m.isBest) ?? providerModels[0];
+        setInitialModel(bestModel.id);
+        saveModel(bestModel.id);
       }
     },
     [modelsByProvider],
@@ -571,7 +571,11 @@ export default function ChatPage() {
   }, [conversation?.selectedModel, initialModel, chatModels]);
 
   // Mutation for updating conversation model
+  // Use a ref so callbacks don't recreate when mutation state changes (isPending etc.),
+  // which would cause infinite re-render loops via Radix composeRefs during commit phase.
   const updateConversationMutation = useUpdateConversation();
+  const updateConversationMutateRef = useRef(updateConversationMutation.mutate);
+  updateConversationMutateRef.current = updateConversationMutation.mutate;
 
   // Handle model change
   const handleModelChange = useCallback(
@@ -582,7 +586,7 @@ export default function ChatPage() {
       const modelInfo = chatModels.find((m) => m.id === model);
       const provider = modelInfo?.provider;
 
-      updateConversationMutation.mutate({
+      updateConversationMutateRef.current({
         id: conversation.id,
         selectedModel: model,
         selectedProvider: provider,
@@ -591,41 +595,41 @@ export default function ChatPage() {
       // Persist to localStorage so it's restored on next visit
       saveModel(model);
     },
-    [conversation, chatModels, updateConversationMutation],
+    [conversation, chatModels],
   );
 
-  // Handle provider change from API key selector - auto-select a model from new provider
+  // Handle API key change - preselect best model for the new key's provider
   const handleProviderChange = useCallback(
     (newProvider: SupportedProvider, _apiKeyId: string) => {
       if (!conversation) return;
 
       const providerModels = modelsByProvider[newProvider];
       if (providerModels && providerModels.length > 0) {
-        // Select first model from the new provider
-        const firstModel = providerModels[0];
-        updateConversationMutation.mutate({
+        const bestModel =
+          providerModels.find((m) => m.isBest) ?? providerModels[0];
+        updateConversationMutateRef.current({
           id: conversation.id,
-          selectedModel: firstModel.id,
+          selectedModel: bestModel.id,
           selectedProvider: newProvider,
         });
 
         // Persist to localStorage so it's restored on next visit
-        saveModel(firstModel.id);
+        saveModel(bestModel.id);
       }
     },
-    [conversation, modelsByProvider, updateConversationMutation],
+    [conversation, modelsByProvider],
   );
 
   // Handle agent change in existing conversation
   const handleConversationAgentChange = useCallback(
     (agentId: string) => {
       if (!conversation) return;
-      updateConversationMutation.mutate({
+      updateConversationMutateRef.current({
         id: conversation.id,
         agentId,
       });
     },
-    [conversation, updateConversationMutation],
+    [conversation],
   );
 
   // Find the specific internal agent for this conversation (if any)

@@ -268,12 +268,8 @@ export function ChatApiKeySelector({
       saveApiKey(selectedKeyProvider, keyId);
     }
 
-    // If the selected key has a different provider, notify parent to switch model
-    if (
-      selectedKeyProvider &&
-      selectedKeyProvider !== currentProvider &&
-      onProviderChange
-    ) {
+    // Always notify parent to preselect best model for the new key
+    if (selectedKeyProvider && onProviderChange) {
       onProviderChange(selectedKeyProvider, keyId);
     }
   };

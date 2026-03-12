@@ -1069,7 +1069,7 @@ export function InternalMCPCatalog({
             initialValue={searchQueryFromUrl}
             onChange={handleSearchChange}
             debounceMs={300}
-            className="pl-9 h-11 bg-background/50 backdrop-blur-sm border-border/50 focus:border-primary/50 transition-colors"
+            className="pl-9 bg-background/50 backdrop-blur-sm border-border/50 focus:border-primary/50 transition-colors"
           />
         </div>
         <McpCatalogLabelFilter />

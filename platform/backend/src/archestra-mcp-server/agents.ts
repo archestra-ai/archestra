@@ -666,10 +666,18 @@ export async function handleTool(
             return {
               name: kb.name,
               description: kb.description,
-              type: "knowledge_base",
+              type: "knowledge_base" as const,
             };
           })
-          .filter(Boolean),
+          .filter(
+            (
+              kb,
+            ): kb is {
+              name: string;
+              description: string | null;
+              type: "knowledge_base";
+            } => kb !== null,
+          ),
       }));
 
       return {

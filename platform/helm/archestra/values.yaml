@@ -86,6 +86,21 @@ archestra:
   #     ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT: "http://$(NODE_IP):4317"
   env: {}
 
+  # Authentication secret source configuration.
+  #
+  # By default, the chart creates a <release>-auth Secret and auto-generates
+  # auth-secret on first install. For external secret managers, point the chart
+  # at an existing Secret instead.
+  authSecret:
+    # When set, the deployment reads ARCHESTRA_AUTH_SECRET from this Secret
+    # instead of the Helm-managed <release>-auth Secret.
+    existingSecretName: ""
+    # Key within existingSecretName containing the auth secret value.
+    existingSecretKey: auth-secret
+    # Optional explicit auth secret value to store in the Helm-managed Secret.
+    # Must be at least 32 characters when set.
+    value: ""
+
   # Environment variables with valueFrom (for fieldRef, resourceFieldRef, configMapKeyRef)
   # Use this for Kubernetes downward API or other valueFrom sources
   # This is required if you want to use $(VAR_NAME) expansion referencing pod/node information

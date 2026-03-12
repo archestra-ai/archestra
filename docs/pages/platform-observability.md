@@ -312,3 +312,30 @@ GRAFANA_URL=https://your-grafana-instance GRAFANA_TOKEN=glsa_xxx \
 ```
 
 This creates an "Archestra" folder and imports all dashboards. The script is idempotent — safe to re-run after updates to create new dashboards or update existing ones.
+
+### PostgreSQL Metrics Provider
+
+The Application Metrics dashboard includes PostgreSQL panels. By default, it uses metric names from the Bitnami postgres_exporter sidecar (Helm subchart). If your PostgreSQL metrics come from a different source, use the `--postgres-provider` flag:
+
+```bash
+# OTel Collector PostgreSQL Receiver (works with RDS, Cloud SQL, Azure, or any PostgreSQL)
+./install-dashboards.sh --postgres-provider otel
+
+# GCP Cloud SQL via Stackdriver Exporter
+./install-dashboards.sh --postgres-provider cloudsql
+
+# Azure Database for PostgreSQL via Azure Monitor
+./install-dashboards.sh --postgres-provider azure
+
+# Remote install with provider flag (no local clone needed)
+GRAFANA_URL=https://example.grafana.net GRAFANA_TOKEN=glsa_xxx \
+  bash <(curl -sL https://raw.githubusercontent.com/archestra-ai/archestra/main/platform/dev/grafana/install-dashboards.sh) \
+  --postgres-provider otel
+```
+
+| Provider | Metric Prefix | Use When |
+|----------|--------------|----------|
+| `helm` (default) | `pg_*` | Using the Bitnami PostgreSQL Helm subchart with metrics sidecar |
+| `otel` | `postgresql_*` | Using OTel Collector PostgreSQL Receiver against any PostgreSQL instance |
+| `cloudsql` | `stackdriver_cloudsql_*` | Scraping GCP Cloud Monitoring via the Stackdriver Exporter |
+| `azure` | `azure_*` | Scraping Azure Monitor metrics for Azure Database for PostgreSQL |

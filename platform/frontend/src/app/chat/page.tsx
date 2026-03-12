@@ -1576,7 +1576,6 @@ export default function ChatPage() {
                     _conversationInternalAgent?.name ||
                     internalAgents.find((a) => a.id === initialAgentId)?.name
                   }
-                  hideArrow={isPlaywrightSetupVisible}
                   messages={messages}
                   status={status}
                   isLoadingConversation={isLoadingConversation}

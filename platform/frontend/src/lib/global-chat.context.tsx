@@ -262,19 +262,15 @@ function ChatSessionHook({
         queryKey: ["conversation", conversationId],
       });
 
-      // If a swap_agent call just completed, poke the new agent
+      // After a swap_agent stop, poke the new agent so it responds.
+      // The new /api/chat POST re-reads the conversation from DB and
+      // loads the swapped agent's system prompt + tools.
       if (swapAgentPendingRef.current) {
         swapAgentPendingRef.current = false;
-        // Use setTimeout so the sendMessage ref is up-to-date after render
         setTimeout(() => {
           sendMessageRef.current?.({
             role: "user",
-            parts: [
-              {
-                type: "text",
-                text: SWAP_AGENT_POKE_TEXT,
-              },
-            ],
+            parts: [{ type: "text", text: SWAP_AGENT_POKE_TEXT }],
           });
         }, 100);
       }
@@ -297,14 +293,17 @@ function ChatSessionHook({
         setPendingCustomServerToolCall(toolCall);
       }
 
-      // Detect swap_agent tool and flag for auto-poke on finish
+      // Detect swap_agent tool: abort the current stream so the old agent
+      // stops generating, then poke the new agent in onFinish.
       if (toolCall.toolName === TOOL_SWAP_AGENT_FULL_NAME) {
         swapAgentPendingRef.current = true;
-        setTimeout(() => {
-          queryClient.invalidateQueries({
-            queryKey: ["conversation", conversationId],
-          });
-        }, 500);
+        // stop() aborts the HTTP stream; the next /api/chat request
+        // will re-read the conversation from DB and pick up the new agent's
+        // system prompt and tools.
+        stop();
+        queryClient.invalidateQueries({
+          queryKey: ["conversation", conversationId],
+        });
       }
 
       // Detect artifact_write tool and invalidate conversation to fetch updated artifact

@@ -65,7 +65,7 @@ export const tools: Tool[] = [
     name: TOOL_SWAP_AGENT_FULL_NAME,
     title: "Swap Agent",
     description:
-      "Switch the current conversation to a different agent. The new agent will automatically continue the conversation. Use this when the user asks to switch to or talk to a different agent.",
+      "Switch the current conversation to a different agent. This replaces YOUR system prompt and available tools with those of the target agent. CRITICAL RULES: (1) This tool MUST be the ONLY tool call in the response — never batch it with other tool calls. (2) After calling this tool, you MUST stop responding immediately — do not add any further text, tool calls, or commentary. The new agent (with its own identity, instructions, and tools) will automatically continue the conversation in a new turn.",
     inputSchema: {
       type: "object",
       properties: {
@@ -289,6 +289,8 @@ export async function handleTool(
               success: true,
               agent_id: targetAgent.id,
               agent_name: targetAgent.name,
+              instruction:
+                "Agent swap complete. Your system prompt and tools have been replaced. STOP responding now — do not emit any further text or tool calls. The new agent will continue in the next turn.",
             }),
           },
         ],

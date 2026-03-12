@@ -94,7 +94,7 @@ describe("useSettingsTabs", () => {
       member: ["read"],
       team: ["read"],
       ac: ["read"],
-      appearanceSettings: ["read"],
+      organizationSettings: ["read"],
       securitySettings: ["read"],
       llmSettings: ["read"],
       agentSettings: ["read"],
@@ -113,7 +113,7 @@ describe("useSettingsTabs", () => {
       expect(labels).toContain("Users");
       expect(labels).toContain("Teams");
       expect(labels).toContain("Roles");
-      expect(labels).toContain("Appearance");
+      expect(labels).toContain("Organization");
     });
   });
 
@@ -256,7 +256,7 @@ describe("useSettingsTabs", () => {
       ac: ["read"],
       identityProvider: ["read"],
       secret: ["read"],
-      appearanceSettings: ["read"],
+      organizationSettings: ["read"],
       securitySettings: ["read"],
       llmSettings: ["read"],
       agentSettings: ["read"],
@@ -271,7 +271,6 @@ describe("useSettingsTabs", () => {
       expect(labels).toEqual([
         "Your Account",
         "Authentication",
-        "Dual LLM",
         "Security",
         "Agents",
         "LLM",
@@ -280,7 +279,8 @@ describe("useSettingsTabs", () => {
         "Roles",
         "Identity Providers",
         "Secrets",
-        "Appearance",
+        "Organization",
+        "Dual LLM",
       ]);
     });
   });

@@ -120500,6 +120500,32 @@
                       "type": "string",
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "favicon": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "appName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "ogDescription": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "footerText": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "chatPlaceholders": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "showTwoFactor": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -120525,7 +120551,13 @@
                     "rerankerModel",
                     "defaultLlmModel",
                     "defaultLlmProvider",
-                    "defaultAgentId"
+                    "defaultAgentId",
+                    "favicon",
+                    "appName",
+                    "ogDescription",
+                    "footerText",
+                    "chatPlaceholders",
+                    "showTwoFactor"
                   ],
                   "additionalProperties": false
                 }
@@ -120805,6 +120837,37 @@
                   "logoDark": {
                     "nullable": true,
                     "type": "string"
+                  },
+                  "favicon": {
+                    "nullable": true,
+                    "type": "string"
+                  },
+                  "appName": {
+                    "nullable": true,
+                    "type": "string",
+                    "maxLength": 100
+                  },
+                  "ogDescription": {
+                    "nullable": true,
+                    "type": "string",
+                    "maxLength": 500
+                  },
+                  "footerText": {
+                    "nullable": true,
+                    "type": "string",
+                    "maxLength": 500
+                  },
+                  "chatPlaceholders": {
+                    "nullable": true,
+                    "maxItems": 20,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "maxLength": 80
+                    }
+                  },
+                  "showTwoFactor": {
+                    "type": "boolean"
                   }
                 }
               }
@@ -120955,6 +121018,32 @@
                       "type": "string",
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "favicon": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "appName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "ogDescription": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "footerText": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "chatPlaceholders": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "showTwoFactor": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -120980,7 +121069,13 @@
                     "rerankerModel",
                     "defaultLlmModel",
                     "defaultLlmProvider",
-                    "defaultAgentId"
+                    "defaultAgentId",
+                    "favicon",
+                    "appName",
+                    "ogDescription",
+                    "footerText",
+                    "chatPlaceholders",
+                    "showTwoFactor"
                   ],
                   "additionalProperties": false
                 }
@@ -121260,13 +121355,28 @@
                     "logoDark": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "favicon": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "appName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "ogDescription": {
+                      "nullable": true,
+                      "type": "string"
                     }
                   },
                   "required": [
                     "theme",
                     "customFont",
                     "logo",
-                    "logoDark"
+                    "logoDark",
+                    "favicon",
+                    "appName",
+                    "ogDescription"
                   ],
                   "additionalProperties": false
                 }
@@ -121658,6 +121768,32 @@
                       "type": "string",
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "favicon": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "appName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "ogDescription": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "footerText": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "chatPlaceholders": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "showTwoFactor": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -121683,7 +121819,13 @@
                     "rerankerModel",
                     "defaultLlmModel",
                     "defaultLlmProvider",
-                    "defaultAgentId"
+                    "defaultAgentId",
+                    "favicon",
+                    "appName",
+                    "ogDescription",
+                    "footerText",
+                    "chatPlaceholders",
+                    "showTwoFactor"
                   ],
                   "additionalProperties": false
                 }
@@ -122086,6 +122228,32 @@
                       "type": "string",
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "favicon": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "appName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "ogDescription": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "footerText": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "chatPlaceholders": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "showTwoFactor": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -122111,7 +122279,13 @@
                     "rerankerModel",
                     "defaultLlmModel",
                     "defaultLlmProvider",
-                    "defaultAgentId"
+                    "defaultAgentId",
+                    "favicon",
+                    "appName",
+                    "ogDescription",
+                    "footerText",
+                    "chatPlaceholders",
+                    "showTwoFactor"
                   ],
                   "additionalProperties": false
                 }
@@ -122507,6 +122681,32 @@
                       "type": "string",
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "favicon": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "appName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "ogDescription": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "footerText": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "chatPlaceholders": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "showTwoFactor": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -122532,7 +122732,13 @@
                     "rerankerModel",
                     "defaultLlmModel",
                     "defaultLlmProvider",
-                    "defaultAgentId"
+                    "defaultAgentId",
+                    "favicon",
+                    "appName",
+                    "ogDescription",
+                    "footerText",
+                    "chatPlaceholders",
+                    "showTwoFactor"
                   ],
                   "additionalProperties": false
                 }
@@ -122950,6 +123156,32 @@
                       "type": "string",
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "favicon": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "appName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "ogDescription": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "footerText": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "chatPlaceholders": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "showTwoFactor": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -122975,7 +123207,13 @@
                     "rerankerModel",
                     "defaultLlmModel",
                     "defaultLlmProvider",
-                    "defaultAgentId"
+                    "defaultAgentId",
+                    "favicon",
+                    "appName",
+                    "ogDescription",
+                    "footerText",
+                    "chatPlaceholders",
+                    "showTwoFactor"
                   ],
                   "additionalProperties": false
                 }
@@ -123346,6 +123584,32 @@
                       "type": "string",
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "favicon": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "appName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "ogDescription": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "footerText": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "chatPlaceholders": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "showTwoFactor": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -123371,7 +123635,13 @@
                     "rerankerModel",
                     "defaultLlmModel",
                     "defaultLlmProvider",
-                    "defaultAgentId"
+                    "defaultAgentId",
+                    "favicon",
+                    "appName",
+                    "ogDescription",
+                    "footerText",
+                    "chatPlaceholders",
+                    "showTwoFactor"
                   ],
                   "additionalProperties": false
                 }
@@ -124031,6 +124301,32 @@
                       "type": "string",
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "favicon": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "appName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "ogDescription": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "footerText": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "chatPlaceholders": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "showTwoFactor": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -124056,7 +124352,13 @@
                     "rerankerModel",
                     "defaultLlmModel",
                     "defaultLlmProvider",
-                    "defaultAgentId"
+                    "defaultAgentId",
+                    "favicon",
+                    "appName",
+                    "ogDescription",
+                    "footerText",
+                    "chatPlaceholders",
+                    "showTwoFactor"
                   ],
                   "additionalProperties": false
                 }

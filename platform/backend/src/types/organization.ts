@@ -71,6 +71,9 @@ export const PublicAppearanceSchema = z.object({
   customFont: OrganizationCustomFontSchema,
   logo: z.string().nullable(),
   logoDark: z.string().nullable(),
+  favicon: z.string().nullable(),
+  appName: z.string().nullable(),
+  ogDescription: z.string().nullable(),
 });
 
 export const OrganizationLimitCleanupIntervalSchema = z
@@ -95,6 +98,12 @@ const extendedFields = {
   defaultLlmModel: z.string().nullable(),
   defaultLlmProvider: z.string().nullable(),
   defaultAgentId: z.string().uuid().nullable(),
+  favicon: z.string().nullable(),
+  appName: z.string().nullable(),
+  ogDescription: z.string().nullable(),
+  footerText: z.string().nullable(),
+  chatPlaceholders: z.array(z.string()).nullable(),
+  showTwoFactor: z.boolean(),
 };
 
 export const SelectOrganizationSchema = createSelectSchema(
@@ -110,6 +119,12 @@ export const UpdateAppearanceSchema = z.object({
   customFont: OrganizationCustomFontSchema.optional(),
   logo: Base64PngSchema.optional(),
   logoDark: Base64PngSchema.optional(),
+  favicon: Base64PngSchema.optional(),
+  appName: z.string().max(100).nullable().optional(),
+  ogDescription: z.string().max(500).nullable().optional(),
+  footerText: z.string().max(500).nullable().optional(),
+  chatPlaceholders: z.array(z.string().max(80)).max(20).nullable().optional(),
+  showTwoFactor: z.boolean().optional(),
 });
 
 export const UpdateSecuritySettingsSchema = z.object({

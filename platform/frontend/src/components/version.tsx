@@ -1,9 +1,11 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { useLatestGitHubRelease } from "@/lib/github-release.query";
 import { useHealth } from "@/lib/health.query";
+import { useOrganization } from "@/lib/organization.query";
 import { hasNewerVersion } from "@/lib/version-utils";
 
 interface VersionProps {
@@ -13,7 +15,12 @@ interface VersionProps {
 export function Version({ inline = false }: VersionProps) {
   const { data } = useHealth();
   const { data: latestRelease } = useLatestGitHubRelease();
+  const { data: organization } = useOrganization();
+  const pathname = usePathname();
   const [shouldHide, setShouldHide] = useState(false);
+
+  const isSettingsPage = pathname.startsWith("/settings");
+  const footerText = organization?.footerText;
 
   const hasNewVersion = useMemo(() => {
     if (!data?.version || !latestRelease?.tag_name) return false;
@@ -44,6 +51,15 @@ export function Version({ inline = false }: VersionProps) {
 
   if (!inline && shouldHide) {
     return null;
+  }
+
+  // Show custom footer text when set and NOT on settings pages
+  if (footerText && !isSettingsPage && !inline) {
+    return (
+      <div className="text-xs text-muted-foreground text-center py-4">
+        {footerText}
+      </div>
+    );
   }
 
   return (

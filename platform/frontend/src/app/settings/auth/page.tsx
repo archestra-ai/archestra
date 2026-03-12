@@ -12,6 +12,7 @@ import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { LoadingSpinner } from "@/components/loading";
 import { PersonalTokenCard } from "@/components/settings/personal-token-card";
 import config from "@/lib/config";
+import { useOrganization } from "@/lib/organization.query";
 import { cn } from "@/lib/utils";
 
 function AuthSettingsContent() {
@@ -19,6 +20,7 @@ function AuthSettingsContent() {
   const highlight = searchParams.get("highlight");
   const changePasswordRef = useRef<HTMLDivElement>(null);
   const [isPulsing, setIsPulsing] = useState(false);
+  const { data: organization } = useOrganization();
 
   useEffect(() => {
     if (highlight === "change-password" && changePasswordRef.current) {
@@ -48,7 +50,9 @@ function AuthSettingsContent() {
           <ChangePasswordCard classNames={{ base: "w-full" }} />
         </div>
       )}
-      <TwoFactorCard classNames={{ base: "w-full" }} />
+      {organization?.showTwoFactor && (
+        <TwoFactorCard classNames={{ base: "w-full" }} />
+      )}
       <SessionsCard classNames={{ base: "w-full" }} />
     </div>
   );

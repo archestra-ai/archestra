@@ -294,6 +294,9 @@ export function useUpdateAppearance(
         customFont: updatedOrganization.customFont,
         logo: updatedOrganization.logo,
         logoDark: updatedOrganization.logoDark,
+        favicon: updatedOrganization.favicon,
+        appName: updatedOrganization.appName,
+        ogDescription: updatedOrganization.ogDescription,
       });
       toast.success(onSuccessMessage);
     },

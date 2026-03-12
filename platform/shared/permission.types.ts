@@ -38,7 +38,7 @@ export const resources = [
   "llmLimit",
   "llmProvider",
   "secret",
-  "appearanceSettings",
+  "organizationSettings",
   "securitySettings",
   "llmSettings",
   "agentSettings",
@@ -62,7 +62,9 @@ export const resources = [
   "member",
   "invitation",
   "team",
-  "minimalisticView",
+  "simpleView",
+  "chatAgentPicker",
+  "chatProviderSettings",
 ] as const;
 
 export const resourceLabels: Record<Resource, string> = {
@@ -89,12 +91,14 @@ export const resourceLabels: Record<Resource, string> = {
   llmLimit: "LLM Limits",
   llmProvider: "LLM Providers",
   secret: "Secrets",
-  appearanceSettings: "Appearance",
+  organizationSettings: "Organization Settings",
   securitySettings: "Security Settings",
   llmSettings: "LLM Settings",
   agentSettings: "Agent Settings",
   agentTrigger: "Agent Triggers",
-  minimalisticView: "Minimalistic View",
+  simpleView: "Simple View",
+  chatAgentPicker: "Chat Agent Picker",
+  chatProviderSettings: "Chat Provider Settings",
 };
 
 export const resourceDescriptions: Record<Resource, string> = {
@@ -121,13 +125,17 @@ export const resourceDescriptions: Record<Resource, string> = {
   invitation: "User invitations",
   identityProvider: "Identity providers for authentication",
   secret: "Secrets manager configuration and connectivity",
-  appearanceSettings: "White-labeling settings (theme, logo, fonts)",
+  organizationSettings:
+    "Organization settings (appearance, authentication, etc)",
   securitySettings: "Security settings (tool policy, chat file uploads)",
   knowledgeBase:
     "Knowledge bases and connectors for RAG-based document retrieval",
   knowledgeSettings:
     "Knowledge settings (embedding and reranking models configuration)",
-  minimalisticView: "Controls if the minimalistic view of the app is enabled",
+  simpleView: "Controls if the simple view of the app is enabled",
+  chatAgentPicker: "Controls visibility of the agent picker in chat",
+  chatProviderSettings:
+    "Controls visibility of model and API key selectors in chat",
   organization: "Organization (internal, used by authentication system)",
 };
 
@@ -137,7 +145,9 @@ export const resourceDescriptions: Record<Resource, string> = {
  */
 export const internalResources: Resource[] = [
   "organization",
-  "minimalisticView",
+  "simpleView",
+  "chatAgentPicker",
+  "chatProviderSettings",
 ];
 
 /**
@@ -155,7 +165,15 @@ export const resourceCategories: Record<string, Resource[]> = {
   ],
   LLM: ["llmProxy", "llmProvider", "llmLimit", "llmSettings", "llmCost"],
   Knowledge: ["knowledgeBase", "knowledgeSettings"],
-  Other: ["chat", "log", "dualLlmConfig", "dualLlmResult", "minimalisticView"],
+  Other: [
+    "chat",
+    "log",
+    "dualLlmConfig",
+    "dualLlmResult",
+    "simpleView",
+    "chatAgentPicker",
+    "chatProviderSettings",
+  ],
   Administration: [
     "member",
     "ac",
@@ -163,7 +181,7 @@ export const resourceCategories: Record<string, Resource[]> = {
     "invitation",
     "identityProvider",
     "secret",
-    "appearanceSettings",
+    "organizationSettings",
     "securitySettings",
   ],
 };

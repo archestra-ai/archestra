@@ -379,6 +379,11 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                 <LabelTags labels={agent.labels} />
               )}
             </div>
+            {agent.description && (
+              <div className="text-[11px] text-muted-foreground truncate">
+                {agent.description}
+              </div>
+            )}
           </div>
         );
       },

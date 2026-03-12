@@ -13,6 +13,9 @@ const DEFAULT_APPEARANCE: PublicAppearance = {
   customFont: "lato",
   logo: null,
   logoDark: null,
+  favicon: null,
+  appName: null,
+  ogDescription: null,
 };
 
 /**

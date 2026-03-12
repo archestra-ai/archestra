@@ -34076,6 +34076,12 @@ export type GetOrganizationResponses = {
         defaultLlmModel: string | null;
         defaultLlmProvider: string | null;
         defaultAgentId: string | null;
+        favicon: string | null;
+        appName: string | null;
+        ogDescription: string | null;
+        footerText: string | null;
+        chatPlaceholders: Array<string> | null;
+        showTwoFactor: boolean;
     };
 };
 
@@ -34156,6 +34162,9 @@ export type GetPublicAppearanceResponses = {
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         logo: string | null;
         logoDark: string | null;
+        favicon: string | null;
+        appName: string | null;
+        ogDescription: string | null;
     };
 };
 
@@ -34167,6 +34176,12 @@ export type UpdateAppearanceData = {
         customFont?: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         logo?: string | null;
         logoDark?: string | null;
+        favicon?: string | null;
+        appName?: string | null;
+        ogDescription?: string | null;
+        footerText?: string | null;
+        chatPlaceholders?: Array<string> | null;
+        showTwoFactor?: boolean;
     };
     path?: never;
     query?: never;
@@ -34260,6 +34275,12 @@ export type UpdateAppearanceResponses = {
         defaultLlmModel: string | null;
         defaultLlmProvider: string | null;
         defaultAgentId: string | null;
+        favicon: string | null;
+        appName: string | null;
+        ogDescription: string | null;
+        footerText: string | null;
+        chatPlaceholders: Array<string> | null;
+        showTwoFactor: boolean;
     };
 };
 
@@ -34362,6 +34383,12 @@ export type UpdateSecuritySettingsResponses = {
         defaultLlmModel: string | null;
         defaultLlmProvider: string | null;
         defaultAgentId: string | null;
+        favicon: string | null;
+        appName: string | null;
+        ogDescription: string | null;
+        footerText: string | null;
+        chatPlaceholders: Array<string> | null;
+        showTwoFactor: boolean;
     };
 };
 
@@ -34465,6 +34492,12 @@ export type UpdateLlmSettingsResponses = {
         defaultLlmModel: string | null;
         defaultLlmProvider: string | null;
         defaultAgentId: string | null;
+        favicon: string | null;
+        appName: string | null;
+        ogDescription: string | null;
+        footerText: string | null;
+        chatPlaceholders: Array<string> | null;
+        showTwoFactor: boolean;
     };
 };
 
@@ -34568,6 +34601,12 @@ export type UpdateAgentSettingsResponses = {
         defaultLlmModel: string | null;
         defaultLlmProvider: string | null;
         defaultAgentId: string | null;
+        favicon: string | null;
+        appName: string | null;
+        ogDescription: string | null;
+        footerText: string | null;
+        chatPlaceholders: Array<string> | null;
+        showTwoFactor: boolean;
     };
 };
 
@@ -34673,6 +34712,12 @@ export type UpdateKnowledgeSettingsResponses = {
         defaultLlmModel: string | null;
         defaultLlmProvider: string | null;
         defaultAgentId: string | null;
+        favicon: string | null;
+        appName: string | null;
+        ogDescription: string | null;
+        footerText: string | null;
+        chatPlaceholders: Array<string> | null;
+        showTwoFactor: boolean;
     };
 };
 
@@ -34772,6 +34817,12 @@ export type DropEmbeddingConfigResponses = {
         defaultLlmModel: string | null;
         defaultLlmProvider: string | null;
         defaultAgentId: string | null;
+        favicon: string | null;
+        appName: string | null;
+        ogDescription: string | null;
+        footerText: string | null;
+        chatPlaceholders: Array<string> | null;
+        showTwoFactor: boolean;
     };
 };
 
@@ -34954,6 +35005,12 @@ export type CompleteOnboardingResponses = {
         defaultLlmModel: string | null;
         defaultLlmProvider: string | null;
         defaultAgentId: string | null;
+        favicon: string | null;
+        appName: string | null;
+        ogDescription: string | null;
+        footerText: string | null;
+        chatPlaceholders: Array<string> | null;
+        showTwoFactor: boolean;
     };
 };
 

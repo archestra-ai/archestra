@@ -30,10 +30,15 @@ describe("permission.types", () => {
     }
   });
 
-  test("no category contains internal resources except for minimalisticView", () => {
+  test("no category contains internal resources except UI behavior resources", () => {
+    const uiBehaviorResources = [
+      "simpleView",
+      "chatAgentPicker",
+      "chatProviderSettings",
+    ];
     const allCategorizedResources = Object.values(resourceCategories).flat();
     for (const internal of internalResources) {
-      if (internal === "minimalisticView") continue;
+      if (uiBehaviorResources.includes(internal)) continue;
       expect(allCategorizedResources).not.toContain(internal);
     }
   });

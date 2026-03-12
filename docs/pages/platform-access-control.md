@@ -56,7 +56,7 @@ Full access to core resources and settings, but cannot manage users, roles, or i
 | Logs | `read` |
 | Teams | `read` |
 | Secrets | `read` |
-| Appearance | `read`, `update` |
+| Organization Settings | `read`, `update` |
 | Security Settings | `read`, `update` |
 
 ### Member
@@ -105,8 +105,6 @@ The following table lists all available permissions that can be assigned to cust
 | `agentTrigger:create` | Set up new agent triggers |
 | `agentTrigger:update` | Modify agent trigger configurations |
 | `agentTrigger:delete` | Remove agent triggers |
-| `appearanceSettings:read` | View white-labeling settings (theme, logo, fonts) |
-| `appearanceSettings:update` | Customize theme, logo, and font settings |
 | `chat:read` | View and access chat conversations |
 | `chat:create` | Start new chat conversations |
 | `chat:update` | Edit chat messages and conversation settings |
@@ -173,6 +171,8 @@ The following table lists all available permissions that can be assigned to cust
 | `member:create` | Add new members to the organization |
 | `member:update` | Change member roles and settings |
 | `member:delete` | Remove members from the organization |
+| `organizationSettings:read` | View organization settings (appearance, authentication, etc) |
+| `organizationSettings:update` | Customize organization appearance, authentication, etc |
 | `secret:read` | View secrets manager configuration |
 | `secret:update` | Modify secrets manager settings and test connectivity |
 | `securitySettings:read` | View security settings (tool policy, file uploads) |

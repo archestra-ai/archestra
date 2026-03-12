@@ -40,9 +40,9 @@ export const Response = memo(
         className={cn(
           "size-full [&>*:first-child]:mt-0 [&>*:last-child]:mb-0",
           // Add proper list styling
-          "[&_ul]:list-disc [&_ul]:ml-6 [&_ul]:my-2",
-          "[&_ol]:list-decimal [&_ol]:ml-6 [&_ol]:my-2",
-          "[&_li]:my-1",
+          "[&_ul]:list-inside [&_ul]:list-disc [&_ul]:ml-6 [&_ul]:my-2",
+          "[&_ol]:list-inside [&_ol]:list-decimal [&_ol]:ml-6 [&_ol]:my-2",
+          "[&_li]:my-1 [&_li>p]:inline",
           // Add proper heading styling
           "[&_h1]:text-2xl [&_h1]:font-bold [&_h1]:my-4",
           "[&_h2]:text-xl [&_h2]:font-bold [&_h2]:my-3",

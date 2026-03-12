@@ -562,7 +562,7 @@ pnpm rebuild <package-name>  # Enable scripts for specific package
   - MCP servers: `search_private_mcp_registry`, `get_mcp_servers`, `get_mcp_server_tools`
   - Tool assignment: `bulk_assign_tools_to_agents`, `bulk_assign_tools_to_mcp_gateways`
   - Operators: `get_autonomy_policy_operators`
-- Implementation: `backend/src/archestra-mcp-server.ts`
+- Implementation: `backend/src/archestra-mcp-server/` (modular directory with one file per tool group)
 - Catalog entry: Created automatically on startup with fixed ID `ARCHESTRA_MCP_CATALOG_ID`
 - Note: `create_mcp_server_installation_request` temporarily disabled pending user context support
 - Security: Archestra tools are always trusted and bypass tool invocation/trusted data policies

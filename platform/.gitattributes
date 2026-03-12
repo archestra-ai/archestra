@@ -37,3 +37,7 @@ backend/src/database/migrations/meta/** linguist-generated=true
 backend/src/database/migrations/meta/** -diff
 backend/src/database/migrations/meta/*.json linguist-generated=true
 backend/src/database/migrations/meta/*.json -diff
+
+# PostgreSQL dashboard variants (generated from application-metrics.json)
+dev/grafana/dashboards/pg-variants/*.json linguist-generated=true
+dev/grafana/dashboards/pg-variants/*.json -diff

@@ -5,6 +5,7 @@ import {
 } from "@shared";
 import {
   getAgentTypePermissionChecker,
+  isAgentTypeAdmin,
   requireAgentModifyPermission,
 } from "@/auth/agent-type-permissions";
 import config from "@/config";
@@ -203,8 +204,7 @@ export const tools: Tool[] = [
   {
     name: TOOL_GET_AGENT_FULL_NAME,
     title: "Get Agent",
-    description:
-      "Get a specific agent by ID or name. When searching by name, only your personal agents are matched.",
+    description: "Get a specific agent by ID or name.",
     inputSchema: {
       type: "object",
       properties: {
@@ -214,8 +214,7 @@ export const tools: Tool[] = [
         },
         name: {
           type: "string",
-          description:
-            "Search by name (partial match). Only returns your personal agents.",
+          description: "Search by name (partial match).",
         },
       },
     },
@@ -540,18 +539,24 @@ export async function handleTool(
 
       let record: Agent | null | undefined;
 
+      const isAdmin =
+        context.userId && organizationId
+          ? await isAgentTypeAdmin({
+              userId: context.userId,
+              organizationId,
+              agentType: expectedType,
+            })
+          : false;
+
       if (id) {
-        record = await AgentModel.findById(id);
+        record = await AgentModel.findById(id, context.userId, isAdmin);
       } else if (name) {
-        // Search by name, only matching personal agents owned by the current user
         const results = await AgentModel.findAllPaginated(
           { limit: 1, offset: 0 },
           undefined,
           {
             name,
             agentType: expectedType,
-            scope: "personal",
-            authorIds: context.userId ? [context.userId] : [],
           },
           context.userId,
           true,

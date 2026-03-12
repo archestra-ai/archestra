@@ -4,7 +4,9 @@ import { type ComponentProps, memo, useMemo } from "react";
 import { Streamdown } from "streamdown";
 import { cn } from "@/lib/utils";
 
-type ResponseProps = ComponentProps<typeof Streamdown>;
+type ResponseProps = ComponentProps<typeof Streamdown> & {
+  isStreaming?: boolean;
+};
 
 /**
  * Check if a URL points to the same origin as the current page.
@@ -21,7 +23,7 @@ export function isSameOriginUrl(url: string): boolean {
 }
 
 export const Response = memo(
-  ({ className, linkSafety, ...props }: ResponseProps) => {
+  ({ className, linkSafety, isStreaming = false, ...props }: ResponseProps) => {
     const mergedLinkSafety = useMemo(
       () => ({
         enabled: true,
@@ -37,6 +39,14 @@ export const Response = memo(
 
     return (
       <Streamdown
+        mode={isStreaming ? "streaming" : "static"}
+        isAnimating={isStreaming}
+        animated={isStreaming ? { animation: "fadeIn", sep: "word" } : false}
+        caret={isStreaming ? "block" : undefined}
+        controls={{
+          code: { copy: true, download: true },
+          table: { copy: true, download: true },
+        }}
         className={cn(
           "size-full [&>*:first-child]:mt-0 [&>*:last-child]:mb-0",
           // Add proper list styling
@@ -65,7 +75,9 @@ export const Response = memo(
       />
     );
   },
-  (prevProps, nextProps) => prevProps.children === nextProps.children,
+  (prevProps, nextProps) =>
+    prevProps.children === nextProps.children &&
+    prevProps.isStreaming === nextProps.isStreaming,
 );
 
 Response.displayName = "Response";

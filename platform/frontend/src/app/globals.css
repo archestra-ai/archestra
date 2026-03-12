@@ -1,7 +1,20 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "@daveyplate/better-auth-ui/css";
+/* Streamdown animation keyframes (sd-fadeIn, sd-blurIn, sd-slideUp) and the
+   [data-sd-animate] rule. Required for the word-by-word fade-in animation
+   during chat streaming (animated={{ animation: "fadeIn", sep: "word" }}).
+   Only adds sd-prefixed keyframes — no conflicts with Archestra themes. */
+@import "streamdown/styles.css";
 @import "./themes.css";
+
+/* Tell Tailwind v4 JIT to scan streamdown's minified JS for dynamic class names
+   (e.g. the caret pseudo-element utility, animation classes). Without this,
+   Tailwind won't generate classes it can't find in our own source files.
+   This only affects class generation — it does NOT import any CSS or styles.
+   Streamdown uses standard semantic tokens (bg-sidebar, text-muted-foreground, etc.)
+   that resolve to Archestra's CSS variables, so all themes are respected. */
+@source "../../node_modules/streamdown/dist";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -110,12 +123,37 @@
     color: var(--shiki-dark) !important;
     background-color: transparent !important;
   }
-  /* Code block styling - use accent color for background */
+  /* Code block styling - use accent color for background and tighten layout */
   [data-streamdown="code-block"] {
     background-color: var(--accent) !important;
+    padding: 0 !important;
+    gap: 0 !important;
+    position: relative !important;
   }
   [data-streamdown="code-block-header"] {
     background-color: var(--accent) !important;
+    height: auto !important;
+    padding: 4px 0.75rem !important;
+    transform: translateY(4px) !important;
+  }
+  /* Actions - position absolutely in the header row, remove pill background */
+  [data-streamdown="code-block"] > .sticky {
+    position: absolute !important;
+    top: 0 !important;
+    right: 0.75rem !important;
+    height: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    z-index: 10 !important;
+  }
+  [data-streamdown="code-block-body"] {
+    padding-top: 0 !important;
+  }
+  [data-streamdown="code-block-actions"] {
+    background: transparent !important;
+    border: none !important;
+    backdrop-filter: none !important;
+    padding-top: 4px !important;
   }
   [data-streamdown="code-block-body"] {
     background-color: var(--accent) !important;
@@ -127,6 +165,20 @@
   /* Override Tailwind's font-sans to use our dynamic CSS variable */
   .font-sans {
     font-family: var(--font-sans) !important;
+  }
+  /* Streamdown streaming caret - the library sets --streamdown-caret inline style
+     and expects Tailwind to generate *:last:after:content-[var(--streamdown-caret)].
+     Since Tailwind v4 can't detect these dynamic classes from minified JS, we
+     define the rules explicitly. */
+  [style*="--streamdown-caret"] > *:last-child::after {
+    content: var(--streamdown-caret);
+    display: inline;
+    vertical-align: baseline;
+    animation: sd-caret-blink 1s steps(2) infinite;
+  }
+  @keyframes sd-caret-blink {
+    0% { opacity: 1; }
+    50% { opacity: 0; }
   }
   /* Fix autofill styles for dark theme - browsers apply light backgrounds on autofill */
   input:-webkit-autofill,

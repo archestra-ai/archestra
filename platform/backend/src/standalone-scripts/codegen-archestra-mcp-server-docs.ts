@@ -68,7 +68,12 @@ const toolGroups: Record<ArchestraToolShortName, ToolGroup> = {
   search_private_mcp_registry: ToolGroup.MCPServers,
   get_mcp_servers: ToolGroup.MCPServers,
   get_mcp_server_tools: ToolGroup.MCPServers,
-  edit_mcp: ToolGroup.MCPServers,
+  edit_mcp_description: ToolGroup.MCPServers,
+  edit_mcp_config: ToolGroup.MCPServers,
+  create_mcp_server: ToolGroup.MCPServers,
+  deploy_mcp_server: ToolGroup.MCPServers,
+  list_mcp_server_deployments: ToolGroup.MCPServers,
+  get_mcp_server_logs: ToolGroup.MCPServers,
   create_mcp_server_installation_request: ToolGroup.MCPServers,
 
   create_limit: ToolGroup.Limits,

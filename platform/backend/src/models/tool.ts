@@ -30,6 +30,7 @@ import {
   createPaginatedResult,
   type PaginatedResult,
 } from "@/database/utils/pagination";
+import logger from "@/logging";
 import type {
   ExtendedTool,
   InsertTool,
@@ -660,6 +661,29 @@ class ToolModel {
     // Bulk insert new tools if any
     if (toolsToInsert.length > 0) {
       await db.insert(schema.toolsTable).values(toolsToInsert).returning();
+    }
+
+    // Remove stale tools that no longer exist in the Archestra tool definitions
+    // FK constraints use onDelete: "cascade" so related records are cleaned up automatically
+    const allCatalogTools = await db
+      .select({ id: schema.toolsTable.id, name: schema.toolsTable.name })
+      .from(schema.toolsTable)
+      .where(eq(schema.toolsTable.catalogId, catalogId));
+
+    const staleTools = allCatalogTools.filter(
+      (t) => !archestraToolNames.includes(t.name),
+    );
+    if (staleTools.length > 0) {
+      await db.delete(schema.toolsTable).where(
+        inArray(
+          schema.toolsTable.id,
+          staleTools.map((t) => t.id),
+        ),
+      );
+      logger.info(
+        { staleToolNames: staleTools.map((t) => t.name) },
+        "Removed stale Archestra tools",
+      );
     }
   }
 

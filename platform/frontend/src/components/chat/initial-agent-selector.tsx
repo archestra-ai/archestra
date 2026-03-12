@@ -2093,8 +2093,9 @@ function ToolServerAvatarGroup({
     return (
       <Tooltip>
         <TooltipTrigger asChild>
-          <button
-            type="button"
+          {/* biome-ignore lint/a11y/noStaticElementInteractions: nested inside parent button */}
+          {/* biome-ignore lint/a11y/useKeyWithClickEvents: parent button handles keyboard */}
+          <div
             className="flex size-5 shrink-0 items-center justify-center rounded-full bg-muted ml-1 hover:bg-muted/80 transition-colors cursor-pointer"
             onClick={(e) => {
               e.stopPropagation();
@@ -2102,7 +2103,7 @@ function ToolServerAvatarGroup({
             }}
           >
             <Plus className="size-3 text-muted-foreground" />
-          </button>
+          </div>
         </TooltipTrigger>
         <TooltipContent side="top">Add tools</TooltipContent>
       </Tooltip>
@@ -2147,8 +2148,9 @@ function ToolServerAvatarGroup({
       {showAddButton && !hasNonBuiltInTools && (
         <Tooltip>
           <TooltipTrigger asChild>
-            <button
-              type="button"
+            {/* biome-ignore lint/a11y/noStaticElementInteractions: nested inside parent button */}
+            {/* biome-ignore lint/a11y/useKeyWithClickEvents: parent button handles keyboard */}
+            <div
               className="flex size-5 shrink-0 items-center justify-center rounded-full bg-muted ring-1 ring-background ml-0.5 hover:bg-muted/80 transition-colors cursor-pointer"
               onClick={(e) => {
                 e.stopPropagation();
@@ -2156,7 +2158,7 @@ function ToolServerAvatarGroup({
               }}
             >
               <Plus className="size-3 text-muted-foreground" />
-            </button>
+            </div>
           </TooltipTrigger>
           <TooltipContent side="top">Add tools</TooltipContent>
         </Tooltip>

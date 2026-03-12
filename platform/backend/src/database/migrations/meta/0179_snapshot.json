@@ -1,5 +1,5 @@
 {
-  "id": "a0ee3eb2-f90f-43af-b7a5-8827d4d39193",
+  "id": "d13de3f6-e562-46e1-a9bd-f1ecf1af613c",
   "prevId": "c7bd402c-24b2-420d-9792-f25da156dee3",
   "version": "7",
   "dialect": "postgresql",
@@ -6006,6 +6006,12 @@
         "chat_placeholders": {
           "name": "chat_placeholders",
           "type": "text[]",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "icon_logo": {
+          "name": "icon_logo",
+          "type": "text",
           "primaryKey": false,
           "notNull": false
         },

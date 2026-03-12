@@ -104,6 +104,9 @@ const organizationsTable = pgTable("organization", {
   /** Chat input placeholder texts (cycles with typing animation) */
   chatPlaceholders: text("chat_placeholders").array(),
 
+  /** Square icon logo (28x28px recommended) for collapsed sidebar and chat loading indicator */
+  iconLogo: text("icon_logo"),
+
   /** Organization-level 2FA visibility toggle */
   showTwoFactor: boolean("show_two_factor").notNull().default(false),
 });

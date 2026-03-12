@@ -72,8 +72,10 @@ export const PublicAppearanceSchema = z.object({
   logo: z.string().nullable(),
   logoDark: z.string().nullable(),
   favicon: z.string().nullable(),
+  iconLogo: z.string().nullable(),
   appName: z.string().nullable(),
   ogDescription: z.string().nullable(),
+  footerText: z.string().nullable(),
 });
 
 export const OrganizationLimitCleanupIntervalSchema = z
@@ -99,6 +101,7 @@ const extendedFields = {
   defaultLlmProvider: z.string().nullable(),
   defaultAgentId: z.string().uuid().nullable(),
   favicon: z.string().nullable(),
+  iconLogo: z.string().nullable(),
   appName: z.string().nullable(),
   ogDescription: z.string().nullable(),
   footerText: z.string().nullable(),
@@ -120,6 +123,7 @@ export const UpdateAppearanceSchema = z.object({
   logo: Base64PngSchema.optional(),
   logoDark: Base64PngSchema.optional(),
   favicon: Base64PngSchema.optional(),
+  iconLogo: Base64PngSchema.optional(),
   appName: z.string().max(100).nullable().optional(),
   ogDescription: z.string().max(500).nullable().optional(),
   footerText: z.string().max(500).nullable().optional(),

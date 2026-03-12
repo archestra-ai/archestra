@@ -8,12 +8,13 @@ import { usePublicAppearance } from "@/lib/appearance.query";
  * based on the organization's appearance settings.
  */
 export function DynamicHead() {
-  const { data: appearance } = usePublicAppearance();
+  const { data: appearance, isFetched } = usePublicAppearance();
 
-  // Update document title
+  // Update document title only after data has loaded to avoid flashing default
   useEffect(() => {
+    if (!isFetched) return;
     document.title = appearance?.appName || "Archestra.AI";
-  }, [appearance?.appName]);
+  }, [appearance?.appName, isFetched]);
 
   // Update favicon
   useEffect(() => {

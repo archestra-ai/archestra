@@ -34081,6 +34081,7 @@ export type GetOrganizationResponses = {
         ogDescription: string | null;
         footerText: string | null;
         chatPlaceholders: Array<string> | null;
+        iconLogo: string | null;
         showTwoFactor: boolean;
     };
 };
@@ -34163,8 +34164,10 @@ export type GetPublicAppearanceResponses = {
         logo: string | null;
         logoDark: string | null;
         favicon: string | null;
+        iconLogo: string | null;
         appName: string | null;
         ogDescription: string | null;
+        footerText: string | null;
     };
 };
 
@@ -34177,6 +34180,7 @@ export type UpdateAppearanceData = {
         logo?: string | null;
         logoDark?: string | null;
         favicon?: string | null;
+        iconLogo?: string | null;
         appName?: string | null;
         ogDescription?: string | null;
         footerText?: string | null;
@@ -34280,6 +34284,7 @@ export type UpdateAppearanceResponses = {
         ogDescription: string | null;
         footerText: string | null;
         chatPlaceholders: Array<string> | null;
+        iconLogo: string | null;
         showTwoFactor: boolean;
     };
 };
@@ -34388,6 +34393,7 @@ export type UpdateSecuritySettingsResponses = {
         ogDescription: string | null;
         footerText: string | null;
         chatPlaceholders: Array<string> | null;
+        iconLogo: string | null;
         showTwoFactor: boolean;
     };
 };
@@ -34497,6 +34503,7 @@ export type UpdateLlmSettingsResponses = {
         ogDescription: string | null;
         footerText: string | null;
         chatPlaceholders: Array<string> | null;
+        iconLogo: string | null;
         showTwoFactor: boolean;
     };
 };
@@ -34606,6 +34613,7 @@ export type UpdateAgentSettingsResponses = {
         ogDescription: string | null;
         footerText: string | null;
         chatPlaceholders: Array<string> | null;
+        iconLogo: string | null;
         showTwoFactor: boolean;
     };
 };
@@ -34717,6 +34725,7 @@ export type UpdateKnowledgeSettingsResponses = {
         ogDescription: string | null;
         footerText: string | null;
         chatPlaceholders: Array<string> | null;
+        iconLogo: string | null;
         showTwoFactor: boolean;
     };
 };
@@ -34822,6 +34831,7 @@ export type DropEmbeddingConfigResponses = {
         ogDescription: string | null;
         footerText: string | null;
         chatPlaceholders: Array<string> | null;
+        iconLogo: string | null;
         showTwoFactor: boolean;
     };
 };
@@ -35010,6 +35020,7 @@ export type CompleteOnboardingResponses = {
         ogDescription: string | null;
         footerText: string | null;
         chatPlaceholders: Array<string> | null;
+        iconLogo: string | null;
         showTwoFactor: boolean;
     };
 };

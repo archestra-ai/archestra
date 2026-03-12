@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
+import { usePublicAppearance } from "@/lib/appearance.query";
 import { useLatestGitHubRelease } from "@/lib/github-release.query";
 import { useHealth } from "@/lib/health.query";
 import { useOrganization } from "@/lib/organization.query";
@@ -16,12 +17,13 @@ export function Version({ inline = false }: VersionProps) {
   const { data } = useHealth();
   const { data: latestRelease } = useLatestGitHubRelease();
   const { data: organization } = useOrganization();
+  const { data: appearance } = usePublicAppearance();
   const pathname = usePathname();
   const [shouldHide, setShouldHide] = useState(false);
 
   const isSettingsPage = pathname.startsWith("/settings");
   const isChatPage = pathname.startsWith("/chat");
-  const footerText = organization?.footerText;
+  const footerText = organization?.footerText || appearance?.footerText;
 
   const hasNewVersion = useMemo(() => {
     if (!data?.version || !latestRelease?.tag_name) return false;

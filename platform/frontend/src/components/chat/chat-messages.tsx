@@ -1,7 +1,6 @@
 import type { UIMessage } from "@ai-sdk/react";
 import { TOOL_TODO_WRITE_FULL_NAME } from "@shared";
 import type { ChatStatus, DynamicToolUIPart, ToolUIPart } from "ai";
-import Image from "next/image";
 import {
   Fragment,
   useCallback,
@@ -41,6 +40,7 @@ import {
   parsePolicyDenied,
 } from "@/lib/llmProviders/common";
 import { useMcpInstallOrchestrator } from "@/lib/mcp-install-orchestrator.hook";
+import { useOrganization } from "@/lib/organization.query";
 import { hasThinkingTags, parseThinkingTags } from "@/lib/parse-thinking";
 import { cn } from "@/lib/utils";
 import { AuthRequiredTool } from "./auth-required-tool";
@@ -124,6 +124,7 @@ export function ChatMessages({
   const { data: userCanCreateAgent } = useHasPermissions({
     agent: ["create"],
   });
+  const { data: organization } = useOrganization();
   const orchestrator = useMcpInstallOrchestrator();
 
   // Initialize mutation hook with conversationId (use empty string as fallback for hook rules)
@@ -896,11 +897,9 @@ export function ChatMessages({
             (status === "streaming" && isStreamingStalled)) && (
             <div className="absolute bottom-[-10] left-0">
               <Message from="assistant">
-                <Image
-                  src={"/logo.png"}
+                <img
+                  src={organization?.iconLogo || "/logo.png"}
                   alt="Loading logo"
-                  width={30}
-                  height={30}
                   className="object-contain h-6 w-auto animate-[bounce_700ms_ease_200ms_infinite]"
                 />
               </Message>

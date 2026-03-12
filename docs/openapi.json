@@ -120530,6 +120530,10 @@
                         "type": "string"
                       }
                     },
+                    "iconLogo": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "showTwoFactor": {
                       "type": "boolean"
                     }
@@ -120563,6 +120567,7 @@
                     "ogDescription",
                     "footerText",
                     "chatPlaceholders",
+                    "iconLogo",
                     "showTwoFactor"
                   ],
                   "additionalProperties": false
@@ -120848,6 +120853,10 @@
                     "nullable": true,
                     "type": "string"
                   },
+                  "iconLogo": {
+                    "nullable": true,
+                    "type": "string"
+                  },
                   "appName": {
                     "nullable": true,
                     "type": "string",
@@ -121048,6 +121057,10 @@
                         "type": "string"
                       }
                     },
+                    "iconLogo": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "showTwoFactor": {
                       "type": "boolean"
                     }
@@ -121081,6 +121094,7 @@
                     "ogDescription",
                     "footerText",
                     "chatPlaceholders",
+                    "iconLogo",
                     "showTwoFactor"
                   ],
                   "additionalProperties": false
@@ -121366,11 +121380,19 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "iconLogo": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "appName": {
                       "nullable": true,
                       "type": "string"
                     },
                     "ogDescription": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "footerText": {
                       "nullable": true,
                       "type": "string"
                     }
@@ -121381,8 +121403,10 @@
                     "logo",
                     "logoDark",
                     "favicon",
+                    "iconLogo",
                     "appName",
-                    "ogDescription"
+                    "ogDescription",
+                    "footerText"
                   ],
                   "additionalProperties": false
                 }
@@ -121798,6 +121822,10 @@
                         "type": "string"
                       }
                     },
+                    "iconLogo": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "showTwoFactor": {
                       "type": "boolean"
                     }
@@ -121831,6 +121859,7 @@
                     "ogDescription",
                     "footerText",
                     "chatPlaceholders",
+                    "iconLogo",
                     "showTwoFactor"
                   ],
                   "additionalProperties": false
@@ -122258,6 +122287,10 @@
                         "type": "string"
                       }
                     },
+                    "iconLogo": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "showTwoFactor": {
                       "type": "boolean"
                     }
@@ -122291,6 +122324,7 @@
                     "ogDescription",
                     "footerText",
                     "chatPlaceholders",
+                    "iconLogo",
                     "showTwoFactor"
                   ],
                   "additionalProperties": false
@@ -122711,6 +122745,10 @@
                         "type": "string"
                       }
                     },
+                    "iconLogo": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "showTwoFactor": {
                       "type": "boolean"
                     }
@@ -122744,6 +122782,7 @@
                     "ogDescription",
                     "footerText",
                     "chatPlaceholders",
+                    "iconLogo",
                     "showTwoFactor"
                   ],
                   "additionalProperties": false
@@ -123186,6 +123225,10 @@
                         "type": "string"
                       }
                     },
+                    "iconLogo": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "showTwoFactor": {
                       "type": "boolean"
                     }
@@ -123219,6 +123262,7 @@
                     "ogDescription",
                     "footerText",
                     "chatPlaceholders",
+                    "iconLogo",
                     "showTwoFactor"
                   ],
                   "additionalProperties": false
@@ -123614,6 +123658,10 @@
                         "type": "string"
                       }
                     },
+                    "iconLogo": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "showTwoFactor": {
                       "type": "boolean"
                     }
@@ -123647,6 +123695,7 @@
                     "ogDescription",
                     "footerText",
                     "chatPlaceholders",
+                    "iconLogo",
                     "showTwoFactor"
                   ],
                   "additionalProperties": false
@@ -124331,6 +124380,10 @@
                         "type": "string"
                       }
                     },
+                    "iconLogo": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "showTwoFactor": {
                       "type": "boolean"
                     }
@@ -124364,6 +124417,7 @@
                     "ogDescription",
                     "footerText",
                     "chatPlaceholders",
+                    "iconLogo",
                     "showTwoFactor"
                   ],
                   "additionalProperties": false

@@ -56,6 +56,7 @@ Full access to core resources and settings, but cannot manage users, roles, or i
 | Logs | `read` |
 | Teams | `read` |
 | Secrets | `read` |
+| API Keys | `read`, `delete` |
 | Organization Settings | `read`, `update` |
 | Security Settings | `read`, `update` |
 | Chat Agent Picker | `enable` |
@@ -108,6 +109,8 @@ The following table lists all available permissions that can be assigned to cust
 | `agentTrigger:create` | Set up new agent triggers |
 | `agentTrigger:update` | Modify agent trigger configurations |
 | `agentTrigger:delete` | Remove agent triggers |
+| `apiKey:read` | View API keys |
+| `apiKey:delete` | Delete API keys |
 | `chat:read` | View and access chat conversations |
 | `chat:create` | Start new chat conversations |
 | `chat:update` | Edit chat messages and conversation settings |

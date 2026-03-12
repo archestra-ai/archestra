@@ -14,8 +14,10 @@ const DEFAULT_APPEARANCE: PublicAppearance = {
   logo: null,
   logoDark: null,
   favicon: null,
+  iconLogo: null,
   appName: null,
   ogDescription: null,
+  footerText: null,
 };
 
 /**

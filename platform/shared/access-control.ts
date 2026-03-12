@@ -62,6 +62,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   invitation: ["create", "cancel"],
   identityProvider: ["read", "create", "update", "delete"],
   secret: ["read", "update"],
+  apiKey: ["read", "delete"],
   organizationSettings: ["read", "update"],
   securitySettings: ["read", "update"],
 
@@ -109,6 +110,7 @@ export const editorPermissions: Record<Resource, Action[]> = {
   // Administration
   team: ["read"],
   secret: ["read"],
+  apiKey: ["read", "delete"],
   organizationSettings: ["read", "update"],
   securitySettings: ["read", "update"],
 
@@ -162,6 +164,7 @@ export const memberPermissions: Record<Resource, Action[]> = {
   // Administration
   team: ["read"],
   secret: [],
+  apiKey: [],
   organizationSettings: [],
   securitySettings: [],
 
@@ -307,6 +310,8 @@ export const permissionDescriptions: Record<string, string> = {
   "identityProvider:delete": "Remove identity providers",
   "secret:read": "View secrets manager configuration",
   "secret:update": "Modify secrets manager settings and test connectivity",
+  "apiKey:read": "View API keys",
+  "apiKey:delete": "Delete API keys",
   "organizationSettings:read":
     "View organization settings (appearance, authentication, etc)",
   "organizationSettings:update":

@@ -3,6 +3,7 @@ ALTER TABLE "organization" ADD COLUMN "app_name" text;--> statement-breakpoint
 ALTER TABLE "organization" ADD COLUMN "og_description" text;--> statement-breakpoint
 ALTER TABLE "organization" ADD COLUMN "footer_text" text;--> statement-breakpoint
 ALTER TABLE "organization" ADD COLUMN "chat_placeholders" text[];--> statement-breakpoint
+ALTER TABLE "organization" ADD COLUMN "icon_logo" text;--> statement-breakpoint
 ALTER TABLE "organization" ADD COLUMN "show_two_factor" boolean DEFAULT false NOT NULL;--> statement-breakpoint
 
 -- Data migration: Rename "minimalisticView" → "simpleView" in custom role permissions JSONB

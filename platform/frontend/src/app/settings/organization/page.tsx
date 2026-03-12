@@ -26,6 +26,7 @@ import { LogoUpload } from "../appearance/_components/logo-upload";
 import { ThemeSelector } from "../appearance/_components/theme-selector";
 import { ChatPlaceholdersEditor } from "./_components/chat-placeholders-editor";
 import { FaviconUpload } from "./_components/favicon-upload";
+import { IconLogoUpload } from "./_components/icon-logo-upload";
 import { OrganizationTokenSection } from "./_components/organization-token-section";
 
 export default function OrganizationSettingsPage() {
@@ -131,6 +132,10 @@ export default function OrganizationSettingsPage() {
           <FaviconUpload
             currentFavicon={organization?.favicon}
             onFaviconChange={handleLogoChange}
+          />
+          <IconLogoUpload
+            currentIconLogo={organization?.iconLogo}
+            onIconLogoChange={handleLogoChange}
           />
           <ThemeSelector
             selectedTheme={currentUITheme}

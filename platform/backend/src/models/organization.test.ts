@@ -20,6 +20,9 @@ describe("OrganizationModel", () => {
         customFont: "lato",
         logo: null,
         logoDark: null,
+        favicon: null,
+        appName: null,
+        ogDescription: null,
       });
     });
 
@@ -35,6 +38,9 @@ describe("OrganizationModel", () => {
         customFont: "lato",
         logo: null,
         logoDark: null,
+        favicon: null,
+        appName: null,
+        ogDescription: null,
       });
     });
 
@@ -115,7 +121,7 @@ describe("OrganizationModel", () => {
       expect(appearance.customFont).toBe("roboto");
     });
 
-    test("should only return theme, customFont, logo, and logoDark fields", async ({
+    test("should only return expected public appearance fields", async ({
       makeOrganization,
     }) => {
       await makeOrganization();
@@ -124,9 +130,12 @@ describe("OrganizationModel", () => {
 
       // Verify only expected fields are returned
       expect(Object.keys(appearance).sort()).toEqual([
+        "appName",
         "customFont",
+        "favicon",
         "logo",
         "logoDark",
+        "ogDescription",
         "theme",
       ]);
     });

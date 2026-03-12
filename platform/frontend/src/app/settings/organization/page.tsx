@@ -139,30 +139,6 @@ export default function OrganizationSettingsPage() {
               setHasThemeChanges(themeId !== themeFromBackend);
             }}
           />
-          {hasThemeChanges && (
-            <div className="flex gap-3 sticky bottom-0 bg-background p-4 rounded-lg border border-border shadow-lg">
-              <PermissionButton
-                permissions={{ organizationSettings: ["update"] }}
-                onClick={() => {
-                  saveAppearance?.(currentUITheme || DEFAULT_THEME);
-                  setHasThemeChanges(false);
-                }}
-                disabled={updateMutation.isPending}
-              >
-                Save Theme
-              </PermissionButton>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setPreviewTheme?.(themeFromBackend || DEFAULT_THEME);
-                  setHasThemeChanges(false);
-                }}
-                disabled={updateMutation.isPending}
-              >
-                Cancel
-              </Button>
-            </div>
-          )}
 
           <Card>
             <CardHeader>
@@ -252,12 +228,20 @@ export default function OrganizationSettingsPage() {
         </div>
       </div>
 
-      {/* Save bar for field changes */}
-      {hasFieldChanges && (
+      {/* Unified save bar for all changes (theme + fields) */}
+      {(hasThemeChanges || hasFieldChanges) && (
         <div className="flex gap-3 sticky bottom-0 bg-background p-4 rounded-lg border border-border shadow-lg">
           <PermissionButton
             permissions={{ organizationSettings: ["update"] }}
-            onClick={handleSaveFields}
+            onClick={async () => {
+              if (hasThemeChanges) {
+                saveAppearance?.(currentUITheme || DEFAULT_THEME);
+                setHasThemeChanges(false);
+              }
+              if (hasFieldChanges) {
+                await handleSaveFields();
+              }
+            }}
             disabled={updateMutation.isPending}
           >
             Save Changes
@@ -265,6 +249,10 @@ export default function OrganizationSettingsPage() {
           <Button
             variant="outline"
             onClick={() => {
+              if (hasThemeChanges) {
+                setPreviewTheme?.(themeFromBackend || DEFAULT_THEME);
+                setHasThemeChanges(false);
+              }
               setAppName(null);
               setOgDescription(null);
               setFooterText(null);

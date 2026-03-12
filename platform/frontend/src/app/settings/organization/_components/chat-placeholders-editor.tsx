@@ -11,15 +11,17 @@ interface ChatPlaceholdersEditorProps {
   onChange: (placeholders: string[]) => void;
 }
 
-let nextId = 0;
-function generateId() {
-  return `placeholder-${++nextId}`;
-}
-
 export function ChatPlaceholdersEditor({
   placeholders,
   onChange,
 }: ChatPlaceholdersEditorProps) {
+  // Stable ID generator scoped to this component instance
+  const nextIdRef = useRef(0);
+  const generateId = useCallback(
+    () => `placeholder-${++nextIdRef.current}`,
+    [],
+  );
+
   // Maintain stable keys for each placeholder entry
   const keysRef = useRef<string[]>([]);
   while (keysRef.current.length < placeholders.length) {
@@ -31,7 +33,7 @@ export function ChatPlaceholdersEditor({
     if (placeholders.length >= 20) return;
     keysRef.current.push(generateId());
     onChange([...placeholders, ""]);
-  }, [placeholders, onChange]);
+  }, [placeholders, onChange, generateId]);
 
   const handleRemove = useCallback(
     (index: number) => {

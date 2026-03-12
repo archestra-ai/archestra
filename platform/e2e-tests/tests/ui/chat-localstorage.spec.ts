@@ -1,70 +1,8 @@
 import { E2eTestId } from "@shared";
 import { expect, test } from "../../fixtures";
 
-test.describe("Chat localStorage persistence", () => {
+test.describe("Chat agent persistence", () => {
   test.setTimeout(60_000);
-
-  test("persists selected model to localStorage and restores on revisit", async ({
-    page,
-    goToPage,
-  }) => {
-    // Navigate to chat page
-    await goToPage(page, "/chat");
-
-    // Wait for the model selector to be visible
-    const modelSelectorTrigger = page.getByTestId(
-      E2eTestId.ChatModelSelectorTrigger,
-    );
-    await expect(modelSelectorTrigger).toBeVisible({ timeout: 15_000 });
-
-    // Open model selector
-    await modelSelectorTrigger.click();
-    await expect(page.getByRole("dialog")).toBeVisible({ timeout: 5_000 });
-
-    // Pick a model that isn't the first one (to ensure we're actually changing something)
-    // Get all model options and pick the second one if available
-    const modelOptions = page.getByRole("option");
-    const optionCount = await modelOptions.count();
-    // Skip first option if it's the "Best available model" option
-    const targetIndex = optionCount > 1 ? 1 : 0;
-    const selectedOption = modelOptions.nth(targetIndex);
-    await selectedOption.click();
-
-    // Wait for dialog to close
-    await expect(page.getByRole("dialog")).not.toBeVisible({ timeout: 5_000 });
-
-    // Verify localStorage was set
-    const storedModel = await page.evaluate(() =>
-      localStorage.getItem("archestra-chat-selected-chat-model"),
-    );
-    expect(storedModel).toBeTruthy();
-
-    // Navigate away from chat
-    await goToPage(page, "/tools");
-    await page.waitForLoadState("domcontentloaded");
-
-    // Navigate back to chat
-    await goToPage(page, "/chat");
-    await page.waitForLoadState("domcontentloaded");
-
-    // Wait for model selector to be visible again
-    await expect(modelSelectorTrigger).toBeVisible({ timeout: 15_000 });
-
-    // Verify the model selector shows the previously selected model
-    // The stored model ID should match what's displayed
-    const restoredModel = await page.evaluate(() =>
-      localStorage.getItem("archestra-chat-selected-chat-model"),
-    );
-    expect(restoredModel).toBe(storedModel);
-
-    // Verify the trigger button shows a model (not default placeholder text).
-    // The trigger displays the display name (e.g., "Claude Haiku 4.5"), not the
-    // model ID (e.g., "claude-haiku-4-5-20251001"), so we check it doesn't show
-    // the placeholder rather than matching the exact model ID.
-    await expect(modelSelectorTrigger).not.toContainText("Select model", {
-      timeout: 10_000,
-    });
-  });
 
   test("persists selected agent to localStorage and restores on revisit", async ({
     page,

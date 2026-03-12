@@ -114,13 +114,7 @@ import {
   getPendingActions,
 } from "@/lib/pending-tool-state";
 import { useTeams } from "@/lib/team.query";
-import {
-  clearSavedModel,
-  getSavedAgent,
-  getSavedModel,
-  saveAgent,
-  saveModel,
-} from "@/lib/use-chat-preferences";
+import { getSavedAgent, saveAgent } from "@/lib/use-chat-preferences";
 import { useIsMobile } from "@/lib/use-mobile.hook";
 import { cn } from "@/lib/utils";
 import ArchestraPromptInput from "./prompt-input";
@@ -307,7 +301,7 @@ export default function ChatPage() {
   ]);
 
   // Initialize model and API key once agent is resolved.
-  // Priority: localStorage (user's explicit choice) > agent config > org default > first available.
+  // Priority: agent config > org default > first available.
   // Uses modelInitializedRef instead of checking initialModel to avoid a race condition:
   // ModelSelector's auto-select fires before this effect and sets initialModel, which would
   // cause an early return and skip the proper priority chain (org default, etc.).
@@ -327,29 +321,7 @@ export default function ChatPage() {
       }
     };
 
-    // 1. User's explicit selection from localStorage takes priority
-    const savedModelId = getSavedModel();
-    if (savedModelId) {
-      // Wait for models to load so we can validate the saved model still exists
-      if (allModels.length === 0) return;
-
-      if (allModels.some((m) => m.id === savedModelId)) {
-        setInitialModel(savedModelId);
-        // Find provider for saved model and auto-select key
-        for (const [provider, models] of Object.entries(modelsByProvider)) {
-          if (models?.some((m) => m.id === savedModelId)) {
-            autoSelectKeyForProvider(provider);
-            break;
-          }
-        }
-        modelInitializedRef.current = true;
-        return;
-      }
-      // Saved model no longer available — clear stale value and fall through
-      clearSavedModel();
-    }
-
-    // 2. Agent-configured model as fallback
+    // 1. Agent-configured model
     const agent = resolvedAgentRef.current;
     const agentData = agent as Record<string, unknown> | undefined;
     if (agentData?.llmModel) {
@@ -361,7 +333,7 @@ export default function ChatPage() {
       return;
     }
 
-    // 3. Organization default model
+    // 2. Organization default model
     if (
       organization?.defaultLlmModel &&
       allModels.some((m) => m.id === organization.defaultLlmModel)
@@ -385,7 +357,7 @@ export default function ChatPage() {
       return;
     }
 
-    // 4. Fall back to first available model (needs models loaded)
+    // 3. Fall back to first available model (needs models loaded)
     if (allModels.length === 0) return;
 
     const providers = Object.keys(modelsByProvider);
@@ -408,23 +380,17 @@ export default function ChatPage() {
     organization?.defaultLlmApiKeyId,
   ]);
 
-  // Don't persist to localStorage here — this callback is shared between
-  // user-initiated model picks and ModelSelector's auto-select on mount.
-  // localStorage is only written when the user explicitly opens the selector
-  // dialog and picks a model (via onOpenChange + onModelChange combo).
+  // Model change callback for the initial (no conversation) state.
+  // After init, only accept explicit user selections (dialog was opened).
+  // This prevents ModelSelector's auto-select (triggered by apiKeyId changes)
+  // from overwriting the agent default or org default.
   const modelSelectorWasOpenRef = useRef(false);
   const handleInitialModelChange = useCallback((modelId: string) => {
-    // After init, only accept explicit user selections (dialog was opened).
-    // This prevents ModelSelector's auto-select (triggered by apiKeyId changes)
-    // from overwriting the org default or user's prior choice.
     if (modelInitializedRef.current && !modelSelectorWasOpenRef.current) {
       return;
     }
     setInitialModel(modelId);
-    if (modelSelectorWasOpenRef.current) {
-      saveModel(modelId);
-      modelSelectorWasOpenRef.current = false;
-    }
+    modelSelectorWasOpenRef.current = false;
   }, []);
   const handleInitialModelSelectorOpenChange = useCallback((open: boolean) => {
     if (open) {
@@ -440,7 +406,6 @@ export default function ChatPage() {
         const bestModel =
           providerModels.find((m) => m.isBest) ?? providerModels[0];
         setInitialModel(bestModel.id);
-        saveModel(bestModel.id);
       }
     },
     [modelsByProvider],
@@ -605,9 +570,6 @@ export default function ChatPage() {
       selectedModel: model,
       selectedProvider: provider,
     });
-
-    // Persist to localStorage so it's restored on next visit
-    saveModel(model);
   }, []);
 
   // Handle API key change - preselect best model for the new key's provider.
@@ -627,9 +589,6 @@ export default function ChatPage() {
           selectedModel: bestModel.id,
           selectedProvider: newProvider,
         });
-
-        // Persist to localStorage so it's restored on next visit
-        saveModel(bestModel.id);
       } else {
         // No models for this provider yet, still update the key
         updateConversationMutateRef.current({

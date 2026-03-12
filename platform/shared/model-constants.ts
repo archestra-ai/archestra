@@ -149,7 +149,16 @@ export const MODEL_MARKER_PATTERNS: Record<
   },
   openai: {
     fastest: ["gpt-4o-mini", "gpt-3.5"],
-    best: ["gpt-5.4", "gpt-5.3", "gpt-5.2", "gpt-5", "o3", "o1", "4o-2", "gpt-4-turbo"],
+    best: [
+      "gpt-5.4",
+      "gpt-5.3",
+      "gpt-5.2",
+      "gpt-5",
+      "o3",
+      "o1",
+      "4o-2",
+      "gpt-4-turbo",
+    ],
   },
   gemini: {
     fastest: ["flash"],

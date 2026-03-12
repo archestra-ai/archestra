@@ -686,7 +686,13 @@ export function ModelSelector({
     if (modelToSelect) {
       onModelChange(modelToSelect);
     }
-  }, [isLoading, isPlaceholderData, allAvailableModels, selectedModel, onModelChange]);
+  }, [
+    isLoading,
+    isPlaceholderData,
+    allAvailableModels,
+    selectedModel,
+    onModelChange,
+  ]);
 
   // If loading, show loading state
   if (isLoading) {

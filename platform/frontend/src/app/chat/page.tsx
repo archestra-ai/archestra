@@ -347,6 +347,7 @@ export default function ChatPage() {
     chatApiKeys,
     organization?.defaultLlmModel,
     organization?.defaultLlmApiKeyId,
+    organization,
   ]);
 
   // Model change callback for the initial (no conversation) state.

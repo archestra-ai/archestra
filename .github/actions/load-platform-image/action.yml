@@ -1,7 +1,6 @@
 name: Load Platform Image
 description: |
   Loads the platform Docker image from a co-located artifact.
-  The build job always uploads a tarball artifact regardless of fork status.
 
 outputs:
   image-tag:

@@ -1,7 +1,6 @@
 name: Load MCP Server Base Image
 description: |
   Loads the MCP server base Docker image from a co-located artifact.
-  The build job always uploads a tarball artifact regardless of fork status.
 
 outputs:
   image-tag:

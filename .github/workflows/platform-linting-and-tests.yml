@@ -155,15 +155,13 @@ jobs:
           echo "✅ All validation checks passed"
 
   # Build Docker images for e2e tests (platform and MCP server base)
-  # Images are always exported as artifacts for fast co-located downloads in E2E jobs.
-  # Non-fork PRs also push to GHCR as a secondary output.
+  # Images are exported as artifacts for fast co-located downloads in E2E jobs.
   platform-e2e-build:
     name: Build ${{ matrix.name }} Image
     runs-on: ${{ matrix.runner }}
     if: ${{ inputs.should-skip-running-and-always-succeed != true && inputs.is-release-please-pr != true }}
     permissions:
       contents: read
-      packages: write
     strategy:
       fail-fast: false
       matrix:
@@ -172,7 +170,6 @@ jobs:
             runner: blacksmith-16vcpu-ubuntu-2404
             context: ./platform
             dockerfile: ""
-            image-name: platform
             artifact-name: platform-docker-image
             tarball-name: platform-image.tar.gz
             local-tag-prefix: archestra-platform
@@ -181,7 +178,6 @@ jobs:
             runner: blacksmith-4vcpu-ubuntu-2404
             context: ./platform/mcp_server_docker_image
             dockerfile: ./platform/mcp_server_docker_image/Dockerfile
-            image-name: mcp-server-base
             artifact-name: mcp-server-base-docker-image
             tarball-name: mcp-server-base-image.tar.gz
             local-tag-prefix: mcp-server-base
@@ -198,71 +194,31 @@ jobs:
         with:
           working-directory: ./platform
 
-      - name: Login to GHCR
-        if: ${{ !inputs.is-fork-pr }}
-        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      # Non-fork PRs: Build, push to GHCR, and load locally for artifact export
-      - name: Build and push Platform image to GHCR
-        if: ${{ !inputs.is-fork-pr && matrix.use-build-action }}
+      - name: Build Platform image
+        if: ${{ matrix.use-build-action }}
         uses: ./.github/actions/build-platform-docker-image
         with:
           context: ${{ matrix.context }}
-          push: "true"
           load: "true"
-          tags: |
-            ghcr.io/${{ github.repository }}/${{ matrix.image-name }}:${{ github.sha }}
-            ${{ matrix.local-tag-prefix }}:${{ github.sha }}
+          tags: ${{ matrix.local-tag-prefix }}:${{ github.sha }}
           turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
           turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
 
-      # Non-fork PRs: Build, push to GHCR, and load locally (MCP server base)
       - name: Setup Blacksmith Builder
         if: ${{ !matrix.use-build-action }}
         uses: useblacksmith/setup-docker-builder@f9b57e1c7d5a57eed0b5609e1ffeadbf3bb0b726 # v1.1.0
 
-      - name: Build and push MCP server base image to GHCR
-        if: ${{ !inputs.is-fork-pr && !matrix.use-build-action }}
+      - name: Build MCP server base image
+        if: ${{ !matrix.use-build-action }}
         uses: useblacksmith/build-push-action@30c71162f16ea2c27c3e21523255d209b8b538c1 # v2
         with:
           context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
           platforms: linux/amd64
-          push: true
-          load: true
-          tags: |
-            ghcr.io/${{ github.repository }}/${{ matrix.image-name }}:${{ github.sha }}
-            ${{ matrix.local-tag-prefix }}:${{ github.sha }}
-
-      # Fork PRs: Build locally and export as artifact (Platform image)
-      - name: Build Platform image locally
-        if: ${{ inputs.is-fork-pr && matrix.use-build-action }}
-        uses: ./.github/actions/build-platform-docker-image
-        with:
-          context: ${{ matrix.context }}
-          push: "false"
-          load: "true"
-          tags: ${{ matrix.local-tag-prefix }}:${{ github.sha }}
-          turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
-          turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
-
-      # Fork PRs: Build locally and export as artifact (MCP server base)
-      - name: Build MCP server base image locally
-        if: ${{ inputs.is-fork-pr && !matrix.use-build-action }}
-        uses: useblacksmith/build-push-action@30c71162f16ea2c27c3e21523255d209b8b538c1 # v2
-        with:
-          context: ${{ matrix.context }}
-          file: ${{ matrix.dockerfile }}
-          platforms: linux/amd64
-          push: false
           load: true
           tags: ${{ matrix.local-tag-prefix }}:${{ github.sha }}
 
-      # Always export as artifact for fast co-located downloads in E2E jobs
+      # Export as artifact for fast co-located downloads in E2E jobs
       - name: Export Docker image as tarball
         env:
           GIT_SHA: ${{ github.sha }}

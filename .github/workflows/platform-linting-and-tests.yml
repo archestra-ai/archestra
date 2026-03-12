@@ -366,17 +366,11 @@ jobs:
         id: load-platform-image
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         uses: ./.github/actions/load-platform-image
-        with:
-          is-fork-pr: ${{ inputs.is-fork-pr }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Load MCP server base image
         id: load-mcp-server-base-image
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         uses: ./.github/actions/load-mcp-server-base-image
-        with:
-          is-fork-pr: ${{ inputs.is-fork-pr }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Archestra Platform
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
@@ -463,9 +457,6 @@ jobs:
         id: load-platform-image
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         uses: ./.github/actions/load-platform-image
-        with:
-          is-fork-pr: ${{ inputs.is-fork-pr }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       # Note: We intentionally don't load/use a custom MCP server base image for quickstart tests.
       # The embedded Kind cluster inside the quickstart container cannot easily access images
@@ -655,9 +646,6 @@ jobs:
         id: load-platform-image
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         uses: ./.github/actions/load-platform-image
-        with:
-          is-fork-pr: ${{ inputs.is-fork-pr }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install Kind cluster
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
@@ -843,9 +831,6 @@ jobs:
         id: load-platform-image
         if: ${{ github.event_name == 'merge_group' && matrix.image-source == 'platform-e2e-build' }}
         uses: ./.github/actions/load-platform-image
-        with:
-          is-fork-pr: ${{ inputs.is-fork-pr }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       # Other images: Build locally for scanning (single arch, no push)
       - name: Setup Blacksmith Builder

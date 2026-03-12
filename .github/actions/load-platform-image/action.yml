@@ -1,15 +1,7 @@
 name: Load Platform Image
 description: |
-  Loads the platform Docker image from a co-located artifact (faster than pulling from GHCR).
+  Loads the platform Docker image from a co-located artifact.
   The build job always uploads a tarball artifact regardless of fork status.
-
-inputs:
-  is-fork-pr:
-    description: "Whether this is a fork PR (kept for backward compatibility)"
-    required: true
-  github-token:
-    description: "GitHub token (kept for backward compatibility, no longer used for GHCR pulls)"
-    required: true
 
 outputs:
   image-tag:

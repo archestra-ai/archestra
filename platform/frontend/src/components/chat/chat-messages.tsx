@@ -548,6 +548,10 @@ export function ChatMessages({
                         }
 
                         const isLastTextPart = i === lastTextPartIndex;
+                        const isStreamingThisPart =
+                          status === "streaming" &&
+                          idx === messages.length - 1 &&
+                          isLastTextPart;
                         const showActions =
                           isLastAssistantInSequence &&
                           isLastTextPart &&
@@ -629,6 +633,10 @@ export function ChatMessages({
                                         ? citationParts
                                         : undefined
                                     }
+                                    isStreaming={
+                                      isStreamingThisPart &&
+                                      isLastParsedTextPart
+                                    }
                                     editDisabled={isResponseInProgress}
                                     onStartEdit={handleStartEdit}
                                     onCancelEdit={handleCancelEdit}
@@ -650,6 +658,7 @@ export function ChatMessages({
                               isEditing={editingPartKey === partKey}
                               showActions={showActions}
                               citationParts={citationParts}
+                              isStreaming={isStreamingThisPart}
                               editDisabled={isResponseInProgress}
                               onStartEdit={handleStartEdit}
                               onCancelEdit={handleCancelEdit}

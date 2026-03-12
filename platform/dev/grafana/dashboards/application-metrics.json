@@ -1560,10 +1560,10 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "time() - process_start_time_seconds",
+          "expr": "time() - last_over_time(process_start_time_seconds[5m])",
           "hide": false,
           "instant": true,
-          "legendFormat": "Uptime",
+          "legendFormat": "{{instance}}",
           "queryType": "instant",
           "refId": "A"
         }
@@ -2440,7 +2440,7 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "sum(${pg_metric_prefix}_backends)",
+          "expr": "sum(pg_stat_activity_count)",
           "hide": false,
           "instant": true,
           "legendFormat": "",
@@ -2504,7 +2504,7 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "max(${pg_metric_prefix}_connection_max)",
+          "expr": "pg_settings_max_connections",
           "hide": false,
           "instant": true,
           "legendFormat": "",
@@ -2577,7 +2577,7 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "sum(${pg_metric_prefix}_backends) / max(${pg_metric_prefix}_connection_max) * 100",
+          "expr": "sum(pg_stat_activity_count) / pg_settings_max_connections * 100",
           "hide": false,
           "instant": true,
           "legendFormat": "",
@@ -2608,15 +2608,15 @@
               },
               {
                 "color": "yellow",
-                "value": 60
+                "value": 536870912
               },
               {
                 "color": "red",
-                "value": 300
+                "value": 1073741824
               }
             ]
           },
-          "unit": "s"
+          "unit": "bytes"
         },
         "overrides": []
       },
@@ -2650,7 +2650,7 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "${pg_metric_prefix}_wal_age_seconds",
+          "expr": "pg_wal_size_bytes",
           "hide": false,
           "instant": true,
           "legendFormat": "",
@@ -2658,7 +2658,7 @@
           "refId": "A"
         }
       ],
-      "title": "WAL Age",
+      "title": "WAL Size",
       "type": "stat"
     },
     {
@@ -2748,7 +2748,7 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "${pg_metric_prefix}_backends",
+          "expr": "pg_stat_activity_count",
           "hide": false,
           "instant": false,
           "legendFormat": "{{datname}}",
@@ -2847,7 +2847,7 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "${pg_metric_prefix}_db_size_bytes",
+          "expr": "pg_database_size_bytes",
           "hide": false,
           "instant": false,
           "legendFormat": "{{datname}}",
@@ -2962,7 +2962,7 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "rate(${pg_metric_prefix}_commits_total[$__rate_interval])",
+          "expr": "rate(pg_stat_database_xact_commit[$__rate_interval])",
           "hide": false,
           "instant": false,
           "legendFormat": "commits - {{datname}}",
@@ -2975,7 +2975,7 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "rate(${pg_metric_prefix}_rollbacks_total[$__rate_interval])",
+          "expr": "rate(pg_stat_database_xact_rollback[$__rate_interval])",
           "hide": false,
           "instant": false,
           "legendFormat": "rollbacks - {{datname}}",
@@ -3074,7 +3074,7 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "rate(${pg_metric_prefix}_blocks_hit_total[$__rate_interval]) / (rate(${pg_metric_prefix}_blocks_hit_total[$__rate_interval]) + rate(${pg_metric_prefix}_blocks_read_total[$__rate_interval]))",
+          "expr": "rate(pg_stat_database_blks_hit[$__rate_interval]) / (rate(pg_stat_database_blks_hit[$__rate_interval]) + rate(pg_stat_database_blks_read[$__rate_interval]))",
           "hide": false,
           "instant": false,
           "legendFormat": "hit ratio - {{datname}}",
@@ -3173,7 +3173,7 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "rate(${pg_metric_prefix}_tup_inserted_total[$__rate_interval])",
+          "expr": "rate(pg_stat_database_tup_inserted[$__rate_interval])",
           "hide": false,
           "instant": false,
           "legendFormat": "inserted - {{datname}}",
@@ -3186,7 +3186,7 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "rate(${pg_metric_prefix}_tup_updated_total[$__rate_interval])",
+          "expr": "rate(pg_stat_database_tup_updated[$__rate_interval])",
           "hide": false,
           "instant": false,
           "legendFormat": "updated - {{datname}}",
@@ -3199,7 +3199,7 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "rate(${pg_metric_prefix}_tup_deleted_total[$__rate_interval])",
+          "expr": "rate(pg_stat_database_tup_deleted[$__rate_interval])",
           "hide": false,
           "instant": false,
           "legendFormat": "deleted - {{datname}}",
@@ -3212,7 +3212,7 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "rate(${pg_metric_prefix}_tup_returned_total[$__rate_interval])",
+          "expr": "rate(pg_stat_database_tup_returned[$__rate_interval])",
           "hide": false,
           "instant": false,
           "legendFormat": "returned - {{datname}}",
@@ -3225,7 +3225,7 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "rate(${pg_metric_prefix}_tup_fetched_total[$__rate_interval])",
+          "expr": "rate(pg_stat_database_tup_fetched[$__rate_interval])",
           "hide": false,
           "instant": false,
           "legendFormat": "fetched - {{datname}}",
@@ -3291,7 +3291,7 @@
               }
             ]
           },
-          "unit": "ops"
+          "unit": "short"
         },
         "overrides": []
       },
@@ -3324,115 +3324,16 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "rate(${pg_metric_prefix}_index_scans_total[$__rate_interval])",
+          "expr": "pg_locks_count",
           "hide": false,
           "instant": false,
-          "legendFormat": "{{relname}}",
+          "legendFormat": "{{mode}} - {{datname}}",
           "queryType": "range",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Index Usage",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "$metrics_datasource"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "showValues": false,
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
-          "unit": "bytes"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 105
-      },
-      "id": 510,
-      "options": {
-        "legend": {
-          "calcs": [
-            "lastNotNull",
-            "mean"
-          ],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "$metrics_datasource"
-          },
-          "expr": "${pg_metric_prefix}_table_size_bytes",
-          "hide": false,
-          "instant": false,
-          "legendFormat": "{{relname}}",
-          "queryType": "range",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Table Size",
+      "title": "Locks by Mode",
       "type": "timeseries"
     },
     {
@@ -3496,6 +3397,105 @@
       "gridPos": {
         "h": 8,
         "w": 12,
+        "x": 0,
+        "y": 105
+      },
+      "id": 510,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull",
+            "mean"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$metrics_datasource"
+          },
+          "expr": "rate(pg_stat_database_deadlocks[$__rate_interval])",
+          "hide": false,
+          "instant": false,
+          "legendFormat": "{{datname}}",
+          "queryType": "range",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Deadlocks",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$metrics_datasource"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "Bps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
         "x": 12,
         "y": 105
       },
@@ -3522,16 +3522,16 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "rate(${pg_metric_prefix}_table_vacuum_count_total[$__rate_interval])",
+          "expr": "rate(pg_stat_database_temp_bytes[$__rate_interval])",
           "hide": false,
           "instant": false,
-          "legendFormat": "{{relname}}",
+          "legendFormat": "{{datname}}",
           "queryType": "range",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Vacuum Activity",
+      "title": "Temp Bytes Written",
       "type": "timeseries"
     }
   ],
@@ -3557,45 +3557,6 @@
         "regex": "",
         "skipUrlSync": false,
         "type": "datasource"
-      },
-      {
-        "current": {
-          "selected": false,
-          "text": "postgresql",
-          "value": "postgresql"
-        },
-        "description": "Metric name prefix for PostgreSQL exporter (e.g., postgresql, pg, cnpg, ccp)",
-        "hide": 0,
-        "includeAll": false,
-        "label": "PG Metric Prefix",
-        "multi": false,
-        "name": "pg_metric_prefix",
-        "options": [
-          {
-            "selected": true,
-            "text": "postgresql",
-            "value": "postgresql"
-          },
-          {
-            "selected": false,
-            "text": "pg",
-            "value": "pg"
-          },
-          {
-            "selected": false,
-            "text": "cnpg",
-            "value": "cnpg"
-          },
-          {
-            "selected": false,
-            "text": "ccp",
-            "value": "ccp"
-          }
-        ],
-        "query": "postgresql,pg,cnpg,ccp",
-        "queryValue": "",
-        "skipUrlSync": false,
-        "type": "custom"
       }
     ]
   },

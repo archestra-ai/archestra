@@ -3,6 +3,7 @@ import config from "@/config";
 import logger from "@/logging";
 import { KbChunkModel } from "@/models";
 import type { VectorSearchResult } from "@/models/kb-chunk";
+import * as metrics from "@/observability/metrics";
 import type { AclEntry } from "@/types/kb-document";
 import {
   buildEmbeddingInteraction,
@@ -35,6 +36,7 @@ class QueryService {
     const { connectorIds, organizationId, queryText, limit = 10 } = params;
     if (connectorIds.length === 0) return [];
 
+    const queryStartTime = Date.now();
     const hybridEnabled = config.kb.hybridSearchEnabled;
     const overFetchLimit = hybridEnabled ? limit * 2 : limit;
 
@@ -162,6 +164,13 @@ class QueryService {
       },
       "[QueryService] Final results (after rerank)",
     );
+
+    const searchType = hybridEnabled ? "hybrid" : "vector";
+    metrics.rag.reportQuery({
+      searchType,
+      durationSeconds: (Date.now() - queryStartTime) / 1000,
+      resultCount: topResults.length,
+    });
 
     return this.mapResults(topResults);
   }

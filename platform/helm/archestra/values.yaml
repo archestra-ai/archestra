@@ -582,6 +582,14 @@ postgresql:
       limits:
         cpu: "1000m"
         memory: "1Gi"
+  # PostgreSQL exporter sidecar for Prometheus metrics (port 9187)
+  # Metrics are scraped by the observability stack (Grafana Alloy or Prometheus)
+  # and visualized in the Application Metrics Grafana dashboard (PostgreSQL section)
+  metrics:
+    enabled: true
+    service:
+      ports:
+        metrics: 9187
   # NOTE: Bitnami is archiving their image.. see these github comments for details
   # (this is essentially why we need to override image.repository and image.tag and global.security.allowInsecureImages)
   #

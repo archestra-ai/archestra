@@ -4,10 +4,11 @@ import {
   IdentityProviderFormSchema,
   type IdentityProviderFormValues,
 } from "@shared";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useForm } from "react-hook-form";
 import { describe, expect, it, vi } from "vitest";
+import { Button } from "@/components/ui/button";
 import { Form } from "@/components/ui/form";
 import { RoleMappingForm } from "./role-mapping-form.ee";
 
@@ -35,8 +36,10 @@ vi.mock("@/lib/role.query", () => ({
 
 function TestWrapper({
   defaultRules = [],
+  onSubmit,
 }: {
   defaultRules?: Array<{ expression: string; role: string }>;
+  onSubmit?: (data: IdentityProviderFormValues) => void;
 }) {
   const form = useForm<IdentityProviderFormValues>({
     // biome-ignore lint/suspicious/noExplicitAny: test setup
@@ -63,8 +66,9 @@ function TestWrapper({
 
   return (
     <Form {...form}>
-      <form>
+      <form onSubmit={form.handleSubmit((data) => onSubmit?.(data))}>
         <RoleMappingForm form={form} />
+        <Button type="submit">Save</Button>
       </form>
     </Form>
   );
@@ -72,6 +76,12 @@ function TestWrapper({
 
 function getAddRuleButton() {
   return screen.getByTestId(E2eTestId.IdpRoleMappingAddRule);
+}
+
+function getDeleteButtons() {
+  return screen
+    .getAllByRole("button", { name: "" })
+    .filter((btn) => btn.querySelector("svg.lucide-trash-2") !== null);
 }
 
 function openAccordion() {
@@ -132,28 +142,16 @@ describe("RoleMappingForm", () => {
     );
     await openAccordion();
 
-    // Verify 3 rules rendered
     expect(
       screen.getAllByTestId(E2eTestId.IdpRoleMappingRuleTemplate),
     ).toHaveLength(3);
 
-    // Remove the first rule (click the first trash button)
-    const trashButtons = screen.getAllByRole("button", { name: "" });
-    // Filter to only the trash icon buttons (they contain the Trash2 SVG)
-    const deleteButtons = trashButtons.filter(
-      (btn) => btn.querySelector("svg.lucide-trash-2") !== null,
-    );
-    expect(deleteButtons).toHaveLength(3);
+    await userEvent.click(getDeleteButtons()[0]);
 
-    await userEvent.click(deleteButtons[0]);
-
-    // Should now have 2 rules
     const remainingTemplates = screen.getAllByTestId(
       E2eTestId.IdpRoleMappingRuleTemplate,
     );
     expect(remainingTemplates).toHaveLength(2);
-
-    // Remaining rules should have correct values (rule-two and rule-three)
     expect(remainingTemplates[0]).toHaveValue("rule-two");
     expect(remainingTemplates[1]).toHaveValue("rule-three");
 
@@ -178,12 +176,7 @@ describe("RoleMappingForm", () => {
     );
     await openAccordion();
 
-    const deleteButtons = screen
-      .getAllByRole("button", { name: "" })
-      .filter((btn) => btn.querySelector("svg.lucide-trash-2") !== null);
-
-    // Remove the middle rule
-    await userEvent.click(deleteButtons[1]);
+    await userEvent.click(getDeleteButtons()[1]);
 
     const remaining = screen.getAllByTestId(
       E2eTestId.IdpRoleMappingRuleTemplate,
@@ -205,10 +198,7 @@ describe("RoleMappingForm", () => {
       screen.getAllByTestId(E2eTestId.IdpRoleMappingRuleTemplate),
     ).toHaveLength(1);
 
-    const deleteButtons = screen
-      .getAllByRole("button", { name: "" })
-      .filter((btn) => btn.querySelector("svg.lucide-trash-2") !== null);
-    await userEvent.click(deleteButtons[0]);
+    await userEvent.click(getDeleteButtons()[0]);
 
     expect(
       screen.queryByTestId(E2eTestId.IdpRoleMappingRuleTemplate),
@@ -228,20 +218,103 @@ describe("RoleMappingForm", () => {
     );
     await openAccordion();
 
-    // Remove the existing rule
-    const deleteButtons = screen
-      .getAllByRole("button", { name: "" })
-      .filter((btn) => btn.querySelector("svg.lucide-trash-2") !== null);
-    await userEvent.click(deleteButtons[0]);
-
-    // Add a new rule
+    await userEvent.click(getDeleteButtons()[0]);
     await userEvent.click(getAddRuleButton());
 
     const templates = screen.getAllByTestId(
       E2eTestId.IdpRoleMappingRuleTemplate,
     );
     expect(templates).toHaveLength(1);
-    // New rule should have empty expression
     expect(templates[0]).toHaveValue("");
+  });
+
+  it("submits form successfully with role mapping rules", async () => {
+    const onSubmit = vi.fn();
+    render(
+      <TestWrapper
+        defaultRules={[
+          { expression: "rule-one", role: "admin" },
+          { expression: "rule-two", role: "member" },
+        ]}
+        onSubmit={onSubmit}
+      />,
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => {
+      expect(onSubmit).toHaveBeenCalledTimes(1);
+    });
+
+    const submittedData = onSubmit.mock.calls[0][0];
+    expect(submittedData.roleMapping.rules).toHaveLength(2);
+    expect(submittedData.roleMapping.rules[0].expression).toBe("rule-one");
+    expect(submittedData.roleMapping.rules[1].expression).toBe("rule-two");
+  });
+
+  it("submits form successfully after removing a rule", async () => {
+    const onSubmit = vi.fn();
+    render(
+      <TestWrapper
+        defaultRules={[
+          { expression: "keep-this", role: "admin" },
+          { expression: "remove-this", role: "member" },
+        ]}
+        onSubmit={onSubmit}
+      />,
+    );
+    await openAccordion();
+
+    // Remove the second rule
+    await userEvent.click(getDeleteButtons()[1]);
+
+    // Submit should succeed without validation errors
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => {
+      expect(onSubmit).toHaveBeenCalledTimes(1);
+    });
+
+    const submittedData = onSubmit.mock.calls[0][0];
+    expect(submittedData.roleMapping.rules).toHaveLength(1);
+    expect(submittedData.roleMapping.rules[0].expression).toBe("keep-this");
+  });
+
+  it("submits form successfully with no role mapping rules", async () => {
+    const onSubmit = vi.fn();
+    render(<TestWrapper onSubmit={onSubmit} />);
+
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => {
+      expect(onSubmit).toHaveBeenCalledTimes(1);
+    });
+
+    const submittedData = onSubmit.mock.calls[0][0];
+    expect(submittedData.roleMapping.rules).toHaveLength(0);
+  });
+
+  it("submits form successfully after removing all rules", async () => {
+    const onSubmit = vi.fn();
+    render(
+      <TestWrapper
+        defaultRules={[{ expression: "remove-me", role: "admin" }]}
+        onSubmit={onSubmit}
+      />,
+    );
+    await openAccordion();
+
+    // Remove the only rule
+    await userEvent.click(getDeleteButtons()[0]);
+
+    // Submit should succeed
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => {
+      expect(onSubmit).toHaveBeenCalledTimes(1);
+    });
+
+    const submittedData = onSubmit.mock.calls[0][0];
+    expect(submittedData.roleMapping.rules).toHaveLength(0);
   });
 });

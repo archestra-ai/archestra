@@ -139,11 +139,14 @@ export function EditIdentityProviderDialog({
   const onSubmit = useCallback(
     async (data: IdentityProviderFormValues) => {
       if (!provider) return;
-      await updateIdentityProvider.mutateAsync({
+      const result = await updateIdentityProvider.mutateAsync({
         id: provider.id,
         data,
       });
-      onOpenChange(false);
+      // Only close the dialog if update succeeded (result is not null)
+      if (result) {
+        onOpenChange(false);
+      }
     },
     [provider, updateIdentityProvider, onOpenChange],
   );

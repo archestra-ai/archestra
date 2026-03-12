@@ -56,13 +56,6 @@ export function OidcConfigForm({
 
   return (
     <div className="space-y-6">
-      <div>
-        <h3 className="text-lg font-medium">Identity Provider Configuration</h3>
-        <p className="text-sm text-muted-foreground">
-          Configure your OpenID Connect provider settings.
-        </p>
-      </div>
-
       <div className="grid gap-4">
         {!hideProviderId && (
           <FormField

@@ -1,7 +1,7 @@
 import config from "@/config";
 import logger from "@/logging";
 import { TaskModel } from "@/models";
-import { metrics } from "@/observability";
+import * as metrics from "@/observability/metrics";
 import type { InsertTask, Task } from "@/types/task";
 import PERIODIC_TASK_DEFINITIONS from "./periodic-tasks";
 

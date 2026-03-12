@@ -7,7 +7,7 @@ import {
   KbDocumentModel,
   KnowledgeBaseConnectorModel,
 } from "@/models";
-import { metrics } from "@/observability";
+import * as metrics from "@/observability/metrics";
 import { secretManager } from "@/secrets-manager";
 import { taskQueueService } from "@/task-queue";
 import type { AclEntry } from "@/types/kb-document";

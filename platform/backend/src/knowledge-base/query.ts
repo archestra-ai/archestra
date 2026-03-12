@@ -3,7 +3,7 @@ import config from "@/config";
 import logger from "@/logging";
 import { KbChunkModel } from "@/models";
 import type { VectorSearchResult } from "@/models/kb-chunk";
-import { metrics } from "@/observability";
+import * as metrics from "@/observability/metrics";
 import type { AclEntry } from "@/types/kb-document";
 import {
   buildEmbeddingInteraction,

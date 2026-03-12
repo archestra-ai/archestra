@@ -1,7 +1,7 @@
 import { embeddingService } from "@/knowledge-base";
 import logger from "@/logging";
 import { ConnectorRunModel, KnowledgeBaseConnectorModel } from "@/models";
-import { metrics } from "@/observability";
+import * as metrics from "@/observability/metrics";
 
 export async function handleBatchEmbedding(
   payload: Record<string, unknown>,

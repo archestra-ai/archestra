@@ -4,7 +4,6 @@ import {
   TOOL_SWAP_AGENT_FULL_NAME,
   TOOL_TODO_WRITE_FULL_NAME,
 } from "@shared";
-import { useSession } from "@/lib/auth.query";
 import type { ChatStatus, DynamicToolUIPart, ToolUIPart } from "ai";
 import {
   Fragment,
@@ -35,7 +34,7 @@ import {
   ToolOutput,
 } from "@/components/ai-elements/tool";
 import { Button } from "@/components/ui/button";
-import { useHasPermissions } from "@/lib/auth.query";
+import { useHasPermissions, useSession } from "@/lib/auth.query";
 import { useUpdateChatMessage } from "@/lib/chat-message.query";
 import {
   extractCatalogIdFromInstallUrl,

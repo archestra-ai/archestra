@@ -324,7 +324,9 @@ function ChatSessionHook({
     sendAutomaticallyWhen: ({ messages: msgs }) => {
       // Don't auto-resubmit after swap_agent — the poke in onFinish handles it
       if (swapAgentPendingRef.current) return false;
-      return lastAssistantMessageIsCompleteWithApprovalResponses({ messages: msgs });
+      return lastAssistantMessageIsCompleteWithApprovalResponses({
+        messages: msgs,
+      });
     },
   } as Parameters<typeof useChat>[0]);
 

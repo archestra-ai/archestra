@@ -23,7 +23,7 @@
     "test:e2e:ui": "turbo test:e2e:ui",
     "check:ci": "turbo check:ci",
     "license-check": "tsx standalone-scripts/license-check.ts",
-    "codegen": "CODEGEN=true turbo codegen",
+    "codegen": "CODEGEN=true turbo codegen && python3 dev/grafana/generate-pg-dashboard-variants.py",
     "db:generate": "turbo db:generate --ui=tui",
     "db:migrate": "turbo db:migrate",
     "db:push": "turbo db:push",

@@ -57,15 +57,15 @@ describe("useTypingAnimation", () => {
     });
     expect(result.current.text).toBe("Ab");
 
-    // Still "Ab" during pause (10s)
+    // Still "Ab" during pause (5s)
     act(() => {
-      vi.advanceTimersByTime(5000);
+      vi.advanceTimersByTime(2500);
     });
     expect(result.current.text).toBe("Ab");
 
-    // After 10s pause, trigger delete phase
+    // After 5s pause, trigger delete phase
     act(() => {
-      vi.advanceTimersByTime(5000);
+      vi.advanceTimersByTime(2500);
     });
 
     // Delete one char (30ms tick)

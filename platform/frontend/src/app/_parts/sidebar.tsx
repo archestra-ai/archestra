@@ -47,17 +47,8 @@ import {
   SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { useIsAuthenticated } from "@/lib/auth.hook";
-import {
-  useHasPermissions,
-  usePermissionMap,
-  useSession,
-} from "@/lib/auth.query";
+import { useHasPermissions, usePermissionMap } from "@/lib/auth.query";
 import config from "@/lib/config";
 import { useEnterpriseFeature } from "@/lib/config.query";
 import { useGithubStars } from "@/lib/github.query";
@@ -402,9 +393,7 @@ const NavSecondary = ({
 export function AppSidebar() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const { state: sidebarState } = useSidebar();
   const isAuthenticated = useIsAuthenticated();
-  const { data: session } = useSession();
   const { data: starCount } = useGithubStars();
   const formattedStarCount = starCount ?? "";
   const permissionMap = usePermissionMap(requiredPagePermissionsMap);
@@ -508,38 +497,29 @@ export function AppSidebar() {
         <SignedIn>
           <SidebarGroup className="mt-auto p-0">
             <SidebarGroupContent>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div
-                    data-testid={E2eTestId.SidebarUserProfile}
-                    className={cn(
-                      "overflow-hidden",
-                      // Collapsed: hide text/chevron, show only avatar circle
-                      "group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:justify-center",
-                      "group-data-[collapsible=icon]:[&_button]:size-7 group-data-[collapsible=icon]:[&_button]:min-w-0 group-data-[collapsible=icon]:[&_button]:rounded-full group-data-[collapsible=icon]:[&_button]:p-0",
-                      "group-data-[collapsible=icon]:[&_[data-slot=avatar]]:size-7",
-                      "group-data-[collapsible=icon]:[&_[data-slot=avatar-fallback]]:text-[9px]",
-                      "group-data-[collapsible=icon]:[&_button>div]:gap-0",
-                      "group-data-[collapsible=icon]:[&_button>div>div:not([data-slot=avatar])]:hidden",
-                      "group-data-[collapsible=icon]:[&_button>svg]:hidden",
-                    )}
-                  >
-                    <UserButton
-                      size="default"
-                      align="center"
-                      side="top"
-                      className="w-full bg-transparent hover:bg-transparent text-foreground"
-                      disableDefaultLinks
-                      additionalLinks={userMenuLinks}
-                    />
-                  </div>
-                </TooltipTrigger>
-                {sidebarState === "collapsed" && (
-                  <TooltipContent side="right">
-                    {session?.user?.name || session?.user?.email || "Account"}
-                  </TooltipContent>
+              <div
+                data-testid={E2eTestId.SidebarUserProfile}
+                className={cn(
+                  "overflow-hidden",
+                  // Collapsed: hide text/chevron, show only avatar circle
+                  "group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:justify-center",
+                  "group-data-[collapsible=icon]:[&_button]:size-7 group-data-[collapsible=icon]:[&_button]:min-w-0 group-data-[collapsible=icon]:[&_button]:rounded-full group-data-[collapsible=icon]:[&_button]:p-0",
+                  "group-data-[collapsible=icon]:[&_[data-slot=avatar]]:size-7",
+                  "group-data-[collapsible=icon]:[&_[data-slot=avatar-fallback]]:text-[9px]",
+                  "group-data-[collapsible=icon]:[&_button>div]:gap-0",
+                  "group-data-[collapsible=icon]:[&_button>div>div:not([data-slot=avatar])]:hidden",
+                  "group-data-[collapsible=icon]:[&_button>svg]:hidden",
                 )}
-              </Tooltip>
+              >
+                <UserButton
+                  size="default"
+                  align="center"
+                  side="top"
+                  className="w-full bg-transparent hover:bg-transparent text-foreground"
+                  disableDefaultLinks
+                  additionalLinks={userMenuLinks}
+                />
+              </div>
             </SidebarGroupContent>
           </SidebarGroup>
         </SignedIn>

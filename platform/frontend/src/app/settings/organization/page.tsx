@@ -205,23 +205,24 @@ export default function OrganizationSettingsPage() {
         <h3 className="text-lg font-medium mb-4">Authentication</h3>
         <div className="space-y-6">
           <Card>
-            <CardHeader>
-              <CardTitle>Two-Factor Authentication</CardTitle>
-              <CardDescription>
-                Enable or disable two-factor authentication for your
-                organization.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center justify-between">
-                <Label htmlFor="showTwoFactor">Show 2FA setup to members</Label>
-                <Switch
-                  id="showTwoFactor"
-                  checked={effectiveShowTwoFactor}
-                  onCheckedChange={(checked) => setShowTwoFactor(checked)}
-                />
+            <div className="flex items-center justify-between gap-4 px-6 py-4">
+              <div>
+                <Label
+                  htmlFor="showTwoFactor"
+                  className="text-base font-semibold"
+                >
+                  Two-Factor Authentication
+                </Label>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Show 2FA setup to members in their authentication settings.
+                </p>
               </div>
-            </CardContent>
+              <Switch
+                id="showTwoFactor"
+                checked={effectiveShowTwoFactor}
+                onCheckedChange={(checked) => setShowTwoFactor(checked)}
+              />
+            </div>
           </Card>
 
           <OrganizationTokenSection />

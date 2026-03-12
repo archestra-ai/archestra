@@ -66,9 +66,9 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   securitySettings: ["read", "update"],
 
   // UI behavior resources
-  simpleView: ["read"],
-  chatAgentPicker: ["read"],
-  chatProviderSettings: ["read"],
+  simpleView: ["enable"],
+  chatAgentPicker: ["enable"],
+  chatProviderSettings: ["enable"],
 
   // better-auth internal resource — not exposed to users, kept for ACL compatibility
   organization: ["update", "delete"],
@@ -122,8 +122,8 @@ export const editorPermissions: Record<Resource, Action[]> = {
   identityProvider: [],
   ac: [],
   simpleView: [],
-  chatAgentPicker: ["read"],
-  chatProviderSettings: ["read"],
+  chatAgentPicker: ["enable"],
+  chatProviderSettings: ["enable"],
   organization: [],
 };
 
@@ -166,7 +166,7 @@ export const memberPermissions: Record<Resource, Action[]> = {
   securitySettings: [],
 
   // UI behavior
-  simpleView: ["read"],
+  simpleView: ["enable"],
   chatAgentPicker: [],
   chatProviderSettings: [],
 
@@ -323,9 +323,9 @@ export const permissionDescriptions: Record<string, string> = {
     "Modify knowledge settings (embedding and reranking models)",
 
   // UI behavior
-  "simpleView:read": "Sidebar is collapsed by default on page load",
-  "chatAgentPicker:read": "Show agent picker in chat",
-  "chatProviderSettings:read": "Show model and API key selectors in chat",
+  "simpleView:enable": "Sidebar is collapsed by default on page load",
+  "chatAgentPicker:enable": "Show agent picker in chat",
+  "chatProviderSettings:enable": "Show model and API key selectors in chat",
 };
 
 /**

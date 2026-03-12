@@ -3,7 +3,7 @@ title: "Access Control"
 category: Administration
 description: "Role-based access control (RBAC) system for managing user permissions in Archestra"
 order: 1
-lastUpdated: 2026-03-11
+lastUpdated: 2026-03-12
 ---
 <!--
 Check ../docs_writer_prompt.md before changing this file.
@@ -58,6 +58,8 @@ Full access to core resources and settings, but cannot manage users, roles, or i
 | Secrets | `read` |
 | Organization Settings | `read`, `update` |
 | Security Settings | `read`, `update` |
+| Chat Agent Picker | `enable` |
+| Chat Provider Settings | `enable` |
 
 ### Member
 
@@ -77,6 +79,7 @@ Can manage agents, tools, and chat, with read-only access to most other resource
 | Dual LLM Results | `read` |
 | Chats | `read`, `create`, `update`, `delete` |
 | Teams | `read` |
+| Simple View | `enable` |
 
 
 ## Custom Roles
@@ -109,6 +112,8 @@ The following table lists all available permissions that can be assigned to cust
 | `chat:create` | Start new chat conversations |
 | `chat:update` | Edit chat messages and conversation settings |
 | `chat:delete` | Delete chat conversations |
+| `chatAgentPicker:enable` | Show agent picker in chat |
+| `chatProviderSettings:enable` | Show model and API key selectors in chat |
 | `dualLlmConfig:read` | View dual LLM security configurations |
 | `dualLlmConfig:create` | Create new dual LLM configurations |
 | `dualLlmConfig:update` | Modify dual LLM configurations |
@@ -177,6 +182,7 @@ The following table lists all available permissions that can be assigned to cust
 | `secret:update` | Modify secrets manager settings and test connectivity |
 | `securitySettings:read` | View security settings (tool policy, file uploads) |
 | `securitySettings:update` | Modify security settings |
+| `simpleView:enable` | Sidebar is collapsed by default on page load |
 | `team:read` | View teams and their members |
 | `team:create` | Create new teams |
 | `team:update` | Modify team settings |

@@ -70,7 +70,7 @@ export function useTypingAnimation(texts: string[] | null | undefined): {
 
         if (charIndexRef.current >= fullText.length) {
           phaseRef.current = "PAUSED";
-          timerRef.current = setTimeout(tick, 10000);
+          timerRef.current = setTimeout(tick, 5000);
         } else {
           timerRef.current = setTimeout(tick, 50);
         }

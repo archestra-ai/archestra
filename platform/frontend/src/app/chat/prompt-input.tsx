@@ -163,16 +163,16 @@ const PromptInputContent = ({
 
   // Chat placeholders from organization settings
   const { data: orgData } = useOrganization();
-  const { text: animatedPlaceholder } = useTypingAnimation(
+  const { text: animatedPlaceholder, isAnimating } = useTypingAnimation(
     orgData?.chatPlaceholders,
   );
 
   // RBAC: check if user can see agent picker and provider settings in chat
   const { data: canSeeAgentPicker } = useHasPermissions({
-    chatAgentPicker: ["read"],
+    chatAgentPicker: ["enable"],
   });
   const { data: canSeeProviderSettings } = useHasPermissions({
-    chatProviderSettings: ["read"],
+    chatProviderSettings: ["enable"],
   });
 
   const storageKey = conversationId
@@ -264,7 +264,9 @@ const PromptInputContent = ({
         ) : (
           <PromptInputTextarea
             placeholder={
-              animatedPlaceholder || "What would you like to get done?"
+              isAnimating
+                ? animatedPlaceholder
+                : "What would you like to get done?"
             }
             ref={textareaRef}
             className="px-4"

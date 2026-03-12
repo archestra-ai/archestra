@@ -118879,7 +118879,8 @@
                               "delete",
                               "team-admin",
                               "admin",
-                              "cancel"
+                              "cancel",
+                              "enable"
                             ]
                           }
                         }
@@ -119154,7 +119155,8 @@
                           "delete",
                           "team-admin",
                           "admin",
-                          "cancel"
+                          "cancel",
+                          "enable"
                         ]
                       }
                     }
@@ -119202,7 +119204,8 @@
                             "delete",
                             "team-admin",
                             "admin",
-                            "cancel"
+                            "cancel",
+                            "enable"
                           ]
                         }
                       }
@@ -119512,7 +119515,8 @@
                             "delete",
                             "team-admin",
                             "admin",
-                            "cancel"
+                            "cancel",
+                            "enable"
                           ]
                         }
                       }
@@ -119786,7 +119790,8 @@
                           "delete",
                           "team-admin",
                           "admin",
-                          "cancel"
+                          "cancel",
+                          "enable"
                         ]
                       }
                     }
@@ -119854,7 +119859,8 @@
                             "delete",
                             "team-admin",
                             "admin",
-                            "cancel"
+                            "cancel",
+                            "enable"
                           ]
                         }
                       }
@@ -133609,7 +133615,8 @@
                         "delete",
                         "team-admin",
                         "admin",
-                        "cancel"
+                        "cancel",
+                        "enable"
                       ]
                     }
                   }

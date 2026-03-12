@@ -17,6 +17,7 @@ export const actions = [
   "team-admin",
   "admin",
   "cancel",
+  "enable",
 ] as const;
 
 export const resources = [
@@ -143,12 +144,7 @@ export const resourceDescriptions: Record<Resource, string> = {
  * Resources that are internal to better-auth and should not be shown
  * in user-facing documentation or the RBAC UI.
  */
-export const internalResources: Resource[] = [
-  "organization",
-  "simpleView",
-  "chatAgentPicker",
-  "chatProviderSettings",
-];
+export const internalResources: Resource[] = ["organization"];
 
 /**
  * Groups resources by category for the RBAC UI (role builder and permissions card).

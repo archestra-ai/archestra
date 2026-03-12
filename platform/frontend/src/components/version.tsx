@@ -20,6 +20,7 @@ export function Version({ inline = false }: VersionProps) {
   const [shouldHide, setShouldHide] = useState(false);
 
   const isSettingsPage = pathname.startsWith("/settings");
+  const isChatPage = pathname.startsWith("/chat");
   const footerText = organization?.footerText;
 
   const hasNewVersion = useMemo(() => {
@@ -54,12 +55,23 @@ export function Version({ inline = false }: VersionProps) {
   }
 
   // Show custom footer text when set and NOT on settings pages
-  if (footerText && !isSettingsPage && !inline) {
+  if (footerText && !isSettingsPage) {
     return (
-      <div className="text-xs text-muted-foreground text-center py-4">
+      <div
+        className={
+          inline
+            ? "text-xs text-muted-foreground"
+            : "text-xs text-muted-foreground text-center py-4"
+        }
+      >
         {footerText}
       </div>
     );
+  }
+
+  // Hide version on chat pages when no custom footer text is set
+  if (isChatPage) {
+    return null;
   }
 
   return (

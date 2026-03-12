@@ -514,7 +514,7 @@ describe("ServiceNowConnector", () => {
       // Should contain a date roughly 6 months ago
       const match = url.match(/sys_updated_on>(\d{4}-\d{2}-\d{2})/);
       expect(match).toBeTruthy();
-      const syncDate = new Date(match?.[1]);
+      const syncDate = new Date(match?.[1] as string);
       const sixMonthsAgo = new Date();
       sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
       // Allow 1 day tolerance
@@ -540,7 +540,7 @@ describe("ServiceNowConnector", () => {
       const url = decodeURIComponent(mockFetch.mock.calls[0][0] as string);
       const match = url.match(/sys_updated_on>(\d{4}-\d{2}-\d{2})/);
       expect(match).toBeTruthy();
-      const syncDate = new Date(match?.[1]);
+      const syncDate = new Date(match?.[1] as string);
       const threeMonthsAgo = new Date();
       threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
       expect(

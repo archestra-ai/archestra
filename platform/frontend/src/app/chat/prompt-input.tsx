@@ -264,9 +264,11 @@ const PromptInputContent = ({
         ) : (
           <PromptInputTextarea
             placeholder={
-              isAnimating
-                ? animatedPlaceholder
-                : "What would you like to get done?"
+              conversationId
+                ? "Ask a follow-up..."
+                : isAnimating
+                  ? animatedPlaceholder
+                  : "What would you like to get done?"
             }
             ref={textareaRef}
             className="px-4"

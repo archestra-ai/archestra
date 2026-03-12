@@ -138,7 +138,6 @@ const libreBaskervilleFont = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "Archestra.AI",
   description: "Enterprise MCP Platform for AI Agents",
 };
 

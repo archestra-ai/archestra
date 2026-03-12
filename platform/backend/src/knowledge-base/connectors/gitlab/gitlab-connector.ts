@@ -70,6 +70,10 @@ export class GitlabConnector extends BaseConnector {
     const parsed = parseGitlabConfig(params.config);
     if (!parsed) return null;
 
+    // Markdown file count cannot be estimated without fetching the full repo tree,
+    // so skip estimation entirely when markdown syncing is enabled.
+    if (parsed.includeMarkdownFiles) return null;
+
     this.log.debug(
       { projectIds: parsed.projectIds, groupId: parsed.groupId },
       "Estimating total items",
@@ -379,9 +383,14 @@ export class GitlabConnector extends BaseConnector {
   }): AsyncGenerator<ConnectorSyncBatch> {
     const { client, project, checkpoint, isLastGroup } = params;
 
-    this.log.debug(
+    this.log.info(
       { project: project.pathWithNamespace },
-      "Syncing markdown files",
+      "Starting markdown file sync",
+    );
+
+    this.log.debug(
+      { project: project.pathWithNamespace, ref: "HEAD" },
+      "Fetching repository tree",
     );
 
     // biome-ignore lint/suspicious/noExplicitAny: Gitbeaker Camelize types
@@ -392,12 +401,13 @@ export class GitlabConnector extends BaseConnector {
         // biome-ignore lint/suspicious/noExplicitAny: Gitbeaker Camelize types
       })) as any[];
     } catch (err) {
-      this.log.warn(
+      this.log.error(
         {
           project: project.pathWithNamespace,
+          ref: "HEAD",
           error: extractErrorMessage(err),
         },
-        "Failed to fetch repo tree, skipping markdown sync",
+        "Failed to fetch repository tree, skipping markdown sync",
       );
       yield {
         documents: [],
@@ -416,18 +426,46 @@ export class GitlabConnector extends BaseConnector {
       (item) => item.type === "blob" && isMarkdownFile(String(item.path ?? "")),
     );
 
-    this.log.debug(
+    this.log.info(
       {
         project: project.pathWithNamespace,
+        ref: "HEAD",
+        totalTreeItems: treeItems.length,
         markdownFileCount: markdownFiles.length,
       },
-      "Found markdown files",
+      "Found markdown files in project",
     );
 
-    const batchSize = BATCH_SIZE;
-    for (let i = 0; i < markdownFiles.length; i += batchSize) {
-      const batch = markdownFiles.slice(i, i + batchSize);
+    if (markdownFiles.length === 0) {
+      yield {
+        documents: [],
+        failures: this.flushFailures(),
+        checkpoint: buildCheckpoint({
+          type: "gitlab",
+          itemUpdatedAt: null,
+          previousLastSyncedAt: checkpoint.lastSyncedAt,
+        }),
+        hasMore: !isLastGroup,
+      };
+      return;
+    }
+
+    for (let i = 0; i < markdownFiles.length; i += BATCH_SIZE) {
+      const batch = markdownFiles.slice(i, i + BATCH_SIZE);
+      const batchNumber = Math.floor(i / BATCH_SIZE) + 1;
+      const totalBatches = Math.ceil(markdownFiles.length / BATCH_SIZE);
       const documents: ConnectorDocument[] = [];
+
+      this.log.debug(
+        {
+          project: project.pathWithNamespace,
+          ref: "HEAD",
+          batch: batchNumber,
+          totalBatches,
+          batchSize: batch.length,
+        },
+        "Fetching markdown file contents",
+      );
 
       for (const file of batch) {
         await this.rateLimit();
@@ -444,30 +482,31 @@ export class GitlabConnector extends BaseConnector {
         }
       }
 
-      const hasMoreFiles = i + batchSize < markdownFiles.length;
+      const failures = this.flushFailures();
+      const hasMoreFiles = i + BATCH_SIZE < markdownFiles.length;
+
+      this.log.info(
+        {
+          project: project.pathWithNamespace,
+          ref: "HEAD",
+          batch: batchNumber,
+          totalBatches,
+          documentsIndexed: documents.length,
+          failureCount: failures.length,
+          hasMore: hasMoreFiles || !isLastGroup,
+        },
+        "Markdown file batch completed",
+      );
 
       yield {
         documents,
-        failures: this.flushFailures(),
+        failures,
         checkpoint: buildCheckpoint({
           type: "gitlab",
           itemUpdatedAt: null,
           previousLastSyncedAt: checkpoint.lastSyncedAt,
         }),
         hasMore: hasMoreFiles || !isLastGroup,
-      };
-    }
-
-    if (markdownFiles.length === 0) {
-      yield {
-        documents: [],
-        failures: this.flushFailures(),
-        checkpoint: buildCheckpoint({
-          type: "gitlab",
-          itemUpdatedAt: null,
-          previousLastSyncedAt: checkpoint.lastSyncedAt,
-        }),
-        hasMore: !isLastGroup,
       };
     }
   }

@@ -76,6 +76,10 @@ export class GithubConnector extends BaseConnector {
     const parsed = parseGithubConfig(params.config);
     if (!parsed) return null;
 
+    // Markdown file count cannot be estimated without fetching the full repo tree,
+    // so skip estimation entirely when markdown syncing is enabled.
+    if (parsed.includeMarkdownFiles) return null;
+
     this.log.debug(
       { owner: parsed.owner, repos: parsed.repos },
       "Estimating total items",
@@ -304,14 +308,20 @@ export class GithubConnector extends BaseConnector {
     isLastGroup: boolean;
   }): AsyncGenerator<ConnectorSyncBatch> {
     const { octokit, repo, checkpoint, isLastGroup } = params;
+    const repoFullName = `${repo.owner}/${repo.name}`;
 
-    this.log.debug(
-      { repo: `${repo.owner}/${repo.name}` },
-      "Syncing markdown files",
+    this.log.info(
+      { repo: repoFullName },
+      "Starting markdown file sync",
     );
 
     let treeSha: string;
     let branch = "main";
+
+    this.log.debug(
+      { repo: repoFullName, branch: "main" },
+      "Resolving branch ref",
+    );
     try {
       const refResponse = await octokit.rest.git.getRef({
         owner: repo.owner,
@@ -319,7 +329,15 @@ export class GithubConnector extends BaseConnector {
         ref: "heads/main",
       });
       treeSha = refResponse.data.object.sha;
-    } catch {
+      this.log.debug(
+        { repo: repoFullName, branch: "main", treeSha },
+        "Resolved branch ref",
+      );
+    } catch (mainErr) {
+      this.log.info(
+        { repo: repoFullName, branch: "main", error: extractErrorMessage(mainErr) },
+        "Branch 'main' not found, trying 'master'",
+      );
       try {
         const refResponse = await octokit.rest.git.getRef({
           owner: repo.owner,
@@ -328,13 +346,18 @@ export class GithubConnector extends BaseConnector {
         });
         treeSha = refResponse.data.object.sha;
         branch = "master";
-      } catch (err) {
-        this.log.warn(
+        this.log.debug(
+          { repo: repoFullName, branch: "master", treeSha },
+          "Resolved branch ref",
+        );
+      } catch (masterErr) {
+        this.log.error(
           {
-            repo: `${repo.owner}/${repo.name}`,
-            error: extractErrorMessage(err),
+            repo: repoFullName,
+            mainError: extractErrorMessage(mainErr),
+            masterError: extractErrorMessage(masterErr),
           },
-          "Could not resolve default branch, skipping markdown sync",
+          "Could not resolve default branch (tried 'main' and 'master'), skipping markdown sync",
         );
         yield {
           documents: [],
@@ -350,6 +373,11 @@ export class GithubConnector extends BaseConnector {
       }
     }
 
+    this.log.debug(
+      { repo: repoFullName, branch, treeSha },
+      "Fetching repository tree",
+    );
+
     let treeItems: Array<{ path: string; sha: string }>;
     try {
       const treeResponse = await octokit.rest.git.getTree({
@@ -358,7 +386,8 @@ export class GithubConnector extends BaseConnector {
         tree_sha: treeSha,
         recursive: "true",
       });
-      treeItems = treeResponse.data.tree
+      const allItems = treeResponse.data.tree;
+      treeItems = allItems
         .filter(
           (item) =>
             item.type === "blob" &&
@@ -370,13 +399,25 @@ export class GithubConnector extends BaseConnector {
           path: item.path as string,
           sha: item.sha as string,
         }));
-    } catch (err) {
-      this.log.warn(
+
+      this.log.info(
         {
-          repo: `${repo.owner}/${repo.name}`,
+          repo: repoFullName,
+          branch,
+          totalTreeItems: allItems.length,
+          markdownFileCount: treeItems.length,
+        },
+        "Found markdown files in repository",
+      );
+    } catch (err) {
+      this.log.error(
+        {
+          repo: repoFullName,
+          branch,
+          treeSha,
           error: extractErrorMessage(err),
         },
-        "Failed to fetch repo tree, skipping markdown sync",
+        "Failed to fetch repository tree, skipping markdown sync",
       );
       yield {
         documents: [],
@@ -391,17 +432,36 @@ export class GithubConnector extends BaseConnector {
       return;
     }
 
-    this.log.debug(
-      {
-        repo: `${repo.owner}/${repo.name}`,
-        markdownFileCount: treeItems.length,
-      },
-      "Found markdown files",
-    );
+    if (treeItems.length === 0) {
+      yield {
+        documents: [],
+        failures: this.flushFailures(),
+        checkpoint: buildCheckpoint({
+          type: "github",
+          itemUpdatedAt: null,
+          previousLastSyncedAt: checkpoint.lastSyncedAt,
+        }),
+        hasMore: !isLastGroup,
+      };
+      return;
+    }
 
     for (let i = 0; i < treeItems.length; i += BATCH_SIZE) {
       const batch = treeItems.slice(i, i + BATCH_SIZE);
+      const batchNumber = Math.floor(i / BATCH_SIZE) + 1;
+      const totalBatches = Math.ceil(treeItems.length / BATCH_SIZE);
       const documents: ConnectorDocument[] = [];
+
+      this.log.debug(
+        {
+          repo: repoFullName,
+          branch,
+          batch: batchNumber,
+          totalBatches,
+          batchSize: batch.length,
+        },
+        "Fetching markdown file contents",
+      );
 
       for (const file of batch) {
         await this.rateLimit();
@@ -417,30 +477,31 @@ export class GithubConnector extends BaseConnector {
         }
       }
 
+      const failures = this.flushFailures();
       const hasMoreFiles = i + BATCH_SIZE < treeItems.length;
+
+      this.log.info(
+        {
+          repo: repoFullName,
+          branch,
+          batch: batchNumber,
+          totalBatches,
+          documentsIndexed: documents.length,
+          failureCount: failures.length,
+          hasMore: hasMoreFiles || !isLastGroup,
+        },
+        "Markdown file batch completed",
+      );
 
       yield {
         documents,
-        failures: this.flushFailures(),
+        failures,
         checkpoint: buildCheckpoint({
           type: "github",
           itemUpdatedAt: null,
           previousLastSyncedAt: checkpoint.lastSyncedAt,
         }),
         hasMore: hasMoreFiles || !isLastGroup,
-      };
-    }
-
-    if (treeItems.length === 0) {
-      yield {
-        documents: [],
-        failures: this.flushFailures(),
-        checkpoint: buildCheckpoint({
-          type: "github",
-          itemUpdatedAt: null,
-          previousLastSyncedAt: checkpoint.lastSyncedAt,
-        }),
-        hasMore: !isLastGroup,
       };
     }
   }

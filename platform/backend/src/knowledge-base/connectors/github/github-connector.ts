@@ -149,6 +149,7 @@ export class GithubConnector extends BaseConnector {
     for (let repoIdx = 0; repoIdx < repos.length; repoIdx++) {
       const repo = repos[repoIdx];
       const isLastRepo = repoIdx === repos.length - 1;
+      const hasMarkdown = parsed.includeMarkdownFiles === true;
 
       if (parsed.includeIssues !== false) {
         yield* this.syncRepoItems({
@@ -157,7 +158,8 @@ export class GithubConnector extends BaseConnector {
           repo,
           checkpoint,
           kind: "issue",
-          isLastGroup: isLastRepo && parsed.includePullRequests === false,
+          isLastGroup:
+            isLastRepo && parsed.includePullRequests === false && !hasMarkdown,
         });
       }
 
@@ -168,6 +170,15 @@ export class GithubConnector extends BaseConnector {
           repo,
           checkpoint,
           kind: "pr",
+          isLastGroup: isLastRepo && !hasMarkdown,
+        });
+      }
+
+      if (hasMarkdown) {
+        yield* this.syncRepoMarkdownFiles({
+          octokit,
+          repo,
+          checkpoint,
           isLastGroup: isLastRepo,
         });
       }
@@ -286,6 +297,151 @@ export class GithubConnector extends BaseConnector {
       };
     }
   }
+  private async *syncRepoMarkdownFiles(params: {
+    octokit: Octokit;
+    repo: { owner: string; name: string; htmlUrl: string };
+    checkpoint: GithubCheckpoint;
+    isLastGroup: boolean;
+  }): AsyncGenerator<ConnectorSyncBatch> {
+    const { octokit, repo, checkpoint, isLastGroup } = params;
+
+    this.log.debug(
+      { repo: `${repo.owner}/${repo.name}` },
+      "Syncing markdown files",
+    );
+
+    let treeSha: string;
+    try {
+      const refResponse = await octokit.rest.git.getRef({
+        owner: repo.owner,
+        repo: repo.name,
+        ref: "heads/main",
+      });
+      treeSha = refResponse.data.object.sha;
+    } catch {
+      try {
+        const refResponse = await octokit.rest.git.getRef({
+          owner: repo.owner,
+          repo: repo.name,
+          ref: "heads/master",
+        });
+        treeSha = refResponse.data.object.sha;
+      } catch (err) {
+        this.log.warn(
+          {
+            repo: `${repo.owner}/${repo.name}`,
+            error: extractErrorMessage(err),
+          },
+          "Could not resolve default branch, skipping markdown sync",
+        );
+        yield {
+          documents: [],
+          failures: this.flushFailures(),
+          checkpoint: buildCheckpoint({
+            type: "github",
+            itemUpdatedAt: null,
+            previousLastSyncedAt: checkpoint.lastSyncedAt,
+          }),
+          hasMore: !isLastGroup,
+        };
+        return;
+      }
+    }
+
+    let treeItems: Array<{ path: string; sha: string }>;
+    try {
+      const treeResponse = await octokit.rest.git.getTree({
+        owner: repo.owner,
+        repo: repo.name,
+        tree_sha: treeSha,
+        recursive: "true",
+      });
+      treeItems = treeResponse.data.tree
+        .filter(
+          (item) =>
+            item.type === "blob" &&
+            item.path &&
+            isMarkdownFile(item.path) &&
+            item.sha,
+        )
+        .map((item) => ({
+          path: item.path as string,
+          sha: item.sha as string,
+        }));
+    } catch (err) {
+      this.log.warn(
+        {
+          repo: `${repo.owner}/${repo.name}`,
+          error: extractErrorMessage(err),
+        },
+        "Failed to fetch repo tree, skipping markdown sync",
+      );
+      yield {
+        documents: [],
+        failures: this.flushFailures(),
+        checkpoint: buildCheckpoint({
+          type: "github",
+          itemUpdatedAt: null,
+          previousLastSyncedAt: checkpoint.lastSyncedAt,
+        }),
+        hasMore: !isLastGroup,
+      };
+      return;
+    }
+
+    this.log.debug(
+      {
+        repo: `${repo.owner}/${repo.name}`,
+        markdownFileCount: treeItems.length,
+      },
+      "Found markdown files",
+    );
+
+    for (let i = 0; i < treeItems.length; i += BATCH_SIZE) {
+      const batch = treeItems.slice(i, i + BATCH_SIZE);
+      const documents: ConnectorDocument[] = [];
+
+      for (const file of batch) {
+        await this.rateLimit();
+        const content = await this.safeItemFetch({
+          fetch: () => getFileContent(octokit, repo, file.path),
+          fallback: null,
+          itemId: file.path,
+          resource: "file_content",
+        });
+
+        if (content !== null) {
+          documents.push(markdownFileToDocument(file.path, content, repo));
+        }
+      }
+
+      const hasMoreFiles = i + BATCH_SIZE < treeItems.length;
+
+      yield {
+        documents,
+        failures: this.flushFailures(),
+        checkpoint: buildCheckpoint({
+          type: "github",
+          itemUpdatedAt: null,
+          previousLastSyncedAt: checkpoint.lastSyncedAt,
+        }),
+        hasMore: hasMoreFiles || !isLastGroup,
+      };
+    }
+
+    if (treeItems.length === 0) {
+      yield {
+        documents: [],
+        failures: this.flushFailures(),
+        checkpoint: buildCheckpoint({
+          type: "github",
+          itemUpdatedAt: null,
+          previousLastSyncedAt: checkpoint.lastSyncedAt,
+        }),
+        hasMore: !isLastGroup,
+      };
+    }
+  }
 }
 
 // ===== Module-level helpers =====
@@ -391,6 +547,49 @@ function shouldSkipItem(item: any, labelsToSkip?: string[]): boolean {
     (l: any) => (typeof l === "string" ? l : (l.name ?? "")),
   );
   return itemLabels.some((label) => labelsToSkip.includes(label));
+}
+
+function isMarkdownFile(path: string): boolean {
+  const lower = path.toLowerCase();
+  return lower.endsWith(".md") || lower.endsWith(".mdx");
+}
+
+async function getFileContent(
+  octokit: Octokit,
+  repo: { owner: string; name: string },
+  path: string,
+): Promise<string> {
+  const response = await octokit.rest.repos.getContent({
+    owner: repo.owner,
+    repo: repo.name,
+    path,
+  });
+
+  const data = response.data;
+  if (!("content" in data) || !data.content) {
+    throw new Error(`No content returned for ${path}`);
+  }
+
+  return Buffer.from(data.content, "base64").toString("utf-8");
+}
+
+function markdownFileToDocument(
+  filePath: string,
+  content: string,
+  repo: { owner: string; name: string; htmlUrl: string },
+): ConnectorDocument {
+  const fileName = filePath.split("/").pop() ?? filePath;
+  return {
+    id: `${repo.name}#file:${filePath}`,
+    title: `${fileName} (${repo.owner}/${repo.name})`,
+    content,
+    sourceUrl: `${repo.htmlUrl}/blob/main/${filePath}`,
+    metadata: {
+      repo: `${repo.owner}/${repo.name}`,
+      filePath,
+      kind: "markdown_file",
+    },
+  };
 }
 
 function itemToDocument(

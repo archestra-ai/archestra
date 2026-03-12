@@ -124,6 +124,27 @@ export function GitlabConfigFields({
 
       <FormField
         control={form.control}
+        name={`${prefix}.includeMarkdownFiles`}
+        render={({ field }) => (
+          <FormItem className="flex items-center justify-between rounded-lg border p-3">
+            <div className="space-y-0.5">
+              <FormLabel>Include Markdown Files</FormLabel>
+              <FormDescription>
+                Sync .md and .mdx files from repositories.
+              </FormDescription>
+            </div>
+            <FormControl>
+              <Switch
+                checked={field.value ?? false}
+                onCheckedChange={field.onChange}
+              />
+            </FormControl>
+          </FormItem>
+        )}
+      />
+
+      <FormField
+        control={form.control}
         name={`${prefix}.labelsToSkip`}
         render={({ field }) => (
           <FormItem>

@@ -29,10 +29,16 @@ describe("mcp server tools", () => {
     expect(tool?.title).toBe("Get MCP Server Tools");
   });
 
-  test("should have edit_mcp tool", () => {
-    const tool = tools.find((t) => t.name.endsWith("edit_mcp"));
+  test("should have edit_mcp_description tool", () => {
+    const tool = tools.find((t) => t.name.endsWith("edit_mcp_description"));
     expect(tool).toBeDefined();
-    expect(tool?.title).toBe("Edit MCP Server");
+    expect(tool?.title).toBe("Edit MCP Server Description");
+  });
+
+  test("should have edit_mcp_config tool", () => {
+    const tool = tools.find((t) => t.name.endsWith("edit_mcp_config"));
+    expect(tool).toBeDefined();
+    expect(tool?.title).toBe("Edit MCP Server Configuration");
   });
 
   test("should have create_mcp_server_installation_request tool", () => {
@@ -88,9 +94,9 @@ describe("mcp server tool execution", () => {
     expect((result.content[0] as any).text).toContain("No MCP servers found");
   });
 
-  test("edit_mcp returns error when id is missing", async () => {
+  test("edit_mcp_description returns error when id is missing", async () => {
     const result = await executeArchestraTool(
-      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}edit_mcp`,
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}edit_mcp_description`,
       {},
       mockContext,
     );
@@ -100,9 +106,9 @@ describe("mcp server tool execution", () => {
     );
   });
 
-  test("edit_mcp returns error when user/org context is missing", async () => {
+  test("edit_mcp_description returns error when user/org context is missing", async () => {
     const result = await executeArchestraTool(
-      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}edit_mcp`,
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}edit_mcp_description`,
       { id: "some-id" },
       mockContext,
     );
@@ -187,7 +193,7 @@ describe("mcp server tool execution", () => {
     expect(names).toContain("test_tool_2");
   });
 
-  test("edit_mcp updates an existing catalog item", async ({
+  test("edit_mcp_description updates an existing catalog item", async ({
     makeInternalMcpCatalog,
     makeUser,
     makeOrganization,
@@ -209,7 +215,7 @@ describe("mcp server tool execution", () => {
     };
 
     const result = await executeArchestraTool(
-      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}edit_mcp`,
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}edit_mcp_description`,
       {
         id: catalog.id,
         name: "Updated Name",

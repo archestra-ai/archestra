@@ -153,8 +153,8 @@ importers:
         specifier: ^3.0.7
         version: 3.0.7(@azure/identity@4.13.0)
       '@microsoft/msgraph-sdk':
-        specifier: 1.0.0-preview.77
-        version: 1.0.0-preview.77
+        specifier: 1.0.0-preview.80
+        version: 1.0.0-preview.80
       '@microsoft/msgraph-sdk-chats':
         specifier: 1.0.0-preview.77
         version: 1.0.0-preview.77
@@ -2006,23 +2006,23 @@ packages:
   '@microsoft/kiota-authentication-azure@1.0.0-preview.100':
     resolution: {integrity: sha512-RT6LtekPVaFYQ5JHOiMDrYEdsx6RyiRtoGz929m3iy+jS6W2dELWTO4mrtAG3Q+8Tczk1uUwP21tYy/Wyf07lw==}
 
-  '@microsoft/kiota-bundle@1.0.0-preview.99':
-    resolution: {integrity: sha512-AxvO+z6UgWMAT2NfXN36CMhAUm/39tUQt8o32axeEJDS/EvZINDAPstbQV+zK7bJRC8kCqUHhCE/fuHX2dXA+g==}
+  '@microsoft/kiota-bundle@1.0.0-preview.100':
+    resolution: {integrity: sha512-ejYzO9Fku/d5IyYYegdQbMQy9cJd8O9HT8TIUA3Ty/39bzNrGG5b6MltKwqr134jTbfMjraaRmh9wD8p246lhA==}
 
-  '@microsoft/kiota-http-fetchlibrary@1.0.0-preview.99':
-    resolution: {integrity: sha512-lIruiYf8L7DPG0Fm92QN5YK4zx4sh76EtTONUAqBCxt5AtEJ7KQceBajaXQsjfcndUAp9LmDVdqR44o8sc9/mA==}
+  '@microsoft/kiota-http-fetchlibrary@1.0.0-preview.100':
+    resolution: {integrity: sha512-uS2rhKKjbYiT8JWG8GGVOALB+s4HdDc9hg5tTZMVf3qY5b/us1OKLQ6WgW6USq/kZAuKKWkIq/BQgPCWbHtFTQ==}
 
-  '@microsoft/kiota-serialization-form@1.0.0-preview.99':
-    resolution: {integrity: sha512-BdXxqNfy+5yWTyxpBguqJYy6E9RRotrDClRcUO89okFcR5N6s6xenjsvGw++q9KWNi7qcHrqaG8xlRz1TLk81Q==}
+  '@microsoft/kiota-serialization-form@1.0.0-preview.100':
+    resolution: {integrity: sha512-SR/yWBtvKYhN2ARR4wVMFb91XgN32DBmLLQmtemdKgL1YWBxVCNAUP/qHbZhrTX7q4kh7jl/S9yrr1S8ySS7AA==}
 
-  '@microsoft/kiota-serialization-json@1.0.0-preview.99':
-    resolution: {integrity: sha512-kDmMYmB7XkRprlLviEynRPDkE45JDxqiuUopfBRMvNK4qhzFiJTXGLihZ2FG6fdVu9LbV3/W0QxbeGP35kDK6A==}
+  '@microsoft/kiota-serialization-json@1.0.0-preview.100':
+    resolution: {integrity: sha512-4qatf5j0Aeaakdw24jMuIX7W6mf/W2rU9UyAjkIrSjaB7W5n8gsUvhoTcRpPTAFN7pvzQkCbO7Z0paRfdYzhIw==}
 
-  '@microsoft/kiota-serialization-multipart@1.0.0-preview.99':
-    resolution: {integrity: sha512-cfviCAVTlZPD+MUgdTIgsX/IfHND+gKQhem3vJeo7l5Qqz2rvvVFXOHwECI19umO9Un1QFKe1V5wg+M+aj90+g==}
+  '@microsoft/kiota-serialization-multipart@1.0.0-preview.100':
+    resolution: {integrity: sha512-zwWoLZH6+KsAl05Ijd8HpbU+mct5wb0//ZCGdCkQ/UqsAaoe2xYSoKicxQbVGv9VvSTq0as7iVLwqDeqEI9rDw==}
 
-  '@microsoft/kiota-serialization-text@1.0.0-preview.99':
-    resolution: {integrity: sha512-gcBffQRI1soHVAiS4YjfMr3SQ9fC8xVUGMfarTTszU4PjpxyFOknaWoFdt/0rvMeavI9jOtbyvDKAf77cZyYIQ==}
+  '@microsoft/kiota-serialization-text@1.0.0-preview.100':
+    resolution: {integrity: sha512-x2Epz0StHLBkVJKeEmwrXSh6SJuxZ72VVBNO53uHUNZ/Y7X8tZuSQR7X74EO69mEi4zAF21X2jbkF9/dhlARog==}
 
   '@microsoft/microsoft-graph-client@3.0.7':
     resolution: {integrity: sha512-/AazAV/F+HK4LIywF9C+NYHcJo038zEnWkteilcxC1FM/uK/4NVGDKGrxx7nNq1ybspAroRKT4I1FHfxQzxkUw==}
@@ -2057,8 +2057,8 @@ packages:
   '@microsoft/msgraph-sdk-users@1.0.0-preview.77':
     resolution: {integrity: sha512-87S1udXhvzAnb/5vV3wlEI4cjOxHTE1W9ig0XxPBfdPplTsXgjToPfNR6Ac59uhrUav0KFAdGrTnIGtvAO5kkQ==}
 
-  '@microsoft/msgraph-sdk@1.0.0-preview.77':
-    resolution: {integrity: sha512-Yt2shpGa7+GFbj0tKTZcdV7dHb861fBaTAK5flbmHNaHcEbYOD7blSMBl+6s7rKJ6bfNxmFXwPZTM+xfeZnTWA==}
+  '@microsoft/msgraph-sdk@1.0.0-preview.80':
+    resolution: {integrity: sha512-FEVUDUjPWdOokc400+KV9Le/0euS7fhtqlHEgDeR4z6j+BJaXiTQTHM7Kg3VvskPq0Ps4Hamw2A1E/2eLZE7tg==}
 
   '@modelcontextprotocol/sdk@1.26.0':
     resolution: {integrity: sha512-Y5RmPncpiDtTXDbLKswIJzTqu2hyBKxTNsgKqKclDbhIgg1wgtf1fRuvxgTnRfcnxtvvgbIEcqUOzZrJ6iSReg==}
@@ -10749,37 +10749,37 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@microsoft/kiota-bundle@1.0.0-preview.99':
+  '@microsoft/kiota-bundle@1.0.0-preview.100':
     dependencies:
       '@microsoft/kiota-abstractions': 1.0.0-preview.100
-      '@microsoft/kiota-http-fetchlibrary': 1.0.0-preview.99
-      '@microsoft/kiota-serialization-form': 1.0.0-preview.99
-      '@microsoft/kiota-serialization-json': 1.0.0-preview.99
-      '@microsoft/kiota-serialization-multipart': 1.0.0-preview.99
-      '@microsoft/kiota-serialization-text': 1.0.0-preview.99
+      '@microsoft/kiota-http-fetchlibrary': 1.0.0-preview.100
+      '@microsoft/kiota-serialization-form': 1.0.0-preview.100
+      '@microsoft/kiota-serialization-json': 1.0.0-preview.100
+      '@microsoft/kiota-serialization-multipart': 1.0.0-preview.100
+      '@microsoft/kiota-serialization-text': 1.0.0-preview.100
 
-  '@microsoft/kiota-http-fetchlibrary@1.0.0-preview.99':
+  '@microsoft/kiota-http-fetchlibrary@1.0.0-preview.100':
     dependencies:
       '@microsoft/kiota-abstractions': 1.0.0-preview.100
       '@opentelemetry/api': 1.9.0
       tslib: 2.8.1
 
-  '@microsoft/kiota-serialization-form@1.0.0-preview.99':
+  '@microsoft/kiota-serialization-form@1.0.0-preview.100':
     dependencies:
       '@microsoft/kiota-abstractions': 1.0.0-preview.100
       tslib: 2.8.1
 
-  '@microsoft/kiota-serialization-json@1.0.0-preview.99':
+  '@microsoft/kiota-serialization-json@1.0.0-preview.100':
     dependencies:
       '@microsoft/kiota-abstractions': 1.0.0-preview.100
       tslib: 2.8.1
 
-  '@microsoft/kiota-serialization-multipart@1.0.0-preview.99':
+  '@microsoft/kiota-serialization-multipart@1.0.0-preview.100':
     dependencies:
       '@microsoft/kiota-abstractions': 1.0.0-preview.100
       tslib: 2.8.1
 
-  '@microsoft/kiota-serialization-text@1.0.0-preview.99':
+  '@microsoft/kiota-serialization-text@1.0.0-preview.100':
     dependencies:
       '@microsoft/kiota-abstractions': 1.0.0-preview.100
       tslib: 2.8.1
@@ -10795,7 +10795,7 @@ snapshots:
 
   '@microsoft/msgraph-sdk-chats@1.0.0-preview.77':
     dependencies:
-      '@microsoft/msgraph-sdk': 1.0.0-preview.77
+      '@microsoft/msgraph-sdk': 1.0.0-preview.80
       tslib: 2.8.1
     transitivePeerDependencies:
       - supports-color
@@ -10804,26 +10804,26 @@ snapshots:
     dependencies:
       '@azure/core-auth': 1.10.1
       '@microsoft/kiota-authentication-azure': 1.0.0-preview.100
-      '@microsoft/kiota-bundle': 1.0.0-preview.99
+      '@microsoft/kiota-bundle': 1.0.0-preview.100
       tslib: 2.8.1
     transitivePeerDependencies:
       - supports-color
 
   '@microsoft/msgraph-sdk-teams@1.0.0-preview.80':
     dependencies:
-      '@microsoft/msgraph-sdk': 1.0.0-preview.77
+      '@microsoft/msgraph-sdk': 1.0.0-preview.80
       tslib: 2.8.1
     transitivePeerDependencies:
       - supports-color
 
   '@microsoft/msgraph-sdk-users@1.0.0-preview.77':
     dependencies:
-      '@microsoft/msgraph-sdk': 1.0.0-preview.77
+      '@microsoft/msgraph-sdk': 1.0.0-preview.80
       tslib: 2.8.1
     transitivePeerDependencies:
       - supports-color
 
-  '@microsoft/msgraph-sdk@1.0.0-preview.77':
+  '@microsoft/msgraph-sdk@1.0.0-preview.80':
     dependencies:
       '@microsoft/msgraph-sdk-core': 1.0.0-preview.17
       tslib: 2.8.1

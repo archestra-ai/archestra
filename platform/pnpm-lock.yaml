@@ -147,8 +147,8 @@ importers:
         specifier: ^2.1.0
         version: 2.1.0(@opentelemetry/api@1.9.0)(drizzle-orm@0.45.1(@electric-sql/pglite@0.3.15)(@opentelemetry/api@1.9.0)(@types/pg@8.16.0)(kysely@0.28.11)(pg@8.18.0))
       '@microsoft/kiota-authentication-azure':
-        specifier: 1.0.0-preview.99
-        version: 1.0.0-preview.99
+        specifier: 1.0.0-preview.100
+        version: 1.0.0-preview.100
       '@microsoft/microsoft-graph-client':
         specifier: ^3.0.7
         version: 3.0.7(@azure/identity@4.13.0)
@@ -2000,11 +2000,11 @@ packages:
   '@mermaid-js/parser@0.6.3':
     resolution: {integrity: sha512-lnjOhe7zyHjc+If7yT4zoedx2vo4sHaTmtkl1+or8BRTnCtDmcTpAjpzDSfCZrshM5bCoz0GyidzadJAH1xobA==}
 
-  '@microsoft/kiota-abstractions@1.0.0-preview.99':
-    resolution: {integrity: sha512-6qrlwGCO3DbvpA7tszqk7JNQPFPDg8gv5NGMTziwdtHqaQrUALKusm3vdJGPVGrbNiZL6/lBaY5NSUvLtlhRCg==}
+  '@microsoft/kiota-abstractions@1.0.0-preview.100':
+    resolution: {integrity: sha512-3s2WYKQ6WLB/0pyDmmv9bigH/3LZ0Mm4ldHskNLBj0U8DYjFzfG729snnEij+hZN0l2XHr37pGBr1MZK8vM7zQ==}
 
-  '@microsoft/kiota-authentication-azure@1.0.0-preview.99':
-    resolution: {integrity: sha512-gPmk/vx15sBMfjfLPgqPanmyVR/rA5HGd3318VtPS28mXxH07Zn30R6PVqSemhIwSxfiGnPiq0SlTj28BQhTKQ==}
+  '@microsoft/kiota-authentication-azure@1.0.0-preview.100':
+    resolution: {integrity: sha512-RT6LtekPVaFYQ5JHOiMDrYEdsx6RyiRtoGz929m3iy+jS6W2dELWTO4mrtAG3Q+8Tczk1uUwP21tYy/Wyf07lw==}
 
   '@microsoft/kiota-bundle@1.0.0-preview.99':
     resolution: {integrity: sha512-AxvO+z6UgWMAT2NfXN36CMhAUm/39tUQt8o32axeEJDS/EvZINDAPstbQV+zK7bJRC8kCqUHhCE/fuHX2dXA+g==}
@@ -4121,11 +4121,11 @@ packages:
     peerDependencies:
       webpack: '>=4.40.0'
 
-  '@simplewebauthn/browser@13.2.2':
-    resolution: {integrity: sha512-FNW1oLQpTJyqG5kkDg5ZsotvWgmBaC6jCHR7Ej0qUNep36Wl9tj2eZu7J5rP+uhXgHaLk+QQ3lqcw2vS5MX1IA==}
+  '@simplewebauthn/browser@13.3.0':
+    resolution: {integrity: sha512-BE/UWv6FOToAdVk0EokzkqQQDOWtNydYlY6+OrmiZ5SCNmb41VehttboTetUM3T/fr6EAFYVXjz4My2wg230rQ==}
 
-  '@simplewebauthn/server@13.2.3':
-    resolution: {integrity: sha512-ZhcVBOw63birYx9jVfbhK6rTehckVes8PeWV324zpmdxr0BUfylospwMzcrxrdMcOi48MHWj2LCA+S528LnGvg==}
+  '@simplewebauthn/server@13.3.0':
+    resolution: {integrity: sha512-MLHYFrYG8/wK2i+86XMhiecK72nMaHKKt4bo+7Q1TbuG9iGjlSdfkPWKO5ZFE/BX+ygCJ7pr8H/AJeyAj1EaTQ==}
     engines: {node: '>=20.0.0'}
 
   '@sindresorhus/is@4.6.0':
@@ -8230,8 +8230,8 @@ packages:
   tdigest@0.1.2:
     resolution: {integrity: sha512-+G0LLgjjo9BZX2MfdvPfH+MKLCrxlXSYec5DaPYP1fe6Iyhf0/fSmJ0bFiZ1F8BT6cGXl2LpltQptzjXKWEkKA==}
 
-  terser-webpack-plugin@5.3.17:
-    resolution: {integrity: sha512-YR7PtUp6GMU91BgSJmlaX/rS2lGDbAF7D+Wtq7hRO+MiljNmodYvqslzCFiYVAgW+Qoaaia/QUIP4lGXufjdZw==}
+  terser-webpack-plugin@5.4.0:
+    resolution: {integrity: sha512-Bn5vxm48flOIfkdl5CaD2+1CiUVbonWQ3KQPyP7/EuIl9Gbzq/gQFOzaMFUEgVjB1396tcK0SG8XcNJ/2kDH8g==}
     engines: {node: '>= 10.13.0'}
     peerDependencies:
       '@swc/core': '*'
@@ -9996,8 +9996,8 @@ snapshots:
       '@better-auth/core': 1.4.19(@better-auth/utils@0.3.0)(@better-fetch/fetch@1.1.21)(better-call@1.1.8(zod@4.3.6))(jose@6.1.3)(kysely@0.28.11)(nanostores@1.1.0)
       '@better-auth/utils': 0.3.0
       '@better-fetch/fetch': 1.1.21
-      '@simplewebauthn/browser': 13.2.2
-      '@simplewebauthn/server': 13.2.3
+      '@simplewebauthn/browser': 13.3.0
+      '@simplewebauthn/server': 13.3.0
       better-auth: 1.4.19(drizzle-kit@0.31.8)(drizzle-orm@0.45.1(@electric-sql/pglite@0.3.15)(@opentelemetry/api@1.9.0)(@types/pg@8.16.0)(kysely@0.28.11)(pg@8.18.0))(next@16.1.6(@babel/core@7.29.0)(@opentelemetry/api@1.9.0)(@playwright/test@1.58.1)(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(pg@8.18.0)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(vitest@4.0.18(@opentelemetry/api@1.9.0)(@types/node@25.2.1)(jiti@2.6.1)(jsdom@28.0.0(@noble/hashes@2.0.1))(lightningcss@1.30.2)(terser@5.46.0)(tsx@4.21.0)(yaml@2.8.2))
       better-call: 1.1.8(zod@4.3.6)
       nanostores: 1.1.0
@@ -10733,17 +10733,17 @@ snapshots:
     dependencies:
       langium: 3.3.1
 
-  '@microsoft/kiota-abstractions@1.0.0-preview.99':
+  '@microsoft/kiota-abstractions@1.0.0-preview.100':
     dependencies:
       '@opentelemetry/api': 1.9.0
       '@std-uritemplate/std-uritemplate': 2.0.8
       tinyduration: 3.4.1
       tslib: 2.8.1
 
-  '@microsoft/kiota-authentication-azure@1.0.0-preview.99':
+  '@microsoft/kiota-authentication-azure@1.0.0-preview.100':
     dependencies:
       '@azure/core-auth': 1.10.1
-      '@microsoft/kiota-abstractions': 1.0.0-preview.99
+      '@microsoft/kiota-abstractions': 1.0.0-preview.100
       '@opentelemetry/api': 1.9.0
       tslib: 2.8.1
     transitivePeerDependencies:
@@ -10751,7 +10751,7 @@ snapshots:
 
   '@microsoft/kiota-bundle@1.0.0-preview.99':
     dependencies:
-      '@microsoft/kiota-abstractions': 1.0.0-preview.99
+      '@microsoft/kiota-abstractions': 1.0.0-preview.100
       '@microsoft/kiota-http-fetchlibrary': 1.0.0-preview.99
       '@microsoft/kiota-serialization-form': 1.0.0-preview.99
       '@microsoft/kiota-serialization-json': 1.0.0-preview.99
@@ -10760,28 +10760,28 @@ snapshots:
 
   '@microsoft/kiota-http-fetchlibrary@1.0.0-preview.99':
     dependencies:
-      '@microsoft/kiota-abstractions': 1.0.0-preview.99
+      '@microsoft/kiota-abstractions': 1.0.0-preview.100
       '@opentelemetry/api': 1.9.0
       tslib: 2.8.1
 
   '@microsoft/kiota-serialization-form@1.0.0-preview.99':
     dependencies:
-      '@microsoft/kiota-abstractions': 1.0.0-preview.99
+      '@microsoft/kiota-abstractions': 1.0.0-preview.100
       tslib: 2.8.1
 
   '@microsoft/kiota-serialization-json@1.0.0-preview.99':
     dependencies:
-      '@microsoft/kiota-abstractions': 1.0.0-preview.99
+      '@microsoft/kiota-abstractions': 1.0.0-preview.100
       tslib: 2.8.1
 
   '@microsoft/kiota-serialization-multipart@1.0.0-preview.99':
     dependencies:
-      '@microsoft/kiota-abstractions': 1.0.0-preview.99
+      '@microsoft/kiota-abstractions': 1.0.0-preview.100
       tslib: 2.8.1
 
   '@microsoft/kiota-serialization-text@1.0.0-preview.99':
     dependencies:
-      '@microsoft/kiota-abstractions': 1.0.0-preview.99
+      '@microsoft/kiota-abstractions': 1.0.0-preview.100
       tslib: 2.8.1
 
   '@microsoft/microsoft-graph-client@3.0.7(@azure/identity@4.13.0)':
@@ -10803,7 +10803,7 @@ snapshots:
   '@microsoft/msgraph-sdk-core@1.0.0-preview.17':
     dependencies:
       '@azure/core-auth': 1.10.1
-      '@microsoft/kiota-authentication-azure': 1.0.0-preview.99
+      '@microsoft/kiota-authentication-azure': 1.0.0-preview.100
       '@microsoft/kiota-bundle': 1.0.0-preview.99
       tslib: 2.8.1
     transitivePeerDependencies:
@@ -13075,9 +13075,9 @@ snapshots:
       - encoding
       - supports-color
 
-  '@simplewebauthn/browser@13.2.2': {}
+  '@simplewebauthn/browser@13.3.0': {}
 
-  '@simplewebauthn/server@13.2.3':
+  '@simplewebauthn/server@13.3.0':
     dependencies:
       '@hexagon/base64': 1.1.28
       '@levischuck/tiny-cbor': 0.2.11
@@ -17909,7 +17909,7 @@ snapshots:
     dependencies:
       bintrees: 1.0.2
 
-  terser-webpack-plugin@5.3.17(webpack@5.104.1):
+  terser-webpack-plugin@5.4.0(webpack@5.104.1):
     dependencies:
       '@jridgewell/trace-mapping': 0.3.31
       jest-worker: 27.5.1
@@ -18452,7 +18452,7 @@ snapshots:
       neo-async: 2.6.2
       schema-utils: 4.3.3
       tapable: 2.3.0
-      terser-webpack-plugin: 5.3.17(webpack@5.104.1)
+      terser-webpack-plugin: 5.4.0(webpack@5.104.1)
       watchpack: 2.5.1
       webpack-sources: 3.3.4
     transitivePeerDependencies:

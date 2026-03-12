@@ -61,7 +61,7 @@
     "@keyv/postgres": "^2.2.3",
     "@kubernetes/client-node": "^1.4.0",
     "@kubiks/otel-drizzle": "^2.1.0",
-    "@microsoft/kiota-authentication-azure": "1.0.0-preview.99",
+    "@microsoft/kiota-authentication-azure": "1.0.0-preview.100",
     "@microsoft/microsoft-graph-client": "^3.0.7",
     "@microsoft/msgraph-sdk": "1.0.0-preview.77",
     "@microsoft/msgraph-sdk-chats": "1.0.0-preview.77",

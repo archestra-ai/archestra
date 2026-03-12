@@ -228,7 +228,7 @@ export function CreateConnectorDialog({
                       <FormLabel>Name</FormLabel>
                       <FormControl>
                         <Input
-                          placeholder="Engineering Jira Connector"
+                          placeholder={`Engineering ${CONNECTOR_OPTIONS.find((o) => o.type === selectedType)?.label ?? ""} Connector`}
                           {...field}
                         />
                       </FormControl>

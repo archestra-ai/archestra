@@ -48,6 +48,13 @@ type ConnectorItem = Pick<
   | "enabled"
 >;
 
+const CONNECTOR_TYPE_LABELS: Record<string, string> = {
+  jira: "Jira",
+  confluence: "Confluence",
+  github: "GitHub",
+  gitlab: "GitLab",
+};
+
 interface EditConnectorFormValues {
   name: string;
   description: string;
@@ -176,7 +183,7 @@ export function EditConnectorDialog({
                     <FormLabel>Name</FormLabel>
                     <FormControl>
                       <Input
-                        placeholder="Engineering Jira Connector"
+                        placeholder={`Engineering ${CONNECTOR_TYPE_LABELS[connector.connectorType] ?? connector.connectorType} Connector`}
                         {...field}
                       />
                     </FormControl>

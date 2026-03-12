@@ -46,4 +46,6 @@ runs:
       if: ${{ steps.cache-kind-node.outputs.cache-hit != 'true' }}
       shell: bash
       run: |
+        # Tag the digest-referenced image with a simple tag so docker save works
+        docker tag kindest/node@sha256:08497ee19eace7b4b5348db5c6a1591d7752b164530a36f855cb0f2bdcbadd48 kindest/node:v1.34.3
         docker save kindest/node:v1.34.3 > /tmp/kindest-node.tar

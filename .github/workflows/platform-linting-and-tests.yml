@@ -65,6 +65,7 @@ jobs:
           persist-credentials: ${{ inputs.is-release-please-pr }} # zizmor: ignore[artipacked]
           ref: ${{ inputs.is-release-please-pr && github.head_ref || '' }}
           token: ${{ steps.generate-token.outputs.token || github.token }}
+          fetch-depth: 1
 
       - name: Setup environment
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
@@ -159,7 +160,7 @@ jobs:
   platform-e2e-build:
     name: Build ${{ matrix.name }} Image
     runs-on: ${{ matrix.runner }}
-    if: ${{ inputs.should-skip-running-and-always-succeed != true && inputs.is-release-please-pr != true }}
+    if: ${{ inputs.should-skip-running-and-always-succeed != true }}
     permissions:
       contents: read
     strategy:
@@ -187,6 +188,7 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
+          fetch-depth: 1
 
       - name: Setup environment
         if: ${{ matrix.use-build-action }}
@@ -242,7 +244,7 @@ jobs:
     name: Platform E2E Tests (${{ matrix.name }})
     needs: [platform-e2e-build]
     # Run even when platform-e2e-build is skipped (on PRs) so job succeeds rather than being skipped
-    if: ${{ !cancelled() && inputs.is-release-please-pr != true }}
+    if: ${{ !cancelled() }}
     runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
@@ -311,6 +313,7 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
+          fetch-depth: 1
 
       - name: Setup environment
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
@@ -391,7 +394,7 @@ jobs:
   platform-quickstart-e2e-tests:
     name: Platform E2E Tests (Quickstart)
     needs: [platform-e2e-build]
-    if: ${{ !cancelled() && inputs.is-release-please-pr != true }}
+    if: ${{ !cancelled() }}
     runs-on: blacksmith-16vcpu-ubuntu-2404
     permissions:
       contents: read
@@ -402,6 +405,7 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
+          fetch-depth: 1
 
       - name: Setup environment
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
@@ -580,7 +584,7 @@ jobs:
   platform-vault-k8s-e2e-tests:
     name: Platform E2E Tests (Vault K8s)
     needs: [platform-e2e-build]
-    if: ${{ !cancelled() && inputs.is-release-please-pr != true }}
+    if: ${{ !cancelled() }}
     runs-on: blacksmith-16vcpu-ubuntu-2404
     permissions:
       contents: read
@@ -591,6 +595,7 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
+          fetch-depth: 1
 
       - name: Setup environment
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
@@ -697,7 +702,7 @@ jobs:
   platform-e2e-merge-reports:
     name: Merge E2E Test Reports
     needs: [platform-e2e-tests, platform-quickstart-e2e-tests, platform-vault-k8s-e2e-tests]
-    if: ${{ always() && !cancelled() && inputs.should-skip-running-and-always-succeed != true && inputs.is-release-please-pr != true }}
+    if: ${{ always() && !cancelled() && inputs.should-skip-running-and-always-succeed != true }}
     runs-on: blacksmith-2vcpu-ubuntu-2404
     permissions:
       contents: read
@@ -707,6 +712,7 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
+          fetch-depth: 1
 
       - name: Setup environment
         uses: ./.github/actions/setup-env
@@ -756,7 +762,7 @@ jobs:
     name: Docker Image Scanning (${{ matrix.name }})
     needs: [platform-e2e-build]
     # Run even when platform-e2e-build is skipped (on PRs) so job succeeds rather than being skipped
-    if: ${{ !cancelled() && inputs.is-release-please-pr != true }}
+    if: ${{ !cancelled() }}
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -781,6 +787,7 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
+          fetch-depth: 1
 
       # Platform image: Load from artifact (already built by platform-e2e-build)
       - name: Load platform image
@@ -842,6 +849,7 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
+          fetch-depth: 1
 
       - name: Linting
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}

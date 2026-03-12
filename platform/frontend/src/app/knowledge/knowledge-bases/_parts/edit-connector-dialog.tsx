@@ -99,7 +99,7 @@ export function EditConnectorDialog({
   const connectorType = connector.connectorType;
   const urlConfig = getEditUrlConfig(connectorType);
 
-  const needsEmail = connectorType === "jira" || connectorType === "confluence" || connectorType === "servicenow";
+  const needsEmail = connectorType === "jira" || connectorType === "confluence";
   const isCloud = form.watch("config.isCloud") as boolean | undefined;
   const emailRequired = needsEmail && isCloud !== false;
 
@@ -282,22 +282,50 @@ export function EditConnectorDialog({
                 />
               )}
 
+              {connectorType === "servicenow" && (
+                <FormField
+                  control={form.control}
+                  name="email"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Username</FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder="admin"
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormDescription>
+                        Leave empty to keep existing credentials unchanged.
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
+
               <FormField
                 control={form.control}
                 name="apiToken"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>
-                      {needsEmail
-                        ? emailRequired
-                          ? "API Token"
-                          : "API Token / Personal Access Token"
-                        : "Personal Access Token"}
+                      {connectorType === "servicenow"
+                        ? "Password"
+                        : needsEmail
+                          ? emailRequired
+                            ? "API Token"
+                            : "API Token / Personal Access Token"
+                          : "Personal Access Token"}
                     </FormLabel>
                     <FormControl>
                       <Input
                         type="password"
-                        placeholder="Leave empty to keep existing token"
+                        placeholder={
+                          connectorType === "servicenow"
+                            ? "Leave empty to keep existing password"
+                            : "Leave empty to keep existing token"
+                        }
                         {...field}
                       />
                     </FormControl>

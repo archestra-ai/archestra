@@ -204,8 +204,7 @@ export const tools: Tool[] = [
   {
     name: TOOL_GET_AGENT_FULL_NAME,
     title: "Get Agent",
-    description:
-      "Get a specific agent by ID or name.",
+    description: "Get a specific agent by ID or name.",
     inputSchema: {
       type: "object",
       properties: {
@@ -215,8 +214,7 @@ export const tools: Tool[] = [
         },
         name: {
           type: "string",
-          description:
-            "Search by name (partial match).",
+          description: "Search by name (partial match).",
         },
       },
     },

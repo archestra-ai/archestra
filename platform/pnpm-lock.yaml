@@ -156,8 +156,8 @@ importers:
         specifier: 1.0.0-preview.80
         version: 1.0.0-preview.80
       '@microsoft/msgraph-sdk-chats':
-        specifier: 1.0.0-preview.77
-        version: 1.0.0-preview.77
+        specifier: 1.0.0-preview.80
+        version: 1.0.0-preview.80
       '@microsoft/msgraph-sdk-teams':
         specifier: 1.0.0-preview.80
         version: 1.0.0-preview.80
@@ -2045,8 +2045,8 @@ packages:
   '@microsoft/microsoft-graph-types@2.43.1':
     resolution: {integrity: sha512-7r3FiJYW2qTWnl+Li8GV5MzJqPiJp27hvY98kH5V/ZMzGuIOkcJqOfIpusoIQrskLDfYk5kFT8AjpeW713qcIg==}
 
-  '@microsoft/msgraph-sdk-chats@1.0.0-preview.77':
-    resolution: {integrity: sha512-HktFFU5e1W2zJin3QB5nMEHcTm+vRop5WarDHm5fy50KVsofiWPkyET3ja1iyIHLFspO6EUMIKwSgSWZyPZD/w==}
+  '@microsoft/msgraph-sdk-chats@1.0.0-preview.80':
+    resolution: {integrity: sha512-9OdasydYtCs5cvyzVmJ0H7To1qK+xrOt6KSQJr3T6mX8nQhz6LTPTxZyEWwa5Kw1pbt5aFPFrKojfImhgpSCIA==}
 
   '@microsoft/msgraph-sdk-core@1.0.0-preview.17':
     resolution: {integrity: sha512-zg4adBwEIwJBjM3IHi8xmz6Hyumz/IyEdCiX4JLWd+v4Jo9qIexZ0+IPEhi8xbgMwdrJ0h82D1CKGRe1vcsCBw==}
@@ -10793,7 +10793,7 @@ snapshots:
 
   '@microsoft/microsoft-graph-types@2.43.1': {}
 
-  '@microsoft/msgraph-sdk-chats@1.0.0-preview.77':
+  '@microsoft/msgraph-sdk-chats@1.0.0-preview.80':
     dependencies:
       '@microsoft/msgraph-sdk': 1.0.0-preview.80
       tslib: 2.8.1

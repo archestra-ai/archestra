@@ -232,13 +232,12 @@ function ChatSessionHook({
   // Track when swap_agent was called so we can auto-poke the new agent on finish
   const swapAgentPendingRef = useRef(false);
   // Ref to hold sendMessage for use in onFinish callback
-  const sendMessageRef =
-    useRef<
-      | ((
-          message: Parameters<ReturnType<typeof useChat>["sendMessage"]>[0],
-        ) => void)
-      | null
-    >(null);
+  const sendMessageRef = useRef<
+    | ((
+        message: Parameters<ReturnType<typeof useChat>["sendMessage"]>[0],
+      ) => void)
+    | null
+  >(null);
 
   const {
     messages,

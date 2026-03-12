@@ -97,7 +97,9 @@ export function SearchableSelect({
           />
         </div>
         {hint && (
-          <div className="px-3 pb-1.5 text-xs text-muted-foreground">{hint}</div>
+          <div className="px-3 pb-1.5 text-xs text-muted-foreground">
+            {hint}
+          </div>
         )}
         <div className="max-h-[300px] overflow-y-auto p-1">
           {filteredItems.length === 0 ? (

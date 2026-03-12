@@ -97,9 +97,7 @@ export default function AgentSettingsPage() {
   }, [allModels]);
 
   const agentItems = useMemo(() => {
-    const items = [
-      { value: "__personal__", label: "User's personal agent" },
-    ];
+    const items = [{ value: "__personal__", label: "User's personal agent" }];
     for (const agent of orgAgents ?? []) {
       items.push({
         value: agent.id,
@@ -109,12 +107,9 @@ export default function AgentSettingsPage() {
     return items;
   }, [orgAgents]);
 
-  const handleAgentChange = useCallback(
-    (value: string) => {
-      setDefaultAgentId(value === "__personal__" ? "" : value);
-    },
-    [],
-  );
+  const handleAgentChange = useCallback((value: string) => {
+    setDefaultAgentId(value === "__personal__" ? "" : value);
+  }, []);
 
   return (
     <div className="space-y-6">

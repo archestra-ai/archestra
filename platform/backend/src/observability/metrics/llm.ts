@@ -535,6 +535,64 @@ export function getObservableFetch(
       throw error;
     }
 
+    // When the upstream returns an error, capture the raw body and re-wrap
+    // it so the OpenAI SDK surfaces a meaningful message instead of
+    // "500 status code (no body)". This is critical for non-OpenAI upstreams
+    // (e.g. LiteLLM/vLLM) that may return error bodies in a different format.
+    if (!response.ok) {
+      try {
+        const cloned = response.clone();
+        const rawBody = await cloned.text();
+        if (rawBody) {
+          logger.error(
+            {
+              statusCode: response.status,
+              upstreamError: rawBody.slice(0, 2000),
+              provider,
+              model,
+            },
+            "Upstream provider returned an error response",
+          );
+
+          // Try to extract a human-readable message from the raw body
+          let errorMessage: string;
+          try {
+            const parsed = JSON.parse(rawBody);
+            errorMessage =
+              parsed?.error?.message || parsed?.message || rawBody;
+          } catch {
+            errorMessage = rawBody;
+          }
+
+          // Re-create the response with an OpenAI-compatible error body
+          // so the SDK can parse it and surface the real error message
+          const formattedBody = JSON.stringify({
+            error: {
+              message:
+                typeof errorMessage === "string"
+                  ? errorMessage
+                  : JSON.stringify(errorMessage),
+              type: "upstream_error",
+              code: response.status,
+            },
+          });
+
+          return new Response(formattedBody, {
+            status: response.status,
+            statusText: response.statusText,
+            headers: new Headers({
+              "content-type": "application/json",
+            }),
+          });
+        }
+      } catch (bodyError) {
+        logger.debug(
+          { err: bodyError },
+          "Failed to read upstream error response body",
+        );
+      }
+    }
+
     // Record token metrics
     if (
       response.ok &&

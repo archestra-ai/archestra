@@ -1225,13 +1225,23 @@ export const openaiAdapterFactory: LLMProvider<
   },
 
   extractErrorMessage(error: unknown): string {
-    // OpenAI SDK error structure
+    // OpenAI SDK APIError — has .error.message with the upstream error
     const openaiMessage = get(error, "error.message");
     if (typeof openaiMessage === "string") {
       return openaiMessage;
     }
 
     if (error instanceof Error) {
+      // Node.js stream termination produces a bare "terminated" message.
+      // Make it actionable for users (common with LiteLLM/vLLM proxies).
+      if (error.message === "terminated") {
+        const status = get(error, "status");
+        if (typeof status === "number") {
+          return `Upstream provider returned HTTP ${status} and closed the connection`;
+        }
+        return "Upstream provider closed the connection unexpectedly";
+      }
+
       return error.message;
     }
 

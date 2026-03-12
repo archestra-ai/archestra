@@ -36,6 +36,7 @@ import { GithubConfigFields } from "./github-config-fields";
 import { GitlabConfigFields } from "./gitlab-config-fields";
 import { JiraConfigFields } from "./jira-config-fields";
 import { SchedulePicker } from "./schedule-picker";
+import { ServiceNowConfigFields } from "./servicenow-config-fields";
 
 type ConnectorItem = Pick<
   archestraApiTypes.GetConnectorsResponses["200"]["data"][number],
@@ -281,22 +282,47 @@ export function EditConnectorDialog({
                 />
               )}
 
+              {connectorType === "servicenow" && (
+                <FormField
+                  control={form.control}
+                  name="email"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Username</FormLabel>
+                      <FormControl>
+                        <Input placeholder="admin" {...field} />
+                      </FormControl>
+                      <FormDescription>
+                        Leave empty to keep existing credentials unchanged.
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
+
               <FormField
                 control={form.control}
                 name="apiToken"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>
-                      {needsEmail
-                        ? emailRequired
-                          ? "API Token"
-                          : "API Token / Personal Access Token"
-                        : "Personal Access Token"}
+                      {connectorType === "servicenow"
+                        ? "Password"
+                        : needsEmail
+                          ? emailRequired
+                            ? "API Token"
+                            : "API Token / Personal Access Token"
+                          : "Personal Access Token"}
                     </FormLabel>
                     <FormControl>
                       <Input
                         type="password"
-                        placeholder="Leave empty to keep existing token"
+                        placeholder={
+                          connectorType === "servicenow"
+                            ? "Leave empty to keep existing password"
+                            : "Leave empty to keep existing token"
+                        }
                         {...field}
                       />
                     </FormControl>
@@ -326,6 +352,9 @@ export function EditConnectorDialog({
                   )}
                   {connectorType === "gitlab" && (
                     <GitlabConfigFields form={form} hideUrl />
+                  )}
+                  {connectorType === "servicenow" && (
+                    <ServiceNowConfigFields form={form} hideUrl />
                   )}
                 </CollapsibleContent>
               </Collapsible>
@@ -393,6 +422,14 @@ function getEditUrlConfig(type: ConnectorType): {
         placeholder: "https://gitlab.com",
         description: "Use https://gitlab.com or your self-hosted GitLab URL.",
         typeLabel: "GitLab",
+      };
+    case "servicenow":
+      return {
+        fieldName: "config.instanceUrl",
+        label: "Instance URL",
+        placeholder: "https://your-instance.service-now.com",
+        description: "Your ServiceNow instance URL.",
+        typeLabel: "ServiceNow",
       };
     default:
       return {

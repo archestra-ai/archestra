@@ -3,7 +3,7 @@ title: Knowledge Connectors
 category: Knowledge
 order: 2
 description: Supported connector types, configuration, and management
-lastUpdated: 2026-03-06
+lastUpdated: 2026-03-12
 ---
 
 <!--
@@ -77,6 +77,20 @@ Ingests issues, merge requests, and their comments from GitLab.com or self-hoste
 | Labels to Skip           | Comma-separated labels to exclude (optional)                                               |
 
 Authentication uses a [personal access token](https://docs.gitlab.com/user/profile/personal_access_tokens/) (PAT). System-generated notes (assignment changes, label updates, etc.) are automatically filtered out. Incremental sync uses the `updated_after` parameter.
+
+## ServiceNow
+
+Ingests incidents from ServiceNow instances via the Table API (`/api/now/table/incident`). Incident descriptions (HTML) are converted to plain text.
+
+| Field              | Description                                                                           |
+| ------------------ | ------------------------------------------------------------------------------------- |
+| Instance URL       | Your ServiceNow instance URL (e.g., `https://your-instance.service-now.com`)          |
+| States             | Comma-separated incident state values to filter by (e.g. `1, 2`) (optional)          |
+| Assignment Groups  | Comma-separated assignment group sys_ids to filter by (optional)                      |
+| Encoded Query      | Custom ServiceNow encoded query to filter incidents (optional)                        |
+| Batch Size         | Incidents per batch (default: 50)                                                     |
+
+Authentication supports both basic auth (username + password) and OAuth bearer tokens. When using basic auth, provide the username in the Email field and the password in the API Token field. For OAuth, leave the Email field empty and provide the bearer token. All incidents are synced by default; use the States or Encoded Query fields to narrow the scope. Incremental sync uses the `sys_updated_on` field to fetch only incidents updated since the last run.
 
 ## Managing Connectors
 

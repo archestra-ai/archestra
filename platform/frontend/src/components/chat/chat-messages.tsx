@@ -34,7 +34,7 @@ import {
   ToolOutput,
 } from "@/components/ai-elements/tool";
 import { Button } from "@/components/ui/button";
-import { useHasPermissions } from "@/lib/auth.query";
+import { useHasPermissions, useSession } from "@/lib/auth.query";
 import { useUpdateChatMessage } from "@/lib/chat-message.query";
 import {
   extractCatalogIdFromInstallUrl,
@@ -122,6 +122,9 @@ export function ChatMessages({
   onToolApprovalResponse,
 }: ChatMessagesProps) {
   const isStreamingStalled = useStreamingStallDetection(messages, status);
+  const { data: session } = useSession();
+  const isDebugging = session?.user?.name?.endsWith("(debugging)") ?? false;
+
   // Track editing by messageId-partIndex to support multiple text parts per message
   const [editingPartKey, setEditingPartKey] = useState<string | null>(null);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
@@ -477,7 +480,7 @@ export function ChatMessages({
         <div className="max-w-4xl mx-auto relative pb-8">
           {messages.map((message, idx) => {
             // Hide the auto-poke message sent after agent swap
-            if (isSwapAgentPokeMessage(message)) return null;
+            if (!isDebugging && isSwapAgentPokeMessage(message)) return null;
 
             const isDimmed =
               editingMessageIndex !== -1 && idx > editingMessageIndex;
@@ -853,6 +856,7 @@ export function ChatMessages({
                           toolResultPart={toolResultPart}
                           toolName={toolName}
                           agentId={agentId}
+                          isDebugging={isDebugging}
                           onToolApprovalResponse={onToolApprovalResponse}
                           onInstallMcp={orchestrator.triggerInstallByCatalogId}
                           onReauthMcp={
@@ -888,6 +892,7 @@ export function ChatMessages({
                             toolResultPart={toolResultPart}
                             toolName={toolName}
                             agentId={agentId}
+                            isDebugging={isDebugging}
                             onToolApprovalResponse={onToolApprovalResponse}
                             onInstallMcp={
                               orchestrator.triggerInstallByCatalogId
@@ -974,6 +979,7 @@ function MessageTool({
   toolResultPart,
   toolName,
   agentId,
+  isDebugging,
   onToolApprovalResponse,
   onInstallMcp,
   onReauthMcp,
@@ -982,6 +988,7 @@ function MessageTool({
   toolResultPart: ToolUIPart | DynamicToolUIPart | null;
   toolName: string;
   agentId?: string;
+  isDebugging?: boolean;
   onToolApprovalResponse?: (params: {
     id: string;
     approved: boolean;
@@ -1088,7 +1095,8 @@ function MessageTool({
   }
 
   // swap_agent is rendered as a divider after all message parts (see SwapAgentDivider below)
-  if (toolName === TOOL_SWAP_AGENT_FULL_NAME) {
+  // Show the raw tool call when the user's name ends with "(debugging)"
+  if (!isDebugging && toolName === TOOL_SWAP_AGENT_FULL_NAME) {
     return null;
   }
 
@@ -1237,14 +1245,22 @@ function SwapAgentDivider({ message }: { message: UIMessage }) {
     )
       continue;
 
-    const output = part.output ?? part.state;
+    // Try tool call args first (always available), then fall back to output
     let agentName = "another agent";
-    if (typeof output === "string") {
-      try {
-        const parsed = JSON.parse(output);
-        if (parsed?.agent_name) agentName = parsed.agent_name;
-      } catch {
-        // ignore
+    const args = (part as Record<string, unknown>).args as
+      | Record<string, unknown>
+      | undefined;
+    if (args?.agent_name && typeof args.agent_name === "string") {
+      agentName = args.agent_name;
+    } else {
+      const output = part.output ?? part.state;
+      if (typeof output === "string") {
+        try {
+          const parsed = JSON.parse(output);
+          if (parsed?.agent_name) agentName = parsed.agent_name;
+        } catch {
+          // ignore
+        }
       }
     }
 

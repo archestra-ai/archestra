@@ -27257,7 +27257,7 @@ export type GetKnowledgeBasesResponses = {
             connectors: Array<{
                 id: string;
                 name: string;
-                connectorType: 'jira' | 'confluence' | 'github' | 'gitlab';
+                connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow';
             }>;
             totalDocsIndexed: number;
             assignedAgents: Array<{
@@ -27787,7 +27787,7 @@ export type GetConnectorsResponses = {
             organizationId: string;
             name: string;
             description: string | null;
-            connectorType: 'jira' | 'confluence' | 'github' | 'gitlab';
+            connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow';
             config: {
                 type: 'jira';
                 jiraBaseUrl: unknown;
@@ -27823,6 +27823,14 @@ export type GetConnectorsResponses = {
                 includeMergeRequests?: boolean;
                 includeMarkdownFiles?: boolean;
                 labelsToSkip?: Array<string>;
+            } | {
+                type: 'servicenow';
+                instanceUrl: unknown;
+                states?: Array<string>;
+                assignmentGroups?: Array<string>;
+                query?: string;
+                batchSize?: number;
+                initialSyncMonths?: number;
             };
             secretId: string | null;
             schedule: string;
@@ -27858,7 +27866,7 @@ export type CreateConnectorData = {
     body: {
         name: string;
         description?: string | null;
-        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab';
+        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow';
         config: {
             type: 'jira';
             jiraBaseUrl: string;
@@ -27894,6 +27902,14 @@ export type CreateConnectorData = {
             includeMergeRequests?: boolean;
             includeMarkdownFiles?: boolean;
             labelsToSkip?: Array<string>;
+        } | {
+            type: 'servicenow';
+            instanceUrl: string;
+            states?: Array<string>;
+            assignmentGroups?: Array<string>;
+            query?: string;
+            batchSize?: number;
+            initialSyncMonths?: number;
         };
         credentials: {
             email?: string;
@@ -27976,7 +27992,7 @@ export type CreateConnectorResponses = {
         organizationId: string;
         name: string;
         description: string | null;
-        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab';
+        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow';
         config: {
             type: 'jira';
             jiraBaseUrl: unknown;
@@ -28012,6 +28028,14 @@ export type CreateConnectorResponses = {
             includeMergeRequests?: boolean;
             includeMarkdownFiles?: boolean;
             labelsToSkip?: Array<string>;
+        } | {
+            type: 'servicenow';
+            instanceUrl: unknown;
+            states?: Array<string>;
+            assignmentGroups?: Array<string>;
+            query?: string;
+            batchSize?: number;
+            initialSyncMonths?: number;
         };
         secretId: string | null;
         schedule: string;
@@ -28185,7 +28209,7 @@ export type GetConnectorResponses = {
         organizationId: string;
         name: string;
         description: string | null;
-        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab';
+        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow';
         config: {
             type: 'jira';
             jiraBaseUrl: unknown;
@@ -28221,6 +28245,14 @@ export type GetConnectorResponses = {
             includeMergeRequests?: boolean;
             includeMarkdownFiles?: boolean;
             labelsToSkip?: Array<string>;
+        } | {
+            type: 'servicenow';
+            instanceUrl: unknown;
+            states?: Array<string>;
+            assignmentGroups?: Array<string>;
+            query?: string;
+            batchSize?: number;
+            initialSyncMonths?: number;
         };
         secretId: string | null;
         schedule: string;
@@ -28278,6 +28310,14 @@ export type UpdateConnectorData = {
             includeMergeRequests?: boolean;
             includeMarkdownFiles?: boolean;
             labelsToSkip?: Array<string>;
+        } | {
+            type: 'servicenow';
+            instanceUrl: string;
+            states?: Array<string>;
+            assignmentGroups?: Array<string>;
+            query?: string;
+            batchSize?: number;
+            initialSyncMonths?: number;
         };
         credentials?: {
             email?: string;
@@ -28361,7 +28401,7 @@ export type UpdateConnectorResponses = {
         organizationId: string;
         name: string;
         description: string | null;
-        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab';
+        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow';
         config: {
             type: 'jira';
             jiraBaseUrl: unknown;
@@ -28397,6 +28437,14 @@ export type UpdateConnectorResponses = {
             includeMergeRequests?: boolean;
             includeMarkdownFiles?: boolean;
             labelsToSkip?: Array<string>;
+        } | {
+            type: 'servicenow';
+            instanceUrl: unknown;
+            states?: Array<string>;
+            assignmentGroups?: Array<string>;
+            query?: string;
+            batchSize?: number;
+            initialSyncMonths?: number;
         };
         secretId: string | null;
         schedule: string;

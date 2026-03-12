@@ -6,8 +6,15 @@ const JIRA = z.literal("jira");
 const CONFLUENCE = z.literal("confluence");
 const GITHUB = z.literal("github");
 const GITLAB = z.literal("gitlab");
+const SERVICENOW = z.literal("servicenow");
 
-export const ConnectorTypeSchema = z.union([JIRA, CONFLUENCE, GITHUB, GITLAB]);
+export const ConnectorTypeSchema = z.union([
+  JIRA,
+  CONFLUENCE,
+  GITHUB,
+  GITLAB,
+  SERVICENOW,
+]);
 export type ConnectorType = z.infer<typeof ConnectorTypeSchema>;
 
 // ===== Connector Sync Status =====
@@ -122,6 +129,26 @@ export const GitlabCheckpointSchema = z.object({
 });
 export type GitlabCheckpoint = z.infer<typeof GitlabCheckpointSchema>;
 
+// ===== ServiceNow Config & Checkpoint =====
+
+export const ServiceNowConfigSchema = z.object({
+  type: SERVICENOW,
+  instanceUrl: connectorUrlSchema,
+  states: z.array(z.string()).optional(),
+  assignmentGroups: z.array(z.string()).optional(),
+  query: z.string().optional(),
+  batchSize: z.number().optional(),
+  initialSyncMonths: z.number().min(1).max(12).optional(),
+});
+export type ServiceNowConfig = z.infer<typeof ServiceNowConfigSchema>;
+
+export const ServiceNowCheckpointSchema = z.object({
+  type: SERVICENOW,
+  lastSyncedAt: z.string().optional(),
+  lastOffset: z.number().optional(),
+});
+export type ServiceNowCheckpoint = z.infer<typeof ServiceNowCheckpointSchema>;
+
 // ===== Discriminated Unions =====
 
 export const ConnectorConfigSchema = z.discriminatedUnion("type", [
@@ -129,6 +156,7 @@ export const ConnectorConfigSchema = z.discriminatedUnion("type", [
   ConfluenceConfigSchema,
   GithubConfigSchema,
   GitlabConfigSchema,
+  ServiceNowConfigSchema,
 ]);
 export type ConnectorConfig = z.infer<typeof ConnectorConfigSchema>;
 
@@ -137,6 +165,7 @@ export const ConnectorCheckpointSchema = z.discriminatedUnion("type", [
   ConfluenceCheckpointSchema,
   GithubCheckpointSchema,
   GitlabCheckpointSchema,
+  ServiceNowCheckpointSchema,
 ]);
 export type ConnectorCheckpoint = z.infer<typeof ConnectorCheckpointSchema>;
 

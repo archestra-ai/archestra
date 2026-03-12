@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "1.1.7"
+    "version": "1.1.8"
   },
   "components": {
     "schemas": {
@@ -95575,6 +95575,12 @@
                                       "enum": [
                                         "gitlab"
                                       ]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": [
+                                        "servicenow"
+                                      ]
                                     }
                                   ]
                                 }
@@ -97431,6 +97437,12 @@
                                 "enum": [
                                   "gitlab"
                                 ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "servicenow"
+                                ]
                               }
                             ]
                           },
@@ -97600,6 +97612,46 @@
                                 "required": [
                                   "type",
                                   "gitlabUrl"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "servicenow"
+                                    ]
+                                  },
+                                  "instanceUrl": {},
+                                  "states": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "assignmentGroups": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "query": {
+                                    "type": "string"
+                                  },
+                                  "batchSize": {
+                                    "type": "number"
+                                  },
+                                  "initialSyncMonths": {
+                                    "type": "number",
+                                    "minimum": 1,
+                                    "maximum": 12
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "instanceUrl"
                                 ],
                                 "additionalProperties": false
                               }
@@ -98030,6 +98082,12 @@
                         "enum": [
                           "gitlab"
                         ]
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
+                          "servicenow"
+                        ]
                       }
                     ]
                   },
@@ -98205,6 +98263,47 @@
                           "type",
                           "gitlabUrl"
                         ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "servicenow"
+                            ]
+                          },
+                          "instanceUrl": {
+                            "type": "string"
+                          },
+                          "states": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "assignmentGroups": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "query": {
+                            "type": "string"
+                          },
+                          "batchSize": {
+                            "type": "number"
+                          },
+                          "initialSyncMonths": {
+                            "type": "number",
+                            "minimum": 1,
+                            "maximum": 12
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "instanceUrl"
+                        ]
                       }
                     ]
                   },
@@ -98293,6 +98392,12 @@
                           "type": "string",
                           "enum": [
                             "gitlab"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "servicenow"
                           ]
                         }
                       ]
@@ -98463,6 +98568,46 @@
                           "required": [
                             "type",
                             "gitlabUrl"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "servicenow"
+                              ]
+                            },
+                            "instanceUrl": {},
+                            "states": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "assignmentGroups": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "query": {
+                              "type": "string"
+                            },
+                            "batchSize": {
+                              "type": "number"
+                            },
+                            "initialSyncMonths": {
+                              "type": "number",
+                              "minimum": 1,
+                              "maximum": 12
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "instanceUrl"
                           ],
                           "additionalProperties": false
                         }
@@ -98842,6 +98987,12 @@
                           "enum": [
                             "gitlab"
                           ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "servicenow"
+                          ]
                         }
                       ]
                     },
@@ -99011,6 +99162,46 @@
                           "required": [
                             "type",
                             "gitlabUrl"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "servicenow"
+                              ]
+                            },
+                            "instanceUrl": {},
+                            "states": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "assignmentGroups": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "query": {
+                              "type": "string"
+                            },
+                            "batchSize": {
+                              "type": "number"
+                            },
+                            "initialSyncMonths": {
+                              "type": "number",
+                              "minimum": 1,
+                              "maximum": 12
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "instanceUrl"
                           ],
                           "additionalProperties": false
                         }
@@ -99520,6 +99711,47 @@
                           "type",
                           "gitlabUrl"
                         ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "servicenow"
+                            ]
+                          },
+                          "instanceUrl": {
+                            "type": "string"
+                          },
+                          "states": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "assignmentGroups": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "query": {
+                            "type": "string"
+                          },
+                          "batchSize": {
+                            "type": "number"
+                          },
+                          "initialSyncMonths": {
+                            "type": "number",
+                            "minimum": 1,
+                            "maximum": 12
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "instanceUrl"
+                        ]
                       }
                     ]
                   },
@@ -99605,6 +99837,12 @@
                           "type": "string",
                           "enum": [
                             "gitlab"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "servicenow"
                           ]
                         }
                       ]
@@ -99775,6 +100013,46 @@
                           "required": [
                             "type",
                             "gitlabUrl"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "servicenow"
+                              ]
+                            },
+                            "instanceUrl": {},
+                            "states": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "assignmentGroups": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "query": {
+                              "type": "string"
+                            },
+                            "batchSize": {
+                              "type": "number"
+                            },
+                            "initialSyncMonths": {
+                              "type": "number",
+                              "minimum": 1,
+                              "maximum": 12
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "instanceUrl"
                           ],
                           "additionalProperties": false
                         }

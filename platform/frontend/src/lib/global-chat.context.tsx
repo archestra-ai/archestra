@@ -293,14 +293,12 @@ function ChatSessionHook({
         setPendingCustomServerToolCall(toolCall);
       }
 
-      // Detect swap_agent tool: abort the current stream so the old agent
-      // stops generating, then poke the new agent in onFinish.
+      // Detect swap_agent tool and flag for poke on finish.
+      // The backend's stopWhen: hasToolCall(...) stops the agentic loop
+      // after swap_agent executes, so the old agent won't continue.
+      // onFinish then sends a poke to trigger the new agent.
       if (toolCall.toolName === TOOL_SWAP_AGENT_FULL_NAME) {
         swapAgentPendingRef.current = true;
-        // stop() aborts the HTTP stream; the next /api/chat request
-        // will re-read the conversation from DB and pick up the new agent's
-        // system prompt and tools.
-        stop();
         queryClient.invalidateQueries({
           queryKey: ["conversation", conversationId],
         });
@@ -323,7 +321,13 @@ function ChatSessionHook({
         setTokenUsage(usage);
       }
     },
-    sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses,
+    sendAutomaticallyWhen: ({ messages: msgs }) => {
+      // Don't auto-resubmit after swap_agent — the poke in onFinish handles it
+      if (swapAgentPendingRef.current) return false;
+      return lastAssistantMessageIsCompleteWithApprovalResponses({
+        messages: msgs,
+      });
+    },
   } as Parameters<typeof useChat>[0]);
 
   // Keep sendMessageRef up-to-date for onFinish callback

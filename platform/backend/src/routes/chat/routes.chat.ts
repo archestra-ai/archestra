@@ -4,6 +4,7 @@ import {
   RouteId,
   type SupportedProvider,
   TimeInMs,
+  TOOL_SWAP_AGENT_FULL_NAME,
   type TokenUsage,
 } from "@shared";
 import {
@@ -11,6 +12,7 @@ import {
   createUIMessageStream,
   createUIMessageStreamResponse,
   generateText,
+  hasToolCall,
   stepCountIs,
   streamText,
   type UIMessage,
@@ -281,7 +283,10 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             model,
             messages: modelMessages,
             ...(supportsToolCalling && { tools: mcpTools }),
-            stopWhen: stepCountIs(500),
+            stopWhen: [
+              stepCountIs(500),
+              hasToolCall(TOOL_SWAP_AGENT_FULL_NAME),
+            ],
             abortSignal: chatAbortController.signal,
             onFinish: async ({ usage, finishReason }) => {
               removeAbortListeners();

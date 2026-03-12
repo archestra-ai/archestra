@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.1.11](https://github.com/archestra-ai/archestra/compare/platform-v1.1.10...platform-v1.1.11) (2026-03-12)
+
+
+### Bug Fixes
+
+* improve error pass through ([#3315](https://github.com/archestra-ai/archestra/issues/3315)) ([92fbb40](https://github.com/archestra-ai/archestra/commit/92fbb40faf0ce6728860681ad4564ee6f5f7a8de))
+
+
+### Miscellaneous Chores
+
+* fix getting agent by name in get_agent tool ([#3314](https://github.com/archestra-ai/archestra/issues/3314)) ([9d5e319](https://github.com/archestra-ai/archestra/commit/9d5e3199e300545a26cdb0c12517599a175e944b))
+
 ## [1.1.10](https://github.com/archestra-ai/archestra/compare/platform-v1.1.9...platform-v1.1.10) (2026-03-12)
 
 

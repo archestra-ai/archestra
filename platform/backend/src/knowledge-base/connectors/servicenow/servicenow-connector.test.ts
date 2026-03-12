@@ -62,9 +62,8 @@ describe("ServiceNowConnector", () => {
     test("accepts config with optional fields", async () => {
       const result = await connector.validateConfig({
         instanceUrl: "https://myinstance.service-now.com",
-        knowledgeBases: ["kb1", "kb2"],
-        categories: ["cat1"],
-        includeRetired: true,
+        states: ["1", "2"],
+        assignmentGroups: ["group1"],
         batchSize: 100,
       });
       expect(result).toEqual({ valid: true });
@@ -86,7 +85,7 @@ describe("ServiceNowConnector", () => {
       expect(mockFetch).toHaveBeenCalledTimes(1);
       const url = mockFetch.mock.calls[0][0] as string;
       expect(url).toContain("service-now.com");
-      expect(url).toContain("kb_knowledge");
+      expect(url).toContain("incident");
     });
 
     test("returns error when API responds with error status", async () => {
@@ -147,22 +146,39 @@ describe("ServiceNowConnector", () => {
   });
 
   describe("sync", () => {
-    function makeArticle(
+    function makeIncident(
       sysId: string,
       title: string,
-      text = "<p>Article content</p>",
+      description = "<p>Incident description</p>",
     ) {
       return {
         sys_id: { display_value: sysId, value: sysId },
-        number: { display_value: `KB${sysId}`, value: `KB${sysId}` },
+        number: { display_value: `INC${sysId}`, value: `INC${sysId}` },
         short_description: { display_value: title, value: title },
-        text: { display_value: text, value: text },
-        kb_knowledge_base: { display_value: "IT KB", value: "kb-sys-id" },
-        kb_category: {
-          display_value: "General",
-          value: "cat-sys-id",
+        description: { display_value: description, value: description },
+        state: { display_value: "New", value: "1" },
+        priority: { display_value: "3 - Moderate", value: "3" },
+        urgency: { display_value: "2 - Medium", value: "2" },
+        impact: { display_value: "2 - Medium", value: "2" },
+        category: { display_value: "Network", value: "network" },
+        assignment_group: {
+          display_value: "IT Support",
+          value: "group-sys-id",
         },
-        workflow_state: { display_value: "Published", value: "published" },
+        assigned_to: {
+          display_value: "John Doe",
+          value: "user-sys-id",
+        },
+        caller_id: {
+          display_value: "Jane Smith",
+          value: "caller-sys-id",
+        },
+        opened_at: {
+          display_value: "2024-01-10 08:00:00",
+          value: "2024-01-10 08:00:00",
+        },
+        resolved_at: { display_value: "", value: "" },
+        closed_at: { display_value: "", value: "" },
         sys_updated_on: {
           display_value: "2024-01-15 10:00:00",
           value: "2024-01-15 10:00:00",
@@ -171,19 +187,18 @@ describe("ServiceNowConnector", () => {
           display_value: "2024-01-10 08:00:00",
           value: "2024-01-10 08:00:00",
         },
-        author: { display_value: "Admin User", value: "admin-sys-id" },
         active: { display_value: "true", value: "true" },
       };
     }
 
     test("yields batch of documents from API results", async () => {
-      const articles = [
-        makeArticle("001", "Getting Started"),
-        makeArticle("002", "API Reference"),
+      const incidents = [
+        makeIncident("001", "Server Down"),
+        makeIncident("002", "Network Issue"),
       ];
 
       mockFetch.mockResolvedValueOnce(
-        new Response(JSON.stringify({ result: articles }), { status: 200 }),
+        new Response(JSON.stringify({ result: incidents }), { status: 200 }),
       );
 
       const batches: ConnectorSyncBatch[] = [];
@@ -198,16 +213,16 @@ describe("ServiceNowConnector", () => {
       expect(batches).toHaveLength(1);
       expect(batches[0].documents).toHaveLength(2);
       expect(batches[0].documents[0].id).toBe("001");
-      expect(batches[0].documents[0].title).toBe("Getting Started");
+      expect(batches[0].documents[0].title).toBe("Server Down");
       expect(batches[0].documents[1].id).toBe("002");
       expect(batches[0].hasMore).toBe(false);
     });
 
     test("paginates through multiple pages", async () => {
       const page1 = Array.from({ length: 50 }, (_, i) =>
-        makeArticle(`${i + 1}`, `Article ${i + 1}`),
+        makeIncident(`${i + 1}`, `Incident ${i + 1}`),
       );
-      const page2 = [makeArticle("51", "Article 51")];
+      const page2 = [makeIncident("51", "Incident 51")];
 
       mockFetch
         .mockResolvedValueOnce(
@@ -252,7 +267,7 @@ describe("ServiceNowConnector", () => {
       expect(url).toContain("2024-01-10");
     });
 
-    test("filters by knowledge base sys_ids", async () => {
+    test("filters by state values", async () => {
       mockFetch.mockResolvedValueOnce(
         new Response(JSON.stringify({ result: [] }), { status: 200 }),
       );
@@ -261,7 +276,7 @@ describe("ServiceNowConnector", () => {
       for await (const batch of connector.sync({
         config: {
           ...validConfig,
-          knowledgeBases: ["kb1", "kb2"],
+          states: ["1", "2"],
         },
         credentials,
         checkpoint: null,
@@ -270,11 +285,11 @@ describe("ServiceNowConnector", () => {
       }
 
       const url = decodeURIComponent(mockFetch.mock.calls[0][0] as string);
-      expect(url).toContain("kb_knowledge_base=kb1");
-      expect(url).toContain("kb_knowledge_base=kb2");
+      expect(url).toContain("state=1");
+      expect(url).toContain("state=2");
     });
 
-    test("filters by category sys_ids", async () => {
+    test("filters by assignment group sys_ids", async () => {
       mockFetch.mockResolvedValueOnce(
         new Response(JSON.stringify({ result: [] }), { status: 200 }),
       );
@@ -283,7 +298,7 @@ describe("ServiceNowConnector", () => {
       for await (const batch of connector.sync({
         config: {
           ...validConfig,
-          categories: ["cat1"],
+          assignmentGroups: ["group1"],
         },
         credentials,
         checkpoint: null,
@@ -292,10 +307,10 @@ describe("ServiceNowConnector", () => {
       }
 
       const url = decodeURIComponent(mockFetch.mock.calls[0][0] as string);
-      expect(url).toContain("kb_category=cat1");
+      expect(url).toContain("assignment_group=group1");
     });
 
-    test("defaults to published articles only", async () => {
+    test("syncs all incidents by default (no active filter)", async () => {
       mockFetch.mockResolvedValueOnce(
         new Response(JSON.stringify({ result: [] }), { status: 200 }),
       );
@@ -310,38 +325,20 @@ describe("ServiceNowConnector", () => {
       }
 
       const url = decodeURIComponent(mockFetch.mock.calls[0][0] as string);
-      expect(url).toContain("workflow_state=published");
+      expect(url).not.toContain("active=true");
     });
 
-    test("includes retired articles when configured", async () => {
-      mockFetch.mockResolvedValueOnce(
-        new Response(JSON.stringify({ result: [] }), { status: 200 }),
-      );
-
-      const batches = [];
-      for await (const batch of connector.sync({
-        config: { ...validConfig, includeRetired: true },
-        credentials,
-        checkpoint: null,
-      })) {
-        batches.push(batch);
-      }
-
-      const url = decodeURIComponent(mockFetch.mock.calls[0][0] as string);
-      expect(url).not.toContain("workflow_state=published");
-    });
-
-    test("converts HTML body to plain text", async () => {
-      const articles = [
-        makeArticle(
+    test("converts HTML description to plain text", async () => {
+      const incidents = [
+        makeIncident(
           "1",
-          "HTML Article",
+          "HTML Incident",
           "<h1>Title</h1><p>Paragraph with <strong>bold</strong> text.</p>",
         ),
       ];
 
       mockFetch.mockResolvedValueOnce(
-        new Response(JSON.stringify({ result: articles }), { status: 200 }),
+        new Response(JSON.stringify({ result: incidents }), { status: 200 }),
       );
 
       const batches: ConnectorSyncBatch[] = [];
@@ -362,7 +359,7 @@ describe("ServiceNowConnector", () => {
     test("builds source URL correctly", async () => {
       mockFetch.mockResolvedValueOnce(
         new Response(
-          JSON.stringify({ result: [makeArticle("123", "Test Article")] }),
+          JSON.stringify({ result: [makeIncident("123", "Test Incident")] }),
           { status: 200 },
         ),
       );
@@ -377,14 +374,14 @@ describe("ServiceNowConnector", () => {
       }
 
       expect(batches[0].documents[0].sourceUrl).toBe(
-        "https://myinstance.service-now.com/kb_view.do?sysparm_article=KB123",
+        "https://myinstance.service-now.com/incident.do?sys_id=123",
       );
     });
 
     test("includes metadata in documents", async () => {
       mockFetch.mockResolvedValueOnce(
         new Response(
-          JSON.stringify({ result: [makeArticle("123", "Test Article")] }),
+          JSON.stringify({ result: [makeIncident("123", "Test Incident")] }),
           { status: 200 },
         ),
       );
@@ -400,19 +397,23 @@ describe("ServiceNowConnector", () => {
 
       const metadata = batches[0].documents[0].metadata;
       expect(metadata.sysId).toBe("123");
-      expect(metadata.number).toBe("KB123");
-      expect(metadata.knowledgeBase).toBe("IT KB");
-      expect(metadata.category).toBe("General");
-      expect(metadata.workflowState).toBe("Published");
-      expect(metadata.author).toBe("Admin User");
+      expect(metadata.number).toBe("INC123");
+      expect(metadata.state).toBe("New");
+      expect(metadata.priority).toBe("3 - Moderate");
+      expect(metadata.urgency).toBe("2 - Medium");
+      expect(metadata.impact).toBe("2 - Medium");
+      expect(metadata.category).toBe("Network");
+      expect(metadata.assignmentGroup).toBe("IT Support");
+      expect(metadata.assignedTo).toBe("John Doe");
+      expect(metadata.caller).toBe("Jane Smith");
       expect(metadata.active).toBe(true);
     });
 
-    test("checkpoint stores lastSyncedAt from last article", async () => {
-      const articles = [
-        makeArticle("001", "First Article"),
+    test("checkpoint stores lastSyncedAt from last incident", async () => {
+      const incidents = [
+        makeIncident("001", "First Incident"),
         {
-          ...makeArticle("002", "Second Article"),
+          ...makeIncident("002", "Second Incident"),
           sys_updated_on: {
             display_value: "2024-06-20 11:30:00",
             value: "2024-06-20 11:30:00",
@@ -421,7 +422,7 @@ describe("ServiceNowConnector", () => {
       ];
 
       mockFetch.mockResolvedValueOnce(
-        new Response(JSON.stringify({ result: articles }), { status: 200 }),
+        new Response(JSON.stringify({ result: incidents }), { status: 200 }),
       );
 
       const batches: ConnectorSyncBatch[] = [];
@@ -439,7 +440,7 @@ describe("ServiceNowConnector", () => {
       expect(checkpoint.lastSyncedAt).toBeDefined();
     });
 
-    test("checkpoint preserves previous value when batch has no articles", async () => {
+    test("checkpoint preserves previous value when batch has no incidents", async () => {
       mockFetch.mockResolvedValueOnce(
         new Response(JSON.stringify({ result: [] }), { status: 200 }),
       );

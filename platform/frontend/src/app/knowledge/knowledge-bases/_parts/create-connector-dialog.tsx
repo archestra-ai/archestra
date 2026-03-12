@@ -68,7 +68,7 @@ const CONNECTOR_OPTIONS: {
   {
     type: "servicenow",
     label: "ServiceNow",
-    description: "Sync knowledge base articles from ServiceNow",
+    description: "Sync incidents from ServiceNow",
   },
 ];
 
@@ -160,7 +160,7 @@ export function CreateConnectorDialog({
 
   const urlConfig = getUrlConfig(connectorType);
   const isCloud = form.watch("config.isCloud") as boolean | undefined;
-  const needsEmail = connectorType === "jira" || connectorType === "confluence";
+  const needsEmail = connectorType === "jira" || connectorType === "confluence" || connectorType === "servicenow";
   const emailRequired = needsEmail && isCloud !== false;
 
   return (
@@ -469,8 +469,8 @@ function transformConfigArrayFields(
     "pageIds",
     "labelsToSkip",
     "commentEmailBlacklist",
-    "knowledgeBases",
-    "categories",
+    "states",
+    "assignmentGroups",
   ];
   for (const key of stringArrayFields) {
     if (typeof result[key] === "string") {

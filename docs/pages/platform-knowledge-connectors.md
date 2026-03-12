@@ -80,18 +80,17 @@ Authentication uses a [personal access token](https://docs.gitlab.com/user/profi
 
 ## ServiceNow
 
-Ingests knowledge base articles (HTML converted to plain text) from ServiceNow instances via the Table API (`/api/now/table/kb_knowledge`).
+Ingests incidents from ServiceNow instances via the Table API (`/api/now/table/incident`). Incident descriptions (HTML) are converted to plain text.
 
-| Field                    | Description                                                                           |
-| ------------------------ | ------------------------------------------------------------------------------------- |
-| Instance URL             | Your ServiceNow instance URL (e.g., `https://your-instance.service-now.com`)          |
-| Knowledge Bases          | Comma-separated knowledge base sys_ids to sync (optional)                             |
-| Categories               | Comma-separated category sys_ids to filter by (optional)                              |
-| Encoded Query            | Custom ServiceNow encoded query to filter articles (optional)                         |
-| Include Retired Articles | Toggle to also sync retired articles (default: off, only published articles)          |
-| Batch Size               | Articles per batch (default: 50)                                                      |
+| Field              | Description                                                                           |
+| ------------------ | ------------------------------------------------------------------------------------- |
+| Instance URL       | Your ServiceNow instance URL (e.g., `https://your-instance.service-now.com`)          |
+| States             | Comma-separated incident state values to filter by (e.g. `1, 2`) (optional)          |
+| Assignment Groups  | Comma-separated assignment group sys_ids to filter by (optional)                      |
+| Encoded Query      | Custom ServiceNow encoded query to filter incidents (optional)                        |
+| Batch Size         | Incidents per batch (default: 50)                                                     |
 
-Authentication supports both basic auth (username + password) and OAuth bearer tokens. When using basic auth, provide the username in the Email field and the password in the API Token field. For OAuth, leave the Email field empty and provide the bearer token. Incremental sync uses the `sys_updated_on` field to fetch only articles updated since the last run.
+Authentication supports both basic auth (username + password) and OAuth bearer tokens. When using basic auth, provide the username in the Email field and the password in the API Token field. For OAuth, leave the Email field empty and provide the bearer token. All incidents are synced by default; use the States or Encoded Query fields to narrow the scope. Incremental sync uses the `sys_updated_on` field to fetch only incidents updated since the last run.
 
 ## Managing Connectors
 

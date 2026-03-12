@@ -99,7 +99,7 @@ export function EditConnectorDialog({
   const connectorType = connector.connectorType;
   const urlConfig = getEditUrlConfig(connectorType);
 
-  const needsEmail = connectorType === "jira" || connectorType === "confluence";
+  const needsEmail = connectorType === "jira" || connectorType === "confluence" || connectorType === "servicenow";
   const isCloud = form.watch("config.isCloud") as boolean | undefined;
   const emailRequired = needsEmail && isCloud !== false;
 

@@ -13,20 +13,27 @@ import {
 } from "../base-connector";
 
 const DEFAULT_BATCH_SIZE = 50;
-const API_PATH = "/api/now/table/kb_knowledge";
+const API_PATH = "/api/now/table/incident";
 
 /** Fields requested from the ServiceNow Table API. */
 const FIELDS = [
   "sys_id",
   "number",
   "short_description",
-  "text",
-  "kb_knowledge_base",
-  "kb_category",
-  "workflow_state",
+  "description",
+  "state",
+  "priority",
+  "urgency",
+  "impact",
+  "category",
+  "assignment_group",
+  "assigned_to",
+  "caller_id",
+  "opened_at",
+  "resolved_at",
+  "closed_at",
   "sys_updated_on",
   "sys_created_on",
-  "author",
   "active",
 ].join(",");
 
@@ -155,7 +162,7 @@ export class ServiceNowConnector extends BaseConnector {
     this.log.debug(
       {
         instanceUrl: parsed.instanceUrl,
-        knowledgeBases: parsed.knowledgeBases,
+        states: parsed.states,
         query,
         checkpoint,
       },
@@ -187,25 +194,25 @@ export class ServiceNowConnector extends BaseConnector {
         }
 
         const data = (await response.json()) as {
-          result: ServiceNowArticle[];
+          result: ServiceNowIncident[];
         };
-        const articles = data.result ?? [];
+        const incidents = data.result ?? [];
         const documents: ConnectorDocument[] = [];
 
-        for (const article of articles) {
-          documents.push(articleToDocument(article, parsed.instanceUrl));
+        for (const incident of incidents) {
+          documents.push(incidentToDocument(incident, parsed.instanceUrl));
         }
 
-        offset += articles.length;
-        hasMore = articles.length >= batchSize;
+        offset += incidents.length;
+        hasMore = incidents.length >= batchSize;
 
-        const lastArticle = articles[articles.length - 1];
-        const lastUpdatedAt = lastArticle?.sys_updated_on?.value;
+        const lastIncident = incidents[incidents.length - 1];
+        const lastUpdatedAt = lastIncident?.sys_updated_on?.value;
 
         this.log.debug(
           {
             batchIndex,
-            articleCount: articles.length,
+            incidentCount: incidents.length,
             documentCount: documents.length,
             hasMore,
           },
@@ -245,17 +252,24 @@ interface ServiceNowDisplayValue {
   link?: string;
 }
 
-interface ServiceNowArticle {
+interface ServiceNowIncident {
   sys_id: ServiceNowDisplayValue;
   number: ServiceNowDisplayValue;
   short_description: ServiceNowDisplayValue;
-  text: ServiceNowDisplayValue;
-  kb_knowledge_base: ServiceNowDisplayValue;
-  kb_category: ServiceNowDisplayValue;
-  workflow_state: ServiceNowDisplayValue;
+  description: ServiceNowDisplayValue;
+  state: ServiceNowDisplayValue;
+  priority: ServiceNowDisplayValue;
+  urgency: ServiceNowDisplayValue;
+  impact: ServiceNowDisplayValue;
+  category: ServiceNowDisplayValue;
+  assignment_group: ServiceNowDisplayValue;
+  assigned_to: ServiceNowDisplayValue;
+  caller_id: ServiceNowDisplayValue;
+  opened_at: ServiceNowDisplayValue;
+  resolved_at: ServiceNowDisplayValue;
+  closed_at: ServiceNowDisplayValue;
   sys_updated_on: ServiceNowDisplayValue;
   sys_created_on: ServiceNowDisplayValue;
-  author: ServiceNowDisplayValue;
   active: ServiceNowDisplayValue;
 }
 
@@ -274,24 +288,18 @@ function buildQuery(
 ): string {
   const clauses: string[] = [];
 
-  if (!config.includeRetired) {
-    clauses.push("workflow_state=published");
+  if (config.states && config.states.length > 0) {
+    const stateFilter = config.states
+      .map((s) => `state=${s}`)
+      .join("^OR");
+    clauses.push(stateFilter);
   }
 
-  clauses.push("active=true");
-
-  if (config.knowledgeBases && config.knowledgeBases.length > 0) {
-    const kbFilter = config.knowledgeBases
-      .map((kb) => `kb_knowledge_base=${kb}`)
+  if (config.assignmentGroups && config.assignmentGroups.length > 0) {
+    const groupFilter = config.assignmentGroups
+      .map((g) => `assignment_group=${g}`)
       .join("^OR");
-    clauses.push(kbFilter);
-  }
-
-  if (config.categories && config.categories.length > 0) {
-    const catFilter = config.categories
-      .map((cat) => `kb_category=${cat}`)
-      .join("^OR");
-    clauses.push(catFilter);
+    clauses.push(groupFilter);
   }
 
   if (config.query) {
@@ -338,23 +346,24 @@ function buildHeaders(credentials: ConnectorCredentials): HeadersInit {
   return headers;
 }
 
-function articleToDocument(
-  article: ServiceNowArticle,
+function incidentToDocument(
+  incident: ServiceNowIncident,
   instanceUrl: string,
 ): ConnectorDocument {
-  const htmlContent = article.text?.display_value ?? article.text?.value ?? "";
-  const plainText = stripHtmlTags(htmlContent);
+  const description =
+    incident.description?.display_value ?? incident.description?.value ?? "";
+  const plainText = stripHtmlTags(description);
   const title =
-    article.short_description?.display_value ??
-    article.short_description?.value ??
+    incident.short_description?.display_value ??
+    incident.short_description?.value ??
     "Untitled";
-  const articleNumber =
-    article.number?.display_value ?? article.number?.value ?? "";
-  const sysId = article.sys_id?.value ?? "";
+  const incidentNumber =
+    incident.number?.display_value ?? incident.number?.value ?? "";
+  const sysId = incident.sys_id?.value ?? "";
 
   const normalizedBase = instanceUrl.replace(/\/+$/, "");
   const sourceUrl = sysId
-    ? `${normalizedBase}/kb_view.do?sysparm_article=${articleNumber}`
+    ? `${normalizedBase}/incident.do?sys_id=${sysId}`
     : undefined;
 
   return {
@@ -364,19 +373,25 @@ function articleToDocument(
     sourceUrl,
     metadata: {
       sysId,
-      number: articleNumber,
-      knowledgeBase:
-        article.kb_knowledge_base?.display_value ??
-        article.kb_knowledge_base?.value,
+      number: incidentNumber,
+      state: incident.state?.display_value ?? incident.state?.value,
+      priority:
+        incident.priority?.display_value ?? incident.priority?.value,
+      urgency: incident.urgency?.display_value ?? incident.urgency?.value,
+      impact: incident.impact?.display_value ?? incident.impact?.value,
       category:
-        article.kb_category?.display_value ?? article.kb_category?.value,
-      workflowState:
-        article.workflow_state?.display_value ?? article.workflow_state?.value,
-      author: article.author?.display_value ?? article.author?.value,
-      active: article.active?.value === "true",
+        incident.category?.display_value ?? incident.category?.value,
+      assignmentGroup:
+        incident.assignment_group?.display_value ??
+        incident.assignment_group?.value,
+      assignedTo:
+        incident.assigned_to?.display_value ?? incident.assigned_to?.value,
+      caller:
+        incident.caller_id?.display_value ?? incident.caller_id?.value,
+      active: incident.active?.value === "true",
     },
-    updatedAt: article.sys_updated_on?.value
-      ? new Date(article.sys_updated_on.value)
+    updatedAt: incident.sys_updated_on?.value
+      ? new Date(incident.sys_updated_on.value)
       : undefined,
   };
 }

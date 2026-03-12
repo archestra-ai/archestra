@@ -10,7 +10,6 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 
 interface ServiceNowConfigFieldsProps {
@@ -50,15 +49,16 @@ export function ServiceNowConfigFields({
 
       <FormField
         control={form.control}
-        name={`${prefix}.knowledgeBases`}
+        name={`${prefix}.states`}
         render={({ field }) => (
           <FormItem>
-            <FormLabel>Knowledge Bases (optional)</FormLabel>
+            <FormLabel>States (optional)</FormLabel>
             <FormControl>
-              <Input placeholder="sys_id_1, sys_id_2" {...field} />
+              <Input placeholder="1, 2, 3" {...field} />
             </FormControl>
             <FormDescription>
-              Comma-separated list of knowledge base sys_ids to sync.
+              Comma-separated list of incident state values to filter by (e.g. 1
+              = New, 2 = In Progress).
             </FormDescription>
             <FormMessage />
           </FormItem>
@@ -67,15 +67,15 @@ export function ServiceNowConfigFields({
 
       <FormField
         control={form.control}
-        name={`${prefix}.categories`}
+        name={`${prefix}.assignmentGroups`}
         render={({ field }) => (
           <FormItem>
-            <FormLabel>Categories (optional)</FormLabel>
+            <FormLabel>Assignment Groups (optional)</FormLabel>
             <FormControl>
               <Input placeholder="sys_id_1, sys_id_2" {...field} />
             </FormControl>
             <FormDescription>
-              Comma-separated list of category sys_ids to filter by.
+              Comma-separated list of assignment group sys_ids to filter by.
             </FormDescription>
             <FormMessage />
           </FormItem>
@@ -90,36 +90,15 @@ export function ServiceNowConfigFields({
             <FormLabel>Encoded Query (optional)</FormLabel>
             <FormControl>
               <Textarea
-                placeholder="short_descriptionLIKEnetwork^workflow_state=published"
+                placeholder="short_descriptionLIKEnetwork^priority=1"
                 rows={3}
                 {...field}
               />
             </FormControl>
             <FormDescription>
-              Custom ServiceNow encoded query to filter articles.
+              Custom ServiceNow encoded query to filter incidents.
             </FormDescription>
             <FormMessage />
-          </FormItem>
-        )}
-      />
-
-      <FormField
-        control={form.control}
-        name={`${prefix}.includeRetired`}
-        render={({ field }) => (
-          <FormItem className="flex items-center justify-between rounded-lg border p-3">
-            <div className="space-y-0.5">
-              <FormLabel>Include Retired Articles</FormLabel>
-              <FormDescription>
-                When enabled, retired articles will also be synced.
-              </FormDescription>
-            </div>
-            <FormControl>
-              <Switch
-                checked={field.value ?? false}
-                onCheckedChange={field.onChange}
-              />
-            </FormControl>
           </FormItem>
         )}
       />
@@ -139,7 +118,7 @@ export function ServiceNowConfigFields({
               />
             </FormControl>
             <FormDescription>
-              Number of articles to process per batch (default: 50).
+              Number of incidents to process per batch (default: 50).
             </FormDescription>
             <FormMessage />
           </FormItem>

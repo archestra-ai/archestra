@@ -134,10 +134,9 @@ export type GitlabCheckpoint = z.infer<typeof GitlabCheckpointSchema>;
 export const ServiceNowConfigSchema = z.object({
   type: SERVICENOW,
   instanceUrl: connectorUrlSchema,
-  knowledgeBases: z.array(z.string()).optional(),
-  categories: z.array(z.string()).optional(),
+  states: z.array(z.string()).optional(),
+  assignmentGroups: z.array(z.string()).optional(),
   query: z.string().optional(),
-  includeRetired: z.boolean().optional(),
   batchSize: z.number().optional(),
 });
 export type ServiceNowConfig = z.infer<typeof ServiceNowConfigSchema>;

@@ -796,9 +796,24 @@ export async function getChatMcpTools({
                       isError: archestraResponse.isError ?? false,
                     });
 
+                    // Check for errors
+                    if (archestraResponse.isError) {
+                      const errorText = (
+                        archestraResponse.content as Array<{
+                          type: string;
+                          text?: string;
+                        }>
+                      )
+                        .map((item) =>
+                          item.type === "text" && item.text
+                            ? item.text
+                            : JSON.stringify(item),
+                        )
+                        .join("\n");
+                      throw new Error(errorText);
+                    }
+
                     // Convert MCP content to string for AI SDK
-                    // Note: isError responses are returned as tool results (not thrown)
-                    // so the LLM can handle them gracefully
                     return (
                       archestraResponse.content as Array<{
                         type: string;

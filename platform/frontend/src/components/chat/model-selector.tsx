@@ -88,8 +88,6 @@ interface ModelSelectorProps {
   onOpenChange?: (open: boolean) => void;
   /** Optional callback to clear selection - shows X button inside the trigger when provided and a model is selected */
   onClear?: () => void;
-  /** When true, the "Best available model" clear option is shown but disabled with a tooltip */
-  clearDisabledReason?: string;
   /** Render trigger as an outline button instead of the default ghost prompt-input button */
   variant?: "default" | "outline";
   /** When provided, only show models associated with this API key */
@@ -545,7 +543,6 @@ export function ModelSelector({
   disabled = false,
   onOpenChange: onOpenChangeProp,
   onClear,
-  clearDisabledReason,
   variant = "default",
   apiKeyId,
 }: ModelSelectorProps) {
@@ -811,42 +808,18 @@ export function ModelSelector({
             {/* Option to unselect model */}
             {onClear && (
               <ModelSelectorGroup heading="">
-                {clearDisabledReason ? (
-                  <TooltipProvider delayDuration={300}>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <div>
-                          <ModelSelectorItem
-                            value="__none__"
-                            disabled
-                          >
-                            <ModelSelectorName className="text-muted-foreground">
-                              Best available model (resolved at runtime)
-                            </ModelSelectorName>
-                          </ModelSelectorItem>
-                        </div>
-                      </TooltipTrigger>
-                      <TooltipContent side="bottom" className="text-xs">
-                        {clearDisabledReason}
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                ) : (
-                  <ModelSelectorItem
-                    value="__none__"
-                    onSelect={() => {
-                      handleOpenChange(false);
-                      onClear();
-                    }}
-                  >
-                    <ModelSelectorName>
-                      Best available model (resolved at runtime)
-                    </ModelSelectorName>
-                    {!selectedModel && (
-                      <CheckIcon className="ml-auto size-4" />
-                    )}
-                  </ModelSelectorItem>
-                )}
+                <ModelSelectorItem
+                  value="__none__"
+                  onSelect={() => {
+                    handleOpenChange(false);
+                    onClear();
+                  }}
+                >
+                  <ModelSelectorName>
+                    Best available model (resolved at runtime)
+                  </ModelSelectorName>
+                  {!selectedModel && <CheckIcon className="ml-auto size-4" />}
+                </ModelSelectorItem>
               </ModelSelectorGroup>
             )}
 

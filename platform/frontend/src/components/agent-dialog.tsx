@@ -1541,24 +1541,39 @@ export function AgentDialog({
                         </PopoverContent>
                       </Popover>
 
-                      <ModelSelector
-                        selectedModel={llmModel || ""}
-                        onModelChange={(modelId) =>
-                          handleLlmModelChange(modelId)
-                        }
-                        onClear={() => {
-                          setLlmModel(null);
-                          setLlmApiKeyId(null);
-                          lastAutoSelectedProviderRef.current = null;
-                        }}
-                        clearDisabledReason={
-                          !llmApiKeyId
-                            ? "Select a provider API key first"
-                            : undefined
-                        }
-                        variant="outline"
-                        apiKeyId={llmApiKeyId}
-                      />
+                      {!llmApiKeyId ? (
+                        <TooltipProvider delayDuration={300}>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <div>
+                                <ModelSelector
+                                  selectedModel=""
+                                  onModelChange={() => {}}
+                                  disabled
+                                  variant="outline"
+                                />
+                              </div>
+                            </TooltipTrigger>
+                            <TooltipContent side="bottom" className="text-xs">
+                              Select a provider API key first
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      ) : (
+                        <ModelSelector
+                          selectedModel={llmModel || ""}
+                          onModelChange={(modelId) =>
+                            handleLlmModelChange(modelId)
+                          }
+                          onClear={() => {
+                            setLlmModel(null);
+                            setLlmApiKeyId(null);
+                            lastAutoSelectedProviderRef.current = null;
+                          }}
+                          variant="outline"
+                          apiKeyId={llmApiKeyId}
+                        />
+                      )}
                     </div>
                   </div>
                 )}

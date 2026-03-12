@@ -112,8 +112,9 @@ export function EditConnectorDialog({
         name: values.name,
         description: values.description || null,
         enabled: values.enabled,
-        config:
-          transformConfigArrayFields(values.config) as archestraApiTypes.CreateConnectorData["body"]["config"],
+        config: transformConfigArrayFields(
+          values.config,
+        ) as archestraApiTypes.CreateConnectorData["body"]["config"],
         schedule: values.schedule,
         ...(hasCredentials && {
           credentials: {

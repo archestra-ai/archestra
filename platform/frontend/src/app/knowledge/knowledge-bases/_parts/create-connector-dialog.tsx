@@ -491,7 +491,6 @@ export function CreateConnectorDialog({
   );
 }
 
-
 function getUrlConfig(type: ConnectorType): {
   fieldName: string;
   label: string;

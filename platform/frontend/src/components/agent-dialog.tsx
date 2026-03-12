@@ -1436,19 +1436,6 @@ export function AgentDialog({
                         : null}
                     </p>
                     <div className="flex flex-wrap items-center gap-2">
-                      <ModelSelector
-                        selectedModel={llmModel || ""}
-                        onModelChange={(modelId) =>
-                          handleLlmModelChange(modelId)
-                        }
-                        onClear={() => {
-                          setLlmModel(null);
-                          setLlmApiKeyId(null);
-                          lastAutoSelectedProviderRef.current = null;
-                        }}
-                        variant="outline"
-                      />
-
                       <Popover
                         open={apiKeySelectorOpen}
                         onOpenChange={setApiKeySelectorOpen}
@@ -1553,6 +1540,19 @@ export function AgentDialog({
                           </Command>
                         </PopoverContent>
                       </Popover>
+
+                      <ModelSelector
+                        selectedModel={llmModel || ""}
+                        onModelChange={(modelId) =>
+                          handleLlmModelChange(modelId)
+                        }
+                        onClear={() => {
+                          setLlmModel(null);
+                          setLlmApiKeyId(null);
+                          lastAutoSelectedProviderRef.current = null;
+                        }}
+                        variant="outline"
+                      />
                     </div>
                   </div>
                 )}

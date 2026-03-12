@@ -310,10 +310,7 @@ export class GithubConnector extends BaseConnector {
     const { octokit, repo, checkpoint, isLastGroup } = params;
     const repoFullName = `${repo.owner}/${repo.name}`;
 
-    this.log.info(
-      { repo: repoFullName },
-      "Starting markdown file sync",
-    );
+    this.log.info({ repo: repoFullName }, "Starting markdown file sync");
 
     let treeSha: string;
     let branch = "main";
@@ -335,7 +332,11 @@ export class GithubConnector extends BaseConnector {
       );
     } catch (mainErr) {
       this.log.info(
-        { repo: repoFullName, branch: "main", error: extractErrorMessage(mainErr) },
+        {
+          repo: repoFullName,
+          branch: "main",
+          error: extractErrorMessage(mainErr),
+        },
         "Branch 'main' not found, trying 'master'",
       );
       try {
@@ -473,7 +474,9 @@ export class GithubConnector extends BaseConnector {
         });
 
         if (content !== null) {
-          documents.push(markdownFileToDocument(file.path, content, repo, branch));
+          documents.push(
+            markdownFileToDocument(file.path, content, repo, branch),
+          );
         }
       }
 

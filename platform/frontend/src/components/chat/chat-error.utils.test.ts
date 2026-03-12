@@ -312,7 +312,12 @@ describe("chat-error.utils", () => {
 
     it("should extract message from backend error JSON format", () => {
       const error = new Error(
-        JSON.stringify({ error: { message: "Internal server error", type: "api_internal_server_error" } }),
+        JSON.stringify({
+          error: {
+            message: "Internal server error",
+            type: "api_internal_server_error",
+          },
+        }),
       );
       const result = mapClientError(error);
 

@@ -52,10 +52,7 @@ export function InlineChatError({ error }: InlineChatErrorProps) {
 
             {/* Collapsible technical details */}
             {chatError.originalError && (
-              <Collapsible
-                open={isDetailsOpen}
-                onOpenChange={setIsDetailsOpen}
-              >
+              <Collapsible open={isDetailsOpen} onOpenChange={setIsDetailsOpen}>
                 <CollapsibleTrigger asChild>
                   <Button
                     variant="ghost"

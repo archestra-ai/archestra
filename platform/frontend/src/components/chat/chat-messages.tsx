@@ -48,6 +48,7 @@ import { useOrganization } from "@/lib/organization.query";
 import { hasThinkingTags, parseThinkingTags } from "@/lib/parse-thinking";
 import { cn } from "@/lib/utils";
 import { AuthRequiredTool } from "./auth-required-tool";
+import { MCPAppRenderer, hasMcpAppContent } from "./mcp-app-renderer";
 import { extractFileAttachments, hasTextPart } from "./chat-messages.utils";
 import { EditableAssistantMessage } from "./editable-assistant-message";
 import { EditableUserMessage } from "./editable-user-message";
@@ -1090,6 +1091,18 @@ function MessageTool({
         toolResultPart={toolResultPart}
         errorText={errorText}
         onToolApprovalResponse={onToolApprovalResponse}
+      />
+    );
+  }
+
+  // MCP Apps: render tool results containing HTML UI in a sandboxed iframe
+  if (hasMcpAppContent(toolResultPart)) {
+    return (
+      <MCPAppRenderer
+        part={part}
+        toolResultPart={toolResultPart}
+        toolName={toolName}
+        agentId={agentId}
       />
     );
   }

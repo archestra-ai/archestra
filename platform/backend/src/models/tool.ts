@@ -467,6 +467,8 @@ class ToolModel {
       description: string | null;
       parameters: Record<string, unknown>;
       catalogId: string;
+      metadata?: Record<string, unknown>;
+      toolAnnotations?: Record<string, unknown>;
     }>,
   ): Promise<Tool[]> {
     if (tools.length === 0) {
@@ -512,6 +514,19 @@ class ToolModel {
     for (const tool of tools) {
       const existingTool = existingToolsByName.get(tool.name);
       if (existingTool) {
+        // Update metadata/annotations on existing tools if provided
+        // (MCP server may have changed _meta since initial tool creation)
+        if (tool.metadata && Object.keys(tool.metadata).length > 0) {
+          await db
+            .update(schema.toolsTable)
+            .set({
+              metadata: tool.metadata,
+              toolAnnotations: tool.toolAnnotations ?? {},
+            })
+            .where(eq(schema.toolsTable.id, existingTool.id));
+          existingTool.metadata = tool.metadata;
+          existingTool.toolAnnotations = tool.toolAnnotations ?? {};
+        }
         resultTools.push(existingTool);
       } else {
         toolsToInsert.push({
@@ -520,6 +535,8 @@ class ToolModel {
           parameters: tool.parameters,
           catalogId: tool.catalogId,
           agentId: null,
+          metadata: tool.metadata ?? {},
+          toolAnnotations: tool.toolAnnotations ?? {},
         });
       }
     }

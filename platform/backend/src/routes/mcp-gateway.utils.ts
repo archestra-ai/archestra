@@ -122,17 +122,19 @@ export async function createAgentServer(
     // the agent's actual knowledge base names and connector types
     const kbToolDescription = await buildKnowledgeSourcesDescription(agentId);
 
-    const toolsList = mcpTools.map(({ name, description, parameters }) => ({
-      name,
-      title: archestraToolTitles.get(name) || name,
-      description:
-        name === TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME && kbToolDescription
-          ? kbToolDescription
-          : description,
-      inputSchema: parameters,
-      annotations: {},
-      _meta: {},
-    }));
+    const toolsList = mcpTools.map(
+      ({ name, description, parameters, metadata, toolAnnotations }) => ({
+        name,
+        title: archestraToolTitles.get(name) || name,
+        description:
+          name === TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME && kbToolDescription
+            ? kbToolDescription
+            : description,
+        inputSchema: parameters,
+        annotations: toolAnnotations ?? {},
+        _meta: metadata ?? {},
+      }),
+    );
 
     // Log tools/list request
     try {

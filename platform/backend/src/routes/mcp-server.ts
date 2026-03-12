@@ -572,6 +572,9 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   description: tool.description,
                   parameters: tool.inputSchema,
                   catalogId: capturedCatalogId,
+                  // Preserve MCP tool metadata and annotations for MCP Apps support
+                  metadata: (tool as Record<string, unknown>)._meta as Record<string, unknown> | undefined,
+                  toolAnnotations: (tool as Record<string, unknown>).annotations as Record<string, unknown> | undefined,
                 }));
 
                 // Bulk create tools to avoid N+1 queries
@@ -659,6 +662,9 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           description: tool.description,
           parameters: tool.inputSchema,
           catalogId: catalogItem.id,
+          // Preserve MCP tool metadata and annotations for MCP Apps support
+          metadata: (tool as Record<string, unknown>)._meta as Record<string, unknown> | undefined,
+          toolAnnotations: (tool as Record<string, unknown>).annotations as Record<string, unknown> | undefined,
         }));
 
         // Bulk create tools to avoid N+1 queries

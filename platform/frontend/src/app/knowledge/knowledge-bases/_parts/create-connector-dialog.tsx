@@ -384,10 +384,7 @@ export function CreateConnectorDialog({
                       <FormItem>
                         <FormLabel>Username</FormLabel>
                         <FormControl>
-                          <Input
-                            placeholder="admin"
-                            {...field}
-                          />
+                          <Input placeholder="admin" {...field} />
                         </FormControl>
                         <FormDescription>
                           Your ServiceNow username for basic authentication.

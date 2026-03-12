@@ -290,10 +290,7 @@ export function EditConnectorDialog({
                     <FormItem>
                       <FormLabel>Username</FormLabel>
                       <FormControl>
-                        <Input
-                          placeholder="admin"
-                          {...field}
-                        />
+                        <Input placeholder="admin" {...field} />
                       </FormControl>
                       <FormDescription>
                         Leave empty to keep existing credentials unchanged.

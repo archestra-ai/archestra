@@ -1,5 +1,5 @@
 import type { archestraApiTypes } from "@shared";
-import { Github, Wrench } from "lucide-react";
+import { Github } from "lucide-react";
 import type { ReactNode } from "react";
 
 type ConnectorType =

@@ -289,9 +289,7 @@ function buildQuery(
   const clauses: string[] = [];
 
   if (config.states && config.states.length > 0) {
-    const stateFilter = config.states
-      .map((s) => `state=${s}`)
-      .join("^OR");
+    const stateFilter = config.states.map((s) => `state=${s}`).join("^OR");
     clauses.push(stateFilter);
   }
 
@@ -375,19 +373,16 @@ function incidentToDocument(
       sysId,
       number: incidentNumber,
       state: incident.state?.display_value ?? incident.state?.value,
-      priority:
-        incident.priority?.display_value ?? incident.priority?.value,
+      priority: incident.priority?.display_value ?? incident.priority?.value,
       urgency: incident.urgency?.display_value ?? incident.urgency?.value,
       impact: incident.impact?.display_value ?? incident.impact?.value,
-      category:
-        incident.category?.display_value ?? incident.category?.value,
+      category: incident.category?.display_value ?? incident.category?.value,
       assignmentGroup:
         incident.assignment_group?.display_value ??
         incident.assignment_group?.value,
       assignedTo:
         incident.assigned_to?.display_value ?? incident.assigned_to?.value,
-      caller:
-        incident.caller_id?.display_value ?? incident.caller_id?.value,
+      caller: incident.caller_id?.display_value ?? incident.caller_id?.value,
       active: incident.active?.value === "true",
     },
     updatedAt: incident.sys_updated_on?.value

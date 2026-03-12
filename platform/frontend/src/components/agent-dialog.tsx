@@ -1551,7 +1551,13 @@ export function AgentDialog({
                           setLlmApiKeyId(null);
                           lastAutoSelectedProviderRef.current = null;
                         }}
+                        clearDisabledReason={
+                          !llmApiKeyId
+                            ? "Select a provider API key first"
+                            : undefined
+                        }
                         variant="outline"
+                        apiKeyId={llmApiKeyId}
                       />
                     </div>
                   </div>

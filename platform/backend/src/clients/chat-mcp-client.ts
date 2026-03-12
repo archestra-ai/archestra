@@ -143,6 +143,7 @@ export const __test = {
   isBrowserMcpTool,
   normalizeJsonSchema,
   executeMcpTool,
+  filterToolsByEnabledIds,
 };
 
 /**
@@ -1293,10 +1294,12 @@ async function filterToolsByEnabledIds(
   const enabledToolNames = await ToolModel.getNamesByIds(enabledToolIds);
 
   // Filter tools to only include enabled ones
+  // Archestra built-in tools always bypass custom selection (they are auto-injected
+  // and hidden from the UI, so users cannot select them)
   const filteredTools: Record<string, Tool> = {};
   const excludedTools: string[] = [];
   for (const [name, tool] of Object.entries(tools)) {
-    if (enabledToolNames.includes(name)) {
+    if (isArchestraMcpServerTool(name) || enabledToolNames.includes(name)) {
       filteredTools[name] = tool;
     } else {
       excludedTools.push(name);

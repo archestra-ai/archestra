@@ -266,7 +266,7 @@ export const ToolOutput = ({
     );
   }
 
-  let Output = <div>{output as ReactNode}</div>;
+  let Output: ReactNode;
 
   if (typeof output === "object" || typeof output === "string") {
     // If output is a string, try to parse it as JSON for proper formatting
@@ -321,6 +321,8 @@ export const ToolOutput = ({
         )}
       </div>
     );
+  } else {
+    Output = <div>{String(output)}</div>;
   }
 
   return (

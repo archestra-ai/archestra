@@ -275,7 +275,6 @@ export function ChatApiKeySelector({
         onProviderChange(selectedKeyProvider, keyId);
       }
     }
-
   };
 
   const handleConfirmChange = () => {

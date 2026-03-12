@@ -114,7 +114,11 @@ import {
   getPendingActions,
 } from "@/lib/pending-tool-state";
 import { useTeams } from "@/lib/team.query";
-import { getSavedAgent, saveAgent } from "@/lib/use-chat-preferences";
+import {
+  getSavedAgent,
+  resolveInitialModel,
+  saveAgent,
+} from "@/lib/use-chat-preferences";
 import { useIsMobile } from "@/lib/use-mobile.hook";
 import { cn } from "@/lib/utils";
 import ArchestraPromptInput from "./prompt-input";
@@ -310,70 +314,35 @@ export default function ChatPage() {
     if (!initialAgentId) return;
     if (modelInitializedRef.current) return;
 
-    const allModels = Object.values(modelsByProvider).flat();
-
-    // Helper: auto-select the first API key for a given provider
-    const autoSelectKeyForProvider = (provider: string) => {
-      if (initialApiKeyId) return; // Already have a key selected
-      const matchingKey = chatApiKeys.find((k) => k.provider === provider);
-      if (matchingKey) {
-        setInitialApiKeyId(matchingKey.id);
-      }
-    };
-
-    // 1. Agent-configured model
     const agent = resolvedAgentRef.current;
     const agentData = agent as Record<string, unknown> | undefined;
-    if (agentData?.llmModel) {
-      setInitialModel(agentData.llmModel as string);
-      if (agentData.llmApiKeyId) {
-        setInitialApiKeyId(agentData.llmApiKeyId as string);
-      }
-      modelInitializedRef.current = true;
-      return;
-    }
 
-    // 2. Organization default model
-    if (
-      organization?.defaultLlmModel &&
-      allModels.some((m) => m.id === organization.defaultLlmModel)
-    ) {
-      setInitialModel(organization.defaultLlmModel);
-      // Use the exact saved API key ID when available
-      if (
-        organization.defaultLlmApiKeyId &&
-        chatApiKeys.some((k) => k.id === organization.defaultLlmApiKeyId)
-      ) {
-        setInitialApiKeyId(organization.defaultLlmApiKeyId);
-      } else {
-        for (const [provider, models] of Object.entries(modelsByProvider)) {
-          if (models?.some((m) => m.id === organization.defaultLlmModel)) {
-            autoSelectKeyForProvider(provider);
-            break;
+    const resolved = resolveInitialModel({
+      modelsByProvider,
+      agent: agentData
+        ? {
+            llmModel: (agentData.llmModel as string) ?? null,
+            llmApiKeyId: (agentData.llmApiKeyId as string) ?? null,
           }
-        }
-      }
-      modelInitializedRef.current = true;
-      return;
-    }
+        : null,
+      chatApiKeys,
+      organization: organization
+        ? {
+            defaultLlmModel: organization.defaultLlmModel,
+            defaultLlmApiKeyId: organization.defaultLlmApiKeyId,
+          }
+        : null,
+    });
 
-    // 3. Fall back to first available model (needs models loaded)
-    if (allModels.length === 0) return;
+    if (!resolved) return; // No models available yet
 
-    const providers = Object.keys(modelsByProvider);
-    if (providers.length > 0) {
-      const firstProvider = providers[0];
-      const models =
-        modelsByProvider[firstProvider as keyof typeof modelsByProvider];
-      if (models && models.length > 0) {
-        setInitialModel(models[0].id);
-        autoSelectKeyForProvider(firstProvider);
-        modelInitializedRef.current = true;
-      }
+    setInitialModel(resolved.modelId);
+    if (resolved.apiKeyId) {
+      setInitialApiKeyId(resolved.apiKeyId);
     }
+    modelInitializedRef.current = true;
   }, [
     initialAgentId,
-    initialApiKeyId,
     modelsByProvider,
     chatApiKeys,
     organization?.defaultLlmModel,

@@ -339,6 +339,18 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
               "Content-Encoding": "none",
             },
             stream: createUIMessageStream({
+              onError: (error) => {
+                const mapped = mapProviderError(error, provider);
+                try {
+                  return JSON.stringify(mapped);
+                } catch {
+                  return JSON.stringify({
+                    code: mapped.code,
+                    message: mapped.message,
+                    isRetryable: mapped.isRetryable,
+                  });
+                }
+              },
               execute: async ({ writer }) => {
                 // Stream tokens to the client in real-time while also
                 // handling context-length errors from vLLM/LiteLLM.
@@ -482,8 +494,14 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   }),
                 );
 
-                // Wait for the stream to complete and get usage data
-                const usage = await result.usage;
+                // Wait for the stream to complete and get usage data.
+                // Catch NoOutputGeneratedError (thrown when provider errors
+                // prevent any output) to avoid emitting a second, generic
+                // error event that would race with the detailed provider error
+                // already flowing through toUIMessageStream's onError.
+                const usage = await Promise.resolve(result.usage).catch(
+                  () => null,
+                );
 
                 // Write token usage data to the stream as a custom data part
                 if (usage) {

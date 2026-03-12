@@ -264,7 +264,7 @@ export const ChatErrorMessages: Record<ChatErrorCode, string> = {
   [ChatErrorCode.ContentFiltered]:
     "Your message was blocked by content filters. Please rephrase your request.",
   [ChatErrorCode.ServerError]:
-    "The AI provider is experiencing issues. Please try again in a moment.",
+    "The AI provider is experiencing issues.",
   [ChatErrorCode.NetworkError]:
     "Connection error. Please check your network and try again.",
   [ChatErrorCode.Unknown]: "An unexpected error occurred. Please try again.",

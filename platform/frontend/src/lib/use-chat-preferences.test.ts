@@ -4,6 +4,7 @@ import {
   getSavedAgent,
   resolveAutoSelectedModel,
   resolveInitialModel,
+  resolveModelForAgent,
   saveAgent,
 } from "./use-chat-preferences";
 
@@ -263,5 +264,109 @@ describe("resolveAutoSelectedModel", () => {
         isLoading: false,
       }),
     ).toBeNull(); // should NOT switch to gpt-4o
+  });
+});
+
+describe("resolveModelForAgent", () => {
+  const baseModels = {
+    openai: [{ id: "gpt-4o" }, { id: "gpt-4o-mini" }],
+    anthropic: [{ id: "claude-3-5-sonnet" }],
+  };
+
+  const baseChatApiKeys = [
+    { id: "key-openai", provider: "openai" },
+    { id: "key-anthropic", provider: "anthropic" },
+  ];
+
+  const orgDefaults = {
+    defaultLlmModel: "gpt-4o",
+    defaultLlmApiKeyId: "key-openai",
+  };
+
+  const baseContext = {
+    modelsByProvider: baseModels,
+    chatApiKeys: baseChatApiKeys,
+    organization: orgDefaults,
+  };
+
+  test("uses agent's direct model/key when configured", () => {
+    const result = resolveModelForAgent({
+      agent: {
+        llmModel: "claude-3-5-sonnet",
+        llmApiKeyId: "key-anthropic",
+      },
+      context: baseContext,
+    });
+    expect(result).toEqual({
+      modelId: "claude-3-5-sonnet",
+      apiKeyId: "key-anthropic",
+      source: "agent",
+    });
+  });
+
+  test("falls back to org default when agent has no model configured", () => {
+    const result = resolveModelForAgent({
+      agent: { llmModel: null, llmApiKeyId: null },
+      context: baseContext,
+    });
+    expect(result).toEqual({
+      modelId: "gpt-4o",
+      apiKeyId: "key-openai",
+      source: "organization",
+    });
+  });
+
+  test("switching from agent with direct config to agent with org default resolves correctly", () => {
+    const agentWithConfig = {
+      llmModel: "claude-3-5-sonnet",
+      llmApiKeyId: "key-anthropic",
+    };
+    const agentWithoutConfig = {
+      llmModel: null,
+      llmApiKeyId: null,
+    };
+
+    // First agent resolves to its own config
+    const first = resolveModelForAgent({
+      agent: agentWithConfig,
+      context: baseContext,
+    });
+    expect(first?.modelId).toBe("claude-3-5-sonnet");
+    expect(first?.apiKeyId).toBe("key-anthropic");
+    expect(first?.source).toBe("agent");
+
+    // Switching to second agent should resolve to org default, NOT keep the first agent's values
+    const second = resolveModelForAgent({
+      agent: agentWithoutConfig,
+      context: baseContext,
+    });
+    expect(second?.modelId).toBe("gpt-4o");
+    expect(second?.apiKeyId).toBe("key-openai");
+    expect(second?.source).toBe("organization");
+  });
+
+  test("handles agent with non-string llmModel gracefully", () => {
+    const result = resolveModelForAgent({
+      agent: { llmModel: undefined, llmApiKeyId: undefined },
+      context: baseContext,
+    });
+    expect(result?.source).toBe("organization");
+  });
+
+  test("switching between two agents with different direct configs", () => {
+    const agentA = {
+      llmModel: "gpt-4o",
+      llmApiKeyId: "key-openai",
+    };
+    const agentB = {
+      llmModel: "claude-3-5-sonnet",
+      llmApiKeyId: "key-anthropic",
+    };
+
+    const resultA = resolveModelForAgent({ agent: agentA, context: baseContext });
+    expect(resultA?.modelId).toBe("gpt-4o");
+
+    const resultB = resolveModelForAgent({ agent: agentB, context: baseContext });
+    expect(resultB?.modelId).toBe("claude-3-5-sonnet");
   });
 });

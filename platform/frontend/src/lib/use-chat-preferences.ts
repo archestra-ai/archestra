@@ -91,11 +91,14 @@ interface OrganizationInfo {
   defaultLlmApiKeyId?: string | null;
 }
 
-interface ResolveInitialModelParams {
+interface ChatContext {
   modelsByProvider: Record<string, ModelInfo[]>;
-  agent: AgentInfo | null;
   chatApiKeys: Array<{ id: string; provider: string }>;
   organization: OrganizationInfo | null;
+}
+
+interface ResolveInitialModelParams extends ChatContext {
+  agent: AgentInfo | null;
 }
 
 interface ResolvedModel {
@@ -173,4 +176,23 @@ export function resolveInitialModel(
   }
 
   return null;
+}
+
+// ===== Agent switch helper =====
+
+/**
+ * Resolve the model and API key to use when switching to a given agent.
+ * Delegates to resolveInitialModel with the agent's LLM config.
+ *
+ * This ensures the same priority chain (agent config → org default → fallback)
+ * is applied both on initial load and when the user switches agents.
+ */
+export function resolveModelForAgent(params: {
+  agent: AgentInfo;
+  context: ChatContext;
+}): ResolvedModel | null {
+  return resolveInitialModel({
+    ...params.context,
+    agent: params.agent,
+  });
 }

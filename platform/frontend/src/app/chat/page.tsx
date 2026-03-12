@@ -117,6 +117,7 @@ import { useTeams } from "@/lib/team.query";
 import {
   getSavedAgent,
   resolveInitialModel,
+  resolveModelForAgent,
   saveAgent,
 } from "@/lib/use-chat-preferences";
 import { useIsMobile } from "@/lib/use-mobile.hook";
@@ -315,16 +316,10 @@ export default function ChatPage() {
     if (modelInitializedRef.current) return;
 
     const agent = resolvedAgentRef.current;
-    const agentData = agent as Record<string, unknown> | undefined;
 
     const resolved = resolveInitialModel({
       modelsByProvider,
-      agent: agentData
-        ? {
-            llmModel: (agentData.llmModel as string) ?? null,
-            llmApiKeyId: (agentData.llmApiKeyId as string) ?? null,
-          }
-        : null,
+      agent: agent ?? null,
       chatApiKeys,
       organization: organization
         ? {
@@ -1014,21 +1009,19 @@ export default function ChatPage() {
       const selectedAgent = internalAgents.find((a) => a.id === agentId);
       if (selectedAgent) {
         resolvedAgentRef.current = selectedAgent;
-        const agentData = selectedAgent as Record<string, unknown>;
 
-        const resolved = resolveInitialModel({
-          modelsByProvider,
-          agent: {
-            llmModel: (agentData.llmModel as string) ?? null,
-            llmApiKeyId: (agentData.llmApiKeyId as string) ?? null,
+        const resolved = resolveModelForAgent({
+          agent: selectedAgent,
+          context: {
+            modelsByProvider,
+            chatApiKeys,
+            organization: organization
+              ? {
+                  defaultLlmModel: organization.defaultLlmModel,
+                  defaultLlmApiKeyId: organization.defaultLlmApiKeyId,
+                }
+              : null,
           },
-          chatApiKeys,
-          organization: organization
-            ? {
-                defaultLlmModel: organization.defaultLlmModel,
-                defaultLlmApiKeyId: organization.defaultLlmApiKeyId,
-              }
-            : null,
         });
 
         if (resolved) {

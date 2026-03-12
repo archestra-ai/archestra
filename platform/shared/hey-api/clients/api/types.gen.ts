@@ -27826,11 +27826,15 @@ export type GetConnectorsResponses = {
             } | {
                 type: 'servicenow';
                 instanceUrl: unknown;
+                includeIncidents?: boolean;
+                includeChanges?: boolean;
+                includeChangeRequests?: boolean;
+                includeProblems?: boolean;
+                includeBusinessApps?: boolean;
                 states?: Array<string>;
                 assignmentGroups?: Array<string>;
-                query?: string;
                 batchSize?: number;
-                initialSyncMonths?: number;
+                syncDataForLastMonths?: number;
             };
             secretId: string | null;
             schedule: string;
@@ -27905,11 +27909,15 @@ export type CreateConnectorData = {
         } | {
             type: 'servicenow';
             instanceUrl: string;
+            includeIncidents?: boolean;
+            includeChanges?: boolean;
+            includeChangeRequests?: boolean;
+            includeProblems?: boolean;
+            includeBusinessApps?: boolean;
             states?: Array<string>;
             assignmentGroups?: Array<string>;
-            query?: string;
             batchSize?: number;
-            initialSyncMonths?: number;
+            syncDataForLastMonths?: number;
         };
         credentials: {
             email?: string;
@@ -28031,11 +28039,15 @@ export type CreateConnectorResponses = {
         } | {
             type: 'servicenow';
             instanceUrl: unknown;
+            includeIncidents?: boolean;
+            includeChanges?: boolean;
+            includeChangeRequests?: boolean;
+            includeProblems?: boolean;
+            includeBusinessApps?: boolean;
             states?: Array<string>;
             assignmentGroups?: Array<string>;
-            query?: string;
             batchSize?: number;
-            initialSyncMonths?: number;
+            syncDataForLastMonths?: number;
         };
         secretId: string | null;
         schedule: string;
@@ -28248,11 +28260,15 @@ export type GetConnectorResponses = {
         } | {
             type: 'servicenow';
             instanceUrl: unknown;
+            includeIncidents?: boolean;
+            includeChanges?: boolean;
+            includeChangeRequests?: boolean;
+            includeProblems?: boolean;
+            includeBusinessApps?: boolean;
             states?: Array<string>;
             assignmentGroups?: Array<string>;
-            query?: string;
             batchSize?: number;
-            initialSyncMonths?: number;
+            syncDataForLastMonths?: number;
         };
         secretId: string | null;
         schedule: string;
@@ -28313,11 +28329,15 @@ export type UpdateConnectorData = {
         } | {
             type: 'servicenow';
             instanceUrl: string;
+            includeIncidents?: boolean;
+            includeChanges?: boolean;
+            includeChangeRequests?: boolean;
+            includeProblems?: boolean;
+            includeBusinessApps?: boolean;
             states?: Array<string>;
             assignmentGroups?: Array<string>;
-            query?: string;
             batchSize?: number;
-            initialSyncMonths?: number;
+            syncDataForLastMonths?: number;
         };
         credentials?: {
             email?: string;
@@ -28440,11 +28460,15 @@ export type UpdateConnectorResponses = {
         } | {
             type: 'servicenow';
             instanceUrl: unknown;
+            includeIncidents?: boolean;
+            includeChanges?: boolean;
+            includeChangeRequests?: boolean;
+            includeProblems?: boolean;
+            includeBusinessApps?: boolean;
             states?: Array<string>;
             assignmentGroups?: Array<string>;
-            query?: string;
             batchSize?: number;
-            initialSyncMonths?: number;
+            syncDataForLastMonths?: number;
         };
         secretId: string | null;
         schedule: string;

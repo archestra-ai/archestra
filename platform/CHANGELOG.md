@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.1.10](https://github.com/archestra-ai/archestra/compare/platform-v1.1.9...platform-v1.1.10) (2026-03-12)
+
+
+### Features
+
+* RAG/task queue observability, PostgreSQL metrics, connector UX fix ([#3305](https://github.com/archestra-ai/archestra/issues/3305)) ([4a44042](https://github.com/archestra-ai/archestra/commit/4a440426ddf5387b00559d122564cfd1eed76888))
+
+
+### Bug Fixes
+
+* prevent footer layout shift on page load ([#3313](https://github.com/archestra-ai/archestra/issues/3313)) ([1d7d8ab](https://github.com/archestra-ai/archestra/commit/1d7d8abee35b03bacfce424b768b906c807d6115))
+
+
+### Miscellaneous Chores
+
+* consistent footer with custom message and version ([#3311](https://github.com/archestra-ai/archestra/issues/3311)) ([9dc70e7](https://github.com/archestra-ai/archestra/commit/9dc70e7de4264783c7e086f79fbdb10b2e35f937))
+
 ## [1.1.9](https://github.com/archestra-ai/archestra/compare/platform-v1.1.8...platform-v1.1.9) (2026-03-12)
 
 

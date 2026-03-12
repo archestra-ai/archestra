@@ -68,6 +68,41 @@ export const EMBEDDING_MODELS: Record<string, EmbeddingModelMeta> = {
   },
 };
 
+/**
+ * Display labels for connector types.
+ * Used in UI placeholders and titles.
+ */
+export const CONNECTOR_TYPE_LABELS: Record<string, string> = {
+  jira: "Jira",
+  confluence: "Confluence",
+  github: "GitHub",
+  gitlab: "GitLab",
+};
+
+const CONNECTOR_PLACEHOLDER_DEPARTMENTS = [
+  "Engineering",
+  "Finance",
+  "Marketing",
+  "Sales",
+  "Product",
+  "Design",
+  "Operations",
+  "Support",
+];
+
+/**
+ * Generate a placeholder connector name like "Marketing Confluence Connector".
+ * Picks a random department each call.
+ */
+export function getConnectorNamePlaceholder(connectorType: string): string {
+  const department =
+    CONNECTOR_PLACEHOLDER_DEPARTMENTS[
+      Math.floor(Math.random() * CONNECTOR_PLACEHOLDER_DEPARTMENTS.length)
+    ];
+  const label = CONNECTOR_TYPE_LABELS[connectorType] ?? connectorType;
+  return `${department} ${label} Connector`;
+}
+
 /** Default LLM model used for reranking knowledge base search results */
 export const DEFAULT_RERANKER_MODEL = "gpt-4o";
 

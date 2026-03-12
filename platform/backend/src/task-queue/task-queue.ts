@@ -1,6 +1,7 @@
 import config from "@/config";
 import logger from "@/logging";
 import { TaskModel } from "@/models";
+import * as metrics from "@/observability/metrics";
 import type { InsertTask, Task } from "@/types/task";
 import PERIODIC_TASK_DEFINITIONS from "./periodic-tasks";
 
@@ -32,6 +33,7 @@ export class TaskQueueService {
       ...(params.scheduledFor && { scheduledFor: params.scheduledFor }),
       ...(params.periodic && { periodic: params.periodic }),
     });
+    metrics.taskQueue.reportTaskEnqueued(params.taskType);
     logger.debug(
       { taskId: task.id, taskType: params.taskType },
       "[TaskQueue] Task enqueued",
@@ -158,6 +160,7 @@ export class TaskQueueService {
     // Reset stuck tasks (processing for more than 1 hour)
     const resetCount = await TaskModel.resetStuckTasks(60 * 60 * 1000);
     if (resetCount > 0) {
+      metrics.taskQueue.reportStuckTasksReset(resetCount);
       logger.warn({ resetCount }, "[TaskQueue] Reset stuck tasks");
     }
 
@@ -208,15 +211,21 @@ export class TaskQueueService {
       return;
     }
 
+    metrics.taskQueue.reportActiveTaskChange(task.taskType, 1);
+    const startTime = Date.now();
+
     try {
       await handler(task.payload as Record<string, unknown>);
       await TaskModel.complete(task.id);
+      const durationSeconds = (Date.now() - startTime) / 1000;
+      metrics.taskQueue.reportTaskCompleted(task.taskType, durationSeconds);
       logger.debug(
         { taskId: task.id, taskType: task.taskType },
         "[TaskQueue] Task completed",
       );
       await this.rescheduleIfPeriodic(task.taskType);
     } catch (error) {
+      metrics.taskQueue.reportTaskFailed(task.taskType);
       const errorMessage =
         error instanceof Error ? error.message : String(error);
       logger.warn(
@@ -232,6 +241,7 @@ export class TaskQueueService {
       });
 
       if (result?.status === "dead") {
+        metrics.taskQueue.reportTaskDead(task.taskType);
         // Reschedule periodic tasks that are dead
         await this.rescheduleIfPeriodic(task.taskType);
 
@@ -260,6 +270,8 @@ export class TaskQueueService {
           }
         }
       }
+    } finally {
+      metrics.taskQueue.reportActiveTaskChange(task.taskType, -1);
     }
   }
 

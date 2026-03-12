@@ -59,6 +59,18 @@
     },
     {
       "asDropdown": false,
+      "icon": "dashboard",
+      "includeVars": true,
+      "keepTime": true,
+      "tags": [],
+      "targetBlank": false,
+      "title": "RAG & Knowledge Base",
+      "tooltip": "",
+      "type": "link",
+      "url": "/d/archestra-rag-knowledge-base/archestra-rag-knowledge-base"
+    },
+    {
+      "asDropdown": false,
       "icon": "doc",
       "includeVars": false,
       "keepTime": false,
@@ -528,35 +540,51 @@
                 "operation": "groupby"
               },
               "span.gen_ai.agent.name": {
-                "aggregations": ["first"],
+                "aggregations": [
+                  "first"
+                ],
                 "operation": "aggregate"
               },
               "gen_ai.agent.name": {
-                "aggregations": ["first"],
+                "aggregations": [
+                  "first"
+                ],
                 "operation": "aggregate"
               },
               "span.archestra.user.email": {
-                "aggregations": ["first"],
+                "aggregations": [
+                  "first"
+                ],
                 "operation": "aggregate"
               },
               "archestra.user.email": {
-                "aggregations": ["first"],
+                "aggregations": [
+                  "first"
+                ],
                 "operation": "aggregate"
               },
               "span.archestra.trigger.source": {
-                "aggregations": ["first"],
+                "aggregations": [
+                  "first"
+                ],
                 "operation": "aggregate"
               },
               "archestra.trigger.source": {
-                "aggregations": ["first"],
+                "aggregations": [
+                  "first"
+                ],
                 "operation": "aggregate"
               },
               "Start time": {
-                "aggregations": ["first"],
+                "aggregations": [
+                  "first"
+                ],
                 "operation": "aggregate"
               },
               "startTimeUnixNano": {
-                "aggregations": ["first"],
+                "aggregations": [
+                  "first"
+                ],
                 "operation": "aggregate"
               }
             }

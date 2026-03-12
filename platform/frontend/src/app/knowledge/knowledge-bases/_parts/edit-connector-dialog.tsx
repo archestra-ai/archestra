@@ -1,6 +1,6 @@
 "use client";
 
-import type { archestraApiTypes } from "@shared";
+import { type archestraApiTypes, getConnectorNamePlaceholder } from "@shared";
 import { ChevronDown } from "lucide-react";
 import { useEffect } from "react";
 import { useForm } from "react-hook-form";
@@ -177,7 +177,9 @@ export function EditConnectorDialog({
                     <FormLabel>Name</FormLabel>
                     <FormControl>
                       <Input
-                        placeholder="Engineering Jira Connector"
+                        placeholder={getConnectorNamePlaceholder(
+                          connector.connectorType,
+                        )}
                         {...field}
                       />
                     </FormControl>

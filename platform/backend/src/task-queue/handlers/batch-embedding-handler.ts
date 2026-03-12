@@ -1,6 +1,7 @@
 import { embeddingService } from "@/knowledge-base";
 import logger from "@/logging";
 import { ConnectorRunModel, KnowledgeBaseConnectorModel } from "@/models";
+import * as metrics from "@/observability/metrics";
 
 export async function handleBatchEmbedding(
   payload: Record<string, unknown>,
@@ -14,7 +15,19 @@ export async function handleBatchEmbedding(
     );
   }
 
-  await embeddingService.processDocuments(documentIds, connectorRunId);
+  try {
+    await embeddingService.processDocuments(documentIds, connectorRunId);
+    metrics.rag.reportEmbeddingBatch({
+      documentCount: documentIds.length,
+      status: "success",
+    });
+  } catch (error) {
+    metrics.rag.reportEmbeddingBatch({
+      documentCount: documentIds.length,
+      status: "error",
+    });
+    throw error;
+  }
 
   const updatedRun = await ConnectorRunModel.completeBatch(connectorRunId);
 

@@ -25,8 +25,9 @@
     "db:clean": "tsx --tsconfig standalone-scripts.tsconfig.json src/standalone-scripts/clean-db-on-dev.ts",
     "db:seed:mock-data": "tsx --tsconfig standalone-scripts.tsconfig.json src/standalone-scripts/seed-mock-data.ts",
     "codegen:access-control-docs": "tsx --tsconfig standalone-scripts.tsconfig.json src/standalone-scripts/codegen-access-control-docs.ts",
+    "codegen:archestra-mcp-server-docs": "tsx --tsconfig standalone-scripts.tsconfig.json src/standalone-scripts/codegen-archestra-mcp-server-docs.ts",
     "codegen:openapi": "tsx --tsconfig standalone-scripts.tsconfig.json src/standalone-scripts/codegen-openapi.ts",
-    "codegen": "pnpm codegen:openapi && pnpm codegen:access-control-docs",
+    "codegen": "pnpm codegen:openapi && pnpm codegen:access-control-docs && pnpm codegen:archestra-mcp-server-docs",
     "sentry:sourcemaps": "if [ -n \"$SENTRY_AUTH_TOKEN\" ]; then sentry-cli --url https://de.sentry.io/ sourcemaps inject --org archestra --project archestra-platform-backend ./dist && sentry-cli --url https://de.sentry.io/ sourcemaps upload --org archestra --project archestra-platform-backend --release \"${VERSION:-dev}\" ./dist; else echo 'Skipping Sentry source map upload (SENTRY_AUTH_TOKEN not set)'; fi"
   },
   "dependencies": {

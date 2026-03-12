@@ -681,7 +681,6 @@ export function ModelSelector({
     }
   }, [isLoading, allAvailableModels, selectedModel, onModelChange]);
 
-
   // If loading, show loading state
   if (isLoading) {
     return (

@@ -3,7 +3,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import type { archestraApiTypes } from "@shared";
 import { ChevronRight, Globe, Info, Plus, Server, Trash2 } from "lucide-react";
-import { lazy, useEffect, useRef, useState } from "react";
+import { lazy, useEffect, useMemo, useRef, useState } from "react";
 import { useFieldArray, useForm } from "react-hook-form";
 import { AgentIconPicker } from "@/components/agent-icon-picker";
 import {
@@ -141,12 +141,6 @@ export function McpCatalogForm({
         }),
   });
 
-  // Report dirty state to parent
-  const { isDirty } = form.formState;
-  useEffect(() => {
-    onDirtyChange?.(isDirty);
-  }, [isDirty, onDirtyChange]);
-
   // Expose imperative submit to parent
   useEffect(() => {
     if (submitRef) {
@@ -170,11 +164,28 @@ export function McpCatalogForm({
   );
 
   // Labels state (managed separately from react-hook-form)
-  const [labels, setLabels] = useState<ProfileLabel[]>(
-    initialValues?.labels?.map((l) => ({ key: l.key, value: l.value })) ?? [],
+  const initialLabels = useMemo(
+    () =>
+      initialValues?.labels?.map((l) => ({ key: l.key, value: l.value })) ?? [],
+    [initialValues?.labels],
   );
+  const [labels, setLabels] = useState<ProfileLabel[]>(initialLabels);
   const [labelsOpen, setLabelsOpen] = useState(false);
   const labelsRef = useRef<ProfileLabelsRef>(null);
+
+  // Report dirty state to parent (includes label changes)
+  const { isDirty: isFormDirty } = form.formState;
+  const areLabelsChanged = useMemo(() => {
+    if (labels.length !== initialLabels.length) return true;
+    return labels.some(
+      (l, i) =>
+        l.key !== initialLabels[i].key || l.value !== initialLabels[i].value,
+    );
+  }, [labels, initialLabels]);
+  const isDirty = isFormDirty || areLabelsChanged;
+  useEffect(() => {
+    onDirtyChange?.(isDirty);
+  }, [isDirty, onDirtyChange]);
 
   // Check admin status for scope options
   const { data: isAdmin } = useHasPermissions({
@@ -1084,8 +1095,11 @@ export function McpCatalogForm({
 
         {typeof footer === "function"
           ? footer({
-              isDirty: form.formState.isDirty,
-              onReset: () => form.reset(),
+              isDirty,
+              onReset: () => {
+                form.reset();
+                setLabels(initialLabels);
+              },
             })
           : footer}
       </form>

@@ -1,0 +1,1 @@
+ALTER TABLE "organization" ADD COLUMN "default_llm_api_key_id" uuid;

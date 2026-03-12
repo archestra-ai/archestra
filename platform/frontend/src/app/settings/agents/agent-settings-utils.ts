@@ -8,6 +8,7 @@ interface ApiKey {
 interface OrganizationData {
   defaultLlmModel?: string | null;
   defaultLlmProvider?: string | null;
+  defaultLlmApiKeyId?: string | null;
   defaultAgentId?: string | null;
 }
 
@@ -22,7 +23,17 @@ export function resolveInitialState(
   apiKeys: ApiKey[],
 ): AgentSettingsState {
   let selectedApiKeyId = "";
-  if (organization.defaultLlmProvider) {
+
+  // Prefer exact API key ID when available; fall back to provider-based lookup
+  if (organization.defaultLlmApiKeyId) {
+    const exactKey = apiKeys.find(
+      (k) => k.id === organization.defaultLlmApiKeyId,
+    );
+    if (exactKey) {
+      selectedApiKeyId = exactKey.id;
+    }
+  }
+  if (!selectedApiKeyId && organization.defaultLlmProvider) {
     const matchingKey = apiKeys.find(
       (k) => k.provider === organization.defaultLlmProvider,
     );
@@ -40,29 +51,29 @@ export function resolveInitialState(
 
 export function detectChanges(
   localState: AgentSettingsState,
-  organization: OrganizationData,
+  savedState: AgentSettingsState,
 ): { hasModelChanges: boolean; hasAgentChanges: boolean; hasChanges: boolean } {
-  const serverModel = organization.defaultLlmModel ?? "";
-  const serverAgentId = organization.defaultAgentId ?? "";
-
-  const hasModelChanges = localState.defaultModel !== serverModel;
-  const hasAgentChanges = localState.defaultAgentId !== serverAgentId;
+  const hasModelChanges = localState.defaultModel !== savedState.defaultModel;
+  const hasApiKeyChanges =
+    localState.selectedApiKeyId !== savedState.selectedApiKeyId;
+  const hasAgentChanges =
+    localState.defaultAgentId !== savedState.defaultAgentId;
 
   return {
-    hasModelChanges,
+    hasModelChanges: hasModelChanges || hasApiKeyChanges,
     hasAgentChanges,
-    hasChanges: hasModelChanges || hasAgentChanges,
+    hasChanges: hasModelChanges || hasApiKeyChanges || hasAgentChanges,
   };
 }
 
 export function buildSavePayload(
   localState: AgentSettingsState,
-  organization: OrganizationData,
+  savedState: AgentSettingsState,
   apiKeys: ApiKey[],
 ): Record<string, unknown> {
   const { hasModelChanges, hasAgentChanges } = detectChanges(
     localState,
-    organization,
+    savedState,
   );
   const payload: Record<string, unknown> = {};
 
@@ -76,6 +87,10 @@ export function buildSavePayload(
     }
     payload.defaultLlmModel = localState.defaultModel || null;
     payload.defaultLlmProvider = resolvedProvider;
+    payload.defaultLlmApiKeyId =
+      localState.defaultModel && localState.selectedApiKeyId
+        ? localState.selectedApiKeyId
+        : null;
   }
 
   if (hasAgentChanges) {

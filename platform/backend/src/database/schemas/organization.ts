@@ -83,6 +83,12 @@ const organizationsTable = pgTable("organization", {
   defaultLlmProvider: text("default_llm_provider"),
 
   /**
+   * Chat API key used for the default LLM model.
+   * FK to chat_api_keys(id) ON DELETE SET NULL — enforced by migration only (same circular issue).
+   */
+  defaultLlmApiKeyId: uuid("default_llm_api_key_id"),
+
+  /**
    * Organization-wide default agent ID (fallback when member has no personal default).
    * FK to agents(id) ON DELETE SET NULL — enforced by migration only
    * (Drizzle .references() causes TS circular inference: organization → agent → ... → organization).

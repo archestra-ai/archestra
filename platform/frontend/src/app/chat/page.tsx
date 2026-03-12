@@ -367,10 +367,18 @@ export default function ChatPage() {
       allModels.some((m) => m.id === organization.defaultLlmModel)
     ) {
       setInitialModel(organization.defaultLlmModel);
-      for (const [provider, models] of Object.entries(modelsByProvider)) {
-        if (models?.some((m) => m.id === organization.defaultLlmModel)) {
-          autoSelectKeyForProvider(provider);
-          break;
+      // Use the exact saved API key ID when available
+      if (
+        organization.defaultLlmApiKeyId &&
+        chatApiKeys.some((k) => k.id === organization.defaultLlmApiKeyId)
+      ) {
+        setInitialApiKeyId(organization.defaultLlmApiKeyId);
+      } else {
+        for (const [provider, models] of Object.entries(modelsByProvider)) {
+          if (models?.some((m) => m.id === organization.defaultLlmModel)) {
+            autoSelectKeyForProvider(provider);
+            break;
+          }
         }
       }
       modelInitializedRef.current = true;
@@ -397,6 +405,7 @@ export default function ChatPage() {
     modelsByProvider,
     chatApiKeys,
     organization?.defaultLlmModel,
+    organization?.defaultLlmApiKeyId,
   ]);
 
   // Don't persist to localStorage here — this callback is shared between

@@ -21,10 +21,6 @@ SCRIPT_DIR = Path(__file__).parent
 BASE_DASHBOARD = SCRIPT_DIR / "dashboards" / "application-metrics.json"
 OUTPUT_DIR = SCRIPT_DIR / "dashboards" / "pg-variants"
 
-# PostgreSQL panel IDs in the base dashboard
-PG_ROW_ID = 500
-PG_PANEL_IDS = {501, 502, 503, 504, 505, 506, 507, 508, 509, 510, 511, 512}
-
 # ---------------------------------------------------------------------------
 # Provider definitions
 # ---------------------------------------------------------------------------
@@ -453,7 +449,7 @@ PROVIDERS = {
 }
 
 
-def transform_dashboard(base: dict, provider_name: str, provider: dict) -> dict:
+def transform_dashboard(base: dict, provider: dict) -> dict:
     """Create a provider-specific variant of the dashboard."""
     dashboard = copy.deepcopy(base)
 
@@ -510,7 +506,7 @@ def main():
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
     for name, provider in PROVIDERS.items():
-        dashboard = transform_dashboard(base, name, provider)
+        dashboard = transform_dashboard(base, provider)
         output_path = OUTPUT_DIR / f"application-metrics-{name}.json"
         with open(output_path, "w") as f:
             json.dump(dashboard, f, indent=2)

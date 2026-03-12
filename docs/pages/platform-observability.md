@@ -326,6 +326,11 @@ The Application Metrics dashboard includes PostgreSQL panels. By default, it use
 
 # Azure Database for PostgreSQL via Azure Monitor
 ./install-dashboards.sh --postgres-provider azure
+
+# Remote install with provider flag (no local clone needed)
+GRAFANA_URL=https://example.grafana.net GRAFANA_TOKEN=glsa_xxx \
+  bash <(curl -sL https://raw.githubusercontent.com/archestra-ai/archestra/main/platform/dev/grafana/install-dashboards.sh) \
+  --postgres-provider otel
 ```
 
 | Provider | Metric Prefix | Use When |

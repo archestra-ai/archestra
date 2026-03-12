@@ -74,6 +74,10 @@ while [[ $# -gt 0 ]]; do
       PG_PROVIDER="$2"
       shift 2
       ;;
+    --postgres-provider=*)
+      PG_PROVIDER="${1#*=}"
+      shift
+      ;;
     *)
       echo "Unknown option: $1" >&2
       usage >&2

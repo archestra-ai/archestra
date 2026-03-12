@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.1.9](https://github.com/archestra-ai/archestra/compare/platform-v1.1.8...platform-v1.1.9) (2026-03-12)
+
+
+### Bug Fixes
+
+* restore original prompt as the instruction is not needed anymore ([#3309](https://github.com/archestra-ai/archestra/issues/3309)) ([88c7856](https://github.com/archestra-ai/archestra/commit/88c78564e8ae6798bb9196c6d04d9632d49a607f))
+
+
+### Miscellaneous Chores
+
+* add ServiceNow connector support for knowledge bases ([#3302](https://github.com/archestra-ai/archestra/issues/3302)) ([9cc872e](https://github.com/archestra-ai/archestra/commit/9cc872eff177a05f9ef7a0ab124a9e5c343ee7b0))
+* streaming response animation + fix numbered list formatting ([#3300](https://github.com/archestra-ai/archestra/issues/3300)) ([1958911](https://github.com/archestra-ai/archestra/commit/1958911f8c4ad9c946c5a552b68c3e0396f475ad))
+
 ## [1.1.8](https://github.com/archestra-ai/archestra/compare/platform-v1.1.7...platform-v1.1.8) (2026-03-12)
 
 

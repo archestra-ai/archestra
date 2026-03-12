@@ -91,6 +91,7 @@ export const GithubConfigSchema = z.object({
   repos: z.array(z.string()).optional(),
   includeIssues: z.boolean().optional(),
   includePullRequests: z.boolean().optional(),
+  includeMarkdownFiles: z.boolean().optional(),
   labelsToSkip: z.array(z.string()).optional(),
 });
 export type GithubConfig = z.infer<typeof GithubConfigSchema>;
@@ -110,6 +111,7 @@ export const GitlabConfigSchema = z.object({
   groupId: z.string().optional(),
   includeIssues: z.boolean().optional(),
   includeMergeRequests: z.boolean().optional(),
+  includeMarkdownFiles: z.boolean().optional(),
   labelsToSkip: z.array(z.string()).optional(),
 });
 export type GitlabConfig = z.infer<typeof GitlabConfigSchema>;

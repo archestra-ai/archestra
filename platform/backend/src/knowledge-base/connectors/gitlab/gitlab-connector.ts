@@ -70,6 +70,10 @@ export class GitlabConnector extends BaseConnector {
     const parsed = parseGitlabConfig(params.config);
     if (!parsed) return null;
 
+    // Markdown file count cannot be estimated without fetching the full repo tree,
+    // so skip estimation entirely when markdown syncing is enabled.
+    if (parsed.includeMarkdownFiles) return null;
+
     this.log.debug(
       { projectIds: parsed.projectIds, groupId: parsed.groupId },
       "Estimating total items",
@@ -148,6 +152,7 @@ export class GitlabConnector extends BaseConnector {
     for (let projIdx = 0; projIdx < projects.length; projIdx++) {
       const project = projects[projIdx];
       const isLastProject = projIdx === projects.length - 1;
+      const hasMarkdown = parsed.includeMarkdownFiles === true;
 
       if (parsed.includeIssues !== false) {
         yield* this.syncProjectIssues({
@@ -155,7 +160,10 @@ export class GitlabConnector extends BaseConnector {
           config: parsed,
           project,
           checkpoint,
-          isLastGroup: isLastProject && parsed.includeMergeRequests === false,
+          isLastGroup:
+            isLastProject &&
+            parsed.includeMergeRequests === false &&
+            !hasMarkdown,
         });
       }
 
@@ -163,6 +171,15 @@ export class GitlabConnector extends BaseConnector {
         yield* this.syncProjectMergeRequests({
           client,
           config: parsed,
+          project,
+          checkpoint,
+          isLastGroup: isLastProject && !hasMarkdown,
+        });
+      }
+
+      if (hasMarkdown) {
+        yield* this.syncProjectMarkdownFiles({
+          client,
           project,
           checkpoint,
           isLastGroup: isLastProject,
@@ -358,6 +375,141 @@ export class GitlabConnector extends BaseConnector {
       }
     }
   }
+  private async *syncProjectMarkdownFiles(params: {
+    client: InstanceType<typeof Gitlab>;
+    project: GitlabProject;
+    checkpoint: GitlabCheckpoint;
+    isLastGroup: boolean;
+  }): AsyncGenerator<ConnectorSyncBatch> {
+    const { client, project, checkpoint, isLastGroup } = params;
+
+    this.log.info(
+      { project: project.pathWithNamespace },
+      "Starting markdown file sync",
+    );
+
+    this.log.debug(
+      { project: project.pathWithNamespace, ref: "HEAD" },
+      "Fetching repository tree",
+    );
+
+    // biome-ignore lint/suspicious/noExplicitAny: Gitbeaker Camelize types
+    let treeItems: any[];
+    try {
+      treeItems = (await client.Repositories.allRepositoryTrees(project.id, {
+        recursive: true,
+        // biome-ignore lint/suspicious/noExplicitAny: Gitbeaker Camelize types
+      })) as any[];
+    } catch (err) {
+      this.log.error(
+        {
+          project: project.pathWithNamespace,
+          ref: "HEAD",
+          error: extractErrorMessage(err),
+        },
+        "Failed to fetch repository tree, skipping markdown sync",
+      );
+      yield {
+        documents: [],
+        failures: this.flushFailures(),
+        checkpoint: buildCheckpoint({
+          type: "gitlab",
+          itemUpdatedAt: null,
+          previousLastSyncedAt: checkpoint.lastSyncedAt,
+        }),
+        hasMore: !isLastGroup,
+      };
+      return;
+    }
+
+    const markdownFiles = treeItems.filter(
+      (item) => item.type === "blob" && isMarkdownFile(String(item.path ?? "")),
+    );
+
+    this.log.info(
+      {
+        project: project.pathWithNamespace,
+        ref: "HEAD",
+        totalTreeItems: treeItems.length,
+        markdownFileCount: markdownFiles.length,
+      },
+      "Found markdown files in project",
+    );
+
+    if (markdownFiles.length === 0) {
+      yield {
+        documents: [],
+        failures: this.flushFailures(),
+        checkpoint: buildCheckpoint({
+          type: "gitlab",
+          itemUpdatedAt: null,
+          previousLastSyncedAt: checkpoint.lastSyncedAt,
+        }),
+        hasMore: !isLastGroup,
+      };
+      return;
+    }
+
+    for (let i = 0; i < markdownFiles.length; i += BATCH_SIZE) {
+      const batch = markdownFiles.slice(i, i + BATCH_SIZE);
+      const batchNumber = Math.floor(i / BATCH_SIZE) + 1;
+      const totalBatches = Math.ceil(markdownFiles.length / BATCH_SIZE);
+      const documents: ConnectorDocument[] = [];
+
+      this.log.debug(
+        {
+          project: project.pathWithNamespace,
+          ref: "HEAD",
+          batch: batchNumber,
+          totalBatches,
+          batchSize: batch.length,
+        },
+        "Fetching markdown file contents",
+      );
+
+      for (const file of batch) {
+        await this.rateLimit();
+        const filePath = String(file.path);
+        const content = await this.safeItemFetch({
+          fetch: () => getFileContent(client, project.id, filePath),
+          fallback: null,
+          itemId: filePath,
+          resource: "file_content",
+        });
+
+        if (content !== null) {
+          documents.push(markdownFileToDocument(filePath, content, project));
+        }
+      }
+
+      const failures = this.flushFailures();
+      const hasMoreFiles = i + BATCH_SIZE < markdownFiles.length;
+
+      this.log.info(
+        {
+          project: project.pathWithNamespace,
+          ref: "HEAD",
+          batch: batchNumber,
+          totalBatches,
+          documentsIndexed: documents.length,
+          failureCount: failures.length,
+          hasMore: hasMoreFiles || !isLastGroup,
+        },
+        "Markdown file batch completed",
+      );
+
+      yield {
+        documents,
+        failures,
+        checkpoint: buildCheckpoint({
+          type: "gitlab",
+          itemUpdatedAt: null,
+          previousLastSyncedAt: checkpoint.lastSyncedAt,
+        }),
+        hasMore: hasMoreFiles || !isLastGroup,
+      };
+    }
+  }
 }
 
 // ===== Module-level helpers =====
@@ -477,6 +629,47 @@ function shouldSkipByLabels(
 ): boolean {
   if (!labelsToSkip || labelsToSkip.length === 0) return false;
   return itemLabels.some((label) => labelsToSkip.includes(label));
+}
+
+function isMarkdownFile(path: string): boolean {
+  const lower = path.toLowerCase();
+  return lower.endsWith(".md") || lower.endsWith(".mdx");
+}
+
+async function getFileContent(
+  client: InstanceType<typeof Gitlab>,
+  projectId: number,
+  filePath: string,
+): Promise<string> {
+  // biome-ignore lint/suspicious/noExplicitAny: Gitbeaker Camelize types
+  const file: any = await client.RepositoryFiles.show(
+    projectId,
+    filePath,
+    "HEAD",
+  );
+  if (!file.content) {
+    throw new Error(`No content returned for ${filePath}`);
+  }
+  return Buffer.from(String(file.content), "base64").toString("utf-8");
+}
+
+function markdownFileToDocument(
+  filePath: string,
+  content: string,
+  project: GitlabProject,
+): ConnectorDocument {
+  const fileName = filePath.split("/").pop() ?? filePath;
+  return {
+    id: `${project.pathWithNamespace}#file:${filePath}`,
+    title: `${fileName} (${project.pathWithNamespace})`,
+    content,
+    sourceUrl: `${project.webUrl}/-/blob/HEAD/${filePath}`,
+    metadata: {
+      project: project.pathWithNamespace,
+      filePath,
+      kind: "markdown_file",
+    },
+  };
 }
 
 function issueToDocument(

@@ -8,16 +8,20 @@ const mockGetAuthenticated = vi.fn();
 const mockListForRepo = vi.fn();
 const mockListForOrg = vi.fn();
 const mockListComments = vi.fn();
+const mockGetRef = vi.fn();
+const mockGetTree = vi.fn();
+const mockGetContent = vi.fn();
 
 vi.mock("@octokit/rest", () => ({
   Octokit: class MockOctokit {
     rest = {
       users: { getAuthenticated: mockGetAuthenticated },
-      repos: { listForOrg: mockListForOrg },
+      repos: { listForOrg: mockListForOrg, getContent: mockGetContent },
       issues: {
         listForRepo: mockListForRepo,
         listComments: mockListComments,
       },
+      git: { getRef: mockGetRef, getTree: mockGetTree },
     };
   },
 }));
@@ -635,6 +639,175 @@ describe("GithubConnector", () => {
         lastSyncedAt?: string;
       };
       expect(checkpoint.lastSyncedAt).toBe("2024-01-10T00:00:00.000Z");
+    });
+  });
+
+  describe("markdown file sync", () => {
+    test("fetches and indexes markdown files when includeMarkdownFiles is true", async () => {
+      // Issues pass - empty
+      mockListForRepo.mockResolvedValueOnce({ data: [] });
+      // PR pass - empty
+      mockListForRepo.mockResolvedValueOnce({ data: [] });
+
+      // Markdown: resolve default branch
+      mockGetRef.mockResolvedValueOnce({
+        data: { object: { sha: "abc123" } },
+      });
+
+      // Markdown: get tree
+      mockGetTree.mockResolvedValueOnce({
+        data: {
+          tree: [
+            { type: "blob", path: "README.md", sha: "sha1" },
+            { type: "blob", path: "docs/guide.mdx", sha: "sha2" },
+            { type: "blob", path: "src/index.ts", sha: "sha3" },
+            { type: "tree", path: "docs", sha: "sha4" },
+          ],
+        },
+      });
+
+      // Markdown: get file contents
+      mockGetContent
+        .mockResolvedValueOnce({
+          data: {
+            content: Buffer.from("# README\nHello world").toString("base64"),
+          },
+        })
+        .mockResolvedValueOnce({
+          data: {
+            content: Buffer.from("# Guide\nSome guide content").toString(
+              "base64",
+            ),
+          },
+        });
+
+      const batches: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: { ...validConfig, includeMarkdownFiles: true },
+        credentials,
+        checkpoint: null,
+      })) {
+        batches.push(batch);
+      }
+
+      const mdDocs = batches
+        .flatMap((b) => b.documents)
+        .filter((d) => d.metadata.kind === "markdown_file");
+
+      expect(mdDocs).toHaveLength(2);
+      expect(mdDocs[0].id).toBe("my-repo#file:README.md");
+      expect(mdDocs[0].title).toBe("README.md (test-org/my-repo)");
+      expect(mdDocs[0].content).toBe("# README\nHello world");
+      expect(mdDocs[0].sourceUrl).toContain("blob/main/README.md");
+      expect(mdDocs[0].metadata.filePath).toBe("README.md");
+
+      expect(mdDocs[1].id).toBe("my-repo#file:docs/guide.mdx");
+      expect(mdDocs[1].content).toBe("# Guide\nSome guide content");
+    });
+
+    test("does not fetch markdown files when includeMarkdownFiles is not set", async () => {
+      mockListForRepo.mockResolvedValueOnce({ data: [] });
+      mockListForRepo.mockResolvedValueOnce({ data: [] });
+
+      const batches: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: validConfig,
+        credentials,
+        checkpoint: null,
+      })) {
+        batches.push(batch);
+      }
+
+      expect(mockGetRef).not.toHaveBeenCalled();
+      expect(mockGetTree).not.toHaveBeenCalled();
+    });
+
+    test("falls back to master branch when main not found", async () => {
+      mockListForRepo.mockResolvedValueOnce({ data: [] });
+      mockListForRepo.mockResolvedValueOnce({ data: [] });
+
+      // main branch fails
+      mockGetRef.mockRejectedValueOnce(new Error("Not found"));
+      // master branch succeeds
+      mockGetRef.mockResolvedValueOnce({
+        data: { object: { sha: "master-sha" } },
+      });
+
+      mockGetTree.mockResolvedValueOnce({
+        data: {
+          tree: [{ type: "blob", path: "README.md", sha: "sha1" }],
+        },
+      });
+
+      mockGetContent.mockResolvedValueOnce({
+        data: {
+          content: Buffer.from("# Hello").toString("base64"),
+        },
+      });
+
+      const batches: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: { ...validConfig, includeMarkdownFiles: true },
+        credentials,
+        checkpoint: null,
+      })) {
+        batches.push(batch);
+      }
+
+      expect(mockGetRef).toHaveBeenCalledTimes(2);
+      expect(mockGetRef).toHaveBeenCalledWith(
+        expect.objectContaining({ ref: "heads/master" }),
+      );
+
+      const mdDocs = batches
+        .flatMap((b) => b.documents)
+        .filter((d) => d.metadata.kind === "markdown_file");
+      expect(mdDocs).toHaveLength(1);
+      expect(mdDocs[0].sourceUrl).toContain("/blob/master/README.md");
+    });
+
+    test("continues when file content fetch fails", async () => {
+      mockListForRepo.mockResolvedValueOnce({ data: [] });
+      mockListForRepo.mockResolvedValueOnce({ data: [] });
+
+      mockGetRef.mockResolvedValueOnce({
+        data: { object: { sha: "abc123" } },
+      });
+
+      mockGetTree.mockResolvedValueOnce({
+        data: {
+          tree: [
+            { type: "blob", path: "a.md", sha: "sha1" },
+            { type: "blob", path: "b.md", sha: "sha2" },
+          ],
+        },
+      });
+
+      mockGetContent
+        .mockRejectedValueOnce(new Error("403 Forbidden"))
+        .mockResolvedValueOnce({
+          data: {
+            content: Buffer.from("# B file").toString("base64"),
+          },
+        });
+
+      const batches: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: { ...validConfig, includeMarkdownFiles: true },
+        credentials,
+        checkpoint: null,
+      })) {
+        batches.push(batch);
+      }
+
+      const mdBatch = batches.find((b) =>
+        b.documents.some((d) => d.metadata.kind === "markdown_file"),
+      );
+      expect(mdBatch).toBeDefined();
+      expect(mdBatch?.documents).toHaveLength(1);
+      expect(mdBatch?.documents[0].content).toBe("# B file");
+      expect(mdBatch?.failures).toHaveLength(1);
+      expect(mdBatch?.failures?.[0].itemId).toBe("a.md");
     });
   });
 

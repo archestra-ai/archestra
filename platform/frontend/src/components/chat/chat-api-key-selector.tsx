@@ -101,8 +101,11 @@ export function ChatApiKeySelector({
     setOpen(newOpen);
     onOpenChange?.(newOpen);
   };
-  // Track if we've already auto-selected to prevent infinite loops
-  const hasAutoSelectedRef = useRef(false);
+  // Track which provider we last auto-selected for to prevent infinite loops.
+  // Using the provider value (not a boolean) so we can re-run auto-select when
+  // the provider genuinely changes (e.g., user picks a model from a different provider)
+  // without looping when our own mutations cause provider changes.
+  const autoSelectedForProviderRef = useRef<string | null>(null);
 
   // Group keys by provider for display
   const keysByProvider = useMemo(() => {
@@ -152,21 +155,26 @@ export function ChatApiKeySelector({
     return availableKeys.find((k) => k.id === currentConversationChatApiKeyId);
   }, [availableKeys, currentConversationChatApiKeyId]);
 
-  // Reset auto-select flag when conversation or provider changes
-  // so auto-selection re-runs (e.g., when user picks a model from a different provider)
-  // biome-ignore lint/correctness/useExhaustiveDependencies: we want to reset when conversationId or currentProvider changes
+  // Reset auto-select tracking when conversation changes so auto-selection
+  // re-runs for the new conversation.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally only resetting on conversationId
   useEffect(() => {
-    hasAutoSelectedRef.current = false;
-  }, [conversationId, currentProvider]);
+    autoSelectedForProviderRef.current = null;
+  }, [conversationId]);
 
-  // Auto-select first key when no key is selected or current key is invalid
+  // Auto-select first key when no key is selected or current key doesn't match provider.
+  // Uses provider-based tracking instead of a boolean flag to allow re-selection when the
+  // provider genuinely changes (e.g., user picks a model from a different provider) while
+  // preventing infinite loops from our own mutations causing provider changes.
   // biome-ignore lint/correctness/useExhaustiveDependencies: adding updateConversationMutation as a dependency would cause a infinite loop
   useEffect(() => {
     // Skip if loading or no keys available
     if (isLoading || availableKeys.length === 0) return;
 
-    // Skip if we've already auto-selected to prevent infinite loops
-    if (hasAutoSelectedRef.current) return;
+    const providerKey = currentProvider ?? null;
+
+    // Skip if we already handled this exact provider
+    if (autoSelectedForProviderRef.current === providerKey) return;
 
     // Check if current key is valid AND matches the current provider
     const currentKeyValid =
@@ -174,8 +182,11 @@ export function ChatApiKeySelector({
       availableKeys.some((k) => k.id === currentConversationChatApiKeyId) &&
       currentConversationChatApiKey.provider === currentProvider;
 
-    // If current key is valid, no need to auto-select
-    if (currentKeyValid) return;
+    // If current key is valid, mark as handled without firing a mutation
+    if (currentKeyValid) {
+      autoSelectedForProviderRef.current = providerKey;
+      return;
+    }
 
     // Get keys for the current provider (prefer matching provider)
     const providerKeys = currentProvider
@@ -210,8 +221,8 @@ export function ChatApiKeySelector({
 
     // Auto-select key if no valid key is selected
     if (keyToSelectValid) {
-      // Mark as auto-selected BEFORE calling callbacks to prevent loops
-      hasAutoSelectedRef.current = true;
+      // Mark as handled BEFORE calling callbacks to prevent loops
+      autoSelectedForProviderRef.current = providerKey;
 
       if (conversationId) {
         updateConversationMutation.mutate({
@@ -255,22 +266,29 @@ export function ChatApiKeySelector({
     const selectedKeyProvider = selectedKey?.provider;
 
     if (conversationId) {
-      updateConversationMutation.mutate({
-        id: conversationId,
-        chatApiKeyId: keyId,
-      });
-    } else if (onApiKeyChange) {
-      onApiKeyChange(keyId);
+      // For existing conversations, let onProviderChange handle both the API key
+      // update and model selection in a single mutation to avoid race conditions.
+      if (selectedKeyProvider && onProviderChange) {
+        onProviderChange(selectedKeyProvider, keyId);
+      } else {
+        updateConversationMutation.mutate({
+          id: conversationId,
+          chatApiKeyId: keyId,
+        });
+      }
+    } else {
+      // For initial (no conversation) state, update key state and notify parent
+      if (onApiKeyChange) {
+        onApiKeyChange(keyId);
+      }
+      if (selectedKeyProvider && onProviderChange) {
+        onProviderChange(selectedKeyProvider, keyId);
+      }
     }
 
     // Save to localStorage for the selected key's provider
     if (selectedKeyProvider) {
       saveApiKey(selectedKeyProvider, keyId);
-    }
-
-    // Always notify parent to preselect best model for the new key
-    if (selectedKeyProvider && onProviderChange) {
-      onProviderChange(selectedKeyProvider, keyId);
     }
   };
 

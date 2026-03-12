@@ -59,6 +59,7 @@ import {
 } from "@/utils/llm-resolution";
 import { estimateMessagesSize } from "@/utils/message-size";
 import {
+  estimateTokenCount,
   parseMaxInputTokens,
   trimMessagesToTokenLimit,
 } from "./context-trimming";
@@ -279,6 +280,9 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // @see https://docs.perplexity.ai/api-reference/chat-completions-post
           const supportsToolCalling = provider !== "perplexity";
 
+          const DEFAULT_MAX_INPUT_TOKENS = 128_000;
+          let knownMaxInputTokens: number | null = null;
+
           const streamTextConfig: Parameters<typeof streamText>[0] = {
             model,
             messages: modelMessages,
@@ -288,6 +292,34 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
               hasToolCall(TOOL_SWAP_AGENT_FULL_NAME),
             ],
             abortSignal: chatAbortController.signal,
+            prepareStep: ({ messages: stepMessages, stepNumber }) => {
+              // First call is handled by the existing try/catch below
+              if (stepNumber === 1) return undefined;
+
+              const maxTokens = knownMaxInputTokens ?? DEFAULT_MAX_INPUT_TOKENS;
+              const estimated = estimateTokenCount(stepMessages);
+
+              // Apply trimming at 90% of the limit as a safety margin
+              if (estimated > maxTokens * 0.9) {
+                const trimmed = trimMessagesToTokenLimit(
+                  stepMessages,
+                  maxTokens,
+                );
+                logger.info(
+                  {
+                    stepNumber,
+                    estimatedTokens: estimated,
+                    maxTokens,
+                    originalMessages: stepMessages.length,
+                    trimmedMessages: trimmed.length,
+                    conversationId,
+                  },
+                  "[ContextTrimming] proactively trimming messages before agentic step",
+                );
+                return { messages: trimmed };
+              }
+              return undefined;
+            },
             onFinish: async ({ usage, finishReason }) => {
               removeAbortListeners();
               logger.info(
@@ -374,6 +406,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 } catch (error) {
                   const maxTokens = parseMaxInputTokens(error);
                   if (maxTokens !== null) {
+                    knownMaxInputTokens = maxTokens;
                     const trimmed = trimMessagesToTokenLimit(
                       modelMessages,
                       maxTokens,

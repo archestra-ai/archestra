@@ -9,7 +9,9 @@ const CHARS_PER_TOKEN = 4;
 
 /**
  * Parse max input token limit from vLLM/LiteLLM error responses.
- * Matches: "maximum input length of 8192 tokens"
+ * Matches:
+ * - vLLM: "maximum input length of 8192 tokens"
+ * - LiteLLM: "Max Input Tokens=200000"
  */
 export function parseMaxInputTokens(error: unknown): number | null {
   let body: string | undefined;
@@ -22,8 +24,21 @@ export function parseMaxInputTokens(error: unknown): number | null {
   }
   if (!body) return null;
 
-  const match = body.match(/maximum input length of (\d+)/);
+  const match =
+    body.match(/maximum input length of (\d+)/) ??
+    body.match(/Max Input Tokens=(\d+)/i);
   return match ? Number.parseInt(match[1], 10) : null;
+}
+
+/**
+ * Estimate token count from a ModelMessage array using character count heuristic.
+ */
+export function estimateTokenCount(messages: ModelMessage[]): number {
+  const totalChars = messages.reduce(
+    (sum, m) => sum + JSON.stringify(m.content).length,
+    0,
+  );
+  return Math.ceil(totalChars / CHARS_PER_TOKEN);
 }
 
 /**

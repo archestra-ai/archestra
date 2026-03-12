@@ -1,6 +1,7 @@
 import type { ModelMessage } from "ai";
 import { describe, expect, test } from "vitest";
 import {
+  estimateTokenCount,
   parseMaxInputTokens,
   trimMessagesToTokenLimit,
 } from "./context-trimming";
@@ -18,6 +19,13 @@ describe("parseMaxInputTokens", () => {
 
   test("returns null for unrelated errors", () => {
     expect(parseMaxInputTokens(new Error("rate limit exceeded"))).toBeNull();
+  });
+
+  test("parses limit from LiteLLM ContextWindowExceededError", () => {
+    const error = new Error(
+      "litellm.ContextWindowExceededError: ContextWindowExceededError: ContextWindowExceededError: Model=claude-sonnet-4-5, Max Input Tokens=200000, Got=231853",
+    );
+    expect(parseMaxInputTokens(error)).toBe(200000);
   });
 
   test("returns null for non-error values", () => {
@@ -88,5 +96,28 @@ describe("trimMessagesToTokenLimit", () => {
     const messages = [msg("user", "hello")];
     const result = trimMessagesToTokenLimit(messages, 1);
     expect(result.some((m) => m.role === "user")).toBe(true);
+  });
+});
+
+describe("estimateTokenCount", () => {
+  test("estimates tokens from messages using chars/4 heuristic", () => {
+    const messages = [msg("user", "a".repeat(400))];
+    // JSON.stringify("a".repeat(400)) = 402 chars (with quotes), / 4 = ~101
+    const estimate = estimateTokenCount(messages);
+    expect(estimate).toBeGreaterThan(0);
+    expect(estimate).toBe(
+      Math.ceil(JSON.stringify("a".repeat(400)).length / 4),
+    );
+  });
+
+  test("returns 0 for empty messages", () => {
+    expect(estimateTokenCount([])).toBe(0);
+  });
+
+  test("sums across multiple messages", () => {
+    const messages = [msg("user", "hello"), msg("assistant", "world")];
+    const single1 = estimateTokenCount([messages[0]]);
+    const single2 = estimateTokenCount([messages[1]]);
+    expect(estimateTokenCount(messages)).toBe(single1 + single2);
   });
 });

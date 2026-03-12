@@ -21,8 +21,10 @@ describe("OrganizationModel", () => {
         logo: null,
         logoDark: null,
         favicon: null,
+        iconLogo: null,
         appName: null,
         ogDescription: null,
+        footerText: null,
       });
     });
 
@@ -39,8 +41,10 @@ describe("OrganizationModel", () => {
         logo: null,
         logoDark: null,
         favicon: null,
+        iconLogo: null,
         appName: null,
         ogDescription: null,
+        footerText: null,
       });
     });
 
@@ -133,6 +137,8 @@ describe("OrganizationModel", () => {
         "appName",
         "customFont",
         "favicon",
+        "footerText",
+        "iconLogo",
         "logo",
         "logoDark",
         "ogDescription",

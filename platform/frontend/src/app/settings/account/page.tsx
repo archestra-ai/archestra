@@ -3,7 +3,7 @@
 import { UpdateNameCard } from "@daveyplate/better-auth-ui";
 import { Suspense } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
-import { LightDarkToggle } from "@/app/settings/appearance/_components/light-dark-toggle";
+import { LightDarkToggle } from "@/app/settings/account/_components/light-dark-toggle";
 import { LoadingSpinner } from "@/components/loading";
 import { RolePermissionsCard } from "@/components/settings/role-permissions-card";
 import { useOrgTheme } from "@/lib/theme.hook";

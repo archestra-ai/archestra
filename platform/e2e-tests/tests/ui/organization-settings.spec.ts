@@ -19,14 +19,6 @@ test.describe("Organization Settings page", () => {
     ).toBeVisible();
   });
 
-  test("should redirect from /settings/appearance to /settings/organization", async ({
-    page,
-  }) => {
-    await goToPage(page, "/settings/appearance");
-    await page.waitForURL("**/settings/organization");
-    expect(page.url()).toContain("/settings/organization");
-  });
-
   test("should show branding fields (App Name, Footer Text, OG Description)", async ({
     page,
   }) => {

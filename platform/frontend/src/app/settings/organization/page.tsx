@@ -22,12 +22,12 @@ import {
   useUpdateAppearance,
 } from "@/lib/organization.query";
 import { useOrgTheme } from "@/lib/theme.hook";
-import { LogoUpload } from "../appearance/_components/logo-upload";
-import { ThemeSelector } from "../appearance/_components/theme-selector";
 import { ChatPlaceholdersEditor } from "./_components/chat-placeholders-editor";
 import { FaviconUpload } from "./_components/favicon-upload";
 import { IconLogoUpload } from "./_components/icon-logo-upload";
+import { LogoUpload } from "./_components/logo-upload";
 import { OrganizationTokenSection } from "./_components/organization-token-section";
+import { ThemeSelector } from "./_components/theme-selector";
 
 export default function OrganizationSettingsPage() {
   const updateMutation = useUpdateAppearance(

@@ -295,8 +295,10 @@ export function useUpdateAppearance(
         logo: updatedOrganization.logo,
         logoDark: updatedOrganization.logoDark,
         favicon: updatedOrganization.favicon,
+        iconLogo: updatedOrganization.iconLogo,
         appName: updatedOrganization.appName,
         ogDescription: updatedOrganization.ogDescription,
+        footerText: updatedOrganization.footerText,
       });
       toast.success(onSuccessMessage);
     },

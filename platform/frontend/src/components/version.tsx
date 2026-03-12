@@ -23,7 +23,8 @@ export function Version({ inline = false }: VersionProps) {
 
   const isSettingsPage = pathname.startsWith("/settings");
   const isChatPage = pathname.startsWith("/chat");
-  const footerText = organization?.footerText || appearance?.footerText;
+  // Prefer authenticated org data; fall back to public appearance for unauthenticated pages (e.g. sign-in)
+  const footerText = organization?.footerText ?? appearance?.footerText;
 
   const hasNewVersion = useMemo(() => {
     if (!data?.version || !latestRelease?.tag_name) return false;

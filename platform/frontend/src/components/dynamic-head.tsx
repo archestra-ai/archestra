@@ -18,17 +18,23 @@ export function DynamicHead() {
 
   // Update favicon
   useEffect(() => {
-    if (!appearance?.favicon) return;
-
-    let link = document.querySelector(
+    const link = document.querySelector(
       'link[rel="icon"]',
     ) as HTMLLinkElement | null;
-    if (!link) {
-      link = document.createElement("link");
-      link.rel = "icon";
-      document.head.appendChild(link);
+
+    if (!appearance?.favicon) {
+      if (link) link.href = "/favicon.ico";
+      return;
     }
-    link.href = appearance.favicon;
+
+    if (link) {
+      link.href = appearance.favicon;
+    } else {
+      const newLink = document.createElement("link");
+      newLink.rel = "icon";
+      newLink.href = appearance.favicon;
+      document.head.appendChild(newLink);
+    }
   }, [appearance?.favicon]);
 
   // Update meta description and OG tags

@@ -11,7 +11,7 @@ import {
 import type { ChatStatus } from "ai";
 import { MoreVerticalIcon, PaperclipIcon } from "lucide-react";
 import type { FormEvent } from "react";
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { ModelSelectorLogo } from "@/components/ai-elements/model-selector";
 import {
   PromptInput,
@@ -163,9 +163,13 @@ const PromptInputContent = ({
 
   // Chat placeholders from organization settings
   const { data: orgData } = useOrganization();
-  const { text: animatedPlaceholder, isAnimating } = useTypingAnimation(
-    orgData?.chatPlaceholders,
+  const chatPlaceholders = useMemo(
+    () => orgData?.chatPlaceholders,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [orgData?.chatPlaceholders],
   );
+  const { text: animatedPlaceholder, isAnimating } =
+    useTypingAnimation(chatPlaceholders);
 
   // RBAC: check if user can see agent picker and provider settings in chat
   const { data: canSeeAgentPicker } = useHasPermissions({

@@ -546,7 +546,11 @@ export function ModelSelector({
   variant = "default",
   apiKeyId,
 }: ModelSelectorProps) {
-  const { modelsByProvider, isPending: isLoading } = useModelsByProvider({
+  const {
+    modelsByProvider,
+    isPending: isLoading,
+    isPlaceholderData,
+  } = useModelsByProvider({
     apiKeyId,
   });
   const syncMutation = useSyncChatModels();
@@ -670,7 +674,10 @@ export function ModelSelector({
   // in the available list (e.g. after switching API keys or on initial load).
   // Only triggers when the model is genuinely unavailable — keeps the user's
   // selection stable across API key changes if the model is still valid.
+  // Skip when using placeholder (stale) data from a previous apiKeyId query —
+  // the stale models would incorrectly trigger auto-select for the wrong provider.
   useEffect(() => {
+    if (isPlaceholderData) return;
     const modelToSelect = resolveAutoSelectedModel({
       selectedModel,
       availableModels: allAvailableModels,
@@ -679,7 +686,13 @@ export function ModelSelector({
     if (modelToSelect) {
       onModelChange(modelToSelect);
     }
-  }, [isLoading, allAvailableModels, selectedModel, onModelChange]);
+  }, [
+    isLoading,
+    isPlaceholderData,
+    allAvailableModels,
+    selectedModel,
+    onModelChange,
+  ]);
 
   // If loading, show loading state
   if (isLoading) {

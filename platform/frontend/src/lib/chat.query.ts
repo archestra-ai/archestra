@@ -201,15 +201,21 @@ export function useUpdateConversation() {
           return merged;
         },
       );
-      queryClient.invalidateQueries({ queryKey: ["conversations"] });
+      // Only invalidate the conversations list for sidebar-relevant changes
+      // (title, pin status, agent). Model/key updates don't affect the sidebar
+      // and unnecessary invalidation causes cascading re-renders.
+      if (
+        variables.title !== undefined ||
+        variables.pinnedAt !== undefined ||
+        variables.agentId
+      ) {
+        queryClient.invalidateQueries({ queryKey: ["conversations"] });
+      }
       if (variables.agentId) {
         // Agent changed — invalidate tools-related queries
         queryClient.invalidateQueries({
           queryKey: ["conversation", variables.id, "enabled-tools"],
         });
-      }
-      if (variables.chatApiKeyId) {
-        queryClient.invalidateQueries({ queryKey: ["chat-models"] });
       }
     },
   });

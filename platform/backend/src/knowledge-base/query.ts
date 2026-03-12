@@ -1,4 +1,4 @@
-import { getEmbeddingColumnName } from "@shared";
+import { addNomicTaskPrefix, getEmbeddingColumnName } from "@shared";
 import config from "@/config";
 import logger from "@/logging";
 import { KbChunkModel } from "@/models";
@@ -56,7 +56,11 @@ class QueryService {
       callback: () =>
         embeddingConfig.client.embeddings.create({
           model: embeddingConfig.model,
-          input: queryText,
+          input: addNomicTaskPrefix(
+            embeddingConfig.model,
+            queryText,
+            "search_query",
+          ),
           ...(embeddingConfig.model.startsWith("nomic")
             ? {}
             : { dimensions: embeddingConfig.dimensions }),

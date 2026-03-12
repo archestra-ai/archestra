@@ -1,5 +1,5 @@
 import type { EmbeddingModel } from "@shared";
-import { EMBEDDING_BATCH_SIZE } from "@shared";
+import { addNomicTaskPrefix, EMBEDDING_BATCH_SIZE } from "@shared";
 import OpenAI from "openai";
 import logger from "@/logging";
 import { KbChunkModel, KbDocumentModel } from "@/models";
@@ -54,7 +54,9 @@ class EmbeddingService {
 
       for (let i = 0; i < chunks.length; i += EMBEDDING_BATCH_SIZE) {
         const batch = chunks.slice(i, i + EMBEDDING_BATCH_SIZE);
-        const texts = batch.map((c) => c.content);
+        const texts = batch.map((c) =>
+          addNomicTaskPrefix(ctx.model, c.content, "search_document"),
+        );
 
         const response = await this.callEmbeddingApiWithRetry(ctx, texts);
 
@@ -181,7 +183,9 @@ class EmbeddingService {
       try {
         const response = await this.callEmbeddingApiWithRetry(
           ctx,
-          batch.map((c) => c.text),
+          batch.map((c) =>
+            addNomicTaskPrefix(ctx.model, c.text, "search_document"),
+          ),
         );
         for (let j = 0; j < batch.length; j++) {
           embeddingResults.set(batch[j].chunkId, response.data[j].embedding);

@@ -577,30 +577,35 @@ export default function ChatPage() {
   const updateConversationMutateRef = useRef(updateConversationMutation.mutate);
   updateConversationMutateRef.current = updateConversationMutation.mutate;
 
-  // Handle model change
-  const handleModelChange = useCallback(
-    (model: string) => {
-      if (!conversation) return;
+  // Handle model change — use refs for chatModels and conversation to keep
+  // callback reference stable. A new callback reference would re-trigger
+  // ModelSelector's auto-select effect on every chatModels refetch.
+  const chatModelsRef = useRef(chatModels);
+  chatModelsRef.current = chatModels;
+  const conversationRef = useRef(conversation);
+  conversationRef.current = conversation;
+  const handleModelChange = useCallback((model: string) => {
+    if (!conversationRef.current) return;
 
-      // Find the provider for this model
-      const modelInfo = chatModels.find((m) => m.id === model);
-      const provider = modelInfo?.provider;
+    // Find the provider for this model
+    const modelInfo = chatModelsRef.current.find((m) => m.id === model);
+    const provider = modelInfo?.provider;
 
-      updateConversationMutateRef.current({
-        id: conversation.id,
-        selectedModel: model,
-        selectedProvider: provider,
-      });
+    updateConversationMutateRef.current({
+      id: conversationRef.current.id,
+      selectedModel: model,
+      selectedProvider: provider,
+    });
 
-      // Persist to localStorage so it's restored on next visit
-      saveModel(model);
-    },
-    [conversation, chatModels],
-  );
+    // Persist to localStorage so it's restored on next visit
+    saveModel(model);
+  }, []);
 
-  // Handle API key change - preselect best model for the new key's provider
+  // Handle API key change - preselect best model for the new key's provider.
+  // Combines chatApiKeyId + model selection in a single mutation to avoid
+  // race conditions between competing updates.
   const handleProviderChange = useCallback(
-    (newProvider: SupportedProvider, _apiKeyId: string) => {
+    (newProvider: SupportedProvider, apiKeyId: string) => {
       if (!conversation) return;
 
       const providerModels = modelsByProvider[newProvider];
@@ -609,12 +614,19 @@ export default function ChatPage() {
           providerModels.find((m) => m.isBest) ?? providerModels[0];
         updateConversationMutateRef.current({
           id: conversation.id,
+          chatApiKeyId: apiKeyId,
           selectedModel: bestModel.id,
           selectedProvider: newProvider,
         });
 
         // Persist to localStorage so it's restored on next visit
         saveModel(bestModel.id);
+      } else {
+        // No models for this provider yet, still update the key
+        updateConversationMutateRef.current({
+          id: conversation.id,
+          chatApiKeyId: apiKeyId,
+        });
       }
     },
     [conversation, modelsByProvider],

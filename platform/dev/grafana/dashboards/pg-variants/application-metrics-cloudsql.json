@@ -3552,7 +3552,7 @@
     "to": "now"
   },
   "timezone": "browser",
-  "title": "Archestra Application Metrics (GCP Cloud SQL)",
-  "uid": "archestra-application-metrics-cloudsql",
+  "title": "Archestra Application Metrics",
+  "uid": "archestra-application-metrics",
   "version": 1
 }

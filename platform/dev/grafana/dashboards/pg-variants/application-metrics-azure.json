@@ -3565,7 +3565,7 @@
     "to": "now"
   },
   "timezone": "browser",
-  "title": "Archestra Application Metrics (Azure Database for PostgreSQL)",
-  "uid": "archestra-application-metrics-azure",
+  "title": "Archestra Application Metrics",
+  "uid": "archestra-application-metrics",
   "version": 1
 }

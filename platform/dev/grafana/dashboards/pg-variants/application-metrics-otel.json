@@ -3552,7 +3552,7 @@
     "to": "now"
   },
   "timezone": "browser",
-  "title": "Archestra Application Metrics (OTel PostgreSQL Receiver)",
-  "uid": "archestra-application-metrics-otel",
+  "title": "Archestra Application Metrics",
+  "uid": "archestra-application-metrics",
   "version": 1
 }

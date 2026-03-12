@@ -42,8 +42,8 @@ PG_PANEL_IDS = {501, 502, 503, 504, 505, 506, 507, 508, 509, 510, 511, 512}
 
 PROVIDERS = {
     "otel": {
-        "title_suffix": "(OTel PostgreSQL Receiver)",
-        "uid_suffix": "-otel",
+        "title_suffix": "",
+        "uid_suffix": "",
         "description": (
             "PostgreSQL metrics from the OpenTelemetry Collector PostgreSQL Receiver. "
             "Works with any PostgreSQL instance including AWS RDS, GCP Cloud SQL, "
@@ -178,8 +178,8 @@ PROVIDERS = {
         },
     },
     "cloudsql": {
-        "title_suffix": "(GCP Cloud SQL)",
-        "uid_suffix": "-cloudsql",
+        "title_suffix": "",
+        "uid_suffix": "",
         "description": (
             "PostgreSQL metrics from GCP Cloud Monitoring via the Stackdriver Exporter. "
             "For Google Cloud SQL for PostgreSQL instances."
@@ -309,8 +309,8 @@ PROVIDERS = {
         },
     },
     "azure": {
-        "title_suffix": "(Azure Database for PostgreSQL)",
-        "uid_suffix": "-azure",
+        "title_suffix": "",
+        "uid_suffix": "",
         "description": (
             "PostgreSQL metrics from Azure Monitor for Azure Database for PostgreSQL "
             "Flexible Server. Metric names follow the azure-metrics-exporter / "
@@ -463,8 +463,11 @@ def transform_dashboard(base: dict, provider_name: str, provider: dict) -> dict:
     dashboard = copy.deepcopy(base)
 
     # Update metadata
-    dashboard["uid"] = dashboard["uid"] + provider["uid_suffix"]
-    dashboard["title"] = dashboard["title"] + " " + provider["title_suffix"]
+    # Keep same UID and title so variants overwrite each other on install
+    if provider["uid_suffix"]:
+        dashboard["uid"] = dashboard["uid"] + provider["uid_suffix"]
+    if provider["title_suffix"]:
+        dashboard["title"] = dashboard["title"] + " " + provider["title_suffix"]
     dashboard["description"] = (
         dashboard.get("description", "") + "\n\n" + provider["description"]
     ).strip()

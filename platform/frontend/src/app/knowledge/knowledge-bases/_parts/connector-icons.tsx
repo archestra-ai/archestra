@@ -1,5 +1,5 @@
 import type { archestraApiTypes } from "@shared";
-import { Github } from "lucide-react";
+import { Github, Wrench } from "lucide-react";
 import type { ReactNode } from "react";
 
 type ConnectorType =
@@ -17,6 +17,7 @@ const CONNECTOR_ICON_MAP: Partial<Record<ConnectorType, ConnectorIcon>> = {
     render: (className) => <Github className={className} />,
   },
   gitlab: { kind: "img", src: "/icons/gitlab.png" },
+  servicenow: { kind: "img", src: "/icons/servicenow.png" },
 };
 
 export function hasConnectorIcon(type: string): boolean {

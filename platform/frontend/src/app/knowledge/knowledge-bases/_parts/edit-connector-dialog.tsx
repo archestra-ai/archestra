@@ -36,6 +36,7 @@ import { GithubConfigFields } from "./github-config-fields";
 import { GitlabConfigFields } from "./gitlab-config-fields";
 import { JiraConfigFields } from "./jira-config-fields";
 import { SchedulePicker } from "./schedule-picker";
+import { ServiceNowConfigFields } from "./servicenow-config-fields";
 
 type ConnectorItem = Pick<
   archestraApiTypes.GetConnectorsResponses["200"]["data"][number],
@@ -327,6 +328,9 @@ export function EditConnectorDialog({
                   {connectorType === "gitlab" && (
                     <GitlabConfigFields form={form} hideUrl />
                   )}
+                  {connectorType === "servicenow" && (
+                    <ServiceNowConfigFields form={form} hideUrl />
+                  )}
                 </CollapsibleContent>
               </Collapsible>
             </div>
@@ -393,6 +397,14 @@ function getEditUrlConfig(type: ConnectorType): {
         placeholder: "https://gitlab.com",
         description: "Use https://gitlab.com or your self-hosted GitLab URL.",
         typeLabel: "GitLab",
+      };
+    case "servicenow":
+      return {
+        fieldName: "config.instanceUrl",
+        label: "Instance URL",
+        placeholder: "https://your-instance.service-now.com",
+        description: "Your ServiceNow instance URL.",
+        typeLabel: "ServiceNow",
       };
     default:
       return {

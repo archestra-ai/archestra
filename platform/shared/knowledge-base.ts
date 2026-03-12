@@ -75,6 +75,30 @@ export const DEFAULT_RERANKER_MODEL = "gpt-4o";
 export const RERANKER_MIN_RELEVANCE_SCORE = 3;
 
 /**
+ * Nomic embedding models require task instruction prefixes in the input text.
+ * Documents should use "search_document: " and queries should use "search_query: ".
+ * See: https://huggingface.co/nomic-ai/nomic-embed-text-v1.5
+ */
+type NomicTaskType = "search_document" | "search_query";
+
+function isNomicModel(model: string): boolean {
+  return model.startsWith("nomic");
+}
+
+/**
+ * Add the appropriate Nomic task prefix to embedding input text.
+ * For non-Nomic models, returns the text unchanged.
+ */
+export function addNomicTaskPrefix(
+  model: string,
+  text: string,
+  taskType: NomicTaskType,
+): string {
+  if (!isNomicModel(model)) return text;
+  return `${taskType}: ${text}`;
+}
+
+/**
  * Get the embedding dimensions for a given model.
  * Falls back to EMBEDDING_DIMENSIONS for unknown models.
  */

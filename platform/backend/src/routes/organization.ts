@@ -1,4 +1,5 @@
 import {
+  addNomicTaskPrefix,
   AUTO_PROVISIONED_INVITATION_STATUS,
   EMBEDDING_COMPATIBLE_PROVIDERS,
   getEmbeddingDimensions,
@@ -303,7 +304,13 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         const response = await client.embeddings.create({
           model: body.embeddingModel,
-          input: ["hello world"],
+          input: [
+            addNomicTaskPrefix(
+              body.embeddingModel,
+              "hello world",
+              "search_document",
+            ),
+          ],
           ...(body.embeddingModel.includes("nomic")
             ? {}
             : { dimensions: getEmbeddingDimensions(body.embeddingModel) }),

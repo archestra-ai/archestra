@@ -27786,6 +27786,7 @@ export type GetConnectorsResponses = {
             id: string;
             organizationId: string;
             name: string;
+            description: string | null;
             connectorType: 'jira' | 'confluence' | 'github' | 'gitlab';
             config: {
                 type: 'jira';
@@ -27854,6 +27855,7 @@ export type GetConnectorsResponse = GetConnectorsResponses[keyof GetConnectorsRe
 export type CreateConnectorData = {
     body: {
         name: string;
+        description?: string | null;
         connectorType: 'jira' | 'confluence' | 'github' | 'gitlab';
         config: {
             type: 'jira';
@@ -27969,6 +27971,7 @@ export type CreateConnectorResponses = {
         id: string;
         organizationId: string;
         name: string;
+        description: string | null;
         connectorType: 'jira' | 'confluence' | 'github' | 'gitlab';
         config: {
             type: 'jira';
@@ -28175,6 +28178,7 @@ export type GetConnectorResponses = {
         id: string;
         organizationId: string;
         name: string;
+        description: string | null;
         connectorType: 'jira' | 'confluence' | 'github' | 'gitlab';
         config: {
             type: 'jira';
@@ -28230,6 +28234,7 @@ export type GetConnectorResponse = GetConnectorResponses[keyof GetConnectorRespo
 export type UpdateConnectorData = {
     body?: {
         name?: string;
+        description?: string | null;
         config?: {
             type: 'jira';
             jiraBaseUrl: string;
@@ -28345,6 +28350,7 @@ export type UpdateConnectorResponses = {
         id: string;
         organizationId: string;
         name: string;
+        description: string | null;
         connectorType: 'jira' | 'confluence' | 'github' | 'gitlab';
         config: {
             type: 'jira';

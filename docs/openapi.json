@@ -97402,6 +97402,10 @@
                           "name": {
                             "type": "string"
                           },
+                          "description": {
+                            "nullable": true,
+                            "type": "string"
+                          },
                           "connectorType": {
                             "anyOf": [
                               {
@@ -97696,6 +97700,7 @@
                           "id",
                           "organizationId",
                           "name",
+                          "description",
                           "connectorType",
                           "config",
                           "secretId",
@@ -97990,6 +97995,10 @@
                     "type": "string",
                     "minLength": 1
                   },
+                  "description": {
+                    "nullable": true,
+                    "type": "string"
+                  },
                   "connectorType": {
                     "anyOf": [
                       {
@@ -98242,6 +98251,10 @@
                       "type": "string"
                     },
                     "name": {
+                      "type": "string"
+                    },
+                    "description": {
+                      "nullable": true,
                       "type": "string"
                     },
                     "connectorType": {
@@ -98515,6 +98528,7 @@
                     "id",
                     "organizationId",
                     "name",
+                    "description",
                     "connectorType",
                     "config",
                     "secretId",
@@ -98779,6 +98793,10 @@
                       "type": "string"
                     },
                     "name": {
+                      "type": "string"
+                    },
+                    "description": {
+                      "nullable": true,
                       "type": "string"
                     },
                     "connectorType": {
@@ -99055,6 +99073,7 @@
                     "id",
                     "organizationId",
                     "name",
+                    "description",
                     "connectorType",
                     "config",
                     "secretId",
@@ -99301,6 +99320,10 @@
                     "type": "string",
                     "minLength": 1
                   },
+                  "description": {
+                    "nullable": true,
+                    "type": "string"
+                  },
                   "config": {
                     "oneOf": [
                       {
@@ -99522,6 +99545,10 @@
                       "type": "string"
                     },
                     "name": {
+                      "type": "string"
+                    },
+                    "description": {
+                      "nullable": true,
                       "type": "string"
                     },
                     "connectorType": {
@@ -99795,6 +99822,7 @@
                     "id",
                     "organizationId",
                     "name",
+                    "description",
                     "connectorType",
                     "config",
                     "secretId",

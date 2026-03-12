@@ -1010,20 +1010,34 @@ export default function ChatPage() {
       setInitialAgentId(agentId);
       saveAgent(agentId);
 
-      // Apply agent's LLM config if present
+      // Resolve model/key for the new agent using the same priority chain
       const selectedAgent = internalAgents.find((a) => a.id === agentId);
       if (selectedAgent) {
         resolvedAgentRef.current = selectedAgent;
         const agentData = selectedAgent as Record<string, unknown>;
-        if (agentData.llmModel) {
-          setInitialModel(agentData.llmModel as string);
-        }
-        if (agentData.llmApiKeyId) {
-          setInitialApiKeyId(agentData.llmApiKeyId as string);
+
+        const resolved = resolveInitialModel({
+          modelsByProvider,
+          agent: {
+            llmModel: (agentData.llmModel as string) ?? null,
+            llmApiKeyId: (agentData.llmApiKeyId as string) ?? null,
+          },
+          chatApiKeys,
+          organization: organization
+            ? {
+                defaultLlmModel: organization.defaultLlmModel,
+                defaultLlmApiKeyId: organization.defaultLlmApiKeyId,
+              }
+            : null,
+        });
+
+        if (resolved) {
+          setInitialModel(resolved.modelId);
+          setInitialApiKeyId(resolved.apiKeyId);
         }
       }
     },
-    [internalAgents],
+    [internalAgents, modelsByProvider, chatApiKeys, organization],
   );
 
   // Handle initial submit (when no conversation exists)

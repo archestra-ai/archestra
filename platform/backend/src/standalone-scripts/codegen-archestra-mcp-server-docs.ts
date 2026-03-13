@@ -251,6 +251,12 @@ Additionally, \`query_knowledge_sources\` is automatically assigned to Agents an
 
 All Archestra tools are prefixed with \`archestra__\` and are always trusted — they bypass tool invocation and trusted data policies.
 
+## Auth
+
+Archestra tools are **trusted**, meaning they bypass [tool invocation policies](/platform-tool-invocation-policies) and [trusted data policies](/platform-trusted-data-policies) — the tool will always execute without policy evaluation.
+
+However, **RBAC (role-based access control) is still enforced**. Every tool is mapped to a required permission (resource + action). The \`tools/list\` endpoint dynamically filters tools so users only see tools they have permission to use. Additionally, \`executeArchestraTool\` performs a centralized RBAC check before executing any tool. For example, a user without \`knowledgeBase:create\` permission will not see \`create_knowledge_base\` in their tool list and cannot execute it.
+
 ${sections.join("\n")}`;
 }
 

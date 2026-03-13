@@ -37,6 +37,7 @@ import {
   toolShortNames as policyToolNames,
   tools as policyTools,
 } from "./policies";
+import { checkToolPermission } from "./rbac";
 import {
   handleTool as handleToolAssignment,
   toolShortNames as toolAssignmentToolNames,
@@ -45,6 +46,7 @@ import {
 import type { ArchestraContext } from "./types";
 
 export { getAgentTools } from "./delegation";
+export { filterToolNamesByPermission, TOOL_PERMISSIONS } from "./rbac";
 export type { ArchestraContext } from "./types";
 
 export const ALL_TOOL_SHORT_NAMES = [
@@ -93,6 +95,10 @@ export async function executeArchestraTool(
   if (toolName.startsWith(AGENT_TOOL_PREFIX)) {
     return handleDelegation(toolName, args, context);
   }
+
+  // Centralized RBAC check — ensures the user has the required permission
+  const rbacDenied = await checkToolPermission(toolName, context);
+  if (rbacDenied) return rbacDenied;
 
   // Try each group handler
   for (const handler of handlers) {

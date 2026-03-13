@@ -82,12 +82,15 @@ describe("knowledge-management tool execution", () => {
   let testAgent: Agent;
   let mockContext: ArchestraContext;
 
-  beforeEach(async ({ makeAgent, makeOrganization }) => {
+  beforeEach(async ({ makeAgent, makeOrganization, makeUser, makeMember }) => {
     const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "admin" });
     testAgent = await makeAgent({ name: "Test Agent" });
     mockContext = {
       agent: { id: testAgent.id, name: testAgent.name },
       organizationId: org.id,
+      userId: user.id,
     };
   });
 
@@ -121,10 +124,14 @@ describe("knowledge-management tool execution", () => {
     test("calls queryService with correct params when KB is assigned", async ({
       makeAgent,
       makeOrganization,
+      makeUser,
+      makeMember,
       makeKnowledgeBase,
       makeKnowledgeBaseConnector,
     }) => {
       const org = await makeOrganization();
+      const user = await makeUser();
+      await makeMember(user.id, org.id, { role: "admin" });
       const kb = await makeKnowledgeBase(org.id);
       const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
 
@@ -150,6 +157,7 @@ describe("knowledge-management tool execution", () => {
       const contextWithOrg: ArchestraContext = {
         agent: { id: agentWithKb.id, name: agentWithKb.name },
         organizationId: org.id,
+        userId: user.id,
       };
 
       const result = await executeArchestraTool(
@@ -176,9 +184,13 @@ describe("knowledge-management tool execution", () => {
     test("returns error when no connectors found for KB", async ({
       makeAgent,
       makeOrganization,
+      makeUser,
+      makeMember,
       makeKnowledgeBase,
     }) => {
       const org = await makeOrganization();
+      const user = await makeUser();
+      await makeMember(user.id, org.id, { role: "admin" });
       const kb = await makeKnowledgeBase(org.id);
 
       const agentWithEmptyKb = await makeAgent({
@@ -190,6 +202,7 @@ describe("knowledge-management tool execution", () => {
       const contextWithOrg: ArchestraContext = {
         agent: { id: agentWithEmptyKb.id, name: agentWithEmptyKb.name },
         organizationId: org.id,
+        userId: user.id,
       };
 
       const result = await executeArchestraTool(
@@ -206,10 +219,14 @@ describe("knowledge-management tool execution", () => {
     test("calls queryService with correct params for direct connector assignment", async ({
       makeAgent,
       makeOrganization,
+      makeUser,
+      makeMember,
       makeKnowledgeBase,
       makeKnowledgeBaseConnector,
     }) => {
       const org = await makeOrganization();
+      const user = await makeUser();
+      await makeMember(user.id, org.id, { role: "admin" });
       const kb = await makeKnowledgeBase(org.id);
       const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
 
@@ -238,6 +255,7 @@ describe("knowledge-management tool execution", () => {
           name: agentWithConnector.name,
         },
         organizationId: org.id,
+        userId: user.id,
       };
 
       const result = await executeArchestraTool(
@@ -286,8 +304,9 @@ describe("knowledge-management tool execution", () => {
         contextNoOrg,
       );
       expect(result.isError).toBe(true);
+      // Centralized RBAC check catches missing user context before the handler
       expect((result.content[0] as any).text).toContain(
-        "Organization context not available",
+        "User context not available",
       );
     });
   });
@@ -773,6 +792,85 @@ describe("knowledge-management tool execution", () => {
       );
       expect(result.isError).toBe(true);
       expect((result.content[0] as any).text).toContain("not assigned");
+    });
+  });
+
+  // --- RBAC enforcement ---
+
+  describe("RBAC enforcement", () => {
+    let memberContext: ArchestraContext;
+
+    beforeEach(async ({ makeUser, makeOrganization, makeMember }) => {
+      const org = await makeOrganization();
+      const member = await makeUser();
+      await makeMember(member.id, org.id, { role: "member" });
+      memberContext = {
+        agent: { id: testAgent.id, name: testAgent.name },
+        organizationId: org.id,
+        userId: member.id,
+      };
+    });
+
+    const mutationTools = [
+      { tool: "create_knowledge_base", args: { name: "Test KB" } },
+      { tool: "update_knowledge_base", args: { id: "x", name: "new" } },
+      { tool: "delete_knowledge_base", args: { id: "x" } },
+      {
+        tool: "create_knowledge_connector",
+        args: { name: "c", connector_type: "jira", config: {} },
+      },
+      { tool: "update_knowledge_connector", args: { id: "x", name: "new" } },
+      { tool: "delete_knowledge_connector", args: { id: "x" } },
+      {
+        tool: "assign_knowledge_connector_to_knowledge_base",
+        args: { connector_id: "x", knowledge_base_id: "y" },
+      },
+      {
+        tool: "unassign_knowledge_connector_from_knowledge_base",
+        args: { connector_id: "x", knowledge_base_id: "y" },
+      },
+      {
+        tool: "assign_knowledge_base_to_agent",
+        args: { knowledge_base_id: "x", agent_id: "y" },
+      },
+      {
+        tool: "unassign_knowledge_base_from_agent",
+        args: { knowledge_base_id: "x", agent_id: "y" },
+      },
+      {
+        tool: "assign_knowledge_connector_to_agent",
+        args: { connector_id: "x", agent_id: "y" },
+      },
+      {
+        tool: "unassign_knowledge_connector_from_agent",
+        args: { connector_id: "x", agent_id: "y" },
+      },
+    ];
+
+    for (const { tool, args } of mutationTools) {
+      test(`${tool} is denied for member without knowledgeBase permission`, async () => {
+        const result = await executeArchestraTool(t(tool), args, memberContext);
+        expect(result.isError).toBe(true);
+        expect((result.content[0] as any).text).toContain(
+          "do not have permission",
+        );
+      });
+    }
+
+    test("mutation without userId returns error", async () => {
+      const noUserContext: ArchestraContext = {
+        agent: { id: testAgent.id, name: testAgent.name },
+        organizationId: memberContext.organizationId,
+      };
+      const result = await executeArchestraTool(
+        t("create_knowledge_base"),
+        { name: "Test KB" },
+        noUserContext,
+      );
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain(
+        "User context not available",
+      );
     });
   });
 });

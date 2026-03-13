@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.1.20](https://github.com/archestra-ai/archestra/compare/platform-v1.1.19...platform-v1.1.20) (2026-03-13)
+
+
+### Features
+
+* knowledge management tools, RBAC enforcement, Zod validation, data corruption fix, chat helpers ([#3349](https://github.com/archestra-ai/archestra/issues/3349)) ([01c612e](https://github.com/archestra-ai/archestra/commit/01c612effc94e318b505c83321cbdd386877f366))
+
+
+### Bug Fixes
+
+* detect default branch instead of hardcoding ([#3353](https://github.com/archestra-ai/archestra/issues/3353)) ([36141e0](https://github.com/archestra-ai/archestra/commit/36141e0095c591ffb11a99589a2fdb54d4fd37d0))
+
 ## [1.1.19](https://github.com/archestra-ai/archestra/compare/platform-v1.1.18...platform-v1.1.19) (2026-03-13)
 
 

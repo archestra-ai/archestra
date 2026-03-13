@@ -250,6 +250,71 @@ class ModelModel {
   }
 
   /**
+   * Bulk upsert models, overwriting ALL fields including user-edited values.
+   * Used by the "full refresh" flow to reset models to provider defaults.
+   */
+  static async bulkUpsertFull(dataArray: CreateModel[]): Promise<Model[]> {
+    if (dataArray.length === 0) {
+      return [];
+    }
+
+    const BATCH_SIZE = 50;
+    const totalBatches = Math.ceil(dataArray.length / BATCH_SIZE);
+
+    logger.debug(
+      { totalModels: dataArray.length, batchSize: BATCH_SIZE, totalBatches },
+      "Starting batched full model upsert",
+    );
+
+    const results = await db.transaction(async (tx) => {
+      const batchResults: Model[] = [];
+
+      for (let i = 0; i < dataArray.length; i += BATCH_SIZE) {
+        const batchNumber = Math.floor(i / BATCH_SIZE) + 1;
+        const batch = dataArray.slice(i, i + BATCH_SIZE);
+
+        logger.debug(
+          { batchNumber, totalBatches, batchSize: batch.length },
+          "Processing full model batch",
+        );
+
+        const insertedBatch = await tx
+          .insert(schema.modelsTable)
+          .values(batch)
+          .onConflictDoUpdate({
+            target: [schema.modelsTable.provider, schema.modelsTable.modelId],
+            set: {
+              externalId: sql`excluded.external_id`,
+              description: sql`excluded.description`,
+              contextLength: sql`excluded.context_length`,
+              inputModalities: sql`excluded.input_modalities`,
+              outputModalities: sql`excluded.output_modalities`,
+              supportsToolCalling: sql`excluded.supports_tool_calling`,
+              promptPricePerToken: sql`excluded.prompt_price_per_token`,
+              completionPricePerToken: sql`excluded.completion_price_per_token`,
+              customPricePerMillionInput: sql`NULL`,
+              customPricePerMillionOutput: sql`NULL`,
+              lastSyncedAt: sql`excluded.last_synced_at`,
+              updatedAt: sql`NOW()`,
+            },
+          })
+          .returning();
+
+        batchResults.push(...insertedBatch);
+      }
+
+      return batchResults;
+    });
+
+    logger.info(
+      { totalUpserted: results.length },
+      "Completed batched full model upsert",
+    );
+
+    return results;
+  }
+
+  /**
    * Delete model by provider and model ID
    */
   static async delete(

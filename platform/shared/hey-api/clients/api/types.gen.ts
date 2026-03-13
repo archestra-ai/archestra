@@ -17111,6 +17111,83 @@ export type SyncChatModelsResponses = {
 
 export type SyncChatModelsResponse = SyncChatModelsResponses[keyof SyncChatModelsResponses];
 
+export type SyncChatModelsFullData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/chat/models/sync-full';
+};
+
+export type SyncChatModelsFullErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type SyncChatModelsFullError = SyncChatModelsFullErrors[keyof SyncChatModelsFullErrors];
+
+export type SyncChatModelsFullResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type SyncChatModelsFullResponse = SyncChatModelsFullResponses[keyof SyncChatModelsFullResponses];
+
 export type GetModelsWithApiKeysData = {
     body?: never;
     path?: never;

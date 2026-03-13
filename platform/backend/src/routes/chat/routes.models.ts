@@ -1204,12 +1204,12 @@ const chatModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
 
         try {
-          await modelSyncService.syncModelsForApiKey(
-            apiKey.id,
-            apiKey.provider,
-            secretValue ?? "",
-            apiKey.baseUrl,
-          );
+          await modelSyncService.syncModelsForApiKey({
+            apiKeyId: apiKey.id,
+            provider: apiKey.provider,
+            apiKeyValue: secretValue ?? "",
+            baseUrl: apiKey.baseUrl,
+          });
         } catch (error) {
           logger.error(
             {
@@ -1231,6 +1231,82 @@ const chatModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       logger.info(
         { organizationId, apiKeyCount: apiKeys.length },
         "Completed model sync for all API keys (including system keys)",
+      );
+
+      return reply.send({ success: true });
+    },
+  );
+
+  // Full sync: re-fetch models and overwrite ALL fields including user-edited values
+  fastify.post(
+    "/api/chat/models/sync-full",
+    {
+      schema: {
+        operationId: RouteId.SyncChatModelsFull,
+        description:
+          "Sync models from providers, overwriting all fields including custom modifications",
+        tags: ["Chat"],
+        response: constructResponseSchema(z.object({ success: z.boolean() })),
+      },
+    },
+    async ({ organizationId, user }, reply) => {
+      const userTeamIds = await TeamModel.getUserTeamIds(user.id);
+      const apiKeys = await ChatApiKeyModel.getAvailableKeysForUser(
+        organizationId,
+        user.id,
+        userTeamIds,
+      );
+
+      const syncPromises = apiKeys.map(async (apiKey) => {
+        let secretValue: string | null = null;
+
+        if (apiKey.secretId) {
+          secretValue = (await getSecretValueForLlmProviderApiKey(
+            apiKey.secretId,
+          )) as string | null;
+        }
+
+        if (
+          !secretValue &&
+          !PROVIDERS_WITH_OPTIONAL_API_KEY.has(apiKey.provider)
+        ) {
+          if (apiKey.secretId) {
+            logger.warn(
+              { apiKeyId: apiKey.id, provider: apiKey.provider },
+              "No secret value for API key, skipping sync",
+            );
+          }
+          return;
+        }
+
+        try {
+          await modelSyncService.syncModelsForApiKey({
+            apiKeyId: apiKey.id,
+            provider: apiKey.provider,
+            apiKeyValue: secretValue ?? "",
+            baseUrl: apiKey.baseUrl,
+            forceRefresh: true,
+          });
+        } catch (error) {
+          logger.error(
+            {
+              apiKeyId: apiKey.id,
+              provider: apiKey.provider,
+              errorMessage:
+                error instanceof Error ? error.message : String(error),
+            },
+            "Failed to full-sync models for API key",
+          );
+        }
+      });
+
+      await Promise.all(syncPromises);
+
+      await systemKeyManager.syncSystemKeys(organizationId);
+
+      logger.info(
+        { organizationId, apiKeyCount: apiKeys.length },
+        "Completed full model sync for all API keys (including system keys)",
       );
 
       return reply.send({ success: true });

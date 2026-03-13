@@ -392,7 +392,11 @@ async function syncModelsForApiKey(
   apiKeyValue: string,
 ): Promise<void> {
   try {
-    await modelSyncService.syncModelsForApiKey(apiKeyId, provider, apiKeyValue);
+    await modelSyncService.syncModelsForApiKey({
+      apiKeyId,
+      provider,
+      apiKeyValue,
+    });
     logger.info({ provider, apiKeyId }, "Synced models for API key");
   } catch (error) {
     logger.error(

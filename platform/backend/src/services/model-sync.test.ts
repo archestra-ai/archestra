@@ -46,7 +46,11 @@ describe("ModelSyncService", () => {
       },
     ]);
 
-    await modelSyncService.syncModelsForApiKey(apiKey.id, "openai", "test-key");
+    await modelSyncService.syncModelsForApiKey({
+      apiKeyId: apiKey.id,
+      provider: "openai",
+      apiKeyValue: "test-key",
+    });
 
     // All models should be stored with provider="openai" (the API key's provider)
     const gpt = await ModelModel.findByProviderAndModelId("openai", "gpt-4o");

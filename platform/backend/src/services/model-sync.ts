@@ -49,12 +49,14 @@ class ModelSyncService {
    * @param apiKeyValue - The actual API key value for making API calls
    * @returns The number of models synced
    */
-  async syncModelsForApiKey(
-    apiKeyId: string,
-    provider: SupportedProvider,
-    apiKeyValue: string,
-    baseUrl?: string | null,
-  ): Promise<number> {
+  async syncModelsForApiKey(params: {
+    apiKeyId: string;
+    provider: SupportedProvider;
+    apiKeyValue: string;
+    baseUrl?: string | null;
+    forceRefresh?: boolean;
+  }): Promise<number> {
+    const { apiKeyId, provider, apiKeyValue, baseUrl, forceRefresh } = params;
     const fetcher = this.modelFetchers.get(provider);
 
     if (!fetcher) {
@@ -109,7 +111,9 @@ class ModelSyncService {
         };
       });
 
-      const upsertedModels = await ModelModel.bulkUpsert(modelsToUpsert);
+      const upsertedModels = forceRefresh
+        ? await ModelModel.bulkUpsertFull(modelsToUpsert)
+        : await ModelModel.bulkUpsert(modelsToUpsert);
 
       logger.info(
         { provider, apiKeyId, upsertedCount: upsertedModels.length },
@@ -157,17 +161,19 @@ class ModelSyncService {
       apiKeyValue: string;
       baseUrl?: string | null;
     }>,
+    options?: { forceRefresh?: boolean },
   ): Promise<Map<string, number>> {
     const results = new Map<string, number>();
 
     for (const apiKey of apiKeys) {
       try {
-        const count = await this.syncModelsForApiKey(
-          apiKey.id,
-          apiKey.provider,
-          apiKey.apiKeyValue,
-          apiKey.baseUrl,
-        );
+        const count = await this.syncModelsForApiKey({
+          apiKeyId: apiKey.id,
+          provider: apiKey.provider,
+          apiKeyValue: apiKey.apiKeyValue,
+          baseUrl: apiKey.baseUrl,
+          forceRefresh: options?.forceRefresh,
+        });
         results.set(apiKey.id, count);
       } catch (error) {
         logger.error(

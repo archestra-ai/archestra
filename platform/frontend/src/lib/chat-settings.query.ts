@@ -34,6 +34,7 @@ const {
   updateChatApiKey,
   deleteChatApiKey,
   syncChatModels,
+  syncChatModelsFull,
   getVirtualApiKeys,
   getAllVirtualApiKeys,
   createVirtualApiKey,
@@ -304,6 +305,26 @@ export function useSyncChatModels() {
     onSuccess: (data) => {
       if (!data) return;
       toast.success("Models synced");
+      queryClient.invalidateQueries({ queryKey: ["chat-models"] });
+      queryClient.invalidateQueries({ queryKey: ["models-with-api-keys"] });
+    },
+  });
+}
+
+export function useSyncChatModelsFull() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const { data: responseData, error } = await syncChatModelsFull();
+      if (error) {
+        handleApiError(error);
+        throw toApiError(error);
+      }
+      return responseData;
+    },
+    onSuccess: (data) => {
+      if (!data) return;
+      toast.success("All model fields refreshed to provider defaults");
       queryClient.invalidateQueries({ queryKey: ["chat-models"] });
       queryClient.invalidateQueries({ queryKey: ["models-with-api-keys"] });
     },

@@ -273,12 +273,12 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         actualApiKeyValue || PROVIDERS_WITH_OPTIONAL_API_KEY.has(body.provider);
       if (canSync && modelSyncService.hasFetcher(body.provider)) {
         try {
-          await modelSyncService.syncModelsForApiKey(
-            createdApiKey.id,
-            body.provider,
-            actualApiKeyValue ?? "",
-            body.baseUrl,
-          );
+          await modelSyncService.syncModelsForApiKey({
+            apiKeyId: createdApiKey.id,
+            provider: body.provider,
+            apiKeyValue: actualApiKeyValue ?? "",
+            baseUrl: body.baseUrl,
+          });
         } catch (error) {
           // Model sync failure shouldn't block API key creation
           logger.error(

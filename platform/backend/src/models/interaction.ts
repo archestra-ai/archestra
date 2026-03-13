@@ -113,7 +113,7 @@ function computeRequestType(
 /**
  * Check if a string is a valid UUID format
  */
-function isUuid(str: string): boolean {
+export function isUuid(str: string): boolean {
   const uuidRegex =
     /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   return uuidRegex.test(str);

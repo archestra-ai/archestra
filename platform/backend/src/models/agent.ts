@@ -42,6 +42,7 @@ import AgentLabelModel from "./agent-label";
 import AgentTeamModel from "./agent-team";
 import MemberModel from "./member";
 import ToolModel from "./tool";
+import { isUuid } from "./interaction";
 
 class AgentModel {
   /**
@@ -913,6 +914,30 @@ class AgentModel {
     await AgentModel.populateAuthorNames([result]);
 
     return result;
+  }
+
+
+  /**
+   * Find an agent by UUID or by name.
+   * If idOrName is a valid UUID, looks up by ID; otherwise, performs a name search.
+   */
+  static async findByIdOrName(
+    idOrName: string,
+    userId?: string,
+    isAgentAdmin?: boolean,
+    agentType?: "profile" | "mcp_gateway" | "llm_proxy" | "agent",
+  ): Promise<Agent | null> {
+    if (isUuid(idOrName)) {
+      return AgentModel.findById(idOrName, userId, isAgentAdmin);
+    }
+    const results = await AgentModel.findAllPaginated(
+      { limit: 1, offset: 0 },
+      undefined,
+      { name: idOrName, agentType },
+      userId,
+      isAgentAdmin,
+    );
+    return results.data[0] ?? null;
   }
 
   static async getMCPGatewayOrCreateDefault(

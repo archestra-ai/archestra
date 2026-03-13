@@ -2193,4 +2193,30 @@ describe("AgentModel", () => {
       expect(await MemberModel.isAgentDefault(otherAgent.id)).toBe(true);
     });
   });
+
+  describe("findByIdOrName", () => {
+    test("finds agent by UUID id", async () => {
+      const agent = await AgentModel.create({ name: "UUID Agent", teams: [], scope: "org" });
+      const found = await AgentModel.findByIdOrName(agent.id);
+      expect(found).not.toBeNull();
+      expect(found?.id).toBe(agent.id);
+    });
+
+    test("finds agent by name when non-UUID string provided", async () => {
+      const agent = await AgentModel.create({ name: "Named Agent", teams: [], scope: "org" });
+      const found = await AgentModel.findByIdOrName("Named Agent");
+      expect(found).not.toBeNull();
+      expect(found?.id).toBe(agent.id);
+    });
+
+    test("returns null when neither UUID nor name matches", async () => {
+      const found = await AgentModel.findByIdOrName("nonexistent-agent-name");
+      expect(found).toBeNull();
+    });
+
+    test("returns null for non-existent UUID", async () => {
+      const found = await AgentModel.findByIdOrName("00000000-0000-0000-0000-000000000000");
+      expect(found).toBeNull();
+    });
+  });
 });

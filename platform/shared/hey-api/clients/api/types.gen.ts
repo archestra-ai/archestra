@@ -35524,6 +35524,7 @@ export type GetOrganizationMemberResponses = {
         id: string;
         name: string;
         email: string;
+        role: string;
     };
 };
 

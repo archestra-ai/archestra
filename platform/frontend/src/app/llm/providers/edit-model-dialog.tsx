@@ -113,7 +113,7 @@ export function EditModelDialog({
           >
             {/* Read-only: Provider */}
             <div className="space-y-1">
-              <label className="text-sm font-medium">Provider</label>
+              <span className="text-sm font-medium">Provider</span>
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 {providerConfig && (
                   <Image
@@ -130,7 +130,7 @@ export function EditModelDialog({
 
             {/* Read-only: Model ID */}
             <div className="space-y-1">
-              <label className="text-sm font-medium">Model ID</label>
+              <span className="text-sm font-medium">Model ID</span>
               <p className="text-sm font-mono text-muted-foreground">
                 {model.modelId}
               </p>
@@ -139,9 +139,9 @@ export function EditModelDialog({
             {/* Pricing */}
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <label className="text-sm font-medium">
+                <span className="text-sm font-medium">
                   Custom Pricing ($/M tokens)
-                </label>
+                </span>
                 <Button
                   type="button"
                   variant="ghost"
@@ -170,10 +170,7 @@ export function EditModelDialog({
                     <FormItem>
                       <FormLabel>Input</FormLabel>
                       <FormControl>
-                        <Input
-                          placeholder={fallbackPricing.input}
-                          {...field}
-                        />
+                        <Input placeholder={fallbackPricing.input} {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -283,10 +280,15 @@ function getFallbackPricing(model: ModelWithApiKeys): {
   output: string;
 } {
   // Tier 2: models.dev synced price (per-token → per-million)
-  if (model.promptPricePerToken != null && model.completionPricePerToken != null) {
+  if (
+    model.promptPricePerToken != null &&
+    model.completionPricePerToken != null
+  ) {
     return {
       input: (parseFloat(model.promptPricePerToken) * 1_000_000).toFixed(2),
-      output: (parseFloat(model.completionPricePerToken) * 1_000_000).toFixed(2),
+      output: (parseFloat(model.completionPricePerToken) * 1_000_000).toFixed(
+        2,
+      ),
     };
   }
   // Tier 3: default fallback

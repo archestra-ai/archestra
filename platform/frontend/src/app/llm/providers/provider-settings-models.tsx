@@ -72,8 +72,9 @@ export function ProviderSettingsModels() {
         keyMap.set(key.id, { name: key.name, provider: key.provider });
       }
     }
-    return Array.from(keyMap.entries())
-      .sort((a, b) => a[1].name.localeCompare(b[1].name));
+    return Array.from(keyMap.entries()).sort((a, b) =>
+      a[1].name.localeCompare(b[1].name),
+    );
   }, [models]);
 
   const handleRefresh = useCallback(async () => {
@@ -317,10 +318,7 @@ export function ProviderSettingsModels() {
                     className="pl-8"
                   />
                 </div>
-                <Select
-                  value={apiKeyFilter}
-                  onValueChange={setApiKeyFilter}
-                >
+                <Select value={apiKeyFilter} onValueChange={setApiKeyFilter}>
                   <SelectTrigger className="w-[200px]">
                     <SelectValue placeholder="All API keys" />
                   </SelectTrigger>

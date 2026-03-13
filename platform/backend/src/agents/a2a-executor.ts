@@ -19,8 +19,14 @@ import {
   ChatApiKeyModel,
   McpServerModel,
   TeamModel,
+  UserModel,
 } from "@/models";
 import { mapProviderError, ProviderError } from "@/routes/chat/errors";
+import {
+  buildRenderedPrompts,
+  promptNeedsRendering,
+  type SystemPromptContext,
+} from "@/templating";
 
 /**
  * Source-agnostic attachment for A2A execution.
@@ -130,15 +136,28 @@ export async function executeA2AMessage(
 
   // Build system prompt from agent's systemPrompt and userPrompt fields
   let systemPrompt: string | undefined;
-  const systemPromptParts: string[] = [];
-  const userPromptParts: string[] = [];
 
-  if (agent.systemPrompt) {
-    systemPromptParts.push(agent.systemPrompt);
+  // Build template context only when prompts use Handlebars syntax
+  let promptContext: SystemPromptContext | null = null;
+  if (promptNeedsRendering(agent.systemPrompt, agent.userPrompt)) {
+    const [userDetails, userTeams] = await Promise.all([
+      UserModel.getById(userId),
+      TeamModel.getUserTeams(userId),
+    ]);
+    promptContext = {
+      user: {
+        name: userDetails?.name ?? "",
+        email: userDetails?.email ?? "",
+        teams: userTeams.map((t) => t.name),
+      },
+    };
   }
-  if (agent.userPrompt) {
-    userPromptParts.push(agent.userPrompt);
-  }
+
+  const { systemPromptParts, userPromptParts } = buildRenderedPrompts({
+    systemPrompt: agent.systemPrompt,
+    userPrompt: agent.userPrompt,
+    context: promptContext,
+  });
 
   if (systemPromptParts.length > 0 || userPromptParts.length > 0) {
     const allParts = [...systemPromptParts, ...userPromptParts];

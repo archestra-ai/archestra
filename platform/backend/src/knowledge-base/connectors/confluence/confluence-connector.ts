@@ -366,7 +366,11 @@ export function formatCqlLocalDate(rawTimestamp: string): string {
   if (match) {
     return `${match[1]}-${match[2]}-${match[3]}`;
   }
-  return formatCqlDate(rawTimestamp);
+  const d = new Date(rawTimestamp);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 /**

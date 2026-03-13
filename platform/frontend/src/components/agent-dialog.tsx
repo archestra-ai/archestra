@@ -41,6 +41,7 @@ import {
   type AgentToolsEditorRef,
 } from "@/components/agent-tools-editor";
 import { ModelSelector } from "@/components/chat/model-selector";
+import { SystemPromptEditor } from "@/components/system-prompt-editor";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   AssignmentCombobox,
@@ -1180,18 +1181,11 @@ export function AgentDialog({
             {isInternalAgent && (
               <div className="rounded-lg border bg-card p-4 space-y-4">
                 <h3 className="text-sm font-semibold">Instruction</h3>
-
-                {/* Instruction (read-only for built-in) */}
-                <div className="space-y-2">
-                  <Textarea
-                    id="systemPrompt"
-                    value={systemPrompt}
-                    onChange={(e) => setSystemPrompt(e.target.value)}
-                    placeholder="Enter instruction for the LLM"
-                    className="min-h-[150px] font-mono"
-                    disabled={isBuiltIn}
-                  />
-                </div>
+                <SystemPromptEditor
+                  value={systemPrompt}
+                  onChange={setSystemPrompt}
+                  readOnly={isBuiltIn}
+                />
               </div>
             )}
 
@@ -1436,19 +1430,6 @@ export function AgentDialog({
                         : null}
                     </p>
                     <div className="flex flex-wrap items-center gap-2">
-                      <ModelSelector
-                        selectedModel={llmModel || ""}
-                        onModelChange={(modelId) =>
-                          handleLlmModelChange(modelId)
-                        }
-                        onClear={() => {
-                          setLlmModel(null);
-                          setLlmApiKeyId(null);
-                          lastAutoSelectedProviderRef.current = null;
-                        }}
-                        variant="outline"
-                      />
-
                       <Popover
                         open={apiKeySelectorOpen}
                         onOpenChange={setApiKeySelectorOpen}
@@ -1553,6 +1534,40 @@ export function AgentDialog({
                           </Command>
                         </PopoverContent>
                       </Popover>
+
+                      {!llmApiKeyId ? (
+                        <TooltipProvider delayDuration={300}>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <div>
+                                <ModelSelector
+                                  selectedModel=""
+                                  onModelChange={() => {}}
+                                  disabled
+                                  variant="outline"
+                                />
+                              </div>
+                            </TooltipTrigger>
+                            <TooltipContent side="bottom" className="text-xs">
+                              Select a provider API key first
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      ) : (
+                        <ModelSelector
+                          selectedModel={llmModel || ""}
+                          onModelChange={(modelId) =>
+                            handleLlmModelChange(modelId)
+                          }
+                          onClear={() => {
+                            setLlmModel(null);
+                            setLlmApiKeyId(null);
+                            lastAutoSelectedProviderRef.current = null;
+                          }}
+                          variant="outline"
+                          apiKeyId={llmApiKeyId}
+                        />
+                      )}
                     </div>
                   </div>
                 )}

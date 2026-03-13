@@ -1,5 +1,47 @@
 # Changelog
 
+## [1.1.17](https://github.com/archestra-ai/archestra/compare/platform-v1.1.16...platform-v1.1.17) (2026-03-13)
+
+
+### Features
+
+* filtering by labels on mcp registry ([#3322](https://github.com/archestra-ai/archestra/issues/3322)) ([bbb3b42](https://github.com/archestra-ai/archestra/commit/bbb3b420b5f5fb6a7d6206907dbc90350132cd75))
+* **helm:** support external auth secret sources ([#3337](https://github.com/archestra-ai/archestra/issues/3337)) ([1d9bf7b](https://github.com/archestra-ai/archestra/commit/1d9bf7be2dccc657a847184a41e02e8fdf16335e))
+
+
+### Bug Fixes
+
+* improve response serialization error logging with Sentry capture ([#3355](https://github.com/archestra-ai/archestra/issues/3355)) ([04be0aa](https://github.com/archestra-ai/archestra/commit/04be0aaa4afa250cd109d5697222c862dc829757))
+
+
+### Miscellaneous Chores
+
+* fix flaky test ([#3336](https://github.com/archestra-ai/archestra/issues/3336)) ([0d557b3](https://github.com/archestra-ai/archestra/commit/0d557b3d4a4ee7dfe8c2f78a24cc5178484f1b8b))
+* reuse vault client in rw vault ([#3352](https://github.com/archestra-ai/archestra/issues/3352)) ([3b63229](https://github.com/archestra-ai/archestra/commit/3b63229b583e027577c9877435b23a4a96b35726))
+
+## [1.1.16](https://github.com/archestra-ai/archestra/compare/platform-v1.1.15...platform-v1.1.16) (2026-03-13)
+
+
+### Features
+
+* add chatExpandToolCalls RBAC permission ([#3344](https://github.com/archestra-ai/archestra/issues/3344)) ([2f3d701](https://github.com/archestra-ai/archestra/commit/2f3d70155185b961dafe3e543b48a38ec81f5105))
+* add Handlebars templating for agent system prompts ([#3348](https://github.com/archestra-ai/archestra/issues/3348)) ([72896e5](https://github.com/archestra-ai/archestra/commit/72896e5e98e6b94bf6d7da0873c162e1e684dec6))
+
+
+### Bug Fixes
+
+* add missing indexes on token_start for team_token and user_token ([#3346](https://github.com/archestra-ai/archestra/issues/3346)) ([c0d4334](https://github.com/archestra-ai/archestra/commit/c0d4334a7df4ebac4702524bd96febf281baf2a9))
+* connection utilization Grafana panels return no data ([#3343](https://github.com/archestra-ai/archestra/issues/3343)) ([46ebc96](https://github.com/archestra-ai/archestra/commit/46ebc968f85a00de4520403dd156f1bbcca0b19d))
+* connection utilization sum() fix for OTEL and Azure variants ([#3347](https://github.com/archestra-ai/archestra/issues/3347)) ([027d008](https://github.com/archestra-ai/archestra/commit/027d0086b9553d31b3a0641ea09aaa8846eba9f6))
+
+## [1.1.15](https://github.com/archestra-ai/archestra/compare/platform-v1.1.14...platform-v1.1.15) (2026-03-12)
+
+
+### Bug Fixes
+
+* simplify chat model/key resolution, remove localStorage, reorder UI pills ([#3334](https://github.com/archestra-ai/archestra/issues/3334)) ([48bb6e3](https://github.com/archestra-ai/archestra/commit/48bb6e3a251876c37706fdebce1b9556bccb9725))
+* trim litellm context ([#3340](https://github.com/archestra-ai/archestra/issues/3340)) ([0cd227a](https://github.com/archestra-ai/archestra/commit/0cd227af105a6e194d00bad2ff9f221c648f41d2))
+
 ## [1.1.14](https://github.com/archestra-ai/archestra/compare/platform-v1.1.13...platform-v1.1.14) (2026-03-12)
 
 

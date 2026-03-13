@@ -21,8 +21,8 @@ import { extractVaultErrorMessage } from "./utils";
  * standalone scripts (e.g. vault-env-injector init container) that run
  * before the database URL is available.
  *
- * ReadonlyVaultSecretManager extends this class to add the DB-dependent
- * ISecretManager interface methods.
+ * ReadonlyVaultSecretManager and VaultSecretManager extend this class
+ * to add the DB-dependent ISecretManager interface methods.
  */
 export class VaultClient {
   protected client: ReturnType<typeof Vault>;
@@ -225,7 +225,7 @@ export class VaultClient {
   }
 
   // ============================================================
-  // Protected methods (used by ReadonlyVaultSecretManager subclass)
+  // Protected methods (used by subclasses)
   // ============================================================
 
   /**
@@ -264,6 +264,104 @@ export class VaultClient {
     }
 
     throw new ApiError(500, extractVaultErrorMessage(error));
+  }
+
+  /**
+   * Build the write payload based on KV version.
+   * KV v2 requires wrapping data in { data: ... }.
+   */
+  protected buildWritePayload(
+    data: Record<string, unknown>,
+  ): Record<string, unknown> {
+    if (this.config.kvVersion === "1") {
+      return data;
+    }
+    return { data };
+  }
+
+  /**
+   * Write data to a Vault path with auth and K8s token refresh.
+   */
+  protected async writeToPath(
+    path: string,
+    payload: Record<string, unknown>,
+  ): Promise<void> {
+    await this.ensureInitialized();
+    await this.executeWithK8sTokenRefresh(
+      () => this.client.write(path, payload),
+      "writeToPath",
+    );
+  }
+
+  /**
+   * Delete a secret at a Vault path with auth and K8s token refresh.
+   */
+  protected async deleteAtPath(path: string): Promise<void> {
+    await this.ensureInitialized();
+    await this.executeWithK8sTokenRefresh(
+      () => this.client.delete(path),
+      "deleteAtPath",
+    );
+  }
+
+  /**
+   * Read a secret from a Vault path with auth and K8s token refresh.
+   */
+  protected async readFromPath(
+    path: string,
+  ): Promise<{ data: Record<string, unknown> }> {
+    await this.ensureInitialized();
+    return await this.executeWithK8sTokenRefresh(
+      () => this.client.read(path),
+      "readFromPath",
+    );
+  }
+
+  /**
+   * List keys at a Vault path with auth and K8s token refresh.
+   * Returns an empty array if the path does not exist (404).
+   */
+  protected async listKeysAtPath(path: string): Promise<string[]> {
+    await this.ensureInitialized();
+    try {
+      const result = await this.executeWithK8sTokenRefresh(
+        () => this.client.list(path),
+        "listKeysAtPath",
+      );
+      return (result?.data?.keys as string[] | undefined) ?? [];
+    } catch (error) {
+      const vaultError = error as { response?: { statusCode?: number } };
+      if (vaultError.response?.statusCode === 404) {
+        return [];
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Get the list path for a folder based on KV version.
+   * KV v2 requires using the metadata path for list operations.
+   */
+  protected getListPath(folderPath: string): string {
+    if (this.config.kvVersion === "1") {
+      return folderPath;
+    }
+    // For KV v2, replace /data/ with /metadata/ in the path
+    return folderPath.replace("/data/", "/metadata/");
+  }
+
+  /**
+   * Extract secret data from Vault read response based on KV version.
+   * KV v1: data is at vaultResponse.data
+   * KV v2: data is at vaultResponse.data.data
+   */
+  protected extractSecretData(vaultResponse: {
+    data: Record<string, unknown>;
+  }): Record<string, string> {
+    if (this.config.kvVersion === "1") {
+      return vaultResponse.data as Record<string, string>;
+    }
+    return vaultResponse.data.data as unknown as Record<string, string>;
   }
 
   // ============================================================
@@ -420,31 +518,5 @@ export class VaultClient {
       );
       throw error;
     }
-  }
-
-  /**
-   * Get the list path for a folder based on KV version.
-   * KV v2 requires using the metadata path for list operations.
-   */
-  private getListPath(folderPath: string): string {
-    if (this.config.kvVersion === "1") {
-      return folderPath;
-    }
-    // For KV v2, replace /data/ with /metadata/ in the path
-    return folderPath.replace("/data/", "/metadata/");
-  }
-
-  /**
-   * Extract secret data from Vault read response based on KV version.
-   * KV v1: data is at vaultResponse.data
-   * KV v2: data is at vaultResponse.data.data
-   */
-  private extractSecretData(vaultResponse: {
-    data: Record<string, unknown>;
-  }): Record<string, string> {
-    if (this.config.kvVersion === "1") {
-      return vaultResponse.data as Record<string, string>;
-    }
-    return vaultResponse.data.data as unknown as Record<string, string>;
   }
 }

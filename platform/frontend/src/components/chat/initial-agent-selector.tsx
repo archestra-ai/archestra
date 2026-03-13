@@ -14,6 +14,7 @@ import {
   Search,
   XIcon,
 } from "lucide-react";
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ConnectorTypeIcon } from "@/app/knowledge/knowledge-bases/_parts/connector-icons";
 import { LocalServerInstallDialog } from "@/app/mcp/registry/_parts/local-server-install-dialog";
@@ -25,6 +26,7 @@ import { AgentIconPicker } from "@/components/agent-icon-picker";
 import { McpCatalogIcon, ToolChecklist } from "@/components/agent-tools-editor";
 import { PromptInputButton } from "@/components/ai-elements/prompt-input";
 import { OAuthConfirmationDialog } from "@/components/oauth-confirmation-dialog";
+import { SystemPromptEditor } from "@/components/system-prompt-editor";
 import { TokenSelect } from "@/components/token-select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -43,7 +45,6 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Tooltip,
   TooltipContent,
@@ -416,7 +417,7 @@ export function InitialAgentSelector({
         }}
       >
         <DialogContent
-          className="max-w-3xl h-[600px] p-0 gap-0 overflow-hidden flex flex-col"
+          className="max-w-3xl h-[660px] p-0 gap-0 overflow-hidden flex flex-col"
           onCloseAutoFocus={(e) => e.preventDefault()}
           showCloseButton={false}
         >
@@ -846,15 +847,11 @@ function AgentSettingsView({
             </AlertDescription>
           </Alert>
         )}
-        <div>
-          <Label className="mb-1.5">Instructions</Label>
-          <Textarea
-            value={instructions}
-            onChange={(e) => setInstructions(e.target.value)}
-            className="resize-none text-sm min-h-[80px] max-h-[200px]"
-            placeholder="Tell the agent what to do..."
-          />
-        </div>
+        <SystemPromptEditor
+          value={instructions}
+          onChange={setInstructions}
+          height="120px"
+        />
 
         <div>
           <Label className="mb-1.5">Tools and subagents</Label>
@@ -964,12 +961,12 @@ function AgentSettingsView({
 
       <div className="border-t px-4 py-3 shrink-0 flex items-center justify-between gap-3">
         {canReadAgents ? (
-          <a
+          <Link
             href={`/agents?edit=${agent.id}`}
             className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1.5"
           >
             Full configuration <ExternalLink className="size-3" />
-          </a>
+          </Link>
         ) : (
           <div />
         )}

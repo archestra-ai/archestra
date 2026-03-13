@@ -34,7 +34,6 @@ import {
   type ChatApiKeyScope,
   useAvailableChatApiKeys,
 } from "@/lib/chat-settings.query";
-import { getSavedApiKey, saveApiKey } from "@/lib/use-chat-preferences";
 
 interface ChatApiKeySelectorProps {
   /** Conversation ID for persisting selection (optional for initial chat) */
@@ -193,21 +192,12 @@ export function ChatApiKeySelector({
       ? (keysByProvider[currentProvider] ?? [])
       : [];
 
-    // Try to find key from localStorage (per-provider key)
-    const keyIdFromLocalStorage = currentProvider
-      ? getSavedApiKey(currentProvider)
-      : null;
-    const keyFromLocalStorage = keyIdFromLocalStorage
-      ? providerKeys.find((k) => k.id === keyIdFromLocalStorage)
-      : null;
-
-    // Priority: localStorage > personal > team > org_wide (within current provider)
+    // Priority: personal > team > org_wide (within current provider)
     const personalKeys = providerKeys.filter((k) => k.scope === "personal");
     const teamKeys = providerKeys.filter((k) => k.scope === "team");
     const orgWideKeys = providerKeys.filter((k) => k.scope === "org_wide");
 
     const keyToSelect =
-      keyFromLocalStorage ||
       personalKeys[0] ||
       teamKeys[0] ||
       orgWideKeys[0] ||
@@ -284,11 +274,6 @@ export function ChatApiKeySelector({
       if (selectedKeyProvider && onProviderChange) {
         onProviderChange(selectedKeyProvider, keyId);
       }
-    }
-
-    // Save to localStorage for the selected key's provider
-    if (selectedKeyProvider) {
-      saveApiKey(selectedKeyProvider, keyId);
     }
   };
 

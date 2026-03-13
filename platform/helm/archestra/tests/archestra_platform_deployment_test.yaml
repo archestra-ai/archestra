@@ -1012,6 +1012,28 @@ tests:
                 name: RELEASE-NAME-archestra-platform-auth
                 key: auth-secret
 
+  - it: should set ARCHESTRA_AUTH_SECRET from configured existing secret
+    documentIndex: 1
+    set:
+      archestra.authSecret.existingSecretName: external-auth-secret
+      archestra.authSecret.existingSecretKey: external-auth-key
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_AUTH_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: external-auth-secret
+                key: external-auth-key
+
+  - it: should fail when auth secret key is set without auth secret name
+    set:
+      archestra.authSecret.existingSecretKey: external-auth-key
+    asserts:
+      - failedTemplate:
+          errorMessage: "archestra.authSecret.existingSecretKey requires archestra.authSecret.existingSecretName to also be set."
+
   - it: should use secretKeyRef for explicit ARCHESTRA_AUTH_SECRET (sensitive env var)
     documentIndex: 1
     set:

@@ -295,4 +295,32 @@ describe("chat tool execution", () => {
     expect(parsed.agent_id).toBe(defaultAgent.id);
     expect(parsed.agent_name).toBe("Default Router Agent");
   });
+
+  test("swap_to_default_agent returns error when already on default agent", async ({
+    makeConversation,
+  }) => {
+    await OrganizationModel.patch(organizationId, {
+      defaultAgentId: testAgent.id,
+    });
+
+    const conversation = await makeConversation(testAgent.id, {
+      userId: userId,
+      organizationId: organizationId,
+    });
+
+    const contextWithConvo: ArchestraContext = {
+      ...mockContext,
+      conversationId: conversation.id,
+    };
+
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}swap_to_default_agent`,
+      {},
+      contextWithConvo,
+    );
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain(
+      "Already using the default agent",
+    );
+  });
 });

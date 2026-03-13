@@ -626,6 +626,8 @@ export async function handleTool(
       const config = args?.config as Record<string, unknown> | undefined;
       if (!name || !connectorType || !config)
         return errorResult("name, connector_type, and config are required");
+      // Inject `type` as the discriminator for ConnectorConfigSchema (discriminated union on "type").
+      // If the user also passes `type` in config, their value wins via spread order and Zod validates.
       const parsed = InsertKnowledgeBaseConnectorSchema.parse({
         organizationId,
         name,

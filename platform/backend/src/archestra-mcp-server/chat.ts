@@ -282,6 +282,13 @@ export async function handleTool(
         return errorResult("Default agent not found.");
       }
 
+      // Prevent no-op swap to the same agent
+      if (targetAgent.id === contextAgent.id) {
+        return errorResult(
+          `Already using the default agent "${targetAgent.name}".`,
+        );
+      }
+
       // Update the conversation's agent
       const updated = await ConversationModel.update(
         context.conversationId,

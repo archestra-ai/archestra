@@ -1177,3 +1177,73 @@ describe("AgentToolModel.findAll", () => {
     });
   });
 });
+
+describe("AgentToolModel.bulkCreateOrUpdateCredentials", () => {
+  test("creates multiple new assignments in a single batch", async ({
+    makeAgent,
+    makeTool,
+  }) => {
+    const agent = await makeAgent();
+    const tool1 = await makeTool({ name: "tool-1" });
+    const tool2 = await makeTool({ name: "tool-2" });
+
+    const results = await AgentToolModel.bulkCreateOrUpdateCredentials([
+      { agentId: agent.id, toolId: tool1.id },
+      { agentId: agent.id, toolId: tool2.id },
+    ]);
+
+    expect(results).toHaveLength(2);
+    expect(results[0].status).toBe("created");
+    expect(results[1].status).toBe("created");
+
+    // Verify they exist in DB
+    const tools = await AgentToolModel.findToolIdsByAgent(agent.id);
+    expect(tools).toContain(tool1.id);
+    expect(tools).toContain(tool2.id);
+  });
+
+  test("returns unchanged for duplicate assignments", async ({
+    makeAgent,
+    makeTool,
+    makeAgentTool,
+  }) => {
+    const agent = await makeAgent();
+    const tool = await makeTool({ name: "tool-1" });
+    await makeAgentTool(agent.id, tool.id);
+
+    const results = await AgentToolModel.bulkCreateOrUpdateCredentials([
+      { agentId: agent.id, toolId: tool.id },
+    ]);
+
+    expect(results).toHaveLength(1);
+    expect(results[0].status).toBe("unchanged");
+  });
+
+  test("handles mix of new, existing, and updated assignments", async ({
+    makeAgent,
+    makeTool,
+    makeAgentTool,
+  }) => {
+    const agent = await makeAgent();
+    const tool1 = await makeTool({ name: "tool-existing" });
+    const tool2 = await makeTool({ name: "tool-new" });
+    await makeAgentTool(agent.id, tool1.id);
+
+    const results = await AgentToolModel.bulkCreateOrUpdateCredentials([
+      { agentId: agent.id, toolId: tool1.id }, // already exists, unchanged
+      { agentId: agent.id, toolId: tool2.id }, // new
+    ]);
+
+    expect(results).toHaveLength(2);
+    const statusMap = new Map(
+      results.map((r) => [`${r.agentId}:${r.toolId}`, r.status]),
+    );
+    expect(statusMap.get(`${agent.id}:${tool1.id}`)).toBe("unchanged");
+    expect(statusMap.get(`${agent.id}:${tool2.id}`)).toBe("created");
+  });
+
+  test("returns empty array for empty input", async () => {
+    const results = await AgentToolModel.bulkCreateOrUpdateCredentials([]);
+    expect(results).toEqual([]);
+  });
+});

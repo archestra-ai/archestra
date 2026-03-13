@@ -35,7 +35,7 @@ import type {
   SortingQuery,
   UpdateAgent,
 } from "@/types";
-import type { AgentScope, AgentScopeFilter } from "@/types/agent";
+import type { AgentScope, AgentScopeFilter, AgentType } from "@/types/agent";
 import AgentConnectorAssignmentModel from "./agent-connector-assignment";
 import AgentKnowledgeBaseModel from "./agent-knowledge-base";
 import AgentLabelModel from "./agent-label";
@@ -836,6 +836,63 @@ class AgentModel {
       .limit(1);
 
     return result !== undefined;
+  }
+
+  /**
+   * Batch fetch minimal agent data needed for permission checks.
+   * Returns a Map of agentId -> { agentType, scope, authorId, teamIds }.
+   * Much lighter than findById (no tool/label/knowledgeBase/connector joins).
+   */
+  static async findByIdsForPermissionCheck(
+    ids: string[],
+  ): Promise<
+    Map<
+      string,
+      {
+        agentType: AgentType;
+        scope: AgentScope;
+        authorId: string | null;
+        teamIds: string[];
+      }
+    >
+  > {
+    if (ids.length === 0) {
+      return new Map();
+    }
+
+    const [agents, teamsMap] = await Promise.all([
+      db
+        .select({
+          id: schema.agentsTable.id,
+          agentType: schema.agentsTable.agentType,
+          scope: schema.agentsTable.scope,
+          authorId: schema.agentsTable.authorId,
+        })
+        .from(schema.agentsTable)
+        .where(inArray(schema.agentsTable.id, ids)),
+      AgentTeamModel.getTeamDetailsForAgents(ids),
+    ]);
+
+    const result = new Map<
+      string,
+      {
+        agentType: AgentType;
+        scope: AgentScope;
+        authorId: string | null;
+        teamIds: string[];
+      }
+    >();
+    for (const agent of agents) {
+      const teams = teamsMap.get(agent.id) ?? [];
+      result.set(agent.id, {
+        agentType: agent.agentType,
+        scope: agent.scope,
+        authorId: agent.authorId,
+        teamIds: teams.map((t) => t.id),
+      });
+    }
+
+    return result;
   }
 
   /**

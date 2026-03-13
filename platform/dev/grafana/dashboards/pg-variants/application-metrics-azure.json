@@ -2577,7 +2577,7 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "sum(azure_active_connections_average) / azure_max_connections_average * 100",
+          "expr": "sum(azure_active_connections_average) / sum(azure_max_connections_average) * 100",
           "hide": false,
           "instant": true,
           "legendFormat": "",

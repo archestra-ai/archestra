@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.22](https://github.com/archestra-ai/archestra/compare/platform-v1.1.21...platform-v1.1.22) (2026-03-13)
+
+
+### Features
+
+* add GET /api/organization/members/:idOrEmail endpoint ([#3363](https://github.com/archestra-ai/archestra/issues/3363)) ([1f37ac4](https://github.com/archestra-ai/archestra/commit/1f37ac4eb998715f1e602963dfd07ddb84b92879))
+
 ## [1.1.21](https://github.com/archestra-ai/archestra/compare/platform-v1.1.20...platform-v1.1.21) (2026-03-13)
 
 

@@ -539,7 +539,7 @@ describe("knowledge-management tool execution", () => {
       const list = JSON.parse((listResult.content[0] as any).text);
       expect(list.some((c: any) => c.id === created.id)).toBe(true);
 
-      // Update
+      // Update name
       const updateResult = await executeArchestraTool(
         t("update_knowledge_connector"),
         { id: created.id, name: "Updated Connector" },
@@ -549,6 +549,21 @@ describe("knowledge-management tool execution", () => {
       expect((updateResult.content[0] as any).text).toContain(
         "Updated Connector",
       );
+
+      // Update config
+      const configUpdateResult = await executeArchestraTool(
+        t("update_knowledge_connector"),
+        {
+          id: created.id,
+          config: {
+            jiraBaseUrl: "https://updated.atlassian.net",
+            isCloud: true,
+            projectKey: "UPDATED",
+          },
+        },
+        mockContext,
+      );
+      expect(configUpdateResult.isError).toBe(false);
 
       // Delete
       const deleteResult = await executeArchestraTool(

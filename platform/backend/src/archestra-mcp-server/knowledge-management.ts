@@ -271,6 +271,11 @@ export const tools: Tool[] = [
           type: "boolean",
           description: "Whether the knowledge connector is enabled",
         },
+        config: {
+          type: "object",
+          description:
+            "Updated connector configuration (provider-specific settings)",
+        },
       },
       required: ["id"],
     },
@@ -439,6 +444,10 @@ export async function handleTool(
         return errorResult("query parameter is required");
       }
 
+      if (!organizationId) {
+        return errorResult("Organization context not available.");
+      }
+
       const agent = await AgentModel.findById(contextAgent.id);
 
       const hasKbs = agent?.knowledgeBaseIds?.length;
@@ -499,10 +508,6 @@ export async function handleTool(
             visibility,
           });
         }
-      }
-
-      if (!organizationId) {
-        return errorResult("Organization context not available.");
       }
 
       const results = await queryService.query({
@@ -611,6 +616,7 @@ export async function handleTool(
       const config = args?.config as Record<string, unknown> | undefined;
       if (!name || !connectorType || !config)
         return errorResult("name, connector_type, and config are required");
+      // Cast needed: MCP tool args are untyped, but connectorType/config form a discriminated union
       const connector = await KnowledgeBaseConnectorModel.create({
         organizationId,
         name,
@@ -661,6 +667,7 @@ export async function handleTool(
       if (args?.description !== undefined)
         updates.description = args.description;
       if (args?.enabled !== undefined) updates.enabled = args.enabled;
+      if (args?.config !== undefined) updates.config = args.config;
       if (Object.keys(updates).length === 0)
         return errorResult("At least one field to update is required");
       const connector = await KnowledgeBaseConnectorModel.update(id, updates);

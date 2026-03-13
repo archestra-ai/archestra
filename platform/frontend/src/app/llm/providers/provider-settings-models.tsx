@@ -41,7 +41,6 @@ export function ProviderSettingsModels() {
   const { data: models = [], isPending, refetch } = useModelsWithApiKeys();
   const syncModelsMutation = useSyncChatModels();
   const [search, setSearch] = useState("");
-  const [providerFilter, setProviderFilter] = useState<string>("all");
   const [apiKeyFilter, setApiKeyFilter] = useState<string>("all");
   const [editingModel, setEditingModel] = useState<ModelWithApiKeys | null>(
     null,
@@ -52,9 +51,6 @@ export function ProviderSettingsModels() {
     if (search) {
       const q = search.toLowerCase();
       result = result.filter((m) => m.modelId.toLowerCase().includes(q));
-    }
-    if (providerFilter !== "all") {
-      result = result.filter((m) => m.provider === providerFilter);
     }
     if (apiKeyFilter !== "all") {
       result = result.filter((m) =>
@@ -67,22 +63,17 @@ export function ProviderSettingsModels() {
         a.provider.localeCompare(b.provider) ||
         a.modelId.localeCompare(b.modelId),
     );
-  }, [models, search, providerFilter, apiKeyFilter]);
-
-  const availableProviders = useMemo(() => {
-    const providers = new Set(models.map((m) => m.provider));
-    return Array.from(providers).sort();
-  }, [models]);
+  }, [models, search, apiKeyFilter]);
 
   const availableApiKeys = useMemo(() => {
-    const keyMap = new Map<string, string>();
+    const keyMap = new Map<string, { name: string; provider: string }>();
     for (const model of models) {
       for (const key of model.apiKeys) {
-        keyMap.set(key.id, key.name);
+        keyMap.set(key.id, { name: key.name, provider: key.provider });
       }
     }
     return Array.from(keyMap.entries())
-      .sort((a, b) => a[1].localeCompare(b[1]));
+      .sort((a, b) => a[1].name.localeCompare(b[1].name));
   }, [models]);
 
   const handleRefresh = useCallback(async () => {
@@ -327,18 +318,18 @@ export function ProviderSettingsModels() {
                   />
                 </div>
                 <Select
-                  value={providerFilter}
-                  onValueChange={setProviderFilter}
+                  value={apiKeyFilter}
+                  onValueChange={setApiKeyFilter}
                 >
                   <SelectTrigger className="w-[200px]">
-                    <SelectValue placeholder="All providers" />
+                    <SelectValue placeholder="All API keys" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All providers</SelectItem>
-                    {availableProviders.map((provider) => {
+                    <SelectItem value="all">All API keys</SelectItem>
+                    {availableApiKeys.map(([id, { name, provider }]) => {
                       const config = PROVIDER_CONFIG[provider];
                       return (
-                        <SelectItem key={provider} value={provider}>
+                        <SelectItem key={id} value={id}>
                           <div className="flex items-center gap-2">
                             {config && (
                               <Image
@@ -349,27 +340,11 @@ export function ProviderSettingsModels() {
                                 className="rounded dark:invert"
                               />
                             )}
-                            <span>{config?.name ?? provider}</span>
+                            <span>{name}</span>
                           </div>
                         </SelectItem>
                       );
                     })}
-                  </SelectContent>
-                </Select>
-                <Select
-                  value={apiKeyFilter}
-                  onValueChange={setApiKeyFilter}
-                >
-                  <SelectTrigger className="w-[200px]">
-                    <SelectValue placeholder="All API keys" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All API keys</SelectItem>
-                    {availableApiKeys.map(([id, name]) => (
-                      <SelectItem key={id} value={id}>
-                        {name}
-                      </SelectItem>
-                    ))}
                   </SelectContent>
                 </Select>
               </div>

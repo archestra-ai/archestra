@@ -66,7 +66,7 @@ export function ProviderSettingsModels() {
   }, [models, search, apiKeyFilter]);
 
   const availableApiKeys = useMemo(() => {
-    const keyMap = new Map<string, { name: string; provider: string }>();
+    const keyMap = new Map<string, { name: string; provider: keyof typeof PROVIDER_CONFIG }>();
     for (const model of models) {
       for (const key of model.apiKeys) {
         keyMap.set(key.id, { name: key.name, provider: key.provider });

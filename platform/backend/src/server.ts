@@ -257,19 +257,33 @@ export const createFastifyInstance = () =>
       // Handle response serialization errors (when response doesn't match schema)
       if (isResponseSerializationError(error)) {
         const issues = error.cause?.issues ?? [];
+        const validationErrors = issues.map((issue) => ({
+          path: issue.path?.join("."),
+          code: issue.code,
+          message: issue.message,
+        }));
+
         this.log.error(
           {
             statusCode: 500,
             method: error.method,
             url: error.url,
-            validationErrors: issues.map((issue) => ({
-              path: issue.path?.join("."),
-              code: issue.code,
-              message: issue.message,
-            })),
+            validationErrors,
           },
-          "Response serialization error: response doesn't match schema",
+          `Response serialization error on ${error.method} ${error.url}: ${JSON.stringify(validationErrors)}`,
         );
+
+        // Explicitly capture in Sentry with full validation details
+        Sentry.captureException(error, {
+          extra: {
+            method: error.method,
+            url: error.url,
+            validationErrors,
+          },
+          tags: {
+            error_type: "response_serialization",
+          },
+        });
 
         return reply.status(500).send({
           error: {

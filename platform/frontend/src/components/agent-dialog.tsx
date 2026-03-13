@@ -43,7 +43,6 @@ import {
 } from "@/components/agent-tools-editor";
 import { ModelSelector } from "@/components/chat/model-selector";
 import { Editor } from "@/components/editor";
-import { computeHandlebarsReplaceOffsets } from "@/lib/handlebars-completion";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   AssignmentCombobox,
@@ -113,6 +112,7 @@ import { useAvailableChatApiKeys } from "@/lib/chat-settings.query";
 import config from "@/lib/config";
 import { useFeature } from "@/lib/config.query";
 import { useConnectors } from "@/lib/connector.query";
+import { computeHandlebarsReplaceOffsets } from "@/lib/handlebars-completion";
 import { useKnowledgeBases } from "@/lib/knowledge-base.query";
 import { cn } from "@/lib/utils";
 

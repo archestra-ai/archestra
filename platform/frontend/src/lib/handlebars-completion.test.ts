@@ -60,10 +60,12 @@ describe("computeHandlebarsReplaceOffsets", () => {
   });
 
   it("does not count braces that are not adjacent to cursor", () => {
-    expect(computeHandlebarsReplaceOffsets("{{ hello {", "} world }}")).toEqual({
-      startOffset: 1,
-      endOffset: 1,
-    });
+    expect(computeHandlebarsReplaceOffsets("{{ hello {", "} world }}")).toEqual(
+      {
+        startOffset: 1,
+        endOffset: 1,
+      },
+    );
   });
 
   it("handles triple braces before cursor", () => {

@@ -10,6 +10,7 @@ import {
   type ToolInvocation,
   type TrustedData,
 } from "@/types";
+import { catchError, errorResult, successResult } from "./helpers";
 import type { ArchestraContext } from "./types";
 
 // === Constants ===
@@ -446,28 +447,9 @@ export async function handleTool(
         return { value, label };
       });
 
-      return {
-        content: [
-          {
-            type: "text",
-            text: JSON.stringify(supportedOperators, null, 2),
-          },
-        ],
-        isError: false,
-      };
+      return successResult(JSON.stringify(supportedOperators, null, 2));
     } catch (error) {
-      logger.error({ err: error }, "Error getting autonomy policy operators");
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Error getting autonomy policy operators: ${
-              error instanceof Error ? error.message : "Unknown error"
-            }`,
-          },
-        ],
-        isError: true,
-      };
+      return catchError(error, "getting autonomy policy operators");
     }
   }
 
@@ -479,28 +461,9 @@ export async function handleTool(
 
     try {
       const policies = await ToolInvocationPolicyModel.findAll();
-      return {
-        content: [
-          {
-            type: "text",
-            text: JSON.stringify(policies, null, 2),
-          },
-        ],
-        isError: false,
-      };
+      return successResult(JSON.stringify(policies, null, 2));
     } catch (error) {
-      logger.error({ err: error }, "Error getting tool invocation policies");
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Error getting tool invocation policies: ${
-              error instanceof Error ? error.message : "Unknown error"
-            }`,
-          },
-        ],
-        isError: true,
-      };
+      return catchError(error, "getting tool invocation policies");
     }
   }
 
@@ -519,28 +482,9 @@ export async function handleTool(
         action: a.action as ToolInvocation.InsertToolInvocationPolicy["action"],
         reason: (a.reason as string) ?? null,
       });
-      return {
-        content: [
-          {
-            type: "text",
-            text: JSON.stringify(policy, null, 2),
-          },
-        ],
-        isError: false,
-      };
+      return successResult(JSON.stringify(policy, null, 2));
     } catch (error) {
-      logger.error({ err: error }, "Error creating tool invocation policy");
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Error creating tool invocation policy: ${
-              error instanceof Error ? error.message : "Unknown error"
-            }`,
-          },
-        ],
-        isError: true,
-      };
+      return catchError(error, "creating tool invocation policy");
     }
   }
 
@@ -553,52 +497,17 @@ export async function handleTool(
     try {
       const id = args?.id as string;
       if (!id) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: "Error: id parameter is required",
-            },
-          ],
-          isError: true,
-        };
+        return errorResult("id parameter is required");
       }
 
       const policy = await ToolInvocationPolicyModel.findById(id);
       if (!policy) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: "Tool invocation policy not found",
-            },
-          ],
-          isError: true,
-        };
+        return errorResult("Tool invocation policy not found");
       }
 
-      return {
-        content: [
-          {
-            type: "text",
-            text: JSON.stringify(policy, null, 2),
-          },
-        ],
-        isError: false,
-      };
+      return successResult(JSON.stringify(policy, null, 2));
     } catch (error) {
-      logger.error({ err: error }, "Error getting tool invocation policy");
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Error getting tool invocation policy: ${
-              error instanceof Error ? error.message : "Unknown error"
-            }`,
-          },
-        ],
-        isError: true,
-      };
+      return catchError(error, "getting tool invocation policy");
     }
   }
 
@@ -612,15 +521,7 @@ export async function handleTool(
       const a = args ?? {};
       const id = a.id as string;
       if (!id) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: "Error: id parameter is required",
-            },
-          ],
-          isError: true,
-        };
+        return errorResult("id parameter is required");
       }
 
       const updateData: Partial<ToolInvocation.InsertToolInvocationPolicy> = {};
@@ -636,39 +537,12 @@ export async function handleTool(
 
       const policy = await ToolInvocationPolicyModel.update(id, updateData);
       if (!policy) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: "Tool invocation policy not found",
-            },
-          ],
-          isError: true,
-        };
+        return errorResult("Tool invocation policy not found");
       }
 
-      return {
-        content: [
-          {
-            type: "text",
-            text: JSON.stringify(policy, null, 2),
-          },
-        ],
-        isError: false,
-      };
+      return successResult(JSON.stringify(policy, null, 2));
     } catch (error) {
-      logger.error({ err: error }, "Error updating tool invocation policy");
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Error updating tool invocation policy: ${
-              error instanceof Error ? error.message : "Unknown error"
-            }`,
-          },
-        ],
-        isError: true,
-      };
+      return catchError(error, "updating tool invocation policy");
     }
   }
 
@@ -681,52 +555,17 @@ export async function handleTool(
     try {
       const id = args?.id as string;
       if (!id) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: "Error: id parameter is required",
-            },
-          ],
-          isError: true,
-        };
+        return errorResult("id parameter is required");
       }
 
       const success = await ToolInvocationPolicyModel.delete(id);
       if (!success) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: "Tool invocation policy not found",
-            },
-          ],
-          isError: true,
-        };
+        return errorResult("Tool invocation policy not found");
       }
 
-      return {
-        content: [
-          {
-            type: "text",
-            text: JSON.stringify({ success: true }, null, 2),
-          },
-        ],
-        isError: false,
-      };
+      return successResult(JSON.stringify({ success: true }, null, 2));
     } catch (error) {
-      logger.error({ err: error }, "Error deleting tool invocation policy");
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Error deleting tool invocation policy: ${
-              error instanceof Error ? error.message : "Unknown error"
-            }`,
-          },
-        ],
-        isError: true,
-      };
+      return catchError(error, "deleting tool invocation policy");
     }
   }
 
@@ -738,28 +577,9 @@ export async function handleTool(
 
     try {
       const policies = await TrustedDataPolicyModel.findAll();
-      return {
-        content: [
-          {
-            type: "text",
-            text: JSON.stringify(policies, null, 2),
-          },
-        ],
-        isError: false,
-      };
+      return successResult(JSON.stringify(policies, null, 2));
     } catch (error) {
-      logger.error({ err: error }, "Error getting trusted data policies");
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Error getting trusted data policies: ${
-              error instanceof Error ? error.message : "Unknown error"
-            }`,
-          },
-        ],
-        isError: true,
-      };
+      return catchError(error, "getting trusted data policies");
     }
   }
 
@@ -778,28 +598,9 @@ export async function handleTool(
         action: a.action as TrustedData.InsertTrustedDataPolicy["action"],
         description: (a.description as string) ?? null,
       });
-      return {
-        content: [
-          {
-            type: "text",
-            text: JSON.stringify(policy, null, 2),
-          },
-        ],
-        isError: false,
-      };
+      return successResult(JSON.stringify(policy, null, 2));
     } catch (error) {
-      logger.error({ err: error }, "Error creating trusted data policy");
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Error creating trusted data policy: ${
-              error instanceof Error ? error.message : "Unknown error"
-            }`,
-          },
-        ],
-        isError: true,
-      };
+      return catchError(error, "creating trusted data policy");
     }
   }
 
@@ -812,52 +613,17 @@ export async function handleTool(
     try {
       const id = args?.id as string;
       if (!id) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: "Error: id parameter is required",
-            },
-          ],
-          isError: true,
-        };
+        return errorResult("id parameter is required");
       }
 
       const policy = await TrustedDataPolicyModel.findById(id);
       if (!policy) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: "Trusted data policy not found",
-            },
-          ],
-          isError: true,
-        };
+        return errorResult("Trusted data policy not found");
       }
 
-      return {
-        content: [
-          {
-            type: "text",
-            text: JSON.stringify(policy, null, 2),
-          },
-        ],
-        isError: false,
-      };
+      return successResult(JSON.stringify(policy, null, 2));
     } catch (error) {
-      logger.error({ err: error }, "Error getting trusted data policy");
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Error getting trusted data policy: ${
-              error instanceof Error ? error.message : "Unknown error"
-            }`,
-          },
-        ],
-        isError: true,
-      };
+      return catchError(error, "getting trusted data policy");
     }
   }
 
@@ -871,15 +637,7 @@ export async function handleTool(
       const a = args ?? {};
       const id = a.id as string;
       if (!id) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: "Error: id parameter is required",
-            },
-          ],
-          isError: true,
-        };
+        return errorResult("id parameter is required");
       }
 
       const updateData: Partial<TrustedData.InsertTrustedDataPolicy> = {};
@@ -895,39 +653,12 @@ export async function handleTool(
 
       const policy = await TrustedDataPolicyModel.update(id, updateData);
       if (!policy) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: "Trusted data policy not found",
-            },
-          ],
-          isError: true,
-        };
+        return errorResult("Trusted data policy not found");
       }
 
-      return {
-        content: [
-          {
-            type: "text",
-            text: JSON.stringify(policy, null, 2),
-          },
-        ],
-        isError: false,
-      };
+      return successResult(JSON.stringify(policy, null, 2));
     } catch (error) {
-      logger.error({ err: error }, "Error updating trusted data policy");
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Error updating trusted data policy: ${
-              error instanceof Error ? error.message : "Unknown error"
-            }`,
-          },
-        ],
-        isError: true,
-      };
+      return catchError(error, "updating trusted data policy");
     }
   }
 
@@ -940,52 +671,17 @@ export async function handleTool(
     try {
       const id = args?.id as string;
       if (!id) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: "Error: id parameter is required",
-            },
-          ],
-          isError: true,
-        };
+        return errorResult("id parameter is required");
       }
 
       const success = await TrustedDataPolicyModel.delete(id);
       if (!success) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: "Trusted data policy not found",
-            },
-          ],
-          isError: true,
-        };
+        return errorResult("Trusted data policy not found");
       }
 
-      return {
-        content: [
-          {
-            type: "text",
-            text: JSON.stringify({ success: true }, null, 2),
-          },
-        ],
-        isError: false,
-      };
+      return successResult(JSON.stringify({ success: true }, null, 2));
     } catch (error) {
-      logger.error({ err: error }, "Error deleting trusted data policy");
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Error deleting trusted data policy: ${
-              error instanceof Error ? error.message : "Unknown error"
-            }`,
-          },
-        ],
-        isError: true,
-      };
+      return catchError(error, "deleting trusted data policy");
     }
   }
 

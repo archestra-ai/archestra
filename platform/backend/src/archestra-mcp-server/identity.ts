@@ -4,6 +4,7 @@ import {
   MCP_SERVER_TOOL_NAME_SEPARATOR,
 } from "@shared";
 import logger from "@/logging";
+import { successResult } from "./helpers";
 import type { ArchestraContext } from "./types";
 
 const TOOL_WHOAMI_NAME = "whoami";
@@ -39,15 +40,9 @@ export async function handleTool(
       "whoami tool called",
     );
 
-    return {
-      content: [
-        {
-          type: "text",
-          text: `Agent Name: ${contextAgent.name}\nAgent ID: ${contextAgent.id}`,
-        },
-      ],
-      isError: false,
-    };
+    return successResult(
+      `Agent Name: ${contextAgent.name}\nAgent ID: ${contextAgent.id}`,
+    );
   }
 
   return null;

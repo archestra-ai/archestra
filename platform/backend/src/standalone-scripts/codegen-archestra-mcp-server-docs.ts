@@ -30,6 +30,7 @@ enum ToolGroup {
   Policies = "Policies",
   ToolAssignment = "Tool Assignment",
   KnowledgeBase = "Knowledge Base",
+  KnowledgeManagement = "Knowledge Management",
   Chat = "Chat",
 }
 
@@ -43,7 +44,8 @@ const groupOrder: Record<ToolGroup, number> = {
   [ToolGroup.Policies]: 6,
   [ToolGroup.ToolAssignment]: 7,
   [ToolGroup.KnowledgeBase]: 8,
-  [ToolGroup.Chat]: 9,
+  [ToolGroup.KnowledgeManagement]: 9,
+  [ToolGroup.Chat]: 10,
 };
 
 /**
@@ -99,6 +101,24 @@ const toolGroups: Record<ArchestraToolShortName, ToolGroup> = {
   bulk_assign_tools_to_mcp_gateways: ToolGroup.ToolAssignment,
 
   query_knowledge_sources: ToolGroup.KnowledgeBase,
+
+  create_knowledge_base: ToolGroup.KnowledgeManagement,
+  get_knowledge_bases: ToolGroup.KnowledgeManagement,
+  get_knowledge_base: ToolGroup.KnowledgeManagement,
+  update_knowledge_base: ToolGroup.KnowledgeManagement,
+  delete_knowledge_base: ToolGroup.KnowledgeManagement,
+  create_knowledge_connector: ToolGroup.KnowledgeManagement,
+  get_knowledge_connectors: ToolGroup.KnowledgeManagement,
+  get_knowledge_connector: ToolGroup.KnowledgeManagement,
+  update_knowledge_connector: ToolGroup.KnowledgeManagement,
+  delete_knowledge_connector: ToolGroup.KnowledgeManagement,
+  assign_knowledge_connector_to_knowledge_base: ToolGroup.KnowledgeManagement,
+  unassign_knowledge_connector_from_knowledge_base:
+    ToolGroup.KnowledgeManagement,
+  assign_knowledge_base_to_agent: ToolGroup.KnowledgeManagement,
+  unassign_knowledge_base_from_agent: ToolGroup.KnowledgeManagement,
+  assign_knowledge_connector_to_agent: ToolGroup.KnowledgeManagement,
+  unassign_knowledge_connector_from_agent: ToolGroup.KnowledgeManagement,
 
   todo_write: ToolGroup.Chat,
   artifact_write: ToolGroup.Chat,

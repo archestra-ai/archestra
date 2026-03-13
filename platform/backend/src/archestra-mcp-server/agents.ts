@@ -1,4 +1,4 @@
-import type { CallToolResult, Tool } from "@modelcontextprotocol/sdk/types.js";
+import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import {
   ARCHESTRA_MCP_SERVER_NAME,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
@@ -15,8 +15,11 @@ import type { Agent } from "@/types";
 import {
   assignMcpServerTools,
   assignSubAgentDelegations,
+  catchError,
   deduplicateLabels,
+  errorResult,
   formatAssignmentSummary,
+  successResult,
 } from "./helpers";
 import type { ArchestraContext } from "./types";
 
@@ -376,7 +379,7 @@ export async function handleTool(
   toolName: string,
   args: Record<string, unknown> | undefined,
   context: ArchestraContext,
-): Promise<CallToolResult | null> {
+): Promise<ReturnType<typeof successResult> | null> {
   const { agent: contextAgent, organizationId } = context;
 
   if (
@@ -411,15 +414,9 @@ export async function handleTool(
 
       // Validate required fields
       if (!name || name.trim() === "") {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Error: ${toolLabel} name is required and cannot be empty.`,
-            },
-          ],
-          isError: true,
-        };
+        return errorResult(
+          `${toolLabel} name is required and cannot be empty.`,
+        );
       }
 
       // Build create params - only agents get prompt fields
@@ -479,23 +476,9 @@ export async function handleTool(
       ];
       formatAssignmentSummary(lines, mcpServerResults, subAgentResults);
 
-      return {
-        content: [{ type: "text", text: lines.join("\n") }],
-        isError: false,
-      };
+      return successResult(lines.join("\n"));
     } catch (error) {
-      logger.error({ err: error }, `Error creating ${toolLabel}`);
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Error creating ${toolLabel}: ${
-              error instanceof Error ? error.message : "Unknown error"
-            }`,
-          },
-        ],
-        isError: true,
-      };
+      return catchError(error, `creating ${toolLabel}`);
     }
   }
 
@@ -527,15 +510,7 @@ export async function handleTool(
       const name = args?.name as string | undefined;
 
       if (!id && !name) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: "Error: either id or name parameter is required",
-            },
-          ],
-          isError: true,
-        };
+        return errorResult("either id or name parameter is required");
       }
 
       let record: Agent | null | undefined;
@@ -569,51 +544,18 @@ export async function handleTool(
       }
 
       if (!record) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `${getLabel} not found`,
-            },
-          ],
-          isError: true,
-        };
+        return errorResult(`${getLabel} not found`);
       }
 
       if (record.agentType !== expectedType) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Error: The requested entity is a ${record.agentType}, not a ${expectedType}.`,
-            },
-          ],
-          isError: true,
-        };
+        return errorResult(
+          `The requested entity is a ${record.agentType}, not a ${expectedType}.`,
+        );
       }
 
-      return {
-        content: [
-          {
-            type: "text",
-            text: JSON.stringify(record, null, 2),
-          },
-        ],
-        isError: false,
-      };
+      return successResult(JSON.stringify(record, null, 2));
     } catch (error) {
-      logger.error({ err: error }, `Error getting ${getLabel}`);
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Error getting ${getLabel}: ${
-              error instanceof Error ? error.message : "Unknown error"
-            }`,
-          },
-        ],
-        isError: true,
-      };
+      return catchError(error, `getting ${getLabel}`);
     }
   }
 
@@ -680,30 +622,11 @@ export async function handleTool(
           ),
       }));
 
-      return {
-        content: [
-          {
-            type: "text",
-            text: JSON.stringify(
-              { total: results.pagination.total, agents },
-              null,
-              2,
-            ),
-          },
-        ],
-        isError: false,
-      };
+      return successResult(
+        JSON.stringify({ total: results.pagination.total, agents }, null, 2),
+      );
     } catch (error) {
-      logger.error({ err: error }, "Error listing agents");
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Error listing agents: ${error instanceof Error ? error.message : "Unknown error"}`,
-          },
-        ],
-        isError: true,
-      };
+      return catchError(error, "listing agents");
     }
   }
 
@@ -716,43 +639,23 @@ export async function handleTool(
     try {
       const id = args?.id as string | undefined;
       if (!id) {
-        return {
-          content: [{ type: "text", text: "Error: agent id is required." }],
-          isError: true,
-        };
+        return errorResult("agent id is required.");
       }
 
       if (!context.userId || !organizationId) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: "Error: user/organization context not available.",
-            },
-          ],
-          isError: true,
-        };
+        return errorResult("user/organization context not available.");
       }
 
       // Fetch existing agent
       const existingAgent = await AgentModel.findById(id);
       if (!existingAgent) {
-        return {
-          content: [{ type: "text", text: "Error: agent not found." }],
-          isError: true,
-        };
+        return errorResult("agent not found.");
       }
 
       if (existingAgent.agentType !== "agent") {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Error: this tool only edits agents, not ${existingAgent.agentType}.`,
-            },
-          ],
-          isError: true,
-        };
+        return errorResult(
+          `this tool only edits agents, not ${existingAgent.agentType}.`,
+        );
       }
 
       // Check permissions
@@ -799,10 +702,7 @@ export async function handleTool(
       );
 
       if (!updated) {
-        return {
-          content: [{ type: "text", text: "Error: failed to update agent." }],
-          isError: true,
-        };
+        return errorResult("failed to update agent.");
       }
 
       // Assign MCP server tools and sub-agents (additive)
@@ -830,17 +730,9 @@ export async function handleTool(
       ];
       formatAssignmentSummary(lines, mcpServerResults, subAgentResults);
 
-      return {
-        content: [{ type: "text", text: lines.join("\n") }],
-        isError: false,
-      };
+      return successResult(lines.join("\n"));
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown error";
-      logger.error({ err: error }, "Error editing agent");
-      return {
-        content: [{ type: "text", text: `Error editing agent: ${message}` }],
-        isError: true,
-      };
+      return catchError(error, "editing agent");
     }
   }
 

@@ -1,3 +1,4 @@
+import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import logger from "@/logging";
 import { AgentModel, AgentToolModel, ToolModel } from "@/models";
 
@@ -115,4 +116,31 @@ export function deduplicateLabels(
   rawLabels: Array<{ key: string; value: string }>,
 ): Array<{ key: string; value: string }> {
   return Array.from(new Map(rawLabels.map((l) => [l.key, l])).values());
+}
+
+export function successResult(text: string): CallToolResult {
+  return {
+    content: [{ type: "text" as const, text }],
+    isError: false,
+  };
+}
+
+export function errorResult(message: string): CallToolResult {
+  return {
+    content: [{ type: "text" as const, text: `Error: ${message}` }],
+    isError: true,
+  };
+}
+
+export function catchError(error: unknown, action: string): CallToolResult {
+  logger.error({ err: error }, `Error ${action}`);
+  return {
+    content: [
+      {
+        type: "text" as const,
+        text: `Error ${action}: ${error instanceof Error ? error.message : "Unknown error"}`,
+      },
+    ],
+    isError: true,
+  };
 }

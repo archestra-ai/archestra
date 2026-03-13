@@ -94,7 +94,7 @@ describe("knowledge tool execution", () => {
       contextWithOrg,
     );
 
-    expect(result.isError).toBeUndefined();
+    expect(result.isError).toBeFalsy();
     const parsed = JSON.parse((result.content[0] as any).text);
     expect(parsed.totalChunks).toBe(1);
     expect(parsed.results).toEqual(mockResults);
@@ -183,7 +183,7 @@ describe("knowledge tool execution", () => {
       contextWithOrg,
     );
 
-    expect(result.isError).toBeUndefined();
+    expect(result.isError).toBeFalsy();
     const parsed = JSON.parse((result.content[0] as any).text);
     expect(parsed.totalChunks).toBe(1);
     expect(parsed.results).toEqual(mockResults);

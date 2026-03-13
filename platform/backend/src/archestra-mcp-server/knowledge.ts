@@ -11,6 +11,7 @@ import {
   UserModel,
 } from "@/models";
 import type { AclEntry } from "@/types/kb-document";
+import { catchError, errorResult, successResult } from "./helpers";
 import type { ArchestraContext } from "./types";
 
 // === Constants ===
@@ -60,10 +61,7 @@ export async function handleTool(
   try {
     const query = args?.query as string | undefined;
     if (!query) {
-      return {
-        content: [{ type: "text", text: "Error: query parameter is required" }],
-        isError: true,
-      };
+      return errorResult("query parameter is required");
     }
 
     const agent = await AgentModel.findById(contextAgent.id);
@@ -74,15 +72,9 @@ export async function handleTool(
     const directConnectorIds = connectorAssignments.map((a) => a.connectorId);
 
     if (!hasKbs && directConnectorIds.length === 0) {
-      return {
-        content: [
-          {
-            type: "text",
-            text: "No knowledge base or connector assigned to this agent. Assign a knowledge base or connector in agent settings to enable knowledge search.",
-          },
-        ],
-        isError: true,
-      };
+      return errorResult(
+        "No knowledge base or connector assigned to this agent. Assign a knowledge base or connector in agent settings to enable knowledge search.",
+      );
     }
 
     // Resolve KB assignments to connector IDs and merge with direct assignments
@@ -98,15 +90,9 @@ export async function handleTool(
     ];
 
     if (connectorIds.length === 0) {
-      return {
-        content: [
-          {
-            type: "text",
-            text: "No connectors found for the assigned knowledge bases or agent. Add connectors to enable knowledge search.",
-          },
-        ],
-        isError: true,
-      };
+      return errorResult(
+        "No connectors found for the assigned knowledge bases or agent. Add connectors to enable knowledge search.",
+      );
     }
 
     // Build user ACL from assigned knowledge bases
@@ -139,15 +125,7 @@ export async function handleTool(
     }
 
     if (!organizationId) {
-      return {
-        content: [
-          {
-            type: "text",
-            text: "Error: Organization context not available.",
-          },
-        ],
-        isError: true,
-      };
+      return errorResult("Organization context not available.");
     }
 
     const results = await queryService.query({
@@ -158,33 +136,13 @@ export async function handleTool(
       limit: 10,
     });
 
-    return {
-      content: [
-        {
-          type: "text",
-          text: JSON.stringify({
-            results,
-            totalChunks: results.length,
-          }),
-        },
-      ],
-    };
-  } catch (error) {
-    logger.error(
-      {
-        agentId: contextAgent.id,
-        error: error instanceof Error ? error.message : String(error),
-      },
-      "query_knowledge_sources failed",
+    return successResult(
+      JSON.stringify({
+        results,
+        totalChunks: results.length,
+      }),
     );
-    return {
-      content: [
-        {
-          type: "text",
-          text: `Error querying knowledge base: ${error instanceof Error ? error.message : "Unknown error"}`,
-        },
-      ],
-      isError: true,
-    };
+  } catch (error) {
+    return catchError(error, "querying knowledge base");
   }
 }

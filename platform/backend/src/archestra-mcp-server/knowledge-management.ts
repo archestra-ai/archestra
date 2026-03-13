@@ -15,7 +15,7 @@ import {
   TeamModel,
   UserModel,
 } from "@/models";
-import type { InsertKnowledgeBaseConnector } from "@/types";
+import { InsertKnowledgeBaseConnectorSchema } from "@/types";
 import type { AclEntry } from "@/types/kb-document";
 import { catchError, errorResult, successResult } from "./helpers";
 import type { ArchestraContext } from "./types";
@@ -567,7 +567,8 @@ export async function handleTool(
       const id = args?.id as string | undefined;
       if (!id) return errorResult("id is required");
       const kb = await KnowledgeBaseModel.findById(id);
-      if (!kb) return errorResult(`Knowledge base not found: ${id}`);
+      if (!kb || kb.organizationId !== organizationId)
+        return errorResult(`Knowledge base not found: ${id}`);
       return successResult(JSON.stringify(kb, null, 2));
     } catch (error) {
       return catchError(error, "getting knowledge base");
@@ -584,6 +585,9 @@ export async function handleTool(
         updates.description = args.description;
       if (Object.keys(updates).length === 0)
         return errorResult("At least one field to update is required");
+      const existing = await KnowledgeBaseModel.findById(id);
+      if (!existing || existing.organizationId !== organizationId)
+        return errorResult(`Knowledge base not found: ${id}`);
       const kb = await KnowledgeBaseModel.update(id, updates);
       if (!kb) return errorResult(`Knowledge base not found: ${id}`);
       return successResult(
@@ -599,7 +603,8 @@ export async function handleTool(
       const id = args?.id as string | undefined;
       if (!id) return errorResult("id is required");
       const existing = await KnowledgeBaseModel.findById(id);
-      if (!existing) return errorResult(`Knowledge base not found: ${id}`);
+      if (!existing || existing.organizationId !== organizationId)
+        return errorResult(`Knowledge base not found: ${id}`);
       await KnowledgeBaseModel.delete(id);
       return successResult(`Knowledge base deleted: ${id}`);
     } catch (error) {
@@ -616,14 +621,14 @@ export async function handleTool(
       const config = args?.config as Record<string, unknown> | undefined;
       if (!name || !connectorType || !config)
         return errorResult("name, connector_type, and config are required");
-      // Cast needed: MCP tool args are untyped, but connectorType/config form a discriminated union
-      const connector = await KnowledgeBaseConnectorModel.create({
+      const parsed = InsertKnowledgeBaseConnectorSchema.parse({
         organizationId,
         name,
         connectorType,
         config: { type: connectorType, ...config },
         description: (args?.description as string) || null,
-      } as InsertKnowledgeBaseConnector);
+      });
+      const connector = await KnowledgeBaseConnectorModel.create(parsed);
       return successResult(
         `Knowledge connector created successfully.\n\n${JSON.stringify(connector, null, 2)}`,
       );
@@ -650,7 +655,7 @@ export async function handleTool(
       const id = args?.id as string | undefined;
       if (!id) return errorResult("id is required");
       const connector = await KnowledgeBaseConnectorModel.findById(id);
-      if (!connector)
+      if (!connector || connector.organizationId !== organizationId)
         return errorResult(`Knowledge connector not found: ${id}`);
       return successResult(JSON.stringify(connector, null, 2));
     } catch (error) {
@@ -670,6 +675,12 @@ export async function handleTool(
       if (args?.config !== undefined) updates.config = args.config;
       if (Object.keys(updates).length === 0)
         return errorResult("At least one field to update is required");
+      const existingConnector = await KnowledgeBaseConnectorModel.findById(id);
+      if (
+        !existingConnector ||
+        existingConnector.organizationId !== organizationId
+      )
+        return errorResult(`Knowledge connector not found: ${id}`);
       const connector = await KnowledgeBaseConnectorModel.update(id, updates);
       if (!connector)
         return errorResult(`Knowledge connector not found: ${id}`);
@@ -686,7 +697,8 @@ export async function handleTool(
       const id = args?.id as string | undefined;
       if (!id) return errorResult("id is required");
       const existing = await KnowledgeBaseConnectorModel.findById(id);
-      if (!existing) return errorResult(`Knowledge connector not found: ${id}`);
+      if (!existing || existing.organizationId !== organizationId)
+        return errorResult(`Knowledge connector not found: ${id}`);
       await KnowledgeBaseConnectorModel.delete(id);
       return successResult(`Knowledge connector deleted: ${id}`);
     } catch (error) {

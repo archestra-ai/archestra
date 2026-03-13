@@ -173,9 +173,8 @@ export async function filterToolNamesByPermission(
       toolNames.filter((name) => {
         const shortName = extractShortName(name);
         if (!shortName) return true; // Non-Archestra tool
-        const perm =
-          TOOL_PERMISSIONS[shortName as ArchestraToolShortName] ?? undefined;
-        return perm === undefined; // null means no perm required, but we mapped null above
+        const perm = TOOL_PERMISSIONS[shortName as ArchestraToolShortName];
+        return perm === null; // null means no permission required
       }),
     );
   }

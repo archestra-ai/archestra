@@ -22,7 +22,11 @@ import {
   UserModel,
 } from "@/models";
 import { mapProviderError, ProviderError } from "@/routes/chat/errors";
-import { renderSystemPrompt, type SystemPromptContext } from "@/templating";
+import {
+  promptNeedsRendering,
+  renderSystemPrompt,
+  type SystemPromptContext,
+} from "@/templating";
 
 /**
  * Source-agnostic attachment for A2A execution.
@@ -135,26 +139,38 @@ export async function executeA2AMessage(
   const systemPromptParts: string[] = [];
   const userPromptParts: string[] = [];
 
-  // Build template context for system prompt rendering
-  const [userDetails, userTeams] = await Promise.all([
-    UserModel.getById(userId),
-    TeamModel.getUserTeams(userId),
-  ]);
-  const promptContext: SystemPromptContext = {
-    user: {
-      name: userDetails?.name ?? "",
-      email: userDetails?.email ?? "",
-      teams: userTeams.map((t) => t.name),
-    },
-  };
-
-  if (agent.systemPrompt) {
-    systemPromptParts.push(
-      renderSystemPrompt(agent.systemPrompt, promptContext),
-    );
-  }
-  if (agent.userPrompt) {
-    userPromptParts.push(renderSystemPrompt(agent.userPrompt, promptContext));
+  // Collect system and user prompts from the agent (render templates if needed)
+  if (agent.systemPrompt || agent.userPrompt) {
+    if (promptNeedsRendering(agent.systemPrompt, agent.userPrompt)) {
+      const [userDetails, userTeams] = await Promise.all([
+        UserModel.getById(userId),
+        TeamModel.getUserTeams(userId),
+      ]);
+      const promptContext: SystemPromptContext = {
+        user: {
+          name: userDetails?.name ?? "",
+          email: userDetails?.email ?? "",
+          teams: userTeams.map((t) => t.name),
+        },
+      };
+      if (agent.systemPrompt) {
+        systemPromptParts.push(
+          renderSystemPrompt(agent.systemPrompt, promptContext),
+        );
+      }
+      if (agent.userPrompt) {
+        userPromptParts.push(
+          renderSystemPrompt(agent.userPrompt, promptContext),
+        );
+      }
+    } else {
+      if (agent.systemPrompt) {
+        systemPromptParts.push(agent.systemPrompt);
+      }
+      if (agent.userPrompt) {
+        userPromptParts.push(agent.userPrompt);
+      }
+    }
   }
 
   if (systemPromptParts.length > 0 || userPromptParts.length > 0) {

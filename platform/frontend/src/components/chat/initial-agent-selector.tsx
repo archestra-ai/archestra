@@ -417,7 +417,7 @@ export function InitialAgentSelector({
         }}
       >
         <DialogContent
-          className="max-w-3xl h-[600px] p-0 gap-0 overflow-hidden flex flex-col"
+          className="max-w-3xl h-[660px] p-0 gap-0 overflow-hidden flex flex-col"
           onCloseAutoFocus={(e) => e.preventDefault()}
           showCloseButton={false}
         >

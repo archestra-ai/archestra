@@ -18452,19 +18452,21 @@ export type GetModelsWithApiKeysResponses = {
 
 export type GetModelsWithApiKeysResponse = GetModelsWithApiKeysResponses[keyof GetModelsWithApiKeysResponses];
 
-export type UpdateModelPricingData = {
-    body: {
-        customPricePerMillionInput: string | null;
-        customPricePerMillionOutput: string | null;
+export type UpdateModelData = {
+    body?: {
+        customPricePerMillionInput?: string | null;
+        customPricePerMillionOutput?: string | null;
+        inputModalities?: Array<'text' | 'image' | 'audio' | 'video' | 'pdf'> | null;
+        outputModalities?: Array<'text' | 'image' | 'audio'> | null;
     };
     path: {
         id: string;
     };
     query?: never;
-    url: '/api/models/{id}/pricing';
+    url: '/api/models/{id}';
 };
 
-export type UpdateModelPricingErrors = {
+export type UpdateModelErrors = {
     /**
      * Default Response
      */
@@ -18521,9 +18523,9 @@ export type UpdateModelPricingErrors = {
     };
 };
 
-export type UpdateModelPricingError = UpdateModelPricingErrors[keyof UpdateModelPricingErrors];
+export type UpdateModelError = UpdateModelErrors[keyof UpdateModelErrors];
 
-export type UpdateModelPricingResponses = {
+export type UpdateModelResponses = {
     /**
      * Default Response
      */
@@ -18548,7 +18550,7 @@ export type UpdateModelPricingResponses = {
     };
 };
 
-export type UpdateModelPricingResponse = UpdateModelPricingResponses[keyof UpdateModelPricingResponses];
+export type UpdateModelResponse = UpdateModelResponses[keyof UpdateModelResponses];
 
 export type StreamChatData = {
     body: {

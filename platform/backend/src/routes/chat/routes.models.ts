@@ -33,8 +33,8 @@ import {
   ModelCapabilitiesSchema,
   ModelWithApiKeysSchema,
   type OpenAi,
+  PatchModelBodySchema,
   SelectModelSchema,
-  UpdateModelPricingSchema,
   UuidIdSchema,
 } from "@/types";
 
@@ -1314,19 +1314,19 @@ const chatModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
-  // Update custom pricing for a model
+  // Update model details (pricing + modalities)
   fastify.patch(
-    "/api/models/:id/pricing",
+    "/api/models/:id",
     {
       schema: {
-        operationId: RouteId.UpdateModelPricing,
+        operationId: RouteId.UpdateModel,
         description:
-          "Update custom pricing for a model. Set prices to null to reset to default pricing.",
+          "Update model details including custom pricing and modalities.",
         tags: ["Models"],
         params: z.object({
           id: UuidIdSchema,
         }),
-        body: UpdateModelPricingSchema,
+        body: PatchModelBodySchema,
         response: constructResponseSchema(SelectModelSchema),
       },
     },
@@ -1336,9 +1336,9 @@ const chatModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Model not found");
       }
 
-      const updated = await ModelModel.updatePricing(id, body);
+      const updated = await ModelModel.update(id, body);
       if (!updated) {
-        throw new ApiError(500, "Failed to update model pricing");
+        throw new ApiError(500, "Failed to update model");
       }
 
       return reply.send(updated);

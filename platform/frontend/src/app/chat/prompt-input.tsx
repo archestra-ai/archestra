@@ -253,7 +253,11 @@ const PromptInputContent = ({
   const handleFileError = useCallback(
     (err: { code: "max_files" | "max_file_size" | "accept"; message: string }) => {
       if (err.code === "accept") {
-        toast.error("File format is not supported by the model");
+        toast.error(
+          !showFileUploadButton
+            ? "This model does not support file uploads"
+            : "File format is not supported by this model",
+        );
       }
     },
     [],

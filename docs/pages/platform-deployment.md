@@ -154,15 +154,6 @@ archestra:
     existingSecretKey: auth-secret
 ```
 
-If you want Helm to manage the Secret but provide the value explicitly, set `archestra.authSecret.value` instead. The value must be at least 32 characters:
-
-```yaml
-archestra:
-  authSecret:
-    value: something-really-really-secret-12345
-```
-
-The previous environment-variable based configuration is also still supported:
 
 ```bash
 # Generate a secure secret
@@ -171,8 +162,6 @@ openssl rand -base64 32
 # Then add to your helm command:
 --set archestra.env.ARCHESTRA_AUTH_SECRET=<your-generated-secret>
 ```
-
-For new Helm deployments, prefer `archestra.authSecret.value` when you want Helm to manage the Secret value directly.
 
 #### MCP Server Runtime Configuration
 

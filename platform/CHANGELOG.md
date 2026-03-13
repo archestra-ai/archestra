@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.1.17](https://github.com/archestra-ai/archestra/compare/platform-v1.1.16...platform-v1.1.17) (2026-03-13)
+
+
+### Features
+
+* filtering by labels on mcp registry ([#3322](https://github.com/archestra-ai/archestra/issues/3322)) ([bbb3b42](https://github.com/archestra-ai/archestra/commit/bbb3b420b5f5fb6a7d6206907dbc90350132cd75))
+* **helm:** support external auth secret sources ([#3337](https://github.com/archestra-ai/archestra/issues/3337)) ([1d9bf7b](https://github.com/archestra-ai/archestra/commit/1d9bf7be2dccc657a847184a41e02e8fdf16335e))
+
+
+### Bug Fixes
+
+* improve response serialization error logging with Sentry capture ([#3355](https://github.com/archestra-ai/archestra/issues/3355)) ([04be0aa](https://github.com/archestra-ai/archestra/commit/04be0aaa4afa250cd109d5697222c862dc829757))
+
+
+### Miscellaneous Chores
+
+* fix flaky test ([#3336](https://github.com/archestra-ai/archestra/issues/3336)) ([0d557b3](https://github.com/archestra-ai/archestra/commit/0d557b3d4a4ee7dfe8c2f78a24cc5178484f1b8b))
+* reuse vault client in rw vault ([#3352](https://github.com/archestra-ai/archestra/issues/3352)) ([3b63229](https://github.com/archestra-ai/archestra/commit/3b63229b583e027577c9877435b23a4a96b35726))
+
 ## [1.1.16](https://github.com/archestra-ai/archestra/compare/platform-v1.1.15...platform-v1.1.16) (2026-03-13)
 
 

@@ -189,7 +189,7 @@ function generateMarkdownBody(): string {
   // Group tools
   const grouped = new Map<
     ToolGroup,
-    { shortName: string; description: string }[]
+    { shortName: string; description: string; inputSchema: JsonSchema }[]
   >();
 
   for (const tool of tools) {
@@ -211,6 +211,7 @@ function generateMarkdownBody(): string {
     grouped.get(group)?.push({
       shortName,
       description: truncateDescription(tool.description ?? ""),
+      inputSchema: tool.inputSchema as JsonSchema,
     });
   }
 
@@ -219,8 +220,8 @@ function generateMarkdownBody(): string {
     ([a], [b]) => groupOrder[a] - groupOrder[b],
   );
 
-  // Build markdown sections
-  const sections: string[] = [];
+  // Build overview sections (tool name + description tables)
+  const overviewSections: string[] = [];
   for (const [group, groupTools] of sortedGroups) {
     let section = `## ${group}\n\n`;
     section += "| Tool | Description |\n";
@@ -230,7 +231,21 @@ function generateMarkdownBody(): string {
       section += `| \`${tool.shortName}\` | ${escapeTableCell(tool.description)} |\n`;
     }
 
-    sections.push(section);
+    overviewSections.push(section);
+  }
+
+  // Build Tools Reference section (detailed input schemas)
+  const referenceEntries: string[] = [];
+  for (const [_group, groupTools] of sortedGroups) {
+    for (const tool of groupTools) {
+      const schemaMarkdown = renderInputSchema(
+        tool.shortName,
+        tool.inputSchema,
+      );
+      if (schemaMarkdown) {
+        referenceEntries.push(schemaMarkdown);
+      }
+    }
   }
 
   const preInstalledList = preInstalledShortNames
@@ -257,7 +272,8 @@ Archestra tools are **trusted**, meaning they bypass [tool invocation policies](
 
 However, **RBAC (role-based access control) is still enforced**. Every tool is mapped to a required permission (resource + action). The \`tools/list\` endpoint dynamically filters tools so users only see tools they have permission to use. Additionally, \`executeArchestraTool\` performs a centralized RBAC check before executing any tool. For example, a user without \`knowledgeBase:create\` permission will not see \`create_knowledge_base\` in their tool list and cannot execute it.
 
-${sections.join("\n")}`;
+${overviewSections.join("\n")}
+${referenceEntries.length > 0 ? `## Tools Reference\n\nDetailed input schemas for each tool.\n\n${referenceEntries.join("\n")}` : ""}`;
 }
 
 function extractBodyFromMarkdown(content: string): string {
@@ -309,4 +325,108 @@ function truncateDescription(description: string): string {
 
 function escapeTableCell(text: string): string {
   return text.replace(/\|/g, "\\|");
+}
+
+// === Input schema rendering ===
+
+interface JsonSchema {
+  type?: string;
+  properties?: Record<string, JsonSchema>;
+  items?: JsonSchema;
+  required?: string[];
+  description?: string;
+  enum?: string[];
+}
+
+function renderInputSchema(
+  toolName: string,
+  schema: JsonSchema,
+): string | null {
+  const properties = schema.properties;
+  if (!properties || Object.keys(properties).length === 0) {
+    return null;
+  }
+
+  const requiredSet = new Set(schema.required ?? []);
+  const rows = renderProperties(properties, requiredSet);
+
+  let md = `### ${toolName}\n\n`;
+  md += "| Parameter | Type | Required | Description |\n";
+  md += "|-----------|------|----------|-------------|\n";
+  for (const row of rows) {
+    md += `| ${row.name} | ${row.type} | ${row.required} | ${escapeTableCell(row.description)} |\n`;
+  }
+
+  return md;
+}
+
+function renderProperties(
+  properties: Record<string, JsonSchema>,
+  requiredSet: Set<string>,
+  prefix = "",
+): { name: string; type: string; required: string; description: string }[] {
+  const rows: {
+    name: string;
+    type: string;
+    required: string;
+    description: string;
+  }[] = [];
+
+  for (const [key, prop] of Object.entries(properties)) {
+    const qualifiedName = prefix ? `${prefix}.${key}` : key;
+    const isRequired = requiredSet.has(key);
+    const typeStr = formatType(prop);
+    const desc = prop.description ?? "";
+
+    rows.push({
+      name: `\`${qualifiedName}\``,
+      type: `\`${typeStr}\``,
+      required: isRequired ? "Yes" : "No",
+      description: desc,
+    });
+
+    // Recurse into nested object properties
+    if (prop.type === "object" && prop.properties) {
+      const nestedRequired = new Set(prop.required ?? []);
+      rows.push(
+        ...renderProperties(prop.properties, nestedRequired, qualifiedName),
+      );
+    }
+
+    // Recurse into array item properties
+    if (
+      prop.type === "array" &&
+      prop.items?.type === "object" &&
+      prop.items.properties
+    ) {
+      const itemRequired = new Set(prop.items.required ?? []);
+      rows.push(
+        ...renderProperties(
+          prop.items.properties,
+          itemRequired,
+          `${qualifiedName}[]`,
+        ),
+      );
+    }
+  }
+
+  return rows;
+}
+
+function formatType(schema: JsonSchema): string {
+  if (schema.enum) {
+    return schema.enum.map((v) => `"${v}"`).join(" \\| ");
+  }
+
+  if (schema.type === "array") {
+    if (schema.items) {
+      if (schema.items.type === "object") {
+        return "object[]";
+      }
+      return `${schema.items.type ?? "any"}[]`;
+    }
+    return "array";
+  }
+
+  return schema.type ?? "any";
 }

@@ -1,4 +1,4 @@
-import type { Action, Resource } from "@shared";
+import type { Permission } from "@shared";
 import {
   ARCHESTRA_MCP_SERVER_NAME,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
@@ -18,7 +18,7 @@ import type { ArchestraContext } from "./types";
  */
 export const TOOL_PERMISSIONS: Record<
   ArchestraToolShortName,
-  { resource: Resource; action: Action } | null
+  Permission | null
 > = {
   // Identity — available to all
   whoami: null,
@@ -180,7 +180,7 @@ export async function filterToolNamesByPermission(
   }
 
   // Collect unique permissions we need to check
-  const permChecks = new Map<string, { resource: Resource; action: Action }>();
+  const permChecks = new Map<string, Permission>();
   for (const name of toolNames) {
     const shortName = extractShortName(name);
     if (!shortName) continue;

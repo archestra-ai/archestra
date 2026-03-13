@@ -4,7 +4,6 @@ import {
   MCP_SERVER_TOOL_NAME_SEPARATOR,
   TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
 } from "@shared";
-import { userHasPermission } from "@/auth/utils";
 import { buildUserAcl, queryService } from "@/knowledge-base";
 import logger from "@/logging";
 import {
@@ -532,28 +531,10 @@ export async function handleTool(
 
   if (!organizationId) return errorResult("Organization context not available");
 
-  // RBAC helper — checks knowledgeBase permission for the calling user
-  const requireKbPermission = async (
-    action: "create" | "update" | "delete",
-  ) => {
-    if (!context.userId) return "User context not available";
-    const allowed = await userHasPermission(
-      context.userId,
-      organizationId,
-      "knowledgeBase",
-      action,
-    );
-    if (!allowed)
-      return `You do not have permission to ${action} knowledge base resources.`;
-    return null;
-  };
-
   // --- Knowledge Base CRUD ---
 
   if (toolName === TOOL_CREATE_KB_FULL) {
     try {
-      const rbacError = await requireKbPermission("create");
-      if (rbacError) return errorResult(rbacError);
       const name = args?.name as string | undefined;
       if (!name) return errorResult("name is required");
       const kb = await KnowledgeBaseModel.create({
@@ -595,8 +576,6 @@ export async function handleTool(
 
   if (toolName === TOOL_UPDATE_KB_FULL) {
     try {
-      const rbacError = await requireKbPermission("update");
-      if (rbacError) return errorResult(rbacError);
       const id = args?.id as string | undefined;
       if (!id) return errorResult("id is required");
       const updates: Record<string, unknown> = {};
@@ -617,8 +596,6 @@ export async function handleTool(
 
   if (toolName === TOOL_DELETE_KB_FULL) {
     try {
-      const rbacError = await requireKbPermission("delete");
-      if (rbacError) return errorResult(rbacError);
       const id = args?.id as string | undefined;
       if (!id) return errorResult("id is required");
       const existing = await KnowledgeBaseModel.findById(id);
@@ -634,8 +611,6 @@ export async function handleTool(
 
   if (toolName === TOOL_CREATE_CONNECTOR_FULL) {
     try {
-      const rbacError = await requireKbPermission("create");
-      if (rbacError) return errorResult(rbacError);
       const name = args?.name as string | undefined;
       const connectorType = args?.connector_type as string | undefined;
       const config = args?.config as Record<string, unknown> | undefined;
@@ -685,8 +660,6 @@ export async function handleTool(
 
   if (toolName === TOOL_UPDATE_CONNECTOR_FULL) {
     try {
-      const rbacError = await requireKbPermission("update");
-      if (rbacError) return errorResult(rbacError);
       const id = args?.id as string | undefined;
       if (!id) return errorResult("id is required");
       const updates: Record<string, unknown> = {};
@@ -710,8 +683,6 @@ export async function handleTool(
 
   if (toolName === TOOL_DELETE_CONNECTOR_FULL) {
     try {
-      const rbacError = await requireKbPermission("delete");
-      if (rbacError) return errorResult(rbacError);
       const id = args?.id as string | undefined;
       if (!id) return errorResult("id is required");
       const existing = await KnowledgeBaseConnectorModel.findById(id);
@@ -727,8 +698,6 @@ export async function handleTool(
 
   if (toolName === TOOL_ASSIGN_CONNECTOR_KB_FULL) {
     try {
-      const rbacError = await requireKbPermission("update");
-      if (rbacError) return errorResult(rbacError);
       const connectorId = args?.connector_id as string | undefined;
       const kbId = args?.knowledge_base_id as string | undefined;
       if (!connectorId || !kbId)
@@ -750,8 +719,6 @@ export async function handleTool(
 
   if (toolName === TOOL_UNASSIGN_CONNECTOR_KB_FULL) {
     try {
-      const rbacError = await requireKbPermission("update");
-      if (rbacError) return errorResult(rbacError);
       const connectorId = args?.connector_id as string | undefined;
       const kbId = args?.knowledge_base_id as string | undefined;
       if (!connectorId || !kbId)
@@ -781,8 +748,6 @@ export async function handleTool(
 
   if (toolName === TOOL_ASSIGN_KB_AGENT_FULL) {
     try {
-      const rbacError = await requireKbPermission("update");
-      if (rbacError) return errorResult(rbacError);
       const kbId = args?.knowledge_base_id as string | undefined;
       const agentId = args?.agent_id as string | undefined;
       if (!kbId || !agentId)
@@ -798,8 +763,6 @@ export async function handleTool(
 
   if (toolName === TOOL_UNASSIGN_KB_AGENT_FULL) {
     try {
-      const rbacError = await requireKbPermission("update");
-      if (rbacError) return errorResult(rbacError);
       const kbId = args?.knowledge_base_id as string | undefined;
       const agentId = args?.agent_id as string | undefined;
       if (!kbId || !agentId)
@@ -822,8 +785,6 @@ export async function handleTool(
 
   if (toolName === TOOL_ASSIGN_CONNECTOR_AGENT_FULL) {
     try {
-      const rbacError = await requireKbPermission("update");
-      if (rbacError) return errorResult(rbacError);
       const connectorId = args?.connector_id as string | undefined;
       const agentId = args?.agent_id as string | undefined;
       if (!connectorId || !agentId)
@@ -839,8 +800,6 @@ export async function handleTool(
 
   if (toolName === TOOL_UNASSIGN_CONNECTOR_AGENT_FULL) {
     try {
-      const rbacError = await requireKbPermission("update");
-      if (rbacError) return errorResult(rbacError);
       const connectorId = args?.connector_id as string | undefined;
       const agentId = args?.agent_id as string | undefined;
       if (!connectorId || !agentId)

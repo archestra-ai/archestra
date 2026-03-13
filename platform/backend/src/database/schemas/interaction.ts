@@ -1,4 +1,7 @@
-import type { SupportedProviderDiscriminator } from "@shared";
+import type {
+  InteractionSource,
+  SupportedProviderDiscriminator,
+} from "@shared";
 import {
   index,
   integer,
@@ -58,6 +61,13 @@ const interactionsTable = pgTable(
      * Values: 'claude_code', 'header', 'openai_user', null
      */
     sessionSource: varchar("session_source"),
+    /**
+     * Where the request originated from.
+     * Values: 'api', 'chat', 'chatops:slack', 'chatops:ms-teams', 'email', null
+     * Internal callers set this via X-Archestra-Source header.
+     * External API requests default to 'api'.
+     */
+    source: varchar("source").$type<InteractionSource>(),
     request: jsonb("request").$type<InteractionRequest>().notNull(),
     processedRequest: jsonb("processed_request").$type<InteractionRequest>(),
     response: jsonb("response").$type<InteractionResponse>().notNull(),

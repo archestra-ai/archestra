@@ -1,5 +1,5 @@
 import type { archestraApiTypes } from "@shared";
-import type { PartialUIMessage } from "@/components/chatbot-demo";
+import type { PartialUIMessage } from "@/components/message-thread";
 import type { DualLlmResult, Interaction, InteractionUtils } from "./common";
 
 class AnthropicMessagesInteraction implements InteractionUtils {
@@ -261,10 +261,11 @@ class AnthropicMessagesInteraction implements InteractionUtils {
                     output = toolResultBlock.content;
                   }
 
-                  // Add tool result part
+                  // Add tool result part (preserve actual tool name for citation extraction)
                   toolCallParts.push({
                     type: "dynamic-tool",
-                    toolName: "tool-result",
+                    toolName:
+                      "name" in block ? (block.name as string) : "tool-result",
                     toolCallId: block.id,
                     state: "output-available",
                     input: {},

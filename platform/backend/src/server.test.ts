@@ -17,11 +17,8 @@ vi.mock("@/database", async (importOriginal) => {
 
 // Import after mock setup
 import { isDatabaseHealthy } from "@/database";
-import {
-  createFastifyInstance,
-  registerHealthEndpoint,
-  registerReadinessEndpoint,
-} from "./server";
+import healthRoutes from "@/routes/health";
+import { createFastifyInstance } from "./server";
 
 // Mock process.exit to prevent it from actually exiting during tests
 const _processExitSpy = vi.spyOn(process, "exit").mockImplementation(() => {
@@ -553,7 +550,7 @@ describe("health endpoints", () => {
   describe("/health endpoint", () => {
     test("returns 200 with application info", async () => {
       const app = createFastifyInstance();
-      registerHealthEndpoint(app);
+      await app.register(healthRoutes);
 
       const response = await app.inject({
         method: "GET",
@@ -572,7 +569,7 @@ describe("health endpoints", () => {
   describe("/ready endpoint", () => {
     test("returns 200 when database is healthy", async () => {
       const app = createFastifyInstance();
-      registerReadinessEndpoint(app);
+      await app.register(healthRoutes);
 
       const response = await app.inject({
         method: "GET",
@@ -591,7 +588,7 @@ describe("health endpoints", () => {
 
     test("returns 503 when database is unhealthy", async () => {
       const app = createFastifyInstance();
-      registerReadinessEndpoint(app);
+      await app.register(healthRoutes);
 
       // Mock isDatabaseHealthy to return false
       mockIsDatabaseHealthy.mockResolvedValueOnce(false);

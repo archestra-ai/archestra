@@ -249,7 +249,7 @@ export async function syncSsoTeams(
   logger.info({ userId, userEmail }, "🔄 syncSsoTeams called");
 
   // Only sync if enterprise license is activated
-  if (!config.enterpriseLicenseActivated) {
+  if (!config.enterpriseFeatures.core) {
     logger.info("🔄 Enterprise license not activated, skipping team sync");
     return;
   }

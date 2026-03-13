@@ -17,30 +17,33 @@ export const actions = [
   "team-admin",
   "admin",
   "cancel",
+  "enable",
 ] as const;
 
 export const resources = [
   "agent",
   "mcpGateway",
   "llmProxy",
-  "tool",
-  "policy",
-  "interaction",
+  "toolPolicy",
+  "log",
   "dualLlmConfig",
   "dualLlmResult",
-  "organization",
   "identityProvider",
-  "member",
-  "invitation",
-  "internalMcpCatalog",
-  "mcpServer",
+  "mcpRegistry",
+  "mcpServerInstallation",
+  "knowledgeBase",
+  "knowledgeSettings",
   "mcpServerInstallationRequest",
-  "mcpToolCall",
-  "team",
-  "conversation",
-  "limit",
-  "llmModels",
-  "chatSettings",
+  "chat",
+  "llmCost",
+  "llmLimit",
+  "llmProvider",
+  "secret",
+  "organizationSettings",
+  "securitySettings",
+  "llmSettings",
+  "agentSettings",
+  "agentTrigger",
   /**
    * Better-auth access control resource - needed for organization role management
    * See: https://github.com/better-auth/better-auth/issues/2336#issuecomment-2820620809
@@ -49,32 +52,143 @@ export const resources = [
    * and is required for dynamic access control to work correctly with custom roles
    */
   "ac",
+  /**
+   * NOTE: similar to "ac", these resources are also part of better-auth's defaultStatements from organization plugin
+   * and are required for dynamic access control to work correctly with custom roles
+   *
+   * These names can't be changed (they're checked in some of the internal ACL checks of better-auth) but we can
+   * present them to users with better names
+   */
+  "organization",
+  "member",
+  "invitation",
+  "team",
+  "apiKey",
+  "simpleView",
+  "chatAgentPicker",
+  "chatProviderSettings",
+  "chatExpandToolCalls",
 ] as const;
 
-// Human-readable labels for resources
 export const resourceLabels: Record<Resource, string> = {
   agent: "Agents",
   mcpGateway: "MCP Gateways",
   llmProxy: "LLM Proxies",
-  tool: "Tools",
-  policy: "Policies",
-  interaction: "Interactions",
+  toolPolicy: "Tools & Policies",
+  log: "Logs",
   dualLlmConfig: "Dual LLM Configs",
   dualLlmResult: "Dual LLM Results",
   organization: "Organization",
   identityProvider: "Identity Providers",
-  member: "Members",
+  member: "Users",
   invitation: "Invitations",
-  internalMcpCatalog: "Internal MCP Catalog",
-  mcpServer: "MCP Servers",
+  mcpRegistry: "MCP Registry",
+  mcpServerInstallation: "MCP Server Installations",
+  knowledgeBase: "Knowledge Bases",
+  knowledgeSettings: "Knowledge Settings",
   mcpServerInstallationRequest: "MCP Server Installation Requests",
-  mcpToolCall: "MCP Tool Calls",
   team: "Teams",
-  ac: "Access Control",
-  conversation: "Conversations",
-  limit: "Limits",
-  llmModels: "LLM Models",
-  chatSettings: "Chat Settings",
+  ac: "Roles",
+  chat: "Chats",
+  llmCost: "LLM Costs",
+  llmLimit: "LLM Limits",
+  llmProvider: "LLM Providers",
+  secret: "Secrets",
+  apiKey: "API Keys",
+  organizationSettings: "Organization Settings",
+  securitySettings: "Security Settings",
+  llmSettings: "LLM Settings",
+  agentSettings: "Agent Settings",
+  agentTrigger: "Agent Triggers",
+  simpleView: "Simple View",
+  chatAgentPicker: "Chat Agent Picker",
+  chatProviderSettings: "Chat Provider Settings",
+  chatExpandToolCalls: "Chat Expand Tool Calls",
+};
+
+export const resourceDescriptions: Record<Resource, string> = {
+  agent: "Agents with prompts and tool assignments",
+  mcpGateway: "Unified MCP endpoints that aggregate tools for clients",
+  llmProxy: "LLM proxy endpoints with security policies and observability",
+  toolPolicy: "Tools, tool invocation policies, and trusted data policies",
+  log: "LLM proxy and MCP tool call logs",
+  chat: "Chat conversations",
+  agentTrigger: "Agent triggers (Slack, MS Teams, incoming emails)",
+  llmProvider: "LLM provider API keys, virtual keys, and models",
+  llmLimit: "LLM usage limits",
+  llmSettings: "LLM settings (compression, cleanup interval)",
+  agentSettings: "Agent settings (default model, default agent)",
+  llmCost: "LLM usage and cost analytics",
+  mcpRegistry: "MCP server registry management",
+  mcpServerInstallation: "Installed MCP servers and their runtime",
+  mcpServerInstallationRequest: "Requests for new MCP server installations",
+  dualLlmConfig: "Dual LLM security configurations",
+  dualLlmResult: "Dual LLM security validation results",
+  member: "Users and role assignments",
+  ac: "Custom RBAC roles",
+  team: "Teams for organizing users and access control",
+  invitation: "User invitations",
+  identityProvider: "Identity providers for authentication",
+  secret: "Secrets manager configuration and connectivity",
+  apiKey: "User API keys for programmatic access",
+  organizationSettings:
+    "Organization settings (appearance, authentication, etc)",
+  securitySettings: "Security settings (tool policy, chat file uploads)",
+  knowledgeBase:
+    "Knowledge bases and connectors for RAG-based document retrieval",
+  knowledgeSettings:
+    "Knowledge settings (embedding and reranking models configuration)",
+  simpleView: "Controls if the simple view of the app is enabled",
+  chatAgentPicker: "Controls visibility of the agent picker in chat",
+  chatProviderSettings:
+    "Controls visibility of model and API key selectors in chat",
+  chatExpandToolCalls:
+    "Controls ability to expand and view tool call details in chat",
+  organization: "Organization (internal, used by authentication system)",
+};
+
+/**
+ * Resources that are internal to better-auth and should not be shown
+ * in user-facing documentation or the RBAC UI.
+ */
+export const internalResources: Resource[] = ["organization"];
+
+/**
+ * Groups resources by category for the RBAC UI (role builder and permissions card).
+ * Used in both the create/edit role dialog and the account permissions display.
+ */
+export const resourceCategories: Record<string, Resource[]> = {
+  Agents: ["agent", "agentTrigger", "agentSettings"],
+  MCP: [
+    "mcpGateway",
+    "toolPolicy",
+    "mcpRegistry",
+    "mcpServerInstallation",
+    "mcpServerInstallationRequest",
+  ],
+  LLM: ["llmProxy", "llmProvider", "llmLimit", "llmSettings", "llmCost"],
+  Knowledge: ["knowledgeBase", "knowledgeSettings"],
+  Other: [
+    "chat",
+    "log",
+    "dualLlmConfig",
+    "dualLlmResult",
+    "simpleView",
+    "chatAgentPicker",
+    "chatProviderSettings",
+    "chatExpandToolCalls",
+  ],
+  Administration: [
+    "member",
+    "ac",
+    "team",
+    "invitation",
+    "identityProvider",
+    "secret",
+    "apiKey",
+    "organizationSettings",
+    "securitySettings",
+  ],
 };
 
 export type Resource = (typeof resources)[number];

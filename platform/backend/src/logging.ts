@@ -39,6 +39,9 @@ import { getActiveSessionId } from "@/observability/request-context";
  * to pass context explicitly.
  */
 
+export const LOG_LEVEL =
+  process.env.ARCHESTRA_LOGGING_LEVEL?.toLowerCase() || "info";
+
 let _instance: pino.Logger | null = null;
 
 function createLogger(): pino.Logger {
@@ -51,7 +54,7 @@ function createLogger(): pino.Logger {
 
   return pino(
     {
-      level: process.env.ARCHESTRA_LOGGING_LEVEL?.toLowerCase() || "info",
+      level: LOG_LEVEL,
       mixin: injectTraceContext,
     },
     pino.multistream([

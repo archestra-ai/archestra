@@ -45,6 +45,8 @@ const ChatModelSchema = z.object({
   provider: SupportedProvidersSchema,
   createdAt: z.string().optional(),
   capabilities: ModelCapabilitiesSchema.optional(),
+  isBest: z.boolean().optional(),
+  isFastest: z.boolean().optional(),
 });
 
 export interface ModelInfo {
@@ -1094,12 +1096,13 @@ const chatModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["Chat"],
         querystring: z.object({
           provider: SupportedProvidersSchema.optional(),
+          apiKeyId: z.string().uuid().optional(),
         }),
         response: constructResponseSchema(z.array(ChatModelSchema)),
       },
     },
     async ({ query, organizationId, user }, reply) => {
-      const { provider } = query;
+      const { provider, apiKeyId } = query;
 
       // Trigger models.dev metadata sync in background if needed
       modelsDevClient.syncIfNeeded();
@@ -1117,6 +1120,7 @@ const chatModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         {
           organizationId,
           provider,
+          apiKeyId,
           apiKeyCount: apiKeys.length,
           apiKeys: apiKeys.map((k) => ({
             id: k.id,
@@ -1129,7 +1133,19 @@ const chatModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       );
 
       // Get models from database based on user's API keys
-      const apiKeyIds = apiKeys.map((k) => k.id);
+      // If a specific apiKeyId is provided and it's in the user's accessible keys,
+      // only return models for that key
+      const accessibleKeyIds = apiKeys.map((k) => k.id);
+      if (apiKeyId && !accessibleKeyIds.includes(apiKeyId)) {
+        logger.warn(
+          { apiKeyId, organizationId, userId: user.id },
+          "Requested apiKeyId not found in user's accessible keys, falling back to all keys",
+        );
+      }
+      const apiKeyIds =
+        apiKeyId && accessibleKeyIds.includes(apiKeyId)
+          ? [apiKeyId]
+          : accessibleKeyIds;
       const dbModels = await ApiKeyModelModel.getModelsForApiKeyIds(apiKeyIds);
 
       logger.info(
@@ -1144,15 +1160,17 @@ const chatModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Filter by provider if specified
       const filteredModels = provider
-        ? dbModels.filter((m) => m.provider === provider)
+        ? dbModels.filter((m) => m.model.provider === provider)
         : dbModels;
 
-      // Transform to response format with capabilities
-      const models = filteredModels.map((model) => ({
+      // Transform to response format with capabilities and markers
+      const models = filteredModels.map(({ model, isBest, isFastest }) => ({
         id: model.modelId,
         displayName: model.description || model.modelId,
         provider: model.provider,
         capabilities: ModelModel.toCapabilities(model),
+        isBest,
+        isFastest,
       }));
 
       logger.info(
@@ -1255,21 +1273,18 @@ const chatModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (_, reply) => {
-      // Get models with their API key relationships
+      // Get models with their API key relationships.
+      // Only returns models that have at least one linked API key.
       const modelsWithApiKeys =
         await ApiKeyModelModel.getAllModelsWithApiKeys();
 
-      // Also include unlinked models (e.g. created by ensureModelExists during proxy
-      // requests) but ONLY for providers that have at least one configured API key.
-      // This prevents showing models from unconfigured providers.
-      // Use chat_api_keys table directly (not api_key_models join table) because
-      // model sync may not have linked models yet (e.g. timing issue on startup).
-      const allModels = await ModelModel.findAll();
+      // Also include LLM Proxy-discovered models even without API key links.
+      // These models are discovered during proxy requests and preserved so users
+      // can define custom token pricing for metrics.
       const linkedModelIds = new Set(modelsWithApiKeys.map((m) => m.model.id));
-      const configuredProviders =
-        await ChatApiKeyModel.getConfiguredProviders();
-      const unlinkedModels = allModels.filter(
-        (m) => !linkedModelIds.has(m.id) && configuredProviders.has(m.provider),
+      const llmProxyModels = await ModelModel.findLlmProxyModels();
+      const unlinkedLlmProxyModels = llmProxyModels.filter(
+        (m) => !linkedModelIds.has(m.id),
       );
 
       // Transform to response format with capabilities and markers
@@ -1281,7 +1296,7 @@ const chatModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
           apiKeys,
           capabilities: ModelModel.toCapabilities(model),
         })),
-        ...unlinkedModels.map((model) => ({
+        ...unlinkedLlmProxyModels.map((model) => ({
           ...model,
           isFastest: false,
           isBest: false,

@@ -17,6 +17,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { PGlite } from "@electric-sql/pglite";
+import { vector } from "@electric-sql/pglite/vector";
 import { drizzle } from "drizzle-orm/pglite";
 import { afterAll, afterEach, beforeAll, beforeEach, vi } from "vitest";
 
@@ -58,8 +59,8 @@ function getMigrationsSql(): string[] {
  * This runs the migrations once, which is the expensive operation.
  */
 beforeAll(async () => {
-  // Create a new in-memory PGlite instance
-  pgliteClient = new PGlite("memory://");
+  // Create a new in-memory PGlite instance with pgvector extension
+  pgliteClient = new PGlite("memory://", { extensions: { vector } });
   testDb = drizzle({ client: pgliteClient });
 
   // Run all migrations once

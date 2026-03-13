@@ -11,6 +11,7 @@ type Gateway = NonNullable<
 
 type McpGatewayActionsProps = {
   agent: Gateway;
+  canModify: boolean;
   onConnect: (agent: Pick<Gateway, "id" | "name" | "agentType">) => void;
   onEdit: (agent: Gateway) => void;
   onDelete: (agentId: string) => void;
@@ -18,6 +19,7 @@ type McpGatewayActionsProps = {
 
 export function McpGatewayActions({
   agent,
+  canModify,
   onConnect,
   onEdit,
   onDelete,
@@ -42,6 +44,7 @@ export function McpGatewayActions({
         aria-label="Edit"
         variant="outline"
         size="icon-sm"
+        disabled={!canModify}
         data-testid={`${E2eTestId.EditAgentButton}-${agent.name}`}
         onClick={(e) => {
           e.stopPropagation();
@@ -55,6 +58,7 @@ export function McpGatewayActions({
         aria-label="Delete"
         variant="outline"
         size="icon-sm"
+        disabled={!canModify}
         onClick={(e) => {
           e.stopPropagation();
           onDelete(agent.id);

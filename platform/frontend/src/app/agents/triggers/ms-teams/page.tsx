@@ -1,5 +1,6 @@
 "use client";
 
+import { DocsPage, getDocsUrl } from "@shared";
 import { ExternalLink, Info } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
@@ -18,8 +19,7 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useChatOpsStatus } from "@/lib/chatops.query";
 import config from "@/lib/config";
-import { useFeatures } from "@/lib/config.query";
-import { usePublicBaseUrl } from "@/lib/features.hook";
+import { useConfig, usePublicBaseUrl } from "@/lib/config.query";
 import { ChannelsSection } from "../_components/channels-section";
 import { CollapsibleSetupSection } from "../_components/collapsible-setup-section";
 import { CredentialField } from "../_components/credential-field";
@@ -33,7 +33,7 @@ const msTeamsProviderConfig: ProviderConfig = {
   providerLabel: "MS Teams",
   providerIcon: "/icons/ms-teams.png",
   webhookPath: "/api/webhooks/chatops/ms-teams",
-  docsUrl: "https://archestra.ai/docs/platform-ms-teams",
+  docsUrl: getDocsUrl(DocsPage.PlatformMsTeams),
   slashCommand: "/select-agent",
   buildDeepLink: (binding) => {
     const channelName = encodeURIComponent(
@@ -57,16 +57,16 @@ export default function MsTeamsPage() {
   const [msTeamsSetupOpen, setMsTeamsSetupOpen] = useState(false);
   const [ngrokDialogOpen, setNgrokDialogOpen] = useState(false);
 
-  const { data: features, isLoading: featuresLoading } = useFeatures();
+  const { data: configData, isLoading: featuresLoading } = useConfig();
   const { data: chatOpsProviders, isLoading: statusLoading } =
     useChatOpsStatus();
 
-  const ngrokDomain = features?.ngrokDomain;
+  const ngrokDomain = configData?.features.ngrokDomain;
   const msTeams = chatOpsProviders?.find((p) => p.id === "ms-teams");
 
   const setupDataLoading = featuresLoading || statusLoading;
   const isLocalDev =
-    features?.isQuickstart || config.environment === "development";
+    configData?.features.isQuickstart || config.environment === "development";
   const { msTeams: allStepsCompleted } = useTriggerStatuses();
 
   return (
@@ -75,7 +75,7 @@ export default function MsTeamsPage() {
         allStepsCompleted={allStepsCompleted}
         isLoading={setupDataLoading}
         providerLabel="Microsoft Teams"
-        docsUrl="https://archestra.ai/docs/platform-ms-teams"
+        docsUrl={getDocsUrl(DocsPage.PlatformMsTeams)}
       >
         {isLocalDev ? (
           <SetupStep

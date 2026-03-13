@@ -25,7 +25,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useFeatureFlag } from "@/lib/features.hook";
+import { useFeature } from "@/lib/config.query";
 import { useTeamsWithVaultFolders } from "@/lib/team.query";
 import { SelectMcpServerCredentialTypeAndTeams } from "./select-mcp-server-credential-type-and-teams";
 
@@ -71,6 +71,10 @@ interface RemoteServerInstallDialogProps {
   isInstalling: boolean;
   /** When true, shows re-authentication mode (info banner, different title) */
   isReauth?: boolean;
+  /** Pre-select a specific team in the credential type selector */
+  preselectedTeamId?: string | null;
+  /** When true, only personal installation is allowed */
+  personalOnly?: boolean;
 }
 
 export function RemoteServerInstallDialog({
@@ -80,6 +84,8 @@ export function RemoteServerInstallDialog({
   catalogItem,
   isInstalling,
   isReauth = false,
+  preselectedTeamId,
+  personalOnly = false,
 }: RemoteServerInstallDialogProps) {
   const [configValues, setConfigValues] = useState<Record<string, string>>({});
 
@@ -98,7 +104,7 @@ export function RemoteServerInstallDialog({
     Record<string, { path: string | null; key: string | null }>
   >({});
 
-  const byosEnabled = useFeatureFlag("byosEnabled");
+  const byosEnabled = useFeature("byosEnabled");
   const { data: teamsWithVault } = useTeamsWithVaultFolders();
   const vaultTeams = teamsWithVault?.filter((t) => t.vaultPath);
 
@@ -276,6 +282,8 @@ export function RemoteServerInstallDialog({
               catalogId={catalogItem?.id}
               onCredentialTypeChange={setCredentialType}
               onCanInstallChange={setCanInstall}
+              preselectedTeamId={preselectedTeamId}
+              personalOnly={personalOnly}
             />
 
             {useVaultSecrets && credentialType === "personal" && (

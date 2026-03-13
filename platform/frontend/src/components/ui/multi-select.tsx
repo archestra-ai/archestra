@@ -18,6 +18,7 @@ interface MultiSelectProps {
   className?: string;
   disabled?: boolean;
   showSelectedBadges?: boolean;
+  selectedSuffix?: string | ((count: number) => string);
   triggerTestId?: string;
 }
 
@@ -29,6 +30,7 @@ export function MultiSelect({
   className,
   disabled = false,
   showSelectedBadges = true,
+  selectedSuffix = "selected",
   triggerTestId,
 }: MultiSelectProps) {
   const [open, setOpen] = React.useState(false);
@@ -111,7 +113,10 @@ export function MultiSelect({
               ))
             ) : (
               <span data-testid={triggerTestId}>
-                {selectedItems.length} selected
+                {selectedItems.length}{" "}
+                {typeof selectedSuffix === "function"
+                  ? selectedSuffix(selectedItems.length)
+                  : selectedSuffix}
               </span>
             )}
           </div>

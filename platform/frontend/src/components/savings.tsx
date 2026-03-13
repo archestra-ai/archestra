@@ -1,3 +1,4 @@
+import type { archestraApiTypes } from "@shared";
 import {
   Tooltip,
   TooltipContent,
@@ -22,7 +23,9 @@ export function Savings({
   baselineCost: string;
   toonCostSavings?: string | null;
   toonTokensSaved?: number | null;
-  toonSkipReason?: string | null;
+  toonSkipReason?:
+    | archestraApiTypes.GetInteractionResponses["200"]["toonSkipReason"]
+    | null;
   format?: "percent" | "number";
   tooltip?: "never" | "always" | "hover";
   className?: string;

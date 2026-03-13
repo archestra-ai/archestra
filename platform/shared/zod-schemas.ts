@@ -64,11 +64,21 @@ export const ImagePullSecretConfigSchema = z.discriminatedUnion("source", [
 
 export type ImagePullSecretConfig = z.infer<typeof ImagePullSecretConfigSchema>;
 
+// Schema for injecting environment variables from existing K8s Secrets or ConfigMaps
+export const EnvFromSchema = z.object({
+  type: z.enum(["secret", "configMap"]),
+  name: z.string().min(1, "Name is required"),
+  // Optional prefix prepended to each key from the Secret/ConfigMap
+  prefix: z.string().optional(),
+});
+
 export const LocalConfigSchema = z
   .object({
     command: z.string().optional(),
     arguments: z.array(z.string()).optional(),
     environment: z.array(EnvironmentVariableSchema).optional(),
+    // Inject all keys from existing K8s Secrets or ConfigMaps as environment variables
+    envFrom: z.array(EnvFromSchema).optional(),
     dockerImage: z.string().optional(),
     transportType: z.enum(["stdio", "streamable-http"]).optional(),
     httpPort: z.number().optional(),
@@ -101,6 +111,7 @@ export const LocalConfigFormSchema = z.object({
   command: z.string().optional(),
   arguments: z.string(), // UI uses string, gets parsed to array
   environment: z.array(EnvironmentVariableSchema), // Structured environment variables
+  envFrom: z.array(EnvFromSchema).optional(), // Inject env vars from existing K8s Secrets/ConfigMaps
   dockerImage: z.string().optional(), // Custom Docker image URL
   transportType: z.enum(["stdio", "streamable-http"]).optional(),
   httpPort: z.string().optional(), // UI uses string, gets parsed to number

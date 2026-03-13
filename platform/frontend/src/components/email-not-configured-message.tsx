@@ -1,3 +1,4 @@
+import { DocsPage, getDocsUrl } from "@shared";
 import { ExternalLink } from "lucide-react";
 import Link from "next/link";
 
@@ -22,7 +23,7 @@ export function EmailNotConfiguredMessage({
       Email invocation of Agents is not configured for your organization. See
       the{" "}
       <Link
-        href="https://archestra.ai/docs/platform-agents#incoming-email"
+        href={getDocsUrl(DocsPage.PlatformAgentTriggersEmail)}
         target="_blank"
         rel="noopener noreferrer"
         className="inline-flex items-center gap-1 text-primary hover:underline"

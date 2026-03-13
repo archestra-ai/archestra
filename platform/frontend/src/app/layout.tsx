@@ -6,8 +6,9 @@ import { PostHogProviderWrapper } from "./_parts/posthog-provider";
 import { ArchestraQueryClientProvider } from "./_parts/query-client-provider";
 import { ThemeProvider } from "./_parts/theme-provider";
 import "./globals.css";
+import { DynamicHead } from "@/components/dynamic-head";
 import { OrgThemeLoader } from "@/components/org-theme-loader";
-import { ChatProvider } from "@/contexts/global-chat-context";
+import { ChatProvider } from "@/lib/global-chat.context";
 import { WebsocketInitializer } from "./_parts/websocket-initializer";
 import { WithAuthCheck } from "./_parts/with-auth-check";
 import { WithPagePermissions } from "./_parts/with-page-permissions";
@@ -137,7 +138,6 @@ const libreBaskervilleFont = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "Archestra.AI",
   description: "Enterprise MCP Platform for AI Agents",
 };
 
@@ -150,6 +150,7 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <head>
         <PublicEnvScript />
+        <link rel="icon" href="/favicon.ico" />
       </head>
       <body
         className={`${latoFont.variable} ${interFont.variable} ${openSansFont.variable} ${robotoFont.variable} ${sourceSansFont.variable} ${jetbrainsMonoFont.variable} ${dmSansFont.variable} ${poppinsFont.variable} ${oxaniumFont.variable} ${montserratFont.variable} ${sourceCodeProFont.variable} ${merriweatherFont.variable} ${quicksandFont.variable} ${outfitFont.variable} ${plusJakartaSansFont.variable} ${libreBaskervilleFont.variable} font-sans antialiased`}
@@ -165,6 +166,7 @@ export default function RootLayout({
               >
                 <PostHogProviderWrapper>
                   <OrgThemeLoader />
+                  <DynamicHead />
                   <WithAuthCheck>
                     <WebsocketInitializer />
                     <AppShell>

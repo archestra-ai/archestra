@@ -12,9 +12,9 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogForm,
   DialogHeader,
+  DialogStickyFooter,
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
@@ -321,7 +321,7 @@ export function CustomServerRequestDialog({
               />
             </div>
 
-            <DialogFooter>
+            <DialogStickyFooter>
               <Button type="button" variant="outline" onClick={onClose}>
                 Cancel
               </Button>
@@ -331,7 +331,7 @@ export function CustomServerRequestDialog({
                 )}
                 Submit Request
               </Button>
-            </DialogFooter>
+            </DialogStickyFooter>
           </DialogForm>
         </Form>
       </DialogContent>

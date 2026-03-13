@@ -2,6 +2,7 @@ import { archestraApiSdk, type archestraApiTypes } from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import config from "@/lib/config";
+import { handleApiError } from "./utils";
 
 /**
  * Query key factory for identity provider-related queries
@@ -22,11 +23,11 @@ export function usePublicIdentityProviders() {
     queryKey: identityProviderKeys.public,
     queryFn: async () => {
       const { data } = await archestraApiSdk.getPublicIdentityProviders();
-      return data;
+      return data ?? [];
     },
     retry: false, // Don't retry on auth pages to avoid repeated 401 errors
     throwOnError: false, // Don't throw errors to prevent crashes
-    enabled: config.enterpriseLicenseActivated,
+    enabled: config.enterpriseFeatures.core,
   });
 }
 
@@ -40,11 +41,11 @@ export function useIdentityProviders() {
     queryKey: identityProviderKeys.all,
     queryFn: async () => {
       const { data } = await archestraApiSdk.getIdentityProviders();
-      return data;
+      return data ?? [];
     },
     retry: false,
     throwOnError: false,
-    enabled: config.enterpriseLicenseActivated,
+    enabled: config.enterpriseFeatures.core,
   });
 }
 
@@ -58,11 +59,11 @@ export function useIdentityProvider(id: string) {
       const { data } = await archestraApiSdk.getIdentityProvider({
         path: { id },
       });
-      return data;
+      return data ?? null;
     },
     retry: false,
     throwOnError: false,
-    enabled: config.enterpriseLicenseActivated,
+    enabled: config.enterpriseFeatures.core,
   });
 }
 
@@ -75,18 +76,20 @@ export function useCreateIdentityProvider() {
     mutationFn: async (
       data: archestraApiTypes.CreateIdentityProviderData["body"],
     ) => {
-      const { data: createdProvider } =
+      const { data: createdProvider, error } =
         await archestraApiSdk.createIdentityProvider({
           body: data,
         });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
       return createdProvider;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      if (!data) return;
       queryClient.invalidateQueries({ queryKey: identityProviderKeys.all });
       toast.success("Identity provider created successfully");
-    },
-    onError: (error) => {
-      toast.error(`Failed to create identity provider: ${error.message}`);
     },
   });
 }
@@ -104,22 +107,24 @@ export function useUpdateIdentityProvider() {
       id: string;
       data: archestraApiTypes.UpdateIdentityProviderData["body"];
     }) => {
-      const { data: updatedProvider } =
+      const { data: updatedProvider, error } =
         await archestraApiSdk.updateIdentityProvider({
           path: { id },
           body: data,
         });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
       return updatedProvider;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      if (!data) return;
       queryClient.invalidateQueries({ queryKey: identityProviderKeys.all });
       queryClient.invalidateQueries({
         queryKey: identityProviderKeys.details(),
       });
       toast.success("Identity provider updated successfully");
-    },
-    onError: (error) => {
-      toast.error(`Failed to update identity provider: ${error.message}`);
     },
   });
 }
@@ -131,17 +136,19 @@ export function useDeleteIdentityProvider() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {
-      const { data } = await archestraApiSdk.deleteIdentityProvider({
+      const { data, error } = await archestraApiSdk.deleteIdentityProvider({
         path: { id },
       });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
       return data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      if (!data) return;
       queryClient.invalidateQueries({ queryKey: identityProviderKeys.all });
       toast.success("Identity provider deleted successfully");
-    },
-    onError: (error) => {
-      toast.error(`Failed to delete identity provider: ${error.message}`);
     },
   });
 }

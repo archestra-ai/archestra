@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useFeatureFlag, useFeatureValue } from "@/lib/features.hook";
+import { useFeature } from "@/lib/config.query";
 import {
   useCheckTeamVaultFolderConnectivity,
   useDeleteTeamVaultFolder,
@@ -52,8 +52,8 @@ export default function TeamVaultFolderDialog({
     error?: string;
   } | null>(null);
 
-  const byosEnabled = useFeatureFlag("byosEnabled");
-  const vaultKvVersion = useFeatureValue("byosVaultKvVersion");
+  const byosEnabled = useFeature("byosEnabled");
+  const vaultKvVersion = useFeature("byosVaultKvVersion");
   const { data: existingFolder, isLoading } = useTeamVaultFolder(
     open ? team.id : null,
   );

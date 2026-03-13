@@ -265,19 +265,19 @@ export function useOrganizationOnboardingStatus(enabled: boolean) {
 }
 
 /**
- * Update organization
+ * Update appearance settings (theme, logo, fonts)
  */
-export function useUpdateOrganization(
+export function useUpdateAppearance(
   onSuccessMessage: string,
   onErrorMessage: string,
 ) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (
-      data: archestraApiTypes.UpdateOrganizationData["body"],
+      data: archestraApiTypes.UpdateAppearanceData["body"],
     ) => {
       const { data: updatedOrganization, error } =
-        await archestraApiSdk.updateOrganization({ body: data });
+        await archestraApiSdk.updateAppearance({ body: data });
 
       if (error) {
         toast.error(onErrorMessage);
@@ -288,18 +288,244 @@ export function useUpdateOrganization(
     },
     onSuccess: (updatedOrganization) => {
       if (!updatedOrganization) return;
-      // Update organization details cache
       queryClient.setQueryData(organizationKeys.details(), updatedOrganization);
-      // Update appearance cache immediately with the new values
       queryClient.setQueryData(appearanceKeys.public(), {
         theme: updatedOrganization.theme,
         customFont: updatedOrganization.customFont,
         logo: updatedOrganization.logo,
+        logoDark: updatedOrganization.logoDark,
+        favicon: updatedOrganization.favicon,
+        iconLogo: updatedOrganization.iconLogo,
+        appName: updatedOrganization.appName,
+        ogDescription: updatedOrganization.ogDescription,
+        footerText: updatedOrganization.footerText,
       });
-      // Invalidate config cache since globalToolPolicy comes from organization record
+      toast.success(onSuccessMessage);
+    },
+  });
+}
+
+/**
+ * Update security settings (global tool policy, chat file uploads)
+ */
+export function useUpdateSecuritySettings(
+  onSuccessMessage: string,
+  onErrorMessage: string,
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (
+      data: archestraApiTypes.UpdateSecuritySettingsData["body"],
+    ) => {
+      const { data: updatedOrganization, error } =
+        await archestraApiSdk.updateSecuritySettings({ body: data });
+
+      if (error) {
+        toast.error(onErrorMessage);
+        return null;
+      }
+
+      return updatedOrganization;
+    },
+    onSuccess: (updatedOrganization) => {
+      if (!updatedOrganization) return;
+      queryClient.setQueryData(organizationKeys.details(), updatedOrganization);
       queryClient.invalidateQueries({ queryKey: ["config"] });
       toast.success(onSuccessMessage);
     },
+  });
+}
+
+/**
+ * Update LLM settings (TOON compression, compression scope, limit cleanup interval)
+ */
+export function useUpdateLlmSettings(
+  onSuccessMessage: string,
+  onErrorMessage: string,
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (
+      data: archestraApiTypes.UpdateLlmSettingsData["body"],
+    ) => {
+      const { data: updatedOrganization, error } =
+        await archestraApiSdk.updateLlmSettings({ body: data });
+
+      if (error) {
+        toast.error(onErrorMessage);
+        return null;
+      }
+
+      return updatedOrganization;
+    },
+    onSuccess: (updatedOrganization) => {
+      if (!updatedOrganization) return;
+      queryClient.setQueryData(organizationKeys.details(), updatedOrganization);
+      toast.success(onSuccessMessage);
+    },
+  });
+}
+
+/**
+ * Update agent settings (default model, default agent)
+ */
+export function useUpdateAgentSettings(
+  onSuccessMessage: string,
+  onErrorMessage: string,
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (
+      data: archestraApiTypes.UpdateAgentSettingsData["body"],
+    ) => {
+      const { data: updatedOrganization, error } =
+        await archestraApiSdk.updateAgentSettings({ body: data });
+
+      if (error) {
+        toast.error(onErrorMessage);
+        return null;
+      }
+
+      return updatedOrganization;
+    },
+    onSuccess: (updatedOrganization) => {
+      if (!updatedOrganization) return;
+      queryClient.setQueryData(organizationKeys.details(), updatedOrganization);
+      toast.success(onSuccessMessage);
+    },
+  });
+}
+
+/**
+ * Update knowledge settings (embedding model)
+ */
+export function useUpdateKnowledgeSettings(
+  onSuccessMessage: string,
+  onErrorMessage: string,
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (
+      data: archestraApiTypes.UpdateKnowledgeSettingsData["body"],
+    ) => {
+      const { data: updatedOrganization, error } =
+        await archestraApiSdk.updateKnowledgeSettings({ body: data });
+
+      if (error) {
+        toast.error(onErrorMessage);
+        return null;
+      }
+
+      return updatedOrganization;
+    },
+    onSuccess: (updatedOrganization) => {
+      if (!updatedOrganization) return;
+      queryClient.setQueryData(organizationKeys.details(), updatedOrganization);
+      toast.success(onSuccessMessage);
+    },
+  });
+}
+
+/**
+ * Drop embedding configuration (deletes all KB documents, resets connector checkpoints)
+ */
+export function useDropEmbeddingConfig() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const { data: updatedOrganization, error } =
+        await archestraApiSdk.dropEmbeddingConfig();
+
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+
+      return updatedOrganization;
+    },
+    onSuccess: (updatedOrganization) => {
+      if (!updatedOrganization) return;
+      queryClient.setQueryData(organizationKeys.details(), updatedOrganization);
+      toast.success("Embedding configuration dropped");
+    },
+  });
+}
+
+/**
+ * Test embedding connection by embedding a sample text
+ */
+export function useTestEmbeddingConnection() {
+  return useMutation({
+    mutationFn: async (params: {
+      embeddingChatApiKeyId: string;
+      embeddingModel: string;
+    }) => {
+      const { data, error } = await archestraApiSdk.testEmbeddingConnection({
+        body: params,
+      });
+
+      if (error) {
+        handleApiError(error);
+        return { success: false, error: "Request failed" };
+      }
+
+      return data ?? { success: false, error: "No response" };
+    },
+    onSuccess: (result) => {
+      if (!result) return;
+      if (result.success) {
+        toast.success("Connection test successful");
+      } else {
+        toast.error("Connection test failed", {
+          description: result.error,
+        });
+      }
+    },
+  });
+}
+
+/**
+ * Complete onboarding
+ */
+export function useCompleteOnboarding() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const { data: updatedOrganization, error } =
+        await archestraApiSdk.completeOnboarding({
+          body: { onboardingComplete: true },
+        });
+
+      if (error) {
+        toast.error("Failed to complete onboarding");
+        return null;
+      }
+
+      return updatedOrganization;
+    },
+    onSuccess: (updatedOrganization) => {
+      if (!updatedOrganization) return;
+      queryClient.setQueryData(organizationKeys.details(), updatedOrganization);
+      toast.success("Onboarding complete");
+    },
+  });
+}
+
+/**
+ * Get all members of the organization (for admin filtering)
+ */
+export function useOrganizationMembers(enabled = true) {
+  return useQuery({
+    queryKey: [...organizationKeys.all, "members"],
+    queryFn: async () => {
+      const { data, error } = await archestraApiSdk.getOrganizationMembers();
+      if (error) {
+        handleApiError(error);
+        return [];
+      }
+      return data ?? [];
+    },
+    enabled,
   });
 }
 

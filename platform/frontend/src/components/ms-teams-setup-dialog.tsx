@@ -1,5 +1,6 @@
 "use client";
 
+import { DocsPage, getDocsUrl } from "@shared";
 import JSZip from "jszip";
 import { Download, ExternalLink, Loader2, TriangleAlert } from "lucide-react";
 import * as React from "react";
@@ -12,7 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useChatOpsStatus } from "@/lib/chatops.query";
 import { useUpdateChatOpsConfigInQuickstart } from "@/lib/chatops-config.query";
-import { usePublicBaseUrl } from "@/lib/features.hook";
+import { usePublicBaseUrl } from "@/lib/config.query";
 
 interface MsTeamsSetupDialogProps {
   open: boolean;
@@ -134,7 +135,7 @@ export function MsTeamsSetupDialog({
           Follow these steps to connect your Archestra agents to Microsoft
           Teams. Find out more in our{" "}
           <a
-            href="https://archestra.ai/docs/platform-ms-teams"
+            href={getDocsUrl(DocsPage.PlatformMsTeams)}
             target="_blank"
             rel="noopener noreferrer"
             className="text-primary underline hover:no-underline"

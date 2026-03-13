@@ -14,7 +14,7 @@ vi.mock("@/config", async (importOriginal) => {
   return {
     default: {
       ...actual.default,
-      enterpriseLicenseActivated: true,
+      enterpriseFeatures: { ...actual.default.enterpriseFeatures, core: true },
       auth: {
         ...actual.default.auth,
         get disableInvitations() {
@@ -581,11 +581,11 @@ describe("handleAfterHook", () => {
   });
 
   describe("SSO team sync", () => {
-    const originalEnterpriseValue = config.enterpriseLicenseActivated;
+    const originalEnterpriseValue = config.enterpriseFeatures.core;
 
     // Helper to set enterprise license config
     function setEnterpriseLicense(value: boolean) {
-      Object.defineProperty(config, "enterpriseLicenseActivated", {
+      Object.defineProperty(config.enterpriseFeatures, "core", {
         value,
         writable: true,
         configurable: true,

@@ -1,28 +1,21 @@
 "use client";
 
 import type { archestraApiTypes } from "@shared";
+import { ArrowLeft, Search } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
+  DialogStickyFooter,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { LOCAL_MCP_DISABLED_MESSAGE } from "@/consts";
-import { useFeatureFlag } from "@/lib/features.hook";
 import {
   useCreateInternalMcpCatalogItem,
   useInternalMcpCatalog,
 } from "@/lib/internal-mcp-catalog.query";
-import { cn } from "@/lib/utils";
 import { ArchestraCatalogTab } from "./archestra-catalog-tab";
 import { McpCatalogForm } from "./mcp-catalog-form";
 import type { McpCatalogFormValues } from "./mcp-catalog-form.types";
@@ -37,20 +30,23 @@ interface CreateCatalogDialogProps {
   onSuccess?: (createdItem: CatalogItem) => void;
 }
 
-type TabType = "archestra-catalog" | "remote" | "local";
+type WizardStep = "form" | "catalog-browse";
 
 export function CreateCatalogDialog({
   isOpen,
   onClose,
   onSuccess,
 }: CreateCatalogDialogProps) {
-  const [activeTab, setActiveTab] = useState<TabType>("archestra-catalog");
+  const [step, setStep] = useState<WizardStep>("form");
+  const [prefilledValues, setPrefilledValues] = useState<
+    McpCatalogFormValues | undefined
+  >(undefined);
   const createMutation = useCreateInternalMcpCatalogItem();
   const { data: catalogItems } = useInternalMcpCatalog();
-  const isLocalMcpEnabled = useFeatureFlag("orchestrator-k8s-runtime");
 
   const handleClose = () => {
-    setActiveTab("archestra-catalog");
+    setStep("form");
+    setPrefilledValues(undefined);
     onClose();
   };
 
@@ -63,114 +59,73 @@ export function CreateCatalogDialog({
     }
   };
 
+  const handleSelectFromCatalog = (formValues: McpCatalogFormValues) => {
+    setPrefilledValues(formValues);
+    setStep("form");
+  };
+
   const footer = (
-    <DialogFooter className="flex-shrink-0">
+    <DialogStickyFooter>
       <Button variant="outline" onClick={handleClose} type="button">
         Cancel
       </Button>
       <Button type="submit" disabled={createMutation.isPending}>
         {createMutation.isPending ? "Adding..." : "Add Server"}
       </Button>
-    </DialogFooter>
+    </DialogStickyFooter>
+  );
+
+  const catalogButton = (
+    <Button
+      type="button"
+      variant="outline"
+      className="w-full"
+      onClick={() => setStep("catalog-browse")}
+    >
+      <Search className="h-4 w-4 mr-2" />
+      Select from Online Catalog
+    </Button>
   );
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="max-w-5xl h-[90vh] flex flex-col">
+      <DialogContent className="max-w-5xl h-[90vh] overflow-y-auto overflow-x-hidden">
         <DialogHeader>
           <DialogTitle>Add MCP Server to the Private Registry</DialogTitle>
           <DialogDescription>
-            Once you add an MCP server here, it will be available for
-            installation.
+            {step === "form"
+              ? "Once you add an MCP server here, it will be available for installation."
+              : "Select a server from the online catalog to pre-fill the form."}
           </DialogDescription>
         </DialogHeader>
 
-        <div className="border-b border-border">
-          <div className="flex gap-4">
-            {[
-              { value: "archestra-catalog", label: "Online Catalog" },
-              {
-                value: "remote",
-                label: "Remote (orchestrated not by Archestra)",
-              },
-            ].map((tab) => (
-              <button
-                type="button"
-                key={tab.value}
-                onClick={() => setActiveTab(tab.value as TabType)}
-                className={cn(
-                  "relative pb-3 text-sm font-medium transition-colors hover:text-foreground",
-                  activeTab === tab.value
-                    ? "text-foreground"
-                    : "text-muted-foreground",
-                )}
-              >
-                {tab.label}
-                {activeTab === tab.value && (
-                  <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
-                )}
-              </button>
-            ))}
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  onClick={() =>
-                    isLocalMcpEnabled && setActiveTab("local" as TabType)
-                  }
-                  disabled={!isLocalMcpEnabled}
-                  className={cn(
-                    "relative pb-3 text-sm font-medium transition-colors",
-                    !isLocalMcpEnabled
-                      ? "text-muted-foreground/50 cursor-not-allowed"
-                      : "hover:text-foreground",
-                    activeTab === "local"
-                      ? "text-foreground"
-                      : "text-muted-foreground",
-                  )}
-                >
-                  Self-hosted (orchestrated by Archestra in K8s)
-                  {activeTab === "local" && (
-                    <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
-                  )}
-                </button>
-              </TooltipTrigger>
-              {!isLocalMcpEnabled && (
-                <TooltipContent>
-                  <p className="max-w-xs">{LOCAL_MCP_DISABLED_MESSAGE}</p>
-                </TooltipContent>
-              )}
-            </Tooltip>
-          </div>
-        </div>
+        {step === "form" && (
+          <McpCatalogForm
+            mode="create"
+            onSubmit={onSubmit}
+            footer={footer}
+            catalogButton={catalogButton}
+            formValues={prefilledValues}
+          />
+        )}
 
-        <div className="flex-1 overflow-y-auto">
-          {activeTab === "archestra-catalog" && (
+        {step === "catalog-browse" && (
+          <div className="flex flex-col">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setStep("form")}
+              className="self-start mb-2"
+            >
+              <ArrowLeft className="h-4 w-4 mr-1" />
+              Back to form
+            </Button>
             <ArchestraCatalogTab
               catalogItems={catalogItems}
-              onClose={handleClose}
-              onSuccess={onSuccess}
+              onSelectServer={handleSelectFromCatalog}
             />
-          )}
-
-          {activeTab === "remote" && (
-            <McpCatalogForm
-              mode="create"
-              onSubmit={onSubmit}
-              serverType="remote"
-              footer={footer}
-            />
-          )}
-
-          {activeTab === "local" && (
-            <McpCatalogForm
-              mode="create"
-              onSubmit={onSubmit}
-              serverType="local"
-              footer={footer}
-            />
-          )}
-        </div>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );

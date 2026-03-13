@@ -33,9 +33,8 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import config from "@/lib/config";
-import { useFeatureFlag } from "@/lib/features.hook";
+import { useFeature } from "@/lib/config.query";
 import { type TeamToken, useTokens } from "@/lib/team-token.query";
-import { WithPermissions } from "../roles/with-permissions";
 import { TeamMembersDialog } from "./team-members-dialog";
 import { TokenManagerDialog } from "./token-manager-dialog";
 
@@ -47,7 +46,7 @@ const TeamVaultFolderDialog = lazy(
 
 type Team = archestraApiTypes.GetTeamsResponses["200"][number];
 
-const { TeamExternalGroupsDialog } = config.enterpriseLicenseActivated
+const { TeamExternalGroupsDialog } = config.enterpriseFeatures.core
   ? // biome-ignore lint/style/noRestrictedImports: conditional EE component with SSO / external teams
     await import("./team-external-groups-dialog.ee")
   : {
@@ -56,7 +55,7 @@ const { TeamExternalGroupsDialog } = config.enterpriseLicenseActivated
 
 export function TeamsList() {
   const queryClient = useQueryClient();
-  const byosEnabled = useFeatureFlag("byosEnabled");
+  const byosEnabled = useFeature("byosEnabled");
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
   const [membersDialogOpen, setMembersDialogOpen] = useState(false);
@@ -160,7 +159,8 @@ export function TeamsList() {
             <div>
               <CardTitle>Teams</CardTitle>
               <CardDescription>
-                Manage teams to organize access to profiles and MCP servers
+                Manage teams to organize access to Agents, MCP Gateways, LLM
+                Proxies, and MCP servers
               </CardDescription>
             </div>
             <PermissionButton
@@ -253,7 +253,7 @@ export function TeamsList() {
                         <TooltipContent>Configure Vault Folder</TooltipContent>
                       </Tooltip>
                     )}
-                    {config.enterpriseLicenseActivated && (
+                    {config.enterpriseFeatures.core && (
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <PermissionButton
@@ -290,66 +290,6 @@ export function TeamsList() {
           )}
         </CardContent>
       </Card>
-
-      {/* Organization Token Section */}
-      <WithPermissions
-        permissions={{ team: ["update"] }}
-        noPermissionHandle="hide"
-      >
-        <Card className="mt-6">
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle>Organization Token</CardTitle>
-                <CardDescription>
-                  Organization-wide authentication token for MCP Gateway access
-                </CardDescription>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            {tokensLoading ? (
-              <p className="text-sm text-muted-foreground">Loading token...</p>
-            ) : (
-              (() => {
-                const orgToken = tokens?.find((t) => t.isOrganizationToken);
-                if (!orgToken) {
-                  return (
-                    <div className="flex flex-col items-center justify-center py-8 text-center">
-                      <Key className="mb-4 h-12 w-12 text-muted-foreground" />
-                      <p className="text-sm text-muted-foreground">
-                        No organization token available. It will be
-                        automatically created.
-                      </p>
-                    </div>
-                  );
-                }
-                return (
-                  <div className="flex flex-col md:flex-row md:items-center md:justify-between rounded-lg border p-4 gap-3">
-                    <div className="flex-1 min-w-0">
-                      <p className="font-mono text-sm text-muted-foreground truncate">
-                        {orgToken.tokenStart}...
-                      </p>
-                    </div>
-                    <PermissionButton
-                      permissions={{ team: ["update"] }}
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        setSelectedToken(orgToken);
-                        setTokenDialogOpen(true);
-                      }}
-                    >
-                      <Key className="mr-2 h-4 w-4" />
-                      Manage Token
-                    </PermissionButton>
-                  </div>
-                );
-              })()
-            )}
-          </CardContent>
-        </Card>
-      </WithPermissions>
 
       <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
         <DialogContent className="max-w-3xl">
@@ -397,7 +337,7 @@ export function TeamsList() {
       </Dialog>
 
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <DialogContent className="max-w-3xl">
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Delete Team</DialogTitle>
             <DialogDescription>

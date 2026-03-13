@@ -1,6 +1,7 @@
 import { archestraApiSdk, type archestraApiTypes } from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useIsAuthenticated } from "./auth.hook";
+import { useHasPermissions } from "./auth.query";
 import { handleApiError } from "./utils";
 
 const { getRoles, createRole, getRole, updateRole, deleteRole } =
@@ -125,6 +126,7 @@ export function useDeleteRole() {
  */
 export function useCustomRoles() {
   const userIsAuthenticated = useIsAuthenticated();
+  const { data: canReadRoles } = useHasPermissions({ ac: ["read"] });
   return useQuery({
     queryKey: roleKeys.custom(),
     queryFn: async () => {
@@ -134,7 +136,7 @@ export function useCustomRoles() {
       // Filter to only custom roles (non-predefined)
       return data.filter((role) => !role.predefined);
     },
-    enabled: userIsAuthenticated,
+    enabled: userIsAuthenticated && !!canReadRoles,
     retry: false,
     throwOnError: false,
   });

@@ -2,8 +2,9 @@ import { isPlaywrightCatalogItem, RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { hasPermission } from "@/auth";
+import mcpClient from "@/clients/mcp-client";
+import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import logger from "@/logging";
-import { McpServerRuntimeManager } from "@/mcp-server-runtime";
 import {
   AgentToolModel,
   InternalMcpCatalogModel,
@@ -41,7 +42,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async ({ user, headers, query }, reply) => {
       const { catalogId } = query;
       const { success: isMcpServerAdmin } = await hasPermission(
-        { mcpServer: ["admin"] },
+        { mcpServerInstallation: ["admin"] },
         headers,
       );
       let allServers = await McpServerModel.findAll(user.id, isMcpServerAdmin);
@@ -166,7 +167,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             // WHY: mcpServer:update distinguishes editors from members
             // Editors have this permission, members don't
             const { success: hasMcpServerUpdate } = await hasPermission(
-              { mcpServer: ["update"] },
+              { mcpServerInstallation: ["update"] },
               headers,
             );
 
@@ -761,7 +762,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Check mcpServer create permission (required for re-authentication)
       const { success: hasMcpServerCreatePermission } = await hasPermission(
-        { mcpServer: ["create"] },
+        { mcpServerInstallation: ["create"] },
         headers,
       );
 
@@ -794,7 +795,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // WHY: mcpServer:update distinguishes editors from members
           // Editors have this permission, members don't
           const { success: hasMcpServerUpdate } = await hasPermission(
-            { mcpServer: ["update"] },
+            { mcpServerInstallation: ["update"] },
             headers,
           );
 
@@ -1007,7 +1008,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Personal server: owner OR mcpServer:update permission
         if (mcpServer.ownerId !== user.id) {
           const { success: hasMcpServerUpdate } = await hasPermission(
-            { mcpServer: ["update"] },
+            { mcpServerInstallation: ["update"] },
             headers,
           );
           if (!hasMcpServerUpdate) {
@@ -1026,7 +1027,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         if (!isTeamAdmin) {
           const { success: hasMcpServerUpdate } = await hasPermission(
-            { mcpServer: ["update"] },
+            { mcpServerInstallation: ["update"] },
             headers,
           );
 
@@ -1172,6 +1173,71 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
+  fastify.post(
+    "/api/mcp_server/:id/inspect",
+    {
+      schema: {
+        operationId: RouteId.InspectMcpServer,
+        description: "Inspect a running MCP server (list tools or call a tool)",
+        tags: ["MCP Server"],
+        params: z.object({
+          id: UuidIdSchema,
+        }),
+        body: z.object({
+          method: z.enum(["tools/list", "tools/call"]),
+          toolName: z.string().optional(),
+          toolArguments: z.record(z.string(), z.unknown()).optional(),
+        }),
+        response: constructResponseSchema(z.record(z.string(), z.unknown())),
+      },
+    },
+    async ({ params: { id }, body }, reply) => {
+      const mcpServer = await McpServerModel.findById(id);
+      if (!mcpServer) {
+        throw new ApiError(404, "MCP server not found");
+      }
+
+      const catalogItem = mcpServer.catalogId
+        ? await InternalMcpCatalogModel.findById(mcpServer.catalogId)
+        : null;
+      if (!catalogItem) {
+        throw new ApiError(400, "No catalog item found for this MCP server");
+      }
+
+      let secrets: Record<string, unknown> = {};
+      if (mcpServer.secretId) {
+        const secretRecord = await secretManager().getSecret(
+          mcpServer.secretId,
+        );
+        if (secretRecord) {
+          secrets = secretRecord.secret;
+        }
+      }
+
+      try {
+        const result = await mcpClient.inspectServer({
+          catalogItem,
+          mcpServerId: mcpServer.id,
+          secrets,
+          method: body.method,
+          toolName: body.toolName,
+          toolArguments: body.toolArguments,
+        });
+
+        return reply.send(result as Record<string, unknown>);
+      } catch (error) {
+        logger.error(
+          { err: error },
+          `Failed to inspect MCP server ${mcpServer.name}`,
+        );
+        throw new ApiError(
+          502,
+          `Failed to inspect MCP server: ${error instanceof Error ? error.message : "Unknown error"}`,
+        );
+      }
+    },
+  );
+
   /**
    * Reinstall an MCP server without losing tool assignments and policies.
    *
@@ -1236,7 +1302,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // WHY: mcpServer:update distinguishes editors from members
           // Editors have this permission, members don't
           const { success: hasMcpServerUpdate } = await hasPermission(
-            { mcpServer: ["update"] },
+            { mcpServerInstallation: ["update"] },
             headers,
           );
 

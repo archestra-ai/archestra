@@ -1,5 +1,7 @@
 export { default as accountsTable } from "./account";
 export { default as agentsTable } from "./agent";
+export { default as agentConnectorAssignmentsTable } from "./agent-connector-assignment";
+export { default as agentKnowledgeBasesTable } from "./agent-knowledge-base";
 export { default as agentLabelsTable } from "./agent-label";
 export { default as agentTeamsTable } from "./agent-team";
 export { default as agentToolsTable } from "./agent-tool";
@@ -12,8 +14,10 @@ export {
 } from "./chat-api-key";
 export { default as chatopsChannelBindingsTable } from "./chatops-channel-binding";
 export { default as chatopsProcessedMessagesTable } from "./chatops-processed-message";
+export { default as connectorRunsTable } from "./connector-run";
 export { default as conversationsTable } from "./conversation";
 export { default as conversationEnabledToolsTable } from "./conversation-enabled-tool";
+export { default as conversationSharesTable } from "./conversation-share";
 export { default as dualLlmConfigsTable } from "./dual-llm-config";
 export { default as dualLlmResultsTable } from "./dual-llm-result";
 export { default as identityProvidersTable } from "./identity-provider";
@@ -22,11 +26,19 @@ export { default as interactionsTable } from "./interaction";
 export { default as internalMcpCatalogTable } from "./internal-mcp-catalog";
 export { default as invitationsTable } from "./invitation";
 export { default as jwksTable } from "./jwks";
+export { default as kbChunksTable } from "./kb-chunk";
+export { default as kbDocumentsTable } from "./kb-document";
+export { default as knowledgeBasesTable } from "./knowledge-base";
+export {
+  default as knowledgeBaseConnectorsTable,
+  knowledgeBaseConnectorAssignmentsTable,
+} from "./knowledge-base-connector";
 export { default as labelKeysTable } from "./label-key";
 export { default as labelValuesTable } from "./label-value";
 export { default as limitsTable } from "./limit";
 export { default as limitModelUsageTable } from "./limit-model-usage";
 export { default as mcpCatalogLabelsTable } from "./mcp-catalog-label";
+export { default as mcpCatalogTeamsTable } from "./mcp-catalog-team";
 export { default as mcpHttpSessionsTable } from "./mcp-http-session";
 export { default as mcpServersTable } from "./mcp-server";
 export { default as mcpServerInstallationRequestsTable } from "./mcp-server-installation-request";
@@ -45,6 +57,7 @@ export { organizationRole as organizationRolesTable } from "./organization-role"
 export { default as processedEmailsTable } from "./processed-email";
 export { default as secretsTable } from "./secret";
 export { default as sessionsTable } from "./session";
+export { default as tasksTable } from "./task";
 export { team as teamsTable, teamMember as teamMembersTable } from "./team";
 export { default as teamExternalGroupsTable } from "./team-external-group";
 export { default as teamTokensTable } from "./team-token";

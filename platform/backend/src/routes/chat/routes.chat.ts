@@ -4,6 +4,7 @@ import {
   RouteId,
   type SupportedProvider,
   TimeInMs,
+  TOOL_SWAP_AGENT_FULL_NAME,
   type TokenUsage,
 } from "@shared";
 import {
@@ -11,6 +12,7 @@ import {
   createUIMessageStream,
   createUIMessageStreamResponse,
   generateText,
+  hasToolCall,
   stepCountIs,
   streamText,
   type UIMessage,
@@ -29,7 +31,7 @@ import {
 } from "@/clients/llm-client";
 import config from "@/config";
 import { browserStreamFeature } from "@/features/browser-stream/services/browser-stream.feature";
-import { extractAndIngestDocuments } from "@/knowledge-graph/chat-document-extractor";
+import { extractAndIngestDocuments } from "@/knowledge-base";
 import logger from "@/logging";
 import {
   AgentModel,
@@ -40,6 +42,11 @@ import {
   TeamModel,
 } from "@/models";
 import { startActiveChatSpan } from "@/observability/tracing";
+import {
+  buildRenderedPrompts,
+  promptNeedsRendering,
+  type SystemPromptContext,
+} from "@/templating";
 import {
   ApiError,
   constructResponseSchema,
@@ -56,6 +63,10 @@ import {
   resolveSmartDefaultLlmForChat,
 } from "@/utils/llm-resolution";
 import { estimateMessagesSize } from "@/utils/message-size";
+import {
+  parseMaxInputTokens,
+  trimMessagesToTokenLimit,
+} from "./context-trimming";
 import { mapProviderError, ProviderError } from "./errors";
 import {
   stripImagesFromMessages,
@@ -119,15 +130,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         conversationId,
       });
 
-      // Extract and ingest documents to knowledge graph (fire and forget)
-      // This runs asynchronously to avoid blocking the chat response
-      extractAndIngestDocuments(messages).catch((error) => {
-        logger.warn(
-          { error: error instanceof Error ? error.message : String(error) },
-          "[Chat] Background document ingestion failed",
-        );
-      });
-
       const userIsAgentAdmin = await hasAnyAgentTypeAdminPermission({
         userId: user.id,
         organizationId,
@@ -153,6 +155,15 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       const { agentId, agent } = conversation;
+
+      // Extract and ingest documents to agent's knowledge base (fire and forget)
+      // This runs asynchronously to avoid blocking the chat response
+      extractAndIngestDocuments(messages, agentId).catch((error) => {
+        logger.warn(
+          { error: error instanceof Error ? error.message : String(error) },
+          "[Chat] Background document ingestion failed",
+        );
+      });
 
       const externalAgentId = agentId;
 
@@ -183,16 +194,25 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Build system prompt from agent's systemPrompt and userPrompt fields
       let systemPrompt: string | undefined;
-      const systemPromptParts: string[] = [];
-      const userPromptParts: string[] = [];
 
-      // Collect system and user prompts from the agent
-      if (agent.systemPrompt) {
-        systemPromptParts.push(agent.systemPrompt);
+      // Build template context only when prompts use Handlebars syntax
+      let promptContext: SystemPromptContext | null = null;
+      if (promptNeedsRendering(agent.systemPrompt, agent.userPrompt)) {
+        const userTeams = await TeamModel.getUserTeams(user.id);
+        promptContext = {
+          user: {
+            name: user.name,
+            email: user.email,
+            teams: userTeams.map((t) => t.name),
+          },
+        };
       }
-      if (agent.userPrompt) {
-        userPromptParts.push(agent.userPrompt);
-      }
+
+      const { systemPromptParts, userPromptParts } = buildRenderedPrompts({
+        systemPrompt: agent.systemPrompt,
+        userPrompt: agent.userPrompt,
+        context: promptContext,
+      });
 
       // Add instruction about tool approval denials
       systemPromptParts.push(
@@ -252,14 +272,15 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             conversationId,
             externalAgentId,
             sessionId: conversationId,
+            source: "chat",
             agentLlmApiKeyId: agent.llmApiKeyId,
           });
 
           // Strip images and large browser tool results from messages before sending to LLM
           // This prevents context limit issues from accumulated screenshots and page snapshots
-          const strippedMessagesForLLM = config.features.browserStreamingEnabled
-            ? stripImagesFromMessages(messages as UiMessage[])
-            : (messages as UiMessage[]);
+          const strippedMessagesForLLM = stripImagesFromMessages(
+            messages as UiMessage[],
+          );
 
           // Stream with AI SDK
           // Build streamText config conditionally
@@ -276,7 +297,10 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             model,
             messages: modelMessages,
             ...(supportsToolCalling && { tools: mcpTools }),
-            stopWhen: stepCountIs(500),
+            stopWhen: [
+              stepCountIs(500),
+              hasToolCall(TOOL_SWAP_AGENT_FULL_NAME),
+            ],
             abortSignal: chatAbortController.signal,
             onFinish: async ({ usage, finishReason }) => {
               removeAbortListeners();
@@ -329,8 +353,62 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
               "Content-Encoding": "none",
             },
             stream: createUIMessageStream({
+              onError: (error) => {
+                const mapped = mapProviderError(error, provider);
+                try {
+                  return JSON.stringify(mapped);
+                } catch {
+                  return JSON.stringify({
+                    code: mapped.code,
+                    message: mapped.message,
+                    isRetryable: mapped.isRetryable,
+                  });
+                }
+              },
               execute: async ({ writer }) => {
-                const result = streamText(streamTextConfig);
+                // Stream tokens to the client in real-time while also
+                // handling context-length errors from vLLM/LiteLLM.
+                //
+                // Context-length errors (400) are rejected by the provider
+                // before any tokens are emitted. We detect this by reading
+                // the first chunk from textStream — if the provider rejects,
+                // the iterator throws immediately. We then parse the error,
+                // trim messages, and retry with a new streamText call.
+                //
+                // For successful requests, the first chunk arrives quickly
+                // and we proceed to merge the full stream to the client.
+                let result = streamText(streamTextConfig);
+
+                // Try reading the first text chunk to detect immediate provider errors.
+                // Context-length errors fire before any tokens, so this catches them
+                // without blocking normal streaming (first token arrives in ~100-500ms).
+                try {
+                  const reader = result.textStream[Symbol.asyncIterator]();
+                  await reader.next();
+                } catch (error) {
+                  const maxTokens = parseMaxInputTokens(error);
+                  if (maxTokens !== null) {
+                    const trimmed = trimMessagesToTokenLimit(
+                      modelMessages,
+                      maxTokens,
+                    );
+                    logger.info(
+                      {
+                        maxTokens,
+                        originalMessages: modelMessages.length,
+                        trimmedMessages: trimmed.length,
+                        conversationId,
+                      },
+                      "[ContextTrimming] retrying with trimmed messages",
+                    );
+                    result = streamText({
+                      ...streamTextConfig,
+                      messages: trimmed,
+                    });
+                  } else {
+                    throw error;
+                  }
+                }
 
                 // Merge the stream text result into the UI message stream
                 writer.merge(
@@ -430,8 +508,14 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   }),
                 );
 
-                // Wait for the stream to complete and get usage data
-                const usage = await result.usage;
+                // Wait for the stream to complete and get usage data.
+                // Catch NoOutputGeneratedError (thrown when provider errors
+                // prevent any output) to avoid emitting a second, generic
+                // error event that would race with the detailed provider error
+                // already flowing through toUIMessageStream's onError.
+                const usage = await Promise.resolve(result.usage).catch(
+                  () => null,
+                );
 
                 // Write token usage data to the stream as a custom data part
                 if (usage) {
@@ -1346,31 +1430,29 @@ async function persistNewMessages(
       return 0;
     }
 
-    let messagesToStore = messagesToSave as UiMessage[];
+    let messagesToStore: UiMessage[];
 
-    if (config.features.browserStreamingEnabled) {
-      // Strip base64 images and large browser tool results before storing
-      if (context === "onFinish") {
-        // Log size reduction only for onFinish (where we have complete messages)
-        const beforeSize = estimateMessagesSize(messagesToSave);
-        messagesToStore = stripImagesFromMessages(messagesToSave);
-        const afterSize = estimateMessagesSize(messagesToStore);
+    // Strip base64 images and large browser tool results before storing
+    if (context === "onFinish") {
+      // Log size reduction only for onFinish (where we have complete messages)
+      const beforeSize = estimateMessagesSize(messagesToSave);
+      messagesToStore = stripImagesFromMessages(messagesToSave);
+      const afterSize = estimateMessagesSize(messagesToStore);
 
-        logger.info(
-          {
-            messageCount: messagesToSave.length,
-            beforeSizeKB: Math.round(beforeSize.length / 1024),
-            afterSizeKB: Math.round(afterSize.length / 1024),
-            savedKB: Math.round((beforeSize.length - afterSize.length) / 1024),
-            sizeEstimateReliable:
-              !beforeSize.isEstimated && !afterSize.isEstimated,
-          },
-          "[Chat] Stripped messages before saving to DB",
-        );
-      } else {
-        // For onError, just strip without detailed logging
-        messagesToStore = stripImagesFromMessages(messagesToStore);
-      }
+      logger.info(
+        {
+          messageCount: messagesToSave.length,
+          beforeSizeKB: Math.round(beforeSize.length / 1024),
+          afterSizeKB: Math.round(afterSize.length / 1024),
+          savedKB: Math.round((beforeSize.length - afterSize.length) / 1024),
+          sizeEstimateReliable:
+            !beforeSize.isEstimated && !afterSize.isEstimated,
+        },
+        "[Chat] Stripped messages before saving to DB",
+      );
+    } else {
+      // For onError, just strip without detailed logging
+      messagesToStore = stripImagesFromMessages(messagesToSave);
     }
 
     // Append only new messages with timestamps

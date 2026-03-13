@@ -67,7 +67,6 @@ const SCOPE_ICONS: Record<ChatApiKeyScope, React.ReactNode> = {
 // Note: This stores the API key's database ID (UUID), NOT the actual API key secret.
 // The actual API key value is never exposed to the frontend - it's stored securely on the server.
 // This ID is just a reference to select which key configuration to use, similar to a userId.
-const LOCAL_STORAGE_KEY = "selected-chat-api-key-id";
 
 /**
  * API Key selector for chat - allows users to select which API key to use for the conversation.
@@ -101,8 +100,11 @@ export function ChatApiKeySelector({
     setOpen(newOpen);
     onOpenChange?.(newOpen);
   };
-  // Track if we've already auto-selected to prevent infinite loops
-  const hasAutoSelectedRef = useRef(false);
+  // Track which provider we last auto-selected for to prevent infinite loops.
+  // Using the provider value (not a boolean) so we can re-run auto-select when
+  // the provider genuinely changes (e.g., user picks a model from a different provider)
+  // without looping when our own mutations cause provider changes.
+  const autoSelectedForProviderRef = useRef<string | null>(null);
 
   // Group keys by provider for display
   const keysByProvider = useMemo(() => {
@@ -152,21 +154,26 @@ export function ChatApiKeySelector({
     return availableKeys.find((k) => k.id === currentConversationChatApiKeyId);
   }, [availableKeys, currentConversationChatApiKeyId]);
 
-  // Reset auto-select flag when conversation or provider changes
-  // so auto-selection re-runs (e.g., when user picks a model from a different provider)
-  // biome-ignore lint/correctness/useExhaustiveDependencies: we want to reset when conversationId or currentProvider changes
+  // Reset auto-select tracking when conversation changes so auto-selection
+  // re-runs for the new conversation.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally only resetting on conversationId
   useEffect(() => {
-    hasAutoSelectedRef.current = false;
-  }, [conversationId, currentProvider]);
+    autoSelectedForProviderRef.current = null;
+  }, [conversationId]);
 
-  // Auto-select first key when no key is selected or current key is invalid
+  // Auto-select first key when no key is selected or current key doesn't match provider.
+  // Uses provider-based tracking instead of a boolean flag to allow re-selection when the
+  // provider genuinely changes (e.g., user picks a model from a different provider) while
+  // preventing infinite loops from our own mutations causing provider changes.
   // biome-ignore lint/correctness/useExhaustiveDependencies: adding updateConversationMutation as a dependency would cause a infinite loop
   useEffect(() => {
     // Skip if loading or no keys available
     if (isLoading || availableKeys.length === 0) return;
 
-    // Skip if we've already auto-selected to prevent infinite loops
-    if (hasAutoSelectedRef.current) return;
+    const providerKey = currentProvider ?? null;
+
+    // Skip if we already handled this exact provider
+    if (autoSelectedForProviderRef.current === providerKey) return;
 
     // Check if current key is valid AND matches the current provider
     const currentKeyValid =
@@ -174,30 +181,23 @@ export function ChatApiKeySelector({
       availableKeys.some((k) => k.id === currentConversationChatApiKeyId) &&
       currentConversationChatApiKey.provider === currentProvider;
 
-    // If current key is valid, no need to auto-select
-    if (currentKeyValid) return;
+    // If current key is valid, mark as handled without firing a mutation
+    if (currentKeyValid) {
+      autoSelectedForProviderRef.current = providerKey;
+      return;
+    }
 
     // Get keys for the current provider (prefer matching provider)
     const providerKeys = currentProvider
       ? (keysByProvider[currentProvider] ?? [])
       : [];
 
-    // Try to find key from localStorage (per-provider key)
-    const localStorageKey = currentProvider
-      ? `${LOCAL_STORAGE_KEY}-${currentProvider}`
-      : LOCAL_STORAGE_KEY;
-    const keyIdFromLocalStorage = localStorage.getItem(localStorageKey);
-    const keyFromLocalStorage = keyIdFromLocalStorage
-      ? providerKeys.find((k) => k.id === keyIdFromLocalStorage)
-      : null;
-
-    // Priority: localStorage > personal > team > org_wide (within current provider)
+    // Priority: personal > team > org_wide (within current provider)
     const personalKeys = providerKeys.filter((k) => k.scope === "personal");
     const teamKeys = providerKeys.filter((k) => k.scope === "team");
     const orgWideKeys = providerKeys.filter((k) => k.scope === "org_wide");
 
     const keyToSelect =
-      keyFromLocalStorage ||
       personalKeys[0] ||
       teamKeys[0] ||
       orgWideKeys[0] ||
@@ -211,8 +211,8 @@ export function ChatApiKeySelector({
 
     // Auto-select key if no valid key is selected
     if (keyToSelectValid) {
-      // Mark as auto-selected BEFORE calling callbacks to prevent loops
-      hasAutoSelectedRef.current = true;
+      // Mark as handled BEFORE calling callbacks to prevent loops
+      autoSelectedForProviderRef.current = providerKey;
 
       if (conversationId) {
         updateConversationMutation.mutate({
@@ -256,29 +256,24 @@ export function ChatApiKeySelector({
     const selectedKeyProvider = selectedKey?.provider;
 
     if (conversationId) {
-      updateConversationMutation.mutate({
-        id: conversationId,
-        chatApiKeyId: keyId,
-      });
-    } else if (onApiKeyChange) {
-      onApiKeyChange(keyId);
-    }
-
-    // Save to localStorage for the selected key's provider
-    if (selectedKeyProvider) {
-      localStorage.setItem(
-        `${LOCAL_STORAGE_KEY}-${selectedKeyProvider}`,
-        keyId,
-      );
-    }
-
-    // If the selected key has a different provider, notify parent to switch model
-    if (
-      selectedKeyProvider &&
-      selectedKeyProvider !== currentProvider &&
-      onProviderChange
-    ) {
-      onProviderChange(selectedKeyProvider, keyId);
+      // For existing conversations, let onProviderChange handle both the API key
+      // update and model selection in a single mutation to avoid race conditions.
+      if (selectedKeyProvider && onProviderChange) {
+        onProviderChange(selectedKeyProvider, keyId);
+      } else {
+        updateConversationMutation.mutate({
+          id: conversationId,
+          chatApiKeyId: keyId,
+        });
+      }
+    } else {
+      // For initial (no conversation) state, update key state and notify parent
+      if (onApiKeyChange) {
+        onApiKeyChange(keyId);
+      }
+      if (selectedKeyProvider && onProviderChange) {
+        onProviderChange(selectedKeyProvider, keyId);
+      }
     }
   };
 
@@ -321,7 +316,7 @@ export function ChatApiKeySelector({
             disabled={disabled}
             className="max-w-[220px] min-w-0"
           >
-            <Key className="h-3.5 w-3.5 shrink-0" />
+            <Key className="size-4 shrink-0" />
             <span className="truncate flex-1 text-left">
               {currentConversationChatApiKey
                 ? getKeyDisplayName(currentConversationChatApiKey)

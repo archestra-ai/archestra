@@ -1,5 +1,6 @@
 "use client";
 
+import { DocsPage, getDocsUrl, SLACK_REQUIRED_BOT_SCOPES } from "@shared";
 import { ExternalLink } from "lucide-react";
 import * as React from "react";
 import { useState } from "react";
@@ -10,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useChatOpsStatus } from "@/lib/chatops.query";
 import { useUpdateSlackChatOpsConfig } from "@/lib/chatops-config.query";
-import { usePublicBaseUrl } from "@/lib/features.hook";
+import { usePublicBaseUrl } from "@/lib/config.query";
 
 type ConnectionMode = "webhook" | "socket";
 
@@ -170,7 +171,7 @@ export function SlackSetupDialog({
           Follow these steps to connect your Archestra agents to Slack. Find out
           more in our{" "}
           <a
-            href="https://archestra.ai/docs/platform-slack"
+            href={getDocsUrl(DocsPage.PlatformSlack)}
             target="_blank"
             rel="noopener noreferrer"
             className="text-primary underline hover:no-underline"
@@ -471,22 +472,7 @@ function buildSlackManifest(params: {
     },
     oauth_config: {
       scopes: {
-        bot: [
-          "assistant:write",
-          "commands",
-          "app_mentions:read",
-          "channels:history",
-          "channels:read",
-          "chat:write",
-          "files:read",
-          "groups:history",
-          "groups:read",
-          "im:history",
-          "im:read",
-          "im:write",
-          "users:read",
-          "users:read.email",
-        ],
+        bot: SLACK_REQUIRED_BOT_SCOPES,
       },
     },
     settings: {

@@ -1,5 +1,6 @@
 "use client";
 
+import { DocsPage, getDocsUrl } from "@shared";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ArchestraArchitectureDiagram } from "@/components/archestra-architecture-diagram";
@@ -55,7 +56,7 @@ export default function ConnectionPage() {
           <h2 className="text-lg font-medium mb-4">Integration Guides</h2>
           <div className="grid grid-cols-2 gap-3">
             <a
-              href="https://archestra.ai/docs/platform-n8n-example"
+              href={getDocsUrl(DocsPage.PlatformN8nExample)}
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center gap-2 p-3 rounded-lg border border-border hover:bg-muted/50 transition-colors"
@@ -84,7 +85,7 @@ export default function ConnectionPage() {
             </a>
 
             <a
-              href="https://archestra.ai/docs/platform-vercel-ai-example"
+              href={getDocsUrl(DocsPage.PlatformVercelAiExample)}
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center gap-2 p-3 rounded-lg border border-border hover:bg-muted/50 transition-colors"
@@ -113,7 +114,7 @@ export default function ConnectionPage() {
             </a>
 
             <a
-              href="https://archestra.ai/docs/platform-langchain-example"
+              href={getDocsUrl(DocsPage.PlatformLangchainExample)}
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center gap-2 p-3 rounded-lg border border-border hover:bg-muted/50 transition-colors"
@@ -142,7 +143,7 @@ export default function ConnectionPage() {
             </a>
 
             <a
-              href="https://archestra.ai/docs/platform-openwebui-example"
+              href={getDocsUrl(DocsPage.PlatformOpenwebuiExample)}
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center gap-2 p-3 rounded-lg border border-border hover:bg-muted/50 transition-colors"
@@ -171,7 +172,7 @@ export default function ConnectionPage() {
             </a>
 
             <a
-              href="https://archestra.ai/docs/platform-pydantic-example"
+              href={getDocsUrl(DocsPage.PlatformPydanticExample)}
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center gap-2 p-3 rounded-lg border border-border hover:bg-muted/50 transition-colors"
@@ -200,7 +201,7 @@ export default function ConnectionPage() {
             </a>
 
             <a
-              href="https://archestra.ai/docs"
+              href={getDocsUrl(DocsPage.PlatformQuickstart)}
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center gap-2 p-3 rounded-lg border border-border hover:bg-muted/50 transition-colors"

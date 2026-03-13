@@ -1,5 +1,5 @@
 import type { archestraApiTypes } from "@shared";
-import type { PartialUIMessage } from "@/components/chatbot-demo";
+import type { PartialUIMessage } from "@/components/message-thread";
 import type { DualLlmResult, Interaction, InteractionUtils } from "./common";
 
 class OpenAiChatCompletionInteraction implements InteractionUtils {
@@ -213,7 +213,7 @@ class OpenAiChatCompletionInteraction implements InteractionUtils {
           }
         }
       } else if (refusal) {
-        // Push as text - parsePolicyDenied in chatbot-demo will handle policy denials
+        // Push as text - parsePolicyDenied in message-thread will handle policy denials
         parts.push({ type: "text", text: refusal });
       } else {
         // Plain text assistant message (no tool calls, no refusal)
@@ -234,6 +234,23 @@ class OpenAiChatCompletionInteraction implements InteractionUtils {
       const toolContent = message.content;
       const toolCallId = message.tool_call_id;
 
+      // Resolve the tool name from the corresponding assistant tool call
+      let resolvedToolName = "tool-result";
+      for (const m of this.request.messages) {
+        if ("tool_calls" in m && Array.isArray(m.tool_calls)) {
+          const tc = m.tool_calls.find((t) => t.id === toolCallId);
+          if (tc) {
+            resolvedToolName =
+              tc.type === "function"
+                ? tc.function.name
+                : tc.type === "custom"
+                  ? tc.custom.name
+                  : "tool-result";
+            break;
+          }
+        }
+      }
+
       // Parse the tool output
       let output: unknown;
       try {
@@ -247,7 +264,7 @@ class OpenAiChatCompletionInteraction implements InteractionUtils {
 
       parts.push({
         type: "dynamic-tool",
-        toolName: "tool-result",
+        toolName: resolvedToolName,
         toolCallId,
         state: "output-available",
         input: {},

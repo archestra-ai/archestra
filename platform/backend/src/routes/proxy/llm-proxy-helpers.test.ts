@@ -304,6 +304,19 @@ describe("buildInteractionRecord", () => {
     const record = buildInteractionRecord(baseParams);
     expect(record.toonCostSavings).toBe("0.0001200000");
   });
+
+  test("includes source when provided", () => {
+    const record = buildInteractionRecord({
+      ...baseParams,
+      source: "chatops:slack",
+    });
+    expect(record.source).toBe("chatops:slack");
+  });
+
+  test("source is undefined when not provided", () => {
+    const record = buildInteractionRecord(baseParams);
+    expect(record.source).toBeUndefined();
+  });
 });
 
 // --------------------------------------------------------------------------
@@ -326,6 +339,7 @@ describe("recordBlockedToolCallMetrics", () => {
       providerName: "openai",
       toolCallCount: 2,
       actualModel: "gpt-4",
+      source: "api",
       externalAgentId: "ext-1",
     });
 
@@ -351,6 +365,7 @@ describe("recordBlockedToolCallMetrics", () => {
       providerName: "anthropic",
       toolCallCount: 1,
       actualModel: "claude-3-opus",
+      source: "api",
       externalAgentId: "ext-2",
     });
 
@@ -359,6 +374,7 @@ describe("recordBlockedToolCallMetrics", () => {
       agent,
       1,
       "claude-3-opus",
+      "api",
       "ext-2",
     );
   });
@@ -375,6 +391,7 @@ describe("recordBlockedToolCallMetrics", () => {
       providerName: "openai",
       toolCallCount: 1,
       actualModel: "gpt-4",
+      source: "api",
     });
 
     expect(mockRecordBlockedToolSpans).toHaveBeenCalledWith(

@@ -4,6 +4,40 @@ import type { SupportedProvider } from "./model-constants";
 /** Prefix for all Archestra-generated tokens (team tokens, user tokens, virtual API keys, API keys) */
 export const ARCHESTRA_TOKEN_PREFIX = "archestra_";
 
+/**
+ * Where an LLM proxy request originated from.
+ * Stored in the `source` column of the interactions table.
+ */
+export const InteractionSourceSchema = z.enum([
+  "api",
+  "chat",
+  "chatops:slack",
+  "chatops:ms-teams",
+  "email",
+  "knowledge:embedding",
+  "knowledge:reranker",
+]);
+
+export type InteractionSource = z.infer<typeof InteractionSourceSchema>;
+
+/**
+ * Display configuration for interaction sources.
+ * Used by both frontend (SourceBadge) and any other consumer that needs
+ * human-readable labels for source values.
+ */
+export const INTERACTION_SOURCE_DISPLAY: Record<
+  InteractionSource,
+  { label: string }
+> = {
+  api: { label: "API" },
+  chat: { label: "Chat" },
+  "chatops:slack": { label: "Slack" },
+  "chatops:ms-teams": { label: "MS Teams" },
+  email: { label: "Email" },
+  "knowledge:embedding": { label: "Knowledge - Embedding" },
+  "knowledge:reranker": { label: "Knowledge - Reranker" },
+};
+
 export const E2eTestId = {
   AgentsTable: "agents-table",
   CreateAgentButton: "create-agent-button",
@@ -35,6 +69,7 @@ export const E2eTestId = {
   IdpRoleMappingAddRule: "idp-role-mapping-add-rule",
   McpServerError: "mcp-server-error",
   McpServerCard: "mcp-server-card",
+  McpServerToolsCount: "mcp-server-tools-count",
   McpToolsDialog: "mcp-tools-dialog",
   TokenSelect: "token-select",
   ProfileTokenManagerTeamsSelect: "profile-token-manager-teams-select",
@@ -87,6 +122,7 @@ export const E2eTestId = {
   McpLogsError: "mcp-logs-error",
   McpLogsViewButton: "mcp-logs-view-button",
   McpLogsEditConfigButton: "mcp-logs-edit-config-button",
+  McpLogsTab: "mcp-logs-tab",
 } as const;
 export type E2eTestId = (typeof E2eTestId)[keyof typeof E2eTestId];
 
@@ -132,12 +168,15 @@ export const AGENT_TOOL_PREFIX = `agent${MCP_SERVER_TOOL_NAME_SEPARATOR}`;
 export const TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_mcp_server_installation_request`;
 export const TOOL_ARTIFACT_WRITE_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}artifact_write`;
 export const TOOL_TODO_WRITE_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}todo_write`;
-export const TOOL_QUERY_KNOWLEDGE_GRAPH_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}query_knowledge_graph`;
+export const TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}query_knowledge_sources`;
+export const TOOL_SWAP_AGENT_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}swap_agent`;
+export const SWAP_AGENT_POKE_TEXT =
+  "(Agent was swapped. Please continue the conversation.)";
 
 export const DEFAULT_ARCHESTRA_TOOL_NAMES = [
   TOOL_ARTIFACT_WRITE_FULL_NAME,
   TOOL_TODO_WRITE_FULL_NAME,
-  TOOL_QUERY_KNOWLEDGE_GRAPH_FULL_NAME,
+  TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
 ];
 
 export const MCP_CATALOG_API_BASE_URL =
@@ -163,6 +202,13 @@ export const USER_ID_HEADER = "X-Archestra-User-Id";
  * This enables session-based grouping in the LLM proxy logs UI.
  */
 export const SESSION_ID_HEADER = "X-Archestra-Session-Id";
+
+/**
+ * Header name for interaction source.
+ * Indicates where the request originated from (e.g., "chat", "chatops:slack", "email").
+ * Internal-only header — external API requests default to "api".
+ */
+export const SOURCE_HEADER = "X-Archestra-Source";
 
 /**
  * Header name for execution ID.
@@ -395,3 +441,27 @@ export const PROVIDERS_WITH_OPTIONAL_API_KEY = new Set<SupportedProvider>([
 ]);
 
 export const AUTO_PROVISIONED_INVITATION_STATUS = "auto-provisioned";
+
+/**
+ * Delimiter used to separate multiple values within a single label key
+ * in the labels query parameter. Pipe is used instead of comma because
+ * label values themselves may contain commas.
+ * Format: key1:val1|val2;key2:val3
+ */
+export const LABELS_VALUE_DELIMITER = "|";
+
+/**
+ * Delimiter used to separate label key:value groups in the labels query parameter.
+ * Format: key1:val1|val2;key2:val3
+ */
+export const LABELS_ENTRY_DELIMITER = ";";
+
+/**
+ * Characters reserved for the labels query parameter format.
+ * Label keys and values must not contain any of these.
+ */
+export const LABEL_RESERVED_CHARS: string[] = [
+  LABELS_VALUE_DELIMITER,
+  LABELS_ENTRY_DELIMITER,
+  ":",
+];

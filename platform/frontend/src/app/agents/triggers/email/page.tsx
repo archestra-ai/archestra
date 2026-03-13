@@ -1,5 +1,6 @@
 "use client";
 
+import { DocsPage, getDocsUrl } from "@shared";
 import {
   AlertCircle,
   CheckCircle2,
@@ -15,7 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useFeatures } from "@/lib/config.query";
+import { useConfig } from "@/lib/config.query";
 import {
   useDeleteIncomingEmailSubscription,
   useIncomingEmailStatus,
@@ -24,7 +25,7 @@ import {
 } from "@/lib/incoming-email.query";
 
 export default function EmailPage() {
-  const { data: features, isLoading: featuresLoading } = useFeatures();
+  const { data: configData, isLoading: featuresLoading } = useConfig();
   const { data: status, isLoading: statusLoading } = useIncomingEmailStatus();
   const setupMutation = useSetupIncomingEmailWebhook();
   const renewMutation = useRenewIncomingEmailSubscription();
@@ -42,7 +43,7 @@ export default function EmailPage() {
     );
   }
 
-  const emailInfo = features?.incomingEmail;
+  const emailInfo = configData?.features.incomingEmail;
   if (!emailInfo?.enabled) {
     return (
       <Card>
@@ -52,7 +53,7 @@ export default function EmailPage() {
             <p className="text-sm text-muted-foreground">
               See the{" "}
               <Link
-                href="https://archestra.ai/docs/platform-agents#incoming-email"
+                href={getDocsUrl(DocsPage.PlatformAgentTriggersEmail)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1 text-primary hover:underline"
@@ -131,7 +132,7 @@ export default function EmailPage() {
           </p>
           <p className="mt-2">
             <Link
-              href="https://archestra.ai/docs/platform-agents#incoming-email"
+              href={getDocsUrl(DocsPage.PlatformAgentTriggersEmail)}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1 text-primary hover:underline"

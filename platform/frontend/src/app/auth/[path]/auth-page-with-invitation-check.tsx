@@ -26,7 +26,6 @@ export function AuthPageWithInvitationCheck({ path }: { path: string }) {
   const redirectTo = searchParams.get("redirectTo");
 
   const { data: invitationData, isLoading } = useInvitationCheck(invitationId);
-
   const isBasicAuthDisabled = config.disableBasicAuth;
 
   // Check if this is a sign-up path (includes "sign-up-with-invitation")

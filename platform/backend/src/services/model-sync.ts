@@ -88,11 +88,14 @@ class ModelSyncService {
       const capabilitiesMap = buildCapabilitiesMap(modelsDevData, provider);
 
       // 4. Merge provider models with models.dev capabilities
+      // Use the API key's provider (not the fetcher's detected provider) so that
+      // models from OpenAI-compatible proxies are stored under the correct provider
+      // instead of being mis-classified by heuristic model ID prefix detection.
       const modelsToUpsert: CreateModel[] = providerModels.map((model) => {
         const capabilities = capabilitiesMap.get(model.id);
         return {
-          externalId: `${model.provider}/${model.id}`,
-          provider: model.provider,
+          externalId: `${provider}/${model.id}`,
+          provider,
           modelId: model.id,
           description: capabilities?.description ?? null,
           contextLength: capabilities?.contextLength ?? null,

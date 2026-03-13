@@ -9,9 +9,10 @@ import {
   supportsFileUploads,
 } from "@shared";
 import type { ChatStatus } from "ai";
-import { PaperclipIcon, Plus } from "lucide-react";
+import { MoreVerticalIcon, PaperclipIcon } from "lucide-react";
 import type { FormEvent } from "react";
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
+import { ModelSelectorLogo } from "@/components/ai-elements/model-selector";
 import {
   PromptInput,
   PromptInputAttachment,
@@ -19,7 +20,6 @@ import {
   PromptInputBody,
   PromptInputButton,
   PromptInputFooter,
-  PromptInputHeader,
   type PromptInputMessage,
   PromptInputProvider,
   PromptInputSpeechButton,
@@ -29,23 +29,33 @@ import {
   usePromptInputAttachments,
   usePromptInputController,
 } from "@/components/ai-elements/prompt-input";
-import { AgentToolsDisplay } from "@/components/chat/agent-tools-display";
 import { ChatApiKeySelector } from "@/components/chat/chat-api-key-selector";
-import { ChatToolsDisplay } from "@/components/chat/chat-tools-display";
 import { ContextIndicator } from "@/components/chat/context-indicator";
-import { KnowledgeGraphUploadIndicator } from "@/components/chat/knowledge-graph-upload-indicator";
-import { ModelSelector } from "@/components/chat/model-selector";
+import { InitialAgentSelector } from "@/components/chat/initial-agent-selector";
+import { KnowledgeBaseUploadIndicator } from "@/components/chat/knowledge-base-upload-indicator";
+import {
+  ModelSelector,
+  providerToLogoProvider,
+} from "@/components/chat/model-selector";
 import { PlaywrightInstallInline } from "@/components/chat/playwright-install-dialog";
 import { Button } from "@/components/ui/button";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useAgentDelegations } from "@/lib/agent-tools.query";
+import { useProfile } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth.query";
-import { useProfileToolsWithIds } from "@/lib/chat.query";
 import { conversationStorageKeys } from "@/lib/chat-utils";
+import { useOrganization } from "@/lib/organization.query";
+import { useTypingAnimation } from "@/lib/typing-animation.hook";
+import { useIsMobile } from "@/lib/use-mobile.hook";
+import { useModelSelectorDisplay } from "@/lib/use-model-selector-display.hook";
 
 interface ArchestraPromptInputProps {
   onSubmit: (
@@ -75,8 +85,6 @@ interface ArchestraPromptInputProps {
   allowFileUploads?: boolean;
   /** Whether models are still loading - passed to API key selector */
   isModelsLoading?: boolean;
-  /** Callback to open edit agent dialog */
-  onEditAgent?: () => void;
   /** Estimated tokens used in the conversation (for context indicator) */
   tokensUsed?: number;
   /** Maximum context length of the selected model (for context indicator) */
@@ -89,6 +97,12 @@ interface ArchestraPromptInputProps {
   submitDisabled?: boolean;
   /** Whether Playwright setup overlay is visible (for showing Playwright install dialog) */
   isPlaywrightSetupVisible: boolean;
+  /** Current agent ID for agent selector */
+  selectorAgentId?: string | null;
+  /** Callback when agent changes */
+  onAgentChange?: (agentId: string) => void;
+  /** Callback when model selector opens/closes */
+  onModelSelectorOpenChange?: (open: boolean) => void;
 }
 
 // Inner component that has access to the controller context
@@ -108,13 +122,15 @@ const PromptInputContent = ({
   textareaRef: externalTextareaRef,
   allowFileUploads = false,
   isModelsLoading = false,
-  onEditAgent,
   tokensUsed = 0,
   maxContextLength,
   inputModalities,
   agentLlmApiKeyId,
   submitDisabled = false,
   isPlaywrightSetupVisible = false,
+  selectorAgentId,
+  onAgentChange,
+  onModelSelectorOpenChange,
 }: Omit<ArchestraPromptInputProps, "onSubmit"> & {
   onSubmit: ArchestraPromptInputProps["onSubmit"];
 }) => {
@@ -123,19 +139,44 @@ const PromptInputContent = ({
   const controller = usePromptInputController();
   const attachments = usePromptInputAttachments();
 
+  // Collapsed/expanded state for the model selector (defaults to collapsed = provider icon only)
+  const { isCollapsed: showDefaultLogo, expand: expandModelSelector } =
+    useModelSelectorDisplay({ conversationId });
+
+  const logoProvider = currentProvider
+    ? providerToLogoProvider[currentProvider]
+    : null;
+
   // Derive file upload capabilities from model input modalities
   const modelSupportsFiles = supportsFileUploads(inputModalities);
   const acceptedFileTypes = getAcceptedFileTypes(inputModalities);
   const supportedTypesDescription =
     getSupportedFileTypesDescription(inputModalities);
 
-  // Check if agent has tools or delegations
-  const { data: tools = [] } = useProfileToolsWithIds(agentId);
-  const { data: delegatedAgents = [] } = useAgentDelegations(agentId);
+  // Check if agent has a knowledge base
+  const { data: agentData } = useProfile(agentId);
 
   // Check if user can update organization settings (to show settings link in tooltip)
   const { data: canUpdateOrganization } = useHasPermissions({
-    organization: ["update"],
+    securitySettings: ["update"],
+  });
+
+  // Chat placeholders from organization settings
+  const { data: orgData } = useOrganization();
+  const chatPlaceholders = useMemo(
+    () => orgData?.chatPlaceholders,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [orgData?.chatPlaceholders],
+  );
+  const { text: animatedPlaceholder, isAnimating } =
+    useTypingAnimation(chatPlaceholders);
+
+  // RBAC: check if user can see agent picker and provider settings in chat
+  const { data: canSeeAgentPicker } = useHasPermissions({
+    chatAgentPicker: ["enable"],
+  });
+  const { data: canSeeProviderSettings } = useHasPermissions({
+    chatProviderSettings: ["enable"],
   });
 
   const storageKey = conversationId
@@ -182,10 +223,17 @@ const PromptInputContent = ({
     [controller.textInput],
   );
 
-  // Check if there are tools or delegated agents
-  const hasTools = tools.length > 0;
-  const hasDelegatedAgents = delegatedAgents.length > 0;
-  const hasContent = hasTools || hasDelegatedAgents;
+  const knowledgeBaseIds =
+    ((agentData as Record<string, unknown> | null | undefined)
+      ?.knowledgeBaseIds as string[] | undefined) ?? [];
+  const connectorIds =
+    ((agentData as Record<string, unknown> | null | undefined)?.connectorIds as
+      | string[]
+      | undefined) ?? [];
+  const hasKnowledgeSources =
+    knowledgeBaseIds.length > 0 || connectorIds.length > 0;
+
+  const isMobile = useIsMobile();
 
   // Determine if file uploads should be shown
   // 1. Organization must allow file uploads (allowFileUploads)
@@ -207,39 +255,6 @@ const PromptInputContent = ({
       onSubmit={handleWrappedSubmit}
       accept={acceptedFileTypes}
     >
-      {agentId && (
-        <PromptInputHeader>
-          {hasContent ? (
-            <>
-              {hasTools && (
-                <ChatToolsDisplay
-                  agentId={agentId}
-                  conversationId={conversationId}
-                />
-              )}
-              {hasDelegatedAgents && (
-                <AgentToolsDisplay
-                  agentId={agentId}
-                  conversationId={conversationId}
-                  addAgentsButton={null}
-                />
-              )}
-            </>
-          ) : (
-            <div className="flex items-start">
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-7 px-2 gap-1.5 text-xs border-dashed"
-                onClick={onEditAgent}
-              >
-                <Plus className="h-3 w-3" />
-                <span>Add tools & sub-agents</span>
-              </Button>
-            </div>
-          )}
-        </PromptInputHeader>
-      )}
       {/* File attachments display - shown inline above textarea */}
       <PromptInputAttachments className="px-3 pt-2 pb-0">
         {(attachment) => <PromptInputAttachment data={attachment} />}
@@ -252,9 +267,16 @@ const PromptInputContent = ({
           />
         ) : (
           <PromptInputTextarea
-            placeholder="Type a message..."
+            placeholder={
+              conversationId
+                ? "Ask a follow-up..."
+                : isAnimating
+                  ? animatedPlaceholder
+                  : "What would you like to get done?"
+            }
             ref={textareaRef}
             className="px-4"
+            autoFocus
             disabled={submitDisabled}
             disableEnterSubmit={status !== "ready" && status !== "error"}
             data-testid={E2eTestId.ChatPromptTextarea}
@@ -262,8 +284,105 @@ const PromptInputContent = ({
         )}
       </PromptInputBody>
       <PromptInputFooter>
-        <PromptInputTools>
-          {/* File attachment button - direct click opens file browser, shows tooltip when disabled */}
+        <PromptInputTools className="gap-0.5">
+          {/* Mobile: vertical three-dots menu for collapsed toolbar items */}
+          {isMobile &&
+            (showDefaultLogo && logoProvider ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-8 px-2"
+                onClick={expandModelSelector}
+              >
+                <ModelSelectorLogo provider={logoProvider} className="size-4" />
+              </Button>
+            ) : (
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 px-2"
+                  >
+                    <MoreVerticalIcon className="size-4" />
+                    <span className="sr-only">More options</span>
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent side="top" align="start" className="w-auto p-3">
+                  <div className="flex flex-col gap-3">
+                    {canSeeAgentPicker &&
+                      selectorAgentId !== undefined &&
+                      onAgentChange && (
+                        <div>
+                          <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1">
+                            Agent
+                          </p>
+                          <InitialAgentSelector
+                            currentAgentId={selectorAgentId}
+                            onAgentChange={onAgentChange}
+                          />
+                        </div>
+                      )}
+                    {canSeeProviderSettings && (
+                      <>
+                        {(conversationId || onApiKeyChange) && (
+                          <div>
+                            <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1">
+                              Provider API Key
+                            </p>
+                            <ChatApiKeySelector
+                              conversationId={conversationId}
+                              currentProvider={currentProvider}
+                              currentConversationChatApiKeyId={
+                                conversationId
+                                  ? (currentConversationChatApiKeyId ?? null)
+                                  : (initialApiKeyId ?? null)
+                              }
+                              messageCount={messageCount}
+                              onApiKeyChange={onApiKeyChange}
+                              onProviderChange={onProviderChange}
+                              isModelsLoading={isModelsLoading}
+                              agentLlmApiKeyId={agentLlmApiKeyId}
+                            />
+                          </div>
+                        )}
+                        <div>
+                          <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1">
+                            Model
+                          </p>
+                          <ModelSelector
+                            selectedModel={selectedModel}
+                            onModelChange={onModelChange}
+                            onOpenChange={onModelSelectorOpenChange}
+                            apiKeyId={
+                              conversationId
+                                ? currentConversationChatApiKeyId
+                                : initialApiKeyId
+                            }
+                          />
+                        </div>
+                      </>
+                    )}
+                    {tokensUsed > 0 && maxContextLength && (
+                      <div>
+                        <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1">
+                          Context
+                        </p>
+                        <ContextIndicator
+                          tokensUsed={tokensUsed}
+                          maxTokens={maxContextLength}
+                          size="sm"
+                        />
+                      </div>
+                    )}
+                  </div>
+                </PopoverContent>
+              </Popover>
+            ))}
+
+          {/* File attachment button - always visible */}
           {showFileUploadButton ? (
             <Tooltip>
               <TooltipTrigger asChild>
@@ -319,51 +438,90 @@ const PromptInputContent = ({
               </TooltipContent>
             </Tooltip>
           )}
-          <ModelSelector
-            selectedModel={selectedModel}
-            onModelChange={onModelChange}
-            onOpenChange={(open) => {
-              if (!open) {
-                setTimeout(() => {
-                  textareaRef.current?.focus();
-                }, 100);
-              }
-            }}
-          />
-          {tokensUsed > 0 && maxContextLength && (
-            <ContextIndicator
-              tokensUsed={tokensUsed}
-              maxTokens={maxContextLength}
-              size="sm"
-            />
-          )}
-          {(conversationId || onApiKeyChange) && (
-            <ChatApiKeySelector
-              conversationId={conversationId}
-              currentProvider={currentProvider}
-              currentConversationChatApiKeyId={
-                conversationId
-                  ? (currentConversationChatApiKeyId ?? null)
-                  : (initialApiKeyId ?? null)
-              }
-              messageCount={messageCount}
-              onApiKeyChange={onApiKeyChange}
-              onProviderChange={onProviderChange}
-              isModelsLoading={isModelsLoading}
-              agentLlmApiKeyId={agentLlmApiKeyId}
-              onOpenChange={(open) => {
-                if (!open) {
-                  setTimeout(() => {
-                    textareaRef.current?.focus();
-                  }, 100);
-                }
-              }}
-            />
+
+          {/* Desktop: inline toolbar items */}
+          {!isMobile && (
+            <>
+              {canSeeAgentPicker &&
+                selectorAgentId !== undefined &&
+                onAgentChange && (
+                  <InitialAgentSelector
+                    currentAgentId={selectorAgentId}
+                    onAgentChange={onAgentChange}
+                  />
+                )}
+              {!canSeeProviderSettings ? null : showDefaultLogo &&
+                logoProvider ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 px-2"
+                  onClick={expandModelSelector}
+                >
+                  <ModelSelectorLogo
+                    provider={logoProvider}
+                    className="size-4"
+                  />
+                </Button>
+              ) : (
+                <>
+                  {(conversationId || onApiKeyChange) && (
+                    <ChatApiKeySelector
+                      conversationId={conversationId}
+                      currentProvider={currentProvider}
+                      currentConversationChatApiKeyId={
+                        conversationId
+                          ? (currentConversationChatApiKeyId ?? null)
+                          : (initialApiKeyId ?? null)
+                      }
+                      messageCount={messageCount}
+                      onApiKeyChange={onApiKeyChange}
+                      onProviderChange={onProviderChange}
+                      isModelsLoading={isModelsLoading}
+                      agentLlmApiKeyId={agentLlmApiKeyId}
+                      onOpenChange={(open) => {
+                        if (!open) {
+                          setTimeout(() => {
+                            textareaRef.current?.focus();
+                          }, 100);
+                        }
+                      }}
+                    />
+                  )}
+                  <ModelSelector
+                    selectedModel={selectedModel}
+                    onModelChange={onModelChange}
+                    onOpenChange={(open) => {
+                      onModelSelectorOpenChange?.(open);
+                      if (!open) {
+                        setTimeout(() => {
+                          textareaRef.current?.focus();
+                        }, 100);
+                      }
+                    }}
+                    apiKeyId={
+                      conversationId
+                        ? currentConversationChatApiKeyId
+                        : initialApiKeyId
+                    }
+                  />
+                </>
+              )}
+              {tokensUsed > 0 && maxContextLength && (
+                <ContextIndicator
+                  tokensUsed={tokensUsed}
+                  maxTokens={maxContextLength}
+                  size="sm"
+                />
+              )}
+            </>
           )}
         </PromptInputTools>
         <div className="flex items-center gap-2">
-          <KnowledgeGraphUploadIndicator
+          <KnowledgeBaseUploadIndicator
             attachmentCount={controller.attachments.files.length}
+            hasKnowledgeBase={hasKnowledgeSources}
           />
           <PromptInputSpeechButton
             textareaRef={textareaRef}
@@ -396,13 +554,15 @@ const ArchestraPromptInput = ({
   textareaRef,
   allowFileUploads = false,
   isModelsLoading = false,
-  onEditAgent,
   tokensUsed = 0,
   maxContextLength,
   inputModalities,
   agentLlmApiKeyId,
   submitDisabled,
   isPlaywrightSetupVisible,
+  selectorAgentId,
+  onAgentChange,
+  onModelSelectorOpenChange,
 }: ArchestraPromptInputProps) => {
   return (
     <div className="flex size-full flex-col justify-end">
@@ -423,13 +583,15 @@ const ArchestraPromptInput = ({
           textareaRef={textareaRef}
           allowFileUploads={allowFileUploads}
           isModelsLoading={isModelsLoading}
-          onEditAgent={onEditAgent}
           tokensUsed={tokensUsed}
           maxContextLength={maxContextLength}
           inputModalities={inputModalities}
           agentLlmApiKeyId={agentLlmApiKeyId}
           submitDisabled={submitDisabled}
           isPlaywrightSetupVisible={isPlaywrightSetupVisible}
+          selectorAgentId={selectorAgentId}
+          onAgentChange={onAgentChange}
+          onModelSelectorOpenChange={onModelSelectorOpenChange}
         />
       </PromptInputProvider>
     </div>

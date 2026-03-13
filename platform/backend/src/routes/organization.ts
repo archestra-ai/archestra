@@ -1,11 +1,23 @@
-import { AUTO_PROVISIONED_INVITATION_STATUS, RouteId } from "@shared";
+import {
+  AUTO_PROVISIONED_INVITATION_STATUS,
+  addNomicTaskPrefix,
+  EMBEDDING_COMPATIBLE_PROVIDERS,
+  getEmbeddingDimensions,
+  RouteId,
+} from "@shared";
 import { and, eq, inArray, like } from "drizzle-orm";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
+import OpenAI from "openai";
 import { z } from "zod";
 import db, { schema } from "@/database";
+import { resolveApiKeyFromChatApiKey } from "@/knowledge-base/kb-llm-client";
 import {
+  AgentModel,
+  ChatApiKeyModel,
   InteractionModel,
   InvitationModel,
+  KbDocumentModel,
+  KnowledgeBaseConnectorModel,
   McpToolCallModel,
   MemberModel,
   OrganizationModel,
@@ -14,10 +26,15 @@ import {
 } from "@/models";
 import {
   ApiError,
+  CompleteOnboardingSchema,
   constructResponseSchema,
   PublicAppearanceSchema,
   SelectOrganizationSchema,
-  UpdateOrganizationSchema,
+  UpdateAgentSettingsSchema,
+  UpdateAppearanceSchema,
+  UpdateKnowledgeSettingsSchema,
+  UpdateLlmSettingsSchema,
+  UpdateSecuritySettingsSchema,
 } from "@/types";
 
 const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
@@ -43,13 +60,292 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.patch(
-    "/api/organization",
+    "/api/organization/appearance",
     {
       schema: {
-        operationId: RouteId.UpdateOrganization,
-        description: "Update organization details",
+        operationId: RouteId.UpdateAppearance,
+        description: "Update appearance settings (theme, logo, fonts)",
         tags: ["Organization"],
-        body: UpdateOrganizationSchema.partial(),
+        body: UpdateAppearanceSchema,
+        response: constructResponseSchema(SelectOrganizationSchema),
+      },
+    },
+    async ({ organizationId, body }, reply) => {
+      const organization = await OrganizationModel.patch(organizationId, body);
+
+      if (!organization) {
+        throw new ApiError(404, "Organization not found");
+      }
+
+      return reply.send(organization);
+    },
+  );
+
+  fastify.patch(
+    "/api/organization/security-settings",
+    {
+      schema: {
+        operationId: RouteId.UpdateSecuritySettings,
+        description:
+          "Update security settings (global tool policy, chat file uploads)",
+        tags: ["Organization"],
+        body: UpdateSecuritySettingsSchema,
+        response: constructResponseSchema(SelectOrganizationSchema),
+      },
+    },
+    async ({ organizationId, body }, reply) => {
+      const organization = await OrganizationModel.patch(organizationId, body);
+
+      if (!organization) {
+        throw new ApiError(404, "Organization not found");
+      }
+
+      return reply.send(organization);
+    },
+  );
+
+  fastify.patch(
+    "/api/organization/llm-settings",
+    {
+      schema: {
+        operationId: RouteId.UpdateLlmSettings,
+        description:
+          "Update LLM settings (TOON compression, compression scope, limit cleanup interval)",
+        tags: ["Organization"],
+        body: UpdateLlmSettingsSchema,
+        response: constructResponseSchema(SelectOrganizationSchema),
+      },
+    },
+    async ({ organizationId, body }, reply) => {
+      const organization = await OrganizationModel.patch(organizationId, body);
+
+      if (!organization) {
+        throw new ApiError(404, "Organization not found");
+      }
+
+      return reply.send(organization);
+    },
+  );
+
+  fastify.patch(
+    "/api/organization/agent-settings",
+    {
+      schema: {
+        operationId: RouteId.UpdateAgentSettings,
+        description: "Update agent settings (default model, default agent)",
+        tags: ["Organization"],
+        body: UpdateAgentSettingsSchema,
+        response: constructResponseSchema(SelectOrganizationSchema),
+      },
+    },
+    async ({ organizationId, body }, reply) => {
+      if (body.defaultLlmApiKeyId) {
+        const apiKey = await ChatApiKeyModel.findById(body.defaultLlmApiKeyId);
+        if (!apiKey || apiKey.organizationId !== organizationId) {
+          throw new ApiError(404, "API key not found");
+        }
+      }
+
+      if (body.defaultAgentId) {
+        const agent = await AgentModel.findById(body.defaultAgentId);
+        if (!agent || agent.organizationId !== organizationId) {
+          throw new ApiError(404, "Agent not found");
+        }
+      }
+
+      const organization = await OrganizationModel.patch(organizationId, body);
+
+      if (!organization) {
+        throw new ApiError(404, "Organization not found");
+      }
+
+      return reply.send(organization);
+    },
+  );
+
+  fastify.patch(
+    "/api/organization/knowledge-settings",
+    {
+      schema: {
+        operationId: RouteId.UpdateKnowledgeSettings,
+        description: "Update knowledge settings (embedding model)",
+        tags: ["Organization"],
+        body: UpdateKnowledgeSettingsSchema,
+        response: constructResponseSchema(SelectOrganizationSchema),
+      },
+    },
+    async ({ organizationId, body }, reply) => {
+      // Embedding model is locked once both key and model have been saved
+      if (body.embeddingModel) {
+        const currentOrg = await OrganizationModel.getById(organizationId);
+        if (
+          currentOrg?.embeddingChatApiKeyId &&
+          currentOrg?.embeddingModel &&
+          body.embeddingModel !== currentOrg.embeddingModel
+        ) {
+          throw new ApiError(
+            400,
+            "Embedding model cannot be changed once configured. Changing models requires re-embedding all documents.",
+          );
+        }
+      }
+
+      // Validate embedding API key uses an embedding-compatible provider
+      if (body.embeddingChatApiKeyId) {
+        const chatApiKey = await ChatApiKeyModel.findById(
+          body.embeddingChatApiKeyId,
+        );
+        if (!chatApiKey) {
+          throw new ApiError(404, "Embedding API key not found");
+        }
+        if (!EMBEDDING_COMPATIBLE_PROVIDERS.has(chatApiKey.provider)) {
+          throw new ApiError(
+            400,
+            "Embedding API key must use a compatible provider (OpenAI or Ollama)",
+          );
+        }
+      }
+
+      const organization = await OrganizationModel.patch(organizationId, body);
+
+      if (!organization) {
+        throw new ApiError(404, "Organization not found");
+      }
+
+      return reply.send(organization);
+    },
+  );
+
+  fastify.post(
+    "/api/organization/knowledge-settings/drop-embedding",
+    {
+      schema: {
+        operationId: RouteId.DropEmbeddingConfig,
+        description:
+          "Drop the embedding configuration, deleting all KB documents and resetting connector checkpoints",
+        tags: ["Organization"],
+        response: constructResponseSchema(SelectOrganizationSchema),
+      },
+    },
+    async ({ organizationId }, reply) => {
+      const currentOrg = await OrganizationModel.getById(organizationId);
+      if (!currentOrg?.embeddingChatApiKeyId || !currentOrg?.embeddingModel) {
+        throw new ApiError(
+          400,
+          "Embedding configuration is not locked — nothing to drop",
+        );
+      }
+
+      // Delete all KB documents (chunks cascade via FK)
+      await KbDocumentModel.deleteByOrganization(organizationId);
+
+      // Reset connector checkpoints so next sync does a full re-ingest
+      await KnowledgeBaseConnectorModel.resetCheckpointsByOrganization(
+        organizationId,
+      );
+
+      // Clear embedding config
+      const organization = await OrganizationModel.patch(organizationId, {
+        embeddingModel: null,
+        embeddingChatApiKeyId: null,
+      });
+
+      if (!organization) {
+        throw new ApiError(404, "Organization not found");
+      }
+
+      return reply.send(organization);
+    },
+  );
+
+  fastify.post(
+    "/api/organization/knowledge-settings/test-embedding",
+    {
+      schema: {
+        operationId: RouteId.TestEmbeddingConnection,
+        description: "Test the embedding connection by embedding a sample text",
+        tags: ["Organization"],
+        body: z.object({
+          embeddingChatApiKeyId: z.string().uuid(),
+          embeddingModel: z.string().min(1),
+        }),
+        response: constructResponseSchema(
+          z.object({
+            success: z.boolean(),
+            error: z.string().optional(),
+          }),
+        ),
+      },
+    },
+    async ({ body }, reply) => {
+      // Validate API key exists and uses an embedding-compatible provider
+      const chatApiKey = await ChatApiKeyModel.findById(
+        body.embeddingChatApiKeyId,
+      );
+      if (!chatApiKey) {
+        throw new ApiError(404, "API key not found");
+      }
+      if (!EMBEDDING_COMPATIBLE_PROVIDERS.has(chatApiKey.provider)) {
+        throw new ApiError(
+          400,
+          "Embedding API key must use a compatible provider (OpenAI or Ollama)",
+        );
+      }
+
+      // Resolve the actual secret
+      const resolved = await resolveApiKeyFromChatApiKey(
+        body.embeddingChatApiKeyId,
+      );
+      if (!resolved) {
+        return reply.send({
+          success: false,
+          error: "Could not resolve API key secret",
+        });
+      }
+
+      try {
+        const client = new OpenAI({
+          apiKey: resolved.apiKey,
+          baseURL: resolved.baseUrl ?? undefined,
+        });
+
+        const response = await client.embeddings.create({
+          model: body.embeddingModel,
+          input: [
+            addNomicTaskPrefix(
+              body.embeddingModel,
+              "hello world",
+              "search_document",
+            ),
+          ],
+          ...(body.embeddingModel.includes("nomic")
+            ? {}
+            : { dimensions: getEmbeddingDimensions(body.embeddingModel) }),
+        });
+
+        if (response.data.length > 0) {
+          return reply.send({ success: true });
+        }
+
+        return reply.send({
+          success: false,
+          error: "No embedding data returned",
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Unknown error";
+        return reply.send({ success: false, error: message });
+      }
+    },
+  );
+
+  fastify.post(
+    "/api/organization/complete-onboarding",
+    {
+      schema: {
+        operationId: RouteId.CompleteOnboarding,
+        description: "Mark organization onboarding as complete",
+        tags: ["Organization"],
+        body: CompleteOnboardingSchema,
         response: constructResponseSchema(SelectOrganizationSchema),
       },
     },
@@ -259,6 +555,30 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
       await UserModel.delete(userId);
 
       return reply.send({ success: true });
+    },
+  );
+
+  fastify.get(
+    "/api/organization/members",
+    {
+      schema: {
+        operationId: RouteId.GetOrganizationMembers,
+        description: "Get all members of the organization",
+        tags: ["Organization"],
+        response: constructResponseSchema(
+          z.array(
+            z.object({
+              id: z.string(),
+              name: z.string(),
+              email: z.string(),
+            }),
+          ),
+        ),
+      },
+    },
+    async ({ organizationId }, reply) => {
+      const members = await MemberModel.findAllByOrganization(organizationId);
+      return reply.send(members);
     },
   );
 

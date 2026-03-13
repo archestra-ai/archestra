@@ -4,7 +4,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // Controllable mock return values
 const mockUseSession = vi.fn();
 const mockUseDefaultCredentialsEnabled = vi.fn();
-const mockUseFeatures = vi.fn();
+const mockUseHasPermissions = vi.fn();
+const mockUseFeature = vi.fn();
 
 vi.mock("@/lib/clients/auth/auth-client", () => ({
   authClient: {
@@ -15,10 +16,11 @@ vi.mock("@/lib/clients/auth/auth-client", () => ({
 vi.mock("@/lib/auth.query", () => ({
   useDefaultCredentialsEnabled: (...args: unknown[]) =>
     mockUseDefaultCredentialsEnabled(...args),
+  useHasPermissions: (...args: unknown[]) => mockUseHasPermissions(...args),
 }));
 
 vi.mock("@/lib/config.query", () => ({
-  useFeatures: (...args: unknown[]) => mockUseFeatures(...args),
+  useFeature: (...args: unknown[]) => mockUseFeature(...args),
 }));
 
 const mockConfig = {
@@ -58,16 +60,14 @@ describe("SidebarWarnings", () => {
     vi.clearAllMocks();
     mockConfig.disableBasicAuth = false;
 
-    // Default: no session, no warnings
+    // Default: no session, no warnings, has org update permission
     mockUseSession.mockReturnValue({ data: null });
     mockUseDefaultCredentialsEnabled.mockReturnValue({
       data: false,
       isLoading: false,
     });
-    mockUseFeatures.mockReturnValue({
-      data: { globalToolPolicy: "strict" },
-      isLoading: false,
-    });
+    mockUseFeature.mockReturnValue("strict");
+    mockUseHasPermissions.mockReturnValue({ data: true });
   });
 
   it("renders nothing when there are no warnings", () => {
@@ -88,7 +88,7 @@ describe("SidebarWarnings", () => {
     mockUseSession.mockReturnValue({
       data: { user: { email: "admin@example.com" } },
     });
-    mockUseFeatures.mockReturnValue({ data: undefined, isLoading: true });
+    mockUseFeature.mockReturnValue(undefined);
     const { container } = render(<SidebarWarnings />);
     expect(container.firstChild).toBeNull();
   });
@@ -98,10 +98,7 @@ describe("SidebarWarnings", () => {
       mockUseSession.mockReturnValue({
         data: { user: { email: "other@example.com" } },
       });
-      mockUseFeatures.mockReturnValue({
-        data: { globalToolPolicy: "permissive" },
-        isLoading: false,
-      });
+      mockUseFeature.mockReturnValue("permissive");
 
       render(<SidebarWarnings />);
 
@@ -114,10 +111,7 @@ describe("SidebarWarnings", () => {
 
     it("does not show when no session exists", () => {
       mockUseSession.mockReturnValue({ data: null });
-      mockUseFeatures.mockReturnValue({
-        data: { globalToolPolicy: "permissive" },
-        isLoading: false,
-      });
+      mockUseFeature.mockReturnValue("permissive");
 
       const { container } = render(<SidebarWarnings />);
       expect(container.firstChild).toBeNull();
@@ -127,10 +121,7 @@ describe("SidebarWarnings", () => {
       mockUseSession.mockReturnValue({
         data: { user: { email: "user@example.com" } },
       });
-      mockUseFeatures.mockReturnValue({
-        data: { globalToolPolicy: "strict" },
-        isLoading: false,
-      });
+      mockUseFeature.mockReturnValue("strict");
 
       const { container } = render(<SidebarWarnings />);
       expect(container.firstChild).toBeNull();
@@ -206,10 +197,7 @@ describe("SidebarWarnings", () => {
         data: true,
         isLoading: false,
       });
-      mockUseFeatures.mockReturnValue({
-        data: { globalToolPolicy: "permissive" },
-        isLoading: false,
-      });
+      mockUseFeature.mockReturnValue("permissive");
 
       render(<SidebarWarnings />);
 
@@ -220,6 +208,52 @@ describe("SidebarWarnings", () => {
 
       // No accordion
       expect(screen.queryByText(/security warnings/)).not.toBeInTheDocument();
+    });
+  });
+
+  describe("permission gating", () => {
+    it("hides default credentials warning when user lacks securitySettings:update permission", () => {
+      mockUseSession.mockReturnValue({
+        data: { user: { email: "admin@example.com" } },
+      });
+      mockUseDefaultCredentialsEnabled.mockReturnValue({
+        data: true,
+        isLoading: false,
+      });
+      mockUseHasPermissions.mockReturnValue({ data: false });
+
+      const { container } = render(<SidebarWarnings />);
+      expect(
+        screen.queryByTestId("default-credentials-warning"),
+      ).not.toBeInTheDocument();
+      expect(container.firstChild).toBeNull();
+    });
+
+    it("hides security engine warning when user lacks securitySettings:update permission", () => {
+      mockUseSession.mockReturnValue({
+        data: { user: { email: "other@example.com" } },
+      });
+      mockUseFeature.mockReturnValue("permissive");
+      mockUseHasPermissions.mockReturnValue({ data: false });
+
+      const { container } = render(<SidebarWarnings />);
+      expect(screen.queryByText(/Security engine off/)).not.toBeInTheDocument();
+      expect(container.firstChild).toBeNull();
+    });
+
+    it("hides both warnings when user lacks securitySettings:update permission", () => {
+      mockUseSession.mockReturnValue({
+        data: { user: { email: "admin@example.com" } },
+      });
+      mockUseDefaultCredentialsEnabled.mockReturnValue({
+        data: true,
+        isLoading: false,
+      });
+      mockUseFeature.mockReturnValue("permissive");
+      mockUseHasPermissions.mockReturnValue({ data: false });
+
+      const { container } = render(<SidebarWarnings />);
+      expect(container.firstChild).toBeNull();
     });
   });
 });

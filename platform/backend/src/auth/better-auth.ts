@@ -30,19 +30,19 @@ import config from "@/config";
 import db, { schema } from "@/database";
 import logger from "@/logging";
 // Import directly from files to avoid circular dependency through barrel export
+import AgentModel from "@/models/agent";
 import InvitationModel from "@/models/invitation";
 import MemberModel from "@/models/member";
 import SessionModel from "@/models/session";
 
-const { ssoConfig, syncSsoRole, syncSsoTeams } =
-  config.enterpriseLicenseActivated
-    ? // biome-ignore lint/style/noRestrictedImports: EE-only SSO config
-      await import("./idp.ee")
-    : {
-        ssoConfig: undefined,
-        syncSsoRole: () => {},
-        syncSsoTeams: () => {},
-      };
+const { ssoConfig, syncSsoRole, syncSsoTeams } = config.enterpriseFeatures.core
+  ? // biome-ignore lint/style/noRestrictedImports: EE-only SSO config
+    await import("./idp.ee")
+  : {
+      ssoConfig: undefined,
+      syncSsoRole: () => {},
+      syncSsoTeams: () => {},
+    };
 
 const APP_NAME = "Archestra";
 const {
@@ -77,7 +77,12 @@ export const auth: any = betterAuth({
       ac,
       dynamicAccessControl: {
         enabled: true,
-        maximumRolesPerOrganization: 50, // Configurable limit for custom roles
+        /**
+         * By default, the maximum number of roles that can be created for an organization is infinite
+         * You can also pass a function that returns a number.
+         * https://better-auth.com/docs/plugins/organization#maximumrolesperorganization
+         */
+        // maximumRolesPerOrganization: 50,
         validateRoleName: async (roleName: string) => {
           // Role names must be lowercase alphanumeric with underscores
           if (!/^[a-z0-9_]+$/.test(roleName)) {
@@ -363,7 +368,7 @@ export async function handleBeforeHook(ctx: HookEndpointContext) {
     return ctx;
   }
 
-  logger.debug({ path, method }, "[auth:beforeHook] Processing auth request");
+  logger.trace({ path, method }, "[auth:beforeHook] Processing auth request");
 
   // Block invitation creation when invitations are disabled
   if (path === "/organization/invite-member" && method === "POST") {
@@ -571,7 +576,7 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
     return ctx;
   }
 
-  logger.debug({ path, method }, "[auth:afterHook] Processing post-auth hook");
+  logger.trace({ path, method }, "[auth:afterHook] Processing post-auth hook");
 
   // Delete invitation from DB when canceled (instead of marking as canceled)
   if (path === "/organization/cancel-invitation" && method === "POST") {
@@ -711,6 +716,24 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
         }
       } catch (error) {
         logger.error({ err: error }, "❌ Failed to set active organization:");
+      }
+
+      // Ensure user has a personal default chat agent (idempotent)
+      const orgId =
+        newSession.session.activeOrganizationId ||
+        (await MemberModel.getFirstMembershipForUser(userId))?.organizationId;
+      if (orgId) {
+        try {
+          await AgentModel.ensurePersonalChatAgent({
+            userId,
+            organizationId: orgId,
+          });
+        } catch (error) {
+          logger.error(
+            { err: error },
+            "Failed to ensure personal chat agent on sign-in",
+          );
+        }
       }
 
       // SSO Role & Team Sync: Synchronize role and team memberships based on SSO claims

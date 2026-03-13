@@ -407,6 +407,151 @@ describe("InternalMcpCatalogModel", () => {
     });
   });
 
+  describe("scope integration", () => {
+    test("create with context sets organizationId, authorId, and scope", async ({
+      makeUser,
+      makeOrganization,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+
+      const catalog = await InternalMcpCatalogModel.create(
+        {
+          name: "scoped-catalog",
+          serverType: "remote",
+          scope: "personal",
+        },
+        { organizationId: org.id, authorId: user.id },
+      );
+
+      expect(catalog.scope).toBe("personal");
+      expect(catalog.organizationId).toBe(org.id);
+      expect(catalog.authorId).toBe(user.id);
+      expect(catalog.authorName).toBeDefined();
+    });
+
+    test("create with teams populates team details", async ({
+      makeUser,
+      makeOrganization,
+      makeTeam,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      const team = await makeTeam(org.id, user.id);
+
+      const catalog = await InternalMcpCatalogModel.create(
+        {
+          name: "team-scoped-catalog",
+          serverType: "remote",
+          scope: "team",
+          teams: [team.id],
+        },
+        { organizationId: org.id, authorId: user.id },
+      );
+
+      expect(catalog.scope).toBe("team");
+      expect(catalog.teams).toHaveLength(1);
+      expect(catalog.teams[0].id).toBe(team.id);
+    });
+
+    test("findById with access check denies non-authorized user", async ({
+      makeUser,
+      makeOrganization,
+      makeInternalMcpCatalog,
+    }) => {
+      const author = await makeUser();
+      const otherUser = await makeUser();
+      const org = await makeOrganization();
+
+      const catalog = await makeInternalMcpCatalog({
+        scope: "personal",
+        organizationId: org.id,
+        authorId: author.id,
+      });
+
+      // Author can access
+      const found = await InternalMcpCatalogModel.findById(catalog.id, {
+        userId: author.id,
+        isAdmin: false,
+      });
+      expect(found).not.toBeNull();
+
+      // Other user cannot access
+      const denied = await InternalMcpCatalogModel.findById(catalog.id, {
+        userId: otherUser.id,
+        isAdmin: false,
+      });
+      expect(denied).toBeNull();
+
+      // Admin can access
+      const adminAccess = await InternalMcpCatalogModel.findById(catalog.id, {
+        userId: otherUser.id,
+        isAdmin: true,
+      });
+      expect(adminAccess).not.toBeNull();
+    });
+
+    test("update with teams syncs team assignments", async ({
+      makeUser,
+      makeOrganization,
+      makeTeam,
+      makeInternalMcpCatalog,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      const team1 = await makeTeam(org.id, user.id);
+      const team2 = await makeTeam(org.id, user.id);
+
+      const catalog = await makeInternalMcpCatalog({
+        scope: "team",
+        organizationId: org.id,
+        teams: [team1.id],
+      });
+
+      const updated = await InternalMcpCatalogModel.update(catalog.id, {
+        teams: [team2.id],
+      });
+
+      expect(updated?.teams).toHaveLength(1);
+      expect(updated?.teams[0].id).toBe(team2.id);
+    });
+
+    test("searchByQuery respects scope filtering", async ({
+      makeUser,
+      makeOrganization,
+      makeInternalMcpCatalog,
+    }) => {
+      const author = await makeUser();
+      const otherUser = await makeUser();
+      const org = await makeOrganization();
+
+      await makeInternalMcpCatalog({
+        name: "searchscope-personal-item",
+        scope: "personal",
+        organizationId: org.id,
+        authorId: author.id,
+      });
+
+      // Author finds it
+      const authorResults = await InternalMcpCatalogModel.searchByQuery(
+        "searchscope-personal",
+        { expandSecrets: false, userId: author.id, isAdmin: false },
+      );
+      expect(
+        authorResults.some((r) => r.name === "searchscope-personal-item"),
+      ).toBe(true);
+
+      // Other user does not
+      const otherResults = await InternalMcpCatalogModel.searchByQuery(
+        "searchscope-personal",
+        { expandSecrets: false, userId: otherUser.id, isAdmin: false },
+      );
+      expect(
+        otherResults.some((r) => r.name === "searchscope-personal-item"),
+      ).toBe(false);
+    });
+  });
+
   describe("Archestra Catalog", () => {
     test("Archestra catalog validates against SelectInternalMcpCatalogSchema", async ({
       seedAndAssignArchestraTools,

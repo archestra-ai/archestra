@@ -13,6 +13,7 @@ Check ../docs_writer_prompt.md before changing this file.
 ![Agent Platform Swarm](/docs/platform-agents-swarm.png)
 
 Agents in Archestra provide a comprehensive no-code solution for building autonomous and semi-autonomous agents that can access your data and work together in swarms. Each agent consists of a User Prompt, System Prompt, assigned tools, and sub-agents, and can be triggered via:
+
 - Archestra Chat UI
 - A2A (Agent-to-Agent) protocol
 - [Incoming Email](/docs/platform-agent-triggers-email)
@@ -91,3 +92,40 @@ A2A supports nested agent-to-agent calls. When one agent invokes another, the de
 
 A2A uses the same LLM configuration as Chat. See [Deployment - Environment Variables](/docs/platform-deployment#environment-variables) for the full list of `ARCHESTRA_CHAT_*` variables.
 
+## System Prompt Templating
+
+Agent system prompts support [Handlebars](https://handlebarsjs.com/) templating. Templates are rendered at runtime before the prompt is sent to the LLM, with the current user's context injected as variables.
+
+### Variables
+
+| Variable         | Type     | Description                          |
+| ---------------- | -------- | ------------------------------------ |
+| `{{user.name}}`  | string   | Name of the user invoking the agent  |
+| `{{user.email}}` | string   | Email of the user invoking the agent |
+| `{{user.teams}}` | string[] | Team names the user belongs to       |
+
+### Helpers
+
+| Helper            | Output       | Description                      |
+| ----------------- | ------------ | -------------------------------- |
+| `{{currentDate}}` | `2026-03-12` | Current date in UTC (YYYY-MM-DD) |
+| `{{currentTime}}` | `14:30:00 UTC` | Current time in UTC (HH:MM:SS UTC) |
+
+All [built-in Handlebars helpers](https://handlebarsjs.com/guide/builtin-helpers.html) (`#each`, `#if`, `#with`, `#unless`) are also available, along with Archestra helpers like `includes`, `equals`, `contains`, and `json`.
+
+### Example
+
+```handlebars
+You are a helpful assistant for
+{{user.name}}. Today's date is
+{{currentDate}}.
+
+{{#includes user.teams "Engineering"}}
+  You have access to engineering-specific tools and documentation.
+{{/includes}}
+
+{{#if user.teams}}
+  The user belongs to:
+  {{#each user.teams}}{{this}}{{#unless @last}}, {{/unless}}{{/each}}.
+{{/if}}
+```

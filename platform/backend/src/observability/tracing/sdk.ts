@@ -27,7 +27,8 @@ import {
 } from "@sentry/opentelemetry";
 import config from "@/config";
 import logger from "@/logging";
-import sentryClient from "@/sentry";
+import sentryClient from "@/observability/sentry";
+import { isNoiseRoute } from "@/observability/utils";
 import { ATTR_ROUTE_CATEGORY } from "./attributes";
 
 const {
@@ -143,7 +144,7 @@ const sdk = new NodeSDK({
           new FastifyOtelInstrumentation({
             registerOnInitialization: true,
             ignorePaths: (opts) => {
-              return opts.url.startsWith(config.observability.metrics.endpoint);
+              return isNoiseRoute(opts.url);
             },
           }),
         ]

@@ -1,5 +1,6 @@
 import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import Handlebars from "handlebars";
+import logger from "@/logging";
 import type { CommonToolResult } from "@/types";
 
 /**
@@ -137,6 +138,106 @@ Handlebars.registerHelper("pluck", (array, property) => {
     .map((item) => (typeof item === "object" && item ? item[property] : null))
     .filter((v) => v !== null && v !== undefined);
 });
+
+/**
+ * System prompt template helpers
+ */
+
+// Returns the current date in YYYY-MM-DD format (UTC)
+Handlebars.registerHelper("currentDate", () => {
+  return new Date().toISOString().split("T")[0];
+});
+
+// Returns the current time in HH:MM:SS UTC format
+Handlebars.registerHelper("currentTime", () => {
+  return `${new Date().toISOString().split("T")[1].split(".")[0]} UTC`;
+});
+
+/**
+ * Context for rendering system prompt templates
+ */
+export interface SystemPromptContext {
+  user: {
+    name: string;
+    email: string;
+    teams: string[];
+  };
+}
+
+/**
+ * Check if any of the given prompt strings contain Handlebars syntax (`{{`).
+ * Used to skip unnecessary DB queries (e.g. fetching user teams) when no
+ * templating is needed.
+ */
+export function promptNeedsRendering(
+  ...prompts: (string | null | undefined)[]
+): boolean {
+  return prompts.some((p) => p?.includes("{{"));
+}
+
+/**
+ * Build rendered system and user prompt parts from an agent's prompts.
+ * Skips template rendering (and avoids requiring a context) when the prompts
+ * don't contain Handlebars syntax.
+ */
+export function buildRenderedPrompts(params: {
+  systemPrompt: string | null;
+  userPrompt: string | null;
+  context: SystemPromptContext | null;
+}): { systemPromptParts: string[]; userPromptParts: string[] } {
+  const systemPromptParts: string[] = [];
+  const userPromptParts: string[] = [];
+
+  if (!params.systemPrompt && !params.userPrompt) {
+    return { systemPromptParts, userPromptParts };
+  }
+
+  const needsRendering =
+    params.context != null &&
+    promptNeedsRendering(params.systemPrompt, params.userPrompt);
+
+  if (params.systemPrompt) {
+    systemPromptParts.push(
+      needsRendering
+        ? renderSystemPrompt(params.systemPrompt, params.context!)
+        : params.systemPrompt,
+    );
+  }
+  if (params.userPrompt) {
+    userPromptParts.push(
+      needsRendering
+        ? renderSystemPrompt(params.userPrompt, params.context!)
+        : params.userPrompt,
+    );
+  }
+
+  return { systemPromptParts, userPromptParts };
+}
+
+/**
+ * Render a system prompt template with user context variables.
+ * If the template fails to compile or render, returns the original string unchanged
+ * so the agent still works without variable substitution.
+ *
+ * @param templateString - Handlebars template string (or plain text)
+ * @param context - User context with name, email, and teams
+ * @returns Rendered string, or original templateString on error
+ */
+export function renderSystemPrompt(
+  templateString: string,
+  context: SystemPromptContext,
+): string {
+  try {
+    const template = Handlebars.compile(templateString);
+    return template(context);
+  } catch (error) {
+    logger.warn(
+      { err: error },
+      "Failed to render system prompt template, using raw template string",
+    );
+    return templateString;
+  }
+}
 
 /**
  * Evaluate a Handlebars template for SSO role mapping.

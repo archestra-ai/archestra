@@ -1,5 +1,10 @@
 import { archestraApiSdk, type archestraApiTypes } from "@shared";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { handleApiError } from "./utils";
 
 const {
@@ -397,6 +402,7 @@ export function useAgentDelegations(agentId: string | undefined) {
     },
     enabled: !!agentId,
     staleTime: 0, // Always refetch to ensure fresh data
+    placeholderData: keepPreviousData,
   });
 }
 

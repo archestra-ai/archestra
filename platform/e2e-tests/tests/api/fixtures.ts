@@ -55,10 +55,16 @@ export interface TestFixtures {
   syncModels: typeof syncModels;
   updateModelPricing: typeof updateModelPricing;
   getOrganization: typeof getOrganization;
-  updateOrganization: typeof updateOrganization;
+  updateLlmSettings: typeof updateLlmSettings;
+  updateSecuritySettings: typeof updateSecuritySettings;
+  updateKnowledgeSettings: typeof updateKnowledgeSettings;
   getInteractions: typeof getInteractions;
   getWiremockRequests: typeof getWiremockRequests;
   clearWiremockRequests: typeof clearWiremockRequests;
+  createKnowledgeBase: typeof createKnowledgeBase;
+  deleteKnowledgeBase: typeof deleteKnowledgeBase;
+  createConnector: typeof createConnector;
+  deleteConnector: typeof deleteConnector;
   /** API request context authenticated as admin (same as default `request`) */
   adminRequest: APIRequestContext;
   /** API request context authenticated as editor */
@@ -828,21 +834,59 @@ const getOrganization = async (request: APIRequestContext) =>
   });
 
 /**
- * Update organization settings
+ * Update LLM settings (compression, cleanup interval)
  * (authnz is handled by the authenticated session)
  */
-const updateOrganization = async (
+const updateLlmSettings = async (
   request: APIRequestContext,
   updates: {
     convertToolResultsToToon?: boolean;
     compressionScope?: "organization" | "team";
-    globalToolPolicy?: "permissive" | "restrictive";
+    limitCleanupInterval?: "1h" | "12h" | "24h" | "1w" | "1m";
   },
 ) =>
   makeApiRequest({
     request,
     method: "patch",
-    urlSuffix: "/api/organization",
+    urlSuffix: "/api/organization/llm-settings",
+    data: updates,
+  });
+
+/**
+ * Update security settings (global tool policy, chat file uploads)
+ * (authnz is handled by the authenticated session)
+ */
+const updateSecuritySettings = async (
+  request: APIRequestContext,
+  updates: {
+    globalToolPolicy?: "permissive" | "restrictive";
+    allowChatFileUploads?: boolean;
+  },
+) =>
+  makeApiRequest({
+    request,
+    method: "patch",
+    urlSuffix: "/api/organization/security-settings",
+    data: updates,
+  });
+
+/**
+ * Update knowledge settings (embedding model, API keys, reranker)
+ * (authnz is handled by the authenticated session)
+ */
+const updateKnowledgeSettings = async (
+  request: APIRequestContext,
+  updates: {
+    embeddingModel?: "text-embedding-3-small" | "text-embedding-3-large";
+    embeddingChatApiKeyId?: string | null;
+    rerankerChatApiKeyId?: string | null;
+    rerankerModel?: string | null;
+  },
+) =>
+  makeApiRequest({
+    request,
+    method: "patch",
+    urlSuffix: "/api/organization/knowledge-settings",
     data: updates,
   });
 
@@ -940,6 +984,87 @@ const getWiremockRequests = async (
 const clearWiremockRequests = async (request: APIRequestContext) => {
   await request.delete(`${WIREMOCK_BASE_URL}/__admin/requests`);
 };
+
+/**
+ * Create a knowledge base
+ * (authnz is handled by the authenticated session)
+ */
+const createKnowledgeBase = async (request: APIRequestContext, name?: string) =>
+  makeApiRequest({
+    request,
+    method: "post",
+    urlSuffix: "/api/knowledge-bases",
+    data: {
+      name: name ?? `Test Knowledge Base ${crypto.randomUUID().slice(0, 8)}`,
+    },
+  });
+
+/**
+ * Delete a knowledge base by ID
+ * (authnz is handled by the authenticated session)
+ */
+const deleteKnowledgeBase = async (request: APIRequestContext, id: string) =>
+  makeApiRequest({
+    request,
+    method: "delete",
+    urlSuffix: `/api/knowledge-bases/${id}`,
+    ignoreStatusCheck: true,
+  });
+
+/**
+ * Create a connector for a knowledge base
+ * (authnz is handled by the authenticated session)
+ */
+const createConnector = async (
+  request: APIRequestContext,
+  kgId: string,
+  name?: string,
+  overrides?: {
+    connectorType?: string;
+    config?: Record<string, unknown>;
+    credentials?: { email: string; apiToken: string };
+    schedule?: string;
+    enabled?: boolean;
+  },
+) =>
+  makeApiRequest({
+    request,
+    method: "post",
+    urlSuffix: "/api/connectors",
+    data: {
+      name: name ?? `Test Connector ${crypto.randomUUID().slice(0, 8)}`,
+      knowledgeBaseIds: [kgId],
+      connectorType: overrides?.connectorType ?? "jira",
+      config: overrides?.config ?? {
+        type: "jira",
+        jiraBaseUrl: "https://test.atlassian.net",
+        isCloud: true,
+        projectKey: "TEST",
+      },
+      credentials: overrides?.credentials ?? {
+        email: "test@example.com",
+        apiToken: "test-token-123",
+      },
+      schedule: overrides?.schedule ?? "0 */6 * * *",
+      enabled: overrides?.enabled ?? true,
+    },
+  });
+
+/**
+ * Delete a connector by ID
+ * (authnz is handled by the authenticated session)
+ */
+const deleteConnector = async (
+  request: APIRequestContext,
+  _kgId: string,
+  connectorId: string,
+) =>
+  makeApiRequest({
+    request,
+    method: "delete",
+    urlSuffix: `/api/connectors/${connectorId}`,
+    ignoreStatusCheck: true,
+  });
 
 export * from "@playwright/test";
 export const test = base.extend<TestFixtures>({
@@ -1054,8 +1179,14 @@ export const test = base.extend<TestFixtures>({
   getOrganization: async ({}, use) => {
     await use(getOrganization);
   },
-  updateOrganization: async ({}, use) => {
-    await use(updateOrganization);
+  updateLlmSettings: async ({}, use) => {
+    await use(updateLlmSettings);
+  },
+  updateSecuritySettings: async ({}, use) => {
+    await use(updateSecuritySettings);
+  },
+  updateKnowledgeSettings: async ({}, use) => {
+    await use(updateKnowledgeSettings);
   },
   getInteractions: async ({}, use) => {
     await use(getInteractions);
@@ -1065,6 +1196,18 @@ export const test = base.extend<TestFixtures>({
   },
   clearWiremockRequests: async ({}, use) => {
     await use(clearWiremockRequests);
+  },
+  createKnowledgeBase: async ({}, use) => {
+    await use(createKnowledgeBase);
+  },
+  deleteKnowledgeBase: async ({}, use) => {
+    await use(deleteKnowledgeBase);
+  },
+  createConnector: async ({}, use) => {
+    await use(createConnector);
+  },
+  deleteConnector: async ({}, use) => {
+    await use(deleteConnector);
   },
   /**
    * Admin request - same auth as default `request` fixture

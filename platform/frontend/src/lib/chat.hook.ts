@@ -7,6 +7,8 @@ interface ConversationWithTitle {
 
 interface UseRecentlyGeneratedTitlesOptions {
   animationDuration?: number;
+  /** Max time to wait for title change before clearing regenerating state */
+  regenerationTimeout?: number;
 }
 
 interface UseRecentlyGeneratedTitlesReturn {
@@ -31,7 +33,7 @@ export function useRecentlyGeneratedTitles(
   conversations: ConversationWithTitle[],
   options: UseRecentlyGeneratedTitlesOptions = {},
 ): UseRecentlyGeneratedTitlesReturn {
-  const { animationDuration = 3000 } = options;
+  const { animationDuration = 3000, regenerationTimeout = 5_000 } = options;
 
   const [recentlyGeneratedTitles, setRecentlyGeneratedTitles] = useState<
     Set<string>
@@ -44,6 +46,10 @@ export function useRecentlyGeneratedTitles(
   const previousTitlesRef = useRef<Map<string, string | null>>(new Map());
   // Store individual timeouts per conversation to avoid canceling each other
   const animationTimeoutsRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
+  // Store regeneration timeout IDs for cleanup
+  const regenerationTimeoutsRef = useRef<Map<string, NodeJS.Timeout>>(
+    new Map(),
+  );
 
   // Helper to start animation for a conversation
   const startAnimation = useCallback(
@@ -54,6 +60,13 @@ export function useRecentlyGeneratedTitles(
         next.delete(conversationId);
         return next;
       });
+
+      // Clear the regeneration timeout since title changed successfully
+      const regenTimeout = regenerationTimeoutsRef.current.get(conversationId);
+      if (regenTimeout) {
+        clearTimeout(regenTimeout);
+        regenerationTimeoutsRef.current.delete(conversationId);
+      }
 
       // Add to recently generated set
       setRecentlyGeneratedTitles((prev) => new Set(prev).add(conversationId));
@@ -80,9 +93,28 @@ export function useRecentlyGeneratedTitles(
   );
 
   // Mark a conversation as regenerating (don't show animation until new title arrives)
-  const triggerRegeneration = useCallback((conversationId: string) => {
-    setRegeneratingTitles((prev) => new Set(prev).add(conversationId));
-  }, []);
+  const triggerRegeneration = useCallback(
+    (conversationId: string) => {
+      setRegeneratingTitles((prev) => new Set(prev).add(conversationId));
+
+      // Safety net: clear regenerating state after timeout in case title never changes
+      // (e.g. backend failure returns unchanged conversation, or LLM generates same title)
+      const existingTimeout =
+        regenerationTimeoutsRef.current.get(conversationId);
+      if (existingTimeout) {
+        clearTimeout(existingTimeout);
+      }
+
+      const timeout = setTimeout(() => {
+        regenerationTimeoutsRef.current.delete(conversationId);
+        // Title didn't change (e.g. same title regenerated) — still show animation
+        startAnimation(conversationId);
+      }, regenerationTimeout);
+
+      regenerationTimeoutsRef.current.set(conversationId, timeout);
+    },
+    [regenerationTimeout, startAnimation],
+  );
 
   // Detect when a title changes
   useEffect(() => {
@@ -111,11 +143,16 @@ export function useRecentlyGeneratedTitles(
   // Cleanup timeouts on unmount
   useEffect(() => {
     const timeouts = animationTimeoutsRef.current;
+    const regenTimeouts = regenerationTimeoutsRef.current;
     return () => {
       for (const timeout of timeouts.values()) {
         clearTimeout(timeout);
       }
       timeouts.clear();
+      for (const timeout of regenTimeouts.values()) {
+        clearTimeout(timeout);
+      }
+      regenTimeouts.clear();
     };
   }, []);
 

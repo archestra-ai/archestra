@@ -22,8 +22,8 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
+  DialogStickyFooter,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Form } from "@/components/ui/form";
@@ -74,6 +74,9 @@ export function EditIdentityProviderDialog({
         },
         overrideUserInfo: true,
       },
+      roleMapping: {
+        rules: [],
+      },
     },
   });
 
@@ -88,8 +91,10 @@ export function EditIdentityProviderDialog({
         issuer: provider.issuer,
         domain: provider.domain,
         providerType: isSaml ? "saml" : "oidc",
-        // Include roleMapping and teamSyncConfig if they exist on the provider
-        ...(provider.roleMapping && { roleMapping: provider.roleMapping }),
+        roleMapping: {
+          rules: [],
+          ...provider.roleMapping,
+        },
         ...(provider.teamSyncConfig && {
           teamSyncConfig: provider.teamSyncConfig,
         }),
@@ -134,11 +139,14 @@ export function EditIdentityProviderDialog({
   const onSubmit = useCallback(
     async (data: IdentityProviderFormValues) => {
       if (!provider) return;
-      await updateIdentityProvider.mutateAsync({
+      const result = await updateIdentityProvider.mutateAsync({
         id: provider.id,
         data,
       });
-      onOpenChange(false);
+      // Only close the dialog if update succeeded (result is not null)
+      if (result) {
+        onOpenChange(false);
+      }
     },
     [provider, updateIdentityProvider, onOpenChange],
   );
@@ -160,7 +168,7 @@ export function EditIdentityProviderDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
+      <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Edit Identity Provider</DialogTitle>
           <DialogDescription>
@@ -169,19 +177,14 @@ export function EditIdentityProviderDialog({
         </DialogHeader>
 
         <Form {...form}>
-          <form
-            onSubmit={form.handleSubmit(onSubmit)}
-            className="flex flex-col flex-1 overflow-hidden"
-          >
-            <div className="flex-1 overflow-y-auto py-4">
-              {providerType === "saml" ? (
-                <SamlConfigForm form={form} />
-              ) : (
-                <OidcConfigForm form={form} />
-              )}
-            </div>
+          <form onSubmit={form.handleSubmit(onSubmit)}>
+            {providerType === "saml" ? (
+              <SamlConfigForm form={form} />
+            ) : (
+              <OidcConfigForm form={form} />
+            )}
 
-            <DialogFooter className="mt-4">
+            <DialogStickyFooter>
               <div className="flex w-full justify-between">
                 <PermissionButton
                   type="button"
@@ -207,7 +210,7 @@ export function EditIdentityProviderDialog({
                   </PermissionButton>
                 </div>
               </div>
-            </DialogFooter>
+            </DialogStickyFooter>
           </form>
         </Form>
       </DialogContent>

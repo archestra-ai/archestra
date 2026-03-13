@@ -870,6 +870,14 @@ class MSTeamsProvider implements ChatOpsProvider {
     });
   }
 
+  hasMissingScopes(): boolean {
+    return false;
+  }
+
+  async notifyMissingScopes(): Promise<void> {
+    // No-op: MS Teams permissions are managed in Azure AD and can't be detected at runtime
+  }
+
   async downloadFiles(
     files: ChatThreadMessageFile[],
   ): Promise<

@@ -1,6 +1,6 @@
 "use client";
 
-import type { archestraApiTypes } from "@shared";
+import { type archestraApiTypes, DocsPage, getDocsUrl } from "@shared";
 import { ChevronDown } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
@@ -209,7 +209,7 @@ function DualLLMContent({
                 separate agent that can only respond via structured multiple
                 choice answers.{" "}
                 <a
-                  href="https://archestra.ai/docs/platform-dual-llm"
+                  href={getDocsUrl(DocsPage.PlatformDualLlm)}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-primary hover:underline"
@@ -395,7 +395,7 @@ function DualLLMContent({
               agent that can only respond via structured multiple choice
               answers.{" "}
               <a
-                href="https://archestra.ai/docs/platform-dual-llm"
+                href={getDocsUrl(DocsPage.PlatformDualLlm)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-primary hover:underline"

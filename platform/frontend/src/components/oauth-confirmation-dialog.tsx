@@ -15,7 +15,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { useFeatureFlag } from "@/lib/features.hook";
+import { useFeature } from "@/lib/config.query";
 
 export interface OAuthInstallResult {
   /** Team ID to assign the MCP server to (null for personal) */
@@ -30,6 +30,10 @@ interface OAuthConfirmationDialogProps {
   onCancel: () => void;
   /** Catalog ID to filter existing installations */
   catalogId?: string;
+  /** Pre-select a specific team in the credential type selector */
+  preselectedTeamId?: string | null;
+  /** When true, only personal installation is allowed */
+  personalOnly?: boolean;
 }
 
 export function OAuthConfirmationDialog({
@@ -39,10 +43,12 @@ export function OAuthConfirmationDialog({
   onConfirm,
   onCancel,
   catalogId,
+  preselectedTeamId,
+  personalOnly = false,
 }: OAuthConfirmationDialogProps) {
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
   const [canInstall, setCanInstall] = useState(true);
-  const byosEnabled = useFeatureFlag("byosEnabled");
+  const byosEnabled = useFeature("byosEnabled");
 
   const handleConfirm = () => {
     onConfirm({ teamId: selectedTeamId });
@@ -100,6 +106,8 @@ export function OAuthConfirmationDialog({
               onTeamChange={setSelectedTeamId}
               catalogId={catalogId}
               onCanInstallChange={setCanInstall}
+              preselectedTeamId={preselectedTeamId}
+              personalOnly={personalOnly}
             />
           </div>
 

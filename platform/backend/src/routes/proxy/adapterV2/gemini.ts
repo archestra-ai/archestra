@@ -342,9 +342,7 @@ class GeminiRequestAdapter
       });
     }
 
-    if (config.features.browserStreamingEnabled) {
-      contents = this.convertToolResultContent(contents);
-    }
+    contents = this.convertToolResultContent(contents);
 
     return {
       ...this.request,
@@ -1320,18 +1318,19 @@ export const geminiAdapterFactory: LLMProvider<
 
   createClient(
     apiKey: string | undefined,
-    options?: CreateClientOptions,
+    options: CreateClientOptions,
   ): GoogleGenAI {
-    if (options?.mockMode) {
+    if (options.mockMode) {
       return new MockGeminiClient() as unknown as GoogleGenAI;
     }
     const client = createGoogleGenAIClient(apiKey, "[GeminiProxyV2]");
 
     // Wrap with observability for request duration metrics
-    if (options?.agent) {
+    if (options.agent) {
       return metrics.llm.getObservableGenAI(
         client,
         options.agent,
+        options.source,
         options.externalAgentId,
       );
     }

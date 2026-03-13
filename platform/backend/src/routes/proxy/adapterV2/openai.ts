@@ -315,26 +315,24 @@ export class OpenAIRequestAdapter
       messages = this.applyUpdates(messages, this.toolResultUpdates);
     }
 
-    if (config.features.browserStreamingEnabled) {
-      messages = this.convertToolResultContent(messages);
-      const sizeBeforeStrip = estimateMessagesSize(messages);
-      messages = stripBrowserToolsResults(messages);
-      const sizeAfterStrip = estimateMessagesSize(messages);
+    messages = this.convertToolResultContent(messages);
+    const sizeBeforeStrip = estimateMessagesSize(messages);
+    messages = stripBrowserToolsResults(messages);
+    const sizeAfterStrip = estimateMessagesSize(messages);
 
-      if (sizeBeforeStrip.length !== sizeAfterStrip.length) {
-        logger.info(
-          {
-            sizeBeforeKB: Math.round(sizeBeforeStrip.length / 1024),
-            sizeAfterKB: Math.round(sizeAfterStrip.length / 1024),
-            savedKB: Math.round(
-              (sizeBeforeStrip.length - sizeAfterStrip.length) / 1024,
-            ),
-            sizeEstimateReliable:
-              !sizeBeforeStrip.isEstimated && !sizeAfterStrip.isEstimated,
-          },
-          "[OpenAIAdapter] Stripped browser tool results",
-        );
-      }
+    if (sizeBeforeStrip.length !== sizeAfterStrip.length) {
+      logger.info(
+        {
+          sizeBeforeKB: Math.round(sizeBeforeStrip.length / 1024),
+          sizeAfterKB: Math.round(sizeAfterStrip.length / 1024),
+          savedKB: Math.round(
+            (sizeBeforeStrip.length - sizeAfterStrip.length) / 1024,
+          ),
+          sizeEstimateReliable:
+            !sizeBeforeStrip.isEstimated && !sizeAfterStrip.isEstimated,
+        },
+        "[OpenAIAdapter] Stripped browser tool results",
+      );
     }
 
     // Calculate approximate request size for debugging
@@ -1168,24 +1166,76 @@ export const openaiAdapterFactory: LLMProvider<
 
   createClient(
     apiKey: string | undefined,
-    options?: CreateClientOptions,
+    options: CreateClientOptions,
   ): OpenAIProvider {
-    if (options?.mockMode) {
+    if (options.mockMode) {
       return new MockOpenAIClient() as unknown as OpenAIProvider;
     }
 
     // Use observable fetch for request duration metrics if agent is provided
-    const customFetch = options?.agent
+    const baseFetch = options.agent
       ? metrics.llm.getObservableFetch(
           "openai",
           options.agent,
+          options.source,
           options.externalAgentId,
         )
       : undefined;
 
+    // Wrap fetch to normalize non-OpenAI error responses (e.g. LiteLLM/vLLM)
+    // into OpenAI-compatible format so the SDK surfaces the real error message
+    // instead of "500 status code (no body)".
+    const customFetch = async (
+      url: string | URL | Request,
+      init?: RequestInit,
+    ): Promise<Response> => {
+      const response = await (baseFetch ?? fetch)(url, init);
+
+      if (!response.ok) {
+        const contentType = response.headers.get("content-type") || "";
+        // Only intercept JSON responses — SSE streams are handled differently
+        if (contentType.includes("application/json")) {
+          try {
+            const cloned = response.clone();
+            const rawBody = await cloned.text();
+            if (rawBody) {
+              const parsed = JSON.parse(rawBody);
+              // If the body already has an OpenAI-compatible error.message, leave it
+              if (parsed?.error?.message) {
+                return response;
+              }
+              // Re-wrap non-standard error body into OpenAI format
+              const errorMessage = parsed?.message || rawBody;
+              const formattedBody = JSON.stringify({
+                error: {
+                  message:
+                    typeof errorMessage === "string"
+                      ? errorMessage
+                      : JSON.stringify(errorMessage),
+                  type: "upstream_error",
+                  code: response.status,
+                },
+              });
+              return new Response(formattedBody, {
+                status: response.status,
+                statusText: response.statusText,
+                headers: new Headers({
+                  "content-type": "application/json",
+                }),
+              });
+            }
+          } catch {
+            // Can't parse body — return original response
+          }
+        }
+      }
+
+      return response;
+    };
+
     return new OpenAIProvider({
       apiKey,
-      baseURL: options?.baseUrl,
+      baseURL: options.baseUrl,
       fetch: customFetch,
     });
   },
@@ -1226,13 +1276,23 @@ export const openaiAdapterFactory: LLMProvider<
   },
 
   extractErrorMessage(error: unknown): string {
-    // OpenAI SDK error structure
+    // OpenAI SDK APIError — has .error.message with the upstream error
     const openaiMessage = get(error, "error.message");
     if (typeof openaiMessage === "string") {
       return openaiMessage;
     }
 
     if (error instanceof Error) {
+      // Node.js stream termination produces a bare "terminated" message.
+      // Make it actionable for users (common with LiteLLM/vLLM proxies).
+      if (error.message === "terminated") {
+        const status = get(error, "status");
+        if (typeof status === "number") {
+          return `Upstream provider returned HTTP ${status} and closed the connection`;
+        }
+        return "Upstream provider closed the connection unexpectedly";
+      }
+
       return error.message;
     }
 

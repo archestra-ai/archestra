@@ -124,6 +124,7 @@ ENV ARCHESTRA_INTERNAL_API_BASE_URL="http://localhost:9000"
 ENV ARCHESTRA_API_BASE_URL=""
 ENV ARCHESTRA_ANALYTICS="enabled"
 ENV ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED="false"
+ENV ARCHESTRA_ENTERPRISE_LICENSE_FULL_WHITE_LABELING="false"
 ENV ARCHESTRA_AUTH_DISABLE_BASIC_AUTH="false"
 ENV ARCHESTRA_AUTH_DISABLE_INVITATIONS="false"
 ENV ARCHESTRA_SENTRY_FRONTEND_DSN=""
@@ -134,8 +135,8 @@ ENV ARCHESTRA_SENTRY_ENVIRONMENT=""
 ENV NODE_EXTRA_CA_CERTS="/etc/ssl/certs/cloud-database-ca-bundle.pem"
 
 RUN apk --no-cache upgrade && \
-    # Install PostgreSQL 17 (pin 17.8-r0 for CVE-2026-2004..2007), supervisord, and wget
-    apk add --no-cache postgresql17=17.8-r0 postgresql17-contrib=17.8-r0 su-exec wget && \
+    # Install PostgreSQL 17, pgvector, supervisord, and wget
+    apk add --no-cache postgresql17=17.9-r0 postgresql17-contrib=17.9-r0 postgresql-pgvector su-exec wget && \
     # Download cloud database CA bundles for SSL certificate validation
     # AWS RDS global CA bundle
     wget -qO /tmp/aws-rds-ca.pem https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem && \
@@ -298,7 +299,7 @@ priority=20
 # See: https://nextjs.org/docs/app/api-reference/config/next-config-js/output#automatically-copying-traced-files
 # NEXT_PUBLIC_* variables are mapped from ARCHESTRA_* ENV variables
 # All other environment variables (NODE_ENV, etc.) are inherited automatically
-environment=HOSTNAME="0.0.0.0",NEXT_PUBLIC_ARCHESTRA_API_BASE_URL="%(ENV_ARCHESTRA_API_BASE_URL)s",NEXT_PUBLIC_ARCHESTRA_ANALYTICS="%(ENV_ARCHESTRA_ANALYTICS)s",NEXT_PUBLIC_ARCHESTRA_SENTRY_FRONTEND_DSN="%(ENV_ARCHESTRA_SENTRY_FRONTEND_DSN)s",NEXT_PUBLIC_ARCHESTRA_SENTRY_ENVIRONMENT="%(ENV_ARCHESTRA_SENTRY_ENVIRONMENT)s",NEXT_PUBLIC_ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED="%(ENV_ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED)s",NEXT_PUBLIC_ARCHESTRA_AUTH_DISABLE_BASIC_AUTH="%(ENV_ARCHESTRA_AUTH_DISABLE_BASIC_AUTH)s",NEXT_PUBLIC_ARCHESTRA_AUTH_DISABLE_INVITATIONS="%(ENV_ARCHESTRA_AUTH_DISABLE_INVITATIONS)s"
+environment=HOSTNAME="0.0.0.0",NEXT_PUBLIC_ARCHESTRA_API_BASE_URL="%(ENV_ARCHESTRA_API_BASE_URL)s",NEXT_PUBLIC_ARCHESTRA_ANALYTICS="%(ENV_ARCHESTRA_ANALYTICS)s",NEXT_PUBLIC_ARCHESTRA_SENTRY_FRONTEND_DSN="%(ENV_ARCHESTRA_SENTRY_FRONTEND_DSN)s",NEXT_PUBLIC_ARCHESTRA_SENTRY_ENVIRONMENT="%(ENV_ARCHESTRA_SENTRY_ENVIRONMENT)s",NEXT_PUBLIC_ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED="%(ENV_ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED)s",NEXT_PUBLIC_ARCHESTRA_ENTERPRISE_LICENSE_FULL_WHITE_LABELING="%(ENV_ARCHESTRA_ENTERPRISE_LICENSE_FULL_WHITE_LABELING)s",NEXT_PUBLIC_ARCHESTRA_AUTH_DISABLE_BASIC_AUTH="%(ENV_ARCHESTRA_AUTH_DISABLE_BASIC_AUTH)s",NEXT_PUBLIC_ARCHESTRA_AUTH_DISABLE_INVITATIONS="%(ENV_ARCHESTRA_AUTH_DISABLE_INVITATIONS)s"
 EOF
 
 # Create postgres program configuration (to be conditionally included)
@@ -568,10 +569,24 @@ if [ "$USE_EXTERNAL_DB" = "false" ]; then
             GRANT ALL PRIVILEGES ON DATABASE ${POSTGRES_DB} TO ${POSTGRES_USER};
 EOSQL
 
+        # Create pgvector extension as superuser (required for knowledge base feature)
+        psql -v ON_ERROR_STOP=1 --username postgres --dbname ${POSTGRES_DB} <<-EOSQL
+            CREATE EXTENSION IF NOT EXISTS vector;
+EOSQL
+
         # Stop PostgreSQL
         su-exec postgres pg_ctl -D /var/lib/postgresql/data -m fast -w stop
 
         echo "PostgreSQL initialized successfully"
+    else
+        # Existing database — ensure pgvector extension exists (idempotent).
+        # On first init the extension is created above, but upgrades from older
+        # images need it created retroactively before Drizzle migrations run.
+        su-exec postgres pg_ctl -D /var/lib/postgresql/data -o "-c listen_addresses=''" -w start
+        psql -v ON_ERROR_STOP=1 --username postgres --dbname ${POSTGRES_DB} <<-EOSQL
+            CREATE EXTENSION IF NOT EXISTS vector;
+EOSQL
+        su-exec postgres pg_ctl -D /var/lib/postgresql/data -m fast -w stop
     fi
 else
     echo "Using external PostgreSQL database"

@@ -5,7 +5,7 @@
  */
 
 import type { archestraApiTypes } from "@shared";
-import type { PartialUIMessage } from "@/components/chatbot-demo";
+import type { PartialUIMessage } from "@/components/message-thread";
 import type { DualLlmResult, Interaction, InteractionUtils } from "./common";
 
 class CohereChatInteraction implements InteractionUtils {
@@ -231,12 +231,26 @@ class CohereChatInteraction implements InteractionUtils {
           output = message.content;
         }
 
+        // Resolve the tool name from the corresponding assistant tool call
+        let resolvedToolName = "tool-result";
+        for (const m of messages) {
+          if ("tool_calls" in m && Array.isArray(m.tool_calls)) {
+            const tc = m.tool_calls.find(
+              (t: { id?: string }) => t.id === message.tool_call_id,
+            );
+            if (tc && "function" in tc) {
+              resolvedToolName = (tc.function as { name: string }).name;
+              break;
+            }
+          }
+        }
+
         uiMessages.push({
           role: "assistant",
           parts: [
             {
               type: "dynamic-tool",
-              toolName: "tool-result",
+              toolName: resolvedToolName,
               toolCallId: message.tool_call_id,
               state: "output-available",
               input: {},
@@ -260,7 +274,7 @@ class CohereChatInteraction implements InteractionUtils {
         }
       }
 
-      // Check for policy denial or refusal. We push the text so ChatBotDemo can parse it.
+      // Check for policy denial or refusal. We push the text so MessageThread can parse it.
       if (parts.length > 0) {
         uiMessages.push({ role: "assistant", parts });
       }

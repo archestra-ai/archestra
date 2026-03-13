@@ -19,7 +19,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { useUpdateOrganization } from "@/lib/organization.query";
+import { useCompleteOnboarding } from "@/lib/organization.query";
 import { cn } from "@/lib/utils";
 
 interface AlternativeOnboardingDialogProps {
@@ -33,15 +33,10 @@ export function AlternativeOnboardingDialog({
     null,
   );
   const [isHovering, setIsHovering] = useState<"proxy" | "chat" | null>(null);
-  const { mutate: completeOnboarding } = useUpdateOrganization(
-    "Onboarding complete",
-    "Failed to complete onboarding",
-  );
+  const { mutate: completeOnboarding } = useCompleteOnboarding();
 
   const handleFinishOnboarding = useCallback(() => {
-    completeOnboarding({
-      onboardingComplete: true,
-    });
+    completeOnboarding();
   }, [completeOnboarding]);
 
   const handleDialogOpenChange = useCallback(

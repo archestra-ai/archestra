@@ -1,6 +1,10 @@
 "use client";
 
-import { archestraApiSdk, type archestraApiTypes } from "@shared";
+import {
+  archestraApiSdk,
+  type archestraApiTypes,
+  type InteractionSource,
+} from "@shared";
 import { useQuery } from "@tanstack/react-query";
 import { DEFAULT_TABLE_LIMIT, handleApiError } from "./utils";
 
@@ -158,6 +162,7 @@ export function useUniqueUserIds() {
 export function useInteractionSessions({
   profileId,
   userId,
+  source,
   sessionId,
   startDate,
   endDate,
@@ -168,6 +173,7 @@ export function useInteractionSessions({
 }: {
   profileId?: string;
   userId?: string;
+  source?: InteractionSource;
   sessionId?: string;
   startDate?: string;
   endDate?: string;
@@ -182,6 +188,7 @@ export function useInteractionSessions({
       "sessions",
       profileId,
       userId,
+      source,
       sessionId,
       startDate,
       endDate,
@@ -194,6 +201,7 @@ export function useInteractionSessions({
         query: {
           ...(profileId ? { profileId } : {}),
           ...(userId ? { userId } : {}),
+          ...(source ? { source } : {}),
           ...(sessionId ? { sessionId } : {}),
           ...(startDate ? { startDate } : {}),
           ...(endDate ? { endDate } : {}),
@@ -225,6 +233,7 @@ export function useInteractionSessions({
       limit === DEFAULT_TABLE_LIMIT &&
       !profileId &&
       !userId &&
+      !source &&
       !sessionId &&
       !startDate &&
       !endDate &&

@@ -3,7 +3,12 @@ import {
   type archestraApiTypes,
   type SupportedProvider,
 } from "@shared";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { useMemo } from "react";
 import { toast } from "sonner";
 import { handleApiError } from "./utils";
@@ -24,27 +29,35 @@ export type ModelCapabilities = NonNullable<ChatModel["capabilities"]>;
 
 /**
  * Fetch available chat models from all configured providers.
+ * When apiKeyId is provided, only returns models linked to that specific key.
  */
-export function useChatModels() {
+export function useChatModels(params?: { apiKeyId?: string | null }) {
+  const apiKeyId = params?.apiKeyId;
   return useQuery({
-    queryKey: ["chat-models"],
+    queryKey: ["chat-models", apiKeyId ?? null],
     queryFn: async (): Promise<ChatModel[]> => {
-      const { data, error } = await getChatModels();
+      const { data, error } = await getChatModels({
+        query: apiKeyId ? { apiKeyId } : undefined,
+      });
       if (error) {
         handleApiError(error);
         return [];
       }
       return data ?? [];
     },
+    // Keep showing previous models while fetching for a new apiKeyId,
+    // preventing display name flicker (e.g. "Claude Opus 4.1" → raw ID → back).
+    placeholderData: keepPreviousData,
   });
 }
 
 /**
  * Get models grouped by provider for UI display.
  * Returns models grouped by provider with loading/error states.
+ * When apiKeyId is provided, only returns models linked to that specific key.
  */
-export function useModelsByProvider() {
-  const query = useChatModels();
+export function useModelsByProvider(params?: { apiKeyId?: string | null }) {
+  const query = useChatModels(params);
 
   // Memoize to prevent creating new object reference on every render
   const modelsByProvider = useMemo(() => {
@@ -64,6 +77,7 @@ export function useModelsByProvider() {
   return {
     ...query,
     modelsByProvider,
+    isPlaceholderData: query.isPlaceholderData,
   };
 }
 

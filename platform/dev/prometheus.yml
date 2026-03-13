@@ -9,3 +9,9 @@ scrape_configs:
       - targets: ["host.docker.internal:9050"]
     metrics_path: "/metrics"
     scrape_interval: 10s
+
+  # Scrape PostgreSQL metrics (postgres_exporter sidecar via Bitnami helm subchart)
+  - job_name: "postgresql"
+    static_configs:
+      - targets: ["host.docker.internal:9187"]
+    scrape_interval: 30s

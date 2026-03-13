@@ -8,6 +8,7 @@
 import { context as otelContext } from "@opentelemetry/api";
 import {
   ApiError,
+  type InteractionSource,
   type SupportedProvider,
   type SupportedProviderDiscriminator,
 } from "@shared";
@@ -101,6 +102,7 @@ export function buildInteractionRecord(params: {
   userId?: string;
   sessionId?: string | null;
   sessionSource?: SessionSource;
+  source?: InteractionSource | null;
   providerType: SupportedProviderDiscriminator;
   request: unknown;
   processedRequest: unknown;
@@ -119,6 +121,7 @@ export function buildInteractionRecord(params: {
     userId: params.userId,
     sessionId: params.sessionId,
     sessionSource: params.sessionSource,
+    source: params.source,
     type: params.providerType,
     request: params.request as InteractionRequest,
     processedRequest: params.processedRequest as InteractionRequest,
@@ -150,6 +153,7 @@ export function recordBlockedToolCallMetrics(params: {
   providerName: SupportedProvider;
   toolCallCount: number;
   actualModel: string;
+  source: InteractionSource;
   externalAgentId?: string;
 }): void {
   utils.tracing.recordBlockedToolSpans({
@@ -167,6 +171,7 @@ export function recordBlockedToolCallMetrics(params: {
       params.agent,
       params.toolCallCount,
       params.actualModel,
+      params.source,
       params.externalAgentId,
     ),
   );

@@ -16,7 +16,10 @@ import {
   getOtlpAuthHeaders,
   getTrustedOrigins,
   parseBodyLimit,
+  parseConnectorSyncMaxDuration,
   parseContentMaxLength,
+  parseProcessType,
+  parseSampleRate,
   parseVirtualKeyDefaultExpiration,
 } from "./config";
 
@@ -957,5 +960,122 @@ describe("parseVirtualKeyDefaultExpiration", () => {
 
   test("should cap value just over 1 year", () => {
     expect(parseVirtualKeyDefaultExpiration("31536001")).toBe(31_536_000);
+  });
+});
+
+describe("parseConnectorSyncMaxDuration", () => {
+  test("should return default 3300 when undefined", () => {
+    expect(parseConnectorSyncMaxDuration(undefined)).toBe(3300);
+  });
+
+  test("should return default 3300 when empty string", () => {
+    expect(parseConnectorSyncMaxDuration("")).toBe(3300);
+  });
+
+  test("should parse valid positive integer", () => {
+    expect(parseConnectorSyncMaxDuration("1800")).toBe(1800);
+  });
+
+  test("should return undefined for zero (disables time-bounded runs)", () => {
+    expect(parseConnectorSyncMaxDuration("0")).toBeUndefined();
+  });
+
+  test("should return undefined for negative value", () => {
+    expect(parseConnectorSyncMaxDuration("-100")).toBeUndefined();
+  });
+
+  test("should return undefined for non-numeric value", () => {
+    expect(parseConnectorSyncMaxDuration("abc")).toBeUndefined();
+  });
+
+  test("should parse large value", () => {
+    expect(parseConnectorSyncMaxDuration("7200")).toBe(7200);
+  });
+});
+
+describe("parseProcessType", () => {
+  test("should return 'all' when undefined", () => {
+    expect(parseProcessType(undefined)).toBe("all");
+  });
+
+  test("should return 'all' when empty string", () => {
+    expect(parseProcessType("")).toBe("all");
+  });
+
+  test("should return 'web' for 'web'", () => {
+    expect(parseProcessType("web")).toBe("web");
+  });
+
+  test("should return 'worker' for 'worker'", () => {
+    expect(parseProcessType("worker")).toBe("worker");
+  });
+
+  test("should be case insensitive", () => {
+    expect(parseProcessType("WEB")).toBe("web");
+    expect(parseProcessType("WORKER")).toBe("worker");
+    expect(parseProcessType("Web")).toBe("web");
+    expect(parseProcessType("Worker")).toBe("worker");
+  });
+
+  test("should return 'all' for unknown values", () => {
+    expect(parseProcessType("unknown")).toBe("all");
+    expect(parseProcessType("both")).toBe("all");
+    expect(parseProcessType("api")).toBe("all");
+  });
+
+  test.each([
+    { input: undefined, processType: "all", webServer: true, worker: true },
+    { input: "", processType: "all", webServer: true, worker: true },
+    { input: "all", processType: "all", webServer: true, worker: true },
+    { input: "web", processType: "web", webServer: true, worker: false },
+    { input: "WEB", processType: "web", webServer: true, worker: false },
+    { input: "worker", processType: "worker", webServer: false, worker: true },
+    { input: "WORKER", processType: "worker", webServer: false, worker: true },
+    { input: "unknown", processType: "all", webServer: true, worker: true },
+  ])("input=$input → shouldRunWebServer=$webServer, shouldRunWorker=$worker", ({
+    input,
+    processType,
+    webServer,
+    worker,
+  }) => {
+    const result = parseProcessType(input);
+    expect(result).toBe(processType);
+    // These match the derivation: shouldRunWebServer = processType !== "worker", shouldRunWorker = processType !== "web"
+    expect(result !== "worker").toBe(webServer);
+    expect(result !== "web").toBe(worker);
+  });
+});
+
+describe("parseSampleRate", () => {
+  test("should return default when undefined", () => {
+    expect(parseSampleRate(undefined, 0.2)).toBe(0.2);
+  });
+
+  test("should return default when empty string", () => {
+    expect(parseSampleRate("", 0.05)).toBe(0.05);
+  });
+
+  test("should parse valid rate", () => {
+    expect(parseSampleRate("0.5", 0.2)).toBe(0.5);
+  });
+
+  test("should parse 0", () => {
+    expect(parseSampleRate("0", 0.2)).toBe(0);
+  });
+
+  test("should parse 1", () => {
+    expect(parseSampleRate("1", 0.2)).toBe(1);
+  });
+
+  test("should return default for value above 1", () => {
+    expect(parseSampleRate("1.5", 0.2)).toBe(0.2);
+  });
+
+  test("should return default for negative value", () => {
+    expect(parseSampleRate("-0.1", 0.3)).toBe(0.3);
+  });
+
+  test("should return default for non-numeric value", () => {
+    expect(parseSampleRate("abc", 0.1)).toBe(0.1);
   });
 });

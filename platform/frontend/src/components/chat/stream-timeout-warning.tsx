@@ -1,6 +1,7 @@
 "use client";
 
 import type { UIMessage } from "@ai-sdk/react";
+import { DocsPage, getDocsUrl } from "@shared";
 import { AlertTriangle } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
@@ -77,7 +78,10 @@ export function StreamTimeoutWarning({
             provider's load balancer is too low. We recommend increasing the
             timeout to at least 5 minutes.{" "}
             <a
-              href="https://archestra.ai/docs/platform-deployment#cloud-provider-configuration-streaming-timeout-settings"
+              href={getDocsUrl(
+                DocsPage.PlatformDeployment,
+                "cloud-provider-configuration-streaming-timeout-settings",
+              )}
               target="_blank"
               rel="noopener noreferrer"
               className="font-medium underline hover:no-underline"

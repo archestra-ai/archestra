@@ -1,4 +1,5 @@
 import {
+  EnvFromSchema,
   ImagePullSecretConfigSchema,
   LocalConfigSchema,
   OAuthConfigSchema,
@@ -60,6 +61,7 @@ const LocalConfigSelectSchema = z.object({
       }),
     )
     .optional(),
+  envFrom: z.array(EnvFromSchema).optional(),
   dockerImage: z.string().optional(),
   serviceAccount: z.string().optional(),
   transportType: z.enum(["stdio", "streamable-http"]).optional(),
@@ -97,6 +99,9 @@ export const SelectInternalMcpCatalogSchema = createSelectSchema(
   localConfig: LocalConfigSelectSchema.nullable(),
   // Labels are loaded from the junction table, not from the DB row
   labels: z.array(CatalogLabelSchema).default([]),
+  // Teams are loaded from the junction table, not from the DB row
+  teams: z.array(z.object({ id: z.string(), name: z.string() })).default([]),
+  authorName: z.string().nullable().optional(),
 });
 
 export const InsertInternalMcpCatalogSchema = createInsertSchema(
@@ -116,10 +121,14 @@ export const InsertInternalMcpCatalogSchema = createInsertSchema(
     localConfig: LocalConfigSchema.nullable().optional(),
     // Labels are synced separately via McpCatalogLabelModel
     labels: z.array(CatalogLabelSchema).optional(),
+    // Team IDs for team scope (synced separately)
+    teams: z.array(z.string()).optional(),
   })
   .omit({
     createdAt: true,
     updatedAt: true,
+    organizationId: true,
+    authorId: true,
   });
 
 export const UpdateInternalMcpCatalogSchema = createUpdateSchema(
@@ -137,11 +146,15 @@ export const UpdateInternalMcpCatalogSchema = createUpdateSchema(
     localConfig: LocalConfigSchema.nullable().optional(),
     // Labels are synced separately via McpCatalogLabelModel
     labels: z.array(CatalogLabelSchema).optional(),
+    // Team IDs for team scope (synced separately)
+    teams: z.array(z.string()).optional(),
   })
   .omit({
     id: true,
     createdAt: true,
     updatedAt: true,
+    organizationId: true,
+    authorId: true,
   });
 
 export type InternalMcpCatalogServerType = z.infer<

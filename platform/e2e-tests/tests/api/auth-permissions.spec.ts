@@ -43,11 +43,10 @@ test.describe("Auth Permissions API", () => {
 
     // Admin should have all permissions
     expect(permissions).toBeDefined();
-    expect(permissions.organization).toContain("read");
     expect(permissions.organization).toContain("update");
     expect(permissions.organization).toContain("delete");
     expect(permissions.agent).toBeDefined();
-    expect(permissions.tool).toBeDefined();
+    expect(permissions.toolPolicy).toBeDefined();
   });
 
   test("should allow admin to access all resource permissions", async ({

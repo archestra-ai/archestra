@@ -25,6 +25,12 @@
       "source": "https://github.com/instantdb/instant/blob/main/LICENSE",
       "verifiedBy": "manual inspection",
       "verifiedDate": "2025-12-18"
+    },
+    "jsuri": {
+      "license": "MIT",
+      "source": "https://github.com/derek-watson/jsUri/blob/master/LICENSE",
+      "verifiedBy": "manual inspection",
+      "verifiedDate": "2026-03-07"
     }
   }
 }

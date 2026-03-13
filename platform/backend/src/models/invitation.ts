@@ -7,6 +7,7 @@ import type {
   BetterAuthSessionUser,
   UpdateInvitation,
 } from "@/types";
+import AgentModel from "./agent";
 import MemberModel from "./member";
 import SessionModel from "./session";
 import UserTokenModel from "./user-token";
@@ -113,6 +114,19 @@ class InvitationModel {
           `❌ Failed to create personal token for user ${user.email}:`,
         );
         // Don't fail invitation acceptance if token creation fails
+      }
+
+      // Create personal default chat agent for the new member
+      try {
+        await AgentModel.ensurePersonalChatAgent({
+          userId: user.id,
+          organizationId,
+        });
+      } catch (agentError) {
+        logger.error(
+          { err: agentError },
+          `❌ Failed to create personal chat agent for user ${user.email}:`,
+        );
       }
 
       // Mark invitation as accepted

@@ -2,7 +2,12 @@ import { AUTO_PROVISIONED_INVITATION_STATUS, MEMBER_ROLE_NAME } from "@shared";
 import config from "@/config";
 import db, { schema } from "@/database";
 import logger from "@/logging";
-import { MemberModel, OrganizationModel, UserModel } from "@/models";
+import {
+  AgentModel,
+  MemberModel,
+  OrganizationModel,
+  UserModel,
+} from "@/models";
 import type { ChatOpsProviderType } from "@/types/chatops";
 import { isUniqueConstraintError } from "@/utils/db";
 
@@ -46,6 +51,19 @@ export async function autoProvisionUser(params: {
 
     // Create member record linking user to organization
     await MemberModel.create(userId, org.id, MEMBER_ROLE_NAME);
+
+    // Create personal default chat agent for the new member
+    try {
+      await AgentModel.ensurePersonalChatAgent({
+        userId,
+        organizationId: org.id,
+      });
+    } catch (error) {
+      logger.error(
+        { err: error, userId },
+        "[ChatOps] Failed to create personal chat agent",
+      );
+    }
 
     // Create invitation record for the signup-completion link
     const invitationId = crypto.randomUUID();

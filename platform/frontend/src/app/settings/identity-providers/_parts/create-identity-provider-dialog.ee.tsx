@@ -12,8 +12,8 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
+  DialogStickyFooter,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Form } from "@/components/ui/form";
@@ -49,44 +49,50 @@ export function CreateIdentityProviderDialog({
   const form = useForm<IdentityProviderFormValues>({
     // biome-ignore lint/suspicious/noExplicitAny: Version mismatch between @hookform/resolvers and Zod
     resolver: zodResolver(IdentityProviderFormSchema as any),
-    defaultValues: defaultValues || {
-      providerId: "",
-      issuer: "",
-      domain: "",
-      providerType: providerType,
-      ...(providerType === "saml"
-        ? {
-            samlConfig: {
-              issuer: "",
-              entryPoint: "",
-              cert: "",
-              callbackUrl: "",
-              spMetadata: {},
-            },
-          }
-        : {
-            oidcConfig: {
-              issuer: "",
-              pkce: true,
-              clientId: "",
-              clientSecret: "",
-              discoveryEndpoint: "",
-              scopes: ["openid", "email", "profile"],
-              mapping: {
-                id: "sub",
-                email: "email",
-                name: "name",
+    defaultValues: {
+      roleMapping: { rules: [] },
+      ...(defaultValues || {
+        providerId: "",
+        issuer: "",
+        domain: "",
+        providerType: providerType,
+        ...(providerType === "saml"
+          ? {
+              samlConfig: {
+                issuer: "",
+                entryPoint: "",
+                cert: "",
+                callbackUrl: "",
+                spMetadata: {},
               },
-            },
-          }),
+            }
+          : {
+              oidcConfig: {
+                issuer: "",
+                pkce: true,
+                clientId: "",
+                clientSecret: "",
+                discoveryEndpoint: "",
+                scopes: ["openid", "email", "profile"],
+                mapping: {
+                  id: "sub",
+                  email: "email",
+                  name: "name",
+                },
+              },
+            }),
+      }),
     },
   });
 
   const onSubmit = useCallback(
     async (data: IdentityProviderFormValues) => {
-      await createIdentityProvider.mutateAsync(data);
-      form.reset();
-      onOpenChange(false);
+      const result = await createIdentityProvider.mutateAsync(data);
+      // Only close the dialog if creation succeeded (result is not null)
+      if (result) {
+        form.reset();
+        onOpenChange(false);
+      }
     },
     [createIdentityProvider, form, onOpenChange],
   );
@@ -100,7 +106,7 @@ export function CreateIdentityProviderDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
+      <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
             {providerName
@@ -115,23 +121,18 @@ export function CreateIdentityProviderDialog({
         </DialogHeader>
 
         <Form {...form}>
-          <form
-            onSubmit={form.handleSubmit(onSubmit)}
-            className="flex flex-col flex-1 overflow-hidden"
-          >
-            <div className="flex-1 overflow-y-auto py-4">
-              {currentProviderType === "saml" ? (
-                <SamlConfigForm form={form} hideProviderId={hideProviderId} />
-              ) : (
-                <OidcConfigForm
-                  form={form}
-                  hidePkce={hidePkce}
-                  hideProviderId={hideProviderId}
-                />
-              )}
-            </div>
+          <form onSubmit={form.handleSubmit(onSubmit)}>
+            {currentProviderType === "saml" ? (
+              <SamlConfigForm form={form} hideProviderId={hideProviderId} />
+            ) : (
+              <OidcConfigForm
+                form={form}
+                hidePkce={hidePkce}
+                hideProviderId={hideProviderId}
+              />
+            )}
 
-            <DialogFooter className="mt-4">
+            <DialogStickyFooter>
               <Button type="button" variant="outline" onClick={handleClose}>
                 Cancel
               </Button>
@@ -142,9 +143,9 @@ export function CreateIdentityProviderDialog({
               >
                 {createIdentityProvider.isPending
                   ? "Creating..."
-                  : "Create Provider"}
+                  : "Create & Test"}
               </PermissionButton>
-            </DialogFooter>
+            </DialogStickyFooter>
           </form>
         </Form>
       </DialogContent>

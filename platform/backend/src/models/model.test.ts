@@ -1,4 +1,5 @@
 import { describe, expect, test } from "@/test";
+import ApiKeyModelModel from "./api-key-model";
 import ModelModel from "./model";
 
 describe("ModelModel", () => {
@@ -489,6 +490,137 @@ describe("ModelModel", () => {
         "openai",
       );
       expect(savings).toBe(0);
+    });
+  });
+
+  describe("ensureModelExists", () => {
+    test("creates a new model with discoveredViaLlmProxy=true", async () => {
+      await ModelModel.ensureModelExists("gpt-4o-mini", "openai");
+
+      const model = await ModelModel.findByProviderAndModelId(
+        "openai",
+        "gpt-4o-mini",
+      );
+      expect(model).not.toBeNull();
+      expect(model?.discoveredViaLlmProxy).toBe(true);
+      expect(model?.externalId).toBe("openai/gpt-4o-mini");
+    });
+
+    test("sets discoveredViaLlmProxy=true on existing model", async () => {
+      // Create model via normal sync (discoveredViaLlmProxy defaults to false)
+      await ModelModel.create({
+        externalId: "anthropic/claude-3-5-sonnet",
+        provider: "anthropic",
+        modelId: "claude-3-5-sonnet",
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        lastSyncedAt: new Date(),
+      });
+
+      const before = await ModelModel.findByProviderAndModelId(
+        "anthropic",
+        "claude-3-5-sonnet",
+      );
+      expect(before?.discoveredViaLlmProxy).toBe(false);
+
+      // LLM Proxy request triggers ensureModelExists
+      await ModelModel.ensureModelExists("claude-3-5-sonnet", "anthropic");
+
+      const after = await ModelModel.findByProviderAndModelId(
+        "anthropic",
+        "claude-3-5-sonnet",
+      );
+      expect(after?.discoveredViaLlmProxy).toBe(true);
+    });
+  });
+
+  describe("findLlmProxyModels", () => {
+    test("returns only models with discoveredViaLlmProxy=true", async () => {
+      // Create a regular synced model
+      await ModelModel.create({
+        externalId: "openai/gpt-4o",
+        provider: "openai",
+        modelId: "gpt-4o",
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        lastSyncedAt: new Date(),
+      });
+
+      // Create an LLM Proxy-discovered model
+      await ModelModel.ensureModelExists("custom-model", "openai");
+
+      const proxyModels = await ModelModel.findLlmProxyModels();
+      expect(proxyModels).toHaveLength(1);
+      expect(proxyModels[0].modelId).toBe("custom-model");
+    });
+  });
+
+  describe("deleteOrphanedModels", () => {
+    test("deletes models without API key links that are not from LLM Proxy", async ({
+      makeOrganization,
+      makeSecret,
+      makeChatApiKey,
+    }) => {
+      const org = await makeOrganization();
+
+      // Create a model with no API key link (orphaned, not from proxy)
+      await ModelModel.create({
+        externalId: "openai/orphan-model",
+        provider: "openai",
+        modelId: "orphan-model",
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        lastSyncedAt: new Date(),
+      });
+
+      // Create an LLM Proxy-discovered model (no API key link but should be preserved)
+      await ModelModel.ensureModelExists("proxy-model", "openai");
+
+      // Create a model WITH an API key link (should be preserved)
+      const linkedModel = await ModelModel.create({
+        externalId: "openai/linked-model",
+        provider: "openai",
+        modelId: "linked-model",
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        lastSyncedAt: new Date(),
+      });
+
+      // Create an API key and link the model
+      const secret = await makeSecret({ secret: { apiKey: "test-key" } });
+      const apiKey = await makeChatApiKey(org.id, secret.id, {
+        provider: "openai",
+      });
+      await ApiKeyModelModel.syncModelsForApiKey(
+        apiKey.id,
+        [{ id: linkedModel.id, modelId: linkedModel.modelId }],
+        "openai",
+      );
+
+      const deletedCount = await ModelModel.deleteOrphanedModels();
+
+      // Only the orphan without proxy flag should be deleted
+      expect(deletedCount).toBe(1);
+
+      // Verify the proxy model and linked model still exist
+      const proxyModel = await ModelModel.findByProviderAndModelId(
+        "openai",
+        "proxy-model",
+      );
+      expect(proxyModel).not.toBeNull();
+
+      const linked = await ModelModel.findByProviderAndModelId(
+        "openai",
+        "linked-model",
+      );
+      expect(linked).not.toBeNull();
+
+      // Verify the orphan was deleted
+      const orphan = await ModelModel.findByProviderAndModelId(
+        "openai",
+        "orphan-model",
+      );
+      expect(orphan).toBeNull();
     });
   });
 

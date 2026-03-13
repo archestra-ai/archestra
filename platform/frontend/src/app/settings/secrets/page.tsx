@@ -50,7 +50,7 @@ export default function SecretsSettingsPage() {
 
           <div className="flex items-center gap-4">
             <PermissionButton
-              permissions={{ organization: ["update"] }}
+              permissions={{ secret: ["update"] }}
               onClick={handleCheckConnectivity}
               disabled={checkConnectivityMutation.isPending}
             >

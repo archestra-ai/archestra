@@ -1,5 +1,4 @@
 import { FinishReason, type GenerateContentResponse } from "@google/genai";
-import config from "@/config";
 import { describe, expect, test } from "@/test";
 import type { Gemini } from "@/types";
 import { type GeminiRequestWithModel, geminiAdapterFactory } from "./gemini";
@@ -410,138 +409,126 @@ describe("GeminiRequestAdapter", () => {
     });
 
     test("converts MCP image blocks in tool results", () => {
-      const originalBrowserStreaming = config.features.browserStreamingEnabled;
-      config.features.browserStreamingEnabled = true;
-      try {
-        const mcpImageResponse = [
-          { type: "text", text: "Screenshot captured" },
-          {
-            type: "image",
-            data: "abc123",
-            mimeType: "image/png",
-          },
-        ] as unknown as Record<string, unknown>;
+      const mcpImageResponse = [
+        { type: "text", text: "Screenshot captured" },
+        {
+          type: "image",
+          data: "abc123",
+          mimeType: "image/png",
+        },
+      ] as unknown as Record<string, unknown>;
 
-        const request = createMockRequest([
-          { role: "user", parts: [{ text: "Capture a screenshot" }] },
-          {
-            role: "model",
-            parts: [
-              {
-                functionCall: {
-                  name: "browser_take_screenshot",
-                  id: "call_123",
-                  args: {},
-                },
-              },
-            ],
-          },
-          {
-            role: "user",
-            parts: [
-              {
-                functionResponse: {
-                  name: "browser_take_screenshot",
-                  id: "call_123",
-                  response: mcpImageResponse,
-                },
-              },
-            ],
-          },
-        ]);
-
-        const adapter = geminiAdapterFactory.createRequestAdapter(request);
-        const result = adapter.toProviderRequest();
-
-        const userContent = result.contents?.find(
-          (content) =>
-            content.role === "user" &&
-            content.parts?.some((part) => "functionResponse" in part),
-        );
-        const functionResponsePart = userContent?.parts?.find(
-          (part) => "functionResponse" in part,
-        );
-        expect(
-          (functionResponsePart as { functionResponse: { response: unknown } })
-            ?.functionResponse?.response,
-        ).toEqual({
-          text: "Screenshot captured",
-          images: [
+      const request = createMockRequest([
+        { role: "user", parts: [{ text: "Capture a screenshot" }] },
+        {
+          role: "model",
+          parts: [
             {
-              inlineData: {
-                mimeType: "image/png",
-                data: "abc123",
+              functionCall: {
+                name: "browser_take_screenshot",
+                id: "call_123",
+                args: {},
               },
             },
           ],
-        });
-      } finally {
-        config.features.browserStreamingEnabled = originalBrowserStreaming;
-      }
+        },
+        {
+          role: "user",
+          parts: [
+            {
+              functionResponse: {
+                name: "browser_take_screenshot",
+                id: "call_123",
+                response: mcpImageResponse,
+              },
+            },
+          ],
+        },
+      ]);
+
+      const adapter = geminiAdapterFactory.createRequestAdapter(request);
+      const result = adapter.toProviderRequest();
+
+      const userContent = result.contents?.find(
+        (content) =>
+          content.role === "user" &&
+          content.parts?.some((part) => "functionResponse" in part),
+      );
+      const functionResponsePart = userContent?.parts?.find(
+        (part) => "functionResponse" in part,
+      );
+      expect(
+        (functionResponsePart as { functionResponse: { response: unknown } })
+          ?.functionResponse?.response,
+      ).toEqual({
+        text: "Screenshot captured",
+        images: [
+          {
+            inlineData: {
+              mimeType: "image/png",
+              data: "abc123",
+            },
+          },
+        ],
+      });
     });
 
     test("strips oversized MCP image blocks in tool results", () => {
-      const originalBrowserStreaming = config.features.browserStreamingEnabled;
-      config.features.browserStreamingEnabled = true;
-      try {
-        const largeImageData = "a".repeat(140000);
-        const mcpImageResponse = [
-          { type: "text", text: "Screenshot captured" },
-          {
-            type: "image",
-            data: largeImageData,
-            mimeType: "image/png",
-          },
-        ] as unknown as Record<string, unknown>;
+      const largeImageData = "a".repeat(140000);
+      const mcpImageResponse = [
+        { type: "text", text: "Screenshot captured" },
+        {
+          type: "image",
+          data: largeImageData,
+          mimeType: "image/png",
+        },
+      ] as unknown as Record<string, unknown>;
 
-        const request = createMockRequest([
-          { role: "user", parts: [{ text: "Capture a screenshot" }] },
-          {
-            role: "model",
-            parts: [
-              {
-                functionCall: {
-                  name: "browser_take_screenshot",
-                  id: "call_123",
-                  args: {},
-                },
+      const request = createMockRequest([
+        { role: "user", parts: [{ text: "Capture a screenshot" }] },
+        {
+          role: "model",
+          parts: [
+            {
+              functionCall: {
+                name: "browser_take_screenshot",
+                id: "call_123",
+                args: {},
               },
-            ],
-          },
-          {
-            role: "user",
-            parts: [
-              {
-                functionResponse: {
-                  name: "browser_take_screenshot",
-                  id: "call_123",
-                  response: mcpImageResponse,
-                },
+            },
+          ],
+        },
+        {
+          role: "user",
+          parts: [
+            {
+              functionResponse: {
+                name: "browser_take_screenshot",
+                id: "call_123",
+                response: mcpImageResponse,
               },
-            ],
-          },
-        ]);
+            },
+          ],
+        },
+      ]);
 
-        const adapter = geminiAdapterFactory.createRequestAdapter(request);
-        const result = adapter.toProviderRequest();
+      const adapter = geminiAdapterFactory.createRequestAdapter(request);
+      const result = adapter.toProviderRequest();
 
-        const userContent = result.contents?.find(
-          (content) =>
-            content.role === "user" &&
-            content.parts?.some((part) => "functionResponse" in part),
-        );
-        const functionResponsePart = userContent?.parts?.find(
-          (part) => "functionResponse" in part,
-        );
-        expect(
-          (functionResponsePart as { functionResponse: { response: unknown } })
-            ?.functionResponse?.response,
-        ).toEqual({
-          text: "Screenshot captured\n[Image omitted due to size]",
-        });
-      } finally {
-        config.features.browserStreamingEnabled = originalBrowserStreaming;
-      }
+      const userContent = result.contents?.find(
+        (content) =>
+          content.role === "user" &&
+          content.parts?.some((part) => "functionResponse" in part),
+      );
+      const functionResponsePart = userContent?.parts?.find(
+        (part) => "functionResponse" in part,
+      );
+      expect(
+        (functionResponsePart as { functionResponse: { response: unknown } })
+          ?.functionResponse?.response,
+      ).toEqual({
+        text: "Screenshot captured\n[Image omitted due to size]",
+      });
     });
   });
 });

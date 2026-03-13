@@ -2,9 +2,10 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import type { archestraApiTypes } from "@shared";
-import { AlertCircle, ChevronRight, Plus, Trash2 } from "lucide-react";
+import { ChevronRight, Globe, Info, Plus, Server, Trash2 } from "lucide-react";
 import { lazy, useEffect, useRef, useState } from "react";
 import { useFieldArray, useForm } from "react-hook-form";
+import { AgentIconPicker } from "@/components/agent-icon-picker";
 import {
   type ProfileLabel,
   ProfileLabels,
@@ -30,6 +31,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { MultiSelectCombobox } from "@/components/ui/multi-select-combobox";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
@@ -40,9 +42,17 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { useFeatureFlag, useFeatureValue } from "@/lib/features.hook";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { LOCAL_MCP_DISABLED_MESSAGE } from "@/consts";
+import { useHasPermissions } from "@/lib/auth.query";
+import { useFeature } from "@/lib/config.query";
 import { useK8sImagePullSecrets } from "@/lib/internal-mcp-catalog.query";
 import { useGetSecret } from "@/lib/secrets.query";
+import { useTeams } from "@/lib/team.query";
 import {
   formSchema,
   type McpCatalogFormValues,
@@ -59,9 +69,16 @@ interface McpCatalogFormProps {
   mode: "create" | "edit";
   initialValues?: archestraApiTypes.GetInternalMcpCatalogResponses["200"][number];
   onSubmit: (values: McpCatalogFormValues) => void;
-  serverType?: "remote" | "local";
-  footer?: React.ReactNode;
+  footer?:
+    | React.ReactNode
+    | ((opts: { isDirty: boolean; onReset: () => void }) => React.ReactNode);
   nameDisabled?: boolean;
+  catalogButton?: React.ReactNode;
+  formValues?: McpCatalogFormValues;
+  /** Called when form dirty state changes */
+  onDirtyChange?: (isDirty: boolean) => void;
+  /** Ref to imperatively trigger form submission */
+  submitRef?: React.MutableRefObject<(() => Promise<void>) | null>;
 }
 
 export function McpCatalogForm({
@@ -69,8 +86,11 @@ export function McpCatalogForm({
   initialValues,
   onSubmit,
   nameDisabled,
-  serverType = "remote",
   footer,
+  catalogButton,
+  formValues,
+  onDirtyChange,
+  submitRef,
 }: McpCatalogFormProps) {
   // Fetch local config secret if it exists
   const { data: localConfigSecret } = useGetSecret(
@@ -78,16 +98,20 @@ export function McpCatalogForm({
   );
 
   // Get MCP server base image from backend features endpoint
-  const mcpServerBaseImage = useFeatureValue("mcpServerBaseImage") ?? "";
+  const mcpServerBaseImage = useFeature("mcpServerBaseImage") ?? "";
+
+  const isLocalMcpEnabled = useFeature("orchestratorK8sRuntime");
 
   const form = useForm<McpCatalogFormValues>({
     // biome-ignore lint/suspicious/noExplicitAny: Version mismatch between @hookform/resolvers and Zod
     resolver: zodResolver(formSchema as any),
     defaultValues: initialValues
       ? transformCatalogItemToFormValues(initialValues, undefined)
-      : {
+      : (formValues ?? {
           name: "",
-          serverType: serverType,
+          description: "",
+          icon: null,
+          serverType: "remote",
           serverUrl: "",
           authMethod: "none",
           oauthConfig: {
@@ -104,6 +128,7 @@ export function McpCatalogForm({
             command: "",
             arguments: "",
             environment: [],
+            envFrom: [],
             dockerImage: "",
             transportType: "stdio",
             httpPort: "",
@@ -111,8 +136,26 @@ export function McpCatalogForm({
             serviceAccount: "",
             imagePullSecrets: [],
           },
-        },
+          scope: "personal",
+          teams: [],
+        }),
   });
+
+  // Report dirty state to parent
+  const { isDirty } = form.formState;
+  useEffect(() => {
+    onDirtyChange?.(isDirty);
+  }, [isDirty, onDirtyChange]);
+
+  // Expose imperative submit to parent
+  useEffect(() => {
+    if (submitRef) {
+      submitRef.current = form.handleSubmit(onSubmit) as () => Promise<void>;
+    }
+    return () => {
+      if (submitRef) submitRef.current = null;
+    };
+  }, [submitRef, form, onSubmit]);
 
   const authMethod = form.watch("authMethod");
   const currentServerType = form.watch("serverType");
@@ -133,13 +176,30 @@ export function McpCatalogForm({
   const [labelsOpen, setLabelsOpen] = useState(false);
   const labelsRef = useRef<ProfileLabelsRef>(null);
 
+  // Check admin status for scope options
+  const { data: isAdmin } = useHasPermissions({
+    mcpServerInstallation: ["admin"],
+  });
+  const { data: teams } = useTeams();
+  const currentScope = form.watch("scope");
+
   // Check if BYOS feature is available (enterprise license)
-  const showByosOption = useFeatureFlag("byosEnabled");
+  const showByosOption = useFeature("byosEnabled");
 
   // Use field array for environment variables
   const { fields, append, remove } = useFieldArray({
     control: form.control,
     name: "localConfig.environment",
+  });
+
+  // Use field array for envFrom (existing K8s Secrets/ConfigMaps)
+  const {
+    fields: envFromFields,
+    append: appendEnvFrom,
+    remove: removeEnvFrom,
+  } = useFieldArray({
+    control: form.control,
+    name: "localConfig.envFrom",
   });
 
   // Use field array for imagePullSecrets
@@ -167,6 +227,17 @@ export function McpCatalogForm({
       oauthVaultSecretKey || undefined,
     );
   }, [oauthVaultSecretPath, oauthVaultSecretKey, form]);
+
+  // Reset form when formValues change (catalog pre-fill in create mode)
+  useEffect(() => {
+    if (formValues && !initialValues) {
+      form.reset(formValues);
+      setLabels(
+        formValues.labels?.map((l) => ({ key: l.key, value: l.value })) ?? [],
+      );
+      setLabelsOpen((formValues.labels ?? []).length > 0);
+    }
+  }, [formValues, initialValues, form]);
 
   // Reset form when initial values change (for edit mode)
   // Also reset when localConfigSecret loads (if it exists)
@@ -206,8 +277,8 @@ export function McpCatalogForm({
     <Form {...form}>
       <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-6">
         {mode === "edit" && (
-          <Alert>
-            <AlertCircle className="h-4 w-4" />
+          <Alert variant="info">
+            <Info className="h-4 w-4" />
             <AlertDescription>
               Changes to {nameDisabled ? "" : "Name, "}Server URL or
               Authentication will require reinstalling the server for the
@@ -216,7 +287,16 @@ export function McpCatalogForm({
           </Alert>
         )}
 
-        <div className="space-y-4">
+        {catalogButton}
+
+        <div className="border rounded-lg p-5 space-y-4">
+          <AgentIconPicker
+            value={form.watch("icon") ?? null}
+            onChange={(icon) =>
+              form.setValue("icon", icon, { shouldDirty: true })
+            }
+            showLogos
+          />
           <FormField
             control={form.control}
             name="name"
@@ -232,11 +312,155 @@ export function McpCatalogForm({
                     disabled={nameDisabled}
                   />
                 </FormControl>
-                <FormDescription>Display name for this server</FormDescription>
+
                 <FormMessage />
               </FormItem>
             )}
           />
+
+          <FormField
+            control={form.control}
+            name="description"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Description</FormLabel>
+                <FormControl>
+                  <Textarea
+                    placeholder="Describe what this MCP server does..."
+                    className="min-h-20"
+                    {...field}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="scope"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Visibility</FormLabel>
+                <Select
+                  value={field.value ?? "personal"}
+                  onValueChange={(value) => {
+                    field.onChange(value);
+                    if (value !== "team") {
+                      form.setValue("teams", [], { shouldDirty: true });
+                    }
+                  }}
+                >
+                  <FormControl>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select visibility" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    <SelectItem value="personal">
+                      Personal (draft, only you)
+                    </SelectItem>
+                    {isAdmin && (
+                      <SelectItem value="team">
+                        Team (visible to team members)
+                      </SelectItem>
+                    )}
+                    {isAdmin && (
+                      <SelectItem value="org">
+                        Organization (visible to everyone)
+                      </SelectItem>
+                    )}
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          {currentScope === "team" && (
+            <div className="space-y-2">
+              <Label>Teams</Label>
+              <MultiSelectCombobox
+                options={
+                  teams?.map((t) => ({
+                    label: t.name,
+                    value: t.id,
+                  })) ?? []
+                }
+                value={form.watch("teams") ?? []}
+                onChange={(ids) =>
+                  form.setValue("teams", ids, { shouldDirty: true })
+                }
+                placeholder="Select teams..."
+                emptyMessage="No teams found"
+              />
+            </div>
+          )}
+
+          {mode === "create" && (
+            <div className="space-y-2">
+              <Label>Server Type</Label>
+              <div className="flex rounded-lg border border-border overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => form.setValue("serverType", "remote")}
+                  className={`flex-1 flex flex-col items-center justify-center gap-0.5 px-4 py-2 text-sm font-medium transition-colors ${
+                    currentServerType === "remote"
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-background text-muted-foreground hover:text-foreground hover:bg-muted"
+                  }`}
+                >
+                  <span className="flex items-center gap-2">
+                    <Globe className="h-4 w-4" />
+                    Remote
+                  </span>
+                  <span
+                    className={`text-xs font-normal ${currentServerType === "remote" ? "text-primary-foreground/70" : "text-muted-foreground"}`}
+                  >
+                    Orchestrated externally
+                  </span>
+                </button>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        isLocalMcpEnabled &&
+                        form.setValue("serverType", "local")
+                      }
+                      disabled={!isLocalMcpEnabled}
+                      className={`flex-1 flex flex-col items-center justify-center gap-0.5 px-4 py-2 text-sm font-medium transition-colors border-l border-border ${
+                        !isLocalMcpEnabled
+                          ? "bg-background text-muted-foreground/50 cursor-not-allowed"
+                          : currentServerType === "local"
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-background text-muted-foreground hover:text-foreground hover:bg-muted"
+                      }`}
+                    >
+                      <span className="flex items-center gap-2">
+                        <Server className="h-4 w-4" />
+                        Self-hosted
+                      </span>
+                      <span
+                        className={`text-xs font-normal ${!isLocalMcpEnabled ? "text-muted-foreground/50" : currentServerType === "local" ? "text-primary-foreground/70" : "text-muted-foreground"}`}
+                      >
+                        Orchestrated by Archestra in k8s
+                      </span>
+                    </button>
+                  </TooltipTrigger>
+                  {!isLocalMcpEnabled && (
+                    <TooltipContent>
+                      <p className="max-w-xs">{LOCAL_MCP_DISABLED_MESSAGE}</p>
+                    </TooltipContent>
+                  )}
+                </Tooltip>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="border rounded-lg p-5 space-y-4">
+          <h3 className="font-semibold text-sm">Server Configuration</h3>
 
           {currentServerType === "remote" && (
             <FormField
@@ -254,9 +478,6 @@ export function McpCatalogForm({
                       {...field}
                     />
                   </FormControl>
-                  <FormDescription>
-                    The remote MCP server endpoint
-                  </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -270,12 +491,7 @@ export function McpCatalogForm({
                 name="localConfig.command"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>
-                      Command{" "}
-                      {!form.watch("localConfig.dockerImage") && (
-                        <span className="text-destructive">*</span>
-                      )}
-                    </FormLabel>
+                    <FormLabel>Command</FormLabel>
                     <FormControl>
                       <Input
                         placeholder="node"
@@ -286,38 +502,6 @@ export function McpCatalogForm({
                     <FormDescription>
                       The executable command to run. Optional if Docker Image is
                       set (will use image's default <code>CMD</code>).
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="localConfig.dockerImage"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Docker Image (optional)</FormLabel>
-                    <FormControl>
-                      <Input
-                        placeholder={mcpServerBaseImage}
-                        className="font-mono"
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormDescription>
-                      Use your own image if you need additional packages, or
-                      just want to deploy your own MCP server. See the{" "}
-                      <a
-                        href="https://github.com/archestra-ai/archestra/tree/main/platform/mcp_server_docker_image"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-primary underline hover:no-underline"
-                      >
-                        Dockerfile
-                      </a>{" "}
-                      for what's included in the default image (alpine, npx,
-                      mcp[cli]).
                     </FormDescription>
                     <FormMessage />
                   </FormItem>
@@ -337,22 +521,9 @@ export function McpCatalogForm({
                         {...field}
                       />
                     </FormControl>
-                    <FormDescription>
-                      Command line arguments, one per line
-                    </FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
-              />
-
-              <EnvironmentVariablesFormField
-                control={form.control}
-                fields={fields}
-                append={append}
-                remove={remove}
-                fieldNamePrefix="localConfig.environment"
-                form={form}
-                useExternalSecretsManager={showByosOption}
               />
 
               <FormField
@@ -390,11 +561,6 @@ export function McpCatalogForm({
                         </div>
                       </RadioGroup>
                     </FormControl>
-                    <FormDescription>
-                      stdio uses JSON-RPC over stdin/stdout (serialized
-                      requests). Streamable HTTP uses native HTTP/SSE transport
-                      (better performance, concurrent requests).
-                    </FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -417,10 +583,6 @@ export function McpCatalogForm({
                             {...field}
                           />
                         </FormControl>
-                        <FormDescription>
-                          Port for HTTP server (defaults to 8080 if not
-                          specified)
-                        </FormDescription>
                         <FormMessage />
                       </FormItem>
                     )}
@@ -438,182 +600,229 @@ export function McpCatalogForm({
                             {...field}
                           />
                         </FormControl>
-                        <FormDescription>
-                          Endpoint path for MCP requests (defaults to /mcp)
-                        </FormDescription>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
                 </>
               )}
-
-              <div className="space-y-3">
-                <Label>Image Pull Secrets</Label>
-                <p className="text-sm text-muted-foreground">
-                  Kubernetes secrets for pulling container images from private
-                  registries.{" "}
-                  <a
-                    href="https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-primary underline underline-offset-2 hover:text-primary/80"
-                  >
-                    Learn more
-                  </a>
-                </p>
-
-                {imagePullSecretFields.map((field, index) => {
-                  const watchField = (key: string) =>
-                    form.watch(
-                      // biome-ignore lint/suspicious/noExplicitAny: discriminated union paths need cast
-                      `localConfig.imagePullSecrets.${index}.${key}` as any,
-                    ) ?? "";
-                  const setField = (key: string, value: string) =>
-                    form.setValue(
-                      // biome-ignore lint/suspicious/noExplicitAny: discriminated union paths need cast
-                      `localConfig.imagePullSecrets.${index}.${key}` as any,
-                      value,
-                    );
-                  const source = watchField("source");
-
-                  return (
-                    <div
-                      key={field.id}
-                      className="border rounded-lg p-3 space-y-3"
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <Select
-                          value={source}
-                          onValueChange={(val) => {
-                            if (val === "existing") {
-                              updateImagePullSecret(index, {
-                                source: "existing",
-                                name: "",
-                              });
-                            } else {
-                              updateImagePullSecret(index, {
-                                source: "credentials",
-                                server: "",
-                                username: "",
-                                email: "",
-                              });
-                            }
-                          }}
-                        >
-                          <SelectTrigger className="w-[200px]">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="existing">
-                              Existing Secret
-                            </SelectItem>
-                            <SelectItem value="credentials">
-                              Registry Credentials
-                            </SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => removeImagePullSecret(index)}
-                        >
-                          <Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" />
-                        </Button>
-                      </div>
-
-                      {source === "existing" ? (
-                        <SearchableSelect
-                          value={watchField("name")}
-                          onValueChange={(val) => setField("name", val)}
-                          items={k8sSecrets.map((s) => ({
-                            value: s.name,
-                            label: s.name,
-                          }))}
-                          placeholder="Select a secret..."
-                          searchPlaceholder="Search secrets..."
-                          allowCustom
-                          className="w-full"
-                        />
-                      ) : (
-                        <div className="grid grid-cols-2 gap-3">
-                          <div className="space-y-1">
-                            <Label className="text-xs">Server</Label>
-                            <Input
-                              placeholder="e.g. quay.io"
-                              className="font-mono"
-                              value={watchField("server")}
-                              onChange={(e) =>
-                                setField("server", e.target.value)
-                              }
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <Label className="text-xs">Username</Label>
-                            <Input
-                              placeholder="username"
-                              value={watchField("username")}
-                              onChange={(e) =>
-                                setField("username", e.target.value)
-                              }
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <Label className="text-xs">Password</Label>
-                            <Input
-                              type="password"
-                              placeholder={
-                                mode === "edit" && !watchField("password")
-                                  ? "Saved — leave blank to keep"
-                                  : "password"
-                              }
-                              value={watchField("password") ?? ""}
-                              onChange={(e) =>
-                                setField("password", e.target.value)
-                              }
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <Label className="text-xs">Email (optional)</Label>
-                            <Input
-                              placeholder="email@example.com"
-                              value={watchField("email")}
-                              onChange={(e) =>
-                                setField("email", e.target.value)
-                              }
-                            />
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() =>
-                    appendImagePullSecret({ source: "existing", name: "" })
-                  }
-                >
-                  <Plus className="h-4 w-4 mr-1" />
-                  Add
-                </Button>
-              </div>
             </>
           )}
         </div>
 
-        {(currentServerType === "remote" || currentServerType === "local") && (
-          <div className="space-y-4 pt-4 border-t">
-            <FormLabel>Authentication</FormLabel>
-            <p className="text-sm text-muted-foreground">
-              Configure how users authenticate with this MCP server. OAuth is
-              recommended for servers that support it.
-            </p>
+        {currentServerType === "local" && (
+          <div className="border rounded-lg p-5 space-y-4">
+            <EnvironmentVariablesFormField
+              control={form.control}
+              fields={fields}
+              append={append}
+              remove={remove}
+              fieldNamePrefix="localConfig.environment"
+              form={form}
+              useExternalSecretsManager={showByosOption}
+              envFrom={{
+                fields: envFromFields,
+                append: appendEnvFrom,
+                remove: removeEnvFrom,
+                watch: form.watch,
+                setValue: form.setValue,
+                register: form.register,
+                fieldNamePrefix: "localConfig.envFrom",
+              }}
+            />
+          </div>
+        )}
 
+        {currentServerType === "local" && (
+          <div className="border rounded-lg p-5 space-y-4">
+            <h3 className="font-semibold text-sm">Docker</h3>
+
+            <FormField
+              control={form.control}
+              name="localConfig.dockerImage"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Image (optional)</FormLabel>
+                  <FormControl>
+                    <Input
+                      placeholder={mcpServerBaseImage}
+                      className="font-mono"
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormDescription>
+                    <a
+                      href="https://github.com/archestra-ai/archestra/tree/main/platform/mcp_server_docker_image"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-primary underline hover:no-underline"
+                    >
+                      Default image
+                    </a>{" "}
+                    includes alpine, npx, mcp[cli]. Use custom for additional
+                    packages.
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <div className="space-y-3">
+              <Label>Image Pull Secrets</Label>
+              <p className="text-sm text-muted-foreground">
+                Kubernetes secrets for pulling container images from private
+                registries.{" "}
+                <a
+                  href="https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary underline underline-offset-2 hover:text-primary/80"
+                >
+                  Learn more
+                </a>
+              </p>
+
+              {imagePullSecretFields.map((field, index) => {
+                const watchField = (key: string) =>
+                  form.watch(
+                    // biome-ignore lint/suspicious/noExplicitAny: discriminated union paths need cast
+                    `localConfig.imagePullSecrets.${index}.${key}` as any,
+                  ) ?? "";
+                const setField = (key: string, value: string) =>
+                  form.setValue(
+                    // biome-ignore lint/suspicious/noExplicitAny: discriminated union paths need cast
+                    `localConfig.imagePullSecrets.${index}.${key}` as any,
+                    value,
+                  );
+                const source = watchField("source");
+
+                return (
+                  <div
+                    key={field.id}
+                    className="border rounded-lg p-3 space-y-3"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <Select
+                        value={source}
+                        onValueChange={(val) => {
+                          if (val === "existing") {
+                            updateImagePullSecret(index, {
+                              source: "existing",
+                              name: "",
+                            });
+                          } else {
+                            updateImagePullSecret(index, {
+                              source: "credentials",
+                              server: "",
+                              username: "",
+                              email: "",
+                            });
+                          }
+                        }}
+                      >
+                        <SelectTrigger className="w-[200px]">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="existing">
+                            Existing Secret
+                          </SelectItem>
+                          <SelectItem value="credentials">
+                            Registry Credentials
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => removeImagePullSecret(index)}
+                      >
+                        <Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" />
+                      </Button>
+                    </div>
+
+                    {source === "existing" ? (
+                      <SearchableSelect
+                        value={watchField("name")}
+                        onValueChange={(val) => setField("name", val)}
+                        items={k8sSecrets.map((s) => ({
+                          value: s.name,
+                          label: s.name,
+                        }))}
+                        placeholder="Select a secret..."
+                        searchPlaceholder="Search secrets..."
+                        allowCustom
+                        className="w-full"
+                      />
+                    ) : (
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                          <Label className="text-xs">Server</Label>
+                          <Input
+                            placeholder="e.g. quay.io"
+                            className="font-mono"
+                            value={watchField("server")}
+                            onChange={(e) => setField("server", e.target.value)}
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-xs">Username</Label>
+                          <Input
+                            placeholder="username"
+                            value={watchField("username")}
+                            onChange={(e) =>
+                              setField("username", e.target.value)
+                            }
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-xs">Password</Label>
+                          <Input
+                            type="password"
+                            placeholder={
+                              mode === "edit" && !watchField("password")
+                                ? "Saved — leave blank to keep"
+                                : "password"
+                            }
+                            value={watchField("password") ?? ""}
+                            onChange={(e) =>
+                              setField("password", e.target.value)
+                            }
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-xs">Email (optional)</Label>
+                          <Input
+                            placeholder="email@example.com"
+                            value={watchField("email")}
+                            onChange={(e) => setField("email", e.target.value)}
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  appendImagePullSecret({ source: "existing", name: "" })
+                }
+              >
+                <Plus className="h-4 w-4 mr-1" />
+                Add
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {(currentServerType === "remote" || currentServerType === "local") && (
+          <div className="border rounded-lg p-5 space-y-4">
+            <h3 className="font-semibold text-sm">Multitenant Authorization</h3>
             <FormField
               control={form.control}
               name="authMethod"
@@ -631,7 +840,7 @@ export function McpCatalogForm({
                           htmlFor="auth-none"
                           className="font-normal cursor-pointer"
                         >
-                          No authorization
+                          None (e.g. static API key via environment variables)
                         </FormLabel>
                       </div>
                       {currentServerType === "remote" && (
@@ -665,7 +874,7 @@ export function McpCatalogForm({
                           htmlFor="auth-oauth"
                           className="font-normal cursor-pointer"
                         >
-                          OAuth 2.0
+                          OAuth 2.0 (recommended)
                         </FormLabel>
                       </div>
                     </RadioGroup>
@@ -846,33 +1055,39 @@ export function McpCatalogForm({
           </div>
         )}
 
-        <Collapsible open={labelsOpen} onOpenChange={setLabelsOpen}>
-          <CollapsibleTrigger className="flex items-center gap-2 text-sm font-medium hover:text-foreground text-muted-foreground transition-colors pt-4 border-t w-full">
-            <ChevronRight
-              className={`h-4 w-4 transition-transform ${labelsOpen ? "rotate-90" : ""}`}
-            />
-            Labels
-            {labels.length > 0 && (
-              <span className="text-xs bg-muted px-1.5 py-0.5 rounded-full">
-                {labels.length}
+        <div className="border rounded-lg p-5">
+          <Collapsible open={labelsOpen} onOpenChange={setLabelsOpen}>
+            <CollapsibleTrigger className="flex items-center gap-2 text-sm font-semibold hover:text-foreground text-foreground transition-colors w-full">
+              <ChevronRight
+                className={`h-4 w-4 transition-transform ${labelsOpen ? "rotate-90" : ""}`}
+              />
+              Labels
+              <span className="text-xs font-normal text-muted-foreground ml-1">
+                Organize, filter and search servers
               </span>
-            )}
-          </CollapsibleTrigger>
-          <CollapsibleContent className="pt-4">
-            <p className="text-sm text-muted-foreground pb-2">
-              Add labels to organize, filter, and search for this server in the
-              catalog.
-            </p>
-            <ProfileLabels
-              ref={labelsRef}
-              labels={labels}
-              onLabelsChange={setLabels}
-              showLabel={false}
-            />
-          </CollapsibleContent>
-        </Collapsible>
+              {labels.length > 0 && (
+                <span className="text-xs bg-muted px-1.5 py-0.5 rounded-full">
+                  {labels.length}
+                </span>
+              )}
+            </CollapsibleTrigger>
+            <CollapsibleContent className="pt-4">
+              <ProfileLabels
+                ref={labelsRef}
+                labels={labels}
+                onLabelsChange={setLabels}
+                showLabel={false}
+              />
+            </CollapsibleContent>
+          </Collapsible>
+        </div>
 
-        {footer}
+        {typeof footer === "function"
+          ? footer({
+              isDirty: form.formState.isDirty,
+              onReset: () => form.reset(),
+            })
+          : footer}
       </form>
     </Form>
   );

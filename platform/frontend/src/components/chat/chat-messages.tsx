@@ -1,12 +1,15 @@
 import type { UIMessage } from "@ai-sdk/react";
-import { TOOL_TODO_WRITE_FULL_NAME } from "@shared";
+import {
+  SWAP_AGENT_POKE_TEXT,
+  TOOL_SWAP_AGENT_FULL_NAME,
+  TOOL_TODO_WRITE_FULL_NAME,
+} from "@shared";
 import type { ChatStatus, DynamicToolUIPart, ToolUIPart } from "ai";
-import Image from "next/image";
 import {
   Fragment,
-  useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -31,8 +34,10 @@ import {
   ToolOutput,
 } from "@/components/ai-elements/tool";
 import { Button } from "@/components/ui/button";
-import { useHasPermissions } from "@/lib/auth.query";
+import { useHasPermissions, useSession } from "@/lib/auth.query";
+import { useProfileToolsWithIds } from "@/lib/chat.query";
 import { useUpdateChatMessage } from "@/lib/chat-message.query";
+import { useInternalMcpCatalog } from "@/lib/internal-mcp-catalog.query";
 import {
   extractCatalogIdFromInstallUrl,
   extractIdsFromReauthUrl,
@@ -41,14 +46,17 @@ import {
   parsePolicyDenied,
 } from "@/lib/llmProviders/common";
 import { useMcpInstallOrchestrator } from "@/lib/mcp-install-orchestrator.hook";
+import { useOrganization } from "@/lib/organization.query";
 import { hasThinkingTags, parseThinkingTags } from "@/lib/parse-thinking";
 import { cn } from "@/lib/utils";
 import { AuthRequiredTool } from "./auth-required-tool";
 import { extractFileAttachments, hasTextPart } from "./chat-messages.utils";
+import { CompactToolGroup } from "./compact-tool-call";
 import { EditableAssistantMessage } from "./editable-assistant-message";
 import { EditableUserMessage } from "./editable-user-message";
 import { ExpiredAuthTool } from "./expired-auth-tool";
 import { InlineChatError } from "./inline-chat-error";
+import { hasKnowledgeBaseToolCall } from "./knowledge-graph-citations";
 import { McpInstallDialogs } from "./mcp-install-dialogs";
 import { PolicyDeniedTool } from "./policy-denied-tool";
 import { TodoWriteTool } from "./todo-write-tool";
@@ -71,8 +79,6 @@ interface ChatMessagesProps {
   agentName?: string;
   suggestedPrompt?: string | null;
   onSuggestedPromptClick?: () => void;
-  /** Hide the decorative arrow pointing to agent selector (e.g., when an overlay is shown) */
-  hideArrow?: boolean;
   /** Callback for tool approval responses (approve/deny) */
   onToolApprovalResponse?: (params: {
     id: string;
@@ -113,17 +119,44 @@ export function ChatMessages({
   onMessagesUpdate,
   onUserMessageEdit,
   error = null,
-  hideArrow = false,
   onToolApprovalResponse,
 }: ChatMessagesProps) {
   const isStreamingStalled = useStreamingStallDetection(messages, status);
+  const { data: session } = useSession();
+  const isDebugging = session?.user?.name?.endsWith("(debugging)") ?? false;
+
   // Track editing by messageId-partIndex to support multiple text parts per message
   const [editingPartKey, setEditingPartKey] = useState<string | null>(null);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const { data: userCanCreateAgent } = useHasPermissions({
     agent: ["create"],
   });
+  const { data: canExpandToolCalls } = useHasPermissions({
+    chatExpandToolCalls: ["enable"],
+  });
+  const { data: organization } = useOrganization();
   const orchestrator = useMcpInstallOrchestrator();
+
+  // Build tool name → icon map from agent tools + catalog data
+  const { data: agentTools } = useProfileToolsWithIds(agentId);
+  const { data: catalogItems } = useInternalMcpCatalog({ enabled: !!agentId });
+  const toolIconMap = useMemo(() => {
+    const map = new Map<string, { icon?: string | null; catalogId?: string }>();
+    if (!agentTools || !catalogItems) return map;
+    const catalogMap = new Map(catalogItems.map((c) => [c.id, c]));
+    for (const tool of agentTools) {
+      if (tool.catalogId) {
+        const catalog = catalogMap.get(tool.catalogId);
+        if (catalog) {
+          map.set(tool.name, {
+            icon: catalog.icon,
+            catalogId: catalog.id,
+          });
+        }
+      }
+    }
+    return map;
+  }, [agentTools, catalogItems]);
 
   // Initialize mutation hook with conversationId (use empty string as fallback for hook rules)
   const updateChatMessageMutation = useUpdateChatMessage(conversationId || "");
@@ -200,139 +233,6 @@ export function ChatMessages({
     }
   };
 
-  // Ref for the text position marker
-  const textMarkerRef = useRef<HTMLSpanElement>(null);
-
-  // Calculate arrow dimensions based on actual text position
-  const [arrowDimensions, setArrowDimensions] = useState({
-    width: 400,
-    height: 300,
-    pathD: "M 350 340 Q 300 340 250 340 L 100 340 Q 60 340 60 300 L 60 5",
-    visible: false,
-    left: 248,
-    top: 85,
-  });
-
-  const updateArrowDimensions = useCallback(() => {
-    if (!textMarkerRef.current) return;
-
-    // Get the parent container dimensions (changes when artifact panel opens/closes)
-    const parentContainer = textMarkerRef.current.closest(".flex-1");
-    if (!parentContainer) return;
-
-    const containerRect = parentContainer.getBoundingClientRect();
-    const containerWidth = containerRect.width;
-    const viewportHeight = window.innerHeight;
-
-    // Only show arrow if container has sufficient width and viewport has height
-    const isVisible = containerWidth >= 768 && viewportHeight >= 600;
-
-    if (!isVisible) {
-      setArrowDimensions((prev) => ({ ...prev, visible: false }));
-      return;
-    }
-
-    // Get the actual position of the text marker
-    const textRect = textMarkerRef.current.getBoundingClientRect();
-    const textX = textRect.left;
-    const textY = textRect.top;
-
-    // Agent selector position - dynamically find the actual button.
-    // The SVG path draws the arrowhead at internal coords (60, 5), so offset
-    // selectorX/Y so the arrowhead lands near the button's left edge, below the header.
-    const selectorEl = document.querySelector("[data-agent-selector]");
-    const selectorRect = selectorEl?.getBoundingClientRect();
-    const selectorX = selectorRect ? selectorRect.left - 8 : 248;
-    const selectorY = selectorRect ? selectorRect.bottom + 30 : 85;
-
-    // Calculate SVG dimensions - arrow should end at text marker position
-    const svgWidth = Math.max(textX - selectorX, 200); // Width from selector to text
-    const svgHeight = Math.max(textY - selectorY, 100); // Height from selector to text
-
-    // Path coordinates (relative to SVG origin)
-    // Arrow tip at top left
-    const _startX = 60;
-    const startY = 5;
-    // End point should be exactly at the text marker position
-    const endX = svgWidth; // No margin - end exactly at text
-    const endY = svgHeight - 10;
-    // Curve control point
-    const curveY = endY - 40;
-
-    setArrowDimensions({
-      width: svgWidth,
-      height: svgHeight,
-      pathD: `M ${endX} ${endY} Q ${endX - 50} ${endY} ${endX - 100} ${endY} L 100 ${endY} Q 60 ${endY} 60 ${curveY} L 60 ${startY}`,
-      visible: isVisible,
-      left: selectorX,
-      top: selectorY,
-    });
-  }, []);
-
-  useEffect(() => {
-    // Initial calculation after mount
-    const timer = setTimeout(updateArrowDimensions, 100);
-
-    // Update on window resize
-    window.addEventListener("resize", updateArrowDimensions);
-
-    // Use ResizeObserver to detect when the parent container changes size
-    // This will trigger when the artifact panel opens/closes or height changes
-    const resizeObserver = new ResizeObserver((entries) => {
-      // Check if height actually changed (not just width)
-      for (const _entry of entries) {
-        updateArrowDimensions();
-      }
-    });
-
-    // Find the main content area that actually resizes when artifact panel toggles
-    // Look for the parent that contains the overflow-y-auto class
-    const parentContainer =
-      textMarkerRef.current?.closest(".overflow-y-auto")?.parentElement
-        ?.parentElement;
-    if (parentContainer) {
-      resizeObserver.observe(parentContainer);
-    }
-
-    // Also observe the direct parent for vertical size changes
-    const directParent = textMarkerRef.current?.closest(".overflow-y-auto");
-    if (directParent) {
-      resizeObserver.observe(directParent);
-    }
-
-    // Also add a small delay and retry to ensure element is found
-    const retryTimer = setTimeout(() => {
-      if (!parentContainer && textMarkerRef.current) {
-        const container =
-          textMarkerRef.current.closest(".overflow-y-auto")?.parentElement
-            ?.parentElement;
-        if (container) {
-          resizeObserver.observe(container);
-        }
-        const direct = textMarkerRef.current.closest(".overflow-y-auto");
-        if (direct) {
-          resizeObserver.observe(direct);
-        }
-      }
-    }, 500);
-
-    return () => {
-      clearTimeout(timer);
-      clearTimeout(retryTimer);
-      window.removeEventListener("resize", updateArrowDimensions);
-      resizeObserver.disconnect();
-    };
-  }, [updateArrowDimensions]);
-
-  // Recalculate arrow when agent name changes
-  useEffect(() => {
-    if (agentName) {
-      // Small delay to ensure DOM has updated with new agent name
-      const timer = setTimeout(updateArrowDimensions, 50);
-      return () => clearTimeout(timer);
-    }
-  }, [agentName, updateArrowDimensions]);
-
   if (messages.length === 0) {
     // Don't show "start conversation" message while loading - prevents flash of empty state
     if (isLoadingConversation) {
@@ -343,55 +243,8 @@ export function ChatMessages({
     if (agentName) {
       return (
         <div className="flex items-center justify-center h-full relative">
-          {/* Custom bent arrow pointing to agent selector - hidden on mobile */}
-          {arrowDimensions.visible && !hideArrow && (
-            <svg
-              className="fixed pointer-events-none z-50"
-              width={arrowDimensions.width}
-              height={arrowDimensions.height}
-              style={{
-                top: `${arrowDimensions.top}px`,
-                left: `${arrowDimensions.left}px`,
-              }}
-              aria-hidden="true"
-            >
-              <title>Arrow pointing to agent selector</title>
-              <defs>
-                <marker
-                  id="arrowhead"
-                  markerWidth="10"
-                  markerHeight="7"
-                  refX="9"
-                  refY="3.5"
-                  orient="auto"
-                >
-                  <polygon
-                    points="0 0, 10 3.5, 0 7"
-                    fill="rgb(156, 163, 175)"
-                    strokeWidth="0"
-                    opacity="0.6"
-                  />
-                </marker>
-              </defs>
-              <path
-                d={arrowDimensions.pathD}
-                stroke="rgb(156, 163, 175)"
-                strokeWidth="2"
-                fill="none"
-                strokeDasharray="5,5"
-                markerEnd="url(#arrowhead)"
-                opacity="0.5"
-              />
-            </svg>
-          )}
-
           <div className="text-center space-y-6 max-w-2xl px-4 relative">
             <p className="text-lg text-muted-foreground relative">
-              <span
-                ref={textMarkerRef}
-                className="absolute -left-4 top-1/2 -translate-y-1/2 w-0 h-0"
-                aria-hidden="true"
-              />
               Chat with{" "}
               <span className="font-medium text-foreground truncate inline-block max-w-sm align-bottom">
                 {agentName}
@@ -470,6 +323,9 @@ export function ChatMessages({
       <ConversationContent>
         <div className="max-w-4xl mx-auto relative pb-8">
           {messages.map((message, idx) => {
+            // Hide the auto-poke message sent after agent swap
+            if (!isDebugging && isSwapAgentPokeMessage(message)) return null;
+
             const isDimmed =
               editingMessageIndex !== -1 && idx > editingMessageIndex;
             return (
@@ -477,348 +333,393 @@ export function ChatMessages({
                 key={message.id || idx}
                 className={cn(isDimmed && "opacity-40 transition-opacity")}
               >
-                {message.parts?.map((part, i) => {
-                  // Skip tool result parts that immediately follow a tool invocation with same toolCallId
-                  if (
-                    isToolPart(part) &&
-                    part.state === "output-available" &&
-                    i > 0
-                  ) {
-                    const prevPart = message.parts?.[i - 1];
-                    if (
-                      isToolPart(prevPart) &&
-                      prevPart.state === "input-available" &&
-                      prevPart.toolCallId === part.toolCallId
-                    ) {
+                {(() => {
+                  const { groupMap, consumedIndices } = identifyCompactGroups(
+                    message.parts,
+                  );
+                  return message.parts?.map((part, i) => {
+                    // Render compact group at its start index
+                    if (groupMap.has(i)) {
+                      const group = groupMap.get(i);
+                      if (!group) return null;
+                      return (
+                        <CompactToolGroup
+                          key={`compact-${message.id}-${i}`}
+                          tools={group.entries.map((entry) => ({
+                            key: `${message.id}-${entry.partIndex}`,
+                            toolName: entry.toolName,
+                            part: entry.part,
+                            toolResultPart: entry.toolResultPart,
+                            errorText: entry.errorText,
+                          }))}
+                          toolIconMap={toolIconMap}
+                          canExpandToolCalls={canExpandToolCalls}
+                          onToolApprovalResponse={onToolApprovalResponse}
+                        />
+                      );
+                    }
+
+                    // Skip parts consumed by compact groups
+                    if (consumedIndices.has(i)) {
                       return null;
                     }
-                  }
 
-                  switch (part.type) {
-                    case "text": {
-                      // Skip empty text parts from assistant messages.
-                      // OpenAI-compatible providers (Ollama, vLLM, etc.) may send empty content
-                      // alongside tool calls, which the AI SDK converts into an empty text part.
-                      if (!part.text && message.role === "assistant") {
+                    // Skip tool result parts that immediately follow a tool invocation with same toolCallId
+                    if (
+                      isToolPart(part) &&
+                      part.state === "output-available" &&
+                      i > 0
+                    ) {
+                      const prevPart = message.parts?.[i - 1];
+                      if (
+                        isToolPart(prevPart) &&
+                        prevPart.state === "input-available" &&
+                        prevPart.toolCallId === part.toolCallId
+                      ) {
                         return null;
                       }
-
-                      const partKey = `${message.id}-${i}`;
-
-                      // Anthropic sends policy denials as text blocks (see MessageTool for OpenAI path)
-                      const policyDenied = parsePolicyDenied(part.text);
-                      if (policyDenied) {
-                        return (
-                          <PolicyDeniedTool
-                            key={partKey}
-                            policyDenied={policyDenied}
-                            {...(agentId
-                              ? { editable: true, profileId: agentId }
-                              : { editable: false })}
-                          />
-                        );
-                      }
-
-                      // Use editable component for assistant messages
-                      if (message.role === "assistant") {
-                        // Only show actions if this is the last assistant message in sequence
-                        // AND this is the last text part in the message
-                        const isLastAssistantInSequence =
-                          isLastInAssistantSequence[idx];
-
-                        // Find the last text part index in this message
-                        let lastTextPartIndex = -1;
-                        for (let j = message.parts.length - 1; j >= 0; j--) {
-                          if (message.parts[j].type === "text") {
-                            lastTextPartIndex = j;
-                            break;
-                          }
-                        }
-
-                        const isLastTextPart = i === lastTextPartIndex;
-                        const showActions =
-                          isLastAssistantInSequence &&
-                          isLastTextPart &&
-                          status !== "streaming";
-
-                        // Check for <think> tags (used by Qwen and similar models)
-                        if (hasThinkingTags(part.text)) {
-                          const parsedParts = parseThinkingTags(part.text);
-                          return (
-                            <Fragment key={partKey}>
-                              {parsedParts.map((parsedPart, parsedIdx) => {
-                                const parsedKey = `${partKey}-parsed-${parsedIdx}`;
-                                if (parsedPart.type === "reasoning") {
-                                  return (
-                                    <Reasoning
-                                      key={parsedKey}
-                                      className="w-full"
-                                    >
-                                      <ReasoningTrigger />
-                                      <ReasoningContent>
-                                        {parsedPart.text}
-                                      </ReasoningContent>
-                                    </Reasoning>
-                                  );
-                                }
-                                // Render text parts - show actions only on the last text part
-                                const isLastParsedTextPart =
-                                  parsedIdx ===
-                                  parsedParts.length -
-                                    1 -
-                                    [...parsedParts]
-                                      .reverse()
-                                      .findIndex((p) => p.type === "text");
-                                return (
-                                  <EditableAssistantMessage
-                                    key={parsedKey}
-                                    messageId={message.id}
-                                    partIndex={i}
-                                    partKey={partKey}
-                                    text={parsedPart.text}
-                                    isEditing={editingPartKey === partKey}
-                                    showActions={
-                                      showActions && isLastParsedTextPart
-                                    }
-                                    editDisabled={isResponseInProgress}
-                                    onStartEdit={handleStartEdit}
-                                    onCancelEdit={handleCancelEdit}
-                                    onSave={handleSaveAssistantMessage}
-                                  />
-                                );
-                              })}
-                            </Fragment>
-                          );
-                        }
-
-                        return (
-                          <Fragment key={partKey}>
-                            <EditableAssistantMessage
-                              messageId={message.id}
-                              partIndex={i}
-                              partKey={partKey}
-                              text={part.text}
-                              isEditing={editingPartKey === partKey}
-                              showActions={showActions}
-                              editDisabled={isResponseInProgress}
-                              onStartEdit={handleStartEdit}
-                              onCancelEdit={handleCancelEdit}
-                              onSave={handleSaveAssistantMessage}
-                            />
-                          </Fragment>
-                        );
-                      }
-
-                      // Use editable component for user messages
-                      if (message.role === "user") {
-                        return (
-                          <Fragment key={partKey}>
-                            <EditableUserMessage
-                              messageId={message.id}
-                              partIndex={i}
-                              partKey={partKey}
-                              text={part.text}
-                              isEditing={editingPartKey === partKey}
-                              editDisabled={isResponseInProgress}
-                              attachments={extractFileAttachments(
-                                message.parts,
-                              )}
-                              onStartEdit={handleStartEdit}
-                              onCancelEdit={handleCancelEdit}
-                              onSave={handleSaveUserMessage}
-                            />
-                          </Fragment>
-                        );
-                      }
-
-                      // Regular rendering for system messages
-                      return (
-                        <Fragment key={`${message.id}-${i}`}>
-                          <Message from={message.role}>
-                            <MessageContent>
-                              {message.role === "system" && (
-                                <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                  System Prompt
-                                </div>
-                              )}
-                              <Response>{part.text}</Response>
-                            </MessageContent>
-                          </Message>
-                        </Fragment>
-                      );
                     }
 
-                    case "reasoning":
-                      return (
-                        <Reasoning
-                          key={`${message.id}-${i}`}
-                          className="w-full"
-                        >
-                          <ReasoningTrigger />
-                          <ReasoningContent>{part.text}</ReasoningContent>
-                        </Reasoning>
-                      );
-
-                    case "file": {
-                      // User file attachments are normally rendered inside EditableUserMessage
-                      // But if there's no text part, we need to render them here
-                      if (message.role === "user") {
-                        // If there's a text part, files will be rendered with EditableUserMessage
-                        if (hasTextPart(message.parts)) {
-                          return null;
-                        }
-
-                        // For file-only messages, render on the first file part only
-                        const isFirstFilePart =
-                          message.parts?.findIndex((p) => p.type === "file") ===
-                          i;
-
-                        if (!isFirstFilePart) {
+                    switch (part.type) {
+                      case "text": {
+                        // Skip empty text parts from assistant messages.
+                        // OpenAI-compatible providers (Ollama, vLLM, etc.) may send empty content
+                        // alongside tool calls, which the AI SDK converts into an empty text part.
+                        if (!part.text && message.role === "assistant") {
                           return null;
                         }
 
                         const partKey = `${message.id}-${i}`;
 
-                        return (
-                          <Fragment key={partKey}>
-                            <EditableUserMessage
-                              messageId={message.id}
-                              partIndex={i}
-                              partKey={partKey}
-                              text=""
-                              isEditing={editingPartKey === partKey}
-                              editDisabled={isResponseInProgress}
-                              attachments={extractFileAttachments(
-                                message.parts,
-                              )}
-                              onStartEdit={handleStartEdit}
-                              onCancelEdit={handleCancelEdit}
-                              onSave={handleSaveUserMessage}
+                        // Anthropic sends policy denials as text blocks (see MessageTool for OpenAI path)
+                        const policyDenied = parsePolicyDenied(part.text);
+                        if (policyDenied) {
+                          return (
+                            <PolicyDeniedTool
+                              key={partKey}
+                              policyDenied={policyDenied}
+                              {...(agentId
+                                ? { editable: true, profileId: agentId }
+                                : { editable: false })}
                             />
+                          );
+                        }
+
+                        // Use editable component for assistant messages
+                        if (message.role === "assistant") {
+                          // Only show actions if this is the last assistant message in sequence
+                          // AND this is the last text part in the message
+                          const isLastAssistantInSequence =
+                            isLastInAssistantSequence[idx];
+
+                          // Find the last text part index in this message
+                          let lastTextPartIndex = -1;
+                          for (let j = message.parts.length - 1; j >= 0; j--) {
+                            if (message.parts[j].type === "text") {
+                              lastTextPartIndex = j;
+                              break;
+                            }
+                          }
+
+                          const isLastTextPart = i === lastTextPartIndex;
+                          const isStreamingThisPart =
+                            status === "streaming" &&
+                            idx === messages.length - 1 &&
+                            isLastTextPart;
+                          const showActions =
+                            isLastAssistantInSequence &&
+                            isLastTextPart &&
+                            status !== "streaming";
+                          // Show citations on the last text part of the last
+                          // assistant message, only after streaming completes
+                          // to avoid citations jumping between messages.
+                          let citationParts: typeof message.parts | undefined;
+                          if (
+                            isLastAssistantInSequence &&
+                            isLastTextPart &&
+                            !isResponseInProgress
+                          ) {
+                            if (hasKnowledgeBaseToolCall(message.parts ?? [])) {
+                              citationParts = message.parts;
+                            } else {
+                              // Search backwards for KB tool calls within the same
+                              // assistant turn — stop at the next user message to
+                              // avoid showing stale citations from prior turns.
+                              for (
+                                let prevIdx = idx - 1;
+                                prevIdx >= 0;
+                                prevIdx--
+                              ) {
+                                const prev = messages[prevIdx];
+                                if (prev.role === "user") break;
+                                if (
+                                  prev.role === "assistant" &&
+                                  hasKnowledgeBaseToolCall(prev.parts ?? [])
+                                ) {
+                                  citationParts = prev.parts;
+                                  break;
+                                }
+                              }
+                            }
+                          }
+
+                          // Check for <think> tags (used by Qwen and similar models)
+                          if (hasThinkingTags(part.text)) {
+                            const parsedParts = parseThinkingTags(part.text);
+                            return (
+                              <Fragment key={partKey}>
+                                {parsedParts.map((parsedPart, parsedIdx) => {
+                                  const parsedKey = `${partKey}-parsed-${parsedIdx}`;
+                                  if (parsedPart.type === "reasoning") {
+                                    return (
+                                      <Reasoning
+                                        key={parsedKey}
+                                        className="w-full"
+                                      >
+                                        <ReasoningTrigger />
+                                        <ReasoningContent>
+                                          {parsedPart.text}
+                                        </ReasoningContent>
+                                      </Reasoning>
+                                    );
+                                  }
+                                  // Render text parts - show actions only on the last text part
+                                  const isLastParsedTextPart =
+                                    parsedIdx ===
+                                    parsedParts.length -
+                                      1 -
+                                      [...parsedParts]
+                                        .reverse()
+                                        .findIndex((p) => p.type === "text");
+                                  return (
+                                    <EditableAssistantMessage
+                                      key={parsedKey}
+                                      messageId={message.id}
+                                      partIndex={i}
+                                      partKey={partKey}
+                                      text={parsedPart.text}
+                                      isEditing={editingPartKey === partKey}
+                                      showActions={
+                                        showActions && isLastParsedTextPart
+                                      }
+                                      citationParts={
+                                        isLastParsedTextPart
+                                          ? citationParts
+                                          : undefined
+                                      }
+                                      isStreaming={
+                                        isStreamingThisPart &&
+                                        isLastParsedTextPart
+                                      }
+                                      editDisabled={isResponseInProgress}
+                                      onStartEdit={handleStartEdit}
+                                      onCancelEdit={handleCancelEdit}
+                                      onSave={handleSaveAssistantMessage}
+                                    />
+                                  );
+                                })}
+                              </Fragment>
+                            );
+                          }
+
+                          return (
+                            <Fragment key={partKey}>
+                              <EditableAssistantMessage
+                                messageId={message.id}
+                                partIndex={i}
+                                partKey={partKey}
+                                text={part.text}
+                                isEditing={editingPartKey === partKey}
+                                showActions={showActions}
+                                citationParts={citationParts}
+                                isStreaming={isStreamingThisPart}
+                                editDisabled={isResponseInProgress}
+                                onStartEdit={handleStartEdit}
+                                onCancelEdit={handleCancelEdit}
+                                onSave={handleSaveAssistantMessage}
+                              />
+                            </Fragment>
+                          );
+                        }
+
+                        // Use editable component for user messages
+                        if (message.role === "user") {
+                          return (
+                            <Fragment key={partKey}>
+                              <EditableUserMessage
+                                messageId={message.id}
+                                partIndex={i}
+                                partKey={partKey}
+                                text={part.text}
+                                isEditing={editingPartKey === partKey}
+                                editDisabled={isResponseInProgress}
+                                attachments={extractFileAttachments(
+                                  message.parts,
+                                )}
+                                onStartEdit={handleStartEdit}
+                                onCancelEdit={handleCancelEdit}
+                                onSave={handleSaveUserMessage}
+                              />
+                            </Fragment>
+                          );
+                        }
+
+                        // Regular rendering for system messages
+                        return (
+                          <Fragment key={`${message.id}-${i}`}>
+                            <Message from={message.role}>
+                              <MessageContent>
+                                {message.role === "system" && (
+                                  <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                    System Prompt
+                                  </div>
+                                )}
+                                <Response>{part.text}</Response>
+                              </MessageContent>
+                            </Message>
                           </Fragment>
                         );
                       }
 
-                      // Render file attachments for assistant/system messages
-                      const filePart = part as {
-                        type: "file";
-                        url: string;
-                        mediaType: string;
-                        filename?: string;
-                      };
-                      const isImage = filePart.mediaType?.startsWith("image/");
-                      const isVideo = filePart.mediaType?.startsWith("video/");
-                      const isPdf = filePart.mediaType === "application/pdf";
+                      case "reasoning":
+                        return (
+                          <Reasoning
+                            key={`${message.id}-${i}`}
+                            className="w-full"
+                          >
+                            <ReasoningTrigger />
+                            <ReasoningContent>{part.text}</ReasoningContent>
+                          </Reasoning>
+                        );
 
-                      return (
-                        <div
-                          key={`${message.id}-${i}`}
-                          className="py-1 -mt-2 flex justify-start"
-                        >
-                          <div className="max-w-sm">
-                            {isImage && (
-                              <img
-                                src={filePart.url}
-                                alt={filePart.filename || "Attached image"}
-                                className="max-w-full max-h-64 rounded-lg object-contain"
+                      case "file": {
+                        // User file attachments are normally rendered inside EditableUserMessage
+                        // But if there's no text part, we need to render them here
+                        if (message.role === "user") {
+                          // If there's a text part, files will be rendered with EditableUserMessage
+                          if (hasTextPart(message.parts)) {
+                            return null;
+                          }
+
+                          // For file-only messages, render on the first file part only
+                          const isFirstFilePart =
+                            message.parts?.findIndex(
+                              (p) => p.type === "file",
+                            ) === i;
+
+                          if (!isFirstFilePart) {
+                            return null;
+                          }
+
+                          const partKey = `${message.id}-${i}`;
+
+                          return (
+                            <Fragment key={partKey}>
+                              <EditableUserMessage
+                                messageId={message.id}
+                                partIndex={i}
+                                partKey={partKey}
+                                text=""
+                                isEditing={editingPartKey === partKey}
+                                editDisabled={isResponseInProgress}
+                                attachments={extractFileAttachments(
+                                  message.parts,
+                                )}
+                                onStartEdit={handleStartEdit}
+                                onCancelEdit={handleCancelEdit}
+                                onSave={handleSaveUserMessage}
                               />
-                            )}
-                            {isVideo && (
-                              <video
-                                src={filePart.url}
-                                controls
-                                className="max-w-full max-h-64 rounded-lg"
-                              >
-                                <track kind="captions" />
-                              </video>
-                            )}
-                            {isPdf && (
-                              <div className="flex items-center gap-2 text-sm rounded-lg border bg-muted/50 p-2">
-                                <svg
-                                  className="h-6 w-6 text-red-500"
-                                  fill="currentColor"
-                                  viewBox="0 0 24 24"
+                            </Fragment>
+                          );
+                        }
+
+                        // Render file attachments for assistant/system messages
+                        const filePart = part as {
+                          type: "file";
+                          url: string;
+                          mediaType: string;
+                          filename?: string;
+                        };
+                        const isImage =
+                          filePart.mediaType?.startsWith("image/");
+                        const isVideo =
+                          filePart.mediaType?.startsWith("video/");
+                        const isPdf = filePart.mediaType === "application/pdf";
+
+                        return (
+                          <div
+                            key={`${message.id}-${i}`}
+                            className="py-1 -mt-2 flex justify-start"
+                          >
+                            <div className="max-w-sm">
+                              {isImage && (
+                                <img
+                                  src={filePart.url}
+                                  alt={filePart.filename || "Attached image"}
+                                  className="max-w-full max-h-64 rounded-lg object-contain"
+                                />
+                              )}
+                              {isVideo && (
+                                <video
+                                  src={filePart.url}
+                                  controls
+                                  className="max-w-full max-h-64 rounded-lg"
                                 >
-                                  <title>PDF Document</title>
-                                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm-1 2l5 5h-5V4zm-3 9h2v2H10v-2zm0 3h2v2H10v-2zm-3-3h2v2H7v-2zm0 3h2v2H7v-2z" />
-                                </svg>
-                                <span className="font-medium truncate">
-                                  {filePart.filename || "PDF Document"}
-                                </span>
-                              </div>
-                            )}
-                            {!isImage && !isVideo && !isPdf && (
-                              <div className="flex items-center gap-2 text-sm rounded-lg border bg-muted/50 p-2">
-                                <svg
-                                  className="h-5 w-5 text-muted-foreground"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  viewBox="0 0 24 24"
-                                >
-                                  <title>File Attachment</title>
-                                  <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    strokeWidth={2}
-                                    d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"
-                                  />
-                                </svg>
-                                <span className="truncate">
-                                  {filePart.filename || "Attached file"}
-                                </span>
-                              </div>
-                            )}
+                                  <track kind="captions" />
+                                </video>
+                              )}
+                              {isPdf && (
+                                <div className="flex items-center gap-2 text-sm rounded-lg border bg-muted/50 p-2">
+                                  <svg
+                                    className="h-6 w-6 text-red-500"
+                                    fill="currentColor"
+                                    viewBox="0 0 24 24"
+                                  >
+                                    <title>PDF Document</title>
+                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm-1 2l5 5h-5V4zm-3 9h2v2H10v-2zm0 3h2v2H10v-2zm-3-3h2v2H7v-2zm0 3h2v2H7v-2z" />
+                                  </svg>
+                                  <span className="font-medium truncate">
+                                    {filePart.filename || "PDF Document"}
+                                  </span>
+                                </div>
+                              )}
+                              {!isImage && !isVideo && !isPdf && (
+                                <div className="flex items-center gap-2 text-sm rounded-lg border bg-muted/50 p-2">
+                                  <svg
+                                    className="h-5 w-5 text-muted-foreground"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                  >
+                                    <title>File Attachment</title>
+                                    <path
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      strokeWidth={2}
+                                      d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"
+                                    />
+                                  </svg>
+                                  <span className="truncate">
+                                    {filePart.filename || "Attached file"}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      );
-                    }
-
-                    case "dynamic-tool": {
-                      if (!isToolPart(part)) return null;
-                      const toolName = part.toolName;
-
-                      // Look ahead for tool result (same tool call ID)
-                      let toolResultPart = null;
-                      const nextPart = message.parts?.[i + 1];
-                      if (
-                        nextPart &&
-                        isToolPart(nextPart) &&
-                        nextPart.type === "dynamic-tool" &&
-                        nextPart.state === "output-available" &&
-                        nextPart.toolCallId === part.toolCallId
-                      ) {
-                        toolResultPart = nextPart;
+                        );
                       }
 
-                      return (
-                        <MessageTool
-                          part={part}
-                          key={`${message.id}-${i}`}
-                          toolResultPart={toolResultPart}
-                          toolName={toolName}
-                          agentId={agentId}
-                          onToolApprovalResponse={onToolApprovalResponse}
-                          onInstallMcp={orchestrator.triggerInstallByCatalogId}
-                          onReauthMcp={
-                            orchestrator.triggerReauthByCatalogIdAndServerId
-                          }
-                        />
-                      );
-                    }
-
-                    default: {
-                      // Handle tool invocations (type is "tool-{toolName}")
-                      if (isToolPart(part) && part.type?.startsWith("tool-")) {
-                        const toolName = part.type.replace("tool-", "");
+                      case "dynamic-tool": {
+                        if (!isToolPart(part)) return null;
+                        const toolName = part.toolName;
 
                         // Look ahead for tool result (same tool call ID)
-                        // biome-ignore lint/suspicious/noExplicitAny: Tool result structure varies by tool type
-                        let toolResultPart: any = null;
+                        let toolResultPart = null;
                         const nextPart = message.parts?.[i + 1];
                         if (
                           nextPart &&
                           isToolPart(nextPart) &&
-                          nextPart.type?.startsWith("tool-") &&
+                          nextPart.type === "dynamic-tool" &&
                           nextPart.state === "output-available" &&
                           nextPart.toolCallId === part.toolCallId
                         ) {
@@ -832,6 +733,8 @@ export function ChatMessages({
                             toolResultPart={toolResultPart}
                             toolName={toolName}
                             agentId={agentId}
+                            isDebugging={isDebugging}
+                            canExpandToolCalls={canExpandToolCalls}
                             onToolApprovalResponse={onToolApprovalResponse}
                             onInstallMcp={
                               orchestrator.triggerInstallByCatalogId
@@ -843,11 +746,54 @@ export function ChatMessages({
                         );
                       }
 
-                      // Skip step-start and other non-renderable parts
-                      return null;
+                      default: {
+                        // Handle tool invocations (type is "tool-{toolName}")
+                        if (
+                          isToolPart(part) &&
+                          part.type?.startsWith("tool-")
+                        ) {
+                          const toolName = part.type.replace("tool-", "");
+
+                          // Look ahead for tool result (same tool call ID)
+                          // biome-ignore lint/suspicious/noExplicitAny: Tool result structure varies by tool type
+                          let toolResultPart: any = null;
+                          const nextPart = message.parts?.[i + 1];
+                          if (
+                            nextPart &&
+                            isToolPart(nextPart) &&
+                            nextPart.type?.startsWith("tool-") &&
+                            nextPart.state === "output-available" &&
+                            nextPart.toolCallId === part.toolCallId
+                          ) {
+                            toolResultPart = nextPart;
+                          }
+
+                          return (
+                            <MessageTool
+                              part={part}
+                              key={`${message.id}-${i}`}
+                              toolResultPart={toolResultPart}
+                              toolName={toolName}
+                              agentId={agentId}
+                              isDebugging={isDebugging}
+                              onToolApprovalResponse={onToolApprovalResponse}
+                              onInstallMcp={
+                                orchestrator.triggerInstallByCatalogId
+                              }
+                              onReauthMcp={
+                                orchestrator.triggerReauthByCatalogIdAndServerId
+                              }
+                            />
+                          );
+                        }
+
+                        // Skip step-start and other non-renderable parts
+                        return null;
+                      }
                     }
-                  }
-                })}
+                  });
+                })()}
+                <SwapAgentDivider message={message} />
               </div>
             );
           })}
@@ -857,11 +803,9 @@ export function ChatMessages({
             (status === "streaming" && isStreamingStalled)) && (
             <div className="absolute bottom-[-10] left-0">
               <Message from="assistant">
-                <Image
-                  src={"/logo.png"}
+                <img
+                  src={organization?.iconLogo || "/logo.png"}
                   alt="Loading logo"
-                  width={30}
-                  height={30}
                   className="object-contain h-6 w-auto animate-[bounce_700ms_ease_200ms_infinite]"
                 />
               </Message>
@@ -919,6 +863,8 @@ function MessageTool({
   toolResultPart,
   toolName,
   agentId,
+  isDebugging,
+  canExpandToolCalls = true,
   onToolApprovalResponse,
   onInstallMcp,
   onReauthMcp,
@@ -927,6 +873,8 @@ function MessageTool({
   toolResultPart: ToolUIPart | DynamicToolUIPart | null;
   toolName: string;
   agentId?: string;
+  isDebugging?: boolean;
+  canExpandToolCalls?: boolean;
   onToolApprovalResponse?: (params: {
     id: string;
     approved: boolean;
@@ -1032,6 +980,12 @@ function MessageTool({
     }
   }
 
+  // swap_agent is rendered as a divider after all message parts (see SwapAgentDivider below)
+  // Show the raw tool call when the user's name ends with "(debugging)"
+  if (!isDebugging && toolName === TOOL_SWAP_AGENT_FULL_NAME) {
+    return null;
+  }
+
   if (toolName === TOOL_TODO_WRITE_FULL_NAME) {
     return (
       <TodoWriteTool
@@ -1058,9 +1012,12 @@ function MessageTool({
     <ToolErrorLogsButton toolName={toolName} />
   ) : null;
 
+  const isExpandable =
+    hasContent && (canExpandToolCalls || isApprovalRequested);
+
   return (
     <Tool
-      className={hasContent ? "cursor-pointer" : ""}
+      className={isExpandable ? "cursor-pointer" : ""}
       defaultOpen={isApprovalRequested}
     >
       <ToolHeader
@@ -1070,7 +1027,7 @@ function MessageTool({
           toolResultPart,
           errorText,
         })}
-        isCollapsible={hasContent}
+        isCollapsible={isExpandable}
         actionButton={logsButton}
       />
       <ToolContent>
@@ -1151,3 +1108,244 @@ const getHeaderState = ({
   if (toolResultPart) return "output-available";
   return state;
 };
+
+/**
+ * Determines if a tool part should render as a compact circle rather than a full card.
+ * Returns false for errors, special tools, and approval-requested states.
+ */
+function isCompactEligible(params: {
+  // biome-ignore lint/suspicious/noExplicitAny: Tool parts have dynamic structure from AI SDK
+  part: any;
+  // biome-ignore lint/suspicious/noExplicitAny: Tool result parts have dynamic structure from AI SDK
+  toolResultPart: any;
+  toolName: string;
+}): boolean {
+  const { part, toolResultPart, toolName } = params;
+
+  // Special tools always render as full cards or are hidden
+  if (
+    toolName === TOOL_SWAP_AGENT_FULL_NAME ||
+    toolName === TOOL_TODO_WRITE_FULL_NAME
+  ) {
+    return false;
+  }
+
+  // Approval states need full card for approve/deny buttons
+  if (part.state === "approval-requested") {
+    return false;
+  }
+
+  // Check for errors
+  const outputError = toolResultPart
+    ? tryToExtractErrorFromOutput(toolResultPart.output)
+    : tryToExtractErrorFromOutput(part.output);
+  const errorText = toolResultPart
+    ? (toolResultPart.errorText ?? outputError)
+    : (part.errorText ?? outputError);
+
+  if (errorText) {
+    // Check for policy denied, expired auth, auth required patterns
+    if (
+      parsePolicyDenied(errorText) ||
+      parseExpiredAuth(errorText) ||
+      parseAuthRequired(errorText)
+    ) {
+      return false;
+    }
+    // Any error = full card
+    return false;
+  }
+
+  // Check output for auth patterns
+  const rawOutput = toolResultPart?.output ?? part.output;
+  if (typeof rawOutput === "string") {
+    if (parseExpiredAuth(rawOutput) || parseAuthRequired(rawOutput)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+type CompactGroup = {
+  startIndex: number;
+  entries: Array<{
+    partIndex: number;
+    toolName: string;
+    // biome-ignore lint/suspicious/noExplicitAny: Tool parts have dynamic structure
+    part: any;
+    // biome-ignore lint/suspicious/noExplicitAny: Tool result parts have dynamic structure
+    toolResultPart: any;
+    // biome-ignore lint/suspicious/noExplicitAny: Error text extraction is dynamic
+    errorText: any;
+  }>;
+};
+
+/**
+ * Pre-processes message parts to identify groups of consecutive compact-eligible tools.
+ * Returns a map from the first part index of each group to the group data,
+ * and a set of all part indices consumed by compact groups.
+ *
+ * Pass 1: Build a map from toolCallId → result part index, and identify invocation indices.
+ * Pass 2: Walk invocations in order, skipping result-only parts and non-tool parts,
+ *          grouping consecutive compact-eligible invocations together.
+ */
+function identifyCompactGroups(
+  // biome-ignore lint/suspicious/noExplicitAny: Message parts have dynamic structure
+  parts: any[] | undefined,
+): { groupMap: Map<number, CompactGroup>; consumedIndices: Set<number> } {
+  const groupMap = new Map<number, CompactGroup>();
+  const consumedIndices = new Set<number>();
+
+  if (!parts) return { groupMap, consumedIndices };
+
+  // Pass 1: Identify which parts are "duplicate result" parts (a result that
+  // immediately follows its invocation with the same toolCallId) vs primary
+  // tool parts. A tool part is primary if it's the first occurrence of its
+  // toolCallId. The second occurrence (the result) is a duplicate.
+  const seenToolCallIds = new Set<string>();
+  const duplicateResultIndices = new Set<number>();
+  const invocationIndices: number[] = [];
+  // Map from toolCallId to the index of the duplicate result part
+  const resultByCallId = new Map<string, number>();
+
+  for (let i = 0; i < parts.length; i++) {
+    const part = parts[i];
+    if (!isToolPart(part)) continue;
+
+    const callId = part.toolCallId;
+    if (callId && seenToolCallIds.has(callId)) {
+      // This is a duplicate result part
+      duplicateResultIndices.add(i);
+      resultByCallId.set(callId, i);
+    } else {
+      // Primary tool part (may have state "output-available" if combined)
+      if (callId) seenToolCallIds.add(callId);
+      invocationIndices.push(i);
+    }
+  }
+
+  // Pass 2: Group consecutive compact-eligible invocations
+  let currentGroup: CompactGroup | null = null;
+
+  for (const idx of invocationIndices) {
+    // biome-ignore lint/suspicious/noExplicitAny: Dynamic tool parts have toolName property
+    const rawPart = parts[idx] as any;
+
+    const toolName: string | null =
+      rawPart.type === "dynamic-tool"
+        ? rawPart.toolName
+        : rawPart.type?.startsWith("tool-")
+          ? rawPart.type.replace("tool-", "")
+          : null;
+
+    if (!toolName) {
+      if (currentGroup && currentGroup.entries.length > 0) {
+        groupMap.set(currentGroup.startIndex, currentGroup);
+        currentGroup = null;
+      }
+      continue;
+    }
+
+    // Find matching result part
+    const resultIdx = rawPart.toolCallId
+      ? resultByCallId.get(rawPart.toolCallId)
+      : undefined;
+    const toolResultPart = resultIdx !== undefined ? parts[resultIdx] : null;
+
+    const outputError = toolResultPart
+      ? tryToExtractErrorFromOutput(toolResultPart.output)
+      : tryToExtractErrorFromOutput(rawPart.output);
+    const errorText = toolResultPart
+      ? (toolResultPart.errorText ?? outputError)
+      : (rawPart.errorText ?? outputError);
+
+    if (isCompactEligible({ part: rawPart, toolResultPart, toolName })) {
+      if (!currentGroup) {
+        currentGroup = { startIndex: idx, entries: [] };
+      }
+      currentGroup.entries.push({
+        partIndex: idx,
+        toolName,
+        part: rawPart,
+        toolResultPart,
+        errorText,
+      });
+      consumedIndices.add(idx);
+      if (resultIdx !== undefined) {
+        consumedIndices.add(resultIdx);
+      }
+    } else {
+      // Non-compact tool breaks the group
+      if (currentGroup && currentGroup.entries.length > 0) {
+        groupMap.set(currentGroup.startIndex, currentGroup);
+        currentGroup = null;
+      }
+    }
+  }
+
+  // Finalize last group
+  if (currentGroup && currentGroup.entries.length > 0) {
+    groupMap.set(currentGroup.startIndex, currentGroup);
+  }
+
+  return { groupMap, consumedIndices };
+}
+
+/**
+ * Renders a "Switched to {agent}" divider after all parts of a message
+ * that contains a swap_agent tool call.
+ */
+function isSwapAgentPokeMessage(message: UIMessage): boolean {
+  if (message.role !== "user") return false;
+  const textParts = message.parts?.filter((p) => p.type === "text") ?? [];
+  return (
+    textParts.length === 1 &&
+    (textParts[0] as { text: string }).text === SWAP_AGENT_POKE_TEXT
+  );
+}
+
+function SwapAgentDivider({ message }: { message: UIMessage }) {
+  if (message.role !== "assistant") return null;
+
+  for (const part of message.parts ?? []) {
+    if (!isToolPart(part)) continue;
+    const type = part.type as string;
+    if (
+      type !== TOOL_SWAP_AGENT_FULL_NAME &&
+      type !== `tool-${TOOL_SWAP_AGENT_FULL_NAME}`
+    )
+      continue;
+
+    // Try tool call args first (always available), then fall back to output
+    let agentName = "another agent";
+    const args = (part as Record<string, unknown>).args as
+      | Record<string, unknown>
+      | undefined;
+    if (args?.agent_name && typeof args.agent_name === "string") {
+      agentName = args.agent_name;
+    } else {
+      const output = part.output ?? part.state;
+      if (typeof output === "string") {
+        try {
+          const parsed = JSON.parse(output);
+          if (parsed?.agent_name) agentName = parsed.agent_name;
+        } catch {
+          // ignore
+        }
+      }
+    }
+
+    return (
+      <div className="flex items-center gap-3 py-2">
+        <div className="h-px flex-1 bg-border" />
+        <span className="text-xs text-muted-foreground">
+          Switched to {agentName}
+        </span>
+        <div className="h-px flex-1 bg-border" />
+      </div>
+    );
+  }
+
+  return null;
+}

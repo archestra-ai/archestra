@@ -20,13 +20,17 @@ import {
 import type {
   Agent,
   AgentTool,
+  ConnectorRun,
   InsertAccount,
   InsertAgent,
   InsertChatApiKey,
+  InsertConnectorRun,
   InsertConversation,
   InsertInteraction,
   InsertInternalMcpCatalog,
   InsertInvitation,
+  InsertKnowledgeBase,
+  InsertKnowledgeBaseConnector,
   InsertMcpServer,
   InsertMember,
   InsertOrganization,
@@ -34,6 +38,8 @@ import type {
   InsertSession,
   InsertTeam,
   InsertUser,
+  KnowledgeBase,
+  KnowledgeBaseConnector,
   OrganizationRole,
   TeamMember,
   Tool,
@@ -69,6 +75,9 @@ interface TestFixtures {
   makeAccount: typeof makeAccount;
   makeSession: typeof makeSession;
   makeAuthHeaders: typeof makeAuthHeaders;
+  makeKnowledgeBase: typeof makeKnowledgeBase;
+  makeKnowledgeBaseConnector: typeof makeKnowledgeBaseConnector;
+  makeConnectorRun: typeof makeConnectorRun;
   makeConversation: typeof makeConversation;
   makeInteraction: typeof makeInteraction;
   makeSecret: typeof makeSecret;
@@ -198,6 +207,8 @@ async function makeAgent(
     scope: "org",
     teams: [],
     labels: [],
+    knowledgeBaseIds: [],
+    connectorIds: [],
   };
   return await AgentModel.create(
     {
@@ -417,15 +428,36 @@ async function makeInternalMcpCatalog(
       | "localConfig"
       | "userConfig"
       | "oauthConfig"
+      | "scope"
+      | "teams"
     >
-  > = {},
+  > & {
+    organizationId?: string;
+    authorId?: string;
+  } = {},
 ) {
-  return await InternalMcpCatalogModel.create({
-    name: `test-catalog-${crypto.randomUUID().substring(0, 8)}`,
-    serverType: "remote",
-    serverUrl: "https://api.example.com/mcp/",
-    ...overrides,
-  });
+  const { organizationId, authorId, ...catalogOverrides } = overrides;
+
+  // Auto-create organization if not provided
+  let orgId = organizationId;
+  if (!orgId) {
+    const org = await makeOrganization();
+    orgId = org.id;
+  }
+
+  return await InternalMcpCatalogModel.create(
+    {
+      name: `test-catalog-${crypto.randomUUID().substring(0, 8)}`,
+      serverType: "remote",
+      serverUrl: "https://api.example.com/mcp/",
+      scope: "org",
+      ...catalogOverrides,
+    },
+    {
+      organizationId: orgId,
+      authorId,
+    },
+  );
 }
 
 /**
@@ -815,6 +847,83 @@ async function makeOAuthRefreshToken(
 }
 
 /**
+ * Creates a test knowledge base in the database
+ */
+async function makeKnowledgeBase(
+  organizationId: string,
+  overrides: Partial<Pick<InsertKnowledgeBase, "name" | "status">> = {},
+): Promise<KnowledgeBase> {
+  const [result] = await db
+    .insert(schema.knowledgeBasesTable)
+    .values({
+      organizationId,
+      name: `Test Knowledge Base ${crypto.randomUUID().substring(0, 8)}`,
+      ...overrides,
+    })
+    .returning();
+  return result;
+}
+
+/**
+ * Creates a test knowledge base connector in the database
+ */
+async function makeKnowledgeBaseConnector(
+  knowledgeBaseId: string,
+  organizationId: string,
+  overrides: Partial<
+    Pick<
+      InsertKnowledgeBaseConnector,
+      "name" | "connectorType" | "config" | "schedule" | "enabled"
+    >
+  > = {},
+): Promise<KnowledgeBaseConnector> {
+  const [result] = await db
+    .insert(schema.knowledgeBaseConnectorsTable)
+    .values({
+      organizationId,
+      name: `Test Connector ${crypto.randomUUID().substring(0, 8)}`,
+      connectorType: "jira",
+      config: {
+        type: "jira",
+        jiraBaseUrl: "https://test.atlassian.net",
+        isCloud: true,
+        projectKey: "TEST",
+      },
+      ...overrides,
+    })
+    .returning();
+
+  // Assign connector to the knowledge base via junction table
+  await db.insert(schema.knowledgeBaseConnectorAssignmentsTable).values({
+    connectorId: result.id,
+    knowledgeBaseId,
+  });
+
+  return result;
+}
+
+/**
+ * Creates a test connector run in the database
+ */
+async function makeConnectorRun(
+  connectorId: string,
+  overrides: Partial<
+    Pick<InsertConnectorRun, "status" | "startedAt" | "documentsProcessed">
+  > = {},
+): Promise<ConnectorRun> {
+  const [result] = await db
+    .insert(schema.connectorRunsTable)
+    .values({
+      connectorId,
+      status: "running",
+      startedAt: new Date(),
+      ...overrides,
+    })
+    .returning();
+  return result;
+}
+
+/**
  * Seeds and assigns Archestra tools to an agent.
  * Creates the Archestra catalog entry if it doesn't exist, then seeds tools.
  * This is useful for tests that need Archestra tools to be available.
@@ -900,6 +1009,15 @@ export const test = baseTest.extend<TestFixtures>({
   },
   makeAuthHeaders: async ({}, use) => {
     await use(makeAuthHeaders);
+  },
+  makeKnowledgeBase: async ({}, use) => {
+    await use(makeKnowledgeBase);
+  },
+  makeKnowledgeBaseConnector: async ({}, use) => {
+    await use(makeKnowledgeBaseConnector);
+  },
+  makeConnectorRun: async ({}, use) => {
+    await use(makeConnectorRun);
   },
   makeConversation: async ({}, use) => {
     await use(makeConversation);

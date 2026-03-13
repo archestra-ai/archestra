@@ -55,6 +55,7 @@ export const RouteId = {
   GetMcpServers: "getMcpServers",
   GetMcpServer: "getMcpServer",
   GetMcpServerTools: "getMcpServerTools",
+  InspectMcpServer: "inspectMcpServer",
   InstallMcpServer: "installMcpServer",
   DeleteMcpServer: "deleteMcpServer",
   ReauthenticateMcpServer: "reauthenticateMcpServer",
@@ -241,6 +242,11 @@ export const RouteId = {
   GetConversationEnabledTools: "getConversationEnabledTools",
   UpdateConversationEnabledTools: "updateConversationEnabledTools",
   DeleteConversationEnabledTools: "deleteConversationEnabledTools",
+  ShareConversation: "shareConversation",
+  UnshareConversation: "unshareConversation",
+  GetConversationShare: "getConversationShare",
+  GetSharedConversation: "getSharedConversation",
+  ForkSharedConversation: "forkSharedConversation",
   GetChatModels: "getChatModels",
   SyncChatModels: "syncChatModels",
 
@@ -270,13 +276,29 @@ export const RouteId = {
 
   // Organization Routes
   GetOrganization: "getOrganization",
-  UpdateOrganization: "updateOrganization",
   GetOnboardingStatus: "getOnboardingStatus",
   GetMemberSignupStatus: "getMemberSignupStatus",
+  GetOrganizationMembers: "getOrganizationMembers",
   DeletePendingSignupMember: "deletePendingSignupMember",
+  CompleteOnboarding: "completeOnboarding",
 
-  // Appearance Routes (public/unauthenticated)
+  // Appearance Routes
   GetPublicAppearance: "getPublicAppearance",
+  UpdateAppearance: "updateAppearance",
+
+  // Security Settings Routes
+  UpdateSecuritySettings: "updateSecuritySettings",
+
+  // LLM Settings Routes (organization-level)
+  UpdateLlmSettings: "updateLlmSettings",
+
+  // Agent Settings Routes (organization-level)
+  UpdateAgentSettings: "updateAgentSettings",
+
+  // Knowledge Settings Routes (organization-level)
+  UpdateKnowledgeSettings: "updateKnowledgeSettings",
+  DropEmbeddingConfig: "dropEmbeddingConfig",
+  TestEmbeddingConnection: "testEmbeddingConnection",
 
   // Identity Provider Routes
   GetPublicIdentityProviders: "getPublicIdentityProviders",
@@ -286,6 +308,10 @@ export const RouteId = {
   UpdateIdentityProvider: "updateIdentityProvider",
   DeleteIdentityProvider: "deleteIdentityProvider",
   GetIdentityProviderIdpLogoutUrl: "getIdentityProviderIdpLogoutUrl",
+
+  // Member Routes
+  UpdateMemberDefaultAgent: "updateMemberDefaultAgent",
+  GetMemberDefaultAgent: "getMemberDefaultAgent",
 
   // User Routes
   GetUserPermissions: "getUserPermissions",
@@ -338,6 +364,32 @@ export const RouteId = {
   UpdateChatOpsConfigInQuickstart: "updateChatOpsConfigInQuickstart",
   UpdateSlackChatOpsConfig: "updateSlackChatOpsConfig",
   RefreshChatOpsChannelDiscovery: "refreshChatOpsChannelDiscovery",
+
+  // Knowledge Base Routes
+  GetKnowledgeBases: "getKnowledgeBases",
+  CreateKnowledgeBase: "createKnowledgeBase",
+  GetKnowledgeBase: "getKnowledgeBase",
+  UpdateKnowledgeBase: "updateKnowledgeBase",
+  DeleteKnowledgeBase: "deleteKnowledgeBase",
+  GetKnowledgeBaseHealth: "getKnowledgeBaseHealth",
+
+  // Knowledge Base Connector Routes
+  GetConnectors: "getConnectors",
+  CreateConnector: "createConnector",
+  GetConnector: "getConnector",
+  UpdateConnector: "updateConnector",
+  DeleteConnector: "deleteConnector",
+  SyncConnector: "syncConnector",
+  TestConnectorConnection: "testConnectorConnection",
+
+  // Connector Knowledge Base Assignment Routes
+  AssignConnectorToKnowledgeBases: "assignConnectorToKnowledgeBases",
+  UnassignConnectorFromKnowledgeBase: "unassignConnectorFromKnowledgeBase",
+  GetConnectorKnowledgeBases: "getConnectorKnowledgeBases",
+
+  // Connector Run Routes
+  GetConnectorRuns: "getConnectorRuns",
+  GetConnectorRun: "getConnectorRun",
 
   // Invitation Routes
   CheckInvitation: "checkInvitation",

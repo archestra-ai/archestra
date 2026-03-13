@@ -2,11 +2,7 @@ import { DEFAULT_THEME_ID, type OrganizationCustomFont } from "@shared";
 import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import logger from "@/logging";
-import type {
-  Organization,
-  PublicAppearance,
-  UpdateOrganization,
-} from "@/types";
+import type { Organization, PublicAppearance } from "@/types";
 
 class OrganizationModel {
   /**
@@ -67,7 +63,7 @@ class OrganizationModel {
    */
   static async patch(
     id: string,
-    data: Partial<UpdateOrganization>,
+    data: Partial<Organization>,
   ): Promise<Organization | null> {
     logger.debug(
       { id, dataKeys: Object.keys(data) },
@@ -120,6 +116,12 @@ class OrganizationModel {
         theme: schema.organizationsTable.theme,
         customFont: schema.organizationsTable.customFont,
         logo: schema.organizationsTable.logo,
+        logoDark: schema.organizationsTable.logoDark,
+        favicon: schema.organizationsTable.favicon,
+        iconLogo: schema.organizationsTable.iconLogo,
+        appName: schema.organizationsTable.appName,
+        ogDescription: schema.organizationsTable.ogDescription,
+        footerText: schema.organizationsTable.footerText,
       })
       .from(schema.organizationsTable)
       .limit(1);
@@ -130,6 +132,12 @@ class OrganizationModel {
         theme: DEFAULT_THEME_ID,
         customFont: "lato" as OrganizationCustomFont,
         logo: null,
+        logoDark: null,
+        favicon: null,
+        iconLogo: null,
+        appName: null,
+        ogDescription: null,
+        footerText: null,
       };
     }
 

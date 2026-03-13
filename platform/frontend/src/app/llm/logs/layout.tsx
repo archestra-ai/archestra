@@ -1,7 +1,7 @@
 "use client";
 
 import { PageLayout } from "@/components/page-layout";
-import { LOGS_LAYOUT_CONFIG } from "@/config/logs-layout";
+import { LOGS_LAYOUT_CONFIG } from "@/consts";
 
 export default function LlmLogsLayout({
   children,

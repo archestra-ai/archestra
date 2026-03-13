@@ -21,9 +21,9 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogForm,
   DialogHeader,
+  DialogStickyFooter,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -37,7 +37,7 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
-import { useFeatureFlag } from "@/lib/features.hook";
+import { useFeature } from "@/lib/config.query";
 import { useTeamsWithVaultFolders } from "@/lib/team.query";
 import { SelectMcpServerCredentialTypeAndTeams } from "./select-mcp-server-credential-type-and-teams";
 import { ServiceAccountField } from "./service-account-field";
@@ -97,6 +97,10 @@ interface LocalServerInstallDialogProps {
   existingTeamId?: string | null;
   /** When true, shows re-authentication mode (info banner, different title) */
   isReauth?: boolean;
+  /** Pre-select a specific team in the credential type selector */
+  preselectedTeamId?: string | null;
+  /** When true, only personal installation is allowed */
+  personalOnly?: boolean;
 }
 
 export function LocalServerInstallDialog({
@@ -108,6 +112,8 @@ export function LocalServerInstallDialog({
   isReinstall = false,
   existingTeamId,
   isReauth = false,
+  preselectedTeamId,
+  personalOnly: personalOnlyProp = false,
 }: LocalServerInstallDialogProps) {
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
   const [credentialType, setCredentialType] = useState<"personal" | "team">(
@@ -156,7 +162,7 @@ export function LocalServerInstallDialog({
     Record<string, { path: string | null; key: string | null }>
   >({});
 
-  const byosEnabled = useFeatureFlag("byosEnabled");
+  const byosEnabled = useFeature("byosEnabled");
   const { data: teamsWithVault } = useTeamsWithVaultFolders();
   const vaultTeams = teamsWithVault?.filter((t) => t.vaultPath);
 
@@ -351,8 +357,10 @@ export function LocalServerInstallDialog({
             isReinstall={isReinstall}
             existingTeamId={existingTeamId}
             personalOnly={
-              catalogItem ? isPlaywrightCatalogItem(catalogItem.id) : false
+              personalOnlyProp ||
+              (catalogItem ? isPlaywrightCatalogItem(catalogItem.id) : false)
             }
+            preselectedTeamId={preselectedTeamId}
           />
 
           {useVaultSecrets && credentialType === "personal" && (
@@ -395,7 +403,7 @@ export function LocalServerInstallDialog({
               {/* Non-secret Environment Variables (always editable) */}
               {nonSecretEnvVars.length > 0 && (
                 <div className="space-y-4">
-                  <h3 className="text-sm font-medium">Configuration</h3>
+                  <h3 className="text-sm font-medium sr-only">Configuration</h3>
                   {nonSecretEnvVars.map((env) => (
                     <div key={env.key} className="space-y-2">
                       {env.type === "boolean" ? (
@@ -634,7 +642,7 @@ export function LocalServerInstallDialog({
             </div>
           )}
 
-          <DialogFooter>
+          <DialogStickyFooter>
             {canInstall && (
               <Button
                 type="button"
@@ -660,7 +668,7 @@ export function LocalServerInstallDialog({
                       : "Install"}
               </Button>
             )}
-          </DialogFooter>
+          </DialogStickyFooter>
         </DialogForm>
       </DialogContent>
     </Dialog>

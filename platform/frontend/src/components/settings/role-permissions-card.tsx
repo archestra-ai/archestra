@@ -4,6 +4,8 @@ import {
   type Action,
   type Permissions,
   type Resource,
+  resourceCategories,
+  resourceDescriptions,
   resourceLabels,
 } from "@shared";
 import { ChevronDown, ChevronRight } from "lucide-react";
@@ -24,36 +26,6 @@ import {
   useActiveOrganization,
 } from "@/lib/organization.query";
 
-const resourceCategories: Record<string, Resource[]> = {
-  "Core Resources": [
-    "agent",
-    "mcpGateway",
-    "llmProxy",
-    "tool",
-    "policy",
-    "interaction",
-    "conversation",
-  ],
-  "MCP & Integrations": [
-    "mcpServer",
-    "mcpServerInstallationRequest",
-    "mcpToolCall",
-    "internalMcpCatalog",
-  ],
-  "Dual LLM": ["dualLlmConfig", "dualLlmResult"],
-  Organization: [
-    "organization",
-    "member",
-    "ac",
-    "team",
-    "invitation",
-    "limit",
-    "llmModels",
-    "chatSettings",
-    "identityProvider",
-  ],
-};
-
 const actionLabels: Record<Action, string> = {
   create: "Create",
   read: "Read",
@@ -62,6 +34,7 @@ const actionLabels: Record<Action, string> = {
   "team-admin": "Team Admin",
   admin: "Admin",
   cancel: "Cancel",
+  enable: "Enable",
 };
 
 export function RolePermissionsCard() {
@@ -89,7 +62,7 @@ export function RolePermissionsCard() {
   return (
     <Card>
       <CardContent className="space-y-4">
-        <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-3">
+        <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
           <span className="text-muted-foreground">Username:</span>
           <span>{session?.user?.name || "—"}</span>
           <span className="text-muted-foreground">Email:</span>
@@ -186,12 +159,19 @@ function CategorySection({
             return (
               <div
                 key={resource}
-                className="flex items-center gap-2 rounded-md border bg-card p-2"
+                className="flex items-center justify-between gap-4 rounded-md border bg-card px-3 py-2.5"
               >
-                <span className="text-sm font-medium min-w-[140px]">
-                  {resourceLabels[resource] || resource}
-                </span>
-                <div className="flex flex-wrap gap-1">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium leading-tight">
+                    {resourceLabels[resource] || resource}
+                  </p>
+                  {resourceDescriptions[resource] && (
+                    <p className="text-xs text-muted-foreground truncate leading-tight mt-0.5">
+                      {resourceDescriptions[resource]}
+                    </p>
+                  )}
+                </div>
+                <div className="flex flex-wrap gap-1 shrink-0">
                   {actions.map((action) => (
                     <Badge key={action} variant="outline" className="text-xs">
                       {actionLabels[action] || action}

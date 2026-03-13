@@ -16,11 +16,13 @@ const {
 
 export function useInternalMcpCatalog(params?: {
   initialData?: archestraApiTypes.GetInternalMcpCatalogResponses["200"];
+  enabled?: boolean;
 }) {
   return useQuery({
     queryKey: ["mcp-catalog"],
     queryFn: async () => (await getInternalMcpCatalog()).data ?? [],
     initialData: params?.initialData,
+    enabled: params?.enabled,
   });
 }
 

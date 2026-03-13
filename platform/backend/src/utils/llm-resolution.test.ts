@@ -39,6 +39,7 @@ const MOCK_MODEL = {
   completionPricePerToken: null,
   customPricePerMillionInput: null,
   customPricePerMillionOutput: null,
+  discoveredViaLlmProxy: false,
   lastSyncedAt: new Date(),
   createdAt: new Date(),
   updatedAt: new Date(),
@@ -343,7 +344,7 @@ describe("resolveSmartDefaultLlmForChat", () => {
       });
 
       expect(result).toEqual({
-        model: "gpt-4o",
+        model: "gpt-5.4",
         provider: "openai",
       });
     } finally {

@@ -679,11 +679,11 @@ for (const config of testConfigs) {
     test("compresses tool results when compression is enabled", async ({
       request,
       createAgent,
-      updateOrganization,
+      updateLlmSettings,
       makeApiRequest,
     }) => {
       // 1. Enable compression at organization level
-      await updateOrganization(request, {
+      await updateLlmSettings(request, {
         convertToolResultsToToon: true,
         compressionScope: "organization",
       });
@@ -715,11 +715,11 @@ for (const config of testConfigs) {
     test("does not compress tool results when compression is disabled", async ({
       request,
       createAgent,
-      updateOrganization,
+      updateLlmSettings,
       makeApiRequest,
     }) => {
       // 1. Disable compression at organization level
-      await updateOrganization(request, {
+      await updateLlmSettings(request, {
         convertToolResultsToToon: false,
         compressionScope: "organization",
       });
@@ -748,9 +748,9 @@ for (const config of testConfigs) {
       expect(response.ok()).toBeTruthy();
     });
 
-    test.afterEach(async ({ request, deleteAgent, updateOrganization }) => {
+    test.afterEach(async ({ request, deleteAgent, updateLlmSettings }) => {
       // Restore original compression settings
-      await updateOrganization(request, {
+      await updateLlmSettings(request, {
         convertToolResultsToToon: originalCompressionEnabled,
         compressionScope: originalCompressionScope,
       }).catch(() => {});

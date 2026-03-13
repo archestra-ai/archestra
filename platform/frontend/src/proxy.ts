@@ -2,6 +2,11 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
 export function proxy(req: NextRequest) {
+  // Redirect root to /chat before any client components render
+  if (req.nextUrl.pathname === "/") {
+    return NextResponse.redirect(new URL("/chat", req.url));
+  }
+
   if (shouldLogApiRequest(req)) {
     // biome-ignore lint/suspicious/noConsole: Intentional console log of API requests
     console.log(`API Request: ${req.method} ${req.nextUrl.href}`);

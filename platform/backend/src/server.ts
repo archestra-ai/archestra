@@ -12,7 +12,7 @@ const isMainModule =
  * Only do this if the server is being run directly (not imported)
  */
 if (isMainModule) {
-  await import("./sentry");
+  await import("./observability/sentry");
   await import("./observability/tracing/sdk");
 }
 
@@ -43,20 +43,18 @@ import {
 } from "@/agents/incoming-email";
 import { fastifyAuthPlugin } from "@/auth";
 import { cacheManager } from "@/cache-manager";
-import config from "@/config";
+import config, { shouldRunWebServer, shouldRunWorker } from "@/config";
 import { initializeDatabase, isDatabaseHealthy } from "@/database";
 import { seedRequiredStartingData } from "@/database/seed";
-import {
-  cleanupKnowledgeGraphProvider,
-  initializeKnowledgeGraphProvider,
-} from "@/knowledge-graph";
+import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import logger from "@/logging";
-import { McpServerRuntimeManager } from "@/mcp-server-runtime";
 import { enterpriseLicenseMiddleware } from "@/middleware";
 import AgentLabelModel from "@/models/agent-label";
 import OrganizationModel from "@/models/organization";
 import { metrics } from "@/observability";
 import { systemKeyManager } from "@/services/system-key-manager";
+import { taskQueueService } from "@/task-queue";
+import { registerTaskHandlers } from "@/task-queue/handlers";
 import {
   Anthropic,
   ApiError,
@@ -77,6 +75,11 @@ import {
 } from "@/types";
 import websocketService from "@/websocket";
 import * as routes from "./routes";
+import {
+  HEALTH_PATH,
+  MCP_GATEWAY_PREFIX,
+  READY_PATH,
+} from "./routes/route-paths";
 
 /** Max time to wait for cleanup operations during graceful shutdown before exiting */
 const SHUTDOWN_CLEANUP_TIMEOUT_MS = 3000;
@@ -84,7 +87,7 @@ const SHUTDOWN_CLEANUP_TIMEOUT_MS = 3000;
 // Load enterprise routes if license is activated OR if running in codegen mode
 // (codegen mode ensures OpenAPI spec always includes all enterprise routes)
 const eeRoutes =
-  config.enterpriseLicenseActivated || config.codegenMode
+  config.enterpriseFeatures.core || config.codegenMode
     ? // biome-ignore lint/style/noRestrictedImports: conditional schema
       await import("./routes/index.ee")
     : ({} as Record<string, never>);
@@ -98,6 +101,7 @@ const {
     corsOrigins,
     apiKeyAuthorizationHeaderName,
   },
+  test: { enableE2eTestEndpoints, testValue },
   observability,
 } = config;
 
@@ -222,80 +226,6 @@ export async function registerSwaggerPlugin(fastify: FastifyInstanceWithZod) {
     transform: jsonSchemaTransform,
     transformObject: jsonSchemaTransformObject,
   });
-}
-
-/**
- * Register the health endpoint on a Fastify instance.
- * This is a lightweight endpoint for liveness checks - it only verifies the HTTP server is running.
- */
-export function registerHealthEndpoint(fastify: FastifyInstanceWithZod) {
-  fastify.get(
-    "/health",
-    {
-      schema: {
-        tags: ["health"],
-        response: {
-          200: z.object({
-            name: z.string(),
-            status: z.string(),
-            version: z.string(),
-          }),
-        },
-      },
-    },
-    async () => ({
-      name,
-      status: "ok",
-      version,
-    }),
-  );
-}
-
-/**
- * Register the readiness endpoint on a Fastify instance.
- * This endpoint checks database connectivity and should be used for readiness probes.
- * Returns 200 if the application is ready to receive traffic, 503 otherwise.
- */
-export function registerReadinessEndpoint(fastify: FastifyInstanceWithZod) {
-  fastify.get(
-    "/ready",
-    {
-      schema: {
-        tags: ["health"],
-        response: {
-          200: z.object({
-            name: z.string(),
-            status: z.string(),
-            version: z.string(),
-            database: z.string(),
-          }),
-          503: z.object({
-            name: z.string(),
-            status: z.string(),
-            version: z.string(),
-            database: z.string(),
-          }),
-        },
-      },
-    },
-    async (request, reply) => {
-      const dbHealthy = await isDatabaseHealthy();
-
-      const response = {
-        name,
-        status: dbHealthy ? "ok" : "degraded",
-        version,
-        database: dbHealthy ? "connected" : "disconnected",
-      };
-
-      if (!dbHealthy) {
-        request.log.warn("Database health check failed for readiness probe");
-        return reply.status(503).send(response);
-      }
-
-      return reply.send(response);
-    },
-  );
 }
 
 /**
@@ -433,7 +363,7 @@ const registerMetricsPlugin = async (
     routeMetrics: {
       enabled: metricsEnabled,
       methodBlacklist: ["OPTIONS", "HEAD"],
-      routeBlacklist: ["/health", "/ready"],
+      routeBlacklist: [HEALTH_PATH, READY_PATH],
     },
   });
 };
@@ -457,7 +387,7 @@ const startMetricsServer = async () => {
   if (metricsSecret) {
     metricsServer.addHook("preHandler", async (request, reply) => {
       // Skip auth for health and readiness endpoints
-      if (request.url === "/health" || request.url === "/ready") {
+      if (request.url === HEALTH_PATH || request.url === READY_PATH) {
         return;
       }
 
@@ -475,7 +405,7 @@ const startMetricsServer = async () => {
     });
   }
 
-  metricsServer.get("/health", () => ({ status: "ok" }));
+  metricsServer.get(HEALTH_PATH, () => ({ status: "ok" }));
 
   await registerMetricsPlugin(metricsServer, true);
 
@@ -529,7 +459,7 @@ const startMcpServerRuntime = async (
   }
 };
 
-const start = async () => {
+const startWebServer = async () => {
   const fastify = createFastifyInstance();
 
   /**
@@ -539,9 +469,10 @@ const start = async () => {
    * - GET /v1/mcp/*: MCP Gateway SSE polling (happens every second)
    */
   const shouldSkipRequestLogging = (url: string, method: string): boolean => {
-    if (url === "/health" || url === "/ready") return true;
+    if (url === HEALTH_PATH || url === READY_PATH) return true;
     // Skip MCP Gateway SSE polling (GET requests to /v1/mcp/*)
-    if (method === "GET" && url.startsWith("/v1/mcp/")) return true;
+    if (method === "GET" && url.startsWith(`${MCP_GATEWAY_PREFIX}/`))
+      return true;
     return false;
   };
 
@@ -625,6 +556,8 @@ const start = async () => {
     metrics.llm.initializeMetrics(labelKeys);
     metrics.mcp.initializeMcpMetrics(labelKeys);
     metrics.agentExecution.initializeAgentExecutionMetrics(labelKeys);
+    metrics.rag.initializeRagMetrics();
+    metrics.taskQueue.initializeTaskQueueMetrics();
 
     // Start metrics server
     await startMetricsServer();
@@ -643,9 +576,13 @@ const start = async () => {
     // Seeds DB from env vars on first run, then loads config from DB.
     await chatOpsManager.initialize();
 
-    // Initialize knowledge graph provider (if configured)
-    // This enables automatic document ingestion from chat uploads
-    await initializeKnowledgeGraphProvider();
+    // Start task queue worker for knowledge base connector syncs and embeddings
+    // In "web" mode, a separate worker Deployment handles background jobs
+    if (shouldRunWorker) {
+      registerTaskHandlers(taskQueueService);
+      await taskQueueService.seedPeriodicTasks();
+      taskQueueService.startWorker();
+    }
 
     // Background job to renew email subscriptions before they expire
     const emailRenewalIntervalId = setInterval(() => {
@@ -713,12 +650,10 @@ const start = async () => {
 
     // Register routes
     fastify.get("/openapi.json", async () => fastify.swagger());
-    registerHealthEndpoint(fastify);
-    registerReadinessEndpoint(fastify);
 
-    if (process.env.ENABLE_E2E_TEST_ENDPOINTS === "true") {
+    if (enableE2eTestEndpoints) {
       fastify.get("/test", async () => ({
-        value: process.env.TEST_VALUE ?? null,
+        value: testValue,
       }));
     }
 
@@ -762,20 +697,19 @@ const start = async () => {
         // Stop cache manager's background cleanup
         cacheManager.shutdown();
 
+        // Stop task queue worker (waits for in-flight tasks to drain)
+        if (shouldRunWorker) {
+          await taskQueueService.stopWorker();
+        }
+
         // Track which cleanup operations have completed
-        const completedCleanups = new Set<
-          "emailProvider" | "knowledgeGraph" | "chatOps"
-        >();
+        const completedCleanups = new Set<"emailProvider" | "chatOps">();
 
         // Run remaining cleanup in parallel with a timeout to avoid blocking shutdown
         const cleanupPromise = Promise.allSettled([
           cleanupEmailProvider().then(() => {
             completedCleanups.add("emailProvider");
             fastify.log.info("Email provider cleanup completed");
-          }),
-          cleanupKnowledgeGraphProvider().then(() => {
-            completedCleanups.add("knowledgeGraph");
-            fastify.log.info("Knowledge graph provider cleanup completed");
           }),
           chatOpsManager.cleanup().then(() => {
             completedCleanups.add("chatOps");
@@ -784,11 +718,7 @@ const start = async () => {
         ]).then(() => "completed" as const);
 
         // Wait for cleanup with timeout, then exit anyway
-        const allCleanupNames = [
-          "emailProvider",
-          "knowledgeGraph",
-          "chatOps",
-        ] as const;
+        const allCleanupNames = ["emailProvider", "chatOps"] as const;
         const result = await Promise.race([
           cleanupPromise,
           new Promise<"timeout">((resolve) =>
@@ -823,9 +753,86 @@ const start = async () => {
 };
 
 /**
+ * Starts the process in worker-only mode.
+ * Processes background jobs from the postgres queue without starting the HTTP API server.
+ * Used in Helm deployments where the worker runs as a separate Deployment.
+ */
+const startWorker = async () => {
+  logger.info("Starting in worker-only mode (ARCHESTRA_PROCESS_TYPE=worker)");
+
+  try {
+    await initializeDatabase();
+    cacheManager.start();
+
+    // Set OpenMetrics content type to enable exemplar support
+    const promClient = await import("prom-client");
+    // eslint-disable-next-line -- default register is typed as Registry<PrometheusContentType> but setContentType accepts both at runtime
+    (promClient.default.register.setContentType as (ct: string) => void)(
+      promClient.default.Registry.OPENMETRICS_CONTENT_TYPE,
+    );
+
+    metrics.rag.initializeRagMetrics();
+    metrics.taskQueue.initializeTaskQueueMetrics();
+
+    registerTaskHandlers(taskQueueService);
+    await taskQueueService.seedPeriodicTasks();
+    taskQueueService.startWorker();
+
+    // Minimal health server for Kubernetes probes
+    const healthServer = Fastify();
+    healthServer.get("/health", async () => ({ status: "ok" }));
+    healthServer.get("/ready", async (_request, reply) => {
+      const dbHealthy = await isDatabaseHealthy();
+      if (!dbHealthy) {
+        return reply.status(503).send({ status: "error", reason: "database" });
+      }
+      return { status: "ok" };
+    });
+    await healthServer.listen({ port: port, host });
+    logger.info(`Worker health server started on port ${port}`);
+
+    const gracefulShutdown = async (signal: string) => {
+      logger.info(`Worker received ${signal}, shutting down...`);
+
+      // Force exit if cleanup takes too long (e.g., long-running task doesn't respect cancellation).
+      // Must exceed taskWorkerShutdownTimeoutSeconds so stopWorker() has time to drain
+      // in-flight tasks and release them back to the queue.
+      const forceExitTimeoutMs =
+        (config.kb.taskWorkerShutdownTimeoutSeconds + 5) * 1000;
+      const forceExitTimeout = setTimeout(() => {
+        logger.warn("Worker shutdown timed out, forcing exit");
+        process.exit(1);
+      }, forceExitTimeoutMs);
+
+      try {
+        await healthServer.close();
+        cacheManager.shutdown();
+        await taskQueueService.stopWorker();
+        clearTimeout(forceExitTimeout);
+        process.exit(0);
+      } catch (error) {
+        clearTimeout(forceExitTimeout);
+        logger.error({ error }, "Worker shutdown error");
+        process.exit(1);
+      }
+    };
+
+    process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+    process.on("SIGINT", () => gracefulShutdown("SIGINT"));
+  } catch (err) {
+    logger.error(err, "Worker failed to start");
+    process.exit(1);
+  }
+};
+
+/**
  * Only start the server if this file is being run directly (not imported)
  * This allows other scripts to import helper functions without starting the server
  */
 if (isMainModule) {
-  start();
+  if (shouldRunWorker && !shouldRunWebServer) {
+    startWorker();
+  } else if (shouldRunWebServer) {
+    startWebServer();
+  }
 }

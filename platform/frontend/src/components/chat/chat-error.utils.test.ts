@@ -1,9 +1,10 @@
-import { ChatErrorCode } from "@shared";
+import { ChatErrorCode, ChatErrorMessages } from "@shared";
 import { describe, expect, it } from "vitest";
 import {
   AI_SDK_INTERNAL_TYPES,
   deepParseJson,
   formatOriginalError,
+  mapClientError,
   parseErrorResponse,
 } from "./chat-error.utils";
 
@@ -272,6 +273,59 @@ describe("chat-error.utils", () => {
       expect(AI_SDK_INTERNAL_TYPES).toContain("AI_RetryError");
       expect(AI_SDK_INTERNAL_TYPES).toContain("APICallError");
       expect(AI_SDK_INTERNAL_TYPES).toContain("RetryError");
+    });
+  });
+
+  describe("mapClientError", () => {
+    it("should map 'Failed to fetch' to network_error", () => {
+      const error = new Error("Failed to fetch");
+      const result = mapClientError(error);
+
+      expect(result).toEqual({
+        code: ChatErrorCode.NetworkError,
+        message: ChatErrorMessages[ChatErrorCode.NetworkError],
+        isRetryable: true,
+      });
+    });
+
+    it("should map NetworkError to network_error", () => {
+      const error = new Error("NetworkError when attempting to fetch resource");
+      const result = mapClientError(error);
+
+      expect(result).toEqual({
+        code: ChatErrorCode.NetworkError,
+        message: ChatErrorMessages[ChatErrorCode.NetworkError],
+        isRetryable: true,
+      });
+    });
+
+    it("should map unknown errors to generic unknown_error", () => {
+      const error = new Error("Something completely unexpected");
+      const result = mapClientError(error);
+
+      expect(result).toEqual({
+        code: ChatErrorCode.Unknown,
+        message: "Something completely unexpected",
+        isRetryable: false,
+      });
+    });
+
+    it("should extract message from backend error JSON format", () => {
+      const error = new Error(
+        JSON.stringify({
+          error: {
+            message: "Internal server error",
+            type: "api_internal_server_error",
+          },
+        }),
+      );
+      const result = mapClientError(error);
+
+      expect(result).toEqual({
+        code: ChatErrorCode.Unknown,
+        message: "Internal server error",
+        isRetryable: false,
+      });
     });
   });
 });

@@ -42,6 +42,15 @@ describe("hasNewerVersion", () => {
     expect(hasNewerVersion("abc1234", "platform-v1.0.38")).toBe(false);
   });
 
+  it("returns false when current version is a full commit hash starting with a digit", () => {
+    expect(
+      hasNewerVersion(
+        "1fb94dd9badfb738525eaa3a4fe23fd7d6aacb1d",
+        "platform-v1.0.57",
+      ),
+    ).toBe(false);
+  });
+
   it("returns false when latest tag is not semver", () => {
     expect(hasNewerVersion("1.0.37", "latest")).toBe(false);
   });

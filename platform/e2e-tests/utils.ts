@@ -54,11 +54,9 @@ export async function addCustomSelfHostedCatalogItem({
   await addButton.waitFor({ state: "visible", timeout: 30_000 });
   await addButton.click();
 
-  await page
-    .getByRole("button", { name: "Self-hosted (orchestrated by" })
-    .click();
+  await page.getByRole("button", { name: "Self-hosted" }).click();
   await page.getByRole("textbox", { name: "Name *" }).fill(catalogItemName);
-  await page.getByRole("textbox", { name: "Command *" }).fill("sh");
+  await page.getByRole("textbox", { name: "Command" }).fill("sh");
   const singleLineCommand = testMcpServerCommand.replace(/\n/g, " ");
   await page
     .getByRole("textbox", { name: "Arguments (one per line)" })
@@ -592,9 +590,21 @@ export async function expectAuthenticated(
   page: Page,
   timeout = 30000,
 ): Promise<void> {
-  await expect(page.getByTestId(E2eTestId.SidebarNavGuardrails)).toBeVisible({
+  await expect(page.getByTestId(E2eTestId.SidebarUserProfile)).toBeVisible({
     timeout,
   });
+}
+
+/**
+ * Expand the sidebar if it's currently collapsed.
+ * Useful for tests that need to read sidebar text content.
+ */
+export async function expandSidebar(page: Page): Promise<void> {
+  const sidebar = page.locator("[data-slot=sidebar]");
+  const state = await sidebar.getAttribute("data-state");
+  if (state === "collapsed") {
+    await page.locator("[data-sidebar=trigger]").first().click();
+  }
 }
 
 /**

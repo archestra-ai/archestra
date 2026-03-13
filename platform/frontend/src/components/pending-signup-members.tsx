@@ -25,7 +25,7 @@ const PROVIDER_ICONS: Record<string, { src: string; alt: string }> = {
 };
 
 /**
- * Shows auto-provisioned members who haven't completed signup yet.
+ * Shows auto-provisioned users who haven't completed signup yet.
  * These are users created via Slack/Teams bot interaction who haven't
  * set up their password or signed in via SSO.
  */
@@ -68,11 +68,11 @@ export function PendingSignupMembers({
     <Card>
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-2 text-base">
-          Auto-provisioned Members
+          Auto-provisioned Users
         </CardTitle>
         <CardDescription>
-          Members auto-provisioned from Slack or Microsoft Teams who
-          haven&apos;t completed their account setup yet.
+          Users auto-provisioned from Slack or Microsoft Teams who haven&apos;t
+          completed their account setup yet.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -129,7 +129,7 @@ export function PendingSignupMembers({
                   )}
                   <PermissionButton
                     permissions={{ member: ["delete"] }}
-                    tooltip="Remove pending member"
+                    tooltip="Remove pending user"
                     size="icon"
                     variant="ghost"
                     onClick={() => deleteMutation.mutate(member.userId)}

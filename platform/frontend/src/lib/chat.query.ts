@@ -4,7 +4,12 @@ import {
   PLAYWRIGHT_MCP_SERVER_NAME,
   type SupportedProvider,
 } from "@shared";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { invalidateToolAssignmentQueries } from "./agent-tools.hook";
@@ -172,12 +177,45 @@ export function useUpdateConversation() {
     },
     onSuccess: (data, variables) => {
       if (!data) return;
-      queryClient.invalidateQueries({ queryKey: ["conversations"] });
-      queryClient.invalidateQueries({
-        queryKey: ["conversation", variables.id],
-      });
-      if (variables.chatApiKeyId) {
-        queryClient.invalidateQueries({ queryKey: ["chat-models"] });
+      // Merge only the fields this mutation updated into the cache.
+      // Using a full replacement (`setQueryData(key, data)`) causes flicker when
+      // concurrent mutations race (e.g. model change + API key auto-select):
+      // the slower response can overwrite fields the faster mutation already set.
+      queryClient.setQueryData(
+        ["conversation", variables.id],
+        (old: typeof data | undefined) => {
+          if (!old) return data;
+          const merged = { ...old };
+          if (variables.title !== undefined) merged.title = data.title;
+          if (variables.selectedModel !== undefined)
+            merged.selectedModel = data.selectedModel;
+          if (variables.selectedProvider !== undefined)
+            merged.selectedProvider = data.selectedProvider;
+          if (variables.chatApiKeyId !== undefined)
+            merged.chatApiKeyId = data.chatApiKeyId;
+          if (variables.agentId !== undefined) {
+            merged.agentId = data.agentId;
+            merged.agent = data.agent;
+          }
+          if (variables.pinnedAt !== undefined) merged.pinnedAt = data.pinnedAt;
+          return merged;
+        },
+      );
+      // Only invalidate the conversations list for sidebar-relevant changes
+      // (title, pin status, agent). Model/key updates don't affect the sidebar
+      // and unnecessary invalidation causes cascading re-renders.
+      if (
+        variables.title !== undefined ||
+        variables.pinnedAt !== undefined ||
+        variables.agentId
+      ) {
+        queryClient.invalidateQueries({ queryKey: ["conversations"] });
+      }
+      if (variables.agentId) {
+        // Agent changed — invalidate tools-related queries
+        queryClient.invalidateQueries({
+          queryKey: ["conversation", variables.id, "enabled-tools"],
+        });
       }
     },
   });
@@ -444,6 +482,7 @@ export function useProfileToolsWithIds(agentId: string | undefined) {
     enabled: !!agentId,
     staleTime: 5 * 60 * 1000, // 5 minutes
     gcTime: 10 * 60 * 1000,
+    placeholderData: keepPreviousData,
   });
 }
 

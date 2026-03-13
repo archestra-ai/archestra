@@ -7,7 +7,8 @@ import {
   parseFullToolName,
 } from "@shared";
 import { useQueries } from "@tanstack/react-query";
-import { Loader2, Pencil, Search, X } from "lucide-react";
+import { Loader2, Pencil, Search, Server, X } from "lucide-react";
+import Image from "next/image";
 import {
   forwardRef,
   useCallback,
@@ -75,16 +76,22 @@ export interface AgentToolsEditorRef {
 interface AgentToolsEditorProps {
   agentId?: string;
   onSelectedCountChange?: (count: number) => void;
+  /** "pills" (default): compact pills + dropdown combobox. "cards": inline grid of MCP server cards. */
+  layout?: "pills" | "cards";
 }
 
 export const AgentToolsEditor = forwardRef<
   AgentToolsEditorRef,
   AgentToolsEditorProps
->(function AgentToolsEditor({ agentId, onSelectedCountChange }, ref) {
+>(function AgentToolsEditor(
+  { agentId, onSelectedCountChange, layout = "pills" },
+  ref,
+) {
   return (
     <AgentToolsEditorContent
       agentId={agentId}
       onSelectedCountChange={onSelectedCountChange}
+      layout={layout}
       ref={ref}
     />
   );
@@ -93,7 +100,10 @@ export const AgentToolsEditor = forwardRef<
 const AgentToolsEditorContent = forwardRef<
   AgentToolsEditorRef,
   AgentToolsEditorProps
->(function AgentToolsEditorContent({ agentId, onSelectedCountChange }, ref) {
+>(function AgentToolsEditorContent(
+  { agentId, onSelectedCountChange, layout = "pills" },
+  ref,
+) {
   const invalidateAllQueries = useInvalidateToolAssignmentQueries();
   const assignTool = useAssignTool();
   const unassignTool = useUnassignTool();
@@ -433,6 +443,13 @@ const AgentToolsEditorContent = forwardRef<
         id: catalog.id,
         name: catalog.name,
         description: catalog.description || undefined,
+        icon: (
+          <McpCatalogIcon
+            icon={catalog.icon}
+            catalogId={catalog.id}
+            size={16}
+          />
+        ),
         badge: isDisabled
           ? undefined
           : assignedCount > 0
@@ -477,6 +494,38 @@ const AgentToolsEditorContent = forwardRef<
     );
   }
 
+  if (layout === "cards") {
+    return (
+      <div className="grid grid-cols-3 gap-2">
+        {sortedCatalogItems.map((catalog) => {
+          const isSelected = selectedCatalogIds.includes(catalog.id);
+          const pending = pendingChangesRef.current.get(catalog.id);
+          const assignedCount = pending
+            ? pending.selectedToolIds.size
+            : (assignedToolsByCatalog.get(catalog.id)?.length ?? 0);
+          const totalCount = toolCountByCatalog.get(catalog.id) ?? 0;
+          const hasNoTools = totalCount === 0;
+          const hasNoCredentials =
+            catalog.serverType !== "builtin" &&
+            !allCredentials?.[catalog.id]?.length;
+          const isDisabled = hasNoTools || hasNoCredentials;
+
+          return (
+            <McpServerCard
+              key={catalog.id}
+              catalog={catalog}
+              isSelected={isSelected}
+              isDisabled={isDisabled}
+              assignedCount={assignedCount}
+              totalCount={totalCount}
+              onToggle={() => handleCatalogToggle(catalog.id)}
+            />
+          );
+        })}
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-wrap gap-2">
       {selectedCatalogs.map((catalog) => (
@@ -487,6 +536,7 @@ const AgentToolsEditorContent = forwardRef<
           initialPendingChanges={pendingChangesRef.current.get(catalog.id)}
           onPendingChanges={registerPendingChanges}
           onClearPendingChanges={clearPendingChanges}
+          onRemove={handleCatalogToggle}
           autoOpen={catalog.id === autoOpenCatalogId}
           onAutoOpened={() => setAutoOpenCatalogId(null)}
         />
@@ -507,12 +557,56 @@ const AgentToolsEditorContent = forwardRef<
   );
 });
 
+function McpServerCard({
+  catalog,
+  isSelected,
+  isDisabled,
+  assignedCount,
+  totalCount,
+  onToggle,
+}: {
+  catalog: InternalMcpCatalogItem;
+  isSelected: boolean;
+  isDisabled: boolean;
+  assignedCount: number;
+  totalCount: number;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={isDisabled ? undefined : onToggle}
+      disabled={isDisabled}
+      className={cn(
+        "flex flex-col items-center gap-1.5 rounded-lg border p-3 text-center transition-colors cursor-pointer",
+        isSelected && "border-primary bg-primary/5",
+        isDisabled && "opacity-40 cursor-not-allowed",
+        !isSelected && !isDisabled && "hover:bg-accent",
+      )}
+    >
+      <McpCatalogIcon icon={catalog.icon} catalogId={catalog.id} size={24} />
+      <span className="text-xs font-medium truncate w-full">
+        {catalog.name}
+      </span>
+      <span className="text-[10px] text-muted-foreground">
+        {isDisabled
+          ? "Not installed"
+          : isSelected
+            ? `${assignedCount}/${totalCount} tools`
+            : `${totalCount} tools`}
+      </span>
+    </button>
+  );
+}
+
 interface McpServerPillProps {
   catalogItem: InternalMcpCatalogItem;
   assignedTools: AgentTool[];
   initialPendingChanges?: PendingCatalogChanges;
   onPendingChanges: (catalogId: string, changes: PendingCatalogChanges) => void;
   onClearPendingChanges: (catalogId: string) => void;
+  /** Called when the user clicks the remove button on the pill */
+  onRemove: (catalogId: string) => void;
   /** When true, the pill's popover opens automatically after mount */
   autoOpen?: boolean;
   /** Called after the auto-open has been consumed */
@@ -525,6 +619,7 @@ function McpServerPill({
   initialPendingChanges,
   onPendingChanges,
   onClearPendingChanges,
+  onRemove,
   autoOpen,
   onAutoOpened,
 }: McpServerPillProps) {
@@ -637,9 +732,12 @@ function McpServerPill({
     return null;
   }
 
-  const hasAssignedTools = assignedTools.length > 0;
   const assignedCount = assignedTools.length;
   const totalCount = allTools.length;
+  const displayedCount = hasPendingChanges
+    ? selectedToolIds.size
+    : assignedCount;
+  const isEmpty = displayedCount === 0;
 
   // Show credential selector for non-builtin, non-Playwright servers that have credentials available
   const isPlaywright = isPlaywrightCatalogItem(catalogItem.id);
@@ -657,25 +755,43 @@ function McpServerPill({
       }}
       modal
     >
-      <PopoverTrigger asChild>
-        <Button
-          variant="outline"
-          size="sm"
-          className={cn(
-            "h-8 px-3 gap-1.5 text-xs",
-            (hasPendingChanges
-              ? selectedToolIds.size === 0
-              : !hasAssignedTools) && "border-dashed opacity-50",
-            hasPendingChanges && "border-primary opacity-100",
-          )}
-        >
-          <span className="font-medium">{catalogItem.name}</span>
-          <span className="text-muted-foreground">
-            ({hasPendingChanges ? selectedToolIds.size : assignedCount})
-          </span>
-          <Pencil className="h-3 w-3 shrink-0 text-muted-foreground" />
-        </Button>
-      </PopoverTrigger>
+      <div className="flex items-center">
+        <PopoverTrigger asChild>
+          <Button
+            variant="outline"
+            size="sm"
+            className={cn(
+              "h-8 px-3 gap-1.5 text-xs",
+              isEmpty && "border-dashed opacity-50",
+              isEmpty && "rounded-r-none border-r-0",
+              hasPendingChanges && "border-primary opacity-100",
+            )}
+          >
+            <McpCatalogIcon
+              icon={catalogItem.icon}
+              catalogId={catalogItem.id}
+              size={14}
+            />
+            <span className="font-medium">{catalogItem.name}</span>
+            <span className="text-muted-foreground">({displayedCount})</span>
+            <Pencil className="h-3 w-3 shrink-0 text-muted-foreground" />
+          </Button>
+        </PopoverTrigger>
+        {isEmpty && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 w-8 p-0 rounded-l-none border-dashed opacity-50 hover:opacity-100"
+            onClick={(e) => {
+              e.stopPropagation();
+              onRemove(catalogItem.id);
+            }}
+            aria-label={`Remove ${catalogItem.name}`}
+          >
+            <X className="h-3 w-3" />
+          </Button>
+        )}
+      </div>
       <PopoverContent
         className="w-[420px] max-h-[min(500px,var(--radix-popover-content-available-height))] p-0 flex flex-col overflow-hidden"
         side="bottom"
@@ -751,6 +867,55 @@ function McpServerPill({
   );
 }
 
+export function McpCatalogIcon({
+  icon,
+  catalogId,
+  size = 14,
+}: {
+  icon?: string | null;
+  catalogId?: string;
+  size?: number;
+}) {
+  if (!icon && catalogId === ARCHESTRA_MCP_CATALOG_ID) {
+    return (
+      <Image
+        src="/logo.png"
+        alt="Archestra"
+        width={size}
+        height={size}
+        className="shrink-0 rounded-sm object-contain"
+      />
+    );
+  }
+
+  if (!icon) {
+    return (
+      <Server
+        className="shrink-0 text-muted-foreground"
+        style={{ width: size, height: size }}
+      />
+    );
+  }
+
+  if (icon.startsWith("data:")) {
+    return (
+      <Image
+        src={icon}
+        alt="MCP server icon"
+        width={size}
+        height={size}
+        className="shrink-0 rounded-sm object-contain"
+      />
+    );
+  }
+
+  return (
+    <span className="shrink-0 leading-none" style={{ fontSize: size }}>
+      {icon}
+    </span>
+  );
+}
+
 export interface ToolChecklistProps {
   tools: CatalogTool[];
   selectedToolIds: Set<string>;
@@ -822,12 +987,17 @@ export function ToolChecklist({
   const [searchQuery, setSearchQuery] = useState("");
 
   // Snapshot the initial selection for sort order so tools don't jump
-  // around as the user toggles checkboxes. Re-sorts only when the
-  // component remounts (e.g. popover re-opens) or search query changes.
+  // around as the user toggles checkboxes. Updates synchronously during
+  // render when the selection transitions from empty to populated (async
+  // data load), then stays frozen until remount.
   const initialSelectedRef = useRef(selectedToolIds);
+  if (initialSelectedRef.current.size === 0 && selectedToolIds.size > 0) {
+    initialSelectedRef.current = selectedToolIds;
+  }
+  // biome-ignore lint/correctness/useExhaustiveDependencies: selectedToolIds.size > 0 triggers re-sort when selection transitions from empty to populated
   const filteredTools = useMemo(
     () => sortAndFilterTools(tools, initialSelectedRef.current, searchQuery),
-    [tools, searchQuery],
+    [tools, searchQuery, selectedToolIds.size > 0],
   );
 
   const allSelected = filteredTools.every((tool) =>

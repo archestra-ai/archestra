@@ -18,9 +18,14 @@ setup("authenticate as admin", async ({ page }) => {
 
   // Mark onboarding as complete and set restrictive policy via API
   // Setting globalToolPolicy to "restrictive" prevents the permissive policy overlay from blocking UI interactions
-  await page.request.patch(`${UI_BASE_URL}/api/organization`, {
-    data: { onboardingComplete: true, globalToolPolicy: "restrictive" },
-  });
+  await page.request.post(
+    `${UI_BASE_URL}/api/organization/complete-onboarding`,
+    { data: { onboardingComplete: true } },
+  );
+  await page.request.patch(
+    `${UI_BASE_URL}/api/organization/security-settings`,
+    { data: { globalToolPolicy: "restrictive" } },
+  );
 
   // Reload page to dismiss onboarding dialog (on fresh env it renders before API call)
   await page.reload({ waitUntil: "domcontentloaded" });

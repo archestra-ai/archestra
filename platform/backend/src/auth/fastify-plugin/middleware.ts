@@ -6,6 +6,12 @@ import { betterAuth, hasPermission } from "@/auth";
 import config from "@/config";
 import logger from "@/logging";
 import { UserModel } from "@/models";
+import {
+  HEALTH_PATH,
+  READY_PATH,
+  WELL_KNOWN_ACME_PREFIX,
+  WELL_KNOWN_OAUTH_PREFIX,
+} from "@/routes/route-paths";
 import { ApiError } from "@/types";
 
 export class Authnz {
@@ -19,14 +25,14 @@ export class Authnz {
 
     // return 401 if unauthenticated
     if (!(await this.isAuthenticated(request))) {
-      logger.debug(
+      logger.trace(
         { requestId, url: request.url },
         "[Authnz] Authentication failed",
       );
       throw new ApiError(401, "Unauthenticated");
     }
 
-    logger.debug(
+    logger.trace(
       { requestId },
       "[Authnz] Authentication successful, populating user info",
     );
@@ -46,7 +52,7 @@ export class Authnz {
     // Set Sentry user context after successful authentication
     this.setSentryUserContext(request.user, request);
 
-    logger.debug(
+    logger.trace(
       {
         requestId,
         userId: request.user?.id,
@@ -57,7 +63,7 @@ export class Authnz {
 
     const { success } = await this.isAuthorized(request);
     if (success) {
-      logger.debug(
+      logger.trace(
         { requestId, userId: request.user?.id },
         "[Authnz] Authorization successful",
       );
@@ -65,7 +71,7 @@ export class Authnz {
     }
 
     // return 403 if unauthorized
-    logger.debug(
+    logger.trace(
       {
         requestId,
         userId: request.user?.id,
@@ -82,7 +88,7 @@ export class Authnz {
   }: FastifyRequest): Promise<boolean> => {
     // Skip CORS preflight and HEAD requests globally
     if (method === "OPTIONS" || method === "HEAD") {
-      logger.debug(
+      logger.trace(
         { url, method },
         "[Authnz] Skipping auth for preflight/HEAD request",
       );
@@ -98,18 +104,18 @@ export class Authnz {
       url.startsWith("/api/invitation/") || // Allow invitation check without auth
       isLlmProxyRoute ||
       url === "/openapi.json" ||
-      url === "/health" ||
-      url === "/ready" ||
+      url === HEALTH_PATH ||
+      url === READY_PATH ||
       url === "/test" ||
       url.startsWith(config.mcpGateway.endpoint) ||
       // A2A routes use token auth handled in route, similar to MCP Gateway
       url.startsWith(config.a2aGateway.endpoint) ||
       // Skip OAuth well-known discovery endpoints (RFC 8414 / RFC 9728)
-      url.startsWith("/.well-known/oauth-") ||
+      url.startsWith(WELL_KNOWN_OAUTH_PREFIX) ||
       // Skip OAuth consent page proxy (handled by frontend)
       url.startsWith("/oauth/") ||
       // Skip ACME challenge paths for SSL certificate domain validation
-      url.startsWith("/.well-known/acme-challenge/") ||
+      url.startsWith(WELL_KNOWN_ACME_PREFIX) ||
       // Allow fetching public SSO providers list for login page (minimal info, no secrets)
       (method === "GET" && url === "/api/identity-providers/public") ||
       // Allow fetching public appearance settings for login page (theme, logo, font)
@@ -131,47 +137,47 @@ export class Authnz {
     const headers = new Headers(request.headers as HeadersInit);
 
     try {
-      logger.debug("[Authnz] Attempting session-based authentication");
+      logger.trace("[Authnz] Attempting session-based authentication");
       const session = await betterAuth.api.getSession({
         headers,
         query: { disableCookieCache: true },
       });
 
       if (session) {
-        logger.debug(
+        logger.trace(
           { userId: session.user?.id, sessionId: session.session?.id },
           "[Authnz] Session authentication successful",
         );
         return true;
       }
-      logger.debug("[Authnz] No session found");
+      logger.trace("[Authnz] No session found");
     } catch (error) {
       /**
        * If getSession fails (e.g., "No active organization"), try API key verification
        */
-      logger.debug(
+      logger.trace(
         { error: error instanceof Error ? error.message : "unknown" },
         "[Authnz] Session authentication failed, trying API key",
       );
       const authHeader = headers.get("authorization");
       if (authHeader) {
         try {
-          logger.debug("[Authnz] Attempting API key authentication");
+          logger.trace("[Authnz] Attempting API key authentication");
           const { valid } = await betterAuth.api.verifyApiKey({
             body: { key: authHeader },
           });
 
-          logger.debug({ valid }, "[Authnz] API key verification result");
+          logger.trace({ valid }, "[Authnz] API key verification result");
           return valid;
         } catch (_apiKeyError) {
           // API key verification failed, return unauthenticated
-          logger.debug("[Authnz] API key verification failed");
+          logger.trace("[Authnz] API key verification failed");
           return false;
         }
       }
     }
 
-    logger.debug("[Authnz] No valid authentication method found");
+    logger.trace("[Authnz] No valid authentication method found");
     return false;
   };
 
@@ -182,14 +188,14 @@ export class Authnz {
       | RouteId
       | undefined;
 
-    logger.debug({ routeId }, "[Authnz] Checking authorization for route");
+    logger.trace({ routeId }, "[Authnz] Checking authorization for route");
 
     const requiredPermissions = routeId
       ? requiredEndpointPermissionsMap[routeId]
       : undefined;
 
     if (requiredPermissions === undefined) {
-      logger.debug(
+      logger.trace(
         { routeId },
         "[Authnz] Route not configured in permissions map, denying by default",
       );
@@ -203,14 +209,14 @@ export class Authnz {
 
     // If no specific permissions are required (empty object), allow any authenticated user
     if (Object.keys(requiredPermissions).length === 0) {
-      logger.debug(
+      logger.trace(
         { routeId },
         "[Authnz] No specific permissions required, allowing access",
       );
       return { success: true, error: null };
     }
 
-    logger.debug(
+    logger.trace(
       { routeId, permissionCount: Object.keys(requiredPermissions).length },
       "[Authnz] Checking required permissions",
     );
@@ -223,14 +229,14 @@ export class Authnz {
 
       // Try session-based authentication first
       try {
-        logger.debug("[Authnz] populateUserInfo: trying session-based lookup");
+        logger.trace("[Authnz] populateUserInfo: trying session-based lookup");
         const session = await betterAuth.api.getSession({
           headers,
           query: { disableCookieCache: true },
         });
 
         if (session?.user?.id) {
-          logger.debug(
+          logger.trace(
             { userId: session.user.id },
             "[Authnz] populateUserInfo: found session user, fetching full user data",
           );
@@ -242,7 +248,7 @@ export class Authnz {
           // Populate the request decorators
           request.user = user;
           request.organizationId = organizationId;
-          logger.debug(
+          logger.trace(
             { userId: user.id, organizationId },
             "[Authnz] populateUserInfo: populated from session",
           );
@@ -250,7 +256,7 @@ export class Authnz {
         }
       } catch (sessionError) {
         // Fall through to API key authentication
-        logger.debug(
+        logger.trace(
           {
             error:
               sessionError instanceof Error ? sessionError.message : "unknown",
@@ -263,13 +269,13 @@ export class Authnz {
       const authHeader = headers.get("authorization");
       if (authHeader) {
         try {
-          logger.debug("[Authnz] populateUserInfo: trying API key lookup");
+          logger.trace("[Authnz] populateUserInfo: trying API key lookup");
           const apiKeyResult = await betterAuth.api.verifyApiKey({
             body: { key: authHeader },
           });
 
           if (apiKeyResult?.valid && apiKeyResult.key?.userId) {
-            logger.debug(
+            logger.trace(
               "[Authnz] populateUserInfo: valid API key, fetching user data",
             );
             // Get the full user object from database using the userId from the API key
@@ -280,7 +286,7 @@ export class Authnz {
             // Populate the request decorators
             request.user = user;
             request.organizationId = organizationId;
-            logger.debug(
+            logger.trace(
               { userId: user.id, organizationId },
               "[Authnz] populateUserInfo: populated from API key",
             );
@@ -288,7 +294,7 @@ export class Authnz {
           }
         } catch (_apiKeyError) {
           // API key verification failed
-          logger.debug(
+          logger.trace(
             "[Authnz] populateUserInfo: API key verification failed",
           );
         }
@@ -296,7 +302,7 @@ export class Authnz {
     } catch (error) {
       // If population fails, leave decorators unpopulated
       // The route handlers should handle missing user info gracefully
-      logger.debug(
+      logger.trace(
         { error: error instanceof Error ? error.message : "unknown" },
         "[Authnz] populateUserInfo: failed to populate user info",
       );

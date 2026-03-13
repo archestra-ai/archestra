@@ -11,10 +11,11 @@ import {
   MCP_CATALOG_INSTALL_QUERY_PARAM,
   MCP_CATALOG_REAUTH_QUERY_PARAM,
   MCP_CATALOG_SERVER_QUERY_PARAM,
+  parseFullToolName,
 } from "@shared";
 import config from "@/config";
+import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import logger from "@/logging";
-import { McpServerRuntimeManager } from "@/mcp-server-runtime";
 import {
   InternalMcpCatalogModel,
   McpHttpSessionModel,
@@ -293,6 +294,12 @@ class McpClient {
         if (targetToolName === toolCall.name) {
           // No prefix match with catalogName; attempt to strip using mcpServerName instead.
           targetToolName = this.stripServerPrefix(toolCall.name, mcpServerName);
+        }
+
+        if (targetToolName === toolCall.name) {
+          // Neither prefix matched (e.g. server name contains "__" separator).
+          // Fall back to parseFullToolName which uses lastIndexOf to split correctly.
+          targetToolName = parseFullToolName(toolCall.name).toolName;
         }
 
         // Resolve the actual tool name from the server (preserving original casing).
@@ -1034,7 +1041,7 @@ class McpClient {
    * Get appropriate transport based on server type and configuration
    */
   private shouldLimitConcurrency(): boolean {
-    return config.features.browserStreamingEnabled;
+    return true;
   }
 
   private getConcurrencyLimit(transportKind: TransportKind): number {
@@ -1680,6 +1687,58 @@ class McpClient {
         lastError?.message || "Unknown error"
       }`,
     );
+  }
+
+  /**
+   * Connect to a running MCP server and list tools or call a tool.
+   */
+  async inspectServer(params: {
+    catalogItem: InternalMcpCatalog;
+    mcpServerId: string;
+    secrets: Record<string, unknown>;
+    method: "tools/list" | "tools/call";
+    toolName?: string;
+    toolArguments?: Record<string, unknown>;
+  }): Promise<unknown> {
+    const { catalogItem, mcpServerId, secrets, method } = params;
+
+    const transport = await this.getTransport(
+      catalogItem,
+      mcpServerId,
+      secrets,
+    );
+
+    const client = new Client(
+      { name: "archestra-inspector", version: "1.0.0" },
+      { capabilities: {} },
+    );
+
+    try {
+      await Promise.race([
+        client.connect(transport),
+        this.createTimeout(30000, "Connection timeout after 30 seconds"),
+      ]);
+
+      if (method === "tools/list") {
+        return await Promise.race([
+          client.listTools(),
+          this.createTimeout(30000, "List tools timeout"),
+        ]);
+      }
+
+      if (!params.toolName) {
+        throw new Error("toolName is required for tools/call");
+      }
+      return await Promise.race([
+        client.callTool({
+          name: params.toolName,
+          arguments: params.toolArguments ?? {},
+        }),
+        this.createTimeout(60000, "Tool call timeout"),
+      ]);
+    } finally {
+      await client.close().catch(() => {});
+    }
   }
 
   /**

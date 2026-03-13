@@ -3,6 +3,8 @@
 import {
   ARCHESTRA_MCP_CATALOG_ID,
   type archestraApiTypes,
+  DocsPage,
+  getDocsUrl,
   parseFullToolName,
 } from "@shared";
 import {
@@ -76,6 +78,9 @@ export function McpConnectionInstructions({
   const { data: userToken } = useUserToken();
   const { data: hasAdminPermission } = useHasPermissions({
     mcpGateway: ["admin"],
+  });
+  const { data: hasTeamAdminPermission } = useHasPermissions({
+    mcpGateway: ["team-admin"],
   });
 
   const [copiedConfig, setCopiedConfig] = useState(false);
@@ -261,7 +266,7 @@ export function McpConnectionInstructions({
         ? userToken
           ? `${userToken.tokenStart}***`
           : "ask-admin-for-access-token"
-        : hasAdminPermission && selectedTeamToken
+        : (hasAdminPermission || hasTeamAdminPermission) && selectedTeamToken
           ? `${selectedTeamToken.tokenStart}***`
           : "ask-admin-for-access-token";
 
@@ -515,7 +520,7 @@ export function McpConnectionInstructions({
           <p className="text-xs text-muted-foreground">
             For external identity providers, use{" "}
             <a
-              href="https://archestra.ai/docs/mcp-authentication#external-idp-jwks"
+              href={getDocsUrl(DocsPage.McpAuthentication, "external-idp-jwks")}
               target="_blank"
               rel="noopener noreferrer"
               className="underline hover:text-foreground"
@@ -610,7 +615,9 @@ export function McpConnectionInstructions({
                   onClick={handleExposeToken}
                   disabled={
                     isLoadingToken ||
-                    (!isPersonalTokenSelected && !hasAdminPermission)
+                    (!isPersonalTokenSelected &&
+                      !hasAdminPermission &&
+                      !hasTeamAdminPermission)
                   }
                 >
                   {isLoadingToken ? (
@@ -635,7 +642,9 @@ export function McpConnectionInstructions({
                   size="sm"
                   className="gap-2 bg-transparent"
                   onClick={
-                    isPersonalTokenSelected || hasAdminPermission
+                    isPersonalTokenSelected ||
+                    hasAdminPermission ||
+                    hasTeamAdminPermission
                       ? handleCopyConfig
                       : handleCopyConfigWithoutRealToken
                   }

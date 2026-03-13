@@ -65,90 +65,21 @@ spec:
     metadata:
       labels:
         {{- include "archestra-platform.labels" . | nindent 8 }}
+        app.kubernetes.io/component: web
       {{- with .Values.archestra.podAnnotations }}
       annotations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
     spec:
       serviceAccountName: {{ include "archestra-platform.serviceAccountName" . }}
-      # Init container to wait for PostgreSQL to be ready before starting the application
-      # This prevents the application from crashing when PostgreSQL is still starting up
-      # and the application tries to run database migrations (in which it assumes that the database is already ready)
       initContainers:
-        {{- if .Values.archestra.initContainers.vaultSecrets.enabled }}
-        # Vault secret injection init container
-        #
-        # This init container authenticates with Vault, fetches secrets, and writes them
-        # as KEY=VALUE pairs to /vault/secrets/env. The main container sources this file
-        # on startup to load secrets as environment variables (see command override below).
-        - name: vault-secrets
-          image: {{ include "archestra-platform.image" . }}
-          workingDir: /app/backend
-          env:
-            {{- include "archestra-platform.env" . | nindent 12 }}
-            - name: VAULT_INJECTOR_SECRETS
-              value: {{ .Values.archestra.initContainers.vaultSecrets.secrets | toJson | quote }}
-          command: ["node", "--enable-source-maps", "dist/standalone-scripts/vault-env-injector.ee.mjs"]
-          volumeMounts:
-            - name: vault-secrets
-              mountPath: /vault/secrets
-        {{- end }}
-        - name: wait-for-postgres
-          image: busybox:1.36
-          env:
-            {{- include "archestra-platform.env" . | nindent 12 }}
-          {{- if .Values.archestra.initContainers.vaultSecrets.enabled }}
-          volumeMounts:
-            - name: vault-secrets
-              mountPath: /vault/secrets
-              readOnly: true
-          {{- end }}
-          command:
-            - sh
-            - -c
-            - |
-              {{- if .Values.archestra.initContainers.waitForPostgres.enabled }}
-              # Source Vault secrets if available (may override ARCHESTRA_DATABASE_URL)
-              if [ -f /vault/secrets/env ]; then
-                set -a
-                . /vault/secrets/env
-                set +a
-              fi
-
-              # Parse host and port from ARCHESTRA_DATABASE_URL
-              # Format: postgresql://user:pass@host[:port]/database
-              DB_URL="${ARCHESTRA_DATABASE_URL##*@}"  # Remove prefix up to last @ (handles passwords with @)
-              HOST_PORT="${DB_URL%%/*}"               # Remove /database suffix
-              HOST="${HOST_PORT%%:*}"                 # Extract host
-              # Extract port, defaulting to 5432 if not specified
-              case "$HOST_PORT" in
-                *:*) PORT="${HOST_PORT##*:}" ;;
-                *)   PORT="5432" ;;
-              esac
-
-              echo "Waiting for PostgreSQL at ${HOST}:${PORT}..."
-              until nc -z "${HOST}" "${PORT}"; do
-                echo "PostgreSQL is unavailable - sleeping"
-                sleep 1
-              done
-              echo "PostgreSQL is up - continuing"
-              {{- else }}
-              echo "Skipping PostgreSQL readiness check"
-              {{- end }}
+        {{- include "archestra-platform.initContainers" . | nindent 8 }}
       containers:
         - name: {{ .Chart.Name }}
           image: {{ include "archestra-platform.image" . }}
           imagePullPolicy: {{ .Values.archestra.imagePullPolicy | default "IfNotPresent" }}
           {{- if .Values.archestra.initContainers.vaultSecrets.enabled }}
-          command: ["/bin/sh", "-c"]
-          args:
-            - |
-              if [ -f /vault/secrets/env ]; then
-                set -a
-                . /vault/secrets/env
-                set +a
-              fi
-              exec {{ .Values.archestra.initContainers.vaultSecrets.entrypoint | default "/docker-entrypoint.sh" }}
+          {{- include "archestra-platform.vaultSecretsCommand" (.Values.archestra.initContainers.vaultSecrets.entrypoint | default "/docker-entrypoint.sh") | nindent 10 }}
           {{- end }}
           ports:
             - name: backend
@@ -162,6 +93,10 @@ spec:
               protocol: TCP
           env:
             {{- include "archestra-platform.env" . | nindent 12 }}
+            {{- if .Values.archestra.worker.enabled }}
+            - name: ARCHESTRA_PROCESS_TYPE
+              value: "web"
+            {{- end }}
           {{- with .Values.archestra.envFrom }}
           envFrom:
             {{- toYaml . | nindent 12 }}
@@ -197,19 +132,7 @@ spec:
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 3
-          {{- if or (and .Values.archestra.orchestrator.kubernetes.kubeconfig.enabled .Values.archestra.orchestrator.kubernetes.kubeconfig.secretName) .Values.archestra.initContainers.vaultSecrets.enabled }}
-          volumeMounts:
-            {{- if and .Values.archestra.orchestrator.kubernetes.kubeconfig.enabled .Values.archestra.orchestrator.kubernetes.kubeconfig.secretName }}
-            - name: kubeconfig
-              mountPath: {{ .Values.archestra.orchestrator.kubernetes.kubeconfig.mountPath }}
-              readOnly: true
-            {{- end }}
-            {{- if .Values.archestra.initContainers.vaultSecrets.enabled }}
-            - name: vault-secrets
-              mountPath: /vault/secrets
-              readOnly: true
-            {{- end }}
-          {{- end }}
+          {{- include "archestra-platform.volumeMounts" . | nindent 10 }}
       {{- with .Values.archestra.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
@@ -218,16 +141,4 @@ spec:
       tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- if or (and .Values.archestra.orchestrator.kubernetes.kubeconfig.enabled .Values.archestra.orchestrator.kubernetes.kubeconfig.secretName) .Values.archestra.initContainers.vaultSecrets.enabled }}
-      volumes:
-        {{- if and .Values.archestra.orchestrator.kubernetes.kubeconfig.enabled .Values.archestra.orchestrator.kubernetes.kubeconfig.secretName }}
-        - name: kubeconfig
-          secret:
-            secretName: {{ .Values.archestra.orchestrator.kubernetes.kubeconfig.secretName }}
-        {{- end }}
-        {{- if .Values.archestra.initContainers.vaultSecrets.enabled }}
-        - name: vault-secrets
-          emptyDir:
-            medium: Memory
-        {{- end }}
-      {{- end }}
+      {{- include "archestra-platform.volumes" . | nindent 6 }}

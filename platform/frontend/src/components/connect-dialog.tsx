@@ -1,5 +1,7 @@
 "use client";
 
+import type { DocsPage } from "@shared";
+import { getDocsUrl } from "@shared";
 import type { LucideIcon } from "lucide-react";
 import { ArrowRight, Bot, ExternalLink, Network, Route } from "lucide-react";
 import type { ReactNode } from "react";
@@ -10,11 +12,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-
-type DocsPage =
-  | "platform-agents"
-  | "platform-llm-proxy"
-  | "platform-mcp-gateway";
 
 const AGENT_TYPE_CONFIG: Record<
   string,
@@ -77,7 +74,7 @@ export function ConnectDialog({
             <span>
               Need help? Check our{" "}
               <a
-                href={`https://archestra.ai/docs/${docsPage}`}
+                href={getDocsUrl(docsPage)}
                 target="_blank"
                 className="text-primary hover:underline font-medium"
                 rel="noopener"

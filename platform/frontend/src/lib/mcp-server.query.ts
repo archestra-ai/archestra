@@ -9,7 +9,7 @@ import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { invalidateToolAssignmentQueries } from "./agent-tools.hook";
 import { authClient } from "./clients/auth/auth-client";
-import { useFeatureFlag } from "./features.hook";
+import { useFeature } from "./config.query";
 import { handleApiError } from "./utils";
 import websocketService from "./websocket";
 
@@ -27,6 +27,7 @@ export function useMcpServers(params?: {
   initialData?: archestraApiTypes.GetMcpServersResponses["200"];
   hasInstallingServers?: boolean;
   catalogId?: string;
+  enabled?: boolean;
 }) {
   return useQuery({
     // Include catalogId in queryKey only when provided to maintain cache separation
@@ -40,6 +41,7 @@ export function useMcpServers(params?: {
       return response.data ?? [];
     },
     initialData: params?.initialData,
+    enabled: params?.enabled,
     refetchInterval: params?.hasInstallingServers ? 2000 : false,
   });
 }
@@ -305,7 +307,7 @@ export function useMcpDeploymentStatuses(): Record<
   const [statuses, setStatuses] = useState<
     Record<string, McpDeploymentStatusEntry>
   >({});
-  const isK8sEnabled = useFeatureFlag("orchestrator-k8s-runtime");
+  const isK8sEnabled = useFeature("orchestratorK8sRuntime");
 
   useEffect(() => {
     if (!isK8sEnabled) return;

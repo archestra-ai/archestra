@@ -1,12 +1,18 @@
 "use client";
 
-import type { archestraApiTypes } from "@shared";
-import { Layers, MessageSquare, Search, User } from "lucide-react";
+import {
+  type archestraApiTypes,
+  INTERACTION_SOURCE_DISPLAY,
+  type InteractionSource,
+} from "@shared";
+import { Database, Layers, MessageSquare, User } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
-import { DebouncedInput } from "@/components/debounced-input";
+import { LogsEmptyState } from "@/components/logs-empty-state";
 import { Savings } from "@/components/savings";
+import { SearchInput } from "@/components/search-input";
+import { SourceBadge } from "@/components/source-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DateTimeRangePicker } from "@/components/ui/date-time-range-picker";
@@ -114,7 +120,7 @@ function SessionRow({
     if (isSingleInteraction) {
       router.push(`/llm/logs/${session.interactionId}`);
     } else if (session.sessionId) {
-      router.push(`/llm/logs/session/${session.sessionId}`);
+      router.push(`/llm/logs/session/${encodeURIComponent(session.sessionId)}`);
     }
   };
 
@@ -176,6 +182,11 @@ function SessionRow({
                 ? `${lastUserMessage.slice(0, 80)}...`
                 : lastUserMessage}
             </span>
+          ) : session.source?.startsWith("knowledge:") ? (
+            <span className="text-muted-foreground">
+              {INTERACTION_SOURCE_DISPLAY[session.source]?.label ??
+                session.source}
+            </span>
           ) : (
             <span className="text-muted-foreground">No message</span>
           )}
@@ -206,11 +217,11 @@ function SessionRow({
         </TooltipProvider>
       </TableCell>
       <TableCell className="font-mono text-xs py-3">
-        {session.totalCost && session.totalBaselineCost && (
+        {session.totalCost && (
           <TooltipProvider>
             <Savings
               cost={session.totalCost}
-              baselineCost={session.totalBaselineCost}
+              baselineCost={session.totalBaselineCost || session.totalCost}
               toonCostSavings={session.totalToonCostSavings}
               format="percent"
               tooltip="hover"
@@ -218,6 +229,9 @@ function SessionRow({
             />
           </TooltipProvider>
         )}
+      </TableCell>
+      <TableCell className="py-3">
+        <SourceBadge source={session.source} />
       </TableCell>
       <TableCell className="font-mono text-xs py-3">
         <div className="flex flex-col gap-0.5">
@@ -239,11 +253,19 @@ function SessionRow({
       <TableCell className="py-3">
         <div className="flex flex-wrap gap-1">
           <Badge variant="secondary" className="text-xs max-w-[200px]">
-            <Layers className="h-3 w-3 mr-1 shrink-0" />
+            {session.source?.startsWith("knowledge:") ? (
+              <Database className="h-3 w-3 mr-1 shrink-0" />
+            ) : (
+              <Layers className="h-3 w-3 mr-1 shrink-0" />
+            )}
             <span className="truncate">
               {agent?.name ??
                 session.profileName ??
-                (session.profileId === null ? "Deleted LLM Proxy" : "Unknown")}
+                (session.source?.startsWith("knowledge:")
+                  ? "Knowledge Base"
+                  : session.profileId === null
+                    ? "Deleted LLM Proxy"
+                    : "Unknown")}
             </span>
           </Badge>
           {session.userNames.map((userName) => (
@@ -296,6 +318,7 @@ function SessionsTable({
   const pageSizeFromUrl = searchParams.get("pageSize");
   const profileIdFromUrl = searchParams.get("profileId");
   const userIdFromUrl = searchParams.get("userId");
+  const sourceFromUrl = searchParams.get("source");
   const startDateFromUrl = searchParams.get("startDate");
   const endDateFromUrl = searchParams.get("endDate");
   const searchFromUrl = searchParams.get("search");
@@ -305,7 +328,7 @@ function SessionsTable({
 
   const [profileFilter, setProfileFilter] = useState(profileIdFromUrl || "all");
   const [userFilter, setUserFilter] = useState(userIdFromUrl || "all");
-  const [searchFilter, setSearchFilter] = useState(searchFromUrl || "");
+  const [sourceFilter, setSourceFilter] = useState(sourceFromUrl || "all");
 
   // Helper to update URL params
   const updateUrlParams = useCallback(
@@ -371,62 +394,56 @@ function SessionsTable({
     [updateUrlParams],
   );
 
-  const handleSearchChange = useCallback(
+  const handleSourceFilterChange = useCallback(
     (value: string) => {
-      setSearchFilter(value);
+      setSourceFilter(value);
       updateUrlParams({
-        search: value || null,
+        source: value === "all" ? null : value,
         page: "1", // Reset to first page
       });
     },
     [updateUrlParams],
   );
 
-  const { data: sessionsResponse } = useInteractionSessions({
+  const { data: sessionsResponse, isFetching } = useInteractionSessions({
     limit: pageSize,
     offset: pageIndex * pageSize,
     profileId: profileFilter !== "all" ? profileFilter : undefined,
     userId: userFilter !== "all" ? userFilter : undefined,
+    source:
+      sourceFilter !== "all" ? (sourceFilter as InteractionSource) : undefined,
     startDate: dateTimePicker.startDateParam,
     endDate: dateTimePicker.endDateParam,
-    search: searchFilter || undefined,
+    search: searchFromUrl || undefined,
   });
 
   const { data: agents } = useProfiles({
     initialData: initialData?.agents,
+    filters: { agentTypes: ["agent", "llm_proxy"] },
   });
 
   const { data: uniqueUsers } = useUniqueUserIds();
 
   const sessions = sessionsResponse?.data ?? [];
   const paginationMeta = sessionsResponse?.pagination;
-
   const hasFilters =
     profileFilter !== "all" ||
     userFilter !== "all" ||
+    sourceFilter !== "all" ||
     dateTimePicker.dateRange !== undefined ||
-    searchFilter !== "";
+    !!searchFromUrl;
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap gap-4">
-        <div className="relative w-[250px]">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <DebouncedInput
-            initialValue={searchFromUrl || ""}
-            onChange={handleSearchChange}
-            placeholder="Search sessions..."
-            className="pl-9"
-            debounceMs={400}
-          />
-        </div>
+        <SearchInput placeholder="Search sessions..." paramName="search" />
 
         <SearchableSelect
           value={profileFilter}
           onValueChange={handleProfileFilterChange}
           placeholder="Filter by Profile"
           items={[
-            { value: "all", label: "All Profiles" },
+            { value: "all", label: "All Agents & LLM Proxies" },
             ...(agents?.map((agent) => ({
               value: agent.id,
               label: agent.name,
@@ -445,6 +462,19 @@ function SessionsTable({
               value: user.id,
               label: user.name || user.id,
             })) || []),
+          ]}
+          className="w-[200px]"
+        />
+
+        <SearchableSelect
+          value={sourceFilter}
+          onValueChange={handleSourceFilterChange}
+          placeholder="Filter by Source"
+          items={[
+            { value: "all", label: "All Sources" },
+            ...Object.entries(INTERACTION_SOURCE_DISPLAY).map(
+              ([value, { label }]) => ({ value, label }),
+            ),
           ]}
           className="w-[200px]"
         />
@@ -470,10 +500,11 @@ function SessionsTable({
             variant="ghost"
             size="sm"
             onClick={() => {
-              handleSearchChange("");
               handleProfileFilterChange("all");
               handleUserFilterChange("all");
+              handleSourceFilterChange("all");
               dateTimePicker.clearDateRange();
+              updateUrlParams({ search: null, page: "1" });
             }}
           >
             Clear all filters
@@ -482,11 +513,11 @@ function SessionsTable({
       </div>
 
       {!sessions || sessions.length === 0 ? (
-        <p className="text-muted-foreground">
-          {hasFilters
-            ? "No sessions match your filters. Try adjusting your search."
-            : "No sessions found"}
-        </p>
+        <LogsEmptyState
+          isLoading={isFetching}
+          hasFilters={hasFilters}
+          emptyMessage="No LLM proxy logs found. Logs will appear here when agents start making requests."
+        />
       ) : (
         <div className="w-full space-y-4">
           <div className="overflow-hidden rounded-md border">
@@ -501,6 +532,7 @@ function SessionsTable({
                   <TableHead className="w-[140px] whitespace-nowrap">
                     Cost
                   </TableHead>
+                  <TableHead className="w-[100px]">Source</TableHead>
                   <TableHead className="w-[160px]">Time</TableHead>
                   <TableHead className="min-w-[100px]">Details</TableHead>
                 </TableRow>

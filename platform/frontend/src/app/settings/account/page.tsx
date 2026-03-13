@@ -1,35 +1,22 @@
 "use client";
 
-import {
-  ApiKeysCard,
-  SecuritySettingsCards,
-  UpdateNameCard,
-} from "@daveyplate/better-auth-ui";
+import { UpdateNameCard } from "@daveyplate/better-auth-ui";
 import { Suspense } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
+import { LightDarkToggle } from "@/app/settings/account/_components/light-dark-toggle";
 import { LoadingSpinner } from "@/components/loading";
-import { PersonalTokenCard } from "@/components/settings/personal-token-card";
 import { RolePermissionsCard } from "@/components/settings/role-permissions-card";
+import { useOrgTheme } from "@/lib/theme.hook";
 
 function AccountSettingsContent() {
+  const orgTheme = useOrgTheme();
+  const currentUITheme = orgTheme?.currentUITheme;
+
   return (
     <div className="space-y-6">
       <RolePermissionsCard />
-      <PersonalTokenCard />
-      <ApiKeysCard
-        classNames={{
-          base: "w-full",
-        }}
-      />
       <UpdateNameCard classNames={{ base: "w-full" }} />
-      <SecuritySettingsCards
-        classNames={{
-          cards: "w-full",
-          card: {
-            base: "w-full",
-          },
-        }}
-      />
+      <LightDarkToggle currentThemeId={currentUITheme} />
     </div>
   );
 }

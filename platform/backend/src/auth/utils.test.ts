@@ -208,7 +208,7 @@ describe("hasPermission", () => {
     test("should handle complex permissions object", async () => {
       const permissions: Permissions = {
         agent: ["read", "create", "update", "delete"],
-        mcpServer: ["admin"],
+        mcpServerInstallation: ["admin"],
         team: ["read"],
       };
       const headers: IncomingHttpHeaders = {

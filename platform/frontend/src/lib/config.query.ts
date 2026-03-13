@@ -1,16 +1,13 @@
 import { archestraApiSdk, type archestraApiTypes } from "@shared";
 import { useQuery } from "@tanstack/react-query";
 import { useIsAuthenticated } from "@/lib/auth.hook";
+import appConfig, { DEFAULT_BACKEND_URL } from "./config";
 
 const { getConfig } = archestraApiSdk;
 
 export type ConfigResponse = archestraApiTypes.GetConfigResponses["200"];
 export type FeaturesResponse = ConfigResponse["features"];
 
-/**
- * Fetch the full config (features + providerBaseUrls).
- * Only fetches when the user is authenticated.
- */
 export function useConfig() {
   const isAuthenticated = useIsAuthenticated();
   return useQuery({
@@ -21,19 +18,36 @@ export function useConfig() {
   });
 }
 
-/**
- * Convenience hook: returns just the features object.
- * Backward-compatible with consumers that only need feature flags.
- */
-export function useFeatures() {
-  const { data, ...rest } = useConfig();
-  return { data: data?.features ?? null, ...rest };
-}
-
-/**
- * Returns the provider base URLs from the config endpoint.
- */
 export function useProviderBaseUrls() {
   const { data, ...rest } = useConfig();
   return { data: data?.providerBaseUrls ?? null, ...rest };
+}
+
+export function useFeature<K extends keyof FeaturesResponse>(
+  flag: K,
+): FeaturesResponse[K] | undefined {
+  const { data } = useConfig();
+  if (!data) return undefined;
+  return data.features[flag];
+}
+
+type EnterpriseFeatures = ConfigResponse["enterpriseFeatures"];
+type EnterpriseFeatureKey = keyof EnterpriseFeatures;
+
+export function useEnterpriseFeature(feature: EnterpriseFeatureKey): boolean {
+  const { data, isLoading } = useConfig();
+  if (isLoading || !data) return false;
+  return data.enterpriseFeatures[feature] ?? false;
+}
+
+export function usePublicBaseUrl(): string {
+  const { data, isLoading } = useConfig();
+  if (isLoading || !data) return "";
+  if (data.features.ngrokDomain) {
+    return `https://${data.features.ngrokDomain}`;
+  }
+  if (typeof window !== "undefined") {
+    return window.location.origin;
+  }
+  return appConfig.api.externalProxyUrls[0] ?? DEFAULT_BACKEND_URL;
 }

@@ -1,5 +1,9 @@
 import crypto from "node:crypto";
-import { PLAYWRIGHT_MCP_CATALOG_ID, type SupportedProvider } from "@shared";
+import {
+  type InteractionSource,
+  PLAYWRIGHT_MCP_CATALOG_ID,
+  type SupportedProvider,
+} from "@shared";
 import type { UserContent } from "ai";
 import { NoOutputGeneratedError, stepCountIs, streamText } from "ai";
 import { MIN_IMAGE_ATTACHMENT_SIZE } from "@/agents/incoming-email/constants";
@@ -15,8 +19,14 @@ import {
   ChatApiKeyModel,
   McpServerModel,
   TeamModel,
+  UserModel,
 } from "@/models";
 import { mapProviderError, ProviderError } from "@/routes/chat/errors";
+import {
+  buildRenderedPrompts,
+  promptNeedsRendering,
+  type SystemPromptContext,
+} from "@/templating";
 
 /**
  * Source-agnostic attachment for A2A execution.
@@ -42,6 +52,8 @@ export interface A2AExecuteParams {
   userId: string;
   /** Session ID to group related LLM requests together in logs */
   sessionId?: string;
+  /** Interaction source for tracking request origin in logs */
+  source?: InteractionSource;
   /**
    * Parent delegation chain (colon-separated agent IDs).
    * The current agentId will be appended to form the new chain.
@@ -85,6 +97,7 @@ export async function executeA2AMessage(
     organizationId,
     userId,
     sessionId,
+    source,
     parentDelegationChain,
     abortSignal,
     attachments,
@@ -123,15 +136,28 @@ export async function executeA2AMessage(
 
   // Build system prompt from agent's systemPrompt and userPrompt fields
   let systemPrompt: string | undefined;
-  const systemPromptParts: string[] = [];
-  const userPromptParts: string[] = [];
 
-  if (agent.systemPrompt) {
-    systemPromptParts.push(agent.systemPrompt);
+  // Build template context only when prompts use Handlebars syntax
+  let promptContext: SystemPromptContext | null = null;
+  if (promptNeedsRendering(agent.systemPrompt, agent.userPrompt)) {
+    const [userDetails, userTeams] = await Promise.all([
+      UserModel.getById(userId),
+      TeamModel.getUserTeams(userId),
+    ]);
+    promptContext = {
+      user: {
+        name: userDetails?.name ?? "",
+        email: userDetails?.email ?? "",
+        teams: userTeams.map((t) => t.name),
+      },
+    };
   }
-  if (agent.userPrompt) {
-    userPromptParts.push(agent.userPrompt);
-  }
+
+  const { systemPromptParts, userPromptParts } = buildRenderedPrompts({
+    systemPrompt: agent.systemPrompt,
+    userPrompt: agent.userPrompt,
+    context: promptContext,
+  });
 
   if (systemPromptParts.length > 0 || userPromptParts.length > 0) {
     const allParts = [...systemPromptParts, ...userPromptParts];
@@ -186,6 +212,7 @@ export async function executeA2AMessage(
       model: selectedModel,
       provider,
       sessionId,
+      source,
       externalAgentId: delegationChain,
       agentLlmApiKeyId: agent.llmApiKeyId,
     });

@@ -313,7 +313,7 @@ export function IdentityProvidersSettingsContent() {
   );
 
   // Show message if SSO feature is disabled (check before loading since query is disabled)
-  if (!config.enterpriseLicenseActivated) {
+  if (!config.enterpriseFeatures.core) {
     return (
       <div>
         <div className="mb-8">
@@ -331,9 +331,9 @@ export function IdentityProvidersSettingsContent() {
       <div className="mb-8">
         <h2 className="text-lg font-semibold">Identity Providers</h2>
         <p className="text-sm text-muted-foreground">
-          Manage Identity Providers (IdPs) for your organization. Identity
-          Providers can be used for Single Sign-On (SSO) authentication and for
-          validating external JWT tokens on MCP Gateway requests via JWKS.
+          Manage Identity Providers (IdPs) for your organization. IdPs can be
+          used for Single Sign-On (SSO) and for validating external JWT tokens
+          on MCP Gateway requests (via JWKS).
         </p>
       </div>
 
@@ -374,7 +374,7 @@ export function IdentityProvidersSettingsContent() {
                   size="sm"
                   className="w-full"
                 >
-                  {existingProvider ? "Configure" : "Enable"}
+                  {existingProvider ? "Edit" : "Enable"}
                 </Button>
               </CardContent>
             </Card>
@@ -394,6 +394,7 @@ export function IdentityProvidersSettingsContent() {
                   issuer: createConfig.config.defaultSamlConfig?.issuer || "",
                   domain: "",
                   providerType: "saml" as const,
+                  roleMapping: { rules: [] },
                   samlConfig: {
                     issuer: createConfig.config.defaultSamlConfig?.issuer || "",
                     entryPoint:
@@ -412,6 +413,7 @@ export function IdentityProvidersSettingsContent() {
                   issuer: createConfig.config.defaultOidcConfig?.issuer || "",
                   domain: "",
                   providerType: "oidc" as const,
+                  roleMapping: { rules: [] },
                   oidcConfig: {
                     ...createConfig.config.defaultOidcConfig,
                     issuer: createConfig.config.defaultOidcConfig?.issuer || "",

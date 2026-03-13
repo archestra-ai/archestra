@@ -29,6 +29,7 @@
  */
 
 import type {
+  InteractionSource,
   SupportedProvider,
   SupportedProviderDiscriminator,
 } from "@shared";
@@ -40,7 +41,7 @@ import type { Agent } from "./agent";
  * Follows OTEL GenAI Semantic Conventions.
  * Span names are constructed as `{operationName} {model}`.
  */
-export type GenAiOperationName = "chat" | "generate_content";
+export type GenAiOperationName = "chat" | "generate_content" | "embedding";
 
 import type {
   CommonMcpToolDefinition,
@@ -64,6 +65,8 @@ export interface CreateClientOptions {
   externalAgentId?: string;
   /** Default headers to include with every request */
   defaultHeaders?: Record<string, string>;
+  /** Interaction source for observability metrics (e.g. "api", "chat", "knowledge:embedding") */
+  source: InteractionSource;
 }
 
 /**
@@ -380,7 +383,7 @@ export interface LLMProvider<TRequest, TResponse, TMessages, TChunk, THeaders> {
    */
   createClient(
     apiKey: string | undefined,
-    options?: CreateClientOptions,
+    options: CreateClientOptions,
   ): unknown;
 
   // ---------------------------------------------------------------------------

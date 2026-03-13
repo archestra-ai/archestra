@@ -5,12 +5,10 @@ import { z } from "zod";
 import { getEmailProviderInfo } from "@/agents/incoming-email";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
 import config from "@/config";
-import { getKnowledgeGraphProviderInfo } from "@/knowledge-graph";
-import { McpServerRuntimeManager } from "@/mcp-server-runtime";
+import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import { OrganizationModel } from "@/models";
 import { getByosVaultKvVersion, isByosEnabled } from "@/secrets-manager";
 import { EmailProviderTypeSchema, type GlobalToolPolicy } from "@/types";
-import { KnowledgeGraphProviderTypeSchema } from "@/types/knowledge-graph";
 
 const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
@@ -22,23 +20,22 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["Config"],
         response: {
           200: z.strictObject({
+            enterpriseFeatures: z.strictObject({
+              core: z.boolean(),
+              knowledgeBase: z.boolean(),
+              fullWhiteLabeling: z.boolean(),
+            }),
             features: z.strictObject({
-              "orchestrator-k8s-runtime": z.boolean(),
+              orchestratorK8sRuntime: z.boolean(),
               byosEnabled: z.boolean(),
               byosVaultKvVersion: z.enum(["1", "2"]).nullable(),
               geminiVertexAiEnabled: z.boolean(),
               globalToolPolicy: z.enum(["permissive", "restrictive"]),
-              browserStreamingEnabled: z.boolean(),
               incomingEmail: z.object({
                 enabled: z.boolean(),
                 provider: EmailProviderTypeSchema.optional(),
                 displayName: z.string().optional(),
                 emailDomain: z.string().optional(),
-              }),
-              knowledgeGraph: z.object({
-                enabled: z.boolean(),
-                provider: KnowledgeGraphProviderTypeSchema.optional(),
-                displayName: z.string().optional(),
               }),
               mcpServerBaseImage: z.string(),
               orchestratorK8sNamespace: z.string(),
@@ -61,15 +58,18 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
         org?.globalToolPolicy ?? "permissive";
 
       return reply.send({
+        enterpriseFeatures: {
+          core: config.enterpriseFeatures.core,
+          knowledgeBase: config.enterpriseFeatures.knowledgeBase,
+          fullWhiteLabeling: config.enterpriseFeatures.fullWhiteLabeling,
+        },
         features: {
-          ...config.features,
-          "orchestrator-k8s-runtime": McpServerRuntimeManager.isEnabled,
+          orchestratorK8sRuntime: McpServerRuntimeManager.isEnabled,
           byosEnabled: isByosEnabled(),
           byosVaultKvVersion: getByosVaultKvVersion(),
           geminiVertexAiEnabled: isVertexAiEnabled(),
           globalToolPolicy,
           incomingEmail: getEmailProviderInfo(),
-          knowledgeGraph: getKnowledgeGraphProviderInfo(),
           mcpServerBaseImage: config.orchestrator.mcpServerBaseImage,
           orchestratorK8sNamespace: config.orchestrator.kubernetes.namespace,
           isQuickstart: config.isQuickstart,

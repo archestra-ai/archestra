@@ -1,9 +1,17 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import type { Action, PredefinedRoleName, Resource } from "@shared";
+import {
+  ADMIN_ROLE_NAME,
+  internalResources,
+  type PredefinedRoleName,
+  type Resource,
+  resourceLabels,
+  roleDescriptions,
+} from "@shared";
 import {
   allAvailableActions,
+  permissionDescriptions,
   predefinedPermissionsMap,
 } from "@shared/access-control";
 import logger from "@/logging";
@@ -11,105 +19,88 @@ import logger from "@/logging";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-function getResourceDescription(resource: Resource): string {
-  const descriptions: Record<Resource, string> = {
-    agent: "Automation agents with prompts and configurations",
-    mcpGateway: "MCP Gateways that provide unified MCP endpoints for tools",
-    llmProxy: "LLM Proxies for security, observability, and cost management",
-    tool: "Individual tools that can be assigned to agents",
-    policy: "Tool invocation and trusted data policies for security",
-    interaction: "Conversation history and agent interactions",
-    dualLlmConfig: "Dual LLM security configuration settings",
-    dualLlmResult: "Results from dual LLM security validation",
-    organization: "Organization settings",
-    identityProvider: "Identity providers for authentication",
-    member: "Organization members and their roles",
-    invitation: "Member invitations and onboarding",
-    internalMcpCatalog: "Internal MCP server catalog management",
-    mcpServer: "MCP servers for tool integration",
-    mcpServerInstallationRequest: "Requests for new MCP server installations",
-    mcpToolCall: "Tool execution logs and results",
-    team: "Teams for organizing members and access control",
-    conversation: "Chat conversations with automation experts",
-    limit: "Usage limits and quotas",
-    llmModels: "LLM models and pricing configuration",
-    chatSettings: "Chat feature configuration and settings",
-    ac: "RBAC roles",
-  };
-  return descriptions[resource] || "";
-}
-
-// Using Record<PredefinedRoleName, string> ensures TypeScript will error
-// if a new predefined role is added but description is missing
-const roleDescriptions: Record<PredefinedRoleName, string> = {
-  admin: "Full administrative access to all organization resources",
-  editor:
-    "Power user with full CRUD access to most resources but no admin privileges",
-  member: "Standard user with limited access to organization resources",
-};
-
-function getRoleDescription(roleName: PredefinedRoleName): string {
-  return roleDescriptions[roleName];
-}
-
-function generatePredefinedRolesTable(): string {
-  // Dynamically get all predefined roles from the permissions map
+function generatePredefinedRolesSections(): string {
   const roles = Object.keys(predefinedPermissionsMap) as PredefinedRoleName[];
-
-  let table = "| Role | Description | Granted Permissions |\n";
-  table += "|------|-------------|--------------------|\n";
+  const sections: string[] = [];
 
   for (const role of roles) {
     const permissions = predefinedPermissionsMap[role];
-    const permissionsList = Object.entries(permissions)
-      .map(([resource, actions]) =>
-        actions
-          .map((action) => `\`${resource}:${action}\``)
-          .join("<br /><br />"),
-      )
-      .join("<br /><br />");
+    const capitalizedName = role.charAt(0).toUpperCase() + role.slice(1);
 
-    table += `| **${role}** | ${getRoleDescription(role)} | ${permissionsList} |\n`;
+    let section = `### ${capitalizedName}\n\n`;
+    section += `${roleDescriptions[role]}\n\n`;
+
+    if (role === ADMIN_ROLE_NAME) {
+      section += "The admin role has **all permissions** on every resource.\n";
+    } else {
+      section += "| Resource | Actions |\n";
+      section += "|----------|--------|\n";
+
+      for (const [resource, actions] of Object.entries(permissions)) {
+        if (
+          actions.length === 0 ||
+          internalResources.includes(resource as Resource)
+        ) {
+          continue;
+        }
+        const label = resourceLabels[resource as Resource] || resource;
+        const actionList = actions.map((a) => `\`${a}\``).join(", ");
+        section += `| ${label} | ${actionList} |\n`;
+      }
+    }
+
+    sections.push(section);
   }
 
-  return table;
+  return sections.join("\n");
+}
+
+/**
+ * Validates that every resource:action combination in allAvailableActions
+ * has a corresponding entry in permissionDescriptions. Throws if any are missing.
+ */
+function validatePermissionDescriptions(): void {
+  const missing: string[] = [];
+
+  for (const resource of Object.keys(allAvailableActions) as Resource[]) {
+    if (internalResources.includes(resource)) continue;
+
+    for (const action of allAvailableActions[resource]) {
+      const key = `${resource}:${action}`;
+      if (!permissionDescriptions[key]) {
+        missing.push(key);
+      }
+    }
+  }
+
+  if (missing.length > 0) {
+    throw new Error(
+      `Missing permission descriptions for: ${missing.join(", ")}. ` +
+        "Add them to permissionDescriptions in shared/access-control.ts",
+    );
+  }
 }
 
 function generateCustomRolesPermissionsTable(): string {
+  validatePermissionDescriptions();
+
   const resources = Object.keys(allAvailableActions) as Resource[];
 
   let table = "| Permission | Description |\n";
   table += "|------------|-------------|\n";
 
-  for (const resource of resources.sort()) {
+  for (const resource of resources
+    .filter((r) => !internalResources.includes(r))
+    .sort()) {
     const actions = allAvailableActions[resource];
-    const description = getResourceDescription(resource);
 
     for (const action of actions) {
-      const permission = `${resource}:${action}`;
-      const actionDesc = getActionDescription(action);
-      // don't lowercase "RBAC roles"
-      const fullDescription = `${actionDesc} ${resource === "ac" ? description : description.toLowerCase()}`;
-
-      table += `| \`${permission}\` | ${fullDescription} |\n`;
+      const key = `${resource}:${action}`;
+      table += `| \`${key}\` | ${permissionDescriptions[key]} |\n`;
     }
   }
 
   return table;
-}
-
-function getActionDescription(action: Action): string {
-  const actionDescriptions: Record<Action, string> = {
-    create: "Create new",
-    read: "View and list",
-    update: "Modify existing",
-    delete: "Remove existing",
-    "team-admin": "Team-level administrative control over the resource",
-    admin: "Administrative control over",
-    cancel: "Cancel",
-  };
-
-  return actionDescriptions[action] || "";
 }
 
 /**
@@ -119,9 +110,9 @@ function getActionDescription(action: Action): string {
 function generateFrontmatter(lastUpdated: string): string {
   return `---
 title: "Access Control"
-category: Archestra Platform
+category: Administration
 description: "Role-based access control (RBAC) system for managing user permissions in Archestra"
-order: 4
+order: 1
 lastUpdated: ${lastUpdated}
 ---`;
 }
@@ -137,30 +128,24 @@ Check ../docs_writer_prompt.md before changing this file.
 This document is human-built, shouldn't be updated with AI. Don't change anything here.
 -->
 
-Archestra uses a role-based access control (RBAC) system to manage user permissions within organizations. This system provides both predefined roles for common use cases and the flexibility to create custom roles with specific permission combinations.
+Archestra uses a role-based access control (RBAC) system to manage user permissions. This system provides both predefined roles for common use cases and the flexibility to create custom roles with specific permission combinations.
 
 Permissions in Archestra are defined using a \`resource:action\` format, where:
 
-- **Resource**: The type of object or feature being accessed (e.g., \`agent\`, \`tool\`, \`organization\`)
+- **Resource**: The type of object or feature being accessed (e.g., \`agent\`, \`mcpGateway\`, \`llmProxy\`)
 - **Action**: The operation being performed (\`create\`, \`read\`, \`update\`, \`delete\`, \`admin\`)
 
-For example, the permission \`agent:create\` allows creating new automation agents, \`mcpGateway:create\` allows creating MCP gateways, \`llmProxy:create\` allows creating LLM proxies, and \`organization:read\` allows viewing organization information.
+For example, the permission \`agent:create\` allows creating new agents, \`mcpGateway:update\` allows updating MCP gateways, whereas \`llmProxy:read\` would allow reading LLM proxies.
 
 ## Predefined Roles
 
 The following roles are built into Archestra and cannot be modified or deleted:
 
-${generatePredefinedRolesTable()}
+${generatePredefinedRolesSections()}
 
 ## Custom Roles
 
-Organization administrators can create custom roles by selecting specific permission combinations. Custom roles allow fine-grained access control tailored to your organization's needs.
-
-### Permission Requirements
-
-- **Role Creation**: Only users with \`organization:update\` permission can create custom roles
-- **Permission Granting**: You can only grant permissions that you already possess
-- **Role Limits**: Up to 50 custom roles per organization
+Users with \`ac:create\` permission can create custom roles by selecting specific permission combinations. Custom roles allow fine-grained access control tailored to your needs. Note that you can only grant permissions that you already possess — this prevents privilege escalation.
 
 ### Available Permissions
 
@@ -172,33 +157,33 @@ ${generateCustomRolesPermissionsTable()}
 
 ### Principle of Least Privilege
 
-Grant users only the minimum permissions necessary for their role. Start with the member role and add specific permissions as needed.
+Grant users only the minimum permissions necessary for their role. Start with the "Member" role and add specific permissions as needed.
 
 ### Team-Based Organization
 
 Combine roles with team-based access control for fine-grained resource access:
 
 1. **Create teams** for different groups (e.g., "Data Scientists", "Developers")
-2. **Assign agents and MCP servers** to specific teams
-3. **Add members to teams** based on their role and responsibilities
+2. **Assign Agents, MCP Gateways, LLM Proxies, and MCP Servers** to specific teams
+3. **Add users to teams** based on their role and responsibilities
 
 #### Default Team
 
-New members are automatically added to the "Default Team" when they accept an invitation. This ensures all users have immediate access to Archestra resources assigned to this team.
+New users are automatically added to the "Default Team" when they accept an invitation. This ensures all users have immediate access to Archestra resources assigned to this team.
 
 #### Team Access Control Rules
 
-**For Agents (MCP Gateways, LLM Proxies, Automation Agents):**
+**For MCP Gateways, LLM Proxies, and Agents:**
 
-- Team members can only see agents assigned to teams they belong to
+- Users can only see agents assigned to teams they belong to
 - Exception: Users with \`agent:admin\` permission can see all agents
-- Exception: Agents with no team assignment are visible to all organization members
+- Exception: Agents with no team assignment are visible to all users
 
 **For MCP Servers:**
 
-- Team members can only access MCP servers assigned to teams they belong to
+- Users can only access MCP servers assigned to teams they belong to
 - Exception: Users with \`mcpServer:admin\` permission can access all MCP servers
-- Exception: MCP servers with no team assignment are accessible to all organization members
+- Exception: MCP servers with no team assignment are accessible to all users
 
 **Associated Artifacts:**
 
@@ -206,7 +191,7 @@ Team-based access extends to related resources like interaction logs, policies, 
 
 ### Regular Review
 
-Periodically review custom roles and member assignments to ensure they align with current organizational needs and security requirements.
+Periodically review custom roles and team membership assignments to ensure they align with current needs and security requirements.
 
 ### Role Naming
 

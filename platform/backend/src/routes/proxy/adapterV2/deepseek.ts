@@ -223,23 +223,24 @@ export const deepseekAdapterFactory: LLMProvider<
 
   createClient(
     apiKey: string | undefined,
-    options?: CreateClientOptions,
+    options: CreateClientOptions,
   ): OpenAIProvider {
-    if (options?.mockMode) {
+    if (options.mockMode) {
       return new MockOpenAIClient() as unknown as OpenAIProvider;
     }
 
-    const customFetch = options?.agent
+    const customFetch = options.agent
       ? metrics.llm.getObservableFetch(
           "deepseek",
           options.agent,
+          options.source,
           options.externalAgentId,
         )
       : undefined;
 
     return new OpenAIProvider({
       apiKey,
-      baseURL: options?.baseUrl ?? config.llm.deepseek.baseUrl,
+      baseURL: options.baseUrl ?? config.llm.deepseek.baseUrl,
       fetch: customFetch,
     });
   },

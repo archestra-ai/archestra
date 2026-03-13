@@ -22,6 +22,7 @@ export interface AssignmentComboboxItem {
   badge?: string;
   disabled?: boolean;
   disabledReason?: string;
+  icon?: React.ReactNode;
 }
 
 interface AssignmentComboboxProps {
@@ -119,13 +120,16 @@ export function AssignmentCombobox({
                       disabled
                       className="opacity-50"
                     >
-                      <div className="min-w-0 pl-6">
-                        <span className="truncate">{item.name}</span>
-                        {item.disabledReason && (
-                          <p className="text-xs text-muted-foreground">
-                            {item.disabledReason}
-                          </p>
-                        )}
+                      <div className="flex items-center gap-2 min-w-0 pl-6">
+                        {item.icon}
+                        <div className="min-w-0">
+                          <span className="truncate">{item.name}</span>
+                          {item.disabledReason && (
+                            <p className="text-xs text-muted-foreground">
+                              {item.disabledReason}
+                            </p>
+                          )}
+                        </div>
                       </div>
                     </DropdownMenuItem>
                   );
@@ -144,11 +148,14 @@ export function AssignmentCombobox({
                     }}
                   >
                     <div className="flex items-center justify-between gap-2 w-full">
-                      <div className="min-w-0">
-                        <span className="truncate">{item.name}</span>
-                        {item.description && (
-                          <ItemDescription description={item.description} />
-                        )}
+                      <div className="flex items-center gap-2 min-w-0">
+                        {item.icon}
+                        <div className="min-w-0">
+                          <span className="truncate">{item.name}</span>
+                          {item.description && (
+                            <ItemDescription description={item.description} />
+                          )}
+                        </div>
                       </div>
                       {item.badge && (
                         <span className="text-xs text-muted-foreground shrink-0">

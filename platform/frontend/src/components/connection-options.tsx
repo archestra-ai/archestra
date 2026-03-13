@@ -11,7 +11,7 @@ import {
   Server,
 } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { A2AConnectionInstructions } from "@/components/a2a-connection-instructions";
 import type { ArchitectureTabType } from "@/components/architecture-diagram/architecture-diagram";
 import { McpConnectionInstructions } from "@/components/mcp-connection-instructions";
@@ -47,6 +47,13 @@ export function ConnectionOptions({
   const { data: mcpGateways } = useProfiles({
     filters: { agentTypes: ["profile", "mcp_gateway"] },
   });
+  const { data: canReadAgent } = useHasPermissions({ agent: ["read"] });
+  const { data: canReadMcpGateway } = useHasPermissions({
+    mcpGateway: ["read"],
+  });
+  const { data: canReadLlmProxy } = useHasPermissions({
+    llmProxy: ["read"],
+  });
   const { data: canCreateAgent } = useHasPermissions({
     agent: ["create"],
   });
@@ -77,151 +84,179 @@ export function ConnectionOptions({
     (p) => p.id === effectiveLlmProxyId,
   );
 
+  // Auto-select first permitted tab if current tab isn't accessible
+  const tabPermissions = useMemo<
+    Record<ArchitectureTabType, boolean | undefined>
+  >(
+    () => ({
+      proxy: canReadLlmProxy,
+      mcp: canReadMcpGateway,
+      a2a: canReadAgent,
+    }),
+    [canReadLlmProxy, canReadMcpGateway, canReadAgent],
+  );
+  useEffect(() => {
+    if (tabPermissions[activeTab] === false) {
+      const firstPermitted = (
+        ["proxy", "mcp", "a2a"] as ArchitectureTabType[]
+      ).find((tab) => tabPermissions[tab]);
+      if (firstPermitted) onTabChange(firstPermitted);
+    }
+  }, [activeTab, onTabChange, tabPermissions]);
+
   return (
     <div className="space-y-6">
       {/* Tab Selection with inline features - same as in profiles dialog */}
       <div className="flex gap-3">
-        <button
-          type="button"
-          onClick={() => onTabChange("proxy")}
-          className="flex-1 min-w-0 flex flex-col gap-2 p-3 rounded-lg transition-all duration-200 border-2 hover:bg-muted/50"
-          style={
-            activeTab === "proxy"
-              ? {
-                  backgroundColor:
-                    "color-mix(in oklch, var(--chart-1) 5%, transparent)",
-                  borderColor:
-                    "color-mix(in oklch, var(--chart-1) 30%, transparent)",
+        {canReadLlmProxy && (
+          <button
+            type="button"
+            onClick={() => onTabChange("proxy")}
+            className="flex-1 min-w-0 flex flex-col gap-2 p-3 rounded-lg transition-all duration-200 border-2 hover:bg-muted/50"
+            style={
+              activeTab === "proxy"
+                ? {
+                    backgroundColor:
+                      "color-mix(in oklch, var(--chart-1) 5%, transparent)",
+                    borderColor:
+                      "color-mix(in oklch, var(--chart-1) 30%, transparent)",
+                  }
+                : {
+                    backgroundColor: "hsl(var(--muted) / 0.3)",
+                    borderColor: "rgba(0, 0, 0, 0.08)",
+                  }
+            }
+          >
+            <div className="flex items-center gap-2">
+              <Network
+                className="h-4 w-4"
+                style={
+                  activeTab === "proxy"
+                    ? { color: "var(--chart-1)" }
+                    : undefined
                 }
-              : {
-                  backgroundColor: "hsl(var(--muted) / 0.3)",
-                  borderColor: "rgba(0, 0, 0, 0.08)",
-                }
-          }
-        >
-          <div className="flex items-center gap-2">
-            <Network
-              className="h-4 w-4"
-              style={
-                activeTab === "proxy" ? { color: "var(--chart-1)" } : undefined
-              }
-            />
-            <span className="font-medium">LLM Proxy</span>
-          </div>
-          <div className="flex flex-wrap gap-1.5">
-            <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-background/60 border border-border/50">
-              <Lock
-                className="h-2.5 w-2.5"
-                style={{ color: "var(--chart-1)" }}
               />
-              <span className="text-[10px]">Security</span>
+              <span className="font-medium">LLM Proxy</span>
             </div>
-            <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-background/60 border border-border/50">
-              <Eye
-                className="h-2.5 w-2.5"
-                style={{ color: "var(--chart-5)" }}
-              />
-              <span className="text-[10px]">Observability</span>
+            <div className="flex flex-wrap gap-1.5">
+              <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-background/60 border border-border/50">
+                <Lock
+                  className="h-2.5 w-2.5"
+                  style={{ color: "var(--chart-1)" }}
+                />
+                <span className="text-[10px]">Security</span>
+              </div>
+              <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-background/60 border border-border/50">
+                <Eye
+                  className="h-2.5 w-2.5"
+                  style={{ color: "var(--chart-5)" }}
+                />
+                <span className="text-[10px]">Observability</span>
+              </div>
+              <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-background/60 border border-border/50">
+                <DollarSign
+                  className="h-2.5 w-2.5"
+                  style={{ color: "var(--chart-2)" }}
+                />
+                <span className="text-[10px]">Cost</span>
+              </div>
             </div>
-            <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-background/60 border border-border/50">
-              <DollarSign
-                className="h-2.5 w-2.5"
-                style={{ color: "var(--chart-2)" }}
-              />
-              <span className="text-[10px]">Cost</span>
-            </div>
-          </div>
-        </button>
+          </button>
+        )}
 
-        <button
-          type="button"
-          onClick={() => onTabChange("mcp")}
-          className="flex-1 min-w-0 flex flex-col gap-2 p-3 rounded-lg transition-all duration-200 border-2 hover:bg-muted/50"
-          style={
-            activeTab === "mcp"
-              ? {
-                  backgroundColor:
-                    "color-mix(in oklch, var(--chart-2) 5%, transparent)",
-                  borderColor:
-                    "color-mix(in oklch, var(--chart-2) 30%, transparent)",
+        {canReadMcpGateway && (
+          <button
+            type="button"
+            onClick={() => onTabChange("mcp")}
+            className="flex-1 min-w-0 flex flex-col gap-2 p-3 rounded-lg transition-all duration-200 border-2 hover:bg-muted/50"
+            style={
+              activeTab === "mcp"
+                ? {
+                    backgroundColor:
+                      "color-mix(in oklch, var(--chart-2) 5%, transparent)",
+                    borderColor:
+                      "color-mix(in oklch, var(--chart-2) 30%, transparent)",
+                  }
+                : {
+                    backgroundColor: "hsl(var(--muted) / 0.3)",
+                    borderColor: "rgba(0, 0, 0, 0.08)",
+                  }
+            }
+          >
+            <div className="flex items-center gap-2">
+              <Route
+                className="h-4 w-4"
+                style={
+                  activeTab === "mcp" ? { color: "var(--chart-2)" } : undefined
                 }
-              : {
-                  backgroundColor: "hsl(var(--muted) / 0.3)",
-                  borderColor: "rgba(0, 0, 0, 0.08)",
-                }
-          }
-        >
-          <div className="flex items-center gap-2">
-            <Route
-              className="h-4 w-4"
-              style={
-                activeTab === "mcp" ? { color: "var(--chart-2)" } : undefined
-              }
-            />
-            <span className="font-medium">MCP Gateway</span>
-          </div>
-          <div className="flex flex-wrap gap-1.5">
-            <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-background/60 border border-border/50">
-              <Server
-                className="h-2.5 w-2.5"
-                style={{ color: "var(--chart-2)" }}
               />
-              <span className="text-[10px]">Unified MCP</span>
+              <span className="font-medium">MCP Gateway</span>
             </div>
-            <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-background/60 border border-border/50">
-              <Eye
-                className="h-2.5 w-2.5"
-                style={{ color: "var(--chart-5)" }}
-              />
-              <span className="text-[10px]">Observability</span>
+            <div className="flex flex-wrap gap-1.5">
+              <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-background/60 border border-border/50">
+                <Server
+                  className="h-2.5 w-2.5"
+                  style={{ color: "var(--chart-2)" }}
+                />
+                <span className="text-[10px]">Unified MCP</span>
+              </div>
+              <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-background/60 border border-border/50">
+                <Eye
+                  className="h-2.5 w-2.5"
+                  style={{ color: "var(--chart-5)" }}
+                />
+                <span className="text-[10px]">Observability</span>
+              </div>
             </div>
-          </div>
-        </button>
+          </button>
+        )}
 
-        <button
-          type="button"
-          onClick={() => onTabChange("a2a")}
-          className="flex-1 min-w-0 flex flex-col gap-2 p-3 rounded-lg transition-all duration-200 border-2 hover:bg-muted/50"
-          style={
-            activeTab === "a2a"
-              ? {
-                  backgroundColor:
-                    "color-mix(in oklch, var(--chart-3) 5%, transparent)",
-                  borderColor:
-                    "color-mix(in oklch, var(--chart-3) 30%, transparent)",
-                }
-              : {
-                  backgroundColor: "hsl(var(--muted) / 0.3)",
-                  borderColor: "rgba(0, 0, 0, 0.08)",
-                }
-          }
-        >
-          <div className="flex items-center gap-2">
-            <Bot
-              className="h-4 w-4"
-              style={
-                activeTab === "a2a" ? { color: "var(--chart-3)" } : undefined
-              }
-            />
-            <span className="font-medium">A2A Gateway</span>
-          </div>
-          <div className="flex flex-wrap gap-1.5">
-            <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-background/60 border border-border/50">
+        {canReadAgent && (
+          <button
+            type="button"
+            onClick={() => onTabChange("a2a")}
+            className="flex-1 min-w-0 flex flex-col gap-2 p-3 rounded-lg transition-all duration-200 border-2 hover:bg-muted/50"
+            style={
+              activeTab === "a2a"
+                ? {
+                    backgroundColor:
+                      "color-mix(in oklch, var(--chart-3) 5%, transparent)",
+                    borderColor:
+                      "color-mix(in oklch, var(--chart-3) 30%, transparent)",
+                  }
+                : {
+                    backgroundColor: "hsl(var(--muted) / 0.3)",
+                    borderColor: "rgba(0, 0, 0, 0.08)",
+                  }
+            }
+          >
+            <div className="flex items-center gap-2">
               <Bot
-                className="h-2.5 w-2.5"
-                style={{ color: "var(--chart-3)" }}
+                className="h-4 w-4"
+                style={
+                  activeTab === "a2a" ? { color: "var(--chart-3)" } : undefined
+                }
               />
-              <span className="text-[10px]">Agent-to-Agent</span>
+              <span className="font-medium">A2A Gateway</span>
             </div>
-            <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-background/60 border border-border/50">
-              <Eye
-                className="h-2.5 w-2.5"
-                style={{ color: "var(--chart-5)" }}
-              />
-              <span className="text-[10px]">Orchestration</span>
+            <div className="flex flex-wrap gap-1.5">
+              <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-background/60 border border-border/50">
+                <Bot
+                  className="h-2.5 w-2.5"
+                  style={{ color: "var(--chart-3)" }}
+                />
+                <span className="text-[10px]">Agent-to-Agent</span>
+              </div>
+              <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-background/60 border border-border/50">
+                <Eye
+                  className="h-2.5 w-2.5"
+                  style={{ color: "var(--chart-5)" }}
+                />
+                <span className="text-[10px]">Orchestration</span>
+              </div>
             </div>
-          </div>
-        </button>
+          </button>
+        )}
       </div>
 
       {/* Content */}
@@ -231,7 +266,7 @@ export function ConnectionOptions({
             <div className="p-4 rounded-lg border bg-card space-y-6">
               {llmProxies && llmProxies.length === 0 ? (
                 <NoAccessMessage
-                  canCreate={canCreateLlmProxy}
+                  canCreate={!!canCreateLlmProxy}
                   createHref="/llm/proxies"
                   createLabel="LLM Proxies"
                 />
@@ -285,7 +320,7 @@ export function ConnectionOptions({
             <div className="p-4 rounded-lg border bg-card">
               {mcpGateways && mcpGateways.length === 0 ? (
                 <NoAccessMessage
-                  canCreate={canCreateMcpGateway}
+                  canCreate={!!canCreateMcpGateway}
                   createHref="/mcp/gateways"
                   createLabel="MCP Gateways"
                 />
@@ -302,7 +337,7 @@ export function ConnectionOptions({
             <div className="p-4 rounded-lg border bg-card space-y-6">
               {internalAgents && internalAgents.length === 0 ? (
                 <NoAccessMessage
-                  canCreate={canCreateAgent}
+                  canCreate={!!canCreateAgent}
                   createHref="/agents"
                   createLabel="Agents"
                 />

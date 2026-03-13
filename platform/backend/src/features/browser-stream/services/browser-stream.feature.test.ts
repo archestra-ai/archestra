@@ -1,43 +1,9 @@
-import { vi } from "vitest";
-import type * as originalConfigModule from "@/config";
-import { beforeEach, describe, expect, test } from "@/test";
-
-// Create a hoisted mock for the feature flag value
-const mockBrowserStreamingEnabled = vi.hoisted(() => ({ value: false }));
-
-// Mock config before importing the feature
-vi.mock("@/config", async (importOriginal) => {
-  const actual = await importOriginal<typeof originalConfigModule>();
-  return {
-    default: {
-      ...actual.default,
-      features: {
-        ...actual.default.features,
-        get browserStreamingEnabled() {
-          return mockBrowserStreamingEnabled.value;
-        },
-      },
-    },
-  };
-});
-
-// Import after mocking (dynamic import needed because of the mock)
-const { browserStreamFeature } = await import("./browser-stream.feature");
+import { describe, expect, test } from "@/test";
+import { browserStreamFeature } from "./browser-stream.feature";
 
 describe("BrowserStreamFeature", () => {
-  beforeEach(() => {
-    vi.restoreAllMocks();
-    mockBrowserStreamingEnabled.value = false;
-  });
-
   describe("isEnabled", () => {
-    test("returns false when feature flag is disabled", () => {
-      mockBrowserStreamingEnabled.value = false;
-      expect(browserStreamFeature.isEnabled()).toBe(false);
-    });
-
-    test("returns true when feature flag is enabled", () => {
-      mockBrowserStreamingEnabled.value = true;
+    test("returns true", () => {
       expect(browserStreamFeature.isEnabled()).toBe(true);
     });
   });

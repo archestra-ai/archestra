@@ -992,22 +992,23 @@ export const zhipuaiAdapterFactory: LLMProvider<
 
   createClient(
     apiKey: string | undefined,
-    options?: CreateClientOptions,
+    options: CreateClientOptions,
   ): ZhipuaiClient | MockZhipuaiClient {
     // Return mock client if mock mode is enabled
-    if (options?.mockMode) {
+    if (options.mockMode) {
       return new MockZhipuaiClient() as unknown as ZhipuaiClient;
     }
 
-    const customFetch = options?.agent
+    const customFetch = options.agent
       ? metrics.llm.getObservableFetch(
           "zhipuai",
           options.agent,
+          options.source,
           options.externalAgentId,
         )
       : undefined;
 
-    return new ZhipuaiClient(apiKey, options?.baseUrl, customFetch);
+    return new ZhipuaiClient(apiKey, options.baseUrl, customFetch);
   },
 
   async execute(

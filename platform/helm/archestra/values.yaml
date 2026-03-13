@@ -9,7 +9,7 @@ archestra:
   # We use the "generic" updater with inline annotation to preserve YAML comments throughout the file.
   # See: https://github.com/googleapis/release-please/blob/main/docs/customizing.md#updating-arbitrary-files
   # See: https://github.com/googleapis/release-please/issues/2195
-  imageTag: "1.0.55" # x-release-please-version
+  imageTag: "1.1.16" # x-release-please-version
 
   # Image pull policy for the Archestra container
   # Options: Always, IfNotPresent, Never
@@ -344,6 +344,48 @@ archestra:
         #       name: custom-binding-name  # Optional: override the auto-generated binding name
         additionalRoleBindings: []
 
+  # Background worker configuration
+  # Deploys a separate Deployment for processing background jobs from the postgres queue
+  # (e.g., knowledge base connector syncs, batch embeddings).
+  #
+  # When enabled, the main platform pods run as web-only (ARCHESTRA_PROCESS_TYPE=web)
+  # and the worker pods handle all background job processing (ARCHESTRA_PROCESS_TYPE=worker).
+  # When disabled, the main platform pods run both the web server and the worker in-process.
+  worker:
+    # Enable or disable the separate worker Deployment
+    enabled: true
+
+    # Number of worker pod replicas
+    replicaCount: 1
+
+    # Resource requests and limits for worker pods
+    # If not set, inherits from archestra.resources
+    # Workers typically need less memory than the web server
+    resources:
+      requests:
+        memory: "1Gi"
+      limits:
+        memory: "2Gi"
+
+    # Deployment strategy for the worker Deployment
+    deploymentStrategy:
+      type: RollingUpdate
+      rollingUpdate:
+        maxUnavailable: 0
+        maxSurge: 1
+
+    # Pod annotations for worker pods
+    # If not set, inherits from archestra.podAnnotations
+    podAnnotations: {}
+
+    # Node selector for worker pods
+    # If not set, inherits from archestra.nodeSelector
+    nodeSelector: {}
+
+    # Tolerations for worker pods
+    # If not set, inherits from archestra.tolerations
+    tolerations: []
+
   # Service configuration
   service:
     # Service type - ClusterIP, NodePort, or LoadBalancer
@@ -527,6 +569,12 @@ postgresql:
   # Resource configuration for PostgreSQL
   # See: https://artifacthub.io/packages/helm/bitnami/postgresql for all options
   primary:
+    # Grant superuser to the archestra user so migrations can create extensions (e.g., pgvector).
+    # Bitnami initdb scripts run as postgres superuser during DB initialization.
+    initdb:
+      scripts:
+        grant-superuser.sql: |
+          ALTER USER archestra WITH SUPERUSER;
     resources:
       requests:
         cpu: "1000m"
@@ -534,6 +582,14 @@ postgresql:
       limits:
         cpu: "1000m"
         memory: "1Gi"
+  # PostgreSQL exporter sidecar for Prometheus metrics (port 9187)
+  # Metrics are scraped by the observability stack (Grafana Alloy or Prometheus)
+  # and visualized in the Application Metrics Grafana dashboard (PostgreSQL section)
+  metrics:
+    enabled: true
+    service:
+      ports:
+        metrics: 9187
   # NOTE: Bitnami is archiving their image.. see these github comments for details
   # (this is essentially why we need to override image.repository and image.tag and global.security.allowInsecureImages)
   #

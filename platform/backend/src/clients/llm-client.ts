@@ -9,11 +9,13 @@ import { createMistral } from "@ai-sdk/mistral";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createXai } from "@ai-sdk/xai";
 import { context, propagation } from "@opentelemetry/api";
+import type { InteractionSource } from "@shared";
 import {
   EXTERNAL_AGENT_ID_HEADER,
   PROVIDER_BASE_URL_HEADER,
   PROVIDERS_WITH_OPTIONAL_API_KEY,
   SESSION_ID_HEADER,
+  SOURCE_HEADER,
   type SupportedProvider,
   USER_ID_HEADER,
 } from "@shared";
@@ -219,10 +221,15 @@ export function createDirectLLMModel({
   if (cfg.apiKeyRequiredMessage && !apiKey) {
     throw new ApiError(400, cfg.apiKeyRequiredMessage);
   }
+  const resolvedBaseUrl = baseUrl ?? cfg.defaultBaseUrl;
+  const baseURL =
+    resolvedBaseUrl && cfg.proxiedPathSuffix
+      ? `${resolvedBaseUrl}${cfg.proxiedPathSuffix}`
+      : resolvedBaseUrl;
   return cfg.createModel({
     apiKey,
     modelName,
-    baseURL: baseUrl ?? cfg.defaultBaseUrl,
+    baseURL,
   });
 }
 
@@ -238,6 +245,7 @@ export function createLLMModel(params: {
   userId?: string;
   externalAgentId?: string;
   sessionId?: string;
+  source?: InteractionSource;
   baseUrl: string | null;
 }): LLMModel {
   const {
@@ -248,6 +256,7 @@ export function createLLMModel(params: {
     userId,
     externalAgentId,
     sessionId,
+    source,
     baseUrl,
   } = params;
 
@@ -261,6 +270,9 @@ export function createLLMModel(params: {
   }
   if (sessionId) {
     clientHeaders[SESSION_ID_HEADER] = sessionId;
+  }
+  if (source) {
+    clientHeaders[SOURCE_HEADER] = source;
   }
   if (baseUrl) {
     clientHeaders[PROVIDER_BASE_URL_HEADER] = baseUrl;
@@ -298,6 +310,7 @@ export async function createLLMModelForAgent(params: {
   conversationId?: string | null;
   externalAgentId?: string;
   sessionId?: string;
+  source?: InteractionSource;
   agentLlmApiKeyId?: string | null;
 }): Promise<{
   model: LLMModel;
@@ -313,10 +326,15 @@ export async function createLLMModelForAgent(params: {
     conversationId,
     externalAgentId,
     sessionId,
+    source,
     agentLlmApiKeyId,
   } = params;
 
-  const { apiKey, source, baseUrl } = await resolveProviderApiKey({
+  const {
+    apiKey,
+    source: apiKeySource,
+    baseUrl,
+  } = await resolveProviderApiKey({
     organizationId,
     userId,
     provider,
@@ -331,7 +349,7 @@ export async function createLLMModelForAgent(params: {
   const isOllama = provider === "ollama";
 
   logger.info(
-    { apiKeySource: source, provider, isGeminiWithVertexAi, isVllm, isOllama },
+    { apiKeySource, provider, isGeminiWithVertexAi, isVllm, isOllama },
     "Using LLM provider API key",
   );
 
@@ -350,10 +368,11 @@ export async function createLLMModelForAgent(params: {
     userId,
     externalAgentId,
     sessionId,
+    source,
     baseUrl,
   });
 
-  return { model, provider, apiKeySource: source };
+  return { model, provider, apiKeySource };
 }
 
 // =============================================================================

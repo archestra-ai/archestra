@@ -29,7 +29,7 @@ vi.mock("@/lib/identity-provider.query.ee", () => ({
 // Mock config
 vi.mock("@/lib/config", () => ({
   default: {
-    enterpriseLicenseActivated: true,
+    enterpriseFeatures: { core: true },
   },
 }));
 
@@ -248,14 +248,14 @@ describe("IdentityProviderSelector", () => {
 
   describe("rendering conditions", () => {
     it("should not render when enterprise license is not activated", () => {
-      vi.mocked(config).enterpriseLicenseActivated = false;
+      (vi.mocked(config).enterpriseFeatures as { core: boolean }).core = false;
 
       const { container } = render(<IdentityProviderSelector />);
 
       expect(container.firstChild).toBeNull();
 
       // Reset for other tests
-      vi.mocked(config).enterpriseLicenseActivated = true;
+      (vi.mocked(config).enterpriseFeatures as { core: boolean }).core = true;
     });
 
     it("should not render when loading", () => {

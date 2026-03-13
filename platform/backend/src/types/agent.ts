@@ -32,6 +32,15 @@ export type AgentType = z.infer<typeof AgentTypeSchema>;
 export const AgentScopeSchema = z.enum(["personal", "team", "org"]);
 export type AgentScope = z.infer<typeof AgentScopeSchema>;
 
+/** Scope filter for API queries — includes "built_in" as a virtual scope for filtering */
+export const AgentScopeFilterSchema = z.enum([
+  "personal",
+  "team",
+  "org",
+  "built_in",
+]);
+export type AgentScopeFilter = z.infer<typeof AgentScopeFilterSchema>;
+
 // Built-in agent config — discriminated union by name
 // Policy Configuration Subagent config
 const PolicyConfigAgentConfigSchema = z.object({
@@ -141,6 +150,8 @@ export const SelectAgentSchema = createSelectSchema(
   teams: z.array(AgentTeamInfoSchema),
   labels: z.array(AgentLabelWithDetailsSchema),
   authorName: z.string().nullable().optional(),
+  knowledgeBaseIds: z.array(z.string()),
+  connectorIds: z.array(z.string()),
 });
 
 // Base schema without refinement - can be used with .partial()
@@ -154,6 +165,8 @@ export const InsertAgentSchemaBase = createInsertSchema(
     // Make organizationId optional - model will auto-assign if not provided
     organizationId: z.string().optional(),
     scope: AgentScopeSchema,
+    knowledgeBaseIds: z.array(z.string()).default([]),
+    connectorIds: z.array(z.string()).default([]),
   })
   .omit({
     id: true,
@@ -175,9 +188,11 @@ export const UpdateAgentSchemaBase = createUpdateSchema(
   insertExtendedFields,
 )
   .extend({
-    teams: z.array(z.string()),
+    teams: z.array(z.string()).optional(),
     labels: z.array(AgentLabelWithDetailsSchema).optional(),
-    scope: AgentScopeSchema,
+    scope: AgentScopeSchema.optional(),
+    knowledgeBaseIds: z.array(z.string()).optional(),
+    connectorIds: z.array(z.string()).optional(),
   })
   .omit({
     id: true,
@@ -208,7 +223,7 @@ export const AgentVersionsResponseSchema = z.object({
 });
 
 export type Agent = z.infer<typeof SelectAgentSchema>;
-export type InsertAgent = z.infer<typeof InsertAgentSchema>;
+export type InsertAgent = z.input<typeof InsertAgentSchema>;
 export type UpdateAgent = z.infer<typeof UpdateAgentSchema>;
 export type AgentVersionsResponse = z.infer<typeof AgentVersionsResponseSchema>;
 

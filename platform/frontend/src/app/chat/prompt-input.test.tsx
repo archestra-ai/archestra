@@ -9,6 +9,21 @@ global.ResizeObserver = vi.fn().mockImplementation(() => ({
   disconnect: vi.fn(),
 }));
 
+// Mock window.matchMedia for useIsMobile hook
+Object.defineProperty(window, "matchMedia", {
+  writable: true,
+  value: vi.fn().mockImplementation((query: string) => ({
+    matches: false,
+    media: query,
+    onchange: null,
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+  })),
+});
+
 // Mock all the complex dependencies
 vi.mock("@/components/ai-elements/prompt-input", () => ({
   PromptInput: ({ children }: { children: React.ReactNode }) => (
@@ -84,9 +99,9 @@ vi.mock("@/components/chat/chat-tools-display", () => ({
   ChatToolsDisplay: () => <div data-testid="chat-tools-display" />,
 }));
 
-vi.mock("@/components/chat/knowledge-graph-upload-indicator", () => ({
-  KnowledgeGraphUploadIndicator: () => (
-    <div data-testid="knowledge-graph-indicator" />
+vi.mock("@/components/chat/knowledge-base-upload-indicator", () => ({
+  KnowledgeBaseUploadIndicator: () => (
+    <div data-testid="knowledge-base-indicator" />
   ),
 }));
 
@@ -107,6 +122,15 @@ vi.mock("@/components/ui/tooltip", () => ({
   ),
 }));
 
+// Mock agent query hooks
+vi.mock("@/lib/agent.query", () => ({
+  useProfile: () => ({
+    data: null,
+    isLoading: false,
+    error: null,
+  }),
+}));
+
 // Mock the React Query hooks that the component uses
 vi.mock("@/lib/agent-tools.query", () => ({
   useAgentDelegations: () => ({
@@ -121,6 +145,13 @@ vi.mock("@/lib/chat.query", () => ({
     data: [],
     isLoading: false,
     error: null,
+  }),
+}));
+
+vi.mock("@/lib/organization.query", () => ({
+  useOrganization: () => ({
+    data: null,
+    isLoading: false,
   }),
 }));
 
@@ -216,7 +247,7 @@ describe("ArchestraPromptInput", () => {
     });
 
     it("should show settings link in tooltip for admins when file uploads disabled", () => {
-      // Mock admin user with organization update permission
+      // Mock admin user with securitySettings update permission
       mockUseHasPermissions.mockReturnValue({
         data: true,
         isPending: false,
@@ -246,7 +277,7 @@ describe("ArchestraPromptInput", () => {
     });
 
     it("should show admin message in tooltip for non-admins when file uploads disabled", () => {
-      // Mock non-admin user without organization update permission
+      // Mock non-admin user without securitySettings update permission
       mockUseHasPermissions.mockReturnValue({
         data: false,
         isPending: false,
@@ -280,27 +311,18 @@ describe("ArchestraPromptInput", () => {
       expect(screen.getByTestId("prompt-input")).toBeInTheDocument();
     });
 
-    it("should render model selector", () => {
+    it("should render model selector when user has provider settings permission", () => {
+      mockUseHasPermissions.mockReturnValue({
+        data: true,
+        isPending: false,
+        isLoading: false,
+      });
+
       render(
         <ArchestraPromptInput {...defaultProps} allowFileUploads={true} />,
       );
 
       expect(screen.getByTestId("model-selector")).toBeInTheDocument();
-    });
-
-    it("should render 'Add tools & sub-agents' button when no tools or delegations exist", () => {
-      render(
-        <ArchestraPromptInput {...defaultProps} allowFileUploads={true} />,
-      );
-
-      // With empty tools and delegations from mocks, should show the "Add tools" button
-      expect(screen.getByText("Add tools & sub-agents")).toBeInTheDocument();
-      expect(
-        screen.queryByTestId("chat-tools-display"),
-      ).not.toBeInTheDocument();
-      expect(
-        screen.queryByTestId("agent-tools-display"),
-      ).not.toBeInTheDocument();
     });
   });
 });

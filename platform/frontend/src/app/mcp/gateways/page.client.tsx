@@ -1,7 +1,12 @@
 "use client";
 
-import type { archestraApiTypes } from "@shared";
-import { archestraApiSdk, E2eTestId } from "@shared";
+import {
+  archestraApiSdk,
+  type archestraApiTypes,
+  DocsPage,
+  E2eTestId,
+  getDocsUrl,
+} from "@shared";
 import { useQuery } from "@tanstack/react-query";
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
 import {
@@ -12,7 +17,6 @@ import {
   Globe,
   Plus,
   Route,
-  Search,
   Server,
   User,
   Users,
@@ -23,13 +27,17 @@ import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { AgentBadge } from "@/components/agent-badge";
 import { AgentDialog } from "@/components/agent-dialog";
+import {
+  ActiveFilterBadges,
+  AgentScopeFilter,
+} from "@/components/agent-scope-filter";
 import { ConnectDialog } from "@/components/connect-dialog";
-import { DebouncedInput } from "@/components/debounced-input";
 import { LabelTags } from "@/components/label-tags";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { McpConnectionInstructions } from "@/components/mcp-connection-instructions";
 import { PageLayout } from "@/components/page-layout";
 import { ProxyConnectionInstructions } from "@/components/proxy-connection-instructions";
+import { SearchInput } from "@/components/search-input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
@@ -194,12 +202,23 @@ function McpGateways({
     | "name"
     | "createdAt"
     | "toolsCount"
+    | "subagentsCount"
     | "team"
     | null;
   const sortDirectionFromUrl = searchParams.get("sortDirection") as
     | "asc"
     | "desc"
     | null;
+  const scopeFromUrl = searchParams.get("scope") as
+    | "personal"
+    | "team"
+    | "org"
+    | "built_in"
+    | null;
+  const teamIdsFromUrl = searchParams.get("teamIds");
+  const authorIdsFromUrl = searchParams.get("authorIds");
+  const excludeAuthorIdsFromUrl = searchParams.get("excludeAuthorIds");
+  const labelsFromUrl = searchParams.get("labels");
 
   const pageIndex = Number(pageFromUrl || "1") - 1;
   const pageSize = Number(pageSizeFromUrl || DEFAULT_AGENTS_PAGE_SIZE);
@@ -217,9 +236,16 @@ function McpGateways({
     sortDirection,
     name: nameFilter || undefined,
     agentTypes: ["mcp_gateway", "profile"],
+    scope: scopeFromUrl || undefined,
+    teamIds: teamIdsFromUrl ? teamIdsFromUrl.split(",") : undefined,
+    authorIds: authorIdsFromUrl ? authorIdsFromUrl.split(",") : undefined,
+    excludeAuthorIds: excludeAuthorIdsFromUrl
+      ? excludeAuthorIdsFromUrl.split(",")
+      : undefined,
+    labels: labelsFromUrl || undefined,
   });
 
-  const { data: _teams } = useQuery({
+  const { data: userTeams } = useQuery({
     queryKey: ["teams"],
     queryFn: async () => {
       const { data } = await archestraApiSdk.getTeams();
@@ -229,10 +255,13 @@ function McpGateways({
   });
 
   const { data: isAdmin } = useHasPermissions({ mcpGateway: ["admin"] });
+  const { data: isTeamAdmin } = useHasPermissions({
+    mcpGateway: ["team-admin"],
+  });
   const { data: session } = authClient.useSession();
   const currentUserId = session?.user?.id;
+  const userTeamIdSet = new Set((userTeams ?? []).map((t) => t.id));
 
-  const [searchQuery, setSearchQuery] = useState(nameFilter);
   const [sorting, setSorting] = useState<SortingState>([
     { id: sortBy, desc: sortDirection === "desc" },
   ]);
@@ -258,22 +287,6 @@ function McpGateways({
   );
   const [deletingGatewayId, setDeletingGatewayId] = useState<string | null>(
     null,
-  );
-
-  // Update URL when search query changes
-  const handleSearchChange = useCallback(
-    (value: string) => {
-      setSearchQuery(value);
-      const params = new URLSearchParams(searchParams.toString());
-      if (value) {
-        params.set("name", value);
-      } else {
-        params.delete("name");
-      }
-      params.set("page", "1"); // Reset to first page on search
-      router.push(`${pathname}?${params.toString()}`, { scroll: false });
-    },
-    [searchParams, router, pathname],
   );
 
   // Update URL when sorting changes
@@ -402,7 +415,17 @@ function McpGateways({
     },
     {
       id: "subagentsCount",
-      header: "Subagents",
+      accessorKey: "subagentsCount",
+      header: ({ column }) => (
+        <Button
+          variant="ghost"
+          className="h-auto !p-0 font-medium hover:bg-transparent"
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+        >
+          Subagents
+          <SortIcon isSorted={column.getIsSorted()} />
+        </Button>
+      ),
       cell: ({ row }) => {
         const subagentsCount = row.original.tools.filter(
           (t) => t.delegateToAgentId,
@@ -414,7 +437,7 @@ function McpGateways({
       ? [
           {
             id: "team",
-            header: "Accessible to:",
+            header: "Accessible to",
             enableSorting: false,
             cell: ({ row }: { row: { original: GatewayData } }) => (
               <VisibilityBadge
@@ -449,9 +472,28 @@ function McpGateways({
       enableHiding: false,
       cell: ({ row }) => {
         const agent = row.original;
+        const scope = (agent as unknown as Record<string, unknown>).scope as
+          | string
+          | undefined;
+        const authorId = (agent as unknown as Record<string, unknown>)
+          .authorId as string | null | undefined;
+        const agentTeams = (
+          agent as unknown as { teams?: Array<{ id: string }> }
+        ).teams;
+        const isPersonal = scope === "personal";
+        const isTeamScoped = scope === "team";
+        const isOwner = !!currentUserId && authorId === currentUserId;
+        const isMemberOfAgentTeam = agentTeams?.some((t) =>
+          userTeamIdSet.has(t.id),
+        );
+        const canModify =
+          !!isAdmin ||
+          (isTeamScoped && !!isTeamAdmin && !!isMemberOfAgentTeam) ||
+          (isPersonal && isOwner);
         return (
           <McpGatewayActions
             agent={agent}
+            canModify={canModify}
             onConnect={setConnectingGateway}
             onEdit={(agentData) => {
               setEditingGateway(agentData);
@@ -475,7 +517,7 @@ function McpGateways({
             MCP Gateways provide a unified MCP endpoint for your AI agents to
             access tools and subagents.{" "}
             <a
-              href="https://archestra.ai/docs/platform-mcp-gateway"
+              href={getDocsUrl(DocsPage.PlatformMcpGateway)}
               target="_blank"
               rel="noopener noreferrer"
               className="underline hover:text-foreground"
@@ -497,22 +539,22 @@ function McpGateways({
       >
         <div>
           <div>
-            <div className="mb-6">
-              <div className="relative max-w-md">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <DebouncedInput
+            <div className="mb-6 flex flex-col gap-2">
+              <div className="flex items-center gap-4">
+                <SearchInput
                   placeholder="Search gateways by name..."
-                  initialValue={searchQuery}
-                  onChange={handleSearchChange}
-                  className="pl-9"
+                  paramName="name"
+                  className="relative max-w-md flex-1"
                 />
+                <AgentScopeFilter />
               </div>
+              <ActiveFilterBadges />
             </div>
 
             {!agents || agents.length === 0 ? (
               <div className="text-muted-foreground">
-                {nameFilter
-                  ? "No MCP gateways found matching your search"
+                {nameFilter || scopeFromUrl || labelsFromUrl
+                  ? "No MCP gateways found matching your filters"
                   : "No MCP gateways found"}
               </div>
             ) : (

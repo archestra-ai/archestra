@@ -144,6 +144,7 @@ export default defineConfig((options: UserConfig) => {
       "**/*.spec.ts",
       "src/test/**/*",
       "src/standalone-scripts/**/*",
+      "src/entrypoints/**/*",
     ],
 
     // Only set onSuccess handler when in watch mode

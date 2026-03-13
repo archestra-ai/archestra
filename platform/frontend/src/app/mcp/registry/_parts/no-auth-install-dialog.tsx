@@ -29,6 +29,10 @@ interface NoAuthInstallDialogProps {
   onInstall: (result: NoAuthInstallResult) => Promise<void>;
   catalogItem: CatalogItem | null;
   isInstalling: boolean;
+  /** Pre-select a specific team in the credential type selector */
+  preselectedTeamId?: string | null;
+  /** When true, only personal installation is allowed */
+  personalOnly?: boolean;
 }
 
 export function NoAuthInstallDialog({
@@ -37,6 +41,8 @@ export function NoAuthInstallDialog({
   onInstall,
   catalogItem,
   isInstalling,
+  preselectedTeamId,
+  personalOnly = false,
 }: NoAuthInstallDialogProps) {
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
   const [canInstall, setCanInstall] = useState(true);
@@ -74,6 +80,8 @@ export function NoAuthInstallDialog({
               onTeamChange={setSelectedTeamId}
               catalogId={catalogItem?.id}
               onCanInstallChange={setCanInstall}
+              preselectedTeamId={preselectedTeamId}
+              personalOnly={personalOnly}
             />
           </div>
 

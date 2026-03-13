@@ -331,6 +331,20 @@ export interface ChatOpsProvider {
   getWorkspaceName(): string | null;
 
   /**
+   * Check whether the provider is missing any required scopes/permissions.
+   * Used to trigger rate-limited user notifications about scope drift.
+   */
+  hasMissingScopes(): boolean;
+
+  /**
+   * Send a rate-limited notification to the user about missing scopes/permissions.
+   * Implementations should throttle notifications (e.g., once per 30 days per workspace).
+   * No-op if the provider has no missing scopes or doesn't support scope detection.
+   * @param message - The incoming message to reply in-thread to
+   */
+  notifyMissingScopes(message: IncomingChatMessage): Promise<void>;
+
+  /**
    * Download files from thread history messages.
    * Reuses the provider's existing download logic (auth headers, SSRF protection, etc.).
    * @param files - File metadata from thread history messages

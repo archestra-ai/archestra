@@ -1,6 +1,8 @@
 "use client";
 
 import Image from "next/image";
+import { useTheme } from "next-themes";
+import config from "@/lib/config";
 import { useOrgTheme } from "@/lib/theme.hook";
 
 interface AppLogoProps {
@@ -12,26 +14,30 @@ interface AppLogoProps {
 }
 
 export function AppLogo({ centered = true }: AppLogoProps) {
-  const { logo, isLoadingAppearance } = useOrgTheme() ?? {};
+  const { logo, logoDark, isLoadingAppearance } = useOrgTheme() ?? {};
+  const { resolvedTheme } = useTheme();
+  const effectiveLogo = resolvedTheme === "dark" && logoDark ? logoDark : logo;
 
   if (isLoadingAppearance) {
     return <div className="h-[47px]" />;
   }
 
-  if (logo) {
+  if (effectiveLogo) {
     return (
       <div className={`flex ${centered ? "justify-center" : "pl-8"}`}>
         <div className="flex flex-col items-center gap-1">
           <Image
-            src={logo}
+            src={effectiveLogo}
             alt="Organization logo"
             width={200}
             height={60}
             className="object-contain h-12 w-auto max-w-[calc(100vw-6rem)]"
           />
-          <p className="text-[10px] text-muted-foreground">
-            Powered by Archestra
-          </p>
+          {!config.enterpriseFeatures.fullWhiteLabeling && (
+            <p className="text-[10px] text-muted-foreground">
+              Powered by Archestra
+            </p>
+          )}
         </div>
       </div>
     );

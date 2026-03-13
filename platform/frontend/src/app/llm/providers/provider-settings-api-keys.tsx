@@ -1,8 +1,10 @@
 "use client";
 
 import {
+  DocsPage,
   E2eTestId,
   formatSecretStorageType,
+  getDocsUrl,
   PROVIDERS_WITH_OPTIONAL_API_KEY,
 } from "@shared";
 import type { ColumnDef } from "@tanstack/react-table";
@@ -42,6 +44,7 @@ import {
   DialogFooter,
   DialogForm,
   DialogHeader,
+  DialogStickyFooter,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { InlineTag } from "@/components/ui/inline-tag";
@@ -53,7 +56,8 @@ import {
   useDeleteChatApiKey,
   useUpdateChatApiKey,
 } from "@/lib/chat-settings.query";
-import { useFeatureFlag } from "@/lib/features.hook";
+import { useFeature } from "@/lib/config.query";
+import { useOrganization } from "@/lib/organization.query";
 
 const SCOPE_ICONS: Record<ChatApiKeyScope, React.ReactNode> = {
   personal: <User className="h-3 w-3" />,
@@ -75,11 +79,26 @@ const DEFAULT_FORM_VALUES: ChatApiKeyFormValues = {
 
 export function ProviderSettingsApiKeys() {
   const { data: apiKeys = [], isPending } = useChatApiKeys();
+  const { data: organization } = useOrganization();
   const createMutation = useCreateChatApiKey();
   const updateMutation = useUpdateChatApiKey();
   const deleteMutation = useDeleteChatApiKey();
-  const byosEnabled = useFeatureFlag("byosEnabled");
-  const geminiVertexAiEnabled = useFeatureFlag("geminiVertexAiEnabled");
+  const byosEnabled = useFeature("byosEnabled");
+  const geminiVertexAiEnabled = useFeature("geminiVertexAiEnabled");
+
+  const getKeyUsage = useCallback(
+    (keyId: string): string | null => {
+      if (!organization) return null;
+      const usages: string[] = [];
+      if (organization.embeddingChatApiKeyId === keyId)
+        usages.push("embedding");
+      if (organization.rerankerChatApiKeyId === keyId) usages.push("reranking");
+      return usages.length > 0
+        ? `Used for knowledge base ${usages.join(" and ")}`
+        : null;
+    },
+    [organization],
+  );
 
   // Dialog states
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
@@ -302,7 +321,10 @@ export function ProviderSettingsApiKeys() {
             <span className="text-sm text-muted-foreground">
               Env Vars{" "}
               <a
-                href="https://archestra.ai/docs/platform-supported-llm-providers#using-vertex-ai"
+                href={getDocsUrl(
+                  DocsPage.PlatformSupportedLlmProviders,
+                  "using-vertex-ai",
+                )}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1 text-primary hover:underline"
@@ -342,11 +364,13 @@ export function ProviderSettingsApiKeys() {
         header: "Actions",
         cell: ({ row }) => {
           const isSystem = row.original.isSystem;
+          const keyUsage = getKeyUsage(row.original.id);
+          const isInUse = !!keyUsage;
           return (
             <ButtonGroup>
               <PermissionButton
                 permissions={{
-                  chatSettings: ["update"],
+                  llmProvider: ["update"],
                   ...(row.original.scope === "org_wide"
                     ? { team: ["admin"] }
                     : {}),
@@ -365,7 +389,7 @@ export function ProviderSettingsApiKeys() {
               </PermissionButton>
               <PermissionButton
                 permissions={{
-                  chatSettings: ["delete"],
+                  llmProvider: ["delete"],
                   ...(row.original.scope === "org_wide"
                     ? { team: ["admin"] }
                     : {}),
@@ -373,7 +397,12 @@ export function ProviderSettingsApiKeys() {
                 aria-label="Delete"
                 variant="outline"
                 size="icon-sm"
-                disabled={isSystem}
+                disabled={isSystem || isInUse}
+                tooltip={
+                  isInUse
+                    ? `${keyUsage}. Remove it from Settings > Knowledge before deleting.`
+                    : undefined
+                }
                 data-testid={`${E2eTestId.DeleteChatApiKeyButton}-${row.original.name}`}
                 onClick={(e) => {
                   e.stopPropagation();
@@ -387,7 +416,7 @@ export function ProviderSettingsApiKeys() {
         },
       },
     ],
-    [openEditDialog, openDeleteDialog],
+    [openEditDialog, openDeleteDialog, getKeyUsage],
   );
 
   return (
@@ -407,14 +436,15 @@ export function ProviderSettingsApiKeys() {
               Manage API keys for LLM providers used in Chat and LLM Proxy
             </p>
           </div>
-          <Button
+          <PermissionButton
+            permissions={{ llmProvider: ["create"] }}
             className="shrink-0"
             onClick={() => setIsCreateDialogOpen(true)}
             data-testid={E2eTestId.AddChatApiKeyButton}
           >
             <Plus className="h-4 w-4 mr-2" />
             Add API Key
-          </Button>
+          </PermissionButton>
         </div>
 
         {byosEnabled &&
@@ -459,7 +489,7 @@ export function ProviderSettingsApiKeys() {
                   geminiVertexAiEnabled={geminiVertexAiEnabled}
                 />
               </div>
-              <DialogFooter>
+              <DialogStickyFooter>
                 <Button
                   type="button"
                   variant="outline"
@@ -476,7 +506,7 @@ export function ProviderSettingsApiKeys() {
                   )}
                   Test & Create
                 </Button>
-              </DialogFooter>
+              </DialogStickyFooter>
             </DialogForm>
           </DialogContent>
         </Dialog>
@@ -503,7 +533,7 @@ export function ProviderSettingsApiKeys() {
                   />
                 )}
               </div>
-              <DialogFooter>
+              <DialogStickyFooter>
                 <Button
                   type="button"
                   variant="outline"
@@ -520,7 +550,7 @@ export function ProviderSettingsApiKeys() {
                   )}
                   Test & Save
                 </Button>
-              </DialogFooter>
+              </DialogStickyFooter>
             </DialogForm>
           </DialogContent>
         </Dialog>

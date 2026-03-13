@@ -1,4 +1,3 @@
-import { useDebounce } from "@uidotdev/usehooks";
 import { useEffect, useRef, useState } from "react";
 import { Input } from "./ui/input";
 
@@ -18,29 +17,34 @@ export function DebouncedInput({
   ...props
 }: DebouncedInputProps) {
   const [value, setValue] = useState(initialValue);
-  const isFirstRender = useRef(true);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isTypingRef = useRef(false);
 
-  const debouncedValue = useDebounce(value, debounceMs);
-
-  // Sync internal state when initialValue changes (e.g., browser back/forward)
+  // Sync internal state when initialValue changes externally (e.g., browser back/forward)
+  // but not while the user is actively typing to prevent eating characters
   useEffect(() => {
-    setValue(initialValue);
+    if (!isTypingRef.current) {
+      setValue(initialValue);
+    }
   }, [initialValue]);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: it's ok here
   useEffect(() => {
-    if (isFirstRender.current) {
-      isFirstRender.current = false;
-      return;
-    }
-    onChange(debouncedValue);
-  }, [debouncedValue]);
+    return () => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    };
+  }, []);
 
-  return (
-    <Input
-      value={value}
-      onChange={(e) => setValue(e.target.value)}
-      {...props}
-    />
-  );
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newValue = e.target.value;
+    setValue(newValue);
+    isTypingRef.current = true;
+
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    timeoutRef.current = setTimeout(() => {
+      isTypingRef.current = false;
+      onChange(newValue);
+    }, debounceMs);
+  };
+
+  return <Input value={value} onChange={handleChange} {...props} />;
 }

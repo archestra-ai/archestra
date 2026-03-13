@@ -49,7 +49,7 @@ function InvitationsListContent({
         <CardHeader>
           <CardTitle>Pending Invitations</CardTitle>
           <CardDescription>
-            Pending invitations for members to join the organization.
+            Pending invitations for users to join the organization.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">

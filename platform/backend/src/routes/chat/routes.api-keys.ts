@@ -14,6 +14,8 @@ import logger from "@/logging";
 import {
   ApiKeyModelModel,
   ChatApiKeyModel,
+  ModelModel,
+  OrganizationModel,
   TeamModel,
   VirtualApiKeyModel,
 } from "@/models";
@@ -550,6 +552,20 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         headers,
       });
 
+      // Prevent deletion if the key is used for knowledge base embedding or reranking
+      const org = await OrganizationModel.getById(organizationId);
+      if (org) {
+        const usages: string[] = [];
+        if (org.embeddingChatApiKeyId === params.id) usages.push("embedding");
+        if (org.rerankerChatApiKeyId === params.id) usages.push("reranking");
+        if (usages.length > 0) {
+          throw new ApiError(
+            400,
+            `This API key is used for knowledge base ${usages.join(" and ")}. Remove it from Settings > Knowledge before deleting.`,
+          );
+        }
+      }
+
       // Delete virtual key secrets before deleting the parent API key.
       // The DB cascades the virtual key rows, but their secrets in the
       // secret manager would be orphaned without explicit cleanup.
@@ -577,6 +593,16 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       await ChatApiKeyModel.delete(params.id);
+
+      // Clean up orphaned models that lost their last API key link.
+      // Models discovered via LLM Proxy are preserved for custom pricing.
+      const deletedCount = await ModelModel.deleteOrphanedModels();
+      if (deletedCount > 0) {
+        logger.info(
+          { deletedCount },
+          "Cleaned up orphaned models after API key deletion",
+        );
+      }
 
       return reply.send({ success: true });
     },

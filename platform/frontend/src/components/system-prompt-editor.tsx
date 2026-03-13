@@ -37,10 +37,7 @@ export function SystemPromptEditor({
         </Link>{" "}
         templating. See{" "}
         <a
-          href={getDocsUrl(
-            DocsPage.PlatformAgents,
-            "system-prompt-templating",
-          )}
+          href={getDocsUrl(DocsPage.PlatformAgents, "system-prompt-templating")}
           target="_blank"
           rel="noopener noreferrer"
           className="underline hover:text-foreground"

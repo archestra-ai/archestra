@@ -546,9 +546,9 @@ describe("promptNeedsRendering", () => {
   });
 
   test("returns true when any prompt contains handlebars syntax", () => {
-    expect(
-      promptNeedsRendering("plain text", "Hello {{user.name}}"),
-    ).toBe(true);
+    expect(promptNeedsRendering("plain text", "Hello {{user.name}}")).toBe(
+      true,
+    );
   });
 
   test("returns false for single curly braces", () => {

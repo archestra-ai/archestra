@@ -172,7 +172,7 @@ export interface SystemPromptContext {
 export function promptNeedsRendering(
   ...prompts: (string | null | undefined)[]
 ): boolean {
-  return prompts.some((p) => p != null && p.includes("{{"));
+  return prompts.some((p) => p?.includes("{{"));
 }
 
 /**

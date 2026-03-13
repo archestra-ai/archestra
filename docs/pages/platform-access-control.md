@@ -3,7 +3,7 @@ title: "Access Control"
 category: Administration
 description: "Role-based access control (RBAC) system for managing user permissions in Archestra"
 order: 1
-lastUpdated: 2026-03-12
+lastUpdated: 2026-03-13
 ---
 <!--
 Check ../docs_writer_prompt.md before changing this file.
@@ -61,6 +61,7 @@ Full access to core resources and settings, but cannot manage users, roles, or i
 | Security Settings | `read`, `update` |
 | Chat Agent Picker | `enable` |
 | Chat Provider Settings | `enable` |
+| Chat Expand Tool Calls | `enable` |
 
 ### Member
 
@@ -81,6 +82,7 @@ Can manage agents, tools, and chat, with read-only access to most other resource
 | Chats | `read`, `create`, `update`, `delete` |
 | Teams | `read` |
 | Simple View | `enable` |
+| Chat Expand Tool Calls | `enable` |
 
 
 ## Custom Roles
@@ -116,6 +118,7 @@ The following table lists all available permissions that can be assigned to cust
 | `chat:update` | Edit chat messages and conversation settings |
 | `chat:delete` | Delete chat conversations |
 | `chatAgentPicker:enable` | Show agent picker in chat |
+| `chatExpandToolCalls:enable` | Allow expanding tool call details in chat |
 | `chatProviderSettings:enable` | Show model and API key selectors in chat |
 | `dualLlmConfig:read` | View dual LLM security configurations |
 | `dualLlmConfig:create` | Create new dual LLM configurations |

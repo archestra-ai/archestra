@@ -105,10 +105,12 @@ export type ToolIconMap = Map<
 export function CompactToolGroup({
   tools,
   toolIconMap,
+  canExpandToolCalls = true,
   onToolApprovalResponse,
 }: {
   tools: CompactToolEntry[];
   toolIconMap?: ToolIconMap;
+  canExpandToolCalls?: boolean;
   onToolApprovalResponse?: (params: {
     id: string;
     approved: boolean;
@@ -118,6 +120,7 @@ export function CompactToolGroup({
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
 
   const handleToggle = (key: string) => {
+    if (!canExpandToolCalls) return;
     setExpandedKey((prev) => (prev === key ? null : key));
   };
 

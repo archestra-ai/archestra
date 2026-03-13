@@ -374,7 +374,7 @@ export function IdentityProvidersSettingsContent() {
                   size="sm"
                   className="w-full"
                 >
-                  {existingProvider ? "Configure" : "Enable"}
+                  {existingProvider ? "Edit" : "Enable"}
                 </Button>
               </CardContent>
             </Card>
@@ -394,6 +394,7 @@ export function IdentityProvidersSettingsContent() {
                   issuer: createConfig.config.defaultSamlConfig?.issuer || "",
                   domain: "",
                   providerType: "saml" as const,
+                  roleMapping: { rules: [] },
                   samlConfig: {
                     issuer: createConfig.config.defaultSamlConfig?.issuer || "",
                     entryPoint:
@@ -412,6 +413,7 @@ export function IdentityProvidersSettingsContent() {
                   issuer: createConfig.config.defaultOidcConfig?.issuer || "",
                   domain: "",
                   providerType: "oidc" as const,
+                  roleMapping: { rules: [] },
                   oidcConfig: {
                     ...createConfig.config.defaultOidcConfig,
                     issuer: createConfig.config.defaultOidcConfig?.issuer || "",

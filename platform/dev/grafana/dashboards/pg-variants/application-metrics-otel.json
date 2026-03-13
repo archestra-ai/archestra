@@ -2577,7 +2577,7 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "sum(postgresql_backends) / postgresql_connection_max * 100",
+          "expr": "sum(postgresql_backends) / sum(postgresql_connection_max) * 100",
           "hide": false,
           "instant": true,
           "legendFormat": "",

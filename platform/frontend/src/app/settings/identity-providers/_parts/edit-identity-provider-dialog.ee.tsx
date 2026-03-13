@@ -74,6 +74,9 @@ export function EditIdentityProviderDialog({
         },
         overrideUserInfo: true,
       },
+      roleMapping: {
+        rules: [],
+      },
     },
   });
 
@@ -88,8 +91,10 @@ export function EditIdentityProviderDialog({
         issuer: provider.issuer,
         domain: provider.domain,
         providerType: isSaml ? "saml" : "oidc",
-        // Include roleMapping and teamSyncConfig if they exist on the provider
-        ...(provider.roleMapping && { roleMapping: provider.roleMapping }),
+        roleMapping: {
+          rules: [],
+          ...provider.roleMapping,
+        },
         ...(provider.teamSyncConfig && {
           teamSyncConfig: provider.teamSyncConfig,
         }),
@@ -134,11 +139,14 @@ export function EditIdentityProviderDialog({
   const onSubmit = useCallback(
     async (data: IdentityProviderFormValues) => {
       if (!provider) return;
-      await updateIdentityProvider.mutateAsync({
+      const result = await updateIdentityProvider.mutateAsync({
         id: provider.id,
         data,
       });
-      onOpenChange(false);
+      // Only close the dialog if update succeeded (result is not null)
+      if (result) {
+        onOpenChange(false);
+      }
     },
     [provider, updateIdentityProvider, onOpenChange],
   );

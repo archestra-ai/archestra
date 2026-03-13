@@ -49,44 +49,50 @@ export function CreateIdentityProviderDialog({
   const form = useForm<IdentityProviderFormValues>({
     // biome-ignore lint/suspicious/noExplicitAny: Version mismatch between @hookform/resolvers and Zod
     resolver: zodResolver(IdentityProviderFormSchema as any),
-    defaultValues: defaultValues || {
-      providerId: "",
-      issuer: "",
-      domain: "",
-      providerType: providerType,
-      ...(providerType === "saml"
-        ? {
-            samlConfig: {
-              issuer: "",
-              entryPoint: "",
-              cert: "",
-              callbackUrl: "",
-              spMetadata: {},
-            },
-          }
-        : {
-            oidcConfig: {
-              issuer: "",
-              pkce: true,
-              clientId: "",
-              clientSecret: "",
-              discoveryEndpoint: "",
-              scopes: ["openid", "email", "profile"],
-              mapping: {
-                id: "sub",
-                email: "email",
-                name: "name",
+    defaultValues: {
+      roleMapping: { rules: [] },
+      ...(defaultValues || {
+        providerId: "",
+        issuer: "",
+        domain: "",
+        providerType: providerType,
+        ...(providerType === "saml"
+          ? {
+              samlConfig: {
+                issuer: "",
+                entryPoint: "",
+                cert: "",
+                callbackUrl: "",
+                spMetadata: {},
               },
-            },
-          }),
+            }
+          : {
+              oidcConfig: {
+                issuer: "",
+                pkce: true,
+                clientId: "",
+                clientSecret: "",
+                discoveryEndpoint: "",
+                scopes: ["openid", "email", "profile"],
+                mapping: {
+                  id: "sub",
+                  email: "email",
+                  name: "name",
+                },
+              },
+            }),
+      }),
     },
   });
 
   const onSubmit = useCallback(
     async (data: IdentityProviderFormValues) => {
-      await createIdentityProvider.mutateAsync(data);
-      form.reset();
-      onOpenChange(false);
+      const result = await createIdentityProvider.mutateAsync(data);
+      // Only close the dialog if creation succeeded (result is not null)
+      if (result) {
+        form.reset();
+        onOpenChange(false);
+      }
     },
     [createIdentityProvider, form, onOpenChange],
   );
@@ -137,7 +143,7 @@ export function CreateIdentityProviderDialog({
               >
                 {createIdentityProvider.isPending
                   ? "Creating..."
-                  : "Create Provider"}
+                  : "Create & Test"}
               </PermissionButton>
             </DialogStickyFooter>
           </form>

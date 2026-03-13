@@ -1436,19 +1436,6 @@ export function AgentDialog({
                         : null}
                     </p>
                     <div className="flex flex-wrap items-center gap-2">
-                      <ModelSelector
-                        selectedModel={llmModel || ""}
-                        onModelChange={(modelId) =>
-                          handleLlmModelChange(modelId)
-                        }
-                        onClear={() => {
-                          setLlmModel(null);
-                          setLlmApiKeyId(null);
-                          lastAutoSelectedProviderRef.current = null;
-                        }}
-                        variant="outline"
-                      />
-
                       <Popover
                         open={apiKeySelectorOpen}
                         onOpenChange={setApiKeySelectorOpen}
@@ -1553,6 +1540,40 @@ export function AgentDialog({
                           </Command>
                         </PopoverContent>
                       </Popover>
+
+                      {!llmApiKeyId ? (
+                        <TooltipProvider delayDuration={300}>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <div>
+                                <ModelSelector
+                                  selectedModel=""
+                                  onModelChange={() => {}}
+                                  disabled
+                                  variant="outline"
+                                />
+                              </div>
+                            </TooltipTrigger>
+                            <TooltipContent side="bottom" className="text-xs">
+                              Select a provider API key first
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      ) : (
+                        <ModelSelector
+                          selectedModel={llmModel || ""}
+                          onModelChange={(modelId) =>
+                            handleLlmModelChange(modelId)
+                          }
+                          onClear={() => {
+                            setLlmModel(null);
+                            setLlmApiKeyId(null);
+                            lastAutoSelectedProviderRef.current = null;
+                          }}
+                          variant="outline"
+                          apiKeyId={llmApiKeyId}
+                        />
+                      )}
                     </div>
                   </div>
                 )}

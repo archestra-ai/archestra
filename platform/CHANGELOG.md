@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.19](https://github.com/archestra-ai/archestra/compare/platform-v1.1.18...platform-v1.1.19) (2026-03-13)
+
+
+### Bug Fixes
+
+* change agent change message ([#3358](https://github.com/archestra-ai/archestra/issues/3358)) ([75b6129](https://github.com/archestra-ai/archestra/commit/75b6129ffd1a094da30abf219c926981c7fd310f))
+
 ## [1.1.18](https://github.com/archestra-ai/archestra/compare/platform-v1.1.17...platform-v1.1.18) (2026-03-13)
 
 

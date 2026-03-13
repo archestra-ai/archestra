@@ -527,6 +527,73 @@ Current date: {{currentDate}}.`;
       "You are an engineer",
     );
   });
+
+  test("renders variables adjacent to backticks correctly", () => {
+    const template = "Use `{{user.name}}` in your code";
+    expect(renderSystemPrompt(template, baseContext)).toBe(
+      "Use `Alice Smith` in your code",
+    );
+  });
+
+  test("renders variables inside triple backtick code blocks", () => {
+    const template = "```\n{{user.name}}\n```";
+    expect(renderSystemPrompt(template, baseContext)).toBe(
+      "```\nAlice Smith\n```",
+    );
+  });
+
+  test("does not HTML-escape apostrophes in variable values", () => {
+    const context = {
+      user: { name: "O'Brien", email: "obrien@test.com", teams: [] },
+    };
+    const template = "Hello {{user.name}}";
+    expect(renderSystemPrompt(template, context)).toBe("Hello O'Brien");
+  });
+
+  test("does not HTML-escape ampersands in variable values", () => {
+    const context = {
+      user: { name: "Alice", email: "alice@test.com", teams: ["R&D"] },
+    };
+    const template =
+      "Teams: {{#each user.teams}}{{this}}{{/each}}";
+    expect(renderSystemPrompt(template, context)).toBe("Teams: R&D");
+  });
+
+  test("does not HTML-escape backticks in variable values", () => {
+    const context = {
+      user: {
+        name: "use `tool` here",
+        email: "test@test.com",
+        teams: [],
+      },
+    };
+    const template = "Instruction: {{user.name}}";
+    expect(renderSystemPrompt(template, context)).toBe(
+      "Instruction: use `tool` here",
+    );
+  });
+
+  test("does not HTML-escape angle brackets in variable values", () => {
+    const context = {
+      user: { name: "<admin>", email: "admin@test.com", teams: [] },
+    };
+    const template = "User: {{user.name}}";
+    expect(renderSystemPrompt(template, context)).toBe("User: <admin>");
+  });
+
+  test("renders backtick-wrapped variable with special chars in value", () => {
+    const context = {
+      user: {
+        name: "O'Brien",
+        email: "obrien@test.com",
+        teams: ["R&D"],
+      },
+    };
+    const template = "Welcome `{{user.name}}` from `{{user.teams}}`";
+    expect(renderSystemPrompt(template, context)).toBe(
+      "Welcome `O'Brien` from `R&D`",
+    );
+  });
 });
 
 describe("promptNeedsRendering", () => {

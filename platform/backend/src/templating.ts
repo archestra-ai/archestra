@@ -228,7 +228,7 @@ export function renderSystemPrompt(
   context: SystemPromptContext,
 ): string {
   try {
-    const template = Handlebars.compile(templateString);
+    const template = Handlebars.compile(templateString, { noEscape: true });
     return template(context);
   } catch (error) {
     logger.warn(
@@ -252,7 +252,7 @@ export function evaluateRoleMappingTemplate(
   context: Record<string, unknown>,
 ): boolean {
   try {
-    const template = Handlebars.compile(templateString);
+    const template = Handlebars.compile(templateString, { noEscape: true });
     const result = template(context).trim();
     // Consider any non-empty string as truthy
     return result.length > 0 && result !== "false" && result !== "0";
@@ -275,7 +275,7 @@ export function extractGroupsWithTemplate(
   context: Record<string, unknown>,
 ): string[] {
   // Compile template - let this throw on syntax errors so caller can fall back
-  const template = Handlebars.compile(templateString);
+  const template = Handlebars.compile(templateString, { noEscape: true });
 
   try {
     const result = template(context).trim();
@@ -322,7 +322,7 @@ export function applyResponseModifierTemplate(
   >["content"],
 ): CommonToolResult["content"] {
   try {
-    const template = Handlebars.compile(templateString);
+    const template = Handlebars.compile(templateString, { noEscape: true });
 
     // Render the template with the response as context
     const rendered = template({ response: toolCallResponseResultContent });

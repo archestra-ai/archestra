@@ -42,7 +42,11 @@ import {
   TeamModel,
 } from "@/models";
 import { startActiveChatSpan } from "@/observability/tracing";
-import { renderSystemPrompt, type SystemPromptContext } from "@/templating";
+import {
+  promptNeedsRendering,
+  renderSystemPrompt,
+  type SystemPromptContext,
+} from "@/templating";
 import {
   ApiError,
   constructResponseSchema,
@@ -193,26 +197,35 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const systemPromptParts: string[] = [];
       const userPromptParts: string[] = [];
 
-      // Build template context for system prompt rendering
-      const userTeams = await TeamModel.getUserTeams(user.id);
-      const promptContext: SystemPromptContext = {
-        user: {
-          name: user.name,
-          email: user.email,
-          teams: userTeams.map((t) => t.name),
-        },
-      };
-
-      // Collect system and user prompts from the agent (render templates)
-      if (agent.systemPrompt) {
-        systemPromptParts.push(
-          renderSystemPrompt(agent.systemPrompt, promptContext),
-        );
-      }
-      if (agent.userPrompt) {
-        userPromptParts.push(
-          renderSystemPrompt(agent.userPrompt, promptContext),
-        );
+      // Collect system and user prompts from the agent (render templates if needed)
+      if (agent.systemPrompt || agent.userPrompt) {
+        if (promptNeedsRendering(agent.systemPrompt, agent.userPrompt)) {
+          const userTeams = await TeamModel.getUserTeams(user.id);
+          const promptContext: SystemPromptContext = {
+            user: {
+              name: user.name,
+              email: user.email,
+              teams: userTeams.map((t) => t.name),
+            },
+          };
+          if (agent.systemPrompt) {
+            systemPromptParts.push(
+              renderSystemPrompt(agent.systemPrompt, promptContext),
+            );
+          }
+          if (agent.userPrompt) {
+            userPromptParts.push(
+              renderSystemPrompt(agent.userPrompt, promptContext),
+            );
+          }
+        } else {
+          if (agent.systemPrompt) {
+            systemPromptParts.push(agent.systemPrompt);
+          }
+          if (agent.userPrompt) {
+            userPromptParts.push(agent.userPrompt);
+          }
+        }
       }
 
       // Add instruction about tool approval denials

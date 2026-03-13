@@ -25,7 +25,7 @@ export const SYSTEM_PROMPT_HELPERS = [
   },
   {
     expression: "{{currentTime}}",
-    description: "Current time in UTC (HH:MM:SS)",
+    description: "Current time in UTC (HH:MM:SS UTC)",
   },
 ] as const;
 

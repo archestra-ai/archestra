@@ -109,7 +109,7 @@ Agent system prompts support [Handlebars](https://handlebarsjs.com/) templating.
 | Helper            | Output       | Description                      |
 | ----------------- | ------------ | -------------------------------- |
 | `{{currentDate}}` | `2026-03-12` | Current date in UTC (YYYY-MM-DD) |
-| `{{currentTime}}` | `14:30:00`   | Current time in UTC (HH:MM:SS)   |
+| `{{currentTime}}` | `14:30:00 UTC` | Current time in UTC (HH:MM:SS UTC) |
 
 All [built-in Handlebars helpers](https://handlebarsjs.com/guide/builtin-helpers.html) (`#each`, `#if`, `#with`, `#unless`) are also available, along with Archestra helpers like `includes`, `equals`, `contains`, and `json`.
 

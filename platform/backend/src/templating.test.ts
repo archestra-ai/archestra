@@ -3,6 +3,7 @@ import {
   applyResponseModifierTemplate,
   evaluateRoleMappingTemplate,
   extractGroupsWithTemplate,
+  promptNeedsRendering,
   renderSystemPrompt,
 } from "./templating";
 
@@ -473,10 +474,10 @@ describe("renderSystemPrompt", () => {
     expect(result).toMatch(/^Today is \d{4}-\d{2}-\d{2}$/);
   });
 
-  test("renders currentTime helper in HH:MM:SS format", () => {
+  test("renders currentTime helper in HH:MM:SS UTC format", () => {
     const template = "Time is {{currentTime}}";
     const result = renderSystemPrompt(template, baseContext);
-    expect(result).toMatch(/^Time is \d{2}:\d{2}:\d{2}$/);
+    expect(result).toMatch(/^Time is \d{2}:\d{2}:\d{2} UTC$/);
   });
 
   test("passes through plain text without templates unchanged", () => {
@@ -524,5 +525,41 @@ Current date: {{currentDate}}.`;
     expect(renderSystemPrompt(template, baseContext)).toBe(
       "You are an engineer",
     );
+  });
+});
+
+describe("promptNeedsRendering", () => {
+  test("returns false for plain text prompts", () => {
+    expect(promptNeedsRendering("You are a helpful assistant.")).toBe(false);
+  });
+
+  test("returns true when prompt contains handlebars syntax", () => {
+    expect(promptNeedsRendering("Hello {{user.name}}")).toBe(true);
+  });
+
+  test("returns false for null and undefined prompts", () => {
+    expect(promptNeedsRendering(null, undefined)).toBe(false);
+  });
+
+  test("returns false when all prompts are null or undefined", () => {
+    expect(promptNeedsRendering(null, undefined, null)).toBe(false);
+  });
+
+  test("returns true when any prompt contains handlebars syntax", () => {
+    expect(
+      promptNeedsRendering("plain text", "Hello {{user.name}}"),
+    ).toBe(true);
+  });
+
+  test("returns false for single curly braces", () => {
+    expect(promptNeedsRendering("Use { and } for JSON")).toBe(false);
+  });
+
+  test("returns true for helper syntax", () => {
+    expect(promptNeedsRendering("{{#if user.teams}}yes{{/if}}")).toBe(true);
+  });
+
+  test("returns false with no arguments", () => {
+    expect(promptNeedsRendering()).toBe(false);
   });
 });

@@ -148,9 +148,9 @@ Handlebars.registerHelper("currentDate", () => {
   return new Date().toISOString().split("T")[0];
 });
 
-// Returns the current time in HH:MM:SS format (UTC)
+// Returns the current time in HH:MM:SS UTC format
 Handlebars.registerHelper("currentTime", () => {
-  return new Date().toISOString().split("T")[1].split(".")[0];
+  return `${new Date().toISOString().split("T")[1].split(".")[0]} UTC`;
 });
 
 /**
@@ -162,6 +162,17 @@ export interface SystemPromptContext {
     email: string;
     teams: string[];
   };
+}
+
+/**
+ * Check if any of the given prompt strings contain Handlebars syntax (`{{`).
+ * Used to skip unnecessary DB queries (e.g. fetching user teams) when no
+ * templating is needed.
+ */
+export function promptNeedsRendering(
+  ...prompts: (string | null | undefined)[]
+): boolean {
+  return prompts.some((p) => p != null && p.includes("{{"));
 }
 
 /**

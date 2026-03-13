@@ -8,7 +8,6 @@ import {
   getResourceForAgentType,
   providerDisplayNames,
   type SupportedProvider,
-  SYSTEM_PROMPT_TEMPLATE_EXPRESSIONS,
 } from "@shared";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -42,7 +41,7 @@ import {
   type AgentToolsEditorRef,
 } from "@/components/agent-tools-editor";
 import { ModelSelector } from "@/components/chat/model-selector";
-import { Editor } from "@/components/editor";
+import { SystemPromptEditor } from "@/components/system-prompt-editor";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   AssignmentCombobox,
@@ -112,7 +111,6 @@ import { useAvailableChatApiKeys } from "@/lib/chat-settings.query";
 import config from "@/lib/config";
 import { useFeature } from "@/lib/config.query";
 import { useConnectors } from "@/lib/connector.query";
-import { computeHandlebarsReplaceOffsets } from "@/lib/handlebars-completion";
 import { useKnowledgeBases } from "@/lib/knowledge-base.query";
 import { cn } from "@/lib/utils";
 
@@ -1183,39 +1181,11 @@ export function AgentDialog({
             {isInternalAgent && (
               <div className="rounded-lg border bg-card p-4 space-y-4">
                 <h3 className="text-sm font-semibold">Instruction</h3>
-                <p className="text-xs text-muted-foreground">
-                  Supports{" "}
-                  <Link
-                    href="https://handlebarsjs.com/"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="underline hover:text-foreground"
-                  >
-                    Handlebars
-                  </Link>{" "}
-                  templating. See{" "}
-                  <a
-                    href={getDocsUrl(
-                      DocsPage.PlatformAgents,
-                      "system-prompt-templating",
-                    )}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="underline hover:text-foreground"
-                  >
-                    docs
-                  </a>{" "}
-                  for details and all available variables and functions.
-                </p>
-
-                {/* Instruction (read-only for built-in) */}
-                <div className="space-y-2">
-                  <SystemPromptEditor
-                    value={systemPrompt}
-                    onChange={setSystemPrompt}
-                    readOnly={isBuiltIn}
-                  />
-                </div>
+                <SystemPromptEditor
+                  value={systemPrompt}
+                  onChange={setSystemPrompt}
+                  readOnly={isBuiltIn}
+                />
               </div>
             )}
 
@@ -1909,80 +1879,3 @@ export function AgentDialog({
   );
 }
 
-// ===
-// Internal helpers
-// ===
-
-let completionsRegistered = false;
-
-type Monaco = Parameters<
-  NonNullable<import("@monaco-editor/react").EditorProps["beforeMount"]>
->[0];
-
-function registerSystemPromptCompletions(monaco: Monaco) {
-  if (completionsRegistered) return;
-  completionsRegistered = true;
-
-  // biome-ignore lint/suspicious/noExplicitAny: Monaco namespace types aren't directly indexable
-  const provideCompletionItems = (model: any, position: any) => {
-    const lineContent = model.getLineContent(position.lineNumber) as string;
-    const col = position.column as number;
-    const { startOffset, endOffset } = computeHandlebarsReplaceOffsets(
-      lineContent.substring(0, col - 1),
-      lineContent.substring(col - 1),
-    );
-    const range = {
-      startLineNumber: position.lineNumber,
-      endLineNumber: position.lineNumber,
-      startColumn: col - startOffset,
-      endColumn: col + endOffset,
-    };
-    return {
-      suggestions: SYSTEM_PROMPT_TEMPLATE_EXPRESSIONS.map((v) => ({
-        label: v.expression,
-        kind: monaco.languages.CompletionItemKind.Variable,
-        insertText: v.expression,
-        detail: v.description,
-        range,
-      })),
-    };
-  };
-  monaco.languages.registerCompletionItemProvider("handlebars", {
-    triggerCharacters: ["{"],
-    provideCompletionItems,
-  });
-}
-
-function SystemPromptEditor({
-  value,
-  onChange,
-  readOnly,
-}: {
-  value: string;
-  onChange: (value: string) => void;
-  readOnly?: boolean;
-}) {
-  return (
-    <div className="border rounded-md overflow-hidden">
-      <Editor
-        height="200px"
-        defaultLanguage="handlebars"
-        value={value}
-        onChange={(v) => onChange(v || "")}
-        beforeMount={(monaco) => {
-          registerSystemPromptCompletions(monaco);
-        }}
-        options={{
-          minimap: { enabled: false },
-          fontSize: 13,
-          lineNumbers: "on",
-          scrollBeyondLastLine: false,
-          wordWrap: "on",
-          automaticLayout: true,
-          readOnly,
-          placeholder: "Enter instruction for the LLM",
-        }}
-      />
-    </div>
-  );
-}

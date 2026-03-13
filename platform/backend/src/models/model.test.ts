@@ -262,9 +262,11 @@ describe("ModelModel", () => {
 
       expect(updated.id).toBe(initial.id);
       expect(updated.description).toBe("Updated description");
-      expect(updated.contextLength).toBe(256000);
-      expect(updated.inputModalities).toEqual(["text", "image"]);
-      expect(updated.supportsToolCalling).toBe(true);
+      // contextLength, inputModalities, supportsToolCalling are NOT updated on conflict
+      // to preserve user-edited values
+      expect(updated.contextLength).toBe(128000);
+      expect(updated.inputModalities).toEqual(["text"]);
+      expect(updated.supportsToolCalling).toBe(false);
     });
   });
 
@@ -388,8 +390,10 @@ describe("ModelModel", () => {
         "update-model-50",
       );
       expect(updated?.description).toBe("Updated Description 50");
-      expect(updated?.contextLength).toBe(200000);
-      expect(updated?.supportsToolCalling).toBe(true);
+      // contextLength and supportsToolCalling are NOT updated on conflict
+      // to preserve user-edited values
+      expect(updated?.contextLength).toBe(100000);
+      expect(updated?.supportsToolCalling).toBe(false);
     });
   });
 

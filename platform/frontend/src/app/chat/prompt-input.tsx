@@ -11,7 +11,8 @@ import {
 import type { ChatStatus } from "ai";
 import { MoreVerticalIcon, PaperclipIcon, RotateCcwIcon } from "lucide-react";
 import type { FormEvent } from "react";
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
+import { toast } from "sonner";
 import { ModelSelectorLogo } from "@/components/ai-elements/model-selector";
 import {
   PromptInput,
@@ -249,12 +250,22 @@ const PromptInputContent = ({
     [onSubmit, storageKey],
   );
 
+  const handleFileError = useCallback(
+    (err: { code: "max_files" | "max_file_size" | "accept"; message: string }) => {
+      if (err.code === "accept") {
+        toast.error("File format is not supported by the model");
+      }
+    },
+    [],
+  );
+
   return (
     <PromptInput
       globalDrop
       multiple
       onSubmit={handleWrappedSubmit}
-      accept={acceptedFileTypes}
+      accept={showFileUploadButton ? acceptedFileTypes : "application/x-empty"}
+      onError={handleFileError}
     >
       {/* File attachments display - shown inline above textarea */}
       <PromptInputAttachments className="px-3 pt-2 pb-0">

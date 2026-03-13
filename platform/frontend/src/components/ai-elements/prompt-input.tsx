@@ -675,7 +675,16 @@ export const PromptInput = ({
         e.preventDefault();
       }
       if (e.dataTransfer?.files && e.dataTransfer.files.length > 0) {
-        add(e.dataTransfer.files);
+        const incoming = Array.from(e.dataTransfer.files);
+        const accepted = incoming.filter((f) => matchesAccept(f));
+        if (accepted.length === 0) {
+          onError?.({
+            code: "accept",
+            message: "No files match the accepted types.",
+          });
+          return;
+        }
+        add(accepted);
       }
     };
     form.addEventListener("dragover", onDragOver);
@@ -684,7 +693,7 @@ export const PromptInput = ({
       form.removeEventListener("dragover", onDragOver);
       form.removeEventListener("drop", onDrop);
     };
-  }, [add, globalDrop]);
+  }, [add, globalDrop, matchesAccept, onError]);
 
   useEffect(() => {
     if (!globalDrop) return;
@@ -699,7 +708,16 @@ export const PromptInput = ({
         e.preventDefault();
       }
       if (e.dataTransfer?.files && e.dataTransfer.files.length > 0) {
-        add(e.dataTransfer.files);
+        const incoming = Array.from(e.dataTransfer.files);
+        const accepted = incoming.filter((f) => matchesAccept(f));
+        if (accepted.length === 0) {
+          onError?.({
+            code: "accept",
+            message: "No files match the accepted types.",
+          });
+          return;
+        }
+        add(accepted);
       }
     };
     document.addEventListener("dragover", onDragOver);
@@ -708,7 +726,7 @@ export const PromptInput = ({
       document.removeEventListener("dragover", onDragOver);
       document.removeEventListener("drop", onDrop);
     };
-  }, [add, globalDrop]);
+  }, [add, globalDrop, matchesAccept, onError]);
 
   useEffect(
     () => () => {

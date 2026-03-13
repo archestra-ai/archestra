@@ -2,8 +2,8 @@
 
 import { E2eTestId, type IdentityProviderFormValues } from "@shared";
 import { Info, Plus, Trash2 } from "lucide-react";
-import { useCallback, useId, useRef, useState } from "react";
-import type { UseFormReturn } from "react-hook-form";
+import { useCallback, useRef } from "react";
+import { type UseFormReturn, useFieldArray } from "react-hook-form";
 import {
   Accordion,
   AccordionContent,
@@ -57,13 +57,11 @@ const HANDLEBARS_EXAMPLES = [
 ];
 
 export function RoleMappingForm({ form }: RoleMappingFormProps) {
-  const rules = form.watch("roleMapping.rules") || [];
+  const { fields, append, remove } = useFieldArray({
+    control: form.control,
+    name: "roleMapping.rules",
+  });
   const accordionContentRef = useRef<HTMLDivElement>(null);
-  const baseId = useId();
-  // Track rule IDs for stable keys. Generate initial IDs based on current rule count.
-  const [ruleIds, setRuleIds] = useState<string[]>(() =>
-    rules.map((_, i) => `${baseId}-rule-${i}`),
-  );
 
   // Scroll the accordion content into view when expanded
   const handleAccordionChange = useCallback((value: string) => {
@@ -77,28 +75,6 @@ export function RoleMappingForm({ form }: RoleMappingFormProps) {
       }, 100);
     }
   }, []);
-
-  const addRule = useCallback(() => {
-    const currentRules = form.getValues("roleMapping.rules") || [];
-    const newId = `${baseId}-rule-${Date.now()}`;
-    setRuleIds((prev) => [...prev, newId]);
-    form.setValue("roleMapping.rules", [
-      ...currentRules,
-      { expression: "", role: "member" },
-    ]);
-  }, [form, baseId]);
-
-  const removeRule = useCallback(
-    (index: number) => {
-      const currentRules = form.getValues("roleMapping.rules") || [];
-      setRuleIds((prev) => prev.filter((_, i) => i !== index));
-      form.setValue(
-        "roleMapping.rules",
-        currentRules.filter((_, i) => i !== index),
-      );
-    },
-    [form],
-  );
 
   return (
     <div className="space-y-6">
@@ -141,7 +117,7 @@ export function RoleMappingForm({ form }: RoleMappingFormProps) {
                   type="button"
                   variant="outline"
                   size="sm"
-                  onClick={addRule}
+                  onClick={() => append({ expression: "", role: "member" })}
                   data-testid={E2eTestId.IdpRoleMappingAddRule}
                 >
                   <Plus className="mr-1 h-4 w-4" />
@@ -149,7 +125,7 @@ export function RoleMappingForm({ form }: RoleMappingFormProps) {
                 </Button>
               </div>
 
-              {rules.length > 1 && (
+              {fields.length > 1 && (
                 <p className="text-xs text-muted-foreground bg-muted/50 p-2 rounded-md">
                   <span className="font-medium">Note:</span> Rules are evaluated
                   in order from top to bottom. The first matching rule
@@ -158,16 +134,16 @@ export function RoleMappingForm({ form }: RoleMappingFormProps) {
                 </p>
               )}
 
-              {rules.length === 0 ? (
+              {fields.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
                   No mapping rules configured. All users will be assigned the
                   default role.
                 </p>
               ) : (
                 <div className="space-y-4">
-                  {rules.map((_, index) => (
+                  {fields.map((field, index) => (
                     <div
-                      key={ruleIds[index] || `fallback-${index}`}
+                      key={field.id}
                       className="flex gap-3 items-start p-3 border rounded-md"
                     >
                       <div className="flex-1 space-y-3">
@@ -226,7 +202,7 @@ export function RoleMappingForm({ form }: RoleMappingFormProps) {
                         variant="ghost"
                         size="icon"
                         className="text-destructive hover:text-destructive"
-                        onClick={() => removeRule(index)}
+                        onClick={() => remove(index)}
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>

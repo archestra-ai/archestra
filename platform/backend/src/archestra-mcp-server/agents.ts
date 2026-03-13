@@ -10,7 +10,7 @@ import {
 } from "@/auth/agent-type-permissions";
 import config from "@/config";
 import logger from "@/logging";
-import { AgentModel, TeamModel } from "@/models";
+import { AgentModel, KnowledgeBaseModel, TeamModel } from "@/models";
 import type { Agent } from "@/types";
 import {
   assignMcpServerTools,
@@ -268,7 +268,8 @@ export const tools: Tool[] = [
   {
     name: TOOL_LIST_AGENTS_FULL_NAME,
     title: "List Agents",
-    description: "List agents with optional filtering by name and scope.",
+    description:
+      "List agents with optional filtering by name and scope. Returns each agent's assigned tools and knowledge sources for discoverability.",
     inputSchema: {
       type: "object",
       properties: {
@@ -639,6 +640,14 @@ export async function handleTool(
         true,
       );
 
+      // Batch fetch knowledge base details for all agents
+      const allKbIds = [
+        ...new Set(results.data.flatMap((a) => a.knowledgeBaseIds)),
+      ];
+      const knowledgeBases =
+        allKbIds.length > 0 ? await KnowledgeBaseModel.findByIds(allKbIds) : [];
+      const kbMap = new Map(knowledgeBases.map((kb) => [kb.id, kb]));
+
       const agents = results.data.map((a) => ({
         id: a.id,
         name: a.name,
@@ -646,6 +655,29 @@ export async function handleTool(
         description: a.description,
         teams: a.teams.map((t) => ({ id: t.id, name: t.name })),
         labels: a.labels.map((l) => ({ key: l.key, value: l.value })),
+        tools: a.tools.map((t) => ({
+          name: t.name,
+          description: t.description,
+        })),
+        knowledgeSources: a.knowledgeBaseIds
+          .map((kbId) => {
+            const kb = kbMap.get(kbId);
+            if (!kb) return null;
+            return {
+              name: kb.name,
+              description: kb.description,
+              type: "knowledge_base" as const,
+            };
+          })
+          .filter(
+            (
+              kb,
+            ): kb is {
+              name: string;
+              description: string | null;
+              type: "knowledge_base";
+            } => kb !== null,
+          ),
       }));
 
       return {

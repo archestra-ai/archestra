@@ -43,6 +43,11 @@ import {
 } from "@/models";
 import { startActiveChatSpan } from "@/observability/tracing";
 import {
+  buildRenderedPrompts,
+  promptNeedsRendering,
+  type SystemPromptContext,
+} from "@/templating";
+import {
   ApiError,
   constructResponseSchema,
   DeleteObjectResponseSchema,
@@ -189,16 +194,25 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Build system prompt from agent's systemPrompt and userPrompt fields
       let systemPrompt: string | undefined;
-      const systemPromptParts: string[] = [];
-      const userPromptParts: string[] = [];
 
-      // Collect system and user prompts from the agent
-      if (agent.systemPrompt) {
-        systemPromptParts.push(agent.systemPrompt);
+      // Build template context only when prompts use Handlebars syntax
+      let promptContext: SystemPromptContext | null = null;
+      if (promptNeedsRendering(agent.systemPrompt, agent.userPrompt)) {
+        const userTeams = await TeamModel.getUserTeams(user.id);
+        promptContext = {
+          user: {
+            name: user.name,
+            email: user.email,
+            teams: userTeams.map((t) => t.name),
+          },
+        };
       }
-      if (agent.userPrompt) {
-        userPromptParts.push(agent.userPrompt);
-      }
+
+      const { systemPromptParts, userPromptParts } = buildRenderedPrompts({
+        systemPrompt: agent.systemPrompt,
+        userPrompt: agent.userPrompt,
+        context: promptContext,
+      });
 
       // Add instruction about tool approval denials
       systemPromptParts.push(
@@ -339,6 +353,18 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
               "Content-Encoding": "none",
             },
             stream: createUIMessageStream({
+              onError: (error) => {
+                const mapped = mapProviderError(error, provider);
+                try {
+                  return JSON.stringify(mapped);
+                } catch {
+                  return JSON.stringify({
+                    code: mapped.code,
+                    message: mapped.message,
+                    isRetryable: mapped.isRetryable,
+                  });
+                }
+              },
               execute: async ({ writer }) => {
                 // Stream tokens to the client in real-time while also
                 // handling context-length errors from vLLM/LiteLLM.
@@ -482,8 +508,14 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   }),
                 );
 
-                // Wait for the stream to complete and get usage data
-                const usage = await result.usage;
+                // Wait for the stream to complete and get usage data.
+                // Catch NoOutputGeneratedError (thrown when provider errors
+                // prevent any output) to avoid emitting a second, generic
+                // error event that would race with the detailed provider error
+                // already flowing through toUIMessageStream's onError.
+                const usage = await Promise.resolve(result.usage).catch(
+                  () => null,
+                );
 
                 // Write token usage data to the stream as a custom data part
                 if (usage) {

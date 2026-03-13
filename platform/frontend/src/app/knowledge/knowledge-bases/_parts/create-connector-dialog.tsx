@@ -41,6 +41,7 @@ import { GitlabConfigFields } from "./gitlab-config-fields";
 import { JiraConfigFields } from "./jira-config-fields";
 import { SchedulePicker } from "./schedule-picker";
 import { ServiceNowConfigFields } from "./servicenow-config-fields";
+import { transformConfigArrayFields } from "./transform-config-array-fields";
 
 type ConnectorType = "jira" | "confluence" | "github" | "gitlab" | "servicenow";
 
@@ -121,7 +122,7 @@ export function CreateConnectorDialog({
       confluence: { type, isCloud: true },
       github: { type, githubUrl: "https://api.github.com" },
       gitlab: { type, gitlabUrl: "https://gitlab.com" },
-      servicenow: { type, initialSyncMonths: 6 },
+      servicenow: { type, syncDataForLastMonths: 6 },
     };
     form.setValue("config", defaultConfigs[type]);
     setStep("configure");
@@ -488,44 +489,6 @@ export function CreateConnectorDialog({
       </DialogContent>
     </Dialog>
   );
-}
-
-/** Convert comma-separated string fields to arrays before sending to the API. */
-function transformConfigArrayFields(
-  config: Record<string, unknown>,
-): Record<string, unknown> {
-  const result = { ...config };
-
-  // String array fields: split by comma, trim, filter empty
-  const stringArrayFields = [
-    "repos",
-    "spaceKeys",
-    "pageIds",
-    "labelsToSkip",
-    "commentEmailBlacklist",
-    "states",
-    "assignmentGroups",
-  ];
-  for (const key of stringArrayFields) {
-    if (typeof result[key] === "string") {
-      const value = result[key] as string;
-      result[key] = value
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean);
-    }
-  }
-
-  // Number array fields: split, trim, parse, filter NaN
-  if (typeof result.projectIds === "string") {
-    const value = result.projectIds as string;
-    result.projectIds = value
-      .split(",")
-      .map((s) => Number(s.trim()))
-      .filter((n) => !Number.isNaN(n));
-  }
-
-  return result;
 }
 
 function getUrlConfig(type: ConnectorType): {

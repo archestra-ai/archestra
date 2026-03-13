@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "1.1.12"
+    "version": "1.1.16"
   },
   "components": {
     "schemas": {
@@ -97625,6 +97625,21 @@
                                     ]
                                   },
                                   "instanceUrl": {},
+                                  "includeIncidents": {
+                                    "type": "boolean"
+                                  },
+                                  "includeChanges": {
+                                    "type": "boolean"
+                                  },
+                                  "includeChangeRequests": {
+                                    "type": "boolean"
+                                  },
+                                  "includeProblems": {
+                                    "type": "boolean"
+                                  },
+                                  "includeBusinessApps": {
+                                    "type": "boolean"
+                                  },
                                   "states": {
                                     "type": "array",
                                     "items": {
@@ -97637,13 +97652,10 @@
                                       "type": "string"
                                     }
                                   },
-                                  "query": {
-                                    "type": "string"
-                                  },
                                   "batchSize": {
                                     "type": "number"
                                   },
-                                  "initialSyncMonths": {
+                                  "syncDataForLastMonths": {
                                     "type": "number",
                                     "minimum": 1,
                                     "maximum": 12
@@ -98276,6 +98288,21 @@
                           "instanceUrl": {
                             "type": "string"
                           },
+                          "includeIncidents": {
+                            "type": "boolean"
+                          },
+                          "includeChanges": {
+                            "type": "boolean"
+                          },
+                          "includeChangeRequests": {
+                            "type": "boolean"
+                          },
+                          "includeProblems": {
+                            "type": "boolean"
+                          },
+                          "includeBusinessApps": {
+                            "type": "boolean"
+                          },
                           "states": {
                             "type": "array",
                             "items": {
@@ -98288,13 +98315,10 @@
                               "type": "string"
                             }
                           },
-                          "query": {
-                            "type": "string"
-                          },
                           "batchSize": {
                             "type": "number"
                           },
-                          "initialSyncMonths": {
+                          "syncDataForLastMonths": {
                             "type": "number",
                             "minimum": 1,
                             "maximum": 12
@@ -98581,6 +98605,21 @@
                               ]
                             },
                             "instanceUrl": {},
+                            "includeIncidents": {
+                              "type": "boolean"
+                            },
+                            "includeChanges": {
+                              "type": "boolean"
+                            },
+                            "includeChangeRequests": {
+                              "type": "boolean"
+                            },
+                            "includeProblems": {
+                              "type": "boolean"
+                            },
+                            "includeBusinessApps": {
+                              "type": "boolean"
+                            },
                             "states": {
                               "type": "array",
                               "items": {
@@ -98593,13 +98632,10 @@
                                 "type": "string"
                               }
                             },
-                            "query": {
-                              "type": "string"
-                            },
                             "batchSize": {
                               "type": "number"
                             },
-                            "initialSyncMonths": {
+                            "syncDataForLastMonths": {
                               "type": "number",
                               "minimum": 1,
                               "maximum": 12
@@ -99175,6 +99211,21 @@
                               ]
                             },
                             "instanceUrl": {},
+                            "includeIncidents": {
+                              "type": "boolean"
+                            },
+                            "includeChanges": {
+                              "type": "boolean"
+                            },
+                            "includeChangeRequests": {
+                              "type": "boolean"
+                            },
+                            "includeProblems": {
+                              "type": "boolean"
+                            },
+                            "includeBusinessApps": {
+                              "type": "boolean"
+                            },
                             "states": {
                               "type": "array",
                               "items": {
@@ -99187,13 +99238,10 @@
                                 "type": "string"
                               }
                             },
-                            "query": {
-                              "type": "string"
-                            },
                             "batchSize": {
                               "type": "number"
                             },
-                            "initialSyncMonths": {
+                            "syncDataForLastMonths": {
                               "type": "number",
                               "minimum": 1,
                               "maximum": 12
@@ -99724,6 +99772,21 @@
                           "instanceUrl": {
                             "type": "string"
                           },
+                          "includeIncidents": {
+                            "type": "boolean"
+                          },
+                          "includeChanges": {
+                            "type": "boolean"
+                          },
+                          "includeChangeRequests": {
+                            "type": "boolean"
+                          },
+                          "includeProblems": {
+                            "type": "boolean"
+                          },
+                          "includeBusinessApps": {
+                            "type": "boolean"
+                          },
                           "states": {
                             "type": "array",
                             "items": {
@@ -99736,13 +99799,10 @@
                               "type": "string"
                             }
                           },
-                          "query": {
-                            "type": "string"
-                          },
                           "batchSize": {
                             "type": "number"
                           },
-                          "initialSyncMonths": {
+                          "syncDataForLastMonths": {
                             "type": "number",
                             "minimum": 1,
                             "maximum": 12
@@ -100026,6 +100086,21 @@
                               ]
                             },
                             "instanceUrl": {},
+                            "includeIncidents": {
+                              "type": "boolean"
+                            },
+                            "includeChanges": {
+                              "type": "boolean"
+                            },
+                            "includeChangeRequests": {
+                              "type": "boolean"
+                            },
+                            "includeProblems": {
+                              "type": "boolean"
+                            },
+                            "includeBusinessApps": {
+                              "type": "boolean"
+                            },
                             "states": {
                               "type": "array",
                               "items": {
@@ -100038,13 +100113,10 @@
                                 "type": "string"
                               }
                             },
-                            "query": {
-                              "type": "string"
-                            },
                             "batchSize": {
                               "type": "number"
                             },
-                            "initialSyncMonths": {
+                            "syncDataForLastMonths": {
                               "type": "number",
                               "minimum": 1,
                               "maximum": 12

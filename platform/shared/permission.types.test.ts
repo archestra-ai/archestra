@@ -35,6 +35,7 @@ describe("permission.types", () => {
       "simpleView",
       "chatAgentPicker",
       "chatProviderSettings",
+      "chatExpandToolCalls",
     ];
     const allCategorizedResources = Object.values(resourceCategories).flat();
     for (const internal of internalResources) {

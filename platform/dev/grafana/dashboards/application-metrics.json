@@ -2577,7 +2577,7 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "sum(pg_stat_activity_count) / pg_settings_max_connections * 100",
+          "expr": "sum(pg_stat_activity_count) / sum(pg_settings_max_connections) * 100",
           "hide": false,
           "instant": true,
           "legendFormat": "",

@@ -70,6 +70,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   simpleView: ["enable"],
   chatAgentPicker: ["enable"],
   chatProviderSettings: ["enable"],
+  chatExpandToolCalls: ["enable"],
 
   // better-auth internal resource — not exposed to users, kept for ACL compatibility
   organization: ["update", "delete"],
@@ -126,6 +127,7 @@ export const editorPermissions: Record<Resource, Action[]> = {
   simpleView: [],
   chatAgentPicker: ["enable"],
   chatProviderSettings: ["enable"],
+  chatExpandToolCalls: ["enable"],
   organization: [],
 };
 
@@ -172,6 +174,7 @@ export const memberPermissions: Record<Resource, Action[]> = {
   simpleView: ["enable"],
   chatAgentPicker: [],
   chatProviderSettings: [],
+  chatExpandToolCalls: ["enable"],
 
   /*
    * Empty arrays below are required for Record<Resource, Action[]> type compatibility.
@@ -331,6 +334,7 @@ export const permissionDescriptions: Record<string, string> = {
   "simpleView:enable": "Sidebar is collapsed by default on page load",
   "chatAgentPicker:enable": "Show agent picker in chat",
   "chatProviderSettings:enable": "Show model and API key selectors in chat",
+  "chatExpandToolCalls:enable": "Allow expanding tool call details in chat",
 };
 
 /**

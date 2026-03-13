@@ -80,17 +80,21 @@ Authentication uses a [personal access token](https://docs.gitlab.com/user/profi
 
 ## ServiceNow
 
-Ingests incidents from ServiceNow instances via the Table API (`/api/now/table/incident`). Incident descriptions (HTML) are converted to plain text.
+Ingests records from ServiceNow instances via the Table API. HTML descriptions are converted to plain text. Multiple entity types can be enabled via toggles.
 
-| Field              | Description                                                                           |
-| ------------------ | ------------------------------------------------------------------------------------- |
-| Instance URL       | Your ServiceNow instance URL (e.g., `https://your-instance.service-now.com`)          |
-| States             | Comma-separated incident state values to filter by (e.g. `1, 2`) (optional)          |
-| Assignment Groups  | Comma-separated assignment group sys_ids to filter by (optional)                      |
-| Encoded Query      | Custom ServiceNow encoded query to filter incidents (optional)                        |
-| Batch Size         | Incidents per batch (default: 50)                                                     |
+| Field                        | Description                                                                           |
+| ---------------------------- | ------------------------------------------------------------------------------------- |
+| Instance URL                 | Your ServiceNow instance URL (e.g., `https://your-instance.service-now.com`)          |
+| Include Incidents            | Sync incidents from the `incident` table (default: on)                                |
+| Include Changes              | Sync change requests from the `change_request` table (default: off)                   |
+| Include Change Tasks         | Sync change tasks from the `change_task` table (default: off)                         |
+| Include Problems             | Sync problems from the `problem` table (default: off)                                 |
+| Include Business Applications| Sync business applications from the `cmdb_ci_business_app` CMDB table (default: off)  |
+| States                       | Comma-separated state values to filter by (e.g. `1, 2`). Applies to incidents, changes, change tasks, and problems (optional) |
+| Assignment Groups            | Comma-separated assignment group sys_ids to filter by. Does not apply to business applications (optional) |
+| Batch Size                   | Records per batch (default: 50)                                                       |
 
-Authentication supports both basic auth (username + password) and OAuth bearer tokens. When using basic auth, provide the username in the Email field and the password in the API Token field. For OAuth, leave the Email field empty and provide the bearer token. All incidents are synced by default; use the States or Encoded Query fields to narrow the scope. Incremental sync uses the `sys_updated_on` field to fetch only incidents updated since the last run.
+Authentication supports both basic auth (username + password) and OAuth bearer tokens. When using basic auth, provide the username in the Email field and the password in the API Token field. For OAuth, leave the Email field empty and provide the bearer token. Incidents are synced by default; enable additional entity types in the advanced configuration. States and assignment group filters apply to all entity types except business applications. Incremental sync uses the `sys_created_on` field to fetch only records created since the last run.
 
 ## Managing Connectors
 

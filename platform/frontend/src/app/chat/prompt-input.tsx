@@ -327,21 +327,6 @@ const PromptInputContent = ({
                       )}
                     {canSeeProviderSettings && (
                       <>
-                        <div>
-                          <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1">
-                            Model
-                          </p>
-                          <ModelSelector
-                            selectedModel={selectedModel}
-                            onModelChange={onModelChange}
-                            onOpenChange={onModelSelectorOpenChange}
-                            apiKeyId={
-                              conversationId
-                                ? currentConversationChatApiKeyId
-                                : initialApiKeyId
-                            }
-                          />
-                        </div>
                         {(conversationId || onApiKeyChange) && (
                           <div>
                             <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1">
@@ -363,6 +348,21 @@ const PromptInputContent = ({
                             />
                           </div>
                         )}
+                        <div>
+                          <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1">
+                            Model
+                          </p>
+                          <ModelSelector
+                            selectedModel={selectedModel}
+                            onModelChange={onModelChange}
+                            onOpenChange={onModelSelectorOpenChange}
+                            apiKeyId={
+                              conversationId
+                                ? currentConversationChatApiKeyId
+                                : initialApiKeyId
+                            }
+                          />
+                        </div>
                       </>
                     )}
                     {tokensUsed > 0 && maxContextLength && (
@@ -466,23 +466,6 @@ const PromptInputContent = ({
                 </Button>
               ) : (
                 <>
-                  <ModelSelector
-                    selectedModel={selectedModel}
-                    onModelChange={onModelChange}
-                    onOpenChange={(open) => {
-                      onModelSelectorOpenChange?.(open);
-                      if (!open) {
-                        setTimeout(() => {
-                          textareaRef.current?.focus();
-                        }, 100);
-                      }
-                    }}
-                    apiKeyId={
-                      conversationId
-                        ? currentConversationChatApiKeyId
-                        : initialApiKeyId
-                    }
-                  />
                   {(conversationId || onApiKeyChange) && (
                     <ChatApiKeySelector
                       conversationId={conversationId}
@@ -506,6 +489,23 @@ const PromptInputContent = ({
                       }}
                     />
                   )}
+                  <ModelSelector
+                    selectedModel={selectedModel}
+                    onModelChange={onModelChange}
+                    onOpenChange={(open) => {
+                      onModelSelectorOpenChange?.(open);
+                      if (!open) {
+                        setTimeout(() => {
+                          textareaRef.current?.focus();
+                        }, 100);
+                      }
+                    }}
+                    apiKeyId={
+                      conversationId
+                        ? currentConversationChatApiKeyId
+                        : initialApiKeyId
+                    }
+                  />
                 </>
               )}
               {tokensUsed > 0 && maxContextLength && (

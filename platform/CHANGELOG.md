@@ -1,5 +1,59 @@
 # Changelog
 
+## [1.1.16](https://github.com/archestra-ai/archestra/compare/platform-v1.1.15...platform-v1.1.16) (2026-03-13)
+
+
+### Features
+
+* add chatExpandToolCalls RBAC permission ([#3344](https://github.com/archestra-ai/archestra/issues/3344)) ([2f3d701](https://github.com/archestra-ai/archestra/commit/2f3d70155185b961dafe3e543b48a38ec81f5105))
+* add Handlebars templating for agent system prompts ([#3348](https://github.com/archestra-ai/archestra/issues/3348)) ([72896e5](https://github.com/archestra-ai/archestra/commit/72896e5e98e6b94bf6d7da0873c162e1e684dec6))
+
+
+### Bug Fixes
+
+* add missing indexes on token_start for team_token and user_token ([#3346](https://github.com/archestra-ai/archestra/issues/3346)) ([c0d4334](https://github.com/archestra-ai/archestra/commit/c0d4334a7df4ebac4702524bd96febf281baf2a9))
+* connection utilization Grafana panels return no data ([#3343](https://github.com/archestra-ai/archestra/issues/3343)) ([46ebc96](https://github.com/archestra-ai/archestra/commit/46ebc968f85a00de4520403dd156f1bbcca0b19d))
+* connection utilization sum() fix for OTEL and Azure variants ([#3347](https://github.com/archestra-ai/archestra/issues/3347)) ([027d008](https://github.com/archestra-ai/archestra/commit/027d0086b9553d31b3a0641ea09aaa8846eba9f6))
+
+## [1.1.15](https://github.com/archestra-ai/archestra/compare/platform-v1.1.14...platform-v1.1.15) (2026-03-12)
+
+
+### Bug Fixes
+
+* simplify chat model/key resolution, remove localStorage, reorder UI pills ([#3334](https://github.com/archestra-ai/archestra/issues/3334)) ([48bb6e3](https://github.com/archestra-ai/archestra/commit/48bb6e3a251876c37706fdebce1b9556bccb9725))
+* trim litellm context ([#3340](https://github.com/archestra-ai/archestra/issues/3340)) ([0cd227a](https://github.com/archestra-ai/archestra/commit/0cd227af105a6e194d00bad2ff9f221c648f41d2))
+
+## [1.1.14](https://github.com/archestra-ai/archestra/compare/platform-v1.1.13...platform-v1.1.14) (2026-03-12)
+
+
+### Features
+
+* Add  Business Application information, Changes, Change Tasks, Problems ([#3335](https://github.com/archestra-ai/archestra/issues/3335)) ([6de1ee9](https://github.com/archestra-ai/archestra/commit/6de1ee9df2da90394872ae7a15b143d8bcc586ce))
+* include tools and knowledge sources in `list_agents` MCP tool response ([#3323](https://github.com/archestra-ai/archestra/issues/3323)) ([a186ed5](https://github.com/archestra-ai/archestra/commit/a186ed5160be90453ac695b4ad4c904a2bfda6ff))
+* PostgreSQL dashboard variants for different metric providers ([#3331](https://github.com/archestra-ai/archestra/issues/3331)) ([539f273](https://github.com/archestra-ai/archestra/commit/539f2739e707c93a754bd6eedee555970e834d52))
+
+
+### Bug Fixes
+
+* compact tool call circles in chat ([#3332](https://github.com/archestra-ai/archestra/issues/3332)) ([dd88fe9](https://github.com/archestra-ai/archestra/commit/dd88fe9114e5ef9ee955b79e89e3fcf89a7f9e9b))
+* handle comma-separated field on form updates ([#3329](https://github.com/archestra-ai/archestra/issues/3329)) ([6e03756](https://github.com/archestra-ai/archestra/commit/6e0375656b731d21b9e4b5d3283d734ab110018a))
+* propagate errors from to the UI ([#3338](https://github.com/archestra-ai/archestra/issues/3338)) ([3b6759a](https://github.com/archestra-ai/archestra/commit/3b6759ad900cae3f5a27eb1463617514b56a0938))
+
+
+### Dependencies
+
+* bump @microsoft/kiota-authentication-azure from 1.0.0-preview.99 to 1.0.0-preview.100 in /platform ([#3328](https://github.com/archestra-ai/archestra/issues/3328)) ([db24a0e](https://github.com/archestra-ai/archestra/commit/db24a0e1b9d85f092997726df4c55bf8027a492b))
+* bump @microsoft/msgraph-sdk from 1.0.0-preview.77 to 1.0.0-preview.80 in /platform ([#3327](https://github.com/archestra-ai/archestra/issues/3327)) ([4ca8e39](https://github.com/archestra-ai/archestra/commit/4ca8e39a30191809d812a58caeedf47529a8861d))
+* bump @microsoft/msgraph-sdk-chats from 1.0.0-preview.77 to 1.0.0-preview.80 in /platform ([#3326](https://github.com/archestra-ai/archestra/issues/3326)) ([6d36c90](https://github.com/archestra-ai/archestra/commit/6d36c90b542112d538775404be9a839089e5b74f))
+* bump @microsoft/msgraph-sdk-teams from 1.0.0-preview.77 to 1.0.0-preview.80 in /platform ([#3325](https://github.com/archestra-ai/archestra/issues/3325)) ([aa46206](https://github.com/archestra-ai/archestra/commit/aa46206cde90764728a6b1c090e8646393d8b43b))
+
+## [1.1.13](https://github.com/archestra-ai/archestra/compare/platform-v1.1.12...platform-v1.1.13) (2026-03-12)
+
+
+### Bug Fixes
+
+* fix setting default model for agents and new chats ([#3316](https://github.com/archestra-ai/archestra/issues/3316)) ([57288a2](https://github.com/archestra-ai/archestra/commit/57288a2fe9caf96e6cee59b16ce101362ba61de6))
+
 ## [1.1.12](https://github.com/archestra-ai/archestra/compare/platform-v1.1.11...platform-v1.1.12) (2026-03-12)
 
 

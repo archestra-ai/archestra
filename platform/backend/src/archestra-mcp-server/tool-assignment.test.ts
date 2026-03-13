@@ -57,10 +57,15 @@ describe("tool assignment tool execution", () => {
   let testAgent: Agent;
   let mockContext: ArchestraContext;
 
-  beforeEach(async ({ makeAgent }) => {
-    testAgent = await makeAgent({ name: "Test Agent" });
+  beforeEach(async ({ makeAgent, makeUser, makeOrganization, makeMember }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "admin" });
+    testAgent = await makeAgent({ name: "Test Agent", organizationId: org.id });
     mockContext = {
       agent: { id: testAgent.id, name: testAgent.name },
+      userId: user.id,
+      organizationId: org.id,
     };
   });
 
@@ -162,10 +167,18 @@ describe("tool assignment with useDynamicTeamCredential", () => {
   let testAgent: Agent;
   let mockContext: ArchestraContext;
 
-  beforeEach(async ({ makeAgent }) => {
-    testAgent = await makeAgent({ name: "Context Agent" });
+  beforeEach(async ({ makeAgent, makeUser, makeOrganization, makeMember }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "admin" });
+    testAgent = await makeAgent({
+      name: "Context Agent",
+      organizationId: org.id,
+    });
     mockContext = {
       agent: { id: testAgent.id, name: testAgent.name },
+      userId: user.id,
+      organizationId: org.id,
     };
   });
 

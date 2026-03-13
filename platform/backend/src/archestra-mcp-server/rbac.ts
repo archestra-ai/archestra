@@ -121,6 +121,7 @@ export const TOOL_PERMISSIONS: Record<
   todo_write: null,
   artifact_write: null,
   swap_agent: { resource: "agent", action: "read" },
+  swap_to_default_agent: null,
 };
 
 /**

@@ -262,15 +262,9 @@ export async function handleTool(
         !context.userId ||
         !context.organizationId
       ) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: "Error: This tool requires conversation context. It can only be used within an active chat conversation.",
-            },
-          ],
-          isError: true,
-        };
+        return errorResult(
+          "This tool requires conversation context. It can only be used within an active chat conversation.",
+        );
       }
 
       // Look up org's default agent
@@ -278,28 +272,14 @@ export async function handleTool(
       const defaultAgentId = org?.defaultAgentId ?? null;
 
       if (!defaultAgentId) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: "Error: No default agent is configured for this organization.",
-            },
-          ],
-          isError: true,
-        };
+        return errorResult(
+          "No default agent is configured for this organization.",
+        );
       }
 
       const targetAgent = await AgentModel.findById(defaultAgentId);
       if (!targetAgent) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: "Error: Default agent not found.",
-            },
-          ],
-          isError: true,
-        };
+        return errorResult("Default agent not found.");
       }
 
       // Update the conversation's agent
@@ -311,43 +291,18 @@ export async function handleTool(
       );
 
       if (!updated) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: "Error: Failed to update conversation agent.",
-            },
-          ],
-          isError: true,
-        };
+        return errorResult("Failed to update conversation agent.");
       }
 
-      return {
-        content: [
-          {
-            type: "text",
-            text: JSON.stringify({
-              success: true,
-              agent_id: targetAgent.id,
-              agent_name: targetAgent.name,
-            }),
-          },
-        ],
-        isError: false,
-      };
+      return successResult(
+        JSON.stringify({
+          success: true,
+          agent_id: targetAgent.id,
+          agent_name: targetAgent.name,
+        }),
+      );
     } catch (error) {
-      logger.error({ err: error }, "Error swapping to default agent");
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Error swapping to default agent: ${
-              error instanceof Error ? error.message : "Unknown error"
-            }`,
-          },
-        ],
-        isError: true,
-      };
+      return catchError(error, "swapping to default agent");
     }
   }
 

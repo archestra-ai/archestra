@@ -23,7 +23,7 @@ const AuthFieldSchema = z.object({
   name: z.string(),
   label: z.string(),
   type: z.string(),
-  required: z.boolean(),
+  required: z.boolean().optional().default(false),
   description: z.string().optional(),
 });
 

@@ -13,7 +13,11 @@ import {
   McpServerModel,
   ToolModel,
 } from "@/models";
-import type { InternalMcpCatalog } from "@/types";
+import {
+  InsertInternalMcpCatalogSchema,
+  type InternalMcpCatalog,
+  UpdateInternalMcpCatalogSchema,
+} from "@/types";
 import {
   catchError,
   deduplicateLabels,
@@ -809,9 +813,11 @@ export async function handleTool(
         );
       }
 
+      const validatedUpdate =
+        UpdateInternalMcpCatalogSchema.partial().parse(updateData);
       const updated = await InternalMcpCatalogModel.update(
         existing.id,
-        updateData as Parameters<typeof InternalMcpCatalogModel.update>[1],
+        validatedUpdate,
       );
 
       if (!updated) {
@@ -935,9 +941,11 @@ export async function handleTool(
         );
       }
 
+      const validatedUpdate =
+        UpdateInternalMcpCatalogSchema.partial().parse(updateData);
       const updated = await InternalMcpCatalogModel.update(
         existing.id,
-        updateData as Parameters<typeof InternalMcpCatalogModel.update>[1],
+        validatedUpdate,
       );
 
       if (!updated) {
@@ -1075,10 +1083,12 @@ export async function handleTool(
       if (labels) createParams.labels = labels;
       if (teams.length > 0) createParams.teams = teams;
 
-      const created = await InternalMcpCatalogModel.create(
-        createParams as Parameters<typeof InternalMcpCatalogModel.create>[0],
-        { organizationId, authorId: context.userId },
-      );
+      const validatedParams =
+        InsertInternalMcpCatalogSchema.parse(createParams);
+      const created = await InternalMcpCatalogModel.create(validatedParams, {
+        organizationId,
+        authorId: context.userId,
+      });
 
       const lines = [
         "Successfully created MCP server.",

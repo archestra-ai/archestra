@@ -25620,7 +25620,7 @@ export type CreateInternalMcpCatalogItemData = {
             name: string;
             label: string;
             type: string;
-            required: boolean;
+            required?: boolean;
             description?: string;
         }> | null;
         serverType: 'local' | 'remote' | 'builtin';
@@ -26170,7 +26170,7 @@ export type UpdateInternalMcpCatalogItemData = {
             name: string;
             label: string;
             type: string;
-            required: boolean;
+            required?: boolean;
             description?: string;
         }> | null;
         serverType?: 'local' | 'remote' | 'builtin';

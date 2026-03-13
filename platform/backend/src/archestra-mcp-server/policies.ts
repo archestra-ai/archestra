@@ -5,11 +5,7 @@ import {
 } from "@shared";
 import logger from "@/logging";
 import { ToolInvocationPolicyModel, TrustedDataPolicyModel } from "@/models";
-import {
-  AutonomyPolicyOperator,
-  type ToolInvocation,
-  type TrustedData,
-} from "@/types";
+import { AutonomyPolicyOperator, ToolInvocation, TrustedData } from "@/types";
 import { catchError, errorResult, successResult } from "./helpers";
 import type { ArchestraContext } from "./types";
 
@@ -475,13 +471,13 @@ export async function handleTool(
 
     try {
       const a = args ?? {};
-      const policy = await ToolInvocationPolicyModel.create({
-        toolId: a.toolId as string,
-        conditions: (a.conditions ??
-          []) as ToolInvocation.InsertToolInvocationPolicy["conditions"],
-        action: a.action as ToolInvocation.InsertToolInvocationPolicy["action"],
-        reason: (a.reason as string) ?? null,
+      const validated = ToolInvocation.InsertToolInvocationPolicySchema.parse({
+        toolId: a.toolId,
+        conditions: a.conditions ?? [],
+        action: a.action,
+        reason: a.reason ?? null,
       });
+      const policy = await ToolInvocationPolicyModel.create(validated);
       return successResult(JSON.stringify(policy, null, 2));
     } catch (error) {
       return catchError(error, "creating tool invocation policy");
@@ -524,16 +520,16 @@ export async function handleTool(
         return errorResult("id parameter is required");
       }
 
-      const updateData: Partial<ToolInvocation.InsertToolInvocationPolicy> = {};
-      if (a.toolId !== undefined) updateData.toolId = a.toolId as string;
-      if (a.conditions !== undefined)
-        updateData.conditions =
-          a.conditions as ToolInvocation.InsertToolInvocationPolicy["conditions"];
-      if (a.action !== undefined)
-        updateData.action =
-          a.action as ToolInvocation.InsertToolInvocationPolicy["action"];
-      if (a.reason !== undefined)
-        updateData.reason = (a.reason as string) ?? null;
+      const rawUpdate: Record<string, unknown> = {};
+      if (a.toolId !== undefined) rawUpdate.toolId = a.toolId;
+      if (a.conditions !== undefined) rawUpdate.conditions = a.conditions;
+      if (a.action !== undefined) rawUpdate.action = a.action;
+      if (a.reason !== undefined) rawUpdate.reason = a.reason ?? null;
+
+      const updateData =
+        ToolInvocation.InsertToolInvocationPolicySchema.partial().parse(
+          rawUpdate,
+        );
 
       const policy = await ToolInvocationPolicyModel.update(id, updateData);
       if (!policy) {
@@ -591,13 +587,13 @@ export async function handleTool(
 
     try {
       const a = args ?? {};
-      const policy = await TrustedDataPolicyModel.create({
-        toolId: a.toolId as string,
-        conditions: (a.conditions ??
-          []) as TrustedData.InsertTrustedDataPolicy["conditions"],
-        action: a.action as TrustedData.InsertTrustedDataPolicy["action"],
-        description: (a.description as string) ?? null,
+      const validated = TrustedData.InsertTrustedDataPolicySchema.parse({
+        toolId: a.toolId,
+        conditions: a.conditions ?? [],
+        action: a.action,
+        description: a.description ?? null,
       });
+      const policy = await TrustedDataPolicyModel.create(validated);
       return successResult(JSON.stringify(policy, null, 2));
     } catch (error) {
       return catchError(error, "creating trusted data policy");
@@ -640,16 +636,15 @@ export async function handleTool(
         return errorResult("id parameter is required");
       }
 
-      const updateData: Partial<TrustedData.InsertTrustedDataPolicy> = {};
-      if (a.toolId !== undefined) updateData.toolId = a.toolId as string;
-      if (a.conditions !== undefined)
-        updateData.conditions =
-          a.conditions as TrustedData.InsertTrustedDataPolicy["conditions"];
-      if (a.action !== undefined)
-        updateData.action =
-          a.action as TrustedData.InsertTrustedDataPolicy["action"];
+      const rawUpdate: Record<string, unknown> = {};
+      if (a.toolId !== undefined) rawUpdate.toolId = a.toolId;
+      if (a.conditions !== undefined) rawUpdate.conditions = a.conditions;
+      if (a.action !== undefined) rawUpdate.action = a.action;
       if (a.description !== undefined)
-        updateData.description = (a.description as string) ?? null;
+        rawUpdate.description = a.description ?? null;
+
+      const updateData =
+        TrustedData.InsertTrustedDataPolicySchema.partial().parse(rawUpdate);
 
       const policy = await TrustedDataPolicyModel.update(id, updateData);
       if (!policy) {

@@ -603,6 +603,7 @@ However, **RBAC (role-based access control) is still enforced**. Every tool is m
 |------|-------------|
 | `todo_write` | Write todos to the current conversation. |
 | `swap_agent` | Switch the current conversation to a different agent. |
+| `swap_to_default_agent` | Return to the default agent. |
 | `artifact_write` | Write or update a markdown artifact for the current conversation. |
 
 #### todo_write

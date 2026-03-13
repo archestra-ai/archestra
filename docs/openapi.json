@@ -88890,6 +88890,7 @@
                               "type": "string"
                             },
                             "required": {
+                              "default": false,
                               "type": "boolean"
                             },
                             "description": {
@@ -89655,6 +89656,7 @@
                           "type": "string"
                         },
                         "required": {
+                          "default": false,
                           "type": "boolean"
                         },
                         "description": {
@@ -89664,8 +89666,7 @@
                       "required": [
                         "name",
                         "label",
-                        "type",
-                        "required"
+                        "type"
                       ]
                     }
                   },
@@ -90142,6 +90143,7 @@
                             "type": "string"
                           },
                           "required": {
+                            "default": false,
                             "type": "boolean"
                           },
                           "description": {
@@ -90921,6 +90923,7 @@
                             "type": "string"
                           },
                           "required": {
+                            "default": false,
                             "type": "boolean"
                           },
                           "description": {
@@ -91680,6 +91683,7 @@
                           "type": "string"
                         },
                         "required": {
+                          "default": false,
                           "type": "boolean"
                         },
                         "description": {
@@ -91689,8 +91693,7 @@
                       "required": [
                         "name",
                         "label",
-                        "type",
-                        "required"
+                        "type"
                       ]
                     }
                   },
@@ -92174,6 +92177,7 @@
                             "type": "string"
                           },
                           "required": {
+                            "default": false,
                             "type": "boolean"
                           },
                           "description": {

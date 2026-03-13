@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.21](https://github.com/archestra-ai/archestra/compare/platform-v1.1.20...platform-v1.1.21) (2026-03-13)
+
+
+### Features
+
+* configurable model capacities ([#3361](https://github.com/archestra-ai/archestra/issues/3361)) ([06ac639](https://github.com/archestra-ai/archestra/commit/06ac639a5a54f2122c5616e56b636dab669963fd))
+
 ## [1.1.20](https://github.com/archestra-ai/archestra/compare/platform-v1.1.19...platform-v1.1.20) (2026-03-13)
 
 

@@ -1082,6 +1082,7 @@ export function AgentDialog({
       <DialogContent
         className="max-w-5xl h-[90vh] flex flex-col overflow-y-auto"
         onInteractOutside={(e) => e.preventDefault()}
+        onOpenAutoFocus={(e) => e.preventDefault()}
       >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">

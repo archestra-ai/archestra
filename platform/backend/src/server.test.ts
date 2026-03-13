@@ -297,9 +297,7 @@ describe("createFastifyInstance", () => {
       expect(capturedError).toBeDefined();
       expect(capturedContext.extra).toBeDefined();
       expect(capturedContext.extra.method).toBe("GET");
-      expect(capturedContext.extra.url).toContain(
-        "/test-serialization-sentry",
-      );
+      expect(capturedContext.extra.url).toContain("/test-serialization-sentry");
       expect(capturedContext.extra.validationErrors).toBeInstanceOf(Array);
       expect(capturedContext.extra.validationErrors.length).toBeGreaterThan(0);
       expect(capturedContext.tags).toEqual({

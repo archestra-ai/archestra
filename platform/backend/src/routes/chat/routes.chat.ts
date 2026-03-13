@@ -42,6 +42,7 @@ import {
   TeamModel,
 } from "@/models";
 import { startActiveChatSpan } from "@/observability/tracing";
+import { renderSystemPrompt, type SystemPromptContext } from "@/templating";
 import {
   ApiError,
   constructResponseSchema,
@@ -192,12 +193,26 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const systemPromptParts: string[] = [];
       const userPromptParts: string[] = [];
 
-      // Collect system and user prompts from the agent
+      // Build template context for system prompt rendering
+      const userTeams = await TeamModel.getUserTeams(user.id);
+      const promptContext: SystemPromptContext = {
+        user: {
+          name: user.name,
+          email: user.email,
+          teams: userTeams.map((t) => t.name),
+        },
+      };
+
+      // Collect system and user prompts from the agent (render templates)
       if (agent.systemPrompt) {
-        systemPromptParts.push(agent.systemPrompt);
+        systemPromptParts.push(
+          renderSystemPrompt(agent.systemPrompt, promptContext),
+        );
       }
       if (agent.userPrompt) {
-        userPromptParts.push(agent.userPrompt);
+        userPromptParts.push(
+          renderSystemPrompt(agent.userPrompt, promptContext),
+        );
       }
 
       // Add instruction about tool approval denials

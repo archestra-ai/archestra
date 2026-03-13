@@ -1,5 +1,6 @@
 import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import Handlebars from "handlebars";
+import logger from "@/logging";
 import type { CommonToolResult } from "@/types";
 
 /**
@@ -137,6 +138,56 @@ Handlebars.registerHelper("pluck", (array, property) => {
     .map((item) => (typeof item === "object" && item ? item[property] : null))
     .filter((v) => v !== null && v !== undefined);
 });
+
+/**
+ * System prompt template helpers
+ */
+
+// Returns the current date in YYYY-MM-DD format (UTC)
+Handlebars.registerHelper("currentDate", () => {
+  return new Date().toISOString().split("T")[0];
+});
+
+// Returns the current time in HH:MM:SS format (UTC)
+Handlebars.registerHelper("currentTime", () => {
+  return new Date().toISOString().split("T")[1].split(".")[0];
+});
+
+/**
+ * Context for rendering system prompt templates
+ */
+export interface SystemPromptContext {
+  user: {
+    name: string;
+    email: string;
+    teams: string[];
+  };
+}
+
+/**
+ * Render a system prompt template with user context variables.
+ * If the template fails to compile or render, returns the original string unchanged
+ * so the agent still works without variable substitution.
+ *
+ * @param templateString - Handlebars template string (or plain text)
+ * @param context - User context with name, email, and teams
+ * @returns Rendered string, or original templateString on error
+ */
+export function renderSystemPrompt(
+  templateString: string,
+  context: SystemPromptContext,
+): string {
+  try {
+    const template = Handlebars.compile(templateString);
+    return template(context);
+  } catch (error) {
+    logger.warn(
+      { err: error },
+      "Failed to render system prompt template, using raw template string",
+    );
+    return templateString;
+  }
+}
 
 /**
  * Evaluate a Handlebars template for SSO role mapping.

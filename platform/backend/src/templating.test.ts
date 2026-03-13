@@ -3,6 +3,7 @@ import {
   applyResponseModifierTemplate,
   evaluateRoleMappingTemplate,
   extractGroupsWithTemplate,
+  renderSystemPrompt,
 } from "./templating";
 
 describe("applyResponseModifierTemplate", () => {
@@ -432,5 +433,96 @@ describe("evaluateRoleMappingTemplate with JSON string claims", () => {
 
     // Should return false when JSON parsing fails
     expect(evaluateRoleMappingTemplate(template, context)).toBe(false);
+  });
+});
+
+describe("renderSystemPrompt", () => {
+  const baseContext = {
+    user: {
+      name: "Alice Smith",
+      email: "alice@example.com",
+      teams: ["Engineering", "Platform"],
+    },
+  };
+
+  test("renders user.name variable", () => {
+    const template = "Hello {{user.name}}, welcome!";
+    expect(renderSystemPrompt(template, baseContext)).toBe(
+      "Hello Alice Smith, welcome!",
+    );
+  });
+
+  test("renders user.email variable", () => {
+    const template = "Your email is {{user.email}}";
+    expect(renderSystemPrompt(template, baseContext)).toBe(
+      "Your email is alice@example.com",
+    );
+  });
+
+  test("renders user.teams with each loop", () => {
+    const template =
+      "Teams: {{#each user.teams}}{{this}}{{#unless @last}}, {{/unless}}{{/each}}";
+    expect(renderSystemPrompt(template, baseContext)).toBe(
+      "Teams: Engineering, Platform",
+    );
+  });
+
+  test("renders currentDate helper in YYYY-MM-DD format", () => {
+    const template = "Today is {{currentDate}}";
+    const result = renderSystemPrompt(template, baseContext);
+    expect(result).toMatch(/^Today is \d{4}-\d{2}-\d{2}$/);
+  });
+
+  test("renders currentTime helper in HH:MM:SS format", () => {
+    const template = "Time is {{currentTime}}";
+    const result = renderSystemPrompt(template, baseContext);
+    expect(result).toMatch(/^Time is \d{2}:\d{2}:\d{2}$/);
+  });
+
+  test("passes through plain text without templates unchanged", () => {
+    const template = "You are a helpful assistant. Be concise.";
+    expect(renderSystemPrompt(template, baseContext)).toBe(
+      "You are a helpful assistant. Be concise.",
+    );
+  });
+
+  test("returns original template string on invalid Handlebars syntax", () => {
+    const template = "Hello {{#invalid}}";
+    expect(renderSystemPrompt(template, baseContext)).toBe(
+      "Hello {{#invalid}}",
+    );
+  });
+
+  test("renders empty string for missing variables", () => {
+    const template = "Hello {{user.nonexistent}}!";
+    expect(renderSystemPrompt(template, baseContext)).toBe("Hello !");
+  });
+
+  test("renders complex template with multiple variables and helpers", () => {
+    const template = `You are an assistant for {{user.name}} ({{user.email}}).
+You are a member of: {{#each user.teams}}{{this}}{{#unless @last}}, {{/unless}}{{/each}}.
+Current date: {{currentDate}}.`;
+    const result = renderSystemPrompt(template, baseContext);
+    expect(result).toContain("You are an assistant for Alice Smith");
+    expect(result).toContain("(alice@example.com)");
+    expect(result).toContain("You are a member of: Engineering, Platform");
+    expect(result).toMatch(/Current date: \d{4}-\d{2}-\d{2}/);
+  });
+
+  test("handles empty teams array", () => {
+    const context = {
+      user: { name: "Bob", email: "bob@test.com", teams: [] },
+    };
+    const template =
+      "{{#if user.teams}}Teams: {{#each user.teams}}{{this}}{{/each}}{{else}}No teams{{/if}}";
+    expect(renderSystemPrompt(template, context)).toBe("No teams");
+  });
+
+  test("handles conditional blocks with user data", () => {
+    const template =
+      '{{#includes user.teams "Engineering"}}You are an engineer{{else}}You are not an engineer{{/includes}}';
+    expect(renderSystemPrompt(template, baseContext)).toBe(
+      "You are an engineer",
+    );
   });
 });

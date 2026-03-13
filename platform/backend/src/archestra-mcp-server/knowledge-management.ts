@@ -680,7 +680,8 @@ export async function handleTool(
       if (args?.config !== undefined) rawUpdates.config = args.config;
       if (Object.keys(rawUpdates).length === 0)
         return errorResult("At least one field to update is required");
-      const updates = UpdateKnowledgeBaseConnectorSchema.partial().parse(rawUpdates);
+      const updates =
+        UpdateKnowledgeBaseConnectorSchema.partial().parse(rawUpdates);
       const existingConnector = await KnowledgeBaseConnectorModel.findById(id);
       if (
         !existingConnector ||

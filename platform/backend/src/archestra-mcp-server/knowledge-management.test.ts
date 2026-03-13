@@ -4,6 +4,8 @@ import {
   ARCHESTRA_MCP_SERVER_NAME,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
 } from "@shared";
+import { vi } from "vitest";
+import { queryService } from "@/knowledge-base";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { Agent, KnowledgeBase, KnowledgeBaseConnector } from "@/types";
 import { type ArchestraContext, executeArchestraTool } from ".";
@@ -16,6 +18,10 @@ const t = (name: string) =>
 
 describe("knowledge-management tools", () => {
   const expectedTools = [
+    {
+      short: "query_knowledge_sources",
+      title: "Query Knowledge Sources",
+    },
     { short: "create_knowledge_base", title: "Create Knowledge Base" },
     { short: "get_knowledge_bases", title: "Get Knowledge Bases" },
     { short: "get_knowledge_base", title: "Get Knowledge Base" },
@@ -83,6 +89,207 @@ describe("knowledge-management tool execution", () => {
       agent: { id: testAgent.id, name: testAgent.name },
       organizationId: org.id,
     };
+  });
+
+  // --- Query Knowledge Sources ---
+
+  describe("query knowledge sources", () => {
+    test("returns error when query is missing", async () => {
+      const result = await executeArchestraTool(
+        t("query_knowledge_sources"),
+        {},
+        mockContext,
+      );
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain(
+        "query parameter is required",
+      );
+    });
+
+    test("returns error when no knowledge base assigned", async () => {
+      const result = await executeArchestraTool(
+        t("query_knowledge_sources"),
+        { query: "test query" },
+        mockContext,
+      );
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain(
+        "No knowledge base or connector assigned",
+      );
+    });
+
+    test("calls queryService with correct params when KB is assigned", async ({
+      makeAgent,
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+
+      const agentWithKb = await makeAgent({
+        name: "Agent With KB",
+        organizationId: org.id,
+        knowledgeBaseIds: [kb.id],
+      });
+
+      const mockResults = [
+        {
+          chunkId: "chunk-1",
+          content: "This is a relevant document",
+          score: 0.95,
+          metadata: { source: "test.md" },
+        },
+      ];
+
+      const querySpy = vi
+        .spyOn(queryService, "query")
+        .mockResolvedValueOnce(mockResults as any);
+
+      const contextWithOrg: ArchestraContext = {
+        agent: { id: agentWithKb.id, name: agentWithKb.name },
+        organizationId: org.id,
+      };
+
+      const result = await executeArchestraTool(
+        t("query_knowledge_sources"),
+        { query: "relevant document" },
+        contextWithOrg,
+      );
+
+      expect(result.isError).toBeFalsy();
+      const parsed = JSON.parse((result.content[0] as any).text);
+      expect(parsed.totalChunks).toBe(1);
+      expect(parsed.results).toEqual(mockResults);
+
+      expect(querySpy).toHaveBeenCalledOnce();
+      const callArgs = querySpy.mock.calls[0][0];
+      expect(callArgs.connectorIds).toContain(connector.id);
+      expect(callArgs.organizationId).toBe(org.id);
+      expect(callArgs.queryText).toBe("relevant document");
+      expect(callArgs.limit).toBe(10);
+
+      querySpy.mockRestore();
+    });
+
+    test("returns error when no connectors found for KB", async ({
+      makeAgent,
+      makeOrganization,
+      makeKnowledgeBase,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+
+      const agentWithEmptyKb = await makeAgent({
+        name: "Agent With Empty KB",
+        organizationId: org.id,
+        knowledgeBaseIds: [kb.id],
+      });
+
+      const contextWithOrg: ArchestraContext = {
+        agent: { id: agentWithEmptyKb.id, name: agentWithEmptyKb.name },
+        organizationId: org.id,
+      };
+
+      const result = await executeArchestraTool(
+        t("query_knowledge_sources"),
+        { query: "test query" },
+        contextWithOrg,
+      );
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain(
+        "No connectors found for the assigned knowledge bases",
+      );
+    });
+
+    test("calls queryService with correct params for direct connector assignment", async ({
+      makeAgent,
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+
+      const agentWithConnector = await makeAgent({
+        name: "Agent With Direct Connector",
+        organizationId: org.id,
+        connectorIds: [connector.id],
+      });
+
+      const mockResults = [
+        {
+          chunkId: "chunk-1",
+          content: "Direct connector result",
+          score: 0.9,
+          metadata: { source: "jira" },
+        },
+      ];
+
+      const querySpy = vi
+        .spyOn(queryService, "query")
+        .mockResolvedValueOnce(mockResults as any);
+
+      const contextWithOrg: ArchestraContext = {
+        agent: {
+          id: agentWithConnector.id,
+          name: agentWithConnector.name,
+        },
+        organizationId: org.id,
+      };
+
+      const result = await executeArchestraTool(
+        t("query_knowledge_sources"),
+        { query: "jira tickets" },
+        contextWithOrg,
+      );
+
+      expect(result.isError).toBeFalsy();
+      const parsed = JSON.parse((result.content[0] as any).text);
+      expect(parsed.totalChunks).toBe(1);
+      expect(parsed.results).toEqual(mockResults);
+
+      expect(querySpy).toHaveBeenCalledOnce();
+      const callArgs = querySpy.mock.calls[0][0];
+      expect(callArgs.connectorIds).toContain(connector.id);
+      expect(callArgs.organizationId).toBe(org.id);
+      expect(callArgs.queryText).toBe("jira tickets");
+
+      querySpy.mockRestore();
+    });
+
+    test("returns error when organizationId is missing", async ({
+      makeAgent,
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      await makeKnowledgeBaseConnector(kb.id, org.id);
+
+      const agentWithKb = await makeAgent({
+        name: "Agent No OrgCtx",
+        organizationId: org.id,
+        knowledgeBaseIds: [kb.id],
+      });
+
+      const contextNoOrg: ArchestraContext = {
+        agent: { id: agentWithKb.id, name: agentWithKb.name },
+      };
+
+      const result = await executeArchestraTool(
+        t("query_knowledge_sources"),
+        { query: "test query" },
+        contextNoOrg,
+      );
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain(
+        "Organization context not available",
+      );
+    });
   });
 
   // --- Knowledge Base CRUD ---

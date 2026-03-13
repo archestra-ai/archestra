@@ -18,11 +18,6 @@ import {
   tools as identityTools,
 } from "./identity";
 import {
-  handleTool as handleKnowledge,
-  toolShortNames as knowledgeToolNames,
-  tools as knowledgeTools,
-} from "./knowledge";
-import {
   handleTool as handleKnowledgeManagement,
   toolShortNames as knowledgeManagementToolNames,
   tools as knowledgeManagementTools,
@@ -59,7 +54,6 @@ export const ALL_TOOL_SHORT_NAMES = [
   ...limitToolNames,
   ...policyToolNames,
   ...toolAssignmentToolNames,
-  ...knowledgeToolNames,
   ...knowledgeManagementToolNames,
   ...chatToolNames,
 ] as const;
@@ -73,7 +67,6 @@ const handlers = [
   handleLimits,
   handlePolicies,
   handleToolAssignment,
-  handleKnowledge,
   handleKnowledgeManagement,
   handleChat,
 ];
@@ -86,7 +79,6 @@ export function getArchestraMcpTools() {
     ...limitTools,
     ...policyTools,
     ...toolAssignmentTools,
-    ...knowledgeTools,
     ...knowledgeManagementTools,
     ...chatTools,
   ];

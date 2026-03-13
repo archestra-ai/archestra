@@ -10,7 +10,7 @@ import {
   type ArchestraToolShortName,
   getArchestraMcpTools,
 } from "@/archestra-mcp-server";
-import { toolShortNames as knowledgeToolShortNames } from "@/archestra-mcp-server/knowledge";
+import { toolShortNames as knowledgeManagementToolShortNames } from "@/archestra-mcp-server/knowledge-management";
 import logger from "@/logging";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -29,7 +29,6 @@ enum ToolGroup {
   Limits = "Limits",
   Policies = "Policies",
   ToolAssignment = "Tool Assignment",
-  KnowledgeBase = "Knowledge Base",
   KnowledgeManagement = "Knowledge Management",
   Chat = "Chat",
 }
@@ -43,9 +42,8 @@ const groupOrder: Record<ToolGroup, number> = {
   [ToolGroup.Limits]: 5,
   [ToolGroup.Policies]: 6,
   [ToolGroup.ToolAssignment]: 7,
-  [ToolGroup.KnowledgeBase]: 8,
-  [ToolGroup.KnowledgeManagement]: 9,
-  [ToolGroup.Chat]: 10,
+  [ToolGroup.KnowledgeManagement]: 8,
+  [ToolGroup.Chat]: 9,
 };
 
 /**
@@ -100,8 +98,7 @@ const toolGroups: Record<ArchestraToolShortName, ToolGroup> = {
   bulk_assign_tools_to_agents: ToolGroup.ToolAssignment,
   bulk_assign_tools_to_mcp_gateways: ToolGroup.ToolAssignment,
 
-  query_knowledge_sources: ToolGroup.KnowledgeBase,
-
+  query_knowledge_sources: ToolGroup.KnowledgeManagement,
   create_knowledge_base: ToolGroup.KnowledgeManagement,
   get_knowledge_bases: ToolGroup.KnowledgeManagement,
   get_knowledge_base: ToolGroup.KnowledgeManagement,
@@ -184,7 +181,7 @@ function generateMarkdownBody(): string {
   );
 
   // Knowledge tools are conditionally assigned (only when knowledge sources are attached)
-  const knowledgeToolSet = new Set<string>(knowledgeToolShortNames);
+  const knowledgeToolSet = new Set<string>(knowledgeManagementToolShortNames);
   const preInstalledShortNames = allPreInstalledShortNames.filter(
     (n) => !knowledgeToolSet.has(n),
   );

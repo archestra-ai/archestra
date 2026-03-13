@@ -2,15 +2,21 @@ import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import {
   ARCHESTRA_MCP_SERVER_NAME,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
+  TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
 } from "@shared";
+import { buildUserAcl, queryService } from "@/knowledge-base";
 import logger from "@/logging";
 import {
   AgentConnectorAssignmentModel,
   AgentKnowledgeBaseModel,
+  AgentModel,
   KnowledgeBaseConnectorModel,
   KnowledgeBaseModel,
+  TeamModel,
+  UserModel,
 } from "@/models";
 import type { InsertKnowledgeBaseConnector } from "@/types";
+import type { AclEntry } from "@/types/kb-document";
 import { catchError, errorResult, successResult } from "./helpers";
 import type { ArchestraContext } from "./types";
 
@@ -84,6 +90,7 @@ const ALL_FULL_NAMES = new Set([
 // === Exports ===
 
 export const toolShortNames = [
+  "query_knowledge_sources",
   TOOL_CREATE_KB_NAME,
   TOOL_GET_KBS_NAME,
   TOOL_GET_KB_NAME,
@@ -103,6 +110,26 @@ export const toolShortNames = [
 ] as const;
 
 export const tools: Tool[] = [
+  // --- Query Knowledge Sources ---
+  {
+    name: TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
+    title: "Query Knowledge Sources",
+    description:
+      "Query the organization's knowledge sources to retrieve relevant information. Use this tool when the user asks a question you cannot answer from your training data alone, or when they explicitly ask you to search internal documents and data sources. Formulate queries about the actual content you are looking for — ask about topics, concepts, or information rather than about source systems.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        query: {
+          type: "string",
+          description:
+            "A natural language query about the content you are looking for. Ask about topics, concepts, or information rather than about source systems.",
+        },
+      },
+      required: ["query"],
+    },
+    annotations: {},
+    _meta: {},
+  },
   // --- Knowledge Base CRUD ---
   {
     name: TOOL_CREATE_KB_FULL,
@@ -390,16 +417,114 @@ export async function handleTool(
   args: Record<string, unknown> | undefined,
   context: ArchestraContext,
 ) {
-  if (!ALL_FULL_NAMES.has(toolName)) return null;
+  if (
+    toolName !== TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME &&
+    !ALL_FULL_NAMES.has(toolName)
+  )
+    return null;
 
   const { agent: contextAgent, organizationId } = context;
-
-  if (!organizationId) return errorResult("Organization context not available");
 
   logger.info(
     { agentId: contextAgent.id, tool: toolName, args },
     "knowledge-management tool called",
   );
+
+  // --- Query Knowledge Sources ---
+
+  if (toolName === TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME) {
+    try {
+      const query = args?.query as string | undefined;
+      if (!query) {
+        return errorResult("query parameter is required");
+      }
+
+      const agent = await AgentModel.findById(contextAgent.id);
+
+      const hasKbs = agent?.knowledgeBaseIds?.length;
+      const connectorAssignments =
+        await AgentConnectorAssignmentModel.findByAgent(contextAgent.id);
+      const directConnectorIds = connectorAssignments.map((a) => a.connectorId);
+
+      if (!hasKbs && directConnectorIds.length === 0) {
+        return errorResult(
+          "No knowledge base or connector assigned to this agent. Assign a knowledge base or connector in agent settings to enable knowledge search.",
+        );
+      }
+
+      // Resolve KB assignments to connector IDs and merge with direct assignments
+      const kbConnectorIdArrays = hasKbs
+        ? await Promise.all(
+            agent.knowledgeBaseIds.map((kbId) =>
+              KnowledgeBaseConnectorModel.getConnectorIds(kbId),
+            ),
+          )
+        : [];
+      const connectorIds = [
+        ...new Set([...kbConnectorIdArrays.flat(), ...directConnectorIds]),
+      ];
+
+      if (connectorIds.length === 0) {
+        return errorResult(
+          "No connectors found for the assigned knowledge bases or agent. Add connectors to enable knowledge search.",
+        );
+      }
+
+      // Build user ACL from assigned knowledge bases
+      const validKbs = hasKbs
+        ? (
+            await Promise.all(
+              agent.knowledgeBaseIds.map((id) =>
+                KnowledgeBaseModel.findById(id),
+              ),
+            )
+          ).filter((kb): kb is NonNullable<typeof kb> => kb !== null)
+        : [];
+
+      let userAcl: AclEntry[] = ["org:*"];
+      if (context.userId) {
+        const [user, teamIds] = await Promise.all([
+          UserModel.getById(context.userId),
+          TeamModel.getUserTeamIds(context.userId),
+        ]);
+        if (user?.email) {
+          const visibility = validKbs.some((kb) => kb.visibility === "org-wide")
+            ? "org-wide"
+            : validKbs.some((kb) => kb.visibility === "team-scoped")
+              ? "team-scoped"
+              : "auto-sync-permissions";
+          userAcl = buildUserAcl({
+            userEmail: user.email,
+            teamIds,
+            visibility,
+          });
+        }
+      }
+
+      if (!organizationId) {
+        return errorResult("Organization context not available.");
+      }
+
+      const results = await queryService.query({
+        connectorIds,
+        organizationId,
+        queryText: query,
+        userAcl,
+        limit: 10,
+      });
+
+      return successResult(
+        JSON.stringify({
+          results,
+          totalChunks: results.length,
+        }),
+      );
+    } catch (error) {
+      return catchError(error, "querying knowledge base");
+    }
+  }
+
+  if (!organizationId) return errorResult("Organization context not available");
 
   // --- Knowledge Base CRUD ---
 

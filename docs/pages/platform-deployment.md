@@ -154,7 +154,6 @@ archestra:
     existingSecretKey: auth-secret
 ```
 
-
 ```bash
 # Generate a secure secret
 openssl rand -base64 32

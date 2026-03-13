@@ -1027,6 +1027,13 @@ tests:
                 name: external-auth-secret
                 key: external-auth-key
 
+  - it: should fail when auth secret key is set without auth secret name
+    set:
+      archestra.authSecret.existingSecretKey: external-auth-key
+    asserts:
+      - failedTemplate:
+          errorMessage: "archestra.authSecret.existingSecretKey requires archestra.authSecret.existingSecretName to also be set."
+
   - it: should use secretKeyRef for explicit ARCHESTRA_AUTH_SECRET (sensitive env var)
     documentIndex: 1
     set:

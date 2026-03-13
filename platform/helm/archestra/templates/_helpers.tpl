@@ -161,6 +161,9 @@ Auth secret name for the Archestra Platform
 Auth secret key for the Archestra Platform
 */}}
 {{- define "archestra-platform.authSecretKey" -}}
+{{- if and (not .Values.archestra.authSecret.existingSecretName) (ne .Values.archestra.authSecret.existingSecretKey "auth-secret") -}}
+{{- fail "archestra.authSecret.existingSecretKey requires archestra.authSecret.existingSecretName to also be set." -}}
+{{- end -}}
 {{- default "auth-secret" .Values.archestra.authSecret.existingSecretKey -}}
 {{- end }}
 

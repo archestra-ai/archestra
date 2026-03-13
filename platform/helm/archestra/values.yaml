@@ -97,9 +97,6 @@ archestra:
     existingSecretName: ""
     # Key within existingSecretName containing the auth secret value.
     existingSecretKey: auth-secret
-    # Optional explicit auth secret value to store in the Helm-managed Secret.
-    # Must be at least 32 characters when set.
-    value: ""
 
   # Environment variables with valueFrom (for fieldRef, resourceFieldRef, configMapKeyRef)
   # Use this for Kubernetes downward API or other valueFrom sources

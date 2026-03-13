@@ -36,7 +36,7 @@ export function usePublicIdentityProviders() {
  * Use this for authenticated admin contexts like the identity providers settings page.
  * Automatically disabled when enterprise license is not activated.
  */
-export function useIdentityProviders() {
+export function useIdentityProviders(params?: { enabled?: boolean }) {
   return useQuery({
     queryKey: identityProviderKeys.all,
     queryFn: async () => {
@@ -45,7 +45,7 @@ export function useIdentityProviders() {
     },
     retry: false,
     throwOnError: false,
-    enabled: config.enterpriseFeatures.core,
+    enabled: config.enterpriseFeatures.core && (params?.enabled ?? true),
   });
 }
 

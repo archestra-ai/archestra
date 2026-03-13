@@ -118,7 +118,7 @@ const { useIdentityProviders } = config.enterpriseFeatures.core
   ? // biome-ignore lint/style/noRestrictedImports: conditional EE query import for IdP selector
     await import("@/lib/identity-provider.query.ee")
   : {
-      useIdentityProviders: () => ({
+      useIdentityProviders: (_params?: { enabled?: boolean }) => ({
         data: [] as Array<{ id: string; providerId: string; issuer: string }>,
       }),
     };
@@ -580,10 +580,22 @@ export function AgentDialog({
     agentType !== "llm_proxy" ? agent?.id : undefined,
   );
   const incomingEmail = useFeature("incomingEmail");
-  const { data: identityProviders = [] } = useIdentityProviders();
-  const { data: knowledgeBasesData } = useKnowledgeBases();
+  const { data: canReadIdentityProviders } = useHasPermissions({
+    identityProvider: ["read"],
+  });
+  const { data: canReadKnowledgeBase } = useHasPermissions({
+    knowledgeBase: ["read"],
+  });
+  const { data: identityProviders = [] } = useIdentityProviders({
+    enabled: !!canReadIdentityProviders,
+  });
+  const { data: knowledgeBasesData } = useKnowledgeBases({
+    enabled: !!canReadKnowledgeBase,
+  });
   const knowledgeBases = knowledgeBasesData?.data ?? [];
-  const { data: connectorsData } = useConnectors();
+  const { data: connectorsData } = useConnectors({
+    enabled: !!canReadKnowledgeBase,
+  });
   const connectors = connectorsData?.data ?? [];
   const agentLlmApiKeyId = agent?.llmApiKeyId;
   const { data: availableApiKeys = [] } = useAvailableChatApiKeys({

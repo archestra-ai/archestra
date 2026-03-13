@@ -137,12 +137,17 @@ export function ChatMessages({
   const { data: canExpandToolCalls } = useHasPermissions({
     chatExpandToolCalls: ["enable"],
   });
+  const { data: canReadMcpRegistry } = useHasPermissions({
+    mcpRegistry: ["read"],
+  });
   const { data: organization } = useOrganization();
   const orchestrator = useMcpInstallOrchestrator();
 
   // Build tool name → icon map from agent tools + catalog data
   const { data: agentTools } = useProfileToolsWithIds(agentId);
-  const { data: catalogItems } = useInternalMcpCatalog({ enabled: !!agentId });
+  const { data: catalogItems } = useInternalMcpCatalog({
+    enabled: !!agentId && !!canReadMcpRegistry,
+  });
   const toolIconMap = useMemo(() => {
     const map = new Map<string, { icon?: string | null; catalogId?: string }>();
     if (!agentTools || !catalogItems) return map;

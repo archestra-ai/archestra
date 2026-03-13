@@ -850,7 +850,7 @@ function AgentSettingsView({
         <SystemPromptEditor
           value={instructions}
           onChange={setInstructions}
-          height="100px"
+          height="120px"
         />
 
         <div>

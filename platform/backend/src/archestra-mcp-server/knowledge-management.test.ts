@@ -575,6 +575,7 @@ describe("knowledge-management tool execution", () => {
         {
           id: created.id,
           config: {
+            type: "jira",
             jiraBaseUrl: "https://updated.atlassian.net",
             isCloud: true,
             projectKey: "UPDATED",

@@ -1,4 +1,5 @@
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import { ZodError } from "zod";
 import logger from "@/logging";
 import { AgentModel, AgentToolModel, ToolModel } from "@/models";
 
@@ -21,7 +22,9 @@ export function isAbortLikeError(error: unknown): boolean {
     return true;
   }
 
-  return error.message.toLowerCase().includes("abort");
+  // Match "aborted" as a whole word to avoid false positives
+  // (e.g., "aborting transaction due to constraint violation")
+  return /\baborted?\b/i.test(error.message);
 }
 
 export type McpServerResult = {
@@ -134,13 +137,11 @@ export function errorResult(message: string): CallToolResult {
 
 export function catchError(error: unknown, action: string): CallToolResult {
   logger.error({ err: error }, `Error ${action}`);
-  return {
-    content: [
-      {
-        type: "text" as const,
-        text: `Error ${action}: ${error instanceof Error ? error.message : "Unknown error"}`,
-      },
-    ],
-    isError: true,
-  };
+  // Zod validation errors are safe to surface — they describe user input issues.
+  // All other errors get a generic message to avoid leaking internal details.
+  if (error instanceof ZodError) {
+    const issues = error.issues.map((i) => i.message).join("; ");
+    return errorResult(`Validation error while ${action}: ${issues}`);
+  }
+  return errorResult(`An internal error occurred while ${action}`);
 }

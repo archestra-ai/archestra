@@ -18,6 +18,7 @@ import {
 import {
   InsertKnowledgeBaseConnectorSchema,
   InsertKnowledgeBaseSchema,
+  UpdateKnowledgeBaseConnectorSchema,
 } from "@/types";
 import type { AclEntry } from "@/types/kb-document";
 import { catchError, errorResult, successResult } from "./helpers";
@@ -671,14 +672,15 @@ export async function handleTool(
     try {
       const id = args?.id as string | undefined;
       if (!id) return errorResult("id is required");
-      const updates: Record<string, unknown> = {};
-      if (args?.name !== undefined) updates.name = args.name;
+      const rawUpdates: Record<string, unknown> = {};
+      if (args?.name !== undefined) rawUpdates.name = args.name;
       if (args?.description !== undefined)
-        updates.description = args.description;
-      if (args?.enabled !== undefined) updates.enabled = args.enabled;
-      if (args?.config !== undefined) updates.config = args.config;
-      if (Object.keys(updates).length === 0)
+        rawUpdates.description = args.description;
+      if (args?.enabled !== undefined) rawUpdates.enabled = args.enabled;
+      if (args?.config !== undefined) rawUpdates.config = args.config;
+      if (Object.keys(rawUpdates).length === 0)
         return errorResult("At least one field to update is required");
+      const updates = UpdateKnowledgeBaseConnectorSchema.partial().parse(rawUpdates);
       const existingConnector = await KnowledgeBaseConnectorModel.findById(id);
       if (
         !existingConnector ||

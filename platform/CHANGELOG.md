@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.18](https://github.com/archestra-ai/archestra/compare/platform-v1.1.17...platform-v1.1.18) (2026-03-13)
+
+
+### Features
+
+* add return to default agent tool ([#3356](https://github.com/archestra-ai/archestra/issues/3356)) ([fce8f90](https://github.com/archestra-ai/archestra/commit/fce8f900ef30a717bafb7fb45cb57cae1ba1607e))
+
 ## [1.1.17](https://github.com/archestra-ai/archestra/compare/platform-v1.1.16...platform-v1.1.17) (2026-03-13)
 
 

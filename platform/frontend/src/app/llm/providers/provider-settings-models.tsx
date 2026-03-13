@@ -5,25 +5,18 @@ import {
   ArrowLeftRight,
   Check,
   Loader2,
+  Pencil,
   RefreshCw,
-  RotateCcw,
   Search,
   Server,
 } from "lucide-react";
 import Image from "next/image";
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useMemo,
-  useState,
-} from "react";
+import { useCallback, useMemo, useState } from "react";
 import { PROVIDER_CONFIG } from "@/components/chat-api-key-form";
 import { LoadingWrapper } from "@/components/loading";
 import {
   BestModelBadge,
   FastestModelBadge,
-  PriceSourceBadge,
   UnknownCapabilitiesBadge,
 } from "@/components/model-badges";
 import { Badge } from "@/components/ui/badge";
@@ -38,23 +31,20 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import {
   type ModelWithApiKeys,
   useModelsWithApiKeys,
-  useUpdateModelPricing,
 } from "@/lib/chat-models.query";
 import { useSyncChatModels } from "@/lib/chat-settings.query";
+import { EditModelDialog } from "./edit-model-dialog";
 
 export function ProviderSettingsModels() {
   const { data: models = [], isPending, refetch } = useModelsWithApiKeys();
   const syncModelsMutation = useSyncChatModels();
-  const updatePricing = useUpdateModelPricing();
   const [search, setSearch] = useState("");
-  const [providerFilter, setProviderFilter] = useState<string>("all");
+  const [apiKeyFilter, setApiKeyFilter] = useState<string>("all");
+  const [editingModel, setEditingModel] = useState<ModelWithApiKeys | null>(
+    null,
+  );
 
   const filteredModels = useMemo(() => {
     let result = models;
@@ -62,20 +52,35 @@ export function ProviderSettingsModels() {
       const q = search.toLowerCase();
       result = result.filter((m) => m.modelId.toLowerCase().includes(q));
     }
-    if (providerFilter !== "all") {
-      result = result.filter((m) => m.provider === providerFilter);
+    if (apiKeyFilter !== "all") {
+      result = result.filter((m) =>
+        m.apiKeys.some((k) => k.id === apiKeyFilter),
+      );
     }
-    // Stable sort so rows don't jump when data refetches after pricing edits
+    // Stable sort so rows don't jump when data refetches after edits
     return [...result].sort(
       (a, b) =>
         a.provider.localeCompare(b.provider) ||
         a.modelId.localeCompare(b.modelId),
     );
-  }, [models, search, providerFilter]);
+  }, [models, search, apiKeyFilter]);
 
-  const availableProviders = useMemo(() => {
-    const providers = new Set(models.map((m) => m.provider));
-    return Array.from(providers).sort();
+  const availableApiKeys = useMemo(() => {
+    const keyMap = new Map<
+      string,
+      { name: string; provider: keyof typeof PROVIDER_CONFIG }
+    >();
+    for (const model of models) {
+      for (const key of model.apiKeys) {
+        keyMap.set(key.id, {
+          name: key.name,
+          provider: key.provider as keyof typeof PROVIDER_CONFIG,
+        });
+      }
+    }
+    return Array.from(keyMap.entries()).sort((a, b) =>
+      a[1].name.localeCompare(b[1].name),
+    );
   }, [models]);
 
   const handleRefresh = useCallback(async () => {
@@ -83,55 +88,6 @@ export function ProviderSettingsModels() {
     await refetch();
   }, [syncModelsMutation, refetch]);
 
-  const handleSaveField = useCallback(
-    async (
-      modelId: string,
-      field: "input" | "output",
-      value: string | null,
-    ) => {
-      const model = models.find((m) => m.id === modelId);
-      // When clearing a field, reset both to null (validation requires both or neither)
-      if (!value) {
-        await updatePricing.mutateAsync({
-          id: modelId,
-          customPricePerMillionInput: null,
-          customPricePerMillionOutput: null,
-        });
-        return;
-      }
-      // Use existing custom price for the unchanged field,
-      // falling back to effective price from capabilities
-      const currentInput =
-        model?.customPricePerMillionInput ??
-        model?.capabilities?.pricePerMillionInput ??
-        null;
-      const currentOutput =
-        model?.customPricePerMillionOutput ??
-        model?.capabilities?.pricePerMillionOutput ??
-        null;
-      await updatePricing.mutateAsync({
-        id: modelId,
-        customPricePerMillionInput:
-          field === "input" ? value : currentInput || null,
-        customPricePerMillionOutput:
-          field === "output" ? value : currentOutput || null,
-      });
-    },
-    [updatePricing, models],
-  );
-
-  const handleReset = useCallback(
-    async (modelId: string) => {
-      await updatePricing.mutateAsync({
-        id: modelId,
-        customPricePerMillionInput: null,
-        customPricePerMillionOutput: null,
-      });
-    },
-    [updatePricing],
-  );
-
-  // Column defs are stable — no editing state in deps
   const columns: ColumnDef<ModelWithApiKeys>[] = useMemo(
     () => [
       {
@@ -204,16 +160,28 @@ export function ProviderSettingsModels() {
       {
         id: "pricingInput",
         header: "$/M Input",
-        cell: ({ row }) => (
-          <PricingValueCell model={row.original} field="input" />
-        ),
+        cell: ({ row }) => {
+          const price = row.original.capabilities?.pricePerMillionInput;
+          if (hasUnknownCapabilities(row.original)) return null;
+          return price ? (
+            <span className="text-sm font-mono">${price}</span>
+          ) : (
+            <span className="text-sm text-muted-foreground">-</span>
+          );
+        },
       },
       {
         id: "pricingOutput",
         header: "$/M Output",
-        cell: ({ row }) => (
-          <PricingValueCell model={row.original} field="output" />
-        ),
+        cell: ({ row }) => {
+          const price = row.original.capabilities?.pricePerMillionOutput;
+          if (hasUnknownCapabilities(row.original)) return null;
+          return price ? (
+            <span className="text-sm font-mono">${price}</span>
+          ) : (
+            <span className="text-sm text-muted-foreground">-</span>
+          );
+        },
       },
       {
         accessorKey: "capabilities.contextLength",
@@ -280,17 +248,27 @@ export function ProviderSettingsModels() {
           ) : null;
         },
       },
+      {
+        id: "actions",
+        header: "",
+        size: 50,
+        cell: ({ row }) => (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-8 w-8 p-0"
+            onClick={() => setEditingModel(row.original)}
+          >
+            <Pencil className="h-4 w-4" />
+          </Button>
+        ),
+      },
     ],
     [],
   );
 
   return (
-    <PricingEditContext.Provider
-      value={{
-        onSaveField: handleSaveField,
-        onReset: handleReset,
-      }}
-    >
+    <>
       <LoadingWrapper
         isPending={isPending}
         loadingFallback={
@@ -304,9 +282,9 @@ export function ProviderSettingsModels() {
             <div>
               <h2 className="text-lg font-semibold">Available Models</h2>
               <p className="text-sm text-muted-foreground">
-                Models available from your configured API keys. Click any price
-                cell to set a custom token price. Use Refresh to re-fetch models
-                and capabilities from providers.
+                Models available from your configured API keys. Click the edit
+                button to update pricing and modalities. Use Refresh to re-fetch
+                models and capabilities from providers.
               </p>
             </div>
             <Button
@@ -346,19 +324,16 @@ export function ProviderSettingsModels() {
                     className="pl-8"
                   />
                 </div>
-                <Select
-                  value={providerFilter}
-                  onValueChange={setProviderFilter}
-                >
+                <Select value={apiKeyFilter} onValueChange={setApiKeyFilter}>
                   <SelectTrigger className="w-[200px]">
-                    <SelectValue placeholder="All providers" />
+                    <SelectValue placeholder="All API keys" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All providers</SelectItem>
-                    {availableProviders.map((provider) => {
+                    <SelectItem value="all">All API keys</SelectItem>
+                    {availableApiKeys.map(([id, { name, provider }]) => {
                       const config = PROVIDER_CONFIG[provider];
                       return (
-                        <SelectItem key={provider} value={provider}>
+                        <SelectItem key={id} value={id}>
                           <div className="flex items-center gap-2">
                             {config && (
                               <Image
@@ -369,7 +344,7 @@ export function ProviderSettingsModels() {
                                 className="rounded dark:invert"
                               />
                             )}
-                            <span>{config?.name ?? provider}</span>
+                            <span>{name}</span>
                           </div>
                         </SelectItem>
                       );
@@ -387,117 +362,21 @@ export function ProviderSettingsModels() {
           )}
         </div>
       </LoadingWrapper>
-    </PricingEditContext.Provider>
-  );
-}
 
-// --- Pricing edit context ---
-
-type PricingEditContextValue = {
-  onSaveField: (
-    modelId: string,
-    field: "input" | "output",
-    value: string | null,
-  ) => Promise<void>;
-  onReset: (modelId: string) => Promise<void>;
-};
-
-const PricingEditContext = createContext<PricingEditContextValue>({
-  onSaveField: async () => {},
-  onReset: async () => {},
-});
-
-// --- Pricing cells (click-to-edit, blur-to-save) ---
-
-function PricingValueCell({
-  model,
-  field,
-}: {
-  model: ModelWithApiKeys;
-  field: "input" | "output";
-}) {
-  const { onSaveField, onReset } = useContext(PricingEditContext);
-  const currentPrice =
-    field === "input"
-      ? model.capabilities?.pricePerMillionInput
-      : model.capabilities?.pricePerMillionOutput;
-  const source = model.capabilities?.priceSource;
-  const isCustom = source === "custom";
-
-  const [editing, setEditing] = useState(false);
-  const [value, setValue] = useState(currentPrice ?? "");
-
-  if (hasUnknownCapabilities(model)) return null;
-
-  if (editing) {
-    return (
-      <Input
-        type="number"
-        min="0"
-        step="0.01"
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        onBlur={() => {
-          setEditing(false);
-          const newVal = value || null;
-          const oldVal = currentPrice || null;
-          if (newVal !== oldVal) {
-            onSaveField(model.id, field, value || null);
-          }
-        }}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            (e.target as HTMLInputElement).blur();
-          }
-          if (e.key === "Escape") {
-            setValue(currentPrice ?? "");
-            setEditing(false);
-          }
-        }}
-        className="h-7 w-24 text-sm font-mono"
-        placeholder={field === "input" ? "Input" : "Output"}
-        autoFocus
-      />
-    );
-  }
-
-  return (
-    <div className="flex items-center gap-1">
-      <Button
-        variant="ghost"
-        className="flex items-center gap-1 h-auto px-1 -mx-1 py-0.5"
-        onClick={() => {
-          setValue(currentPrice ?? "");
-          setEditing(true);
-        }}
-      >
-        {currentPrice ? (
-          <span className="text-sm font-mono">${currentPrice}</span>
-        ) : (
-          <span className="text-sm text-muted-foreground">-</span>
-        )}
-        {field === "output" && source && <PriceSourceBadge source={source} />}
-      </Button>
-      {field === "output" && isCustom && (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-6 w-6 p-0 text-muted-foreground"
-              onClick={() => onReset(model.id)}
-            >
-              <RotateCcw className="h-3 w-3" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Reset token prices to defaults</TooltipContent>
-        </Tooltip>
+      {editingModel && (
+        <EditModelDialog
+          model={editingModel}
+          open={!!editingModel}
+          onOpenChange={(open) => {
+            if (!open) setEditingModel(null);
+          }}
+        />
       )}
-    </div>
+    </>
   );
 }
 
-// --- Internal helpers and badge components ---
+// --- Internal helpers ---
 
 function formatContextLength(contextLength: number | null): string {
   if (contextLength === null) return "-";

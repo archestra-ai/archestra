@@ -571,7 +571,7 @@ async function getRepos(
         owner: config.owner,
         name: repo.name,
         htmlUrl: repo.html_url,
-        defaultBranch: repo.default_branch,
+        defaultBranch: repo.default_branch ?? null,
       });
     }
 

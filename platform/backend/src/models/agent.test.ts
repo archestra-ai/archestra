@@ -2193,4 +2193,126 @@ describe("AgentModel", () => {
       expect(await MemberModel.isAgentDefault(otherAgent.id)).toBe(true);
     });
   });
+
+  describe("findByIdsForPermissionCheck", () => {
+    test("returns agentType, scope, authorId, and teamIds for each agent", async ({
+      makeAgent,
+      makeOrganization,
+      makeUser,
+      makeTeam,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      const team = await makeTeam(org.id, user.id, { name: "Eng" });
+
+      const agent = await makeAgent({
+        name: "Perm Check Agent",
+        agentType: "profile",
+        scope: "org",
+        organizationId: org.id,
+        authorId: user.id,
+        teams: [team.id],
+      });
+
+      const result = await AgentModel.findByIdsForPermissionCheck([agent.id]);
+
+      expect(result.size).toBe(1);
+      const entry = result.get(agent.id);
+      expect(entry).toBeDefined();
+      expect(entry!.agentType).toBe("profile");
+      expect(entry!.scope).toBe("org");
+      expect(entry!.authorId).toBe(user.id);
+      expect(entry!.teamIds).toEqual([team.id]);
+    });
+
+    test("returns multiple agents in a single batch", async ({
+      makeAgent,
+    }) => {
+      const agent1 = await makeAgent({ name: "Agent A", agentType: "agent" });
+      const agent2 = await makeAgent({
+        name: "Agent B",
+        agentType: "llm_proxy",
+      });
+      const agent3 = await makeAgent({
+        name: "Agent C",
+        agentType: "mcp_gateway",
+      });
+
+      const result = await AgentModel.findByIdsForPermissionCheck([
+        agent1.id,
+        agent2.id,
+        agent3.id,
+      ]);
+
+      expect(result.size).toBe(3);
+      expect(result.get(agent1.id)!.agentType).toBe("agent");
+      expect(result.get(agent2.id)!.agentType).toBe("llm_proxy");
+      expect(result.get(agent3.id)!.agentType).toBe("mcp_gateway");
+    });
+
+    test("returns empty map for empty input", async () => {
+      const result = await AgentModel.findByIdsForPermissionCheck([]);
+      expect(result.size).toBe(0);
+    });
+
+    test("omits non-existent agent IDs from result", async ({
+      makeAgent,
+    }) => {
+      const agent = await makeAgent({ name: "Exists" });
+
+      const result = await AgentModel.findByIdsForPermissionCheck([
+        agent.id,
+        "00000000-0000-0000-0000-000000000000",
+      ]);
+
+      expect(result.size).toBe(1);
+      expect(result.has(agent.id)).toBe(true);
+      expect(result.has("00000000-0000-0000-0000-000000000000")).toBe(false);
+    });
+
+    test("returns multiple team IDs when agent has multiple teams", async ({
+      makeAgent,
+      makeOrganization,
+      makeUser,
+      makeTeam,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      const team1 = await makeTeam(org.id, user.id, { name: "Frontend" });
+      const team2 = await makeTeam(org.id, user.id, { name: "Backend" });
+
+      const agent = await makeAgent({
+        name: "Multi-Team Agent",
+        organizationId: org.id,
+        teams: [team1.id, team2.id],
+      });
+
+      const result = await AgentModel.findByIdsForPermissionCheck([agent.id]);
+
+      const entry = result.get(agent.id)!;
+      expect(entry.teamIds).toHaveLength(2);
+      expect(entry.teamIds).toContain(team1.id);
+      expect(entry.teamIds).toContain(team2.id);
+    });
+
+    test("returns empty teamIds for agent with no teams", async ({
+      makeAgent,
+    }) => {
+      const agent = await makeAgent({ name: "No Teams Agent" });
+
+      const result = await AgentModel.findByIdsForPermissionCheck([agent.id]);
+
+      expect(result.get(agent.id)!.teamIds).toEqual([]);
+    });
+
+    test("returns null authorId for agent without an author", async ({
+      makeAgent,
+    }) => {
+      const agent = await makeAgent({ name: "No Author", scope: "org" });
+
+      const result = await AgentModel.findByIdsForPermissionCheck([agent.id]);
+
+      expect(result.get(agent.id)!.authorId).toBeNull();
+    });
+  });
 });

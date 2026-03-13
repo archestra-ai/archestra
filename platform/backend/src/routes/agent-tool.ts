@@ -1139,7 +1139,7 @@ export async function assignToolToAgent(
  * Returns an error object if validation fails, or null if valid.
  * Used by the bulk-assign route to validate all assignments before batch writing.
  */
-async function validateAssignment(
+export async function validateAssignment(
   agentId: string,
   toolId: string,
   credentialSourceMcpServerId: string | null | undefined,

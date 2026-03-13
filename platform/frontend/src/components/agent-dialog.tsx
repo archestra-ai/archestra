@@ -41,6 +41,7 @@ import {
   type AgentToolsEditorRef,
 } from "@/components/agent-tools-editor";
 import { ModelSelector } from "@/components/chat/model-selector";
+import { SystemPromptEditor } from "@/components/system-prompt-editor";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   AssignmentCombobox,
@@ -1180,18 +1181,11 @@ export function AgentDialog({
             {isInternalAgent && (
               <div className="rounded-lg border bg-card p-4 space-y-4">
                 <h3 className="text-sm font-semibold">Instruction</h3>
-
-                {/* Instruction (read-only for built-in) */}
-                <div className="space-y-2">
-                  <Textarea
-                    id="systemPrompt"
-                    value={systemPrompt}
-                    onChange={(e) => setSystemPrompt(e.target.value)}
-                    placeholder="Enter instruction for the LLM"
-                    className="min-h-[150px] font-mono"
-                    disabled={isBuiltIn}
-                  />
-                </div>
+                <SystemPromptEditor
+                  value={systemPrompt}
+                  onChange={setSystemPrompt}
+                  readOnly={isBuiltIn}
+                />
               </div>
             )}
 

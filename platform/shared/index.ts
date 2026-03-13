@@ -16,6 +16,7 @@ export * from "./policy-conditions";
 export * from "./roles";
 export * from "./routes";
 export * from "./slack";
+export * from "./system-prompt-template";
 export * from "./test-mcp-server";
 export * from "./themes/theme-config";
 export * from "./themes/theme-utils";

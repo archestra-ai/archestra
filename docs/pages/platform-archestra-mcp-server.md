@@ -18,13 +18,21 @@ Additionally, `query_knowledge_sources` is automatically assigned to Agents and 
 
 All Archestra tools are prefixed with `archestra__` and are always trusted — they bypass tool invocation and trusted data policies.
 
-## Identity
+## Auth
+
+Archestra tools are **trusted**, meaning they bypass [tool invocation policies](/platform-tool-invocation-policies) and [trusted data policies](/platform-trusted-data-policies) — the tool will always execute without policy evaluation.
+
+However, **RBAC (role-based access control) is still enforced**. Every tool is mapped to a required permission (resource + action). The `tools/list` endpoint dynamically filters tools so users only see tools they have permission to use. Additionally, `executeArchestraTool` performs a centralized RBAC check before executing any tool. For example, a user without `knowledgeBase:create` permission will not see `create_knowledge_base` in their tool list and cannot execute it.
+
+## Tools Reference
+
+### Identity
 
 | Tool | Description |
 |------|-------------|
 | `whoami` | Returns the name and ID of the current agent |
 
-## Agents
+### Agents
 
 | Tool | Description |
 |------|-------------|
@@ -33,21 +41,104 @@ All Archestra tools are prefixed with `archestra__` and are always trusted — t
 | `list_agents` | List agents with optional filtering by name and scope. |
 | `edit_agent` | Edit an existing agent. |
 
-## LLM Proxies
+#### create_agent
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `name` | `string` | Yes | The name of the agent (required) |
+| `scope` | `"team" \| "personal" \| "org"` | No | The scope of the agent: 'team' for team-scoped, 'personal' for personal, or 'org' for organization-wide (optional, defaults to 'personal') |
+| `labels` | `object[]` | No | Array of labels to assign to the agent (optional) |
+| `labels[].key` | `string` | Yes | The label key |
+| `labels[].value` | `string` | Yes | The value for the label |
+| `systemPrompt` | `string` | No | System prompt for the agent (optional) |
+| `userPrompt` | `string` | No | User prompt for the agent (optional) |
+| `description` | `string` | No | A brief description of what this agent does. Helps other agents understand if this agent is relevant for their task (optional) |
+| `icon` | `string` | No | An emoji character to use as the agent icon (optional) |
+| `mcpServerIds` | `string[]` | No | Array of MCP server IDs whose tools should be assigned to the agent. Use get_mcp_servers to look up IDs by name. When the user mentions MCP servers by name, always look up their IDs and pass them here. |
+| `subAgentIds` | `string[]` | No | Array of agent IDs to assign as sub-agents (delegations) to the agent. Use list_agents or get_agent to look up IDs by name. When the user mentions sub-agents by name, always look up their IDs and pass them here. |
+
+#### get_agent
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `id` | `string` | No | The ID of the agent to retrieve |
+| `name` | `string` | No | Search by name (partial match). |
+
+#### list_agents
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `name` | `string` | No | Filter by name (partial match, optional) |
+| `scope` | `"personal" \| "team" \| "org"` | No | Filter by scope (optional) |
+| `limit` | `number` | No | Maximum number of agents to return (optional, default 20, max 100) |
+
+#### edit_agent
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `id` | `string` | Yes | The ID of the agent to edit (required). Use list_agents or get_agent to look up by name. |
+| `name` | `string` | No | New name for the agent |
+| `description` | `string` | No | New description for the agent |
+| `systemPrompt` | `string` | No | New system prompt for the agent |
+| `userPrompt` | `string` | No | New user prompt for the agent |
+| `icon` | `string` | No | An emoji character to use as the agent icon |
+| `scope` | `"team" \| "personal" \| "org"` | No | New scope for the agent |
+| `teams` | `string[]` | No | Array of team IDs to assign (replaces existing teams) |
+| `labels` | `object[]` | No | Array of labels to set on the agent (replaces existing labels) |
+| `labels[].key` | `string` | Yes | The label key |
+| `labels[].value` | `string` | Yes | The value for the label |
+| `mcpServerIds` | `string[]` | No | Array of MCP server IDs whose tools should be assigned to the agent (additive). Use get_mcp_servers to look up IDs by name. |
+| `subAgentIds` | `string[]` | No | Array of agent IDs to assign as sub-agents (additive). Use list_agents or get_agent to look up IDs by name. |
+
+### LLM Proxies
 
 | Tool | Description |
 |------|-------------|
 | `create_llm_proxy` | Create a new LLM proxy with the specified name and optional labels. |
 | `get_llm_proxy` | Get a specific LLM proxy by ID or name. |
 
-## MCP Gateways
+#### create_llm_proxy
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `name` | `string` | Yes | The name of the LLM proxy (required) |
+| `scope` | `"team" \| "personal" \| "org"` | No | The scope of the LLM proxy: 'team' for team-scoped, 'personal' for personal, or 'org' for organization-wide (optional, defaults based on teams) |
+| `labels` | `object[]` | No | Array of labels to assign to the LLM proxy (optional) |
+| `labels[].key` | `string` | Yes | The label key |
+| `labels[].value` | `string` | Yes | The value for the label |
+
+#### get_llm_proxy
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `id` | `string` | No | The ID of the LLM proxy to retrieve |
+| `name` | `string` | No | Search by name (partial match). Only returns your personal proxies. |
+
+### MCP Gateways
 
 | Tool | Description |
 |------|-------------|
 | `create_mcp_gateway` | Create a new MCP gateway with the specified name and optional labels. |
 | `get_mcp_gateway` | Get a specific MCP gateway by ID or name. |
 
-## MCP Servers
+#### create_mcp_gateway
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `name` | `string` | Yes | The name of the MCP gateway (required) |
+| `scope` | `"team" \| "personal" \| "org"` | No | The scope of the MCP gateway: 'team' for team-scoped, 'personal' for personal, or 'org' for organization-wide (optional, defaults based on teams) |
+| `labels` | `object[]` | No | Array of labels to assign to the MCP gateway (optional) |
+| `labels[].key` | `string` | Yes | The label key |
+| `labels[].value` | `string` | Yes | The value for the label |
+
+#### get_mcp_gateway
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `id` | `string` | No | The ID of the MCP gateway to retrieve |
+| `name` | `string` | No | Search by name (partial match). Only returns your personal gateways. |
+
+### MCP Servers
 
 | Tool | Description |
 |------|-------------|
@@ -62,7 +153,149 @@ All Archestra tools are prefixed with `archestra__` and are always trusted — t
 | `get_mcp_server_logs` | Get recent container logs from a deployed local (K8s) MCP server. |
 | `create_mcp_server_installation_request` | Allows users from within the Archestra Platform chat UI to submit a request for an MCP server to be added to their Archestra Platform's internal MCP server registry. |
 
-## Limits
+#### search_private_mcp_registry
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `query` | `string` | No | Optional search query to filter MCP servers by name or description |
+
+#### get_mcp_server_tools
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `mcpServerId` | `string` | Yes | The catalog ID of the MCP server |
+
+#### edit_mcp_description
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `id` | `string` | Yes | The catalog ID of the MCP server to edit. Use get_mcp_servers to look up by name. |
+| `name` | `string` | No | New display name for the MCP server |
+| `icon` | `string` | No | An emoji character to use as the MCP server icon |
+| `description` | `string` | No | New description for the MCP server |
+| `docsUrl` | `string` | No | Documentation URL |
+| `repository` | `string` | No | Source code repository URL |
+| `version` | `string` | No | Version string |
+| `instructions` | `string` | No | Setup or usage instructions |
+| `scope` | `"personal" \| "team" \| "org"` | No | Visibility scope. Changing scope requires admin permissions. |
+| `labels` | `object[]` | No | Key-value labels for organization/categorization |
+| `labels[].key` | `string` | Yes |  |
+| `labels[].value` | `string` | Yes |  |
+| `teams` | `string[]` | No | Team IDs for team-scoped access control |
+
+#### edit_mcp_config
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `id` | `string` | Yes | The catalog ID of the MCP server to edit. Use get_mcp_servers to look up by name. |
+| `serverType` | `"local" \| "remote" \| "builtin"` | No | Server type: local (K8s pod), remote (HTTP URL), or builtin |
+| `serverUrl` | `string` | No | [Remote] The URL of the remote MCP server |
+| `requiresAuth` | `boolean` | No | [Remote] Whether the server requires authentication |
+| `authDescription` | `string` | No | [Remote] Description of how to set up authentication |
+| `authFields` | `object[]` | No | [Remote] Authentication field definitions |
+| `authFields[].name` | `string` | Yes |  |
+| `authFields[].label` | `string` | Yes |  |
+| `authFields[].type` | `"header" \| "query" \| "cookie"` | Yes |  |
+| `authFields[].secret` | `boolean` | Yes |  |
+| `oauthConfig` | `object` | No | [Remote] OAuth configuration for the server |
+| `command` | `string` | No | [Local] The command to run (e.g. 'npx', 'uvx', 'node') |
+| `arguments` | `string[]` | No | [Local] Command-line arguments |
+| `environment` | `object[]` | No | [Local] Environment variables for the server process |
+| `environment[].key` | `string` | Yes |  |
+| `environment[].type` | `"plain_text" \| "secret" \| "boolean" \| "number"` | Yes |  |
+| `environment[].value` | `string` | No |  |
+| `environment[].promptOnInstallation` | `boolean` | Yes |  |
+| `environment[].required` | `boolean` | No |  |
+| `environment[].description` | `string` | No |  |
+| `environment[].default` | `any` | No |  |
+| `environment[].mounted` | `boolean` | No |  |
+| `envFrom` | `object[]` | No | [Local] Import environment variables from K8s Secrets or ConfigMaps |
+| `envFrom[].type` | `"secret" \| "configMap"` | Yes |  |
+| `envFrom[].name` | `string` | Yes |  |
+| `envFrom[].prefix` | `string` | No |  |
+| `dockerImage` | `string` | No | [Local] Custom Docker image (overrides the base MCP server image) |
+| `serviceAccount` | `string` | No | [Local] K8s ServiceAccount name for the pod |
+| `transportType` | `"stdio" \| "streamable-http"` | No | [Local] Transport type: stdio (default, JSON-RPC proxy) or streamable-http (native HTTP/SSE) |
+| `httpPort` | `number` | No | [Local] HTTP port for streamable-http transport (default: 8080) |
+| `httpPath` | `string` | No | [Local] HTTP path for streamable-http transport (default: /mcp) |
+| `nodePort` | `number` | No | [Local] K8s NodePort for local dev access |
+| `imagePullSecrets` | `object[]` | No | [Local] Image pull secrets for private Docker registries |
+| `imagePullSecrets[].source` | `"existing"` | Yes |  |
+| `imagePullSecrets[].name` | `string` | Yes |  |
+| `deploymentSpecYaml` | `string` | No | [Local] Custom K8s deployment YAML override |
+| `installationCommand` | `string` | No | [Local] Command to install the MCP server package |
+| `userConfig` | `object` | No | User-configurable fields shown during installation (shared by both remote and local) |
+
+#### create_mcp_server
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `name` | `string` | Yes | Display name for the MCP server |
+| `serverType` | `"local" \| "remote" \| "builtin"` | No | Server type: local (K8s pod, default), remote (HTTP URL), or builtin |
+| `description` | `string` | No | Description of the MCP server |
+| `icon` | `string` | No | An emoji character to use as the MCP server icon |
+| `docsUrl` | `string` | No | Documentation URL |
+| `repository` | `string` | No | Source code repository URL |
+| `version` | `string` | No | Version string |
+| `instructions` | `string` | No | Setup or usage instructions |
+| `serverUrl` | `string` | No | [Remote] The URL of the remote MCP server |
+| `requiresAuth` | `boolean` | No | [Remote] Whether the server requires authentication |
+| `authDescription` | `string` | No | [Remote] Description of how to set up authentication |
+| `authFields` | `object[]` | No | [Remote] Authentication field definitions |
+| `authFields[].name` | `string` | Yes |  |
+| `authFields[].label` | `string` | Yes |  |
+| `authFields[].type` | `"header" \| "query" \| "cookie"` | Yes |  |
+| `authFields[].secret` | `boolean` | Yes |  |
+| `oauthConfig` | `object` | No | [Remote] OAuth configuration for the server |
+| `command` | `string` | No | [Local] The command to run (e.g. 'npx', 'uvx', 'node') |
+| `arguments` | `string[]` | No | [Local] Command-line arguments |
+| `environment` | `object[]` | No | [Local] Environment variables for the server process |
+| `environment[].key` | `string` | Yes |  |
+| `environment[].type` | `"plain_text" \| "secret" \| "boolean" \| "number"` | Yes |  |
+| `environment[].value` | `string` | No |  |
+| `environment[].promptOnInstallation` | `boolean` | Yes |  |
+| `environment[].required` | `boolean` | No |  |
+| `environment[].description` | `string` | No |  |
+| `environment[].default` | `any` | No |  |
+| `environment[].mounted` | `boolean` | No |  |
+| `envFrom` | `object[]` | No | [Local] Import environment variables from K8s Secrets or ConfigMaps |
+| `envFrom[].type` | `"secret" \| "configMap"` | Yes |  |
+| `envFrom[].name` | `string` | Yes |  |
+| `envFrom[].prefix` | `string` | No |  |
+| `dockerImage` | `string` | No | [Local] Custom Docker image (overrides the base MCP server image) |
+| `serviceAccount` | `string` | No | [Local] K8s ServiceAccount name for the pod |
+| `transportType` | `"stdio" \| "streamable-http"` | No | [Local] Transport type: stdio (default, JSON-RPC proxy) or streamable-http (native HTTP/SSE) |
+| `httpPort` | `number` | No | [Local] HTTP port for streamable-http transport (default: 8080) |
+| `httpPath` | `string` | No | [Local] HTTP path for streamable-http transport (default: /mcp) |
+| `nodePort` | `number` | No | [Local] K8s NodePort for local dev access |
+| `imagePullSecrets` | `object[]` | No | [Local] Image pull secrets for private Docker registries |
+| `imagePullSecrets[].source` | `"existing"` | Yes |  |
+| `imagePullSecrets[].name` | `string` | Yes |  |
+| `deploymentSpecYaml` | `string` | No | [Local] Custom K8s deployment YAML override |
+| `installationCommand` | `string` | No | [Local] Command to install the MCP server package |
+| `userConfig` | `object` | No | User-configurable fields shown during installation (shared by both remote and local) |
+| `scope` | `"personal" \| "team" \| "org"` | No | Visibility scope (default: personal, or team if teams provided). Non-personal scopes require admin. |
+| `labels` | `object[]` | No | Key-value labels for organization/categorization |
+| `labels[].key` | `string` | Yes |  |
+| `labels[].value` | `string` | Yes |  |
+| `teams` | `string[]` | No | Team IDs for team-scoped access control |
+
+#### deploy_mcp_server
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `catalogId` | `string` | Yes | The catalog ID of the MCP server to deploy. Use get_mcp_servers to look up by name. |
+| `teamId` | `string` | No | Optional team ID for a team-scoped deployment. If omitted, deploys as a personal server. |
+| `agentIds` | `string[]` | No | Optional agent IDs to assign the server's tools to after deployment. |
+
+#### get_mcp_server_logs
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `serverId` | `string` | Yes | The deployment ID of the MCP server (from list_mcp_server_deployments). |
+| `lines` | `number` | No | Number of log lines to retrieve (default: 100, max recommended: 500). |
+
+### Limits
 
 | Tool | Description |
 |------|-------------|
@@ -73,7 +306,51 @@ All Archestra tools are prefixed with `archestra__` and are always trusted — t
 | `get_agent_token_usage` | Get the total token usage (input and output) for a specific agent. |
 | `get_llm_proxy_token_usage` | Get the total token usage (input and output) for a specific LLM proxy. |
 
-## Policies
+#### create_limit
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `entity_type` | `"organization" \| "team" \| "agent" \| "llm_proxy" \| "mcp_gateway"` | Yes | The type of entity to apply the limit to |
+| `entity_id` | `string` | Yes | The ID of the entity (organization, team, agent, LLM proxy, or MCP gateway) |
+| `limit_type` | `"token_cost" \| "mcp_server_calls" \| "tool_calls"` | Yes | The type of limit to apply |
+| `limit_value` | `number` | Yes | The limit value (tokens or count depending on limit type) |
+| `model` | `string[]` | No | Array of model names (required for token_cost limits) |
+| `mcp_server_name` | `string` | No | MCP server name (required for mcp_server_calls and tool_calls limits) |
+| `tool_name` | `string` | No | Tool name (required for tool_calls limits) |
+
+#### get_limits
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `entity_type` | `"organization" \| "team" \| "agent" \| "llm_proxy" \| "mcp_gateway"` | No | Optional filter by entity type |
+| `entity_id` | `string` | No | Optional filter by entity ID |
+
+#### update_limit
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `id` | `string` | Yes | The ID of the limit to update |
+| `limit_value` | `number` | Yes | The new limit value |
+
+#### delete_limit
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `id` | `string` | Yes | The ID of the limit to delete |
+
+#### get_agent_token_usage
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `id` | `string` | No | The ID of the agent to get usage for (optional, defaults to current agent) |
+
+#### get_llm_proxy_token_usage
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `id` | `string` | No | The ID of the LLM proxy to get usage for (optional, defaults to current agent) |
+
+### Policies
 
 | Tool | Description |
 |------|-------------|
@@ -89,20 +366,238 @@ All Archestra tools are prefixed with `archestra__` and are always trusted — t
 | `update_trusted_data_policy` | Update a trusted data policy |
 | `delete_trusted_data_policy` | Delete a trusted data policy by ID |
 
-## Tool Assignment
+#### create_tool_invocation_policy
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `toolId` | `string` | Yes | The ID of the tool (UUID from the tools table) |
+| `conditions` | `object[]` | Yes | Array of conditions that must all match (AND logic). Empty array means unconditional. |
+| `conditions[].key` | `string` | Yes | The argument name or context path to evaluate (e.g., 'url', 'context.externalAgentId') |
+| `conditions[].operator` | `"equal" \| "notEqual" \| "contains" \| "notContains" \| "startsWith" \| "endsWith" \| "regex"` | Yes |  |
+| `conditions[].value` | `string` | Yes | The value to compare against |
+| `action` | `"allow_when_context_is_untrusted" \| "block_when_context_is_untrusted" \| "block_always"` | Yes | The action to take when the policy matches |
+| `reason` | `string` | No | Human-readable explanation for why this policy exists |
+
+#### get_tool_invocation_policy
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `id` | `string` | Yes | The ID of the tool invocation policy |
+
+#### update_tool_invocation_policy
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `id` | `string` | Yes | The ID of the tool invocation policy to update |
+| `toolId` | `string` | No | The ID of the tool (UUID from the tools table) |
+| `conditions` | `object[]` | No | Array of conditions that must all match (AND logic). Empty array means unconditional. |
+| `conditions[].key` | `string` | Yes | The argument name or context path to evaluate (e.g., 'url', 'context.externalAgentId') |
+| `conditions[].operator` | `"equal" \| "notEqual" \| "contains" \| "notContains" \| "startsWith" \| "endsWith" \| "regex"` | Yes |  |
+| `conditions[].value` | `string` | Yes | The value to compare against |
+| `action` | `"allow_when_context_is_untrusted" \| "block_when_context_is_untrusted" \| "block_always"` | No | The action to take when the policy matches |
+| `reason` | `string` | No | Human-readable explanation for why this policy exists |
+
+#### delete_tool_invocation_policy
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `id` | `string` | Yes | The ID of the tool invocation policy |
+
+#### create_trusted_data_policy
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `toolId` | `string` | Yes | The ID of the tool (UUID from the tools table) |
+| `conditions` | `object[]` | Yes | Array of conditions that must all match (AND logic). Empty array means unconditional. |
+| `conditions[].key` | `string` | Yes | The attribute key or path in the tool result to evaluate (e.g., 'emails[*].from', 'source') |
+| `conditions[].operator` | `"equal" \| "notEqual" \| "contains" \| "notContains" \| "startsWith" \| "endsWith" \| "regex"` | Yes |  |
+| `conditions[].value` | `string` | Yes | The value to compare against |
+| `action` | `"block_always" \| "mark_as_trusted" \| "mark_as_untrusted" \| "sanitize_with_dual_llm"` | Yes | The action to take when the policy matches |
+| `description` | `string` | No | Human-readable explanation for why this policy exists |
+
+#### get_trusted_data_policy
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `id` | `string` | Yes | The ID of the trusted data policy |
+
+#### update_trusted_data_policy
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `id` | `string` | Yes | The ID of the trusted data policy to update |
+| `toolId` | `string` | No | The ID of the tool (UUID from the tools table) |
+| `conditions` | `object[]` | No | Array of conditions that must all match (AND logic). Empty array means unconditional. |
+| `conditions[].key` | `string` | Yes | The attribute key or path in the tool result to evaluate (e.g., 'emails[*].from', 'source') |
+| `conditions[].operator` | `"equal" \| "notEqual" \| "contains" \| "notContains" \| "startsWith" \| "endsWith" \| "regex"` | Yes |  |
+| `conditions[].value` | `string` | Yes | The value to compare against |
+| `action` | `"block_always" \| "mark_as_trusted" \| "mark_as_untrusted" \| "sanitize_with_dual_llm"` | No | The action to take when the policy matches |
+| `description` | `string` | No | Human-readable explanation for why this policy exists |
+
+#### delete_trusted_data_policy
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `id` | `string` | Yes | The ID of the trusted data policy |
+
+### Tool Assignment
 
 | Tool | Description |
 |------|-------------|
 | `bulk_assign_tools_to_agents` | Assign multiple tools to multiple agents in bulk with validation and error handling |
 | `bulk_assign_tools_to_mcp_gateways` | Assign multiple tools to multiple MCP gateways in bulk with validation and error handling |
 
-## Knowledge Base
+#### bulk_assign_tools_to_agents
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `assignments` | `object[]` | Yes | Array of tool assignments to create |
+| `assignments[].agentId` | `string` | Yes | The ID of the agent to assign the tool to |
+| `assignments[].toolId` | `string` | Yes | The ID of the tool to assign |
+| `assignments[].credentialSourceMcpServerId` | `string` | No | Optional ID of the MCP server to use as credential source |
+| `assignments[].executionSourceMcpServerId` | `string` | No | Optional ID of the MCP server to use as execution source |
+| `assignments[].useDynamicTeamCredential` | `boolean` | No | When true, credentials are resolved at call time based on the caller's identity instead of using a fixed credential source. Resolution order: (1) the calling user's own personal credential, (2) a credential owned by a team member on the same team. Use this as an alternative to credentialSourceMcpServerId or executionSourceMcpServerId. |
+
+#### bulk_assign_tools_to_mcp_gateways
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `assignments` | `object[]` | Yes | Array of tool assignments to create |
+| `assignments[].mcpGatewayId` | `string` | Yes | The ID of the MCP gateway to assign the tool to |
+| `assignments[].toolId` | `string` | Yes | The ID of the tool to assign |
+| `assignments[].credentialSourceMcpServerId` | `string` | No | Optional ID of the MCP server to use as credential source |
+| `assignments[].executionSourceMcpServerId` | `string` | No | Optional ID of the MCP server to use as execution source |
+| `assignments[].useDynamicTeamCredential` | `boolean` | No | When true, credentials are resolved at call time based on the caller's identity instead of using a fixed credential source. Resolution order: (1) the calling user's own personal credential, (2) a credential owned by a team member on the same team. Use this as an alternative to credentialSourceMcpServerId or executionSourceMcpServerId. |
+
+### Knowledge Management
 
 | Tool | Description |
 |------|-------------|
 | `query_knowledge_sources` | Query the organization's knowledge sources to retrieve relevant information. |
+| `create_knowledge_base` | Create a new knowledge base for organizing knowledge connectors. |
+| `get_knowledge_bases` | List all knowledge bases in the organization. |
+| `get_knowledge_base` | Get details of a specific knowledge base by ID. |
+| `update_knowledge_base` | Update an existing knowledge base. |
+| `delete_knowledge_base` | Delete a knowledge base by ID. |
+| `create_knowledge_connector` | Create a new knowledge connector for ingesting data from external sources. |
+| `get_knowledge_connectors` | List all knowledge connectors in the organization. |
+| `get_knowledge_connector` | Get details of a specific knowledge connector by ID. |
+| `update_knowledge_connector` | Update an existing knowledge connector. |
+| `delete_knowledge_connector` | Delete a knowledge connector by ID. |
+| `assign_knowledge_connector_to_knowledge_base` | Assign a knowledge connector to a knowledge base. |
+| `unassign_knowledge_connector_from_knowledge_base` | Remove a knowledge connector from a knowledge base. |
+| `assign_knowledge_base_to_agent` | Assign a knowledge base to an agent. |
+| `unassign_knowledge_base_from_agent` | Remove a knowledge base from an agent. |
+| `assign_knowledge_connector_to_agent` | Directly assign a knowledge connector to an agent (bypassing knowledge base). |
+| `unassign_knowledge_connector_from_agent` | Remove a directly-assigned knowledge connector from an agent. |
 
-## Chat
+#### query_knowledge_sources
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `query` | `string` | Yes | A natural language query about the content you are looking for. Ask about topics, concepts, or information rather than about source systems. |
+
+#### create_knowledge_base
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `name` | `string` | Yes | Name of the knowledge base |
+| `description` | `string` | No | Description of the knowledge base |
+
+#### get_knowledge_base
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `id` | `string` | Yes | Knowledge base ID |
+
+#### update_knowledge_base
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `id` | `string` | Yes | Knowledge base ID |
+| `name` | `string` | No | New name |
+| `description` | `string` | No | New description |
+
+#### delete_knowledge_base
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `id` | `string` | Yes | Knowledge base ID |
+
+#### create_knowledge_connector
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `name` | `string` | Yes | Name of the knowledge connector |
+| `connector_type` | `string` | Yes | Type of the knowledge connector (e.g., jira, confluence, google_drive) |
+| `config` | `object` | Yes | Configuration for the knowledge connector (depends on connector_type) |
+| `description` | `string` | No | Description of the knowledge connector |
+
+#### get_knowledge_connector
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `id` | `string` | Yes | Knowledge connector ID |
+
+#### update_knowledge_connector
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `id` | `string` | Yes | Knowledge connector ID |
+| `name` | `string` | No | New name |
+| `description` | `string` | No | New description |
+| `enabled` | `boolean` | No | Whether the knowledge connector is enabled |
+| `config` | `object` | No | Updated connector configuration (provider-specific settings) |
+
+#### delete_knowledge_connector
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `id` | `string` | Yes | Knowledge connector ID |
+
+#### assign_knowledge_connector_to_knowledge_base
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `connector_id` | `string` | Yes | Knowledge connector ID |
+| `knowledge_base_id` | `string` | Yes | Knowledge base ID |
+
+#### unassign_knowledge_connector_from_knowledge_base
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `connector_id` | `string` | Yes | Knowledge connector ID |
+| `knowledge_base_id` | `string` | Yes | Knowledge base ID |
+
+#### assign_knowledge_base_to_agent
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `knowledge_base_id` | `string` | Yes | Knowledge base ID |
+| `agent_id` | `string` | Yes | Agent ID |
+
+#### unassign_knowledge_base_from_agent
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `knowledge_base_id` | `string` | Yes | Knowledge base ID |
+| `agent_id` | `string` | Yes | Agent ID |
+
+#### assign_knowledge_connector_to_agent
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `connector_id` | `string` | Yes | Knowledge connector ID |
+| `agent_id` | `string` | Yes | Agent ID |
+
+#### unassign_knowledge_connector_from_agent
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `connector_id` | `string` | Yes | Knowledge connector ID |
+| `agent_id` | `string` | Yes | Agent ID |
+
+### Chat
 
 | Tool | Description |
 |------|-------------|
@@ -110,3 +605,24 @@ All Archestra tools are prefixed with `archestra__` and are always trusted — t
 | `swap_agent` | Switch the current conversation to a different agent. |
 | `swap_to_default_agent` | Return to the default agent. |
 | `artifact_write` | Write or update a markdown artifact for the current conversation. |
+
+#### todo_write
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `todos` | `object[]` | Yes | Array of todo items to write to the conversation |
+| `todos[].id` | `integer` | Yes | Unique identifier for the todo item |
+| `todos[].content` | `string` | Yes | The content/description of the todo item |
+| `todos[].status` | `"pending" \| "in_progress" \| "completed"` | Yes | The current status of the todo item |
+
+#### swap_agent
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `agent_name` | `string` | Yes | The name of the agent to switch to. |
+
+#### artifact_write
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `content` | `string` | Yes | The markdown content to write to the conversation artifact. This will completely replace any existing artifact content. |

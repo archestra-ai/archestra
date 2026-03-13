@@ -1,3 +1,5 @@
+import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import { ZodError } from "zod";
 import logger from "@/logging";
 import { AgentModel, AgentToolModel, ToolModel } from "@/models";
 
@@ -20,7 +22,9 @@ export function isAbortLikeError(error: unknown): boolean {
     return true;
   }
 
-  return error.message.toLowerCase().includes("abort");
+  // Match "aborted" as a whole word to avoid false positives
+  // (e.g., "aborting transaction due to constraint violation")
+  return /\baborted?\b/i.test(error.message);
 }
 
 export type McpServerResult = {
@@ -115,4 +119,43 @@ export function deduplicateLabels(
   rawLabels: Array<{ key: string; value: string }>,
 ): Array<{ key: string; value: string }> {
   return Array.from(new Map(rawLabels.map((l) => [l.key, l])).values());
+}
+
+export function successResult(text: string): CallToolResult {
+  return {
+    content: [{ type: "text" as const, text }],
+    isError: false,
+  };
+}
+
+export function errorResult(message: string): CallToolResult {
+  return {
+    content: [{ type: "text" as const, text: `Error: ${message}` }],
+    isError: true,
+  };
+}
+
+export function catchError(error: unknown, action: string): CallToolResult {
+  logger.error({ err: error }, `Error ${action}`);
+  // Zod validation errors are safe to surface — they describe user input issues.
+  if (error instanceof ZodError) {
+    const issues = error.issues.map((i) => i.message).join("; ");
+    return errorResult(`Validation error while ${action}: ${issues}`);
+  }
+  // Unique constraint violations are user-actionable (e.g., duplicate name).
+  if (isUniqueConstraintError(error)) {
+    return errorResult(
+      `A record with the same value already exists (${action})`,
+    );
+  }
+  // All other errors get a generic message to avoid leaking internal details.
+  return errorResult(`An internal error occurred while ${action}`);
+}
+
+// === Internal helpers ===
+
+function isUniqueConstraintError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  // PostgreSQL unique_violation code
+  return "code" in error && (error as { code: string }).code === "23505";
 }

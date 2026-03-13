@@ -1,4 +1,4 @@
-import type { CallToolResult, Tool } from "@modelcontextprotocol/sdk/types.js";
+import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import {
   ARCHESTRA_MCP_SERVER_NAME,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
@@ -13,8 +13,17 @@ import {
   McpServerModel,
   ToolModel,
 } from "@/models";
-import type { InternalMcpCatalog } from "@/types";
-import { deduplicateLabels } from "./helpers";
+import {
+  InsertInternalMcpCatalogSchema,
+  type InternalMcpCatalog,
+  UpdateInternalMcpCatalogSchema,
+} from "@/types";
+import {
+  catchError,
+  deduplicateLabels,
+  errorResult,
+  successResult,
+} from "./helpers";
 import type { ArchestraContext } from "./types";
 
 // === Constants ===
@@ -632,7 +641,7 @@ export async function handleTool(
   toolName: string,
   args: Record<string, unknown> | undefined,
   context: ArchestraContext,
-): Promise<CallToolResult | null> {
+): Promise<ReturnType<typeof successResult> | null> {
   const { agent: contextAgent, organizationId } = context;
 
   if (toolName === TOOL_SEARCH_PRIVATE_MCP_REGISTRY_FULL_NAME) {
@@ -657,17 +666,11 @@ export async function handleTool(
       }
 
       if (catalogItems.length === 0) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: query
-                ? `No MCP servers found matching query: "${query}"`
-                : "No MCP servers found in the private registry.",
-            },
-          ],
-          isError: false,
-        };
+        return successResult(
+          query
+            ? `No MCP servers found matching query: "${query}"`
+            : "No MCP servers found in the private registry.",
+        );
       }
 
       const formattedResults = catalogItems
@@ -683,28 +686,11 @@ export async function handleTool(
         })
         .join("\n\n");
 
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Found ${catalogItems.length} MCP server(s):\n\n${formattedResults}`,
-          },
-        ],
-        isError: false,
-      };
+      return successResult(
+        `Found ${catalogItems.length} MCP server(s):\n\n${formattedResults}`,
+      );
     } catch (error) {
-      logger.error({ err: error }, "Error searching private MCP registry");
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Error searching private MCP registry: ${
-              error instanceof Error ? error.message : "Unknown error"
-            }`,
-          },
-        ],
-        isError: true,
-      };
+      return catchError(error, "searching private MCP registry");
     }
   }
 
@@ -728,28 +714,9 @@ export async function handleTool(
         teams: c.teams?.map((t) => ({ id: t.id, name: t.name })) ?? [],
       }));
 
-      return {
-        content: [
-          {
-            type: "text",
-            text: JSON.stringify(items, null, 2),
-          },
-        ],
-        isError: false,
-      };
+      return successResult(JSON.stringify(items, null, 2));
     } catch (error) {
-      logger.error({ err: error }, "Error getting MCP servers");
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Error getting MCP servers: ${
-              error instanceof Error ? error.message : "Unknown error"
-            }`,
-          },
-        ],
-        isError: true,
-      };
+      return catchError(error, "getting MCP servers");
     }
   }
 
@@ -763,41 +730,14 @@ export async function handleTool(
       const mcpServerId = args?.mcpServerId as string;
 
       if (!mcpServerId) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: "Error: mcpServerId parameter is required",
-            },
-          ],
-          isError: true,
-        };
+        return errorResult("mcpServerId parameter is required");
       }
 
       const tools = await ToolModel.findByCatalogId(mcpServerId);
 
-      return {
-        content: [
-          {
-            type: "text",
-            text: JSON.stringify(tools, null, 2),
-          },
-        ],
-        isError: false,
-      };
+      return successResult(JSON.stringify(tools, null, 2));
     } catch (error) {
-      logger.error({ err: error }, "Error getting MCP server tools");
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Error getting MCP server tools: ${
-              error instanceof Error ? error.message : "Unknown error"
-            }`,
-          },
-        ],
-        isError: true,
-      };
+      return catchError(error, "getting MCP server tools");
     }
   }
 
@@ -810,32 +750,16 @@ export async function handleTool(
     try {
       const id = args?.id as string | undefined;
       if (!id) {
-        return {
-          content: [
-            { type: "text", text: "Error: MCP server catalog id is required." },
-          ],
-          isError: true,
-        };
+        return errorResult("MCP server catalog id is required.");
       }
 
       if (!context.userId || !organizationId) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: "Error: user/organization context not available.",
-            },
-          ],
-          isError: true,
-        };
+        return errorResult("user/organization context not available.");
       }
 
       const existing = await InternalMcpCatalogModel.findById(id);
       if (!existing) {
-        return {
-          content: [{ type: "text", text: "Error: MCP server not found." }],
-          isError: true,
-        };
+        return errorResult("MCP server not found.");
       }
 
       const isAdmin = await userHasPermission(
@@ -850,30 +774,16 @@ export async function handleTool(
           existing.scope !== "personal" ||
           existing.authorId !== context.userId
         ) {
-          return {
-            content: [
-              {
-                type: "text",
-                text: "Error: you can only edit your own personal MCP servers.",
-              },
-            ],
-            isError: true,
-          };
+          return errorResult(
+            "you can only edit your own personal MCP servers.",
+          );
         }
       }
 
       // Scope changes require admin permission
       if (args?.scope !== undefined && args.scope !== existing.scope) {
         if (!isAdmin) {
-          return {
-            content: [
-              {
-                type: "text",
-                text: "Error: only admins can change MCP server scope.",
-              },
-            ],
-            isError: true,
-          };
+          return errorResult("only admins can change MCP server scope.");
         }
       }
 
@@ -898,29 +808,20 @@ export async function handleTool(
       }
 
       if (Object.keys(updateData).length === 0) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `No fields to update. Provide at least one of: ${descriptionFields.join(", ")}.`,
-            },
-          ],
-          isError: true,
-        };
+        return errorResult(
+          `No fields to update. Provide at least one of: ${descriptionFields.join(", ")}.`,
+        );
       }
 
+      const validatedUpdate =
+        UpdateInternalMcpCatalogSchema.partial().parse(updateData);
       const updated = await InternalMcpCatalogModel.update(
         existing.id,
-        updateData as Parameters<typeof InternalMcpCatalogModel.update>[1],
+        validatedUpdate,
       );
 
       if (!updated) {
-        return {
-          content: [
-            { type: "text", text: "Error: failed to update MCP server." },
-          ],
-          isError: true,
-        };
+        return errorResult("failed to update MCP server.");
       }
 
       const lines = [
@@ -936,21 +837,9 @@ export async function handleTool(
       if (updated.repository) lines.push(`Repository: ${updated.repository}`);
       if (updated.version) lines.push(`Version: ${updated.version}`);
 
-      return {
-        content: [{ type: "text", text: lines.join("\n") }],
-        isError: false,
-      };
+      return successResult(lines.join("\n"));
     } catch (error) {
-      logger.error({ err: error }, "Error editing MCP server description");
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Error editing MCP server: ${error instanceof Error ? error.message : "Unknown error"}`,
-          },
-        ],
-        isError: true,
-      };
+      return catchError(error, "editing MCP server description");
     }
   }
 
@@ -963,32 +852,16 @@ export async function handleTool(
     try {
       const id = args?.id as string | undefined;
       if (!id) {
-        return {
-          content: [
-            { type: "text", text: "Error: MCP server catalog id is required." },
-          ],
-          isError: true,
-        };
+        return errorResult("MCP server catalog id is required.");
       }
 
       if (!context.userId || !organizationId) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: "Error: user/organization context not available.",
-            },
-          ],
-          isError: true,
-        };
+        return errorResult("user/organization context not available.");
       }
 
       const existing = await InternalMcpCatalogModel.findById(id);
       if (!existing) {
-        return {
-          content: [{ type: "text", text: "Error: MCP server not found." }],
-          isError: true,
-        };
+        return errorResult("MCP server not found.");
       }
 
       const isAdmin = await userHasPermission(
@@ -1003,15 +876,9 @@ export async function handleTool(
           existing.scope !== "personal" ||
           existing.authorId !== context.userId
         ) {
-          return {
-            content: [
-              {
-                type: "text",
-                text: "Error: you can only edit your own personal MCP servers.",
-              },
-            ],
-            isError: true,
-          };
+          return errorResult(
+            "you can only edit your own personal MCP servers.",
+          );
         }
       }
 
@@ -1069,32 +936,20 @@ export async function handleTool(
         updateData.userConfig = args.userConfig;
 
       if (Object.keys(updateData).length === 0) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: "No fields to update. Provide at least one configuration field.",
-            },
-          ],
-          isError: true,
-        };
+        return errorResult(
+          "No fields to update. Provide at least one configuration field.",
+        );
       }
 
+      const validatedUpdate =
+        UpdateInternalMcpCatalogSchema.partial().parse(updateData);
       const updated = await InternalMcpCatalogModel.update(
         existing.id,
-        updateData as Parameters<typeof InternalMcpCatalogModel.update>[1],
+        validatedUpdate,
       );
 
       if (!updated) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: "Error: failed to update MCP server config.",
-            },
-          ],
-          isError: true,
-        };
+        return errorResult("failed to update MCP server config.");
       }
 
       const lines = [
@@ -1112,21 +967,9 @@ export async function handleTool(
       if (updated.deploymentSpecYaml)
         lines.push("Deployment Spec: (custom YAML set)");
 
-      return {
-        content: [{ type: "text", text: lines.join("\n") }],
-        isError: false,
-      };
+      return successResult(lines.join("\n"));
     } catch (error) {
-      logger.error({ err: error }, "Error editing MCP server config");
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Error editing MCP server config: ${error instanceof Error ? error.message : "Unknown error"}`,
-          },
-        ],
-        isError: true,
-      };
+      return catchError(error, "editing MCP server config");
     }
   }
 
@@ -1139,40 +982,18 @@ export async function handleTool(
     try {
       const name = args?.name as string;
       if (!name || name.trim() === "") {
-        return {
-          content: [
-            {
-              type: "text",
-              text: "Error: MCP server name is required and cannot be empty.",
-            },
-          ],
-          isError: true,
-        };
+        return errorResult("MCP server name is required and cannot be empty.");
       }
 
       if (!context.userId || !organizationId) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: "Error: user/organization context not available.",
-            },
-          ],
-          isError: true,
-        };
+        return errorResult("user/organization context not available.");
       }
 
       const serverType = (args?.serverType as string) ?? "local";
       if (!["local", "remote", "builtin"].includes(serverType)) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: "Error: serverType must be one of: local, remote, builtin.",
-            },
-          ],
-          isError: true,
-        };
+        return errorResult(
+          "serverType must be one of: local, remote, builtin.",
+        );
       }
 
       const teams = (args?.teams as string[]) ?? [];
@@ -1193,15 +1014,9 @@ export async function handleTool(
         "admin",
       );
       if (!isAdmin && scope !== "personal") {
-        return {
-          content: [
-            {
-              type: "text",
-              text: "Error: only admins can create team or org-scoped MCP servers.",
-            },
-          ],
-          isError: true,
-        };
+        return errorResult(
+          "only admins can create team or org-scoped MCP servers.",
+        );
       }
 
       // Build localConfig from individual fields
@@ -1268,10 +1083,12 @@ export async function handleTool(
       if (labels) createParams.labels = labels;
       if (teams.length > 0) createParams.teams = teams;
 
-      const created = await InternalMcpCatalogModel.create(
-        createParams as Parameters<typeof InternalMcpCatalogModel.create>[0],
-        { organizationId, authorId: context.userId },
-      );
+      const validatedParams =
+        InsertInternalMcpCatalogSchema.parse(createParams);
+      const created = await InternalMcpCatalogModel.create(validatedParams, {
+        organizationId,
+        authorId: context.userId,
+      });
 
       const lines = [
         "Successfully created MCP server.",
@@ -1293,21 +1110,9 @@ export async function handleTool(
           `Labels: ${created.labels.map((l) => `${l.key}: ${l.value}`).join(", ")}`,
         );
 
-      return {
-        content: [{ type: "text", text: lines.join("\n") }],
-        isError: false,
-      };
+      return successResult(lines.join("\n"));
     } catch (error) {
-      logger.error({ err: error }, "Error creating MCP server");
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Error creating MCP server: ${error instanceof Error ? error.message : "Unknown error"}`,
-          },
-        ],
-        isError: true,
-      };
+      return catchError(error, "creating MCP server");
     }
   }
 
@@ -1321,43 +1126,23 @@ export async function handleTool(
     try {
       const catalogId = args?.catalogId as string | undefined;
       if (!catalogId) {
-        return {
-          content: [{ type: "text", text: "Error: catalogId is required." }],
-          isError: true,
-        };
+        return errorResult("catalogId is required.");
       }
 
       if (!context.userId || !organizationId) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: "Error: user/organization context not available.",
-            },
-          ],
-          isError: true,
-        };
+        return errorResult("user/organization context not available.");
       }
 
       const catalogItem = await InternalMcpCatalogModel.findById(catalogId);
       if (!catalogItem) {
-        return {
-          content: [{ type: "text", text: "Error: catalog item not found." }],
-          isError: true,
-        };
+        return errorResult("catalog item not found.");
       }
 
       // Block servers that require authentication
       if (catalogItem.requiresAuth || catalogItem.oauthConfig) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: "This MCP server requires authentication. Please install it through the UI at /mcp/registry where you can provide credentials.",
-            },
-          ],
-          isError: true,
-        };
+        return errorResult(
+          "This MCP server requires authentication. Please install it through the UI at /mcp/registry where you can provide credentials.",
+        );
       }
 
       // Block servers with required prompted environment variables (secrets the user must provide)
@@ -1366,15 +1151,9 @@ export async function handleTool(
           (env) => env.promptOnInstallation && env.required,
         ) ?? [];
       if (requiredPromptedEnvVars.length > 0) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `This MCP server requires environment variables to be provided during installation: ${requiredPromptedEnvVars.map((e) => e.key).join(", ")}. Please install it through the UI at /mcp/registry.`,
-            },
-          ],
-          isError: true,
-        };
+        return errorResult(
+          `This MCP server requires environment variables to be provided during installation: ${requiredPromptedEnvVars.map((e) => e.key).join(", ")}. Please install it through the UI at /mcp/registry.`,
+        );
       }
 
       const teamId = args?.teamId as string | undefined;
@@ -1386,34 +1165,22 @@ export async function handleTool(
           (s) => s.ownerId === context.userId && !s.teamId,
         );
         if (existingPersonal) {
-          return {
-            content: [
-              {
-                type: "text",
-                text: [
-                  "This MCP server is already installed (returning existing deployment).",
-                  "",
-                  `Name: ${existingPersonal.name}`,
-                  `ID: ${existingPersonal.id}`,
-                  `Status: ${existingPersonal.localInstallationStatus}`,
-                ].join("\n"),
-              },
-            ],
-            isError: false,
-          };
+          return successResult(
+            [
+              "This MCP server is already installed (returning existing deployment).",
+              "",
+              `Name: ${existingPersonal.name}`,
+              `ID: ${existingPersonal.id}`,
+              `Status: ${existingPersonal.localInstallationStatus}`,
+            ].join("\n"),
+          );
         }
       } else {
         const existingTeam = existingServers.find((s) => s.teamId === teamId);
         if (existingTeam) {
-          return {
-            content: [
-              {
-                type: "text",
-                text: "This team already has an installation of this MCP server.",
-              },
-            ],
-            isError: true,
-          };
+          return errorResult(
+            "This team already has an installation of this MCP server.",
+          );
         }
       }
 
@@ -1430,20 +1197,14 @@ export async function handleTool(
       // For local servers, start K8s deployment
       if (catalogItem.serverType === "local") {
         if (!McpServerRuntimeManager.isEnabled) {
-          return {
-            content: [
-              {
-                type: "text",
-                text: [
-                  "MCP server record created but K8s runtime is not available. The server cannot be deployed.",
-                  "",
-                  `Name: ${mcpServer.name}`,
-                  `ID: ${mcpServer.id}`,
-                ].join("\n"),
-              },
-            ],
-            isError: false,
-          };
+          return successResult(
+            [
+              "MCP server record created but K8s runtime is not available. The server cannot be deployed.",
+              "",
+              `Name: ${mcpServer.name}`,
+              `ID: ${mcpServer.id}`,
+            ].join("\n"),
+          );
         }
 
         await McpServerModel.update(mcpServer.id, {
@@ -1560,21 +1321,9 @@ export async function handleTool(
         `Status: ${catalogItem.serverType === "local" ? "pending (deploying to K8s)" : "ready"}`,
       ];
 
-      return {
-        content: [{ type: "text", text: lines.join("\n") }],
-        isError: false,
-      };
+      return successResult(lines.join("\n"));
     } catch (error) {
-      logger.error({ err: error }, "Error deploying MCP server");
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Error deploying MCP server: ${error instanceof Error ? error.message : "Unknown error"}`,
-          },
-        ],
-        isError: true,
-      };
+      return catchError(error, "deploying MCP server");
     }
   }
 
@@ -1587,15 +1336,7 @@ export async function handleTool(
 
     try {
       if (!context.userId || !organizationId) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: "Error: user/organization context not available.",
-            },
-          ],
-          isError: true,
-        };
+        return errorResult("user/organization context not available.");
       }
 
       const isAdmin = await userHasPermission(
@@ -1608,10 +1349,7 @@ export async function handleTool(
       const servers = await McpServerModel.findAll(context.userId, isAdmin);
 
       if (servers.length === 0) {
-        return {
-          content: [{ type: "text", text: "No MCP server deployments found." }],
-          isError: false,
-        };
+        return successResult("No MCP server deployments found.");
       }
 
       const lines = [`Found ${servers.length} MCP server deployment(s):`, ""];
@@ -1630,21 +1368,9 @@ export async function handleTool(
         lines.push("");
       }
 
-      return {
-        content: [{ type: "text", text: lines.join("\n") }],
-        isError: false,
-      };
+      return successResult(lines.join("\n"));
     } catch (error) {
-      logger.error({ err: error }, "Error listing MCP server deployments");
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Error listing deployments: ${error instanceof Error ? error.message : "Unknown error"}`,
-          },
-        ],
-        isError: true,
-      };
+      return catchError(error, "listing MCP server deployments");
     }
   }
 
@@ -1658,22 +1384,11 @@ export async function handleTool(
     try {
       const serverId = args?.serverId as string | undefined;
       if (!serverId) {
-        return {
-          content: [{ type: "text", text: "Error: serverId is required." }],
-          isError: true,
-        };
+        return errorResult("serverId is required.");
       }
 
       if (!context.userId || !organizationId) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: "Error: user/organization context not available.",
-            },
-          ],
-          isError: true,
-        };
+        return errorResult("user/organization context not available.");
       }
 
       // Verify access
@@ -1690,39 +1405,19 @@ export async function handleTool(
         isAdmin,
       );
       if (!server) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: "Error: MCP server not found or you don't have access.",
-            },
-          ],
-          isError: true,
-        };
+        return errorResult("MCP server not found or you don't have access.");
       }
 
       if (server.serverType !== "local") {
-        return {
-          content: [
-            {
-              type: "text",
-              text: "Logs are only available for local (K8s) MCP servers.",
-            },
-          ],
-          isError: false,
-        };
+        return successResult(
+          "Logs are only available for local (K8s) MCP servers.",
+        );
       }
 
       if (!McpServerRuntimeManager.isEnabled) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: "K8s runtime is not available. Cannot retrieve logs.",
-            },
-          ],
-          isError: true,
-        };
+        return errorResult(
+          "K8s runtime is not available. Cannot retrieve logs.",
+        );
       }
 
       const lineCount = (args?.lines as number) ?? 100;
@@ -1739,21 +1434,9 @@ export async function handleTool(
         logsResult.logs || "(no logs available)",
       ];
 
-      return {
-        content: [{ type: "text", text: output.join("\n") }],
-        isError: false,
-      };
+      return successResult(output.join("\n"));
     } catch (error) {
-      logger.error({ err: error }, "Error getting MCP server logs");
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Error getting logs: ${error instanceof Error ? error.message : "Unknown error"}`,
-          },
-        ],
-        isError: true,
-      };
+      return catchError(error, "getting MCP server logs");
     }
   }
 
@@ -1768,31 +1451,11 @@ export async function handleTool(
     );
 
     try {
-      return {
-        content: [
-          {
-            type: "text",
-            text: "A dialog for adding or requesting an MCP server should now be visible in the chat. Please review and submit to proceed.",
-          },
-        ],
-        isError: false,
-      };
-    } catch (error) {
-      logger.error(
-        { err: error },
-        "Error handling MCP server installation request",
+      return successResult(
+        "A dialog for adding or requesting an MCP server should now be visible in the chat. Please review and submit to proceed.",
       );
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Error handling installation request: ${
-              error instanceof Error ? error.message : "Unknown error"
-            }`,
-          },
-        ],
-        isError: true,
-      };
+    } catch (error) {
+      return catchError(error, "handling MCP server installation request");
     }
   }
 

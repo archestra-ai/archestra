@@ -193,6 +193,7 @@ export const resourceCategories: Record<string, Resource[]> = {
 
 export type Resource = (typeof resources)[number];
 export type Action = (typeof actions)[number];
+export type Permission = { resource: Resource; action: Action };
 export type Permissions = Partial<Record<Resource, Action[]>>;
 
 export const PermissionsSchema = z.partialRecord(

@@ -566,7 +566,9 @@ pnpm rebuild <package-name>  # Enable scripts for specific package
 - Implementation: `backend/src/archestra-mcp-server/` (modular directory with one file per tool group)
 - Catalog entry: Created automatically on startup with fixed ID `ARCHESTRA_MCP_CATALOG_ID`
 - Note: `create_mcp_server_installation_request` temporarily disabled pending user context support
-- Security: Archestra tools are always trusted and bypass tool invocation/trusted data policies
+- Security:
+  - **Trusted (policy bypass)**: Archestra tools bypass tool invocation policies and trusted data policies — they are always allowed to execute without policy evaluation
+  - **RBAC (user permissions) still enforced**: Every tool is mapped to a `{ resource, action }` permission in `TOOL_PERMISSIONS` (`archestra-mcp-server/rbac.ts`). The `tools/list` endpoint dynamically filters tools so users only see tools they have permission to use. `executeArchestraTool` performs a centralized RBAC check before executing any tool. When adding new tools, add the corresponding entry to `TOOL_PERMISSIONS` (the `Record<ArchestraToolShortName, ...>` type will cause a compile error if a tool is missing).
 
 **Testing**:
 

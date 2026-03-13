@@ -42,11 +42,24 @@ describe("chat tools", () => {
 describe("chat tool execution", () => {
   let testAgent: Agent;
   let mockContext: ArchestraContext;
+  let userId: string;
+  let organizationId: string;
 
-  beforeEach(async ({ makeAgent }) => {
-    testAgent = await makeAgent({ name: "Test Agent" });
+  beforeEach(async ({ makeAgent, makeUser, makeOrganization, makeMember }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "admin" });
+    userId = user.id;
+    organizationId = org.id;
+    testAgent = await makeAgent({
+      name: "Test Agent",
+      agentType: "agent",
+      organizationId,
+    });
     mockContext = {
       agent: { id: testAgent.id, name: testAgent.name },
+      userId,
+      organizationId,
     };
   });
 
@@ -129,24 +142,15 @@ describe("chat tool execution", () => {
 
   test("artifact_write succeeds with real conversation context", async ({
     makeConversation,
-    makeUser,
-    makeOrganization,
-    makeMember,
   }) => {
-    const org = await makeOrganization();
-    const user = await makeUser();
-    await makeMember(user.id, org.id, { role: "admin" });
-
     const conversation = await makeConversation(testAgent.id, {
-      userId: user.id,
-      organizationId: org.id,
+      userId: userId,
+      organizationId: organizationId,
     });
 
     const contextWithConvo: ArchestraContext = {
-      agent: { id: testAgent.id, name: testAgent.name },
+      ...mockContext,
       conversationId: conversation.id,
-      userId: user.id,
-      organizationId: org.id,
     };
 
     const result = await executeArchestraTool(
@@ -163,30 +167,21 @@ describe("chat tool execution", () => {
   test("swap_agent succeeds with real conversation and target agent", async ({
     makeAgent,
     makeConversation,
-    makeUser,
-    makeOrganization,
-    makeMember,
   }) => {
-    const org = await makeOrganization();
-    const user = await makeUser();
-    await makeMember(user.id, org.id, { role: "admin" });
-
     const targetAgent = await makeAgent({
       name: "Swap Target Agent",
       agentType: "agent",
-      organizationId: org.id,
+      organizationId: organizationId,
     });
 
     const conversation = await makeConversation(testAgent.id, {
-      userId: user.id,
-      organizationId: org.id,
+      userId: userId,
+      organizationId: organizationId,
     });
 
     const contextWithConvo: ArchestraContext = {
-      agent: { id: testAgent.id, name: testAgent.name },
+      ...mockContext,
       conversationId: conversation.id,
-      userId: user.id,
-      organizationId: org.id,
     };
 
     const result = await executeArchestraTool(
@@ -199,6 +194,28 @@ describe("chat tool execution", () => {
     expect(parsed.success).toBe(true);
     expect(parsed.agent_id).toBe(targetAgent.id);
     expect(parsed.agent_name).toBe("Swap Target Agent");
+  });
+
+  test("swap_agent returns error when swapping to same agent", async ({
+    makeConversation,
+  }) => {
+    const conversation = await makeConversation(testAgent.id, {
+      userId: userId,
+      organizationId: organizationId,
+    });
+
+    const contextWithConvo: ArchestraContext = {
+      ...mockContext,
+      conversationId: conversation.id,
+    };
+
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}swap_agent`,
+      { agent_name: testAgent.name },
+      contextWithConvo,
+    );
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain("Already using agent");
   });
 
   test("swap_to_default_agent returns error when conversation context is missing", async () => {
@@ -215,24 +232,15 @@ describe("chat tool execution", () => {
 
   test("swap_to_default_agent returns error when no default agent configured", async ({
     makeConversation,
-    makeUser,
-    makeOrganization,
-    makeMember,
   }) => {
-    const org = await makeOrganization();
-    const user = await makeUser();
-    await makeMember(user.id, org.id, { role: "admin" });
-
     const conversation = await makeConversation(testAgent.id, {
-      userId: user.id,
-      organizationId: org.id,
+      userId: userId,
+      organizationId: organizationId,
     });
 
     const contextWithConvo: ArchestraContext = {
-      agent: { id: testAgent.id, name: testAgent.name },
+      ...mockContext,
       conversationId: conversation.id,
-      userId: user.id,
-      organizationId: org.id,
     };
 
     const result = await executeArchestraTool(
@@ -249,37 +257,31 @@ describe("chat tool execution", () => {
   test("swap_to_default_agent succeeds when on non-default agent", async ({
     makeAgent,
     makeConversation,
-    makeUser,
-    makeOrganization,
-    makeMember,
   }) => {
-    const org = await makeOrganization();
-    const user = await makeUser();
-    await makeMember(user.id, org.id, { role: "admin" });
-
     const defaultAgent = await makeAgent({
       name: "Default Router Agent",
       agentType: "agent",
-      organizationId: org.id,
+      organizationId: organizationId,
     });
-    await OrganizationModel.patch(org.id, { defaultAgentId: defaultAgent.id });
+    await OrganizationModel.patch(organizationId, {
+      defaultAgentId: defaultAgent.id,
+    });
 
     const specialistAgent = await makeAgent({
       name: "Specialist Agent",
       agentType: "agent",
-      organizationId: org.id,
+      organizationId: organizationId,
     });
 
     const conversation = await makeConversation(specialistAgent.id, {
-      userId: user.id,
-      organizationId: org.id,
+      userId: userId,
+      organizationId: organizationId,
     });
 
     const contextWithConvo: ArchestraContext = {
+      ...mockContext,
       agent: { id: specialistAgent.id, name: specialistAgent.name },
       conversationId: conversation.id,
-      userId: user.id,
-      organizationId: org.id,
     };
 
     const result = await executeArchestraTool(
@@ -292,5 +294,33 @@ describe("chat tool execution", () => {
     expect(parsed.success).toBe(true);
     expect(parsed.agent_id).toBe(defaultAgent.id);
     expect(parsed.agent_name).toBe("Default Router Agent");
+  });
+
+  test("swap_to_default_agent returns error when already on default agent", async ({
+    makeConversation,
+  }) => {
+    await OrganizationModel.patch(organizationId, {
+      defaultAgentId: testAgent.id,
+    });
+
+    const conversation = await makeConversation(testAgent.id, {
+      userId: userId,
+      organizationId: organizationId,
+    });
+
+    const contextWithConvo: ArchestraContext = {
+      ...mockContext,
+      conversationId: conversation.id,
+    };
+
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}swap_to_default_agent`,
+      {},
+      contextWithConvo,
+    );
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain(
+      "Already using the default agent",
+    );
   });
 });

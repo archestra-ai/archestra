@@ -19,6 +19,7 @@ import { eq } from "drizzle-orm";
 import type { FastifyRequest } from "fastify";
 import {
   executeArchestraTool,
+  filterToolNamesByPermission,
   getArchestraMcpTools,
 } from "@/archestra-mcp-server";
 import { userHasPermission } from "@/auth/utils";
@@ -118,21 +119,31 @@ export async function createAgentServer(
     // Fetch fresh on every request to ensure we get newly assigned tools
     const mcpTools = await ToolModel.getMcpToolsByAgent(agentId);
 
+    // Filter Archestra tools based on user RBAC permissions
+    const permittedNames = await filterToolNamesByPermission(
+      mcpTools.map((t) => t.name),
+      tokenAuth?.userId,
+      tokenAuth?.organizationId,
+    );
+    const permittedTools = mcpTools.filter((t) => permittedNames.has(t.name));
+
     // Dynamically enrich the knowledge sources tool description with
     // the agent's actual knowledge base names and connector types
     const kbToolDescription = await buildKnowledgeSourcesDescription(agentId);
 
-    const toolsList = mcpTools.map(({ name, description, parameters }) => ({
-      name,
-      title: archestraToolTitles.get(name) || name,
-      description:
-        name === TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME && kbToolDescription
-          ? kbToolDescription
-          : description,
-      inputSchema: parameters,
-      annotations: {},
-      _meta: {},
-    }));
+    const toolsList = permittedTools.map(
+      ({ name, description, parameters }) => ({
+        name,
+        title: archestraToolTitles.get(name) || name,
+        description:
+          name === TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME && kbToolDescription
+            ? kbToolDescription
+            : description,
+        inputSchema: parameters,
+        annotations: {},
+        _meta: {},
+      }),
+    );
 
     // Log tools/list request
     try {

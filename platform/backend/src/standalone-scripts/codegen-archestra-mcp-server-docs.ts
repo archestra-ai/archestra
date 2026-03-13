@@ -10,7 +10,7 @@ import {
   type ArchestraToolShortName,
   getArchestraMcpTools,
 } from "@/archestra-mcp-server";
-import { toolShortNames as knowledgeToolShortNames } from "@/archestra-mcp-server/knowledge";
+import { toolShortNames as knowledgeManagementToolShortNames } from "@/archestra-mcp-server/knowledge-management";
 import logger from "@/logging";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -29,7 +29,7 @@ enum ToolGroup {
   Limits = "Limits",
   Policies = "Policies",
   ToolAssignment = "Tool Assignment",
-  KnowledgeBase = "Knowledge Base",
+  KnowledgeManagement = "Knowledge Management",
   Chat = "Chat",
 }
 
@@ -42,7 +42,7 @@ const groupOrder: Record<ToolGroup, number> = {
   [ToolGroup.Limits]: 5,
   [ToolGroup.Policies]: 6,
   [ToolGroup.ToolAssignment]: 7,
-  [ToolGroup.KnowledgeBase]: 8,
+  [ToolGroup.KnowledgeManagement]: 8,
   [ToolGroup.Chat]: 9,
 };
 
@@ -98,7 +98,24 @@ const toolGroups: Record<ArchestraToolShortName, ToolGroup> = {
   bulk_assign_tools_to_agents: ToolGroup.ToolAssignment,
   bulk_assign_tools_to_mcp_gateways: ToolGroup.ToolAssignment,
 
-  query_knowledge_sources: ToolGroup.KnowledgeBase,
+  query_knowledge_sources: ToolGroup.KnowledgeManagement,
+  create_knowledge_base: ToolGroup.KnowledgeManagement,
+  get_knowledge_bases: ToolGroup.KnowledgeManagement,
+  get_knowledge_base: ToolGroup.KnowledgeManagement,
+  update_knowledge_base: ToolGroup.KnowledgeManagement,
+  delete_knowledge_base: ToolGroup.KnowledgeManagement,
+  create_knowledge_connector: ToolGroup.KnowledgeManagement,
+  get_knowledge_connectors: ToolGroup.KnowledgeManagement,
+  get_knowledge_connector: ToolGroup.KnowledgeManagement,
+  update_knowledge_connector: ToolGroup.KnowledgeManagement,
+  delete_knowledge_connector: ToolGroup.KnowledgeManagement,
+  assign_knowledge_connector_to_knowledge_base: ToolGroup.KnowledgeManagement,
+  unassign_knowledge_connector_from_knowledge_base:
+    ToolGroup.KnowledgeManagement,
+  assign_knowledge_base_to_agent: ToolGroup.KnowledgeManagement,
+  unassign_knowledge_base_from_agent: ToolGroup.KnowledgeManagement,
+  assign_knowledge_connector_to_agent: ToolGroup.KnowledgeManagement,
+  unassign_knowledge_connector_from_agent: ToolGroup.KnowledgeManagement,
 
   todo_write: ToolGroup.Chat,
   artifact_write: ToolGroup.Chat,
@@ -165,7 +182,7 @@ function generateMarkdownBody(): string {
   );
 
   // Knowledge tools are conditionally assigned (only when knowledge sources are attached)
-  const knowledgeToolSet = new Set<string>(knowledgeToolShortNames);
+  const knowledgeToolSet = new Set<string>(knowledgeManagementToolShortNames);
   const preInstalledShortNames = allPreInstalledShortNames.filter(
     (n) => !knowledgeToolSet.has(n),
   );
@@ -173,7 +190,7 @@ function generateMarkdownBody(): string {
   // Group tools
   const grouped = new Map<
     ToolGroup,
-    { shortName: string; description: string }[]
+    { shortName: string; description: string; inputSchema: JsonSchema }[]
   >();
 
   for (const tool of tools) {
@@ -195,6 +212,7 @@ function generateMarkdownBody(): string {
     grouped.get(group)?.push({
       shortName,
       description: truncateDescription(tool.description ?? ""),
+      inputSchema: tool.inputSchema as JsonSchema,
     });
   }
 
@@ -203,10 +221,10 @@ function generateMarkdownBody(): string {
     ([a], [b]) => groupOrder[a] - groupOrder[b],
   );
 
-  // Build markdown sections
-  const sections: string[] = [];
+  // Build unified Tools Reference sections (overview table + detailed schemas per group)
+  const referenceSections: string[] = [];
   for (const [group, groupTools] of sortedGroups) {
-    let section = `## ${group}\n\n`;
+    let section = `### ${group}\n\n`;
     section += "| Tool | Description |\n";
     section += "|------|-------------|\n";
 
@@ -214,7 +232,18 @@ function generateMarkdownBody(): string {
       section += `| \`${tool.shortName}\` | ${escapeTableCell(tool.description)} |\n`;
     }
 
-    sections.push(section);
+    // Add detailed input schemas for each tool in this group
+    for (const tool of groupTools) {
+      const schemaMarkdown = renderInputSchema(
+        tool.shortName,
+        tool.inputSchema,
+      );
+      if (schemaMarkdown) {
+        section += `\n${schemaMarkdown}`;
+      }
+    }
+
+    referenceSections.push(section);
   }
 
   const preInstalledList = preInstalledShortNames
@@ -235,7 +264,15 @@ Additionally, \`query_knowledge_sources\` is automatically assigned to Agents an
 
 All Archestra tools are prefixed with \`archestra__\` and are always trusted — they bypass tool invocation and trusted data policies.
 
-${sections.join("\n")}`;
+## Auth
+
+Archestra tools are **trusted**, meaning they bypass [tool invocation policies](/platform-tool-invocation-policies) and [trusted data policies](/platform-trusted-data-policies) — the tool will always execute without policy evaluation.
+
+However, **RBAC (role-based access control) is still enforced**. Every tool is mapped to a required permission (resource + action). The \`tools/list\` endpoint dynamically filters tools so users only see tools they have permission to use. Additionally, \`executeArchestraTool\` performs a centralized RBAC check before executing any tool. For example, a user without \`knowledgeBase:create\` permission will not see \`create_knowledge_base\` in their tool list and cannot execute it.
+
+## Tools Reference
+
+${referenceSections.join("\n")}`;
 }
 
 function extractBodyFromMarkdown(content: string): string {
@@ -287,4 +324,108 @@ function truncateDescription(description: string): string {
 
 function escapeTableCell(text: string): string {
   return text.replace(/\|/g, "\\|");
+}
+
+// === Input schema rendering ===
+
+interface JsonSchema {
+  type?: string;
+  properties?: Record<string, JsonSchema>;
+  items?: JsonSchema;
+  required?: string[];
+  description?: string;
+  enum?: string[];
+}
+
+function renderInputSchema(
+  toolName: string,
+  schema: JsonSchema,
+): string | null {
+  const properties = schema.properties;
+  if (!properties || Object.keys(properties).length === 0) {
+    return null;
+  }
+
+  const requiredSet = new Set(schema.required ?? []);
+  const rows = renderProperties(properties, requiredSet);
+
+  let md = `#### ${toolName}\n\n`;
+  md += "| Parameter | Type | Required | Description |\n";
+  md += "|-----------|------|----------|-------------|\n";
+  for (const row of rows) {
+    md += `| ${row.name} | ${row.type} | ${row.required} | ${escapeTableCell(row.description)} |\n`;
+  }
+
+  return md;
+}
+
+function renderProperties(
+  properties: Record<string, JsonSchema>,
+  requiredSet: Set<string>,
+  prefix = "",
+): { name: string; type: string; required: string; description: string }[] {
+  const rows: {
+    name: string;
+    type: string;
+    required: string;
+    description: string;
+  }[] = [];
+
+  for (const [key, prop] of Object.entries(properties)) {
+    const qualifiedName = prefix ? `${prefix}.${key}` : key;
+    const isRequired = requiredSet.has(key);
+    const typeStr = formatType(prop);
+    const desc = prop.description ?? "";
+
+    rows.push({
+      name: `\`${qualifiedName}\``,
+      type: `\`${typeStr}\``,
+      required: isRequired ? "Yes" : "No",
+      description: desc,
+    });
+
+    // Recurse into nested object properties
+    if (prop.type === "object" && prop.properties) {
+      const nestedRequired = new Set(prop.required ?? []);
+      rows.push(
+        ...renderProperties(prop.properties, nestedRequired, qualifiedName),
+      );
+    }
+
+    // Recurse into array item properties
+    if (
+      prop.type === "array" &&
+      prop.items?.type === "object" &&
+      prop.items.properties
+    ) {
+      const itemRequired = new Set(prop.items.required ?? []);
+      rows.push(
+        ...renderProperties(
+          prop.items.properties,
+          itemRequired,
+          `${qualifiedName}[]`,
+        ),
+      );
+    }
+  }
+
+  return rows;
+}
+
+function formatType(schema: JsonSchema): string {
+  if (schema.enum) {
+    return schema.enum.map((v) => `"${v}"`).join(" \\| ");
+  }
+
+  if (schema.type === "array") {
+    if (schema.items) {
+      if (schema.items.type === "object") {
+        return "object[]";
+      }
+      return `${schema.items.type ?? "any"}[]`;
+    }
+    return "array";
+  }
+
+  return schema.type ?? "any";
 }

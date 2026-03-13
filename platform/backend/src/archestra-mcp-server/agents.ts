@@ -513,6 +513,15 @@ export async function handleTool(
         return errorResult("either id or name parameter is required");
       }
 
+      const UUID_RE =
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+      // If the LLM supplied a non-UUID string as `id`, treat it as a name so
+      // lookups like { id: "my agent name" } degrade gracefully instead of
+      // crashing with a PostgreSQL UUID type-mismatch error.
+      const resolvedId = id && UUID_RE.test(id) ? id : undefined;
+      const resolvedName = resolvedId ? name : (id ?? name);
+
       let record: Agent | null | undefined;
 
       const isAdmin =
@@ -524,14 +533,14 @@ export async function handleTool(
             })
           : false;
 
-      if (id) {
-        record = await AgentModel.findById(id, context.userId, isAdmin);
-      } else if (name) {
+      if (resolvedId) {
+        record = await AgentModel.findById(resolvedId, context.userId, isAdmin);
+      } else if (resolvedName) {
         const results = await AgentModel.findAllPaginated(
           { limit: 1, offset: 0 },
           undefined,
           {
-            name,
+            name: resolvedName,
             agentType: expectedType,
           },
           context.userId,
@@ -640,6 +649,14 @@ export async function handleTool(
       const id = args?.id as string | undefined;
       if (!id) {
         return errorResult("agent id is required.");
+      }
+
+      const UUID_RE =
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (!UUID_RE.test(id)) {
+        return errorResult(
+          `invalid id format: "${id}" is not a valid UUID. Use archestra__get_agent with a name search to find the correct ID first.`,
+        );
       }
 
       if (!context.userId || !organizationId) {

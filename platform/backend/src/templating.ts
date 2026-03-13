@@ -198,15 +198,15 @@ export function buildRenderedPrompts(params: {
 
   if (params.systemPrompt) {
     systemPromptParts.push(
-      needsRendering
-        ? renderSystemPrompt(params.systemPrompt, params.context!)
+      needsRendering && params.context
+        ? renderSystemPrompt(params.systemPrompt, params.context)
         : params.systemPrompt,
     );
   }
   if (params.userPrompt) {
     userPromptParts.push(
-      needsRendering
-        ? renderSystemPrompt(params.userPrompt, params.context!)
+      needsRendering && params.context
+        ? renderSystemPrompt(params.userPrompt, params.context)
         : params.userPrompt,
     );
   }

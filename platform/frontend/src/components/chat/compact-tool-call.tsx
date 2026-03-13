@@ -48,6 +48,7 @@ function CompactCircle({
   toolName,
   state,
   isExpanded,
+  isExpandable = true,
   onClick,
   icon,
   catalogId,
@@ -55,6 +56,7 @@ function CompactCircle({
   toolName: string;
   state: "running" | "completed";
   isExpanded: boolean;
+  isExpandable?: boolean;
   onClick: () => void;
   icon?: string | null;
   catalogId?: string;
@@ -66,9 +68,12 @@ function CompactCircle({
           <button
             type="button"
             onClick={onClick}
+            disabled={!isExpandable}
             className={cn(
               "relative inline-flex items-center justify-center size-8 rounded-full border transition-all",
-              "hover:bg-accent hover:border-accent-foreground/20",
+              isExpandable &&
+                "hover:bg-accent hover:border-accent-foreground/20",
+              !isExpandable && "cursor-default",
               isExpanded
                 ? "bg-accent border-accent-foreground/20 ring-2 ring-primary/20"
                 : "bg-background",
@@ -137,6 +142,7 @@ export function CompactToolGroup({
               toolName={tool.toolName}
               state={getToolState(tool.part, tool.toolResultPart)}
               isExpanded={expandedKey === tool.key}
+              isExpandable={canExpandToolCalls}
               onClick={() => handleToggle(tool.key)}
               icon={iconInfo?.icon}
               catalogId={iconInfo?.catalogId}

@@ -1012,12 +1012,13 @@ function MessageTool({
     <ToolErrorLogsButton toolName={toolName} />
   ) : null;
 
-  const isExpandable = hasContent && canExpandToolCalls;
+  const isExpandable =
+    hasContent && (canExpandToolCalls || isApprovalRequested);
 
   return (
     <Tool
       className={isExpandable ? "cursor-pointer" : ""}
-      defaultOpen={isApprovalRequested && canExpandToolCalls}
+      defaultOpen={isApprovalRequested}
     >
       <ToolHeader
         type={`tool-${toolName}`}

@@ -57,6 +57,11 @@ export const tools: Tool[] = [
                 description:
                   "Optional ID of the MCP server to use as execution source",
               },
+              useDynamicTeamCredential: {
+                type: "boolean",
+                description:
+                  "When true, credentials are resolved at call time based on the caller's identity instead of using a fixed credential source. Resolution order: (1) the calling user's own personal credential, (2) a credential owned by a team member on the same team. Use this as an alternative to credentialSourceMcpServerId or executionSourceMcpServerId.",
+              },
             },
             required: ["agentId", "toolId"],
           },
@@ -98,6 +103,11 @@ export const tools: Tool[] = [
                 type: "string",
                 description:
                   "Optional ID of the MCP server to use as execution source",
+              },
+              useDynamicTeamCredential: {
+                type: "boolean",
+                description:
+                  "When true, credentials are resolved at call time based on the caller's identity instead of using a fixed credential source. Resolution order: (1) the calling user's own personal credential, (2) a credential owned by a team member on the same team. Use this as an alternative to credentialSourceMcpServerId or executionSourceMcpServerId.",
               },
             },
             required: ["mcpGatewayId", "toolId"],
@@ -160,6 +170,8 @@ export async function handleTool(
           assignment.toolId,
           assignment.credentialSourceMcpServerId,
           assignment.executionSourceMcpServerId,
+          undefined,
+          assignment.useDynamicTeamCredential,
         ),
       ),
     );

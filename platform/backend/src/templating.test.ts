@@ -1,6 +1,7 @@
 import { describe, expect, test } from "@/test";
 import {
   applyResponseModifierTemplate,
+  buildRenderedPrompts,
   evaluateRoleMappingTemplate,
   extractGroupsWithTemplate,
   promptNeedsRendering,
@@ -561,5 +562,73 @@ describe("promptNeedsRendering", () => {
 
   test("returns false with no arguments", () => {
     expect(promptNeedsRendering()).toBe(false);
+  });
+});
+
+describe("buildRenderedPrompts", () => {
+  const context = {
+    user: {
+      name: "Alice",
+      email: "alice@test.com",
+      teams: ["Engineering"],
+    },
+  };
+
+  test("returns empty arrays when both prompts are null", () => {
+    const result = buildRenderedPrompts({
+      systemPrompt: null,
+      userPrompt: null,
+      context: null,
+    });
+    expect(result).toEqual({ systemPromptParts: [], userPromptParts: [] });
+  });
+
+  test("returns raw prompts when no templating needed", () => {
+    const result = buildRenderedPrompts({
+      systemPrompt: "Be helpful",
+      userPrompt: "Answer concisely",
+      context: null,
+    });
+    expect(result.systemPromptParts).toEqual(["Be helpful"]);
+    expect(result.userPromptParts).toEqual(["Answer concisely"]);
+  });
+
+  test("renders templates when context is provided and prompts contain handlebars", () => {
+    const result = buildRenderedPrompts({
+      systemPrompt: "Hello {{user.name}}",
+      userPrompt: null,
+      context,
+    });
+    expect(result.systemPromptParts).toEqual(["Hello Alice"]);
+    expect(result.userPromptParts).toEqual([]);
+  });
+
+  test("renders both system and user prompts", () => {
+    const result = buildRenderedPrompts({
+      systemPrompt: "For {{user.name}}",
+      userPrompt: "Email: {{user.email}}",
+      context,
+    });
+    expect(result.systemPromptParts).toEqual(["For Alice"]);
+    expect(result.userPromptParts).toEqual(["Email: alice@test.com"]);
+  });
+
+  test("skips rendering when context is null even if prompts have braces", () => {
+    const result = buildRenderedPrompts({
+      systemPrompt: "Hello {{user.name}}",
+      userPrompt: null,
+      context: null,
+    });
+    expect(result.systemPromptParts).toEqual(["Hello {{user.name}}"]);
+  });
+
+  test("handles only userPrompt being set", () => {
+    const result = buildRenderedPrompts({
+      systemPrompt: null,
+      userPrompt: "Plain text",
+      context: null,
+    });
+    expect(result.systemPromptParts).toEqual([]);
+    expect(result.userPromptParts).toEqual(["Plain text"]);
   });
 });

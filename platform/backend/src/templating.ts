@@ -176,6 +176,45 @@ export function promptNeedsRendering(
 }
 
 /**
+ * Build rendered system and user prompt parts from an agent's prompts.
+ * Skips template rendering (and avoids requiring a context) when the prompts
+ * don't contain Handlebars syntax.
+ */
+export function buildRenderedPrompts(params: {
+  systemPrompt: string | null;
+  userPrompt: string | null;
+  context: SystemPromptContext | null;
+}): { systemPromptParts: string[]; userPromptParts: string[] } {
+  const systemPromptParts: string[] = [];
+  const userPromptParts: string[] = [];
+
+  if (!params.systemPrompt && !params.userPrompt) {
+    return { systemPromptParts, userPromptParts };
+  }
+
+  const needsRendering =
+    params.context != null &&
+    promptNeedsRendering(params.systemPrompt, params.userPrompt);
+
+  if (params.systemPrompt) {
+    systemPromptParts.push(
+      needsRendering
+        ? renderSystemPrompt(params.systemPrompt, params.context!)
+        : params.systemPrompt,
+    );
+  }
+  if (params.userPrompt) {
+    userPromptParts.push(
+      needsRendering
+        ? renderSystemPrompt(params.userPrompt, params.context!)
+        : params.userPrompt,
+    );
+  }
+
+  return { systemPromptParts, userPromptParts };
+}
+
+/**
  * Render a system prompt template with user context variables.
  * If the template fails to compile or render, returns the original string unchanged
  * so the agent still works without variable substitution.

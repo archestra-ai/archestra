@@ -23,8 +23,8 @@ import {
 } from "@/models";
 import { mapProviderError, ProviderError } from "@/routes/chat/errors";
 import {
+  buildRenderedPrompts,
   promptNeedsRendering,
-  renderSystemPrompt,
   type SystemPromptContext,
 } from "@/templating";
 
@@ -136,42 +136,28 @@ export async function executeA2AMessage(
 
   // Build system prompt from agent's systemPrompt and userPrompt fields
   let systemPrompt: string | undefined;
-  const systemPromptParts: string[] = [];
-  const userPromptParts: string[] = [];
 
-  // Collect system and user prompts from the agent (render templates if needed)
-  if (agent.systemPrompt || agent.userPrompt) {
-    if (promptNeedsRendering(agent.systemPrompt, agent.userPrompt)) {
-      const [userDetails, userTeams] = await Promise.all([
-        UserModel.getById(userId),
-        TeamModel.getUserTeams(userId),
-      ]);
-      const promptContext: SystemPromptContext = {
-        user: {
-          name: userDetails?.name ?? "",
-          email: userDetails?.email ?? "",
-          teams: userTeams.map((t) => t.name),
-        },
-      };
-      if (agent.systemPrompt) {
-        systemPromptParts.push(
-          renderSystemPrompt(agent.systemPrompt, promptContext),
-        );
-      }
-      if (agent.userPrompt) {
-        userPromptParts.push(
-          renderSystemPrompt(agent.userPrompt, promptContext),
-        );
-      }
-    } else {
-      if (agent.systemPrompt) {
-        systemPromptParts.push(agent.systemPrompt);
-      }
-      if (agent.userPrompt) {
-        userPromptParts.push(agent.userPrompt);
-      }
-    }
+  // Build template context only when prompts use Handlebars syntax
+  let promptContext: SystemPromptContext | null = null;
+  if (promptNeedsRendering(agent.systemPrompt, agent.userPrompt)) {
+    const [userDetails, userTeams] = await Promise.all([
+      UserModel.getById(userId),
+      TeamModel.getUserTeams(userId),
+    ]);
+    promptContext = {
+      user: {
+        name: userDetails?.name ?? "",
+        email: userDetails?.email ?? "",
+        teams: userTeams.map((t) => t.name),
+      },
+    };
   }
+
+  const { systemPromptParts, userPromptParts } = buildRenderedPrompts({
+    systemPrompt: agent.systemPrompt,
+    userPrompt: agent.userPrompt,
+    context: promptContext,
+  });
 
   if (systemPromptParts.length > 0 || userPromptParts.length > 0) {
     const allParts = [...systemPromptParts, ...userPromptParts];

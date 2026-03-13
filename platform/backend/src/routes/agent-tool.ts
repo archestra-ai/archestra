@@ -322,11 +322,10 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       // Bulk create-or-update all validated assignments
-      const bulkResults =
-        await AgentToolModel.bulkCreateOrUpdateCredentials(
-          validated,
-          request.organizationId,
-        );
+      const bulkResults = await AgentToolModel.bulkCreateOrUpdateCredentials(
+        validated,
+        request.organizationId,
+      );
 
       const succeeded: { agentId: string; toolId: string }[] = [];
       const duplicates: { agentId: string; toolId: string }[] = [];

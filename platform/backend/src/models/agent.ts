@@ -843,9 +843,7 @@ class AgentModel {
    * Returns a Map of agentId -> { agentType, scope, authorId, teamIds }.
    * Much lighter than findById (no tool/label/knowledgeBase/connector joins).
    */
-  static async findByIdsForPermissionCheck(
-    ids: string[],
-  ): Promise<
+  static async findByIdsForPermissionCheck(ids: string[]): Promise<
     Map<
       string,
       {

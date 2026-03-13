@@ -61,13 +61,7 @@ describe("validateAssignment", () => {
       toolsMap: new Map([[tool.id, tool]]),
     };
 
-    const result = await validateAssignment(
-      agentId,
-      tool.id,
-      null,
-      null,
-      data,
-    );
+    const result = await validateAssignment(agentId, tool.id, null, null, data);
     expect(result).toBeNull();
   });
 
@@ -87,9 +81,9 @@ describe("validateAssignment", () => {
       data,
     );
     expect(result).not.toBeNull();
-    expect(result!.status).toBe(404);
-    expect(result!.error.type).toBe("not_found");
-    expect(result!.error.message).toContain("missing-agent");
+    expect(result?.status).toBe(404);
+    expect(result?.error.type).toBe("not_found");
+    expect(result?.error.message).toContain("missing-agent");
   });
 
   test("returns 404 when tool does not exist", async () => {
@@ -106,9 +100,9 @@ describe("validateAssignment", () => {
       data,
     );
     expect(result).not.toBeNull();
-    expect(result!.status).toBe(404);
-    expect(result!.error.type).toBe("not_found");
-    expect(result!.error.message).toContain("missing-tool");
+    expect(result?.status).toBe(404);
+    expect(result?.error.type).toBe("not_found");
+    expect(result?.error.message).toContain("missing-tool");
   });
 
   test("returns 400 for local server tool without execution source or dynamic credential", async () => {
@@ -131,8 +125,8 @@ describe("validateAssignment", () => {
       data,
     );
     expect(result).not.toBeNull();
-    expect(result!.status).toBe(400);
-    expect(result!.error.message).toContain("Execution source");
+    expect(result?.status).toBe(400);
+    expect(result?.error.message).toContain("Execution source");
   });
 
   test("allows local server tool with executionSourceMcpServerId", async ({
@@ -153,7 +147,10 @@ describe("validateAssignment", () => {
       toolsMap: new Map([[tool.id, tool]]),
       catalogItemsMap: new Map([[catalogItem.id, catalogItem]]),
       mcpServersBasicMap: new Map([
-        [server.id, { id: server.id, ownerId: null, catalogId: catalogItem.id }],
+        [
+          server.id,
+          { id: server.id, ownerId: null, catalogId: catalogItem.id },
+        ],
       ]),
     };
 
@@ -210,8 +207,8 @@ describe("validateAssignment", () => {
       data,
     );
     expect(result).not.toBeNull();
-    expect(result!.status).toBe(400);
-    expect(result!.error.message).toContain("Credential source");
+    expect(result?.status).toBe(400);
+    expect(result?.error.message).toContain("Credential source");
   });
 
   test("allows remote server tool with useDynamicTeamCredential", async () => {

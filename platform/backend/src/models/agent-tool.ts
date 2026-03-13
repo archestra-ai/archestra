@@ -347,9 +347,7 @@ class AgentToolModel {
           .from(schema.agentsTable)
           .where(eq(schema.agentsTable.id, agentId))
           .limit(1)
-          .then((rows) =>
-            rows.length > 0 ? rows[0].organizationId : null,
-          );
+          .then((rows) => (rows.length > 0 ? rows[0].organizationId : null));
 
     resolveOrgId
       .then(async (orgId) => {

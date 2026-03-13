@@ -2219,15 +2219,13 @@ describe("AgentModel", () => {
       expect(result.size).toBe(1);
       const entry = result.get(agent.id);
       expect(entry).toBeDefined();
-      expect(entry!.agentType).toBe("profile");
-      expect(entry!.scope).toBe("org");
-      expect(entry!.authorId).toBe(user.id);
-      expect(entry!.teamIds).toEqual([team.id]);
+      expect(entry?.agentType).toBe("profile");
+      expect(entry?.scope).toBe("org");
+      expect(entry?.authorId).toBe(user.id);
+      expect(entry?.teamIds).toEqual([team.id]);
     });
 
-    test("returns multiple agents in a single batch", async ({
-      makeAgent,
-    }) => {
+    test("returns multiple agents in a single batch", async ({ makeAgent }) => {
       const agent1 = await makeAgent({ name: "Agent A", agentType: "agent" });
       const agent2 = await makeAgent({
         name: "Agent B",
@@ -2245,9 +2243,9 @@ describe("AgentModel", () => {
       ]);
 
       expect(result.size).toBe(3);
-      expect(result.get(agent1.id)!.agentType).toBe("agent");
-      expect(result.get(agent2.id)!.agentType).toBe("llm_proxy");
-      expect(result.get(agent3.id)!.agentType).toBe("mcp_gateway");
+      expect(result.get(agent1.id)?.agentType).toBe("agent");
+      expect(result.get(agent2.id)?.agentType).toBe("llm_proxy");
+      expect(result.get(agent3.id)?.agentType).toBe("mcp_gateway");
     });
 
     test("returns empty map for empty input", async () => {
@@ -2255,9 +2253,7 @@ describe("AgentModel", () => {
       expect(result.size).toBe(0);
     });
 
-    test("omits non-existent agent IDs from result", async ({
-      makeAgent,
-    }) => {
+    test("omits non-existent agent IDs from result", async ({ makeAgent }) => {
       const agent = await makeAgent({ name: "Exists" });
 
       const result = await AgentModel.findByIdsForPermissionCheck([
@@ -2302,7 +2298,7 @@ describe("AgentModel", () => {
 
       const result = await AgentModel.findByIdsForPermissionCheck([agent.id]);
 
-      expect(result.get(agent.id)!.teamIds).toEqual([]);
+      expect(result.get(agent.id)?.teamIds).toEqual([]);
     });
 
     test("returns null authorId for agent without an author", async ({
@@ -2312,7 +2308,7 @@ describe("AgentModel", () => {
 
       const result = await AgentModel.findByIdsForPermissionCheck([agent.id]);
 
-      expect(result.get(agent.id)!.authorId).toBeNull();
+      expect(result.get(agent.id)?.authorId).toBeNull();
     });
   });
 });

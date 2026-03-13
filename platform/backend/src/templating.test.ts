@@ -554,8 +554,7 @@ Current date: {{currentDate}}.`;
     const context = {
       user: { name: "Alice", email: "alice@test.com", teams: ["R&D"] },
     };
-    const template =
-      "Teams: {{#each user.teams}}{{this}}{{/each}}";
+    const template = "Teams: {{#each user.teams}}{{this}}{{/each}}";
     expect(renderSystemPrompt(template, context)).toBe("Teams: R&D");
   });
 

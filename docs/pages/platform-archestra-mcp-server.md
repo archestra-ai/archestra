@@ -24,13 +24,15 @@ Archestra tools are **trusted**, meaning they bypass [tool invocation policies](
 
 However, **RBAC (role-based access control) is still enforced**. Every tool is mapped to a required permission (resource + action). The `tools/list` endpoint dynamically filters tools so users only see tools they have permission to use. Additionally, `executeArchestraTool` performs a centralized RBAC check before executing any tool. For example, a user without `knowledgeBase:create` permission will not see `create_knowledge_base` in their tool list and cannot execute it.
 
-## Identity
+## Tools Reference
+
+### Identity
 
 | Tool | Description |
 |------|-------------|
 | `whoami` | Returns the name and ID of the current agent |
 
-## Agents
+### Agents
 
 | Tool | Description |
 |------|-------------|
@@ -39,104 +41,7 @@ However, **RBAC (role-based access control) is still enforced**. Every tool is m
 | `list_agents` | List agents with optional filtering by name and scope. |
 | `edit_agent` | Edit an existing agent. |
 
-## LLM Proxies
-
-| Tool | Description |
-|------|-------------|
-| `create_llm_proxy` | Create a new LLM proxy with the specified name and optional labels. |
-| `get_llm_proxy` | Get a specific LLM proxy by ID or name. |
-
-## MCP Gateways
-
-| Tool | Description |
-|------|-------------|
-| `create_mcp_gateway` | Create a new MCP gateway with the specified name and optional labels. |
-| `get_mcp_gateway` | Get a specific MCP gateway by ID or name. |
-
-## MCP Servers
-
-| Tool | Description |
-|------|-------------|
-| `search_private_mcp_registry` | Search the private MCP registry for available MCP servers. |
-| `get_mcp_servers` | List all MCP servers from the catalog. |
-| `get_mcp_server_tools` | Get all tools available for a specific MCP server by its catalog ID (from get_mcp_servers). |
-| `edit_mcp_description` | Edit an MCP server's display information and metadata. |
-| `edit_mcp_config` | Edit an MCP server's technical configuration. |
-| `create_mcp_server` | Create a new MCP server in the private registry. |
-| `deploy_mcp_server` | Deploy (install) an MCP server from the catalog. |
-| `list_mcp_server_deployments` | List all deployed (installed) MCP server instances accessible to the current user. |
-| `get_mcp_server_logs` | Get recent container logs from a deployed local (K8s) MCP server. |
-| `create_mcp_server_installation_request` | Allows users from within the Archestra Platform chat UI to submit a request for an MCP server to be added to their Archestra Platform's internal MCP server registry. |
-
-## Limits
-
-| Tool | Description |
-|------|-------------|
-| `create_limit` | Create a new cost or usage limit for an organization, team, agent, LLM proxy, or MCP gateway. |
-| `get_limits` | Retrieve all limits, optionally filtered by entity type and/or entity ID. |
-| `update_limit` | Update an existing limit's value. |
-| `delete_limit` | Delete an existing limit by ID. |
-| `get_agent_token_usage` | Get the total token usage (input and output) for a specific agent. |
-| `get_llm_proxy_token_usage` | Get the total token usage (input and output) for a specific LLM proxy. |
-
-## Policies
-
-| Tool | Description |
-|------|-------------|
-| `get_autonomy_policy_operators` | Get all supported policy operators with their human-readable labels |
-| `get_tool_invocation_policies` | Get all tool invocation policies |
-| `create_tool_invocation_policy` | Create a new tool invocation policy |
-| `get_tool_invocation_policy` | Get a specific tool invocation policy by ID |
-| `update_tool_invocation_policy` | Update a tool invocation policy |
-| `delete_tool_invocation_policy` | Delete a tool invocation policy by ID |
-| `get_trusted_data_policies` | Get all trusted data policies |
-| `create_trusted_data_policy` | Create a new trusted data policy |
-| `get_trusted_data_policy` | Get a specific trusted data policy by ID |
-| `update_trusted_data_policy` | Update a trusted data policy |
-| `delete_trusted_data_policy` | Delete a trusted data policy by ID |
-
-## Tool Assignment
-
-| Tool | Description |
-|------|-------------|
-| `bulk_assign_tools_to_agents` | Assign multiple tools to multiple agents in bulk with validation and error handling |
-| `bulk_assign_tools_to_mcp_gateways` | Assign multiple tools to multiple MCP gateways in bulk with validation and error handling |
-
-## Knowledge Management
-
-| Tool | Description |
-|------|-------------|
-| `query_knowledge_sources` | Query the organization's knowledge sources to retrieve relevant information. |
-| `create_knowledge_base` | Create a new knowledge base for organizing knowledge connectors. |
-| `get_knowledge_bases` | List all knowledge bases in the organization. |
-| `get_knowledge_base` | Get details of a specific knowledge base by ID. |
-| `update_knowledge_base` | Update an existing knowledge base. |
-| `delete_knowledge_base` | Delete a knowledge base by ID. |
-| `create_knowledge_connector` | Create a new knowledge connector for ingesting data from external sources. |
-| `get_knowledge_connectors` | List all knowledge connectors in the organization. |
-| `get_knowledge_connector` | Get details of a specific knowledge connector by ID. |
-| `update_knowledge_connector` | Update an existing knowledge connector. |
-| `delete_knowledge_connector` | Delete a knowledge connector by ID. |
-| `assign_knowledge_connector_to_knowledge_base` | Assign a knowledge connector to a knowledge base. |
-| `unassign_knowledge_connector_from_knowledge_base` | Remove a knowledge connector from a knowledge base. |
-| `assign_knowledge_base_to_agent` | Assign a knowledge base to an agent. |
-| `unassign_knowledge_base_from_agent` | Remove a knowledge base from an agent. |
-| `assign_knowledge_connector_to_agent` | Directly assign a knowledge connector to an agent (bypassing knowledge base). |
-| `unassign_knowledge_connector_from_agent` | Remove a directly-assigned knowledge connector from an agent. |
-
-## Chat
-
-| Tool | Description |
-|------|-------------|
-| `todo_write` | Write todos to the current conversation. |
-| `swap_agent` | Switch the current conversation to a different agent. |
-| `artifact_write` | Write or update a markdown artifact for the current conversation. |
-
-## Tools Reference
-
-Detailed input schemas for each tool.
-
-### create_agent
+#### create_agent
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
@@ -152,14 +57,14 @@ Detailed input schemas for each tool.
 | `mcpServerIds` | `string[]` | No | Array of MCP server IDs whose tools should be assigned to the agent. Use get_mcp_servers to look up IDs by name. When the user mentions MCP servers by name, always look up their IDs and pass them here. |
 | `subAgentIds` | `string[]` | No | Array of agent IDs to assign as sub-agents (delegations) to the agent. Use list_agents or get_agent to look up IDs by name. When the user mentions sub-agents by name, always look up their IDs and pass them here. |
 
-### get_agent
+#### get_agent
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `id` | `string` | No | The ID of the agent to retrieve |
 | `name` | `string` | No | Search by name (partial match). |
 
-### list_agents
+#### list_agents
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
@@ -167,7 +72,7 @@ Detailed input schemas for each tool.
 | `scope` | `"personal" \| "team" \| "org"` | No | Filter by scope (optional) |
 | `limit` | `number` | No | Maximum number of agents to return (optional, default 20, max 100) |
 
-### edit_agent
+#### edit_agent
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
@@ -185,7 +90,14 @@ Detailed input schemas for each tool.
 | `mcpServerIds` | `string[]` | No | Array of MCP server IDs whose tools should be assigned to the agent (additive). Use get_mcp_servers to look up IDs by name. |
 | `subAgentIds` | `string[]` | No | Array of agent IDs to assign as sub-agents (additive). Use list_agents or get_agent to look up IDs by name. |
 
-### create_llm_proxy
+### LLM Proxies
+
+| Tool | Description |
+|------|-------------|
+| `create_llm_proxy` | Create a new LLM proxy with the specified name and optional labels. |
+| `get_llm_proxy` | Get a specific LLM proxy by ID or name. |
+
+#### create_llm_proxy
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
@@ -195,14 +107,21 @@ Detailed input schemas for each tool.
 | `labels[].key` | `string` | Yes | The label key |
 | `labels[].value` | `string` | Yes | The value for the label |
 
-### get_llm_proxy
+#### get_llm_proxy
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `id` | `string` | No | The ID of the LLM proxy to retrieve |
 | `name` | `string` | No | Search by name (partial match). Only returns your personal proxies. |
 
-### create_mcp_gateway
+### MCP Gateways
+
+| Tool | Description |
+|------|-------------|
+| `create_mcp_gateway` | Create a new MCP gateway with the specified name and optional labels. |
+| `get_mcp_gateway` | Get a specific MCP gateway by ID or name. |
+
+#### create_mcp_gateway
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
@@ -212,26 +131,41 @@ Detailed input schemas for each tool.
 | `labels[].key` | `string` | Yes | The label key |
 | `labels[].value` | `string` | Yes | The value for the label |
 
-### get_mcp_gateway
+#### get_mcp_gateway
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `id` | `string` | No | The ID of the MCP gateway to retrieve |
 | `name` | `string` | No | Search by name (partial match). Only returns your personal gateways. |
 
-### search_private_mcp_registry
+### MCP Servers
+
+| Tool | Description |
+|------|-------------|
+| `search_private_mcp_registry` | Search the private MCP registry for available MCP servers. |
+| `get_mcp_servers` | List all MCP servers from the catalog. |
+| `get_mcp_server_tools` | Get all tools available for a specific MCP server by its catalog ID (from get_mcp_servers). |
+| `edit_mcp_description` | Edit an MCP server's display information and metadata. |
+| `edit_mcp_config` | Edit an MCP server's technical configuration. |
+| `create_mcp_server` | Create a new MCP server in the private registry. |
+| `deploy_mcp_server` | Deploy (install) an MCP server from the catalog. |
+| `list_mcp_server_deployments` | List all deployed (installed) MCP server instances accessible to the current user. |
+| `get_mcp_server_logs` | Get recent container logs from a deployed local (K8s) MCP server. |
+| `create_mcp_server_installation_request` | Allows users from within the Archestra Platform chat UI to submit a request for an MCP server to be added to their Archestra Platform's internal MCP server registry. |
+
+#### search_private_mcp_registry
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `query` | `string` | No | Optional search query to filter MCP servers by name or description |
 
-### get_mcp_server_tools
+#### get_mcp_server_tools
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `mcpServerId` | `string` | Yes | The catalog ID of the MCP server |
 
-### edit_mcp_description
+#### edit_mcp_description
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
@@ -249,7 +183,7 @@ Detailed input schemas for each tool.
 | `labels[].value` | `string` | Yes |  |
 | `teams` | `string[]` | No | Team IDs for team-scoped access control |
 
-### edit_mcp_config
+#### edit_mcp_config
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
@@ -292,7 +226,7 @@ Detailed input schemas for each tool.
 | `installationCommand` | `string` | No | [Local] Command to install the MCP server package |
 | `userConfig` | `object` | No | User-configurable fields shown during installation (shared by both remote and local) |
 
-### create_mcp_server
+#### create_mcp_server
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
@@ -346,7 +280,7 @@ Detailed input schemas for each tool.
 | `labels[].value` | `string` | Yes |  |
 | `teams` | `string[]` | No | Team IDs for team-scoped access control |
 
-### deploy_mcp_server
+#### deploy_mcp_server
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
@@ -354,14 +288,25 @@ Detailed input schemas for each tool.
 | `teamId` | `string` | No | Optional team ID for a team-scoped deployment. If omitted, deploys as a personal server. |
 | `agentIds` | `string[]` | No | Optional agent IDs to assign the server's tools to after deployment. |
 
-### get_mcp_server_logs
+#### get_mcp_server_logs
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `serverId` | `string` | Yes | The deployment ID of the MCP server (from list_mcp_server_deployments). |
 | `lines` | `number` | No | Number of log lines to retrieve (default: 100, max recommended: 500). |
 
-### create_limit
+### Limits
+
+| Tool | Description |
+|------|-------------|
+| `create_limit` | Create a new cost or usage limit for an organization, team, agent, LLM proxy, or MCP gateway. |
+| `get_limits` | Retrieve all limits, optionally filtered by entity type and/or entity ID. |
+| `update_limit` | Update an existing limit's value. |
+| `delete_limit` | Delete an existing limit by ID. |
+| `get_agent_token_usage` | Get the total token usage (input and output) for a specific agent. |
+| `get_llm_proxy_token_usage` | Get the total token usage (input and output) for a specific LLM proxy. |
+
+#### create_limit
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
@@ -373,39 +318,55 @@ Detailed input schemas for each tool.
 | `mcp_server_name` | `string` | No | MCP server name (required for mcp_server_calls and tool_calls limits) |
 | `tool_name` | `string` | No | Tool name (required for tool_calls limits) |
 
-### get_limits
+#### get_limits
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `entity_type` | `"organization" \| "team" \| "agent" \| "llm_proxy" \| "mcp_gateway"` | No | Optional filter by entity type |
 | `entity_id` | `string` | No | Optional filter by entity ID |
 
-### update_limit
+#### update_limit
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `id` | `string` | Yes | The ID of the limit to update |
 | `limit_value` | `number` | Yes | The new limit value |
 
-### delete_limit
+#### delete_limit
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `id` | `string` | Yes | The ID of the limit to delete |
 
-### get_agent_token_usage
+#### get_agent_token_usage
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `id` | `string` | No | The ID of the agent to get usage for (optional, defaults to current agent) |
 
-### get_llm_proxy_token_usage
+#### get_llm_proxy_token_usage
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `id` | `string` | No | The ID of the LLM proxy to get usage for (optional, defaults to current agent) |
 
-### create_tool_invocation_policy
+### Policies
+
+| Tool | Description |
+|------|-------------|
+| `get_autonomy_policy_operators` | Get all supported policy operators with their human-readable labels |
+| `get_tool_invocation_policies` | Get all tool invocation policies |
+| `create_tool_invocation_policy` | Create a new tool invocation policy |
+| `get_tool_invocation_policy` | Get a specific tool invocation policy by ID |
+| `update_tool_invocation_policy` | Update a tool invocation policy |
+| `delete_tool_invocation_policy` | Delete a tool invocation policy by ID |
+| `get_trusted_data_policies` | Get all trusted data policies |
+| `create_trusted_data_policy` | Create a new trusted data policy |
+| `get_trusted_data_policy` | Get a specific trusted data policy by ID |
+| `update_trusted_data_policy` | Update a trusted data policy |
+| `delete_trusted_data_policy` | Delete a trusted data policy by ID |
+
+#### create_tool_invocation_policy
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
@@ -417,13 +378,13 @@ Detailed input schemas for each tool.
 | `action` | `"allow_when_context_is_untrusted" \| "block_when_context_is_untrusted" \| "block_always"` | Yes | The action to take when the policy matches |
 | `reason` | `string` | No | Human-readable explanation for why this policy exists |
 
-### get_tool_invocation_policy
+#### get_tool_invocation_policy
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `id` | `string` | Yes | The ID of the tool invocation policy |
 
-### update_tool_invocation_policy
+#### update_tool_invocation_policy
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
@@ -436,13 +397,13 @@ Detailed input schemas for each tool.
 | `action` | `"allow_when_context_is_untrusted" \| "block_when_context_is_untrusted" \| "block_always"` | No | The action to take when the policy matches |
 | `reason` | `string` | No | Human-readable explanation for why this policy exists |
 
-### delete_tool_invocation_policy
+#### delete_tool_invocation_policy
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `id` | `string` | Yes | The ID of the tool invocation policy |
 
-### create_trusted_data_policy
+#### create_trusted_data_policy
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
@@ -454,13 +415,13 @@ Detailed input schemas for each tool.
 | `action` | `"block_always" \| "mark_as_trusted" \| "mark_as_untrusted" \| "sanitize_with_dual_llm"` | Yes | The action to take when the policy matches |
 | `description` | `string` | No | Human-readable explanation for why this policy exists |
 
-### get_trusted_data_policy
+#### get_trusted_data_policy
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `id` | `string` | Yes | The ID of the trusted data policy |
 
-### update_trusted_data_policy
+#### update_trusted_data_policy
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
@@ -473,13 +434,20 @@ Detailed input schemas for each tool.
 | `action` | `"block_always" \| "mark_as_trusted" \| "mark_as_untrusted" \| "sanitize_with_dual_llm"` | No | The action to take when the policy matches |
 | `description` | `string` | No | Human-readable explanation for why this policy exists |
 
-### delete_trusted_data_policy
+#### delete_trusted_data_policy
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `id` | `string` | Yes | The ID of the trusted data policy |
 
-### bulk_assign_tools_to_agents
+### Tool Assignment
+
+| Tool | Description |
+|------|-------------|
+| `bulk_assign_tools_to_agents` | Assign multiple tools to multiple agents in bulk with validation and error handling |
+| `bulk_assign_tools_to_mcp_gateways` | Assign multiple tools to multiple MCP gateways in bulk with validation and error handling |
+
+#### bulk_assign_tools_to_agents
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
@@ -490,7 +458,7 @@ Detailed input schemas for each tool.
 | `assignments[].executionSourceMcpServerId` | `string` | No | Optional ID of the MCP server to use as execution source |
 | `assignments[].useDynamicTeamCredential` | `boolean` | No | When true, credentials are resolved at call time based on the caller's identity instead of using a fixed credential source. Resolution order: (1) the calling user's own personal credential, (2) a credential owned by a team member on the same team. Use this as an alternative to credentialSourceMcpServerId or executionSourceMcpServerId. |
 
-### bulk_assign_tools_to_mcp_gateways
+#### bulk_assign_tools_to_mcp_gateways
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
@@ -501,26 +469,48 @@ Detailed input schemas for each tool.
 | `assignments[].executionSourceMcpServerId` | `string` | No | Optional ID of the MCP server to use as execution source |
 | `assignments[].useDynamicTeamCredential` | `boolean` | No | When true, credentials are resolved at call time based on the caller's identity instead of using a fixed credential source. Resolution order: (1) the calling user's own personal credential, (2) a credential owned by a team member on the same team. Use this as an alternative to credentialSourceMcpServerId or executionSourceMcpServerId. |
 
-### query_knowledge_sources
+### Knowledge Management
+
+| Tool | Description |
+|------|-------------|
+| `query_knowledge_sources` | Query the organization's knowledge sources to retrieve relevant information. |
+| `create_knowledge_base` | Create a new knowledge base for organizing knowledge connectors. |
+| `get_knowledge_bases` | List all knowledge bases in the organization. |
+| `get_knowledge_base` | Get details of a specific knowledge base by ID. |
+| `update_knowledge_base` | Update an existing knowledge base. |
+| `delete_knowledge_base` | Delete a knowledge base by ID. |
+| `create_knowledge_connector` | Create a new knowledge connector for ingesting data from external sources. |
+| `get_knowledge_connectors` | List all knowledge connectors in the organization. |
+| `get_knowledge_connector` | Get details of a specific knowledge connector by ID. |
+| `update_knowledge_connector` | Update an existing knowledge connector. |
+| `delete_knowledge_connector` | Delete a knowledge connector by ID. |
+| `assign_knowledge_connector_to_knowledge_base` | Assign a knowledge connector to a knowledge base. |
+| `unassign_knowledge_connector_from_knowledge_base` | Remove a knowledge connector from a knowledge base. |
+| `assign_knowledge_base_to_agent` | Assign a knowledge base to an agent. |
+| `unassign_knowledge_base_from_agent` | Remove a knowledge base from an agent. |
+| `assign_knowledge_connector_to_agent` | Directly assign a knowledge connector to an agent (bypassing knowledge base). |
+| `unassign_knowledge_connector_from_agent` | Remove a directly-assigned knowledge connector from an agent. |
+
+#### query_knowledge_sources
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `query` | `string` | Yes | A natural language query about the content you are looking for. Ask about topics, concepts, or information rather than about source systems. |
 
-### create_knowledge_base
+#### create_knowledge_base
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `name` | `string` | Yes | Name of the knowledge base |
 | `description` | `string` | No | Description of the knowledge base |
 
-### get_knowledge_base
+#### get_knowledge_base
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `id` | `string` | Yes | Knowledge base ID |
 
-### update_knowledge_base
+#### update_knowledge_base
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
@@ -528,13 +518,13 @@ Detailed input schemas for each tool.
 | `name` | `string` | No | New name |
 | `description` | `string` | No | New description |
 
-### delete_knowledge_base
+#### delete_knowledge_base
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `id` | `string` | Yes | Knowledge base ID |
 
-### create_knowledge_connector
+#### create_knowledge_connector
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
@@ -543,13 +533,13 @@ Detailed input schemas for each tool.
 | `config` | `object` | Yes | Configuration for the knowledge connector (depends on connector_type) |
 | `description` | `string` | No | Description of the knowledge connector |
 
-### get_knowledge_connector
+#### get_knowledge_connector
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `id` | `string` | Yes | Knowledge connector ID |
 
-### update_knowledge_connector
+#### update_knowledge_connector
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
@@ -559,55 +549,63 @@ Detailed input schemas for each tool.
 | `enabled` | `boolean` | No | Whether the knowledge connector is enabled |
 | `config` | `object` | No | Updated connector configuration (provider-specific settings) |
 
-### delete_knowledge_connector
+#### delete_knowledge_connector
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `id` | `string` | Yes | Knowledge connector ID |
 
-### assign_knowledge_connector_to_knowledge_base
+#### assign_knowledge_connector_to_knowledge_base
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `connector_id` | `string` | Yes | Knowledge connector ID |
 | `knowledge_base_id` | `string` | Yes | Knowledge base ID |
 
-### unassign_knowledge_connector_from_knowledge_base
+#### unassign_knowledge_connector_from_knowledge_base
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `connector_id` | `string` | Yes | Knowledge connector ID |
 | `knowledge_base_id` | `string` | Yes | Knowledge base ID |
 
-### assign_knowledge_base_to_agent
+#### assign_knowledge_base_to_agent
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `knowledge_base_id` | `string` | Yes | Knowledge base ID |
 | `agent_id` | `string` | Yes | Agent ID |
 
-### unassign_knowledge_base_from_agent
+#### unassign_knowledge_base_from_agent
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `knowledge_base_id` | `string` | Yes | Knowledge base ID |
 | `agent_id` | `string` | Yes | Agent ID |
 
-### assign_knowledge_connector_to_agent
+#### assign_knowledge_connector_to_agent
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `connector_id` | `string` | Yes | Knowledge connector ID |
 | `agent_id` | `string` | Yes | Agent ID |
 
-### unassign_knowledge_connector_from_agent
+#### unassign_knowledge_connector_from_agent
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `connector_id` | `string` | Yes | Knowledge connector ID |
 | `agent_id` | `string` | Yes | Agent ID |
 
-### todo_write
+### Chat
+
+| Tool | Description |
+|------|-------------|
+| `todo_write` | Write todos to the current conversation. |
+| `swap_agent` | Switch the current conversation to a different agent. |
+| `artifact_write` | Write or update a markdown artifact for the current conversation. |
+
+#### todo_write
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
@@ -616,13 +614,13 @@ Detailed input schemas for each tool.
 | `todos[].content` | `string` | Yes | The content/description of the todo item |
 | `todos[].status` | `"pending" \| "in_progress" \| "completed"` | Yes | The current status of the todo item |
 
-### swap_agent
+#### swap_agent
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `agent_name` | `string` | Yes | The name of the agent to switch to. |
 
-### artifact_write
+#### artifact_write
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|

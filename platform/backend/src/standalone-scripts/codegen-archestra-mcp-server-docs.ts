@@ -220,10 +220,10 @@ function generateMarkdownBody(): string {
     ([a], [b]) => groupOrder[a] - groupOrder[b],
   );
 
-  // Build overview sections (tool name + description tables)
-  const overviewSections: string[] = [];
+  // Build unified Tools Reference sections (overview table + detailed schemas per group)
+  const referenceSections: string[] = [];
   for (const [group, groupTools] of sortedGroups) {
-    let section = `## ${group}\n\n`;
+    let section = `### ${group}\n\n`;
     section += "| Tool | Description |\n";
     section += "|------|-------------|\n";
 
@@ -231,21 +231,18 @@ function generateMarkdownBody(): string {
       section += `| \`${tool.shortName}\` | ${escapeTableCell(tool.description)} |\n`;
     }
 
-    overviewSections.push(section);
-  }
-
-  // Build Tools Reference section (detailed input schemas)
-  const referenceEntries: string[] = [];
-  for (const [_group, groupTools] of sortedGroups) {
+    // Add detailed input schemas for each tool in this group
     for (const tool of groupTools) {
       const schemaMarkdown = renderInputSchema(
         tool.shortName,
         tool.inputSchema,
       );
       if (schemaMarkdown) {
-        referenceEntries.push(schemaMarkdown);
+        section += `\n${schemaMarkdown}`;
       }
     }
+
+    referenceSections.push(section);
   }
 
   const preInstalledList = preInstalledShortNames
@@ -272,8 +269,9 @@ Archestra tools are **trusted**, meaning they bypass [tool invocation policies](
 
 However, **RBAC (role-based access control) is still enforced**. Every tool is mapped to a required permission (resource + action). The \`tools/list\` endpoint dynamically filters tools so users only see tools they have permission to use. Additionally, \`executeArchestraTool\` performs a centralized RBAC check before executing any tool. For example, a user without \`knowledgeBase:create\` permission will not see \`create_knowledge_base\` in their tool list and cannot execute it.
 
-${overviewSections.join("\n")}
-${referenceEntries.length > 0 ? `## Tools Reference\n\nDetailed input schemas for each tool.\n\n${referenceEntries.join("\n")}` : ""}`;
+## Tools Reference
+
+${referenceSections.join("\n")}`;
 }
 
 function extractBodyFromMarkdown(content: string): string {
@@ -350,7 +348,7 @@ function renderInputSchema(
   const requiredSet = new Set(schema.required ?? []);
   const rows = renderProperties(properties, requiredSet);
 
-  let md = `### ${toolName}\n\n`;
+  let md = `#### ${toolName}\n\n`;
   md += "| Parameter | Type | Required | Description |\n";
   md += "|-----------|------|----------|-------------|\n";
   for (const row of rows) {

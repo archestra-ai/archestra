@@ -11,12 +11,17 @@ const mockListComments = vi.fn();
 const mockGetRef = vi.fn();
 const mockGetTree = vi.fn();
 const mockGetContent = vi.fn();
+const mockReposGet = vi.fn();
 
 vi.mock("@octokit/rest", () => ({
   Octokit: class MockOctokit {
     rest = {
       users: { getAuthenticated: mockGetAuthenticated },
-      repos: { listForOrg: mockListForOrg, getContent: mockGetContent },
+      repos: {
+        listForOrg: mockListForOrg,
+        getContent: mockGetContent,
+        get: mockReposGet,
+      },
       issues: {
         listForRepo: mockListForRepo,
         listComments: mockListComments,
@@ -42,6 +47,10 @@ describe("GithubConnector", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     connector = new GithubConnector();
+    // Default: repos.get returns main as default branch
+    mockReposGet.mockResolvedValue({
+      data: { default_branch: "main" },
+    });
   });
 
   afterEach(() => {
@@ -556,8 +565,16 @@ describe("GithubConnector", () => {
 
       mockListForOrg.mockResolvedValueOnce({
         data: [
-          { name: "repo-a", html_url: "https://github.com/test-org/repo-a" },
-          { name: "repo-b", html_url: "https://github.com/test-org/repo-b" },
+          {
+            name: "repo-a",
+            html_url: "https://github.com/test-org/repo-a",
+            default_branch: "main",
+          },
+          {
+            name: "repo-b",
+            html_url: "https://github.com/test-org/repo-b",
+            default_branch: "main",
+          },
         ],
       });
 
@@ -722,15 +739,18 @@ describe("GithubConnector", () => {
       expect(mockGetTree).not.toHaveBeenCalled();
     });
 
-    test("falls back to master branch when main not found", async () => {
+    test("uses known default branch directly without fallback", async () => {
+      // repos.get returns "develop" as default branch
+      mockReposGet.mockReset();
+      mockReposGet.mockResolvedValueOnce({
+        data: { default_branch: "develop" },
+      });
+
       mockListForRepo.mockResolvedValueOnce({ data: [] });
       mockListForRepo.mockResolvedValueOnce({ data: [] });
 
-      // main branch fails
-      mockGetRef.mockRejectedValueOnce(new Error("Not found"));
-      // master branch succeeds
       mockGetRef.mockResolvedValueOnce({
-        data: { object: { sha: "master-sha" } },
+        data: { object: { sha: "dev-sha" } },
       });
 
       mockGetTree.mockResolvedValueOnce({
@@ -754,16 +774,76 @@ describe("GithubConnector", () => {
         batches.push(batch);
       }
 
-      expect(mockGetRef).toHaveBeenCalledTimes(2);
+      // Should only call getRef once with the known default branch
+      expect(mockGetRef).toHaveBeenCalledTimes(1);
       expect(mockGetRef).toHaveBeenCalledWith(
-        expect.objectContaining({ ref: "heads/master" }),
+        expect.objectContaining({ ref: "heads/develop" }),
       );
 
       const mdDocs = batches
         .flatMap((b) => b.documents)
         .filter((d) => d.metadata.kind === "markdown_file");
       expect(mdDocs).toHaveLength(1);
-      expect(mdDocs[0].sourceUrl).toContain("/blob/master/README.md");
+      expect(mdDocs[0].sourceUrl).toContain("/blob/develop/README.md");
+    });
+
+    test("falls back through main/master/dev/develop when defaultBranch is null", async () => {
+      // repos.get fails, so defaultBranch will be null
+      mockReposGet.mockReset();
+      mockReposGet.mockRejectedValueOnce(new Error("Not found"));
+
+      mockListForRepo.mockResolvedValueOnce({ data: [] });
+      mockListForRepo.mockResolvedValueOnce({ data: [] });
+
+      // main, master, dev all fail
+      mockGetRef.mockRejectedValueOnce(new Error("Not found"));
+      mockGetRef.mockRejectedValueOnce(new Error("Not found"));
+      mockGetRef.mockRejectedValueOnce(new Error("Not found"));
+      // develop succeeds
+      mockGetRef.mockResolvedValueOnce({
+        data: { object: { sha: "develop-sha" } },
+      });
+
+      mockGetTree.mockResolvedValueOnce({
+        data: {
+          tree: [{ type: "blob", path: "README.md", sha: "sha1" }],
+        },
+      });
+
+      mockGetContent.mockResolvedValueOnce({
+        data: {
+          content: Buffer.from("# Hello").toString("base64"),
+        },
+      });
+
+      const batches: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: { ...validConfig, includeMarkdownFiles: true },
+        credentials,
+        checkpoint: null,
+      })) {
+        batches.push(batch);
+      }
+
+      expect(mockGetRef).toHaveBeenCalledTimes(4);
+      expect(mockGetRef).toHaveBeenCalledWith(
+        expect.objectContaining({ ref: "heads/main" }),
+      );
+      expect(mockGetRef).toHaveBeenCalledWith(
+        expect.objectContaining({ ref: "heads/master" }),
+      );
+      expect(mockGetRef).toHaveBeenCalledWith(
+        expect.objectContaining({ ref: "heads/dev" }),
+      );
+      expect(mockGetRef).toHaveBeenCalledWith(
+        expect.objectContaining({ ref: "heads/develop" }),
+      );
+
+      const mdDocs = batches
+        .flatMap((b) => b.documents)
+        .filter((d) => d.metadata.kind === "markdown_file");
+      expect(mdDocs).toHaveLength(1);
+      expect(mdDocs[0].sourceUrl).toContain("/blob/develop/README.md");
     });
 
     test("continues when file content fetch fails", async () => {

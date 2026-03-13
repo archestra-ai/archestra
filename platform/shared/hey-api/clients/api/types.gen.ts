@@ -35445,6 +35445,91 @@ export type GetOrganizationMembersResponses = {
 
 export type GetOrganizationMembersResponse = GetOrganizationMembersResponses[keyof GetOrganizationMembersResponses];
 
+export type GetOrganizationMemberData = {
+    body?: never;
+    path: {
+        /**
+         * User ID or email address
+         */
+        idOrEmail: string;
+    };
+    query?: never;
+    url: '/api/organization/members/{idOrEmail}';
+};
+
+export type GetOrganizationMemberErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetOrganizationMemberError = GetOrganizationMemberErrors[keyof GetOrganizationMemberErrors];
+
+export type GetOrganizationMemberResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        name: string;
+        email: string;
+        role: string;
+    };
+};
+
+export type GetOrganizationMemberResponse = GetOrganizationMemberResponses[keyof GetOrganizationMemberResponses];
+
 export type PerplexityChatCompletionsWithDefaultAgentData = {
     body?: XaiChatCompletionRequestInput;
     headers: {

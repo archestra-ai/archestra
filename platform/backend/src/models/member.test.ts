@@ -113,6 +113,68 @@ describe("MemberModel", () => {
     });
   });
 
+  describe("findByIdOrEmail", () => {
+    test("should find member by user ID", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+    }) => {
+      const user = await makeUser({ email: "findme@test.com" });
+      const org = await makeOrganization();
+      await makeMember(user.id, org.id);
+
+      const result = await MemberModel.findByIdOrEmail(user.id, org.id);
+      expect(result).toBeDefined();
+      expect(result?.id).toBe(user.id);
+      expect(result?.email).toBe("findme@test.com");
+      expect(result?.role).toBe("member");
+    });
+
+    test("should find member by email", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+    }) => {
+      const user = await makeUser({ email: "byemail@test.com" });
+      const org = await makeOrganization();
+      await makeMember(user.id, org.id);
+
+      const result = await MemberModel.findByIdOrEmail(
+        "byemail@test.com",
+        org.id,
+      );
+      expect(result).toBeDefined();
+      expect(result?.id).toBe(user.id);
+      expect(result?.email).toBe("byemail@test.com");
+      expect(result?.role).toBe("member");
+    });
+
+    test("should return undefined for non-existent user", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+      const result = await MemberModel.findByIdOrEmail(
+        "nonexistent@test.com",
+        org.id,
+      );
+      expect(result).toBeUndefined();
+    });
+
+    test("should not find member from different organization", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+    }) => {
+      const user = await makeUser({ email: "orgscoped@test.com" });
+      const org1 = await makeOrganization();
+      const org2 = await makeOrganization();
+      await makeMember(user.id, org1.id);
+
+      const result = await MemberModel.findByIdOrEmail(user.id, org2.id);
+      expect(result).toBeUndefined();
+    });
+  });
+
   describe("updateRole", () => {
     test("should update member role from member to admin", async ({
       makeUser,

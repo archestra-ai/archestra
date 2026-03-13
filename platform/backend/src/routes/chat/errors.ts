@@ -13,7 +13,7 @@ import {
   VllmErrorTypes,
   ZhipuaiErrorTypes,
 } from "@shared";
-import { APICallError, RetryError } from "ai";
+import { APICallError, NoOutputGeneratedError, RetryError } from "ai";
 import logger from "@/logging";
 
 // =============================================================================
@@ -1419,6 +1419,20 @@ export function mapProviderError(
           : undefined,
       };
     }
+  }
+
+  // Handle NoOutputGeneratedError — the provider failed before producing any
+  // output. Map it to a structured server_error so the frontend shows the
+  // same styled error card instead of raw text.
+  if (NoOutputGeneratedError.isInstance(error)) {
+    return createErrorResponse(
+      ChatErrorCode.ServerError,
+      provider,
+      undefined,
+      ChatErrorMessages[ChatErrorCode.ServerError],
+      "NoOutputGeneratedError",
+      {},
+    );
   }
 
   // Get provider-specific parser and mapper

@@ -67,6 +67,7 @@ export const resources = [
   "simpleView",
   "chatAgentPicker",
   "chatProviderSettings",
+  "chatExpandToolCalls",
 ] as const;
 
 export const resourceLabels: Record<Resource, string> = {
@@ -102,6 +103,7 @@ export const resourceLabels: Record<Resource, string> = {
   simpleView: "Simple View",
   chatAgentPicker: "Chat Agent Picker",
   chatProviderSettings: "Chat Provider Settings",
+  chatExpandToolCalls: "Chat Expand Tool Calls",
 };
 
 export const resourceDescriptions: Record<Resource, string> = {
@@ -140,6 +142,8 @@ export const resourceDescriptions: Record<Resource, string> = {
   chatAgentPicker: "Controls visibility of the agent picker in chat",
   chatProviderSettings:
     "Controls visibility of model and API key selectors in chat",
+  chatExpandToolCalls:
+    "Controls ability to expand and view tool call details in chat",
   organization: "Organization (internal, used by authentication system)",
 };
 
@@ -172,6 +176,7 @@ export const resourceCategories: Record<string, Resource[]> = {
     "simpleView",
     "chatAgentPicker",
     "chatProviderSettings",
+    "chatExpandToolCalls",
   ],
   Administration: [
     "member",

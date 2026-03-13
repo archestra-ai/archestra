@@ -59,7 +59,7 @@ PROVIDERS = {
                 "targets": [
                     {
                         "refId": "A",
-                        "expr": "sum(postgresql_backends) / postgresql_connection_max * 100",
+                        "expr": "sum(postgresql_backends) / sum(postgresql_connection_max) * 100",
                         "legendFormat": "",
                     },
                 ],
@@ -331,7 +331,7 @@ PROVIDERS = {
                 "targets": [
                     {
                         "refId": "A",
-                        "expr": "sum(azure_active_connections_average) / azure_max_connections_average * 100",
+                        "expr": "sum(azure_active_connections_average) / sum(azure_max_connections_average) * 100",
                         "legendFormat": "",
                     },
                 ],

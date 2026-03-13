@@ -131,6 +131,9 @@ export function ChatMessages({
   const { data: userCanCreateAgent } = useHasPermissions({
     agent: ["create"],
   });
+  const { data: canExpandToolCalls } = useHasPermissions({
+    chatExpandToolCalls: ["enable"],
+  });
   const { data: organization } = useOrganization();
   const orchestrator = useMcpInstallOrchestrator();
 
@@ -350,6 +353,7 @@ export function ChatMessages({
                             errorText: entry.errorText,
                           }))}
                           toolIconMap={toolIconMap}
+                          canExpandToolCalls={canExpandToolCalls}
                           onToolApprovalResponse={onToolApprovalResponse}
                         />
                       );
@@ -730,6 +734,7 @@ export function ChatMessages({
                             toolName={toolName}
                             agentId={agentId}
                             isDebugging={isDebugging}
+                            canExpandToolCalls={canExpandToolCalls}
                             onToolApprovalResponse={onToolApprovalResponse}
                             onInstallMcp={
                               orchestrator.triggerInstallByCatalogId
@@ -859,6 +864,7 @@ function MessageTool({
   toolName,
   agentId,
   isDebugging,
+  canExpandToolCalls = true,
   onToolApprovalResponse,
   onInstallMcp,
   onReauthMcp,
@@ -868,6 +874,7 @@ function MessageTool({
   toolName: string;
   agentId?: string;
   isDebugging?: boolean;
+  canExpandToolCalls?: boolean;
   onToolApprovalResponse?: (params: {
     id: string;
     approved: boolean;
@@ -1005,9 +1012,12 @@ function MessageTool({
     <ToolErrorLogsButton toolName={toolName} />
   ) : null;
 
+  const isExpandable =
+    hasContent && (canExpandToolCalls || isApprovalRequested);
+
   return (
     <Tool
-      className={hasContent ? "cursor-pointer" : ""}
+      className={isExpandable ? "cursor-pointer" : ""}
       defaultOpen={isApprovalRequested}
     >
       <ToolHeader
@@ -1017,7 +1027,7 @@ function MessageTool({
           toolResultPart,
           errorText,
         })}
-        isCollapsible={hasContent}
+        isCollapsible={isExpandable}
         actionButton={logsButton}
       />
       <ToolContent>

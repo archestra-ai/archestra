@@ -417,16 +417,21 @@ export function AppSidebar() {
   const filteredNavGroups = React.useMemo(() => {
     return contentNavGroups.map((group) => ({
       ...group,
-      items: group.items.filter((item) => {
-        let shouldShow = true;
-        if (item.title === "Knowledge") {
-          shouldShow = knowledgeBaseEnabled;
-        }
-        if (item.title === "Guardrails") {
-          shouldShow = !hasSimpleViewEnabled;
-        }
-        return shouldShow;
-      }),
+      items: group.items
+        .filter((item) => {
+          if (item.title === "Knowledge") return knowledgeBaseEnabled;
+          return true;
+        })
+        .map((item) =>
+          item.subItems && hasSimpleViewEnabled
+            ? {
+                ...item,
+                subItems: item.subItems.filter(
+                  (sub) => sub.title !== "Guardrails",
+                ),
+              }
+            : item,
+        ),
     }));
   }, [knowledgeBaseEnabled, hasSimpleViewEnabled]);
 

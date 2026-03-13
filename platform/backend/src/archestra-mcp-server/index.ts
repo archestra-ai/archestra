@@ -91,7 +91,8 @@ export async function executeArchestraTool(
   args: Record<string, unknown> | undefined,
   context: ArchestraContext,
 ): Promise<CallToolResult> {
-  // Handle dynamic agent delegation tools first
+  // Agent delegation tools are dynamic (one per agent) and not in TOOL_PERMISSIONS,
+  // so they bypass centralized RBAC. They enforce team-based access checks internally.
   if (toolName.startsWith(AGENT_TOOL_PREFIX)) {
     return handleDelegation(toolName, args, context);
   }

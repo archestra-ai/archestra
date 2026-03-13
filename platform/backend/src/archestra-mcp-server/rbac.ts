@@ -135,8 +135,11 @@ export async function checkToolPermission(
   const shortName = extractShortName(toolName);
   if (!shortName) return null; // Not an Archestra tool — allow (handled elsewhere)
 
+  // Cast is safe: unknown-but-prefixed tools return undefined here and are
+  // allowed through — they'll fail in the handler chain with "unknown tool".
+  // Known tools with `null` permission are also allowed (no RBAC needed).
   const perm = TOOL_PERMISSIONS[shortName as ArchestraToolShortName];
-  if (!perm) return null; // No permission required
+  if (!perm) return null;
 
   if (!context.userId || !context.organizationId) {
     return errorResult("User context not available");

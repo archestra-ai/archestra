@@ -24,7 +24,8 @@ WHERE auth_fields IS NOT NULL
   );
 
 -- 2. Delete tool_invocation_policies rows with invalid action values.
---    Valid actions: allow_when_context_is_untrusted, block_when_context_is_untrusted, block_always, require_approval
+--    Valid actions defined at the DB/API level (require_approval is a valid DB value
+--    but not exposed in the MCP tool's inputSchema which only lists the first three).
 DELETE FROM tool_invocation_policies
 WHERE action NOT IN (
   'allow_when_context_is_untrusted',

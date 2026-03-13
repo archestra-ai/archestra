@@ -15,7 +15,10 @@ import {
   TeamModel,
   UserModel,
 } from "@/models";
-import { InsertKnowledgeBaseConnectorSchema } from "@/types";
+import {
+  InsertKnowledgeBaseConnectorSchema,
+  InsertKnowledgeBaseSchema,
+} from "@/types";
 import type { AclEntry } from "@/types/kb-document";
 import { catchError, errorResult, successResult } from "./helpers";
 import type { ArchestraContext } from "./types";
@@ -537,11 +540,12 @@ export async function handleTool(
     try {
       const name = args?.name as string | undefined;
       if (!name) return errorResult("name is required");
-      const kb = await KnowledgeBaseModel.create({
+      const parsed = InsertKnowledgeBaseSchema.parse({
         organizationId,
         name,
         description: (args?.description as string) || null,
       });
+      const kb = await KnowledgeBaseModel.create(parsed);
       return successResult(
         `Knowledge base created successfully.\n\n${JSON.stringify(kb, null, 2)}`,
       );

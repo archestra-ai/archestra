@@ -72,7 +72,10 @@ export function ProviderSettingsModels() {
     >();
     for (const model of models) {
       for (const key of model.apiKeys) {
-        keyMap.set(key.id, { name: key.name, provider: key.provider });
+        keyMap.set(key.id, {
+          name: key.name,
+          provider: key.provider as keyof typeof PROVIDER_CONFIG,
+        });
       }
     }
     return Array.from(keyMap.entries()).sort((a, b) =>

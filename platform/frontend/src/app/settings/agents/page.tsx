@@ -181,7 +181,7 @@ export default function AgentSettingsPage() {
       />
       <SettingsBlock
         title="Default agent"
-        description="Select the default org-wide agent for new chat conversations. When set, this agent is preselected for all users unless they explicitly choose a different one. Only organization-scoped agents are available."
+        description="The default agent is preselected for all new chat conversations. To enable agent routing, assign archestra__swap_agent to the default agent so it can swap to other agents, and archestra__swap_to_default_agent to other agents so they can swap back automatically. Only organization-scoped agents are shown."
         control={
           <WithPermissions
             permissions={{ agentSettings: ["update"] }}

@@ -3,6 +3,7 @@ import {
   ARCHESTRA_MCP_SERVER_NAME,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
 } from "@shared";
+import { OrganizationModel } from "@/models";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { Agent } from "@/types";
 import { type ArchestraContext, executeArchestraTool } from ".";
@@ -21,6 +22,13 @@ describe("chat tools", () => {
     expect(tool).toBeDefined();
     expect(tool?.title).toBe("Swap Agent");
     expect(tool?.inputSchema.required).toContain("agent_name");
+  });
+
+  test("should have swap_to_default_agent tool", () => {
+    const tool = tools.find((t) => t.name.endsWith("swap_to_default_agent"));
+    expect(tool).toBeDefined();
+    expect(tool?.title).toBe("Swap to Default Agent");
+    expect(tool?.inputSchema.required).toEqual([]);
   });
 
   test("should have artifact_write tool", () => {
@@ -193,7 +201,52 @@ describe("chat tool execution", () => {
     expect(parsed.agent_name).toBe("Swap Target Agent");
   });
 
-  test("swap_agent returns error when swapping to same agent", async ({
+  test("swap_to_default_agent returns error when conversation context is missing", async () => {
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}swap_to_default_agent`,
+      {},
+      mockContext,
+    );
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain(
+      "requires conversation context",
+    );
+  });
+
+  test("swap_to_default_agent returns error when no default agent configured", async ({
+    makeConversation,
+    makeUser,
+    makeOrganization,
+    makeMember,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "admin" });
+
+    const conversation = await makeConversation(testAgent.id, {
+      userId: user.id,
+      organizationId: org.id,
+    });
+
+    const contextWithConvo: ArchestraContext = {
+      agent: { id: testAgent.id, name: testAgent.name },
+      conversationId: conversation.id,
+      userId: user.id,
+      organizationId: org.id,
+    };
+
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}swap_to_default_agent`,
+      {},
+      contextWithConvo,
+    );
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain(
+      "No default agent is configured",
+    );
+  });
+
+  test("swap_to_default_agent succeeds when on non-default agent", async ({
     makeAgent,
     makeConversation,
     makeUser,
@@ -204,30 +257,40 @@ describe("chat tool execution", () => {
     const user = await makeUser();
     await makeMember(user.id, org.id, { role: "admin" });
 
-    const sameAgent = await makeAgent({
-      name: "Same Agent Swap Test",
+    const defaultAgent = await makeAgent({
+      name: "Default Router Agent",
+      agentType: "agent",
+      organizationId: org.id,
+    });
+    await OrganizationModel.patch(org.id, { defaultAgentId: defaultAgent.id });
+
+    const specialistAgent = await makeAgent({
+      name: "Specialist Agent",
       agentType: "agent",
       organizationId: org.id,
     });
 
-    const conversation = await makeConversation(sameAgent.id, {
+    const conversation = await makeConversation(specialistAgent.id, {
       userId: user.id,
       organizationId: org.id,
     });
 
     const contextWithConvo: ArchestraContext = {
-      agent: { id: sameAgent.id, name: sameAgent.name },
+      agent: { id: specialistAgent.id, name: specialistAgent.name },
       conversationId: conversation.id,
       userId: user.id,
       organizationId: org.id,
     };
 
     const result = await executeArchestraTool(
-      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}swap_agent`,
-      { agent_name: "Same Agent Swap Test" },
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}swap_to_default_agent`,
+      {},
       contextWithConvo,
     );
-    expect(result.isError).toBe(true);
-    expect((result.content[0] as any).text).toContain("Already using agent");
+    expect(result.isError).toBe(false);
+    const parsed = JSON.parse((result.content[0] as any).text);
+    expect(parsed.success).toBe(true);
+    expect(parsed.agent_id).toBe(defaultAgent.id);
+    expect(parsed.agent_name).toBe("Default Router Agent");
   });
 });

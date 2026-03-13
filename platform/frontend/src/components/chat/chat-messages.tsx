@@ -1,7 +1,10 @@
 import type { UIMessage } from "@ai-sdk/react";
 import {
+  SWAP_AGENT_POKE_PREFIX,
   SWAP_AGENT_POKE_TEXT,
+  SWAP_TO_DEFAULT_AGENT_POKE_TEXT,
   TOOL_SWAP_AGENT_FULL_NAME,
+  TOOL_SWAP_TO_DEFAULT_AGENT_FULL_NAME,
   TOOL_TODO_WRITE_FULL_NAME,
 } from "@shared";
 import type { ChatStatus, DynamicToolUIPart, ToolUIPart } from "ai";
@@ -980,9 +983,13 @@ function MessageTool({
     }
   }
 
-  // swap_agent is rendered as a divider after all message parts (see SwapAgentDivider below)
+  // swap_agent / swap_to_default_agent are rendered as dividers after all message parts (see SwapAgentDivider below)
   // Show the raw tool call when the user's name ends with "(debugging)"
-  if (!isDebugging && toolName === TOOL_SWAP_AGENT_FULL_NAME) {
+  if (
+    !isDebugging &&
+    (toolName === TOOL_SWAP_AGENT_FULL_NAME ||
+      toolName === TOOL_SWAP_TO_DEFAULT_AGENT_FULL_NAME)
+  ) {
     return null;
   }
 
@@ -1299,11 +1306,22 @@ function identifyCompactGroups(
 function isSwapAgentPokeMessage(message: UIMessage): boolean {
   if (message.role !== "user") return false;
   const textParts = message.parts?.filter((p) => p.type === "text") ?? [];
+  if (textParts.length !== 1) return false;
+  const text = (textParts[0] as { text?: string }).text;
+  if (typeof text !== "string") return false;
   return (
-    textParts.length === 1 &&
-    (textParts[0] as { text: string }).text === SWAP_AGENT_POKE_TEXT
+    text === SWAP_AGENT_POKE_TEXT ||
+    text === SWAP_TO_DEFAULT_AGENT_POKE_TEXT ||
+    text.startsWith(SWAP_AGENT_POKE_PREFIX)
   );
 }
+
+const SWAP_TOOL_NAMES = new Set([
+  TOOL_SWAP_AGENT_FULL_NAME,
+  `tool-${TOOL_SWAP_AGENT_FULL_NAME}`,
+  TOOL_SWAP_TO_DEFAULT_AGENT_FULL_NAME,
+  `tool-${TOOL_SWAP_TO_DEFAULT_AGENT_FULL_NAME}`,
+]);
 
 function SwapAgentDivider({ message }: { message: UIMessage }) {
   if (message.role !== "assistant") return null;
@@ -1311,11 +1329,7 @@ function SwapAgentDivider({ message }: { message: UIMessage }) {
   for (const part of message.parts ?? []) {
     if (!isToolPart(part)) continue;
     const type = part.type as string;
-    if (
-      type !== TOOL_SWAP_AGENT_FULL_NAME &&
-      type !== `tool-${TOOL_SWAP_AGENT_FULL_NAME}`
-    )
-      continue;
+    if (!SWAP_TOOL_NAMES.has(type)) continue;
 
     // Try tool call args first (always available), then fall back to output
     let agentName = "another agent";

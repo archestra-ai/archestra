@@ -12,7 +12,7 @@ const DEFAULT_SESSION_NAME = "New Chat Session";
  * code blocks already preserve whitespace.
  */
 export function preserveNewlines(text: string): string {
-  if (!text) return text;
+  if (!text || typeof text !== "string") return text;
 
   const lines = text.split("\n");
   const result: string[] = [];

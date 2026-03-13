@@ -9,7 +9,7 @@ archestra:
   # We use the "generic" updater with inline annotation to preserve YAML comments throughout the file.
   # See: https://github.com/googleapis/release-please/blob/main/docs/customizing.md#updating-arbitrary-files
   # See: https://github.com/googleapis/release-please/issues/2195
-  imageTag: "1.1.16" # x-release-please-version
+  imageTag: "1.1.17" # x-release-please-version
 
   # Image pull policy for the Archestra container
   # Options: Always, IfNotPresent, Never
@@ -85,6 +85,18 @@ archestra:
   #     # Reference another env var (defined via envWithValueFrom below)
   #     ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT: "http://$(NODE_IP):4317"
   env: {}
+
+  # Authentication secret source configuration.
+  #
+  # By default, the chart creates a <release>-auth Secret and auto-generates
+  # auth-secret on first install. For external secret managers, point the chart
+  # at an existing Secret instead.
+  authSecret:
+    # When set, the deployment reads ARCHESTRA_AUTH_SECRET from this Secret
+    # instead of the Helm-managed <release>-auth Secret.
+    existingSecretName: ""
+    # Key within existingSecretName containing the auth secret value.
+    existingSecretKey: auth-secret
 
   # Environment variables with valueFrom (for fieldRef, resourceFieldRef, configMapKeyRef)
   # Use this for Kubernetes downward API or other valueFrom sources

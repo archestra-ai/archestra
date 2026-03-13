@@ -3,11 +3,17 @@ import {
   ARCHESTRA_MCP_SERVER_NAME,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
   TOOL_ARTIFACT_WRITE_FULL_NAME,
+  TOOL_SWAP_TO_DEFAULT_AGENT_FULL_NAME,
   TOOL_TODO_WRITE_FULL_NAME,
 } from "@shared";
 import { userHasPermission } from "@/auth/utils";
 import logger from "@/logging";
-import { AgentModel, AgentTeamModel, ConversationModel } from "@/models";
+import {
+  AgentModel,
+  AgentTeamModel,
+  ConversationModel,
+  OrganizationModel,
+} from "@/models";
 import { catchError, errorResult, successResult } from "./helpers";
 import type { ArchestraContext } from "./types";
 
@@ -19,6 +25,7 @@ const TOOL_SWAP_AGENT_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL
 export const toolShortNames = [
   "todo_write",
   "swap_agent",
+  "swap_to_default_agent",
   "artifact_write",
 ] as const;
 
@@ -76,6 +83,19 @@ export const tools: Tool[] = [
         },
       },
       required: ["agent_name"],
+    },
+    annotations: {},
+    _meta: {},
+  },
+  {
+    name: TOOL_SWAP_TO_DEFAULT_AGENT_FULL_NAME,
+    title: "Swap to Default Agent",
+    description:
+      "Return to the default agent. You MUST call this — without asking the user — when you don't have the right tools to fulfill a request, when you are stuck and cannot help further, when you are done with your task, or when the user wants to go back. Always write a brief message before calling this tool summarizing why you are switching back (e.g. what you accomplished, what tool is missing, or why you cannot continue).",
+    inputSchema: {
+      type: "object",
+      properties: {},
+      required: [],
     },
     annotations: {},
     _meta: {},
@@ -227,6 +247,107 @@ export async function handleTool(
       );
     } catch (error) {
       return catchError(error, "swapping agent");
+    }
+  }
+
+  if (toolName === TOOL_SWAP_TO_DEFAULT_AGENT_FULL_NAME) {
+    logger.info(
+      { agentId: contextAgent.id },
+      "swap_to_default_agent tool called",
+    );
+
+    try {
+      if (
+        !context.conversationId ||
+        !context.userId ||
+        !context.organizationId
+      ) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: "Error: This tool requires conversation context. It can only be used within an active chat conversation.",
+            },
+          ],
+          isError: true,
+        };
+      }
+
+      // Look up org's default agent
+      const org = await OrganizationModel.getById(context.organizationId);
+      const defaultAgentId = org?.defaultAgentId ?? null;
+
+      if (!defaultAgentId) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: "Error: No default agent is configured for this organization.",
+            },
+          ],
+          isError: true,
+        };
+      }
+
+      const targetAgent = await AgentModel.findById(defaultAgentId);
+      if (!targetAgent) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: "Error: Default agent not found.",
+            },
+          ],
+          isError: true,
+        };
+      }
+
+      // Update the conversation's agent
+      const updated = await ConversationModel.update(
+        context.conversationId,
+        context.userId,
+        context.organizationId,
+        { agentId: defaultAgentId },
+      );
+
+      if (!updated) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: "Error: Failed to update conversation agent.",
+            },
+          ],
+          isError: true,
+        };
+      }
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({
+              success: true,
+              agent_id: targetAgent.id,
+              agent_name: targetAgent.name,
+            }),
+          },
+        ],
+        isError: false,
+      };
+    } catch (error) {
+      logger.error({ err: error }, "Error swapping to default agent");
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Error swapping to default agent: ${
+              error instanceof Error ? error.message : "Unknown error"
+            }`,
+          },
+        ],
+        isError: true,
+      };
     }
   }
 

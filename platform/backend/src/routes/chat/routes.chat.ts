@@ -5,6 +5,7 @@ import {
   type SupportedProvider,
   TimeInMs,
   TOOL_SWAP_AGENT_FULL_NAME,
+  TOOL_SWAP_TO_DEFAULT_AGENT_FULL_NAME,
   type TokenUsage,
 } from "@shared";
 import {
@@ -300,6 +301,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             stopWhen: [
               stepCountIs(500),
               hasToolCall(TOOL_SWAP_AGENT_FULL_NAME),
+              hasToolCall(TOOL_SWAP_TO_DEFAULT_AGENT_FULL_NAME),
             ],
             abortSignal: chatAbortController.signal,
             onFinish: async ({ usage, finishReason }) => {

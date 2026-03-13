@@ -853,7 +853,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetUserToken]: {},
   [RouteId.GetUserTokenValue]: {},
   [RouteId.RotateUserToken]: {},
-  [RouteId.UpdateModelPricing]: {
+  [RouteId.UpdateModel]: {
     llmProvider: ["update"],
   },
   [RouteId.GetTeamStatistics]: {

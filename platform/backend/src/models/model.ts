@@ -6,6 +6,7 @@ import type {
   CreateModel,
   Model,
   ModelCapabilities,
+  PatchModelBody,
   PriceSource,
   UpdateModelPricing,
 } from "@/types";
@@ -166,15 +167,13 @@ class ModelModel {
         set: {
           externalId: data.externalId,
           description: data.description,
-          contextLength: data.contextLength,
-          inputModalities: data.inputModalities,
-          outputModalities: data.outputModalities,
-          supportsToolCalling: data.supportsToolCalling,
           promptPricePerToken: data.promptPricePerToken,
           completionPricePerToken: data.completionPricePerToken,
           lastSyncedAt: new Date(),
           updatedAt: new Date(),
           // NOTE: customPricePerMillionInput/Output intentionally NOT updated
+          // NOTE: contextLength, inputModalities, outputModalities, supportsToolCalling
+          // intentionally NOT updated to preserve user-edited values
         },
       })
       .returning();
@@ -225,15 +224,13 @@ class ModelModel {
             set: {
               externalId: sql`excluded.external_id`,
               description: sql`excluded.description`,
-              contextLength: sql`excluded.context_length`,
-              inputModalities: sql`excluded.input_modalities`,
-              outputModalities: sql`excluded.output_modalities`,
-              supportsToolCalling: sql`excluded.supports_tool_calling`,
               promptPricePerToken: sql`excluded.prompt_price_per_token`,
               completionPricePerToken: sql`excluded.completion_price_per_token`,
               lastSyncedAt: sql`excluded.last_synced_at`,
               updatedAt: sql`NOW()`,
               // NOTE: customPricePerMillionInput/Output intentionally NOT updated
+              // NOTE: contextLength, inputModalities, outputModalities, supportsToolCalling
+              // intentionally NOT updated to preserve user-edited values
             },
           })
           .returning();
@@ -309,6 +306,33 @@ class ModelModel {
       .returning({ id: schema.modelsTable.id });
 
     return orphaned.length;
+  }
+
+  /**
+   * Update model details (pricing + modalities) by its internal UUID.
+   */
+  static async update(id: string, data: PatchModelBody): Promise<Model | null> {
+    const set: Record<string, unknown> = { updatedAt: new Date() };
+    if (data.customPricePerMillionInput !== undefined) {
+      set.customPricePerMillionInput = data.customPricePerMillionInput;
+    }
+    if (data.customPricePerMillionOutput !== undefined) {
+      set.customPricePerMillionOutput = data.customPricePerMillionOutput;
+    }
+    if (data.inputModalities !== undefined) {
+      set.inputModalities = data.inputModalities;
+    }
+    if (data.outputModalities !== undefined) {
+      set.outputModalities = data.outputModalities;
+    }
+
+    const [result] = await db
+      .update(schema.modelsTable)
+      .set(set)
+      .where(eq(schema.modelsTable.id, id))
+      .returning();
+
+    return result || null;
   }
 
   /**

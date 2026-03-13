@@ -818,7 +818,7 @@ const updateModelPricing = async (
   makeApiRequest({
     request,
     method: "patch",
-    urlSuffix: `/api/models/${modelId}/pricing`,
+    urlSuffix: `/api/models/${modelId}`,
     data: pricing,
   });
 

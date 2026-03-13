@@ -266,6 +266,7 @@ export const RouteId = {
 
   // Models with API Keys Routes
   GetModelsWithApiKeys: "getModelsWithApiKeys",
+  UpdateModel: "updateModel",
 
   // Limits Routes
   GetLimits: "getLimits",
@@ -315,9 +316,6 @@ export const RouteId = {
 
   // User Routes
   GetUserPermissions: "getUserPermissions",
-
-  // Model Pricing Routes
-  UpdateModelPricing: "updateModelPricing",
 
   // Team Token Routes
   GetTokens: "getTokens",

@@ -103,6 +103,7 @@ const toolGroups: Record<ArchestraToolShortName, ToolGroup> = {
   todo_write: ToolGroup.Chat,
   artifact_write: ToolGroup.Chat,
   swap_agent: ToolGroup.Chat,
+  swap_to_default_agent: ToolGroup.Chat,
 };
 
 // === Script entry point ===

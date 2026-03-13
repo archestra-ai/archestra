@@ -3,10 +3,12 @@
 import { type UIMessage, useChat } from "@ai-sdk/react";
 import {
   EXTERNAL_AGENT_ID_HEADER,
-  SWAP_AGENT_POKE_TEXT,
+  makeSwapAgentPokeText,
+  SWAP_TO_DEFAULT_AGENT_POKE_TEXT,
   TOOL_ARTIFACT_WRITE_FULL_NAME,
   TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_FULL_NAME,
   TOOL_SWAP_AGENT_FULL_NAME,
+  TOOL_SWAP_TO_DEFAULT_AGENT_FULL_NAME,
   type TokenUsage,
 } from "@shared";
 import { useQueryClient } from "@tanstack/react-query";
@@ -230,7 +232,8 @@ function ChatSessionHook({
   // Track if title generation has been attempted for this conversation
   const titleGenerationAttemptedRef = useRef(false);
   // Track when swap_agent was called so we can auto-poke the new agent on finish
-  const swapAgentPendingRef = useRef(false);
+  // Stores the poke text to send, or null if no swap is pending
+  const swapAgentPendingRef = useRef<string | null>(null);
   // Ref to hold sendMessage for use in onFinish callback
   const sendMessageRef = useRef<
     | ((
@@ -266,11 +269,12 @@ function ChatSessionHook({
       // The new /api/chat POST re-reads the conversation from DB and
       // loads the swapped agent's system prompt + tools.
       if (swapAgentPendingRef.current) {
-        swapAgentPendingRef.current = false;
+        const pokeText = swapAgentPendingRef.current;
+        swapAgentPendingRef.current = null;
         setTimeout(() => {
           sendMessageRef.current?.({
             role: "user",
-            parts: [{ type: "text", text: SWAP_AGENT_POKE_TEXT }],
+            parts: [{ type: "text", text: pokeText }],
           });
         }, 100);
       }
@@ -298,7 +302,19 @@ function ChatSessionHook({
       // after swap_agent executes, so the old agent won't continue.
       // onFinish then sends a poke to trigger the new agent.
       if (toolCall.toolName === TOOL_SWAP_AGENT_FULL_NAME) {
-        swapAgentPendingRef.current = true;
+        const agentName = (
+          toolCall as unknown as { args?: Record<string, unknown> }
+        ).args?.agent_name;
+        swapAgentPendingRef.current = makeSwapAgentPokeText(
+          typeof agentName === "string" ? agentName : "another agent",
+        );
+        queryClient.invalidateQueries({
+          queryKey: ["conversation", conversationId],
+        });
+      }
+
+      if (toolCall.toolName === TOOL_SWAP_TO_DEFAULT_AGENT_FULL_NAME) {
+        swapAgentPendingRef.current = SWAP_TO_DEFAULT_AGENT_POKE_TEXT;
         queryClient.invalidateQueries({
           queryKey: ["conversation", conversationId],
         });

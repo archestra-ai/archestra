@@ -170,8 +170,15 @@ export const TOOL_ARTIFACT_WRITE_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_
 export const TOOL_TODO_WRITE_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}todo_write`;
 export const TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}query_knowledge_sources`;
 export const TOOL_SWAP_AGENT_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}swap_agent`;
+export const TOOL_SWAP_TO_DEFAULT_AGENT_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}swap_to_default_agent`;
 export const SWAP_AGENT_POKE_TEXT =
   "(Agent was swapped. Please continue the conversation.)";
+export const SWAP_AGENT_POKE_PREFIX = "(Switched to ";
+export function makeSwapAgentPokeText(agentName: string): string {
+  return `${SWAP_AGENT_POKE_PREFIX}${agentName}. Please continue the conversation.)`;
+}
+export const SWAP_TO_DEFAULT_AGENT_POKE_TEXT =
+  "(Switched back to the default agent. Briefly explain why you switched back and continue the conversation.)";
 
 export const DEFAULT_ARCHESTRA_TOOL_NAMES = [
   TOOL_ARTIFACT_WRITE_FULL_NAME,

@@ -251,7 +251,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Batch fetch all required data in parallel
       const existingAgentIds = new Set(agentsForPermCheck.keys());
-      const [tools] = await Promise.all([ToolModel.getByIds(uniqueToolIds)]);
+      const tools = await ToolModel.getByIds(uniqueToolIds);
 
       // Create maps for efficient lookup
       const toolsMap = new Map(tools.map((tool) => [tool.id, tool]));

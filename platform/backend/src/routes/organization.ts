@@ -591,13 +591,14 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "Get a member of the organization by user ID or email address",
         tags: ["Organization"],
         params: z.object({
-          idOrEmail: z.string().describe("User ID or email address"),
+          idOrEmail: z.string().min(1).describe("User ID or email address"),
         }),
         response: constructResponseSchema(
           z.object({
             id: z.string(),
             name: z.string(),
             email: z.string(),
+            role: z.string(),
           }),
         ),
       },

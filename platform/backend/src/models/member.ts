@@ -201,6 +201,7 @@ class MemberModel {
         id: schema.usersTable.id,
         name: schema.usersTable.name,
         email: schema.usersTable.email,
+        role: schema.membersTable.role,
       })
       .from(schema.membersTable)
       .innerJoin(

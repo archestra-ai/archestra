@@ -27,6 +27,7 @@ test.describe("GET /api/organization/members/:idOrEmail", () => {
     expect(body.id).toBe(member.id);
     expect(body.email).toBe(member.email);
     expect(body.name).toBe(member.name);
+    expect(body.role).toBeDefined();
   });
 
   test("should get member by email", async ({ request, makeApiRequest }) => {
@@ -50,6 +51,7 @@ test.describe("GET /api/organization/members/:idOrEmail", () => {
     const body = await response.json();
     expect(body.id).toBe(member.id);
     expect(body.email).toBe(member.email);
+    expect(body.role).toBeDefined();
   });
 
   test("should return 404 for non-existent user", async ({

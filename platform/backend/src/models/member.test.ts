@@ -127,6 +127,7 @@ describe("MemberModel", () => {
       expect(result).toBeDefined();
       expect(result?.id).toBe(user.id);
       expect(result?.email).toBe("findme@test.com");
+      expect(result?.role).toBe("member");
     });
 
     test("should find member by email", async ({
@@ -145,6 +146,7 @@ describe("MemberModel", () => {
       expect(result).toBeDefined();
       expect(result?.id).toBe(user.id);
       expect(result?.email).toBe("byemail@test.com");
+      expect(result?.role).toBe("member");
     });
 
     test("should return undefined for non-existent user", async ({

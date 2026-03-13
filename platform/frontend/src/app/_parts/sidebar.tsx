@@ -415,7 +415,6 @@ export function AppSidebar() {
 
   // Filter nav groups based on enterprise features
   const filteredNavGroups = React.useMemo(() => {
-    if (knowledgeBaseEnabled) return contentNavGroups;
     return contentNavGroups.map((group) => ({
       ...group,
       items: group.items.filter((item) => {

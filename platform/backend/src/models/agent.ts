@@ -352,25 +352,31 @@ class AgentModel {
       return [];
     }
 
-    const [teamsMap, labelsMap, kbMap, connectorMap, suggestedPromptsMap, toolsResult] =
-      await Promise.all([
-        AgentTeamModel.getTeamDetailsForAgents(agentIds),
-        AgentLabelModel.getLabelsForAgents(agentIds),
-        AgentKnowledgeBaseModel.getKnowledgeBaseIdsForAgents(agentIds),
-        AgentConnectorAssignmentModel.getConnectorIdsForAgents(agentIds),
-        AgentSuggestedPromptModel.getForAgents(agentIds),
-        db
-          .select({
-            agentId: schema.agentToolsTable.agentId,
-            tool: schema.toolsTable,
-          })
-          .from(schema.agentToolsTable)
-          .innerJoin(
-            schema.toolsTable,
-            eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
-          )
-          .where(inArray(schema.agentToolsTable.agentId, agentIds)),
-      ]);
+    const [
+      teamsMap,
+      labelsMap,
+      kbMap,
+      connectorMap,
+      suggestedPromptsMap,
+      toolsResult,
+    ] = await Promise.all([
+      AgentTeamModel.getTeamDetailsForAgents(agentIds),
+      AgentLabelModel.getLabelsForAgents(agentIds),
+      AgentKnowledgeBaseModel.getKnowledgeBaseIdsForAgents(agentIds),
+      AgentConnectorAssignmentModel.getConnectorIdsForAgents(agentIds),
+      AgentSuggestedPromptModel.getForAgents(agentIds),
+      db
+        .select({
+          agentId: schema.agentToolsTable.agentId,
+          tool: schema.toolsTable,
+        })
+        .from(schema.agentToolsTable)
+        .innerJoin(
+          schema.toolsTable,
+          eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+        )
+        .where(inArray(schema.agentToolsTable.agentId, agentIds)),
+    ]);
 
     // Group tools by agent
     const toolsByAgent = new Map<
@@ -428,25 +434,31 @@ class AgentModel {
       return [];
     }
 
-    const [teamsMap, labelsMap, kbMap, connectorMap, suggestedPromptsMap, toolsResult] =
-      await Promise.all([
-        AgentTeamModel.getTeamDetailsForAgents(agentIds),
-        AgentLabelModel.getLabelsForAgents(agentIds),
-        AgentKnowledgeBaseModel.getKnowledgeBaseIdsForAgents(agentIds),
-        AgentConnectorAssignmentModel.getConnectorIdsForAgents(agentIds),
-        AgentSuggestedPromptModel.getForAgents(agentIds),
-        db
-          .select({
-            agentId: schema.agentToolsTable.agentId,
-            tool: schema.toolsTable,
-          })
-          .from(schema.agentToolsTable)
-          .innerJoin(
-            schema.toolsTable,
-            eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
-          )
-          .where(inArray(schema.agentToolsTable.agentId, agentIds)),
-      ]);
+    const [
+      teamsMap,
+      labelsMap,
+      kbMap,
+      connectorMap,
+      suggestedPromptsMap,
+      toolsResult,
+    ] = await Promise.all([
+      AgentTeamModel.getTeamDetailsForAgents(agentIds),
+      AgentLabelModel.getLabelsForAgents(agentIds),
+      AgentKnowledgeBaseModel.getKnowledgeBaseIdsForAgents(agentIds),
+      AgentConnectorAssignmentModel.getConnectorIdsForAgents(agentIds),
+      AgentSuggestedPromptModel.getForAgents(agentIds),
+      db
+        .select({
+          agentId: schema.agentToolsTable.agentId,
+          tool: schema.toolsTable,
+        })
+        .from(schema.agentToolsTable)
+        .innerJoin(
+          schema.toolsTable,
+          eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+        )
+        .where(inArray(schema.agentToolsTable.agentId, agentIds)),
+    ]);
 
     // Group tools by agent
     const toolsByAgent = new Map<

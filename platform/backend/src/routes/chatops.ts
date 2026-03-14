@@ -35,19 +35,15 @@ import {
   createPaginatedResponseSchema,
   createSortingQuerySchema,
   PaginationQuerySchema,
-} from "@/types";
-import {
   type ChatOpsConnectionMode,
   type ChatOpsProvider,
   type ChatOpsProviderType,
   ChatOpsProviderTypeSchema,
   ChatOpsStatusResponseSchema,
   type IncomingChatMessage,
-} from "@/types/chatops";
-import {
   ChatOpsChannelBindingResponseSchema,
   UpdateChatOpsChannelBindingSchema,
-} from "@/types/chatops-channel-binding";
+} from "@/types";
 
 /**
  * Fastify preParsing hook that captures the raw request body before content-type
@@ -1442,9 +1438,8 @@ async function getProviderInfo(providerType: ChatOpsProviderType): Promise<{
       const credentials = {
         botToken: maskValue(dbConfig?.botToken ?? ""),
         appId: maskValue(dbConfig?.appId ?? ""),
-        connectionMode:
-          (dbConfig?.connectionMode ??
-            SLACK_DEFAULT_CONNECTION_MODE) as ChatOpsConnectionMode,
+        connectionMode: (dbConfig?.connectionMode ??
+          SLACK_DEFAULT_CONNECTION_MODE) as ChatOpsConnectionMode,
         ...(isSocket
           ? { appLevelToken: maskValue(dbConfig?.appLevelToken ?? "") }
           : { signingSecret: dbConfig?.signingSecret ? "••••••••" : "" }),

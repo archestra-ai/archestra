@@ -4,7 +4,7 @@ import logger from "@/logging";
 import { KbChunkModel } from "@/models";
 import type { VectorSearchResult } from "@/models/kb-chunk";
 import * as metrics from "@/observability/metrics";
-import type { AclEntry } from "@/types/kb-document";
+import type { AclEntry } from "@/types";
 import {
   buildEmbeddingInteraction,
   withKbObservability,

@@ -1,11 +1,7 @@
 import { SLACK_DEFAULT_CONNECTION_MODE } from "@/agents/chatops/constants";
 import logger from "@/logging";
 import { secretManager } from "@/secrets-manager";
-import type {
-  MsTeamsDbConfig,
-  SecretValue,
-  SlackDbConfig,
-} from "@/types";
+import type { MsTeamsDbConfig, SecretValue, SlackDbConfig } from "@/types";
 import SecretModel from "./secret";
 
 /**

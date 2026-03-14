@@ -19,13 +19,15 @@ import {
   type PaginatedResult,
 } from "@/database/utils/pagination";
 import logger from "@/logging";
-import type { PaginationQuery, SortingQueryFor } from "@/types";
-import type { ChatOpsProviderType, ChatOpsStatus } from "@/types/chatops";
 import type {
+  PaginationQuery,
+  SortingQueryFor,
+  ChatOpsProviderType,
+  ChatOpsStatus,
   ChatOpsChannelBinding,
   InsertChatOpsChannelBinding,
   UpdateChatOpsChannelBinding,
-} from "@/types/chatops-channel-binding";
+} from "@/types";
 
 /**
  * Model for managing chatops channel bindings.

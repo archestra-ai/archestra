@@ -25,14 +25,12 @@ import {
   SelectConnectorRunSchema,
   SelectKnowledgeBaseConnectorSchema,
   SelectKnowledgeBaseSchema,
-} from "@/types";
-import { KnowledgeBaseVisibilitySchema } from "@/types/knowledge-base";
-import {
+  KnowledgeBaseVisibilitySchema,
   ConnectorConfigSchema,
   type ConnectorCredentials,
   ConnectorCredentialsSchema,
   ConnectorTypeSchema,
-} from "@/types/knowledge-connector";
+} from "@/types";
 
 const AssignedAgentSummarySchema = z.object({
   id: z.string(),

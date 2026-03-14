@@ -1,5 +1,4 @@
-import type { AclEntry } from "@/types/kb-document";
-import type { KnowledgeBaseVisibility } from "@/types/knowledge-base";
+import type { AclEntry, KnowledgeBaseVisibility } from "@/types";
 
 /**
  * Build the ACL strings for a document based on the knowledge base visibility mode.

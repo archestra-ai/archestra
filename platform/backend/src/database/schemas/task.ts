@@ -10,7 +10,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import type { TaskStatus, TaskType } from "@/types/task";
+import type { TaskStatus, TaskType } from "@/types";
 
 const tasksTable = pgTable(
   "tasks",

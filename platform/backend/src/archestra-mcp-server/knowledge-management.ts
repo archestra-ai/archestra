@@ -19,8 +19,8 @@ import {
   InsertKnowledgeBaseConnectorSchema,
   InsertKnowledgeBaseSchema,
   UpdateKnowledgeBaseConnectorSchema,
+  type AclEntry,
 } from "@/types";
-import type { AclEntry } from "@/types/kb-document";
 import { catchError, errorResult, successResult } from "./helpers";
 import type { ArchestraContext } from "./types";
 

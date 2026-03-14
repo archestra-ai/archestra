@@ -5,12 +5,7 @@ import { WebClient } from "@slack/web-api";
 import { slackifyMarkdown } from "slackify-markdown";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
 import logger from "@/logging";
-import {
-  AgentModel,
-  ChatOpsChannelBindingModel,
-  UserModel,
-} from "@/models";
-import type { SlackDbConfig } from "@/types";
+import { AgentModel, ChatOpsChannelBindingModel, UserModel } from "@/models";
 import type {
   ChatOpsConnectionMode,
   ChatOpsEventHandler,
@@ -21,6 +16,7 @@ import type {
   ChatThreadMessageFile,
   DiscoveredChannel,
   IncomingChatMessage,
+  SlackDbConfig,
   ThreadHistoryParams,
 } from "@/types";
 import {

@@ -36,7 +36,7 @@ import type {
   IncomingChatMessage,
   MsTeamsDbConfig,
   ThreadHistoryParams,
-} from "@/types/chatops";
+} from "@/types";
 import { detectImageType } from "@/utils/detect-image-type";
 import {
   CHATOPS_ATTACHMENT_LIMITS,

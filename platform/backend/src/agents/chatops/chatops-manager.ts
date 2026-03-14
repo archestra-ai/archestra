@@ -19,7 +19,7 @@ import type {
   ChatOpsProvider,
   ChatOpsProviderType,
   IncomingChatMessage,
-} from "@/types/chatops";
+} from "@/types";
 import {
   autoProvisionUser,
   buildWelcomeMessage,

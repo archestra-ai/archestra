@@ -37,6 +37,7 @@ import {
   PaginationQuerySchema,
 } from "@/types";
 import {
+  type ChatOpsConnectionMode,
   type ChatOpsProvider,
   type ChatOpsProviderType,
   ChatOpsProviderTypeSchema,
@@ -890,10 +891,20 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
           z.object({
             providers: z.array(
               z.object({
-                id: z.string(),
+                id: ChatOpsProviderTypeSchema,
                 displayName: z.string(),
                 configured: z.boolean(),
-                credentials: z.record(z.string(), z.string()).optional(),
+                credentials: z
+                  .object({
+                    botToken: z.string().optional(),
+                    appId: z.string().optional(),
+                    appSecret: z.string().optional(),
+                    tenantId: z.string().optional(),
+                    signingSecret: z.string().optional(),
+                    appLevelToken: z.string().optional(),
+                    connectionMode: ChatOpsConnectionModeSchema.optional(),
+                  })
+                  .optional(),
                 dmInfo: z
                   .object({
                     botUserId: z.string().optional(),
@@ -1424,7 +1435,15 @@ async function getProviderInfo(providerType: ChatOpsProviderType): Promise<{
   id: ChatOpsProviderType;
   displayName: string;
   configured: boolean;
-  credentials?: Record<string, string>;
+  credentials?: {
+    botToken?: string;
+    appId?: string;
+    appSecret?: string;
+    tenantId?: string;
+    signingSecret?: string;
+    appLevelToken?: string;
+    connectionMode?: ChatOpsConnectionMode;
+  };
   dmInfo?: { botUserId?: string; teamId?: string; appId?: string };
 }> {
   switch (providerType) {
@@ -1447,17 +1466,16 @@ async function getProviderInfo(providerType: ChatOpsProviderType): Promise<{
       const provider = chatOpsManager.getSlackProvider();
       const dbConfig = await ChatOpsConfigModel.getSlackConfig();
       const isSocket = dbConfig?.connectionMode === "socket";
-      const credentials: Record<string, string> = {
+      const credentials = {
         botToken: maskValue(dbConfig?.botToken ?? ""),
         appId: maskValue(dbConfig?.appId ?? ""),
         connectionMode:
-          dbConfig?.connectionMode ?? SLACK_DEFAULT_CONNECTION_MODE,
+          (dbConfig?.connectionMode ??
+            SLACK_DEFAULT_CONNECTION_MODE) as ChatOpsConnectionMode,
+        ...(isSocket
+          ? { appLevelToken: maskValue(dbConfig?.appLevelToken ?? "") }
+          : { signingSecret: dbConfig?.signingSecret ? "••••••••" : "" }),
       };
-      if (isSocket) {
-        credentials.appLevelToken = maskValue(dbConfig?.appLevelToken ?? "");
-      } else {
-        credentials.signingSecret = dbConfig?.signingSecret ? "••••••••" : "";
-      }
       return {
         id: "slack",
         displayName: "Slack",

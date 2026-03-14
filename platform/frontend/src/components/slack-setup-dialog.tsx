@@ -142,27 +142,18 @@ export function SlackSetupDialog({
     onClick: async () => {
       setSaving(true);
       try {
-        const body: Record<string, unknown> = {
+        const body: NonNullable<
+          archestraApiTypes.UpdateSlackChatOpsConfigData["body"]
+        > = {
           enabled: true,
           connectionMode,
+          ...(sharedBotToken && { botToken: sharedBotToken }),
+          ...(sharedAppId && { appId: sharedAppId }),
+          ...(isSocket
+            ? sharedAppLevelToken && { appLevelToken: sharedAppLevelToken }
+            : sharedSigningSecret && { signingSecret: sharedSigningSecret }),
         };
-        if (sharedBotToken) body.botToken = sharedBotToken;
-        if (sharedAppId) body.appId = sharedAppId;
-        if (isSocket) {
-          if (sharedAppLevelToken) body.appLevelToken = sharedAppLevelToken;
-        } else {
-          if (sharedSigningSecret) body.signingSecret = sharedSigningSecret;
-        }
-        const updateResult = await mutation.mutateAsync(
-          body as {
-            enabled?: boolean;
-            botToken?: string;
-            signingSecret?: string;
-            appId?: string;
-            connectionMode?: "webhook" | "socket";
-            appLevelToken?: string;
-          },
-        );
+        const updateResult = await mutation.mutateAsync(body);
         if (updateResult?.success) {
           handleOpenChange(false);
         }

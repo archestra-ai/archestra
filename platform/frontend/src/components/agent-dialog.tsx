@@ -8,6 +8,7 @@ import {
   DocsPage,
   getDocsUrl,
   getResourceForAgentType,
+  MAX_SUGGESTED_PROMPTS,
   providerDisplayNames,
   type SupportedProvider,
 } from "@shared";
@@ -1181,24 +1182,42 @@ export function AgentDialog({
                       Shown to users when starting a new chat
                     </p>
                   </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() =>
-                      setSuggestedPrompts((prev) => [
-                        ...prev,
-                        { summaryTitle: "", prompt: "" },
-                      ])
-                    }
-                  >
-                    <Plus className="h-4 w-4 mr-1" />
-                    Add
-                  </Button>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            disabled={
+                              suggestedPrompts.length >= MAX_SUGGESTED_PROMPTS
+                            }
+                            onClick={() =>
+                              setSuggestedPrompts((prev) => [
+                                ...prev,
+                                { summaryTitle: "", prompt: "" },
+                              ])
+                            }
+                          >
+                            <Plus className="h-4 w-4 mr-1" />
+                            Add
+                          </Button>
+                        </span>
+                      </TooltipTrigger>
+                      {suggestedPrompts.length >= MAX_SUGGESTED_PROMPTS && (
+                        <TooltipContent>
+                          Maximum of {MAX_SUGGESTED_PROMPTS} suggested prompts
+                          reached
+                        </TooltipContent>
+                      )}
+                    </Tooltip>
+                  </TooltipProvider>
                 </div>
                 {suggestedPrompts.map((sp, index) => (
                   <div
-                    key={`sp-${sp.summaryTitle || index}`}
+                    // biome-ignore lint/suspicious/noArrayIndexKey: no other way to key the item
+                    key={`sp-${index}`}
                     className="space-y-2 rounded-md border p-3 relative"
                   >
                     <Button

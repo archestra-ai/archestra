@@ -17,7 +17,6 @@ import {
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
-  type FormEvent,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -1029,10 +1028,9 @@ export default function ChatPage() {
     [internalAgents, modelsByProvider, chatApiKeys, organization],
   );
 
-  // Handle initial submit (when no conversation exists)
-  const handleInitialSubmit: PromptInputProps["onSubmit"] = useCallback(
-    (message, e) => {
-      e.preventDefault();
+  // Core logic for starting a new conversation with a message
+  const submitInitialMessage = useCallback(
+    (message: { text?: string; files?: unknown[] }) => {
       if (isPlaywrightSetupVisible) return;
       const hasText = message.text?.trim();
       const hasFiles = message.files && message.files.length > 0;
@@ -1127,6 +1125,15 @@ export default function ChatPage() {
       selectConversation,
       queryClient,
     ],
+  );
+
+  // Form submit handler wraps submitInitialMessage with event.preventDefault
+  const handleInitialSubmit: PromptInputProps["onSubmit"] = useCallback(
+    (message, e) => {
+      e.preventDefault();
+      submitInitialMessage(message);
+    },
+    [submitInitialMessage],
   );
 
   // Auto-send message from URL when conditions are met (deep link support)
@@ -1644,15 +1651,12 @@ export default function ChatPage() {
                           <Suggestion
                             key={`${idx}-${sp.summaryTitle}`}
                             suggestion={sp.summaryTitle}
-                            onClick={() => {
-                              const syntheticEvent = {
-                                preventDefault: () => {},
-                              } as unknown as FormEvent<HTMLFormElement>;
-                              handleInitialSubmit(
-                                { text: sp.prompt, files: [] },
-                                syntheticEvent,
-                              );
-                            }}
+                            onClick={() =>
+                              submitInitialMessage({
+                                text: sp.prompt,
+                                files: [],
+                              })
+                            }
                           />
                         ))}
                       </div>

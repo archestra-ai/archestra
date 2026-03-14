@@ -1,6 +1,5 @@
 import { describe, expect, test } from "@/test";
 import {
-  buildRenderedAgentSystemPrompt,
   evaluateRoleMappingTemplate,
   extractGroupsWithTemplate,
   promptNeedsRendering,
@@ -488,7 +487,7 @@ describe("promptNeedsRendering", () => {
   });
 });
 
-describe("buildRenderedAgentSystemPrompt", () => {
+describe("renderSystemPrompt with null handling", () => {
   const context = {
     user: {
       name: "Alice",
@@ -497,35 +496,23 @@ describe("buildRenderedAgentSystemPrompt", () => {
     },
   };
 
-  test("returns empty arrays when systemPrompt is null", () => {
-    const result = buildRenderedAgentSystemPrompt({
-      systemPrompt: null,
-      context: null,
-    });
-    expect(result).toEqual({ systemPromptParts: [] });
+  test("returns null when systemPrompt is null", () => {
+    expect(renderSystemPrompt(null)).toBeNull();
   });
 
-  test("returns raw prompt when no templating needed", () => {
-    const result = buildRenderedAgentSystemPrompt({
-      systemPrompt: "Be helpful",
-      context: null,
-    });
-    expect(result.systemPromptParts).toEqual(["Be helpful"]);
+  test("returns raw prompt when no context provided", () => {
+    expect(renderSystemPrompt("Be helpful")).toBe("Be helpful");
   });
 
   test("renders templates when context is provided and prompt contains handlebars", () => {
-    const result = buildRenderedAgentSystemPrompt({
-      systemPrompt: "Hello {{user.name}}",
-      context,
-    });
-    expect(result.systemPromptParts).toEqual(["Hello Alice"]);
+    expect(renderSystemPrompt("Hello {{user.name}}", context)).toBe(
+      "Hello Alice",
+    );
   });
 
   test("skips rendering when context is null even if prompt has braces", () => {
-    const result = buildRenderedAgentSystemPrompt({
-      systemPrompt: "Hello {{user.name}}",
-      context: null,
-    });
-    expect(result.systemPromptParts).toEqual(["Hello {{user.name}}"]);
+    expect(renderSystemPrompt("Hello {{user.name}}", null)).toBe(
+      "Hello {{user.name}}",
+    );
   });
 });

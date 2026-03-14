@@ -23,8 +23,8 @@ import {
 } from "@/models";
 import { mapProviderError, ProviderError } from "@/routes/chat/errors";
 import {
-  buildRenderedAgentSystemPrompt,
   promptNeedsRendering,
+  renderSystemPrompt,
   type SystemPromptContext,
 } from "@/templating";
 
@@ -153,13 +153,10 @@ export async function executeA2AMessage(
     };
   }
 
-  const { systemPromptParts } = buildRenderedAgentSystemPrompt({
-    systemPrompt: agent.systemPrompt,
-    context: promptContext,
-  });
+  const renderedPrompt = renderSystemPrompt(agent.systemPrompt, promptContext);
 
-  if (systemPromptParts.length > 0) {
-    systemPrompt = systemPromptParts.join("\n\n");
+  if (renderedPrompt) {
+    systemPrompt = renderedPrompt;
   }
 
   // Track subagent execution so the browser preview can skip screenshots

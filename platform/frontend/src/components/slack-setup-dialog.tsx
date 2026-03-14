@@ -193,9 +193,7 @@ export function SlackSetupDialog({
 function StepAppearanceAndConnect({ stepNumber }: { stepNumber: number }) {
   const configuredAppName = useAppName();
   const { data: organization } = useOrganization();
-  const logoUrl =
-    ((organization as Record<string, unknown>)?.iconLogo as string | null) ??
-    "/logo-slack.png";
+  const logoUrl = organization?.iconLogo ?? "/logo-slack.png";
   return (
     <div
       className="grid flex-1 gap-6"

@@ -3,6 +3,7 @@ import {
   DOMAIN_VALIDATION_REGEX,
   IncomingEmailSecurityModeSchema,
   MAX_DOMAIN_LENGTH,
+  MAX_SUGGESTED_PROMPTS,
 } from "@shared";
 import {
   createInsertSchema,
@@ -142,7 +143,10 @@ export const SelectAgentSchema = createSelectSchema(
   authorName: z.string().nullable().optional(),
   knowledgeBaseIds: z.array(z.string()),
   connectorIds: z.array(z.string()),
-  suggestedPrompts: z.array(SuggestedPromptInputSchema).default([]),
+  suggestedPrompts: z
+    .array(SuggestedPromptInputSchema)
+    .max(MAX_SUGGESTED_PROMPTS)
+    .default([]),
 });
 
 // Base schema without refinement - can be used with .partial()
@@ -158,7 +162,10 @@ export const InsertAgentSchemaBase = createInsertSchema(
     scope: AgentScopeSchema,
     knowledgeBaseIds: z.array(z.string()).default([]),
     connectorIds: z.array(z.string()).default([]),
-    suggestedPrompts: z.array(SuggestedPromptInputSchema).optional(),
+    suggestedPrompts: z
+      .array(SuggestedPromptInputSchema)
+      .max(MAX_SUGGESTED_PROMPTS)
+      .optional(),
   })
   .omit({
     id: true,
@@ -183,7 +190,10 @@ export const UpdateAgentSchemaBase = createUpdateSchema(
     scope: AgentScopeSchema.optional(),
     knowledgeBaseIds: z.array(z.string()).optional(),
     connectorIds: z.array(z.string()).optional(),
-    suggestedPrompts: z.array(SuggestedPromptInputSchema).optional(),
+    suggestedPrompts: z
+      .array(SuggestedPromptInputSchema)
+      .max(MAX_SUGGESTED_PROMPTS)
+      .optional(),
   })
   .omit({
     id: true,

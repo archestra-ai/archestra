@@ -237,8 +237,6 @@ test("deleting an agent cascades to delete its suggestedPrompts", async ({
   await AgentModel.delete(agent.id);
 
   // Verify prompts are cascade-deleted
-  const orphanedPrompts = await AgentSuggestedPromptModel.getForAgent(
-    agent.id,
-  );
+  const orphanedPrompts = await AgentSuggestedPromptModel.getForAgent(agent.id);
   expect(orphanedPrompts).toHaveLength(0);
 });

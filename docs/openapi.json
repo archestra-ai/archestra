@@ -36946,6 +36946,7 @@
                           },
                           "suggestedPrompts": {
                             "default": [],
+                            "maxItems": 10,
                             "type": "array",
                             "items": {
                               "type": "object",
@@ -37418,6 +37419,7 @@
                     }
                   },
                   "suggestedPrompts": {
+                    "maxItems": 10,
                     "type": "array",
                     "items": {
                       "type": "object",
@@ -37726,6 +37728,7 @@
                     },
                     "suggestedPrompts": {
                       "default": [],
+                      "maxItems": 10,
                       "type": "array",
                       "items": {
                         "type": "object",
@@ -38341,6 +38344,7 @@
                       },
                       "suggestedPrompts": {
                         "default": [],
+                        "maxItems": 10,
                         "type": "array",
                         "items": {
                           "type": "object",
@@ -38896,6 +38900,7 @@
                     },
                     "suggestedPrompts": {
                       "default": [],
+                      "maxItems": 10,
                       "type": "array",
                       "items": {
                         "type": "object",
@@ -39450,6 +39455,7 @@
                     },
                     "suggestedPrompts": {
                       "default": [],
+                      "maxItems": 10,
                       "type": "array",
                       "items": {
                         "type": "object",
@@ -40016,6 +40022,7 @@
                     },
                     "suggestedPrompts": {
                       "default": [],
+                      "maxItems": 10,
                       "type": "array",
                       "items": {
                         "type": "object",
@@ -40437,6 +40444,7 @@
                     }
                   },
                   "suggestedPrompts": {
+                    "maxItems": 10,
                     "type": "array",
                     "items": {
                       "type": "object",
@@ -40752,6 +40760,7 @@
                     },
                     "suggestedPrompts": {
                       "default": [],
+                      "maxItems": 10,
                       "type": "array",
                       "items": {
                         "type": "object",

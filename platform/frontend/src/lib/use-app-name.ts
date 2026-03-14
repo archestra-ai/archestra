@@ -7,8 +7,5 @@ import { useOrganization } from "@/lib/organization.query";
  */
 export function useAppName(): string {
   const { data: organization } = useOrganization();
-  return (
-    ((organization as Record<string, unknown>)?.appName as string) ??
-    DEFAULT_APP_NAME
-  );
+  return organization?.appName ?? DEFAULT_APP_NAME;
 }

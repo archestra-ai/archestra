@@ -44,8 +44,8 @@ import {
 } from "@/models";
 import { startActiveChatSpan } from "@/observability/tracing";
 import {
-  buildRenderedAgentSystemPrompt,
   promptNeedsRendering,
+  renderSystemPrompt,
   type SystemPromptContext,
 } from "@/templating";
 import {
@@ -209,20 +209,17 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         };
       }
 
-      const { systemPromptParts } = buildRenderedAgentSystemPrompt({
-        systemPrompt: agent.systemPrompt,
-        context: promptContext,
-      });
-
-      // Add instruction about tool approval denials
-      systemPromptParts.push(
-        "When a tool execution is not approved by the user, do not retry it. Explain what happened and ask the user what they'd like to do instead.",
+      const renderedPrompt = renderSystemPrompt(
+        agent.systemPrompt,
+        promptContext,
       );
 
-      // Combine all prompts into system prompt
-      if (systemPromptParts.length > 0) {
-        systemPrompt = systemPromptParts.join("\n\n");
-      }
+      const toolDenialInstruction =
+        "When a tool execution is not approved by the user, do not retry it. Explain what happened and ask the user what they'd like to do instead.";
+
+      systemPrompt =
+        [renderedPrompt, toolDenialInstruction].filter(Boolean).join("\n\n") ||
+        undefined;
 
       // Use stored provider if available, otherwise detect from model name for backward compatibility
       // At the moment of migration, all supported providers (anthropic, openai, gemini) serve different models,
@@ -243,8 +240,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           model: conversation.selectedModel,
           provider,
           providerSource: conversation.selectedProvider ? "stored" : "detected",
-          hasSystemPromptParts: systemPromptParts.length > 0,
-          systemPromptProvided: !!systemPrompt,
+          hasSystemPrompt: !!systemPrompt,
           externalAgentId,
         },
         "Starting chat stream",

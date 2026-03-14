@@ -279,23 +279,6 @@ export function ToolDetailsDialog({
                                   )}
                                 </div>
                               </div>
-                              {assignment.responseModifierTemplate && (
-                                <div className="text-xs text-muted-foreground">
-                                  <span className="font-medium">
-                                    Response Modifier:{" "}
-                                  </span>
-                                  <code className="bg-muted px-1 py-0.5 rounded">
-                                    {assignment.responseModifierTemplate.slice(
-                                      0,
-                                      50,
-                                    )}
-                                    {assignment.responseModifierTemplate
-                                      .length > 50
-                                      ? "..."
-                                      : ""}
-                                  </code>
-                                </div>
-                              )}
                             </div>
                           );
                         })}

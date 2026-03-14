@@ -1,9 +1,9 @@
 "use client";
 
 import {
+  type AgentType,
   archestraApiSdk,
   type archestraApiTypes,
-  type AgentType,
   DocsPage,
   E2eTestId,
   getDocsUrl,

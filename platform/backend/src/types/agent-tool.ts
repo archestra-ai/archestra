@@ -62,3 +62,13 @@ export type AgentToolSortBy = z.infer<typeof AgentToolSortBySchema>;
 export type AgentToolSortDirection = z.infer<
   typeof AgentToolSortDirectionSchema
 >;
+
+/** Shape returned by ToolModel.getMcpToolsAssignedToAgent */
+export type McpToolAssignment = {
+  toolName: string;
+  credentialSourceMcpServerId: string | null;
+  executionSourceMcpServerId: string | null;
+  useDynamicTeamCredential: boolean;
+  catalogId: string | null;
+  catalogName: string | null;
+};

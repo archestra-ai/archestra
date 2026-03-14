@@ -1,6 +1,10 @@
 "use client";
 
-import { type AgentScope, type archestraApiTypes, isBuiltInCatalogId } from "@shared";
+import {
+  type AgentScope,
+  type archestraApiTypes,
+  isBuiltInCatalogId,
+} from "@shared";
 import { useQueries } from "@tanstack/react-query";
 import {
   ArrowLeft,
@@ -774,9 +778,7 @@ function AgentSettingsView({
                   {agent.name}
                 </button>
                 <AgentBadge
-                  type={
-                    (agent.scope as AgentScope) ?? "personal"
-                  }
+                  type={(agent.scope as AgentScope) ?? "personal"}
                   className="text-[10px] px-1.5 py-0"
                 />
               </div>

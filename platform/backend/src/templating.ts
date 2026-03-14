@@ -1,7 +1,5 @@
-import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import Handlebars from "handlebars";
 import logger from "@/logging";
-import type { CommonToolResult } from "@/types";
 
 /**
  * Register custom Handlebars helpers for template rendering
@@ -292,40 +290,5 @@ export function extractGroupsWithTemplate(
   } catch {
     // Runtime error during template execution
     return [];
-  }
-}
-
-/**
- * Apply a handlebars template to transform a tool response
- *
- * The content from MCP tools will look like:
- * https://modelcontextprotocol.io/specification/2025-06-18/server/tools#calling-tools
- *
- * @param templateString - Handlebars template string
- * @param toolCallResponseResultContent - The content returned from an MCP tool call
- * @returns Transformed content (parsed JSON or original content on failure)
- */
-export function applyResponseModifierTemplate(
-  templateString: string,
-  toolCallResponseResultContent: Awaited<
-    ReturnType<typeof Client.prototype.callTool>
-  >["content"],
-): CommonToolResult["content"] {
-  try {
-    const template = Handlebars.compile(templateString, { noEscape: true });
-
-    // Render the template with the response as context
-    const rendered = template({ response: toolCallResponseResultContent });
-
-    // Try to parse as JSON if possible, otherwise return as text
-    try {
-      return JSON.parse(rendered);
-    } catch {
-      // If it's not valid JSON, return as a text content block
-      return [{ type: "text", text: rendered }];
-    }
-  } catch {
-    // If template compilation or rendering fails, return original content
-    return toolCallResponseResultContent;
   }
 }

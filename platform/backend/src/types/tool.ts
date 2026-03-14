@@ -65,7 +65,6 @@ export const ToolAssignmentSchema = z.object({
   executionSourceMcpServerId: z.string().nullable(),
   executionOwnerEmail: z.string().nullable(),
   useDynamicTeamCredential: z.boolean(),
-  responseModifierTemplate: z.string().nullable(),
 });
 
 // Tool with embedded assignments schema

@@ -20,7 +20,6 @@ const agentToolsTable = pgTable(
     toolId: uuid("tool_id")
       .notNull()
       .references(() => toolsTable.id, { onDelete: "cascade" }),
-    responseModifierTemplate: text("response_modifier_template"),
     // credentialSourceMcpServerId specifies which !!!REMOTE!!! MCP server to use for credentials
     credentialSourceMcpServerId: uuid(
       "credential_source_mcp_server_id",

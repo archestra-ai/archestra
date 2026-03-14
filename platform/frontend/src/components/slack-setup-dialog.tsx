@@ -194,7 +194,7 @@ function StepAppearanceAndConnect({ stepNumber }: { stepNumber: number }) {
   const configuredAppName = useAppName();
   const { data: organization } = useOrganization();
   const logoUrl =
-    (organization as Record<string, unknown>)?.iconLogo as string | null ??
+    ((organization as Record<string, unknown>)?.iconLogo as string | null) ??
     "/logo-slack.png";
   return (
     <div

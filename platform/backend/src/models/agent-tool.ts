@@ -270,9 +270,7 @@ class AgentToolModel {
     options?: Partial<
       Pick<
         InsertAgentTool,
-        | "responseModifierTemplate"
-        | "credentialSourceMcpServerId"
-        | "executionSourceMcpServerId"
+        "credentialSourceMcpServerId" | "executionSourceMcpServerId"
       >
     >,
     organizationId?: string,
@@ -500,9 +498,7 @@ class AgentToolModel {
       const options: Partial<
         Pick<
           InsertAgentTool,
-          | "responseModifierTemplate"
-          | "credentialSourceMcpServerId"
-          | "executionSourceMcpServerId"
+          "credentialSourceMcpServerId" | "executionSourceMcpServerId"
         >
       > = {};
 
@@ -567,9 +563,7 @@ class AgentToolModel {
     options?: Partial<
       Pick<
         InsertAgentTool,
-        | "responseModifierTemplate"
-        | "credentialSourceMcpServerId"
-        | "executionSourceMcpServerId"
+        "credentialSourceMcpServerId" | "executionSourceMcpServerId"
       >
     >,
   ): Promise<void> {
@@ -579,7 +573,6 @@ class AgentToolModel {
     const assignments: Array<{
       agentId: string;
       toolId: string;
-      responseModifierTemplate?: string | null;
       credentialSourceMcpServerId?: string | null;
       executionSourceMcpServerId?: string | null;
     }> = [];
@@ -653,7 +646,6 @@ class AgentToolModel {
       const options: Partial<
         Pick<
           InsertAgentTool,
-          | "responseModifierTemplate"
           | "credentialSourceMcpServerId"
           | "executionSourceMcpServerId"
           | "useDynamicTeamCredential"
@@ -852,7 +844,6 @@ class AgentToolModel {
     data: Partial<
       Pick<
         UpdateAgentTool,
-        | "responseModifierTemplate"
         | "credentialSourceMcpServerId"
         | "executionSourceMcpServerId"
         | "useDynamicTeamCredential"

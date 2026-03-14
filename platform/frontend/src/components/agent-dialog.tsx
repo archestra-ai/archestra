@@ -1,12 +1,12 @@
 "use client";
 
 import {
+  type AgentScope,
+  type AgentType,
   archestraApiSdk,
   type archestraApiTypes,
   DocsPage,
   getDocsUrl,
-  type AgentScope,
-  type AgentType,
   getResourceForAgentType,
   providerDisplayNames,
   type SupportedProvider,
@@ -295,10 +295,7 @@ function SubagentsEditor({
 }
 
 // Helper functions for type-specific UI text
-function getDialogTitle(
-  agentType: AgentType,
-  isEdit: boolean,
-): string {
+function getDialogTitle(agentType: AgentType, isEdit: boolean): string {
   const titles: Record<string, { create: string; edit: string }> = {
     agent: { create: "Create Agent", edit: "Edit Agent" },
     mcp_gateway: { create: "Create MCP Gateway", edit: "Edit MCP Gateway" },
@@ -308,10 +305,7 @@ function getDialogTitle(
   return isEdit ? titles[agentType].edit : titles[agentType].create;
 }
 
-function getSuccessMessage(
-  agentType: AgentType,
-  isUpdate: boolean,
-): string {
+function getSuccessMessage(agentType: AgentType, isUpdate: boolean): string {
   const messages: Record<string, { create: string; update: string }> = {
     mcp_gateway: {
       create: "MCP Gateway created successfully",
@@ -333,9 +327,7 @@ function getSuccessMessage(
   return isUpdate ? messages[agentType].update : messages[agentType].create;
 }
 
-function getNamePlaceholder(
-  agentType: AgentType,
-): string {
+function getNamePlaceholder(agentType: AgentType): string {
   const placeholders: Record<string, string> = {
     mcp_gateway: "Enter MCP Gateway name",
     llm_proxy: "Enter LLM Proxy name",

@@ -35,6 +35,7 @@ import logger from "@/logging";
 import type {
   ExtendedTool,
   InsertTool,
+  McpToolAssignment,
   Tool,
   ToolFilters,
   ToolSortBy,
@@ -779,17 +780,7 @@ class ToolModel {
   static async getMcpToolsAssignedToAgent(
     toolNames: string[],
     agentId: string,
-  ): Promise<
-    Array<{
-      toolName: string;
-      responseModifierTemplate: string | null;
-      credentialSourceMcpServerId: string | null;
-      executionSourceMcpServerId: string | null;
-      useDynamicTeamCredential: boolean;
-      catalogId: string | null;
-      catalogName: string | null;
-    }>
-  > {
+  ): Promise<McpToolAssignment[]> {
     if (toolNames.length === 0) {
       return [];
     }
@@ -797,8 +788,6 @@ class ToolModel {
     const mcpTools = await db
       .select({
         toolName: schema.toolsTable.name,
-        responseModifierTemplate:
-          schema.agentToolsTable.responseModifierTemplate,
         credentialSourceMcpServerId:
           schema.agentToolsTable.credentialSourceMcpServerId,
         executionSourceMcpServerId:
@@ -1233,7 +1222,6 @@ class ToolModel {
               await db.insert(schema.agentToolsTable).values({
                 agentId: agentTool.agentId,
                 toolId: targetTool.id,
-                responseModifierTemplate: agentTool.responseModifierTemplate,
                 credentialSourceMcpServerId:
                   agentTool.credentialSourceMcpServerId,
                 executionSourceMcpServerId:
@@ -1744,8 +1732,6 @@ class ToolModel {
         executionOwnerEmail: executionOwnerAlias.email,
         useDynamicTeamCredential:
           schema.agentToolsTable.useDynamicTeamCredential,
-        responseModifierTemplate:
-          schema.agentToolsTable.responseModifierTemplate,
       })
       .from(schema.agentToolsTable)
       .innerJoin(
@@ -1787,7 +1773,6 @@ class ToolModel {
         executionSourceMcpServerId: string | null;
         executionOwnerEmail: string | null;
         useDynamicTeamCredential: boolean;
-        responseModifierTemplate: string | null;
       }>
     >();
 
@@ -1820,7 +1805,6 @@ class ToolModel {
           ? assignment.executionOwnerEmail
           : null,
         useDynamicTeamCredential: assignment.useDynamicTeamCredential,
-        responseModifierTemplate: assignment.responseModifierTemplate,
       });
       assignmentsByToolId.set(assignment.toolId, existing);
     }

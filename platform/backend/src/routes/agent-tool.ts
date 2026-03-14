@@ -536,7 +536,6 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
           id: UuidIdSchema,
         }),
         body: UpdateAgentToolSchema.pick({
-          responseModifierTemplate: true,
           credentialSourceMcpServerId: true,
           executionSourceMcpServerId: true,
           useDynamicTeamCredential: true,

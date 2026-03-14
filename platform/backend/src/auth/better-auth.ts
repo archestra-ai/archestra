@@ -4,6 +4,7 @@ import { sso } from "@better-auth/sso";
 import {
   ARCHESTRA_TOKEN_PREFIX,
   AUTO_PROVISIONED_INVITATION_STATUS,
+  DEFAULT_APP_NAME,
   OAUTH_PAGES,
   OAUTH_SCOPES,
   SSO_TRUSTED_PROVIDER_IDS,
@@ -44,7 +45,7 @@ const { ssoConfig, syncSsoRole, syncSsoTeams } = config.enterpriseFeatures.core
       syncSsoTeams: () => {},
     };
 
-const APP_NAME = "Archestra";
+const APP_NAME = DEFAULT_APP_NAME;
 const {
   api: { apiKeyAuthorizationHeaderName },
   frontendBaseUrl,

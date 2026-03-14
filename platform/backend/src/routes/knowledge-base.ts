@@ -17,19 +17,19 @@ import { secretManager } from "@/secrets-manager";
 import { taskQueueService } from "@/task-queue";
 import {
   ApiError,
+  ConnectorConfigSchema,
+  type ConnectorCredentials,
+  ConnectorCredentialsSchema,
+  ConnectorTypeSchema,
   constructResponseSchema,
   createPaginatedResponseSchema,
   DeleteObjectResponseSchema,
+  KnowledgeBaseVisibilitySchema,
   PaginationQuerySchema,
   SelectConnectorRunListSchema,
   SelectConnectorRunSchema,
   SelectKnowledgeBaseConnectorSchema,
   SelectKnowledgeBaseSchema,
-  KnowledgeBaseVisibilitySchema,
-  ConnectorConfigSchema,
-  type ConnectorCredentials,
-  ConnectorCredentialsSchema,
-  ConnectorTypeSchema,
 } from "@/types";
 
 const AssignedAgentSummarySchema = z.object({

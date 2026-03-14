@@ -20,12 +20,12 @@ import {
 } from "@/database/utils/pagination";
 import logger from "@/logging";
 import type {
-  PaginationQuery,
-  SortingQueryFor,
+  ChatOpsChannelBinding,
   ChatOpsProviderType,
   ChatOpsStatus,
-  ChatOpsChannelBinding,
   InsertChatOpsChannelBinding,
+  PaginationQuery,
+  SortingQueryFor,
   UpdateChatOpsChannelBinding,
 } from "@/types";
 

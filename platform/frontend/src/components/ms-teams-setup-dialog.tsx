@@ -14,6 +14,7 @@ import { Label } from "@/components/ui/label";
 import { useChatOpsStatus } from "@/lib/chatops.query";
 import { useUpdateChatOpsConfigInQuickstart } from "@/lib/chatops-config.query";
 import { usePublicBaseUrl } from "@/lib/config.query";
+import { useAppName } from "@/lib/use-app-name";
 
 interface MsTeamsSetupDialogProps {
   open: boolean;
@@ -24,6 +25,7 @@ export function MsTeamsSetupDialog({
   open,
   onOpenChange,
 }: MsTeamsSetupDialogProps) {
+  const configuredAppName = useAppName();
   const mutation = useUpdateChatOpsConfigInQuickstart();
   const { data: chatOpsProviders } = useChatOpsStatus();
   const msTeams = chatOpsProviders?.find((p) => p.id === "ms-teams");
@@ -50,7 +52,7 @@ export function MsTeamsSetupDialog({
   };
 
   const stepContents = React.useMemo(() => {
-    const slides = buildSteps();
+    const slides = buildSteps(configuredAppName);
     return slides.map((step, index) => {
       if (step.component === "credentials") {
         return (
@@ -95,7 +97,7 @@ export function MsTeamsSetupDialog({
         />
       );
     });
-  }, [sharedAppId, sharedAppSecret, sharedTenantId]);
+  }, [sharedAppId, sharedAppSecret, sharedTenantId, configuredAppName]);
 
   const lastStepAction = {
     label: saving ? "Connecting..." : "Connect",
@@ -132,8 +134,8 @@ export function MsTeamsSetupDialog({
       title="Setup Microsoft Teams"
       description={
         <>
-          Follow these steps to connect your Archestra agents to Microsoft
-          Teams. Find out more in our{" "}
+          Follow these steps to connect your {configuredAppName} agents to
+          Microsoft Teams. Find out more in our{" "}
           <a
             href={getDocsUrl(DocsPage.PlatformMsTeams)}
             target="_blank"
@@ -151,7 +153,7 @@ export function MsTeamsSetupDialog({
   );
 }
 
-function buildSteps() {
+function buildSteps(appName: string) {
   return [
     {
       title: "Create Azure Bot",
@@ -207,7 +209,7 @@ function buildSteps() {
       component: "manifest" as const,
     },
     {
-      title: "Install in MS Teams and connect Archestra",
+      title: `Install in MS Teams and connect ${appName}`,
       component: "install-and-connect" as const,
       video: "/ms-teams/ms-teams-upload-app.mp4",
     },
@@ -378,6 +380,7 @@ function StepInstallAndConnect({
   stepNumber: number;
   video?: string;
 }) {
+  const configuredAppName = useAppName();
   return (
     <div
       className="grid flex-1 gap-6"
@@ -385,7 +388,7 @@ function StepInstallAndConnect({
     >
       <StepCard
         stepNumber={stepNumber}
-        title="Install in MS Teams and connect Archestra"
+        title={`Install in MS Teams and connect ${configuredAppName}`}
       >
         <ol className="space-y-3">
           <li className="flex gap-3 text-sm leading-relaxed">
@@ -402,7 +405,9 @@ function StepInstallAndConnect({
               2
             </span>
             <span className="pt-0.5">
-              Select your <strong>archestra-teams-app.zip</strong> file
+              Select your{" "}
+              <strong>{configuredAppName.toLowerCase()}-teams-app.zip</strong>{" "}
+              file
             </span>
           </li>
           <li className="flex gap-3 text-sm leading-relaxed">
@@ -452,15 +457,18 @@ function buildManifest(params: {
     manifestVersion: "1.16",
     version: version || "1.0.0",
     id: botAppId || "{{BOT_MS_APP_ID}}",
-    packageName: "com.archestra.bot",
+    packageName: `com.${nameShort.toLowerCase()}.bot`,
     developer: {
-      name: "Archestra",
+      name: nameShort,
       websiteUrl: "https://archestra.ai",
       privacyUrl: "https://archestra.ai/privacy",
       termsOfUseUrl: "https://archestra.ai/terms",
     },
     name: { short: nameShort, full: nameFull },
-    description: { short: "Ask Archestra", full: "Chat with Archestra agents" },
+    description: {
+      short: `Ask ${nameShort}`,
+      full: `Chat with ${nameShort} agents`,
+    },
     icons: { outline: "outline.png", color: "color.png" },
     accentColor: "#FFFFFF",
     bots: [
@@ -513,9 +521,10 @@ function StepManifest({
   stepNumber: number;
   prefillAppId?: string;
 }) {
+  const configuredAppName = useAppName();
   const [botAppId, setBotAppId] = useState("");
-  const [nameShort, setNameShort] = useState("Archestra");
-  const [nameFull, setNameFull] = useState("Archestra Bot");
+  const [nameShort, setNameShort] = useState(configuredAppName);
+  const [nameFull, setNameFull] = useState(`${configuredAppName} Bot`);
   const [version, setVersion] = useState("1.0.0");
   const [downloading, setDownloading] = useState(false);
 
@@ -545,7 +554,7 @@ function StepManifest({
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = "archestra-teams-app.zip";
+      a.download = `${configuredAppName.toLowerCase()}-teams-app.zip`;
       a.click();
       URL.revokeObjectURL(url);
     } finally {
@@ -585,7 +594,7 @@ function StepManifest({
               id="manifest-name-short"
               value={nameShort}
               onChange={(e) => setNameShort(e.target.value)}
-              placeholder="Archestra"
+              placeholder={configuredAppName}
             />
           </div>
           <div className="space-y-1">
@@ -594,7 +603,7 @@ function StepManifest({
               id="manifest-name-full"
               value={nameFull}
               onChange={(e) => setNameFull(e.target.value)}
-              placeholder="Archestra Bot"
+              placeholder={`${configuredAppName} Bot`}
             />
           </div>
         </div>
@@ -619,7 +628,7 @@ function StepManifest({
           ) : (
             <Download className="mr-2 h-4 w-4" />
           )}
-          Download archestra-teams-app.zip
+          Download {configuredAppName.toLowerCase()}-teams-app.zip
         </Button>
 
         {!effectiveAppId && (

@@ -10,7 +10,11 @@ import {
 import * as metrics from "@/observability/metrics";
 import { secretManager } from "@/secrets-manager";
 import { taskQueueService } from "@/task-queue";
-import type { AclEntry, ConnectorCredentials, ConnectorDocument } from "@/types";
+import type {
+  AclEntry,
+  ConnectorCredentials,
+  ConnectorDocument,
+} from "@/types";
 import { chunkDocument } from "./chunker";
 import {
   BaseConnector,

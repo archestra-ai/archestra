@@ -218,7 +218,7 @@ function StepAppearanceAndConnect({ stepNumber }: { stepNumber: number }) {
               Upload an app icon (
               <a
                 href="/logo-slack.png"
-                download="archestra-logo.png"
+                download={`${configuredAppName.toLowerCase()}-logo.png`}
                 className="text-primary underline hover:no-underline"
               >
                 download {configuredAppName} logo
@@ -336,6 +336,7 @@ function StepAppLevelToken({
   appLevelToken: string;
   onAppLevelTokenChange: (v: string) => void;
 }) {
+  const configuredAppName = useAppName();
   return (
     <div
       className="grid flex-1 gap-6"
@@ -365,7 +366,8 @@ function StepAppLevelToken({
               3
             </span>
             <span className="pt-0.5">
-              Name it (e.g., &ldquo;archestra-socket&rdquo;) and add the{" "}
+              Name it (e.g., &ldquo;{configuredAppName.toLowerCase()}
+              -socket&rdquo;) and add the{" "}
               <code className="bg-muted px-1 py-0.5 rounded text-xs">
                 connections:write
               </code>{" "}
@@ -443,31 +445,31 @@ function buildSlackManifest(params: {
       slash_commands: isSocket
         ? [
             {
-              command: "/archestra-select-agent",
+              command: `/${appName.toLowerCase()}-select-agent`,
               description: "Change which agent handles this channel",
             },
             {
-              command: "/archestra-status",
+              command: `/${appName.toLowerCase()}-status`,
               description: "Show current agent for this channel",
             },
             {
-              command: "/archestra-help",
+              command: `/${appName.toLowerCase()}-help`,
               description: "Show available commands",
             },
           ]
         : [
             {
-              command: "/archestra-select-agent",
+              command: `/${appName.toLowerCase()}-select-agent`,
               description: "Change which agent handles this channel",
               url: slashCommandUrl,
             },
             {
-              command: "/archestra-status",
+              command: `/${appName.toLowerCase()}-status`,
               description: "Show current agent for this channel",
               url: slashCommandUrl,
             },
             {
-              command: "/archestra-help",
+              command: `/${appName.toLowerCase()}-help`,
               description: "Show available commands",
               url: slashCommandUrl,
             },

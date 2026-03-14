@@ -29,19 +29,19 @@ import {
 } from "@/models";
 import {
   ApiError,
-  ChatOpsConnectionModeSchema,
-  ChatOpsStatusSchema,
-  constructResponseSchema,
-  createPaginatedResponseSchema,
-  createSortingQuerySchema,
-  PaginationQuerySchema,
+  ChatOpsChannelBindingResponseSchema,
   type ChatOpsConnectionMode,
+  ChatOpsConnectionModeSchema,
   type ChatOpsProvider,
   type ChatOpsProviderType,
   ChatOpsProviderTypeSchema,
   ChatOpsStatusResponseSchema,
+  ChatOpsStatusSchema,
+  constructResponseSchema,
+  createPaginatedResponseSchema,
+  createSortingQuerySchema,
   type IncomingChatMessage,
-  ChatOpsChannelBindingResponseSchema,
+  PaginationQuerySchema,
   UpdateChatOpsChannelBindingSchema,
 } from "@/types";
 

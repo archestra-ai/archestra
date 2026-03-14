@@ -1,10 +1,9 @@
+import { DEFAULT_APP_NAME } from "@shared";
 import { useOrganization } from "@/lib/organization.query";
-
-const DEFAULT_APP_NAME = "Archestra";
 
 /**
  * Returns the configured app name (organization.appName),
- * falling back to "Archestra" if not set.
+ * falling back to DEFAULT_APP_NAME if not set.
  */
 export function useAppName(): string {
   const { data: organization } = useOrganization();

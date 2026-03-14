@@ -1,6 +1,9 @@
 import { z } from "zod";
 import type { SupportedProvider } from "./model-constants";
 
+/** Default app name used as fallback when organization.appName is not configured */
+export const DEFAULT_APP_NAME = "Archestra";
+
 /** Prefix for all Archestra-generated tokens (team tokens, user tokens, virtual API keys, API keys) */
 export const ARCHESTRA_TOKEN_PREFIX = "archestra_";
 

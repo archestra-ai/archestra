@@ -113,6 +113,15 @@ export async function isDatabaseHealthy(): Promise<boolean> {
   }
 }
 
+/**
+ * Default export to use a Proxy to defer access until after database initialization.
+ */
+export default new Proxy({} as ReturnType<typeof getDb>, {
+  get(_, prop) {
+    return (getDb() as unknown as Record<string | symbol, unknown>)[prop];
+  },
+});
+
 export { withDbRetry } from "./retry";
 export { schema };
 

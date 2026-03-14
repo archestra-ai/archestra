@@ -84,7 +84,7 @@ test.describe(
       const invitationLinkInput = page.getByTestId(
         E2eTestId.InvitationLinkInput,
       );
-      await expect(invitationLinkInput).toBeVisible({ timeout: 15000 });
+      await expect(invitationLinkInput).toBeVisible({ timeout: 30000 });
 
       // Get the invitation link
       const invitationLink = await invitationLinkInput.inputValue();

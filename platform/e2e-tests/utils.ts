@@ -603,7 +603,14 @@ export async function expandSidebar(page: Page): Promise<void> {
   const sidebar = page.locator("[data-slot=sidebar]");
   const state = await sidebar.getAttribute("data-state");
   if (state === "collapsed") {
-    await page.locator("[data-sidebar=trigger]").first().click();
+    const trigger = page.locator("[data-sidebar=trigger]").first();
+    // On narrow viewports (e.g. WebKit CI) the sidebar trigger may not be visible.
+    // Use keyboard shortcut as fallback: Cmd+B (macOS) or Ctrl+B (Linux/Windows).
+    if (await trigger.isVisible({ timeout: 2000 }).catch(() => false)) {
+      await trigger.click();
+    } else {
+      await page.keyboard.press("ControlOrMeta+b");
+    }
   }
 }
 

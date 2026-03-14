@@ -1,4 +1,8 @@
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
+import {
+  MAX_SUGGESTED_PROMPT_TEXT_LENGTH,
+  MAX_SUGGESTED_PROMPT_TITLE_LENGTH,
+} from "@shared";
 import { z } from "zod";
 import { schema } from "@/database";
 
@@ -16,8 +20,20 @@ export const InsertSuggestedPromptSchema = createInsertSchema(
 
 /** Lightweight schema for embedding in agent create/update requests */
 export const SuggestedPromptInputSchema = z.object({
-  summaryTitle: z.string().min(1, "Summary title is required"),
-  prompt: z.string().min(1, "Prompt is required"),
+  summaryTitle: z
+    .string()
+    .min(1, "Summary title is required")
+    .max(
+      MAX_SUGGESTED_PROMPT_TITLE_LENGTH,
+      `Summary title must be at most ${MAX_SUGGESTED_PROMPT_TITLE_LENGTH} characters`,
+    ),
+  prompt: z
+    .string()
+    .min(1, "Prompt is required")
+    .max(
+      MAX_SUGGESTED_PROMPT_TEXT_LENGTH,
+      `Prompt must be at most ${MAX_SUGGESTED_PROMPT_TEXT_LENGTH} characters`,
+    ),
 });
 
 export type SuggestedPrompt = z.infer<typeof SelectSuggestedPromptSchema>;

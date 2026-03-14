@@ -1,6 +1,8 @@
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import {
   ARCHESTRA_MCP_SERVER_NAME,
+  MAX_SUGGESTED_PROMPT_TEXT_LENGTH,
+  MAX_SUGGESTED_PROMPT_TITLE_LENGTH,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
 } from "@shared";
 import {
@@ -122,13 +124,13 @@ export const tools: Tool[] = [
             properties: {
               summaryTitle: {
                 type: "string",
-                description:
-                  "Short title shown on the suggestion button in chat",
+                maxLength: MAX_SUGGESTED_PROMPT_TITLE_LENGTH,
+                description: `Short title shown on the suggestion button in chat (max ${MAX_SUGGESTED_PROMPT_TITLE_LENGTH} chars)`,
               },
               prompt: {
                 type: "string",
-                description:
-                  "The full prompt text sent when the suggestion is clicked",
+                maxLength: MAX_SUGGESTED_PROMPT_TEXT_LENGTH,
+                description: `The full prompt text sent when the suggestion is clicked (max ${MAX_SUGGESTED_PROMPT_TEXT_LENGTH} chars)`,
               },
             },
             required: ["summaryTitle", "prompt"],
@@ -387,13 +389,13 @@ export const tools: Tool[] = [
             properties: {
               summaryTitle: {
                 type: "string",
-                description:
-                  "Short title shown on the suggestion button in chat",
+                maxLength: MAX_SUGGESTED_PROMPT_TITLE_LENGTH,
+                description: `Short title shown on the suggestion button in chat (max ${MAX_SUGGESTED_PROMPT_TITLE_LENGTH} chars)`,
               },
               prompt: {
                 type: "string",
-                description:
-                  "The full prompt text sent when the suggestion is clicked",
+                maxLength: MAX_SUGGESTED_PROMPT_TEXT_LENGTH,
+                description: `The full prompt text sent when the suggestion is clicked (max ${MAX_SUGGESTED_PROMPT_TEXT_LENGTH} chars)`,
               },
             },
             required: ["summaryTitle", "prompt"],

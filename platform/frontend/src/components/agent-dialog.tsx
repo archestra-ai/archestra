@@ -8,6 +8,8 @@ import {
   DocsPage,
   getDocsUrl,
   getResourceForAgentType,
+  MAX_SUGGESTED_PROMPT_TEXT_LENGTH,
+  MAX_SUGGESTED_PROMPT_TITLE_LENGTH,
   MAX_SUGGESTED_PROMPTS,
   providerDisplayNames,
   type SupportedProvider,
@@ -1179,7 +1181,9 @@ export function AgentDialog({
                   <div>
                     <h3 className="text-sm font-semibold">Suggested Prompts</h3>
                     <p className="text-xs text-muted-foreground">
-                      Shown to users when starting a new chat
+                      Shown to users when starting a new chat. Title max{" "}
+                      {MAX_SUGGESTED_PROMPT_TITLE_LENGTH} chars, prompt max{" "}
+                      {MAX_SUGGESTED_PROMPT_TEXT_LENGTH} chars.
                     </p>
                   </div>
                   <TooltipProvider>
@@ -1247,6 +1251,7 @@ export function AgentDialog({
                           )
                         }
                         placeholder="e.g. Summarize recent changes"
+                        maxLength={MAX_SUGGESTED_PROMPT_TITLE_LENGTH}
                       />
                     </div>
                     <div className="space-y-1">
@@ -1264,6 +1269,7 @@ export function AgentDialog({
                         }
                         placeholder="The full prompt sent when clicked"
                         className="min-h-[60px]"
+                        maxLength={MAX_SUGGESTED_PROMPT_TEXT_LENGTH}
                       />
                     </div>
                   </div>

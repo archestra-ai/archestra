@@ -6,6 +6,7 @@ import {
   DEFAULT_ADMIN_EMAIL_ENV_VAR_NAME,
   DEFAULT_ADMIN_PASSWORD,
   DEFAULT_ADMIN_PASSWORD_ENV_VAR_NAME,
+  DEFAULT_APP_NAME,
   DEFAULT_VAULT_TOKEN,
   type SupportedProvider,
   SupportedProviders,
@@ -443,7 +444,7 @@ const config = {
   api: {
     host: isDevelopment ? "127.0.0.1" : "0.0.0.0",
     port: getPortFromUrl(),
-    name: "Archestra",
+    name: DEFAULT_APP_NAME,
     version: appVersion,
     corsOrigins: getCorsOrigins(),
     apiKeyAuthorizationHeaderName: "Authorization",
@@ -519,7 +520,7 @@ const config = {
         process.env.ARCHESTRA_OPENROUTER_REFERER ||
         process.env.ARCHESTRA_FRONTEND_URL?.trim() ||
         frontendBaseUrl,
-      title: process.env.ARCHESTRA_OPENROUTER_TITLE || "Archestra",
+      title: process.env.ARCHESTRA_OPENROUTER_TITLE || DEFAULT_APP_NAME,
     },
     anthropic: {
       baseUrl:

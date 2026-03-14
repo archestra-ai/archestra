@@ -809,8 +809,10 @@ function AgentSettingsView({
         </div>
         <div className="flex items-center gap-4 shrink-0">
           {(() => {
-            if (!agent.createdAt) return null;
-            const authorName = agent.authorName ?? appName;
+            const rec = agent as unknown as Record<string, unknown>;
+            if (!rec.createdAt) return null;
+            const authorName =
+              (rec.authorName as string) ?? appName;
             return (
               <div className="flex items-center gap-2 text-xs text-muted-foreground whitespace-nowrap">
                 <div className="h-5 w-5 rounded-full bg-green-500 flex items-center justify-center text-[10px] font-medium text-white shrink-0">
@@ -819,7 +821,7 @@ function AgentSettingsView({
                 <span>
                   Created by {authorName} on{" "}
                   {new Date(
-                    agentRecord.createdAt as string,
+                    rec.createdAt as string,
                   ).toLocaleDateString()}
                 </span>
               </div>

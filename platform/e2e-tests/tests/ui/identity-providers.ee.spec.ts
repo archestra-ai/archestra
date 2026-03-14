@@ -253,6 +253,7 @@ test.describe("Identity Provider Team Sync E2E", () => {
     }
 
     // STEP 1: Authenticate and create OIDC provider
+    await ensureAdminAuthenticated(page);
     await goToPage(page, "/settings/identity-providers");
     await page.waitForLoadState("domcontentloaded");
     await deleteExistingProviderIfExists(page, "Generic OIDC");

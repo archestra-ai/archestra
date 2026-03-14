@@ -4,6 +4,7 @@ import {
   TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
 } from "@shared";
 import { vi } from "vitest";
+import { policyConfigurationService } from "@/agents/subagents/policy-configuration";
 import { describe, expect, test } from "@/test";
 import AgentModel from "./agent";
 import AgentToolModel from "./agent-tool";
@@ -1046,21 +1047,14 @@ describe("AgentToolModel.findAll", () => {
       makeOrganization,
       makeTeam,
     }) => {
-      // Spy on the dynamic import of policy-configuration
-      const mockConfigurePolicies = vi.fn().mockResolvedValue({
-        success: true,
-        toolId: "test-tool",
-        toolInvocationAction: "allow_when_context_is_untrusted",
-        trustedDataAction: "mark_as_untrusted",
-      });
+      // Spy on the real module — avoids vi.doMock flakiness with dynamic imports
+      const spy = vi
+        .spyOn(
+          policyConfigurationService,
+          "configurePoliciesForToolWithTimeout",
+        )
+        .mockResolvedValue({ success: true });
 
-      vi.doMock("@/agents/subagents/policy-configuration", () => ({
-        policyConfigurationService: {
-          configurePoliciesForToolWithTimeout: mockConfigurePolicies,
-        },
-      }));
-
-      // Create org, user, team, then agent with team assignment
       const org = await makeOrganization();
       const user = await makeUser();
       const team = await makeTeam(org.id, user.id);
@@ -1091,7 +1085,7 @@ describe("AgentToolModel.findAll", () => {
       // Wait for the async fire-and-forget to complete
       await vi.waitFor(
         () => {
-          expect(mockConfigurePolicies).toHaveBeenCalledWith({
+          expect(spy).toHaveBeenCalledWith({
             toolId: tool.id,
             organizationId: org.id,
           });
@@ -1099,7 +1093,7 @@ describe("AgentToolModel.findAll", () => {
         { timeout: 5000 },
       );
 
-      vi.doUnmock("@/agents/subagents/policy-configuration");
+      spy.mockRestore();
     });
 
     test("does not trigger auto-configure when built-in agent has autoConfigureOnToolAssignment disabled", async ({
@@ -1109,15 +1103,12 @@ describe("AgentToolModel.findAll", () => {
       makeOrganization,
       makeTeam,
     }) => {
-      const mockConfigurePolicies = vi.fn().mockResolvedValue({
-        success: true,
-      });
-
-      vi.doMock("@/agents/subagents/policy-configuration", () => ({
-        policyConfigurationService: {
-          configurePoliciesForToolWithTimeout: mockConfigurePolicies,
-        },
-      }));
+      const spy = vi
+        .spyOn(
+          policyConfigurationService,
+          "configurePoliciesForToolWithTimeout",
+        )
+        .mockResolvedValue({ success: true });
 
       const org = await makeOrganization();
       const user = await makeUser();
@@ -1142,14 +1133,14 @@ describe("AgentToolModel.findAll", () => {
         },
       });
 
-      await AgentToolModel.create(agent.id, tool.id);
+      await AgentToolModel.create(agent.id, tool.id, undefined, org.id);
 
       // Give the async operation time to run (or not run)
       await new Promise((resolve) => setTimeout(resolve, 500));
 
-      expect(mockConfigurePolicies).not.toHaveBeenCalled();
+      expect(spy).not.toHaveBeenCalled();
 
-      vi.doUnmock("@/agents/subagents/policy-configuration");
+      spy.mockRestore();
     });
   });
 
@@ -1441,15 +1432,12 @@ describe("AgentToolModel.triggerAutoConfigureIfEnabled (private)", () => {
     makeUser,
     makeTeam,
   }) => {
-    const mockConfigurePolicies = vi.fn().mockResolvedValue({
-      success: true,
-    });
-
-    vi.doMock("@/agents/subagents/policy-configuration", () => ({
-      policyConfigurationService: {
-        configurePoliciesForToolWithTimeout: mockConfigurePolicies,
-      },
-    }));
+    const spy = vi
+      .spyOn(
+        policyConfigurationService,
+        "configurePoliciesForToolWithTimeout",
+      )
+      .mockResolvedValue({ success: true });
 
     const org = await makeOrganization();
     const user = await makeUser();
@@ -1460,7 +1448,6 @@ describe("AgentToolModel.triggerAutoConfigureIfEnabled (private)", () => {
     });
     const tool = await makeTool({ name: "trigger-with-org" });
 
-    // Create built-in agent with auto-configure enabled
     await AgentModel.create({
       name: BUILT_IN_AGENT_NAMES.POLICY_CONFIG,
       teams: [],
@@ -1473,7 +1460,6 @@ describe("AgentToolModel.triggerAutoConfigureIfEnabled (private)", () => {
       },
     });
 
-    // Call private method directly with known organizationId
     // biome-ignore lint/suspicious/noExplicitAny: accessing private method for testing
     (AgentToolModel as any).triggerAutoConfigureIfEnabled(
       "fake-agent-tool-id",
@@ -1484,7 +1470,7 @@ describe("AgentToolModel.triggerAutoConfigureIfEnabled (private)", () => {
 
     await vi.waitFor(
       () => {
-        expect(mockConfigurePolicies).toHaveBeenCalledWith({
+        expect(spy).toHaveBeenCalledWith({
           toolId: tool.id,
           organizationId: org.id,
         });
@@ -1492,7 +1478,7 @@ describe("AgentToolModel.triggerAutoConfigureIfEnabled (private)", () => {
       { timeout: 5000 },
     );
 
-    vi.doUnmock("@/agents/subagents/policy-configuration");
+    spy.mockRestore();
   });
 
   test("falls back to DB lookup when organizationId is not provided", async ({
@@ -1502,15 +1488,12 @@ describe("AgentToolModel.triggerAutoConfigureIfEnabled (private)", () => {
     makeUser,
     makeTeam,
   }) => {
-    const mockConfigurePolicies = vi.fn().mockResolvedValue({
-      success: true,
-    });
-
-    vi.doMock("@/agents/subagents/policy-configuration", () => ({
-      policyConfigurationService: {
-        configurePoliciesForToolWithTimeout: mockConfigurePolicies,
-      },
-    }));
+    const spy = vi
+      .spyOn(
+        policyConfigurationService,
+        "configurePoliciesForToolWithTimeout",
+      )
+      .mockResolvedValue({ success: true });
 
     const org = await makeOrganization();
     const user = await makeUser();
@@ -1533,7 +1516,6 @@ describe("AgentToolModel.triggerAutoConfigureIfEnabled (private)", () => {
       },
     });
 
-    // Call without organizationId — should look it up from DB
     // biome-ignore lint/suspicious/noExplicitAny: accessing private method for testing
     (AgentToolModel as any).triggerAutoConfigureIfEnabled(
       "fake-agent-tool-id",
@@ -1544,7 +1526,7 @@ describe("AgentToolModel.triggerAutoConfigureIfEnabled (private)", () => {
 
     await vi.waitFor(
       () => {
-        expect(mockConfigurePolicies).toHaveBeenCalledWith({
+        expect(spy).toHaveBeenCalledWith({
           toolId: tool.id,
           organizationId: org.id,
         });
@@ -1552,25 +1534,21 @@ describe("AgentToolModel.triggerAutoConfigureIfEnabled (private)", () => {
       { timeout: 5000 },
     );
 
-    vi.doUnmock("@/agents/subagents/policy-configuration");
+    spy.mockRestore();
   });
 
   test("does not call auto-configure when organizationId resolves to null", async ({
     makeTool,
   }) => {
-    const mockConfigurePolicies = vi.fn().mockResolvedValue({
-      success: true,
-    });
-
-    vi.doMock("@/agents/subagents/policy-configuration", () => ({
-      policyConfigurationService: {
-        configurePoliciesForToolWithTimeout: mockConfigurePolicies,
-      },
-    }));
+    const spy = vi
+      .spyOn(
+        policyConfigurationService,
+        "configurePoliciesForToolWithTimeout",
+      )
+      .mockResolvedValue({ success: true });
 
     const tool = await makeTool({ name: "trigger-no-agent" });
 
-    // Call with a non-existent agent ID and no organizationId
     // biome-ignore lint/suspicious/noExplicitAny: accessing private method for testing
     (AgentToolModel as any).triggerAutoConfigureIfEnabled(
       "fake-agent-tool-id",
@@ -1581,8 +1559,8 @@ describe("AgentToolModel.triggerAutoConfigureIfEnabled (private)", () => {
     // Give the async operation time to run (or not run)
     await new Promise((resolve) => setTimeout(resolve, 500));
 
-    expect(mockConfigurePolicies).not.toHaveBeenCalled();
+    expect(spy).not.toHaveBeenCalled();
 
-    vi.doUnmock("@/agents/subagents/policy-configuration");
+    spy.mockRestore();
   });
 });

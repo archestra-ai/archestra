@@ -19,7 +19,7 @@ import { useOnUnmount } from "@/lib/lifecycle.hook";
 import {
   organizationKeys,
   useOrganization,
-  useUpdateAppearance,
+  useUpdateAppearanceSettings,
 } from "@/lib/organization.query";
 import { useOrgTheme } from "@/lib/theme.hook";
 import { ChatPlaceholdersEditor } from "./_components/chat-placeholders-editor";
@@ -30,7 +30,7 @@ import { OrganizationTokenSection } from "./_components/organization-token-secti
 import { ThemeSelector } from "./_components/theme-selector";
 
 export default function OrganizationSettingsPage() {
-  const updateMutation = useUpdateAppearance(
+  const updateMutation = useUpdateAppearanceSettings(
     "Organization settings updated",
     "Failed to update organization settings",
   );

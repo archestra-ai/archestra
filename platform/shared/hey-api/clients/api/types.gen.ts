@@ -33843,14 +33843,14 @@ export type GetOrganizationResponses = {
 
 export type GetOrganizationResponse = GetOrganizationResponses[keyof GetOrganizationResponses];
 
-export type GetPublicAppearanceData = {
+export type GetAppearanceSettingsData = {
     body?: never;
     path?: never;
     query?: never;
-    url: '/api/organization/appearance';
+    url: '/api/organization/appearance-settings';
 };
 
-export type GetPublicAppearanceErrors = {
+export type GetAppearanceSettingsErrors = {
     /**
      * Default Response
      */
@@ -33907,9 +33907,9 @@ export type GetPublicAppearanceErrors = {
     };
 };
 
-export type GetPublicAppearanceError = GetPublicAppearanceErrors[keyof GetPublicAppearanceErrors];
+export type GetAppearanceSettingsError = GetAppearanceSettingsErrors[keyof GetAppearanceSettingsErrors];
 
-export type GetPublicAppearanceResponses = {
+export type GetAppearanceSettingsResponses = {
     /**
      * Default Response
      */
@@ -33926,9 +33926,9 @@ export type GetPublicAppearanceResponses = {
     };
 };
 
-export type GetPublicAppearanceResponse = GetPublicAppearanceResponses[keyof GetPublicAppearanceResponses];
+export type GetAppearanceSettingsResponse = GetAppearanceSettingsResponses[keyof GetAppearanceSettingsResponses];
 
-export type UpdateAppearanceData = {
+export type UpdateAppearanceSettingsData = {
     body?: {
         theme?: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont?: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
@@ -33944,10 +33944,10 @@ export type UpdateAppearanceData = {
     };
     path?: never;
     query?: never;
-    url: '/api/organization/appearance';
+    url: '/api/organization/appearance-settings';
 };
 
-export type UpdateAppearanceErrors = {
+export type UpdateAppearanceSettingsErrors = {
     /**
      * Default Response
      */
@@ -34004,9 +34004,9 @@ export type UpdateAppearanceErrors = {
     };
 };
 
-export type UpdateAppearanceError = UpdateAppearanceErrors[keyof UpdateAppearanceErrors];
+export type UpdateAppearanceSettingsError = UpdateAppearanceSettingsErrors[keyof UpdateAppearanceSettingsErrors];
 
-export type UpdateAppearanceResponses = {
+export type UpdateAppearanceSettingsResponses = {
     /**
      * Default Response
      */
@@ -34045,7 +34045,7 @@ export type UpdateAppearanceResponses = {
     };
 };
 
-export type UpdateAppearanceResponse = UpdateAppearanceResponses[keyof UpdateAppearanceResponses];
+export type UpdateAppearanceSettingsResponse = UpdateAppearanceSettingsResponses[keyof UpdateAppearanceSettingsResponses];
 
 export type UpdateSecuritySettingsData = {
     body?: {

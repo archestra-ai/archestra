@@ -28,7 +28,10 @@ import { useForm } from "react-hook-form";
 import { CreateCatalogDialog } from "@/app/mcp/registry/_parts/create-catalog-dialog";
 import { CustomServerRequestDialog } from "@/app/mcp/registry/_parts/custom-server-request-dialog";
 import { AgentDialog } from "@/components/agent-dialog";
-import type { PromptInputProps } from "@/components/ai-elements/prompt-input";
+import type {
+  PromptInputMessage,
+  PromptInputProps,
+} from "@/components/ai-elements/prompt-input";
 import { Suggestion } from "@/components/ai-elements/suggestion";
 import { AppLogo } from "@/components/app-logo";
 import { ButtonWithTooltip } from "@/components/button-with-tooltip";
@@ -1030,7 +1033,7 @@ export default function ChatPage() {
 
   // Core logic for starting a new conversation with a message
   const submitInitialMessage = useCallback(
-    (message: { text?: string; files?: unknown[] }) => {
+    (message: Partial<PromptInputMessage>) => {
       if (isPlaywrightSetupVisible) return;
       const hasText = message.text?.trim();
       const hasFiles = message.files && message.files.length > 0;

@@ -282,9 +282,9 @@ export const RouteId = {
   DeletePendingSignupMember: "deletePendingSignupMember",
   CompleteOnboarding: "completeOnboarding",
 
-  // Appearance Routes
-  GetPublicAppearance: "getPublicAppearance",
-  UpdateAppearance: "updateAppearance",
+  // Appearance Settings Routes
+  GetAppearanceSettings: "getAppearanceSettings",
+  UpdateAppearanceSettings: "updateAppearanceSettings",
 
   // Security Settings Routes
   UpdateSecuritySettings: "updateSecuritySettings",

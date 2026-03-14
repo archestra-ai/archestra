@@ -26,12 +26,12 @@ import {
 } from "@/models";
 import {
   ApiError,
+  AppearanceSettingsSchema,
   CompleteOnboardingSchema,
   constructResponseSchema,
-  PublicAppearanceSchema,
   SelectOrganizationSchema,
   UpdateAgentSettingsSchema,
-  UpdateAppearanceSchema,
+  UpdateAppearanceSettingsSchema,
   UpdateKnowledgeSettingsSchema,
   UpdateLlmSettingsSchema,
   UpdateSecuritySettingsSchema,
@@ -60,13 +60,13 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.patch(
-    "/api/organization/appearance",
+    "/api/organization/appearance-settings",
     {
       schema: {
-        operationId: RouteId.UpdateAppearance,
-        description: "Update appearance settings (theme, logo, fonts)",
+        operationId: RouteId.UpdateAppearanceSettings,
+        description: "Update appearance settings",
         tags: ["Organization"],
-        body: UpdateAppearanceSchema,
+        body: UpdateAppearanceSettingsSchema,
         response: constructResponseSchema(SelectOrganizationSchema),
       },
     },
@@ -616,18 +616,17 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.get(
-    "/api/organization/appearance",
+    "/api/organization/appearance-settings",
     {
       schema: {
-        operationId: RouteId.GetPublicAppearance,
-        description:
-          "Get public appearance settings (theme, logo, font) for unauthenticated pages",
+        operationId: RouteId.GetAppearanceSettings,
+        description: "Get organization appearance settings",
         tags: ["Organization"],
-        response: constructResponseSchema(PublicAppearanceSchema),
+        response: constructResponseSchema(AppearanceSettingsSchema),
       },
     },
     async (_request, reply) => {
-      return reply.send(await OrganizationModel.getPublicAppearance());
+      return reply.send(await OrganizationModel.getAppearanceSettings());
     },
   );
 };

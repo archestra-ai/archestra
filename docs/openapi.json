@@ -119742,13 +119742,13 @@
         }
       }
     },
-    "/api/organization/appearance": {
+    "/api/organization/appearance-settings": {
       "patch": {
-        "operationId": "updateAppearance",
+        "operationId": "updateAppearanceSettings",
         "tags": [
           "Organization"
         ],
-        "description": "Update appearance settings (theme, logo, fonts)",
+        "description": "Update appearance settings",
         "requestBody": {
           "content": {
             "application/json": {
@@ -120276,11 +120276,11 @@
         }
       },
       "get": {
-        "operationId": "getPublicAppearance",
+        "operationId": "getAppearanceSettings",
         "tags": [
           "Organization"
         ],
-        "description": "Get public appearance settings (theme, logo, font) for unauthenticated pages",
+        "description": "Get organization appearance settings",
         "responses": {
           "200": {
             "description": "Default Response",

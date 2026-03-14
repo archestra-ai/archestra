@@ -12,7 +12,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { PermissionButton } from "@/components/ui/permission-button";
-import { useUpdateAppearance } from "@/lib/organization.query";
+import { useUpdateAppearanceSettings } from "@/lib/organization.query";
 
 interface LogoUploadProps {
   currentLogo?: string | null;
@@ -71,11 +71,11 @@ function LogoSlot({
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [preview, setPreview] = useState<string | null>(currentLogo || null);
-  const uploadMutation = useUpdateAppearance(
+  const uploadMutation = useUpdateAppearanceSettings(
     "Logo uploaded successfully",
     "Failed to upload logo",
   );
-  const removeMutation = useUpdateAppearance(
+  const removeMutation = useUpdateAppearanceSettings(
     "Logo removed successfully",
     "Failed to remove logo",
   );

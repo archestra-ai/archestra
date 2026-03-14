@@ -8,6 +8,8 @@ import logger from "@/logging";
 import { UserModel } from "@/models";
 import {
   HEALTH_PATH,
+  INCOMING_EMAIL_WEBHOOK_PREFIX,
+  ORGANIZATION_APPEARANCE_SETTINGS_PATH,
   READY_PATH,
   WELL_KNOWN_ACME_PREFIX,
   WELL_KNOWN_OAUTH_PREFIX,
@@ -119,11 +121,11 @@ export class Authnz {
       // Allow fetching public SSO providers list for login page (minimal info, no secrets)
       (method === "GET" && url === "/api/identity-providers/public") ||
       // Allow fetching public appearance settings for login page (theme, logo, font)
-      (method === "GET" && url === "/api/organization/appearance") ||
+      (method === "GET" && url === ORGANIZATION_APPEARANCE_SETTINGS_PATH) ||
       // Incoming email webhooks - Microsoft Graph calls these directly
       // Only allow the exact webhook path (with optional query params), not sub-paths like /setup
-      url === "/api/webhooks/incoming-email" ||
-      url.startsWith("/api/webhooks/incoming-email?") ||
+      url === INCOMING_EMAIL_WEBHOOK_PREFIX ||
+      url.startsWith(`${INCOMING_EMAIL_WEBHOOK_PREFIX}?`) ||
       // ChatOps webhooks - Bot Framework calls these directly
       // JWT validation is handled by the Bot Framework adapter
       url.startsWith("/api/webhooks/chatops/")

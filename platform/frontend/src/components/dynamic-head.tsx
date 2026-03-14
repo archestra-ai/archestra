@@ -1,14 +1,14 @@
 "use client";
 
 import { useEffect } from "react";
-import { usePublicAppearance } from "@/lib/appearance.query";
+import { useAppearanceSettings } from "@/lib/organization.query";
 
 /**
  * Client component that dynamically updates document title, favicon, and OG tags
  * based on the organization's appearance settings.
  */
 export function DynamicHead() {
-  const { data: appearance, isFetched } = usePublicAppearance();
+  const { data: appearance, isFetched } = useAppearanceSettings();
 
   // Update document title only after data has loaded to avoid flashing default
   useEffect(() => {

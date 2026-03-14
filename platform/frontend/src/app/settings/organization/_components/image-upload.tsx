@@ -12,7 +12,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { PermissionButton } from "@/components/ui/permission-button";
-import { useUpdateAppearance } from "@/lib/organization.query";
+import { useUpdateAppearanceSettings } from "@/lib/organization.query";
 
 interface ImageUploadProps {
   title: string;
@@ -31,11 +31,11 @@ export function ImageUpload({
 }: ImageUploadProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [preview, setPreview] = useState<string | null>(currentImage || null);
-  const uploadMutation = useUpdateAppearance(
+  const uploadMutation = useUpdateAppearanceSettings(
     `${title} uploaded successfully`,
     `Failed to upload ${title.toLowerCase()}`,
   );
-  const removeMutation = useUpdateAppearance(
+  const removeMutation = useUpdateAppearanceSettings(
     `${title} removed successfully`,
     `Failed to remove ${title.toLowerCase()}`,
   );

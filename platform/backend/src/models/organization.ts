@@ -2,7 +2,7 @@ import { DEFAULT_THEME_ID, type OrganizationCustomFont } from "@shared";
 import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import logger from "@/logging";
-import type { Organization, PublicAppearance } from "@/types";
+import type { AppearanceSettings, Organization } from "@/types";
 
 class OrganizationModel {
   /**
@@ -107,10 +107,10 @@ class OrganizationModel {
   }
 
   /**
-   * Get public appearance settings (theme, logo, font) for unauthenticated pages.
-   * Returns the default organization's appearance settings.
+   * Get appearance settings
+   * Returns default appearance settings if no organization exists.
    */
-  static async getPublicAppearance(): Promise<PublicAppearance> {
+  static async getAppearanceSettings(): Promise<AppearanceSettings> {
     const [organization] = await db
       .select({
         theme: schema.organizationsTable.theme,

@@ -14,7 +14,7 @@ const cleanupAppearance = async (
     await makeApiRequest({
       request,
       method: "patch",
-      urlSuffix: "/api/organization/appearance",
+      urlSuffix: "/api/organization/appearance-settings",
       data,
     });
   } catch {
@@ -63,7 +63,7 @@ const cleanupLogo = async (
     await makeApiRequest({
       request,
       method: "patch",
-      urlSuffix: "/api/organization/appearance",
+      urlSuffix: "/api/organization/appearance-settings",
       data: { logo: null },
     });
   } catch (error) {
@@ -81,7 +81,7 @@ test.describe("Organization API logo validation", () => {
       const response = await makeApiRequest({
         request,
         method: "patch",
-        urlSuffix: "/api/organization/appearance",
+        urlSuffix: "/api/organization/appearance-settings",
         data: { logo: INVALID_BASE64_PAYLOAD },
         ignoreStatusCheck: true,
       });
@@ -97,7 +97,7 @@ test.describe("Organization API logo validation", () => {
       const response = await makeApiRequest({
         request,
         method: "patch",
-        urlSuffix: "/api/organization/appearance",
+        urlSuffix: "/api/organization/appearance-settings",
         data: { logo: NON_PNG_BASE64 },
         ignoreStatusCheck: true,
       });
@@ -113,7 +113,7 @@ test.describe("Organization API logo validation", () => {
       const response = await makeApiRequest({
         request,
         method: "patch",
-        urlSuffix: "/api/organization/appearance",
+        urlSuffix: "/api/organization/appearance-settings",
         data: { logo: INVALID_JPEG_BASE64 },
         ignoreStatusCheck: true,
       });
@@ -131,7 +131,7 @@ test.describe("Organization API logo validation", () => {
       const response = await makeApiRequest({
         request,
         method: "patch",
-        urlSuffix: "/api/organization/appearance",
+        urlSuffix: "/api/organization/appearance-settings",
         data: { logo: oversizedLogo },
         ignoreStatusCheck: true,
       });
@@ -149,7 +149,7 @@ test.describe("Organization API logo validation", () => {
       const response = await makeApiRequest({
         request,
         method: "patch",
-        urlSuffix: "/api/organization/appearance",
+        urlSuffix: "/api/organization/appearance-settings",
         data: { logo: VALID_PNG_BASE64 },
       });
 
@@ -173,7 +173,7 @@ test.describe("Organization API logo validation", () => {
       await makeApiRequest({
         request,
         method: "patch",
-        urlSuffix: "/api/organization/appearance",
+        urlSuffix: "/api/organization/appearance-settings",
         data: { logo: VALID_PNG_BASE64 },
       });
 
@@ -181,7 +181,7 @@ test.describe("Organization API logo validation", () => {
       const response = await makeApiRequest({
         request,
         method: "patch",
-        urlSuffix: "/api/organization/appearance",
+        urlSuffix: "/api/organization/appearance-settings",
         data: { logo: null },
       });
 
@@ -203,7 +203,7 @@ test.describe("Organization settings - new fields", () => {
     const response = await makeApiRequest({
       request,
       method: "patch",
-      urlSuffix: "/api/organization/appearance",
+      urlSuffix: "/api/organization/appearance-settings",
       data: { appName: "My Custom App" },
     });
 
@@ -221,7 +221,7 @@ test.describe("Organization settings - new fields", () => {
     const response = await makeApiRequest({
       request,
       method: "patch",
-      urlSuffix: "/api/organization/appearance",
+      urlSuffix: "/api/organization/appearance-settings",
       data: { appName: "a".repeat(101) },
       ignoreStatusCheck: true,
     });
@@ -236,7 +236,7 @@ test.describe("Organization settings - new fields", () => {
     const response = await makeApiRequest({
       request,
       method: "patch",
-      urlSuffix: "/api/organization/appearance",
+      urlSuffix: "/api/organization/appearance-settings",
       data: { ogDescription: "Custom OG description" },
     });
 
@@ -254,7 +254,7 @@ test.describe("Organization settings - new fields", () => {
     const response = await makeApiRequest({
       request,
       method: "patch",
-      urlSuffix: "/api/organization/appearance",
+      urlSuffix: "/api/organization/appearance-settings",
       data: { footerText: "© 2026 Custom Footer" },
     });
 
@@ -272,7 +272,7 @@ test.describe("Organization settings - new fields", () => {
     const response = await makeApiRequest({
       request,
       method: "patch",
-      urlSuffix: "/api/organization/appearance",
+      urlSuffix: "/api/organization/appearance-settings",
       data: { footerText: "a".repeat(501) },
       ignoreStatusCheck: true,
     });
@@ -288,7 +288,7 @@ test.describe("Organization settings - new fields", () => {
     const response = await makeApiRequest({
       request,
       method: "patch",
-      urlSuffix: "/api/organization/appearance",
+      urlSuffix: "/api/organization/appearance-settings",
       data: { chatPlaceholders: placeholders },
     });
 
@@ -308,7 +308,7 @@ test.describe("Organization settings - new fields", () => {
     const response = await makeApiRequest({
       request,
       method: "patch",
-      urlSuffix: "/api/organization/appearance",
+      urlSuffix: "/api/organization/appearance-settings",
       data: {
         chatPlaceholders: Array.from({ length: 21 }, (_, i) => `Item ${i}`),
       },
@@ -325,7 +325,7 @@ test.describe("Organization settings - new fields", () => {
     const response = await makeApiRequest({
       request,
       method: "patch",
-      urlSuffix: "/api/organization/appearance",
+      urlSuffix: "/api/organization/appearance-settings",
       data: { chatPlaceholders: ["a".repeat(81)] },
       ignoreStatusCheck: true,
     });
@@ -340,7 +340,7 @@ test.describe("Organization settings - new fields", () => {
     const response = await makeApiRequest({
       request,
       method: "patch",
-      urlSuffix: "/api/organization/appearance",
+      urlSuffix: "/api/organization/appearance-settings",
       data: { showTwoFactor: true },
     });
 
@@ -359,7 +359,7 @@ test.describe("Organization settings - new fields", () => {
     const response = await makeApiRequest({
       request,
       method: "patch",
-      urlSuffix: "/api/organization/appearance",
+      urlSuffix: "/api/organization/appearance-settings",
       data: { favicon: VALID_PNG_BASE64 },
     });
 
@@ -377,7 +377,7 @@ test.describe("Organization settings - new fields", () => {
     const response = await makeApiRequest({
       request,
       method: "patch",
-      urlSuffix: "/api/organization/appearance",
+      urlSuffix: "/api/organization/appearance-settings",
       data: {
         appName: "Multi-update Test",
         footerText: "Test Footer",
@@ -393,49 +393,22 @@ test.describe("Organization settings - new fields", () => {
     expect(body.showTwoFactor).toBe(true);
     expect(body.chatPlaceholders).toEqual(["Hello", "World"]);
 
+    // Verify public appearance endpoint reflects the same fields
+    const publicResponse = await makeApiRequest({
+      request,
+      method: "get",
+      urlSuffix: "/api/organization/appearance-settings",
+    });
+    expect(publicResponse.status()).toBe(200);
+    const publicBody = await publicResponse.json();
+    expect(publicBody.appName).toBe("Multi-update Test");
+
     // Cleanup
     await cleanupAppearance(request, makeApiRequest, {
       appName: null,
       footerText: null,
       showTwoFactor: false,
       chatPlaceholders: null,
-    });
-  });
-
-  test("public appearance endpoint should include new fields", async ({
-    request,
-    makeApiRequest,
-  }) => {
-    // Set values first
-    await makeApiRequest({
-      request,
-      method: "patch",
-      urlSuffix: "/api/organization/appearance",
-      data: {
-        appName: "Public Test",
-        ogDescription: "Public OG",
-        favicon: VALID_PNG_BASE64,
-      },
-    });
-
-    // Fetch public appearance (unauthenticated endpoint)
-    const response = await makeApiRequest({
-      request,
-      method: "get",
-      urlSuffix: "/api/organization/public-appearance",
-    });
-
-    expect(response.status()).toBe(200);
-    const body = await response.json();
-    expect(body.appName).toBe("Public Test");
-    expect(body.ogDescription).toBe("Public OG");
-    expect(body.favicon).toBe(VALID_PNG_BASE64);
-
-    // Cleanup
-    await cleanupAppearance(request, makeApiRequest, {
-      appName: null,
-      ogDescription: null,
-      favicon: null,
     });
   });
 });

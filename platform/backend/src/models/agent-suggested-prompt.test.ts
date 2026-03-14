@@ -158,3 +158,87 @@ test("AgentModel.findById includes suggestedPrompts", async ({
   expect(found?.suggestedPrompts[0].summaryTitle).toBe("Prompt 1");
   expect(found?.suggestedPrompts[1].summaryTitle).toBe("Prompt 2");
 });
+
+test("AgentModel.findAll includes suggestedPrompts", async ({
+  makeOrganization,
+}) => {
+  const { default: AgentModel } = await import("./agent");
+  const org = await makeOrganization();
+
+  await AgentModel.create({
+    name: "Agent With Prompts In List",
+    organizationId: org.id,
+    scope: "org",
+    teams: [],
+    agentType: "agent",
+    suggestedPrompts: [
+      { summaryTitle: "List Prompt", prompt: "From list query" },
+    ],
+  });
+
+  const agents = await AgentModel.findAll();
+  const found = agents.find((a) => a.name === "Agent With Prompts In List");
+  expect(found?.suggestedPrompts).toHaveLength(1);
+  expect(found?.suggestedPrompts[0].summaryTitle).toBe("List Prompt");
+});
+
+test("AgentModel.update with empty array clears suggestedPrompts", async ({
+  makeOrganization,
+}) => {
+  const { default: AgentModel } = await import("./agent");
+  const org = await makeOrganization();
+
+  const agent = await AgentModel.create({
+    name: "Agent To Clear Prompts",
+    organizationId: org.id,
+    scope: "org",
+    teams: [],
+    agentType: "agent",
+    suggestedPrompts: [
+      { summaryTitle: "Will be removed", prompt: "Temporary" },
+    ],
+  });
+
+  expect(agent.suggestedPrompts).toHaveLength(1);
+
+  const updated = await AgentModel.update(agent.id, {
+    suggestedPrompts: [],
+  });
+
+  expect(updated?.suggestedPrompts).toHaveLength(0);
+
+  // Verify persistence
+  const found = await AgentModel.findById(agent.id);
+  expect(found?.suggestedPrompts).toHaveLength(0);
+});
+
+test("deleting an agent cascades to delete its suggestedPrompts", async ({
+  makeOrganization,
+}) => {
+  const { default: AgentModel } = await import("./agent");
+  const org = await makeOrganization();
+
+  const agent = await AgentModel.create({
+    name: "Agent To Delete",
+    organizationId: org.id,
+    scope: "org",
+    teams: [],
+    agentType: "agent",
+    suggestedPrompts: [
+      { summaryTitle: "Orphan check", prompt: "Should be deleted" },
+    ],
+  });
+
+  // Verify prompts exist
+  const prompts = await AgentSuggestedPromptModel.getForAgent(agent.id);
+  expect(prompts).toHaveLength(1);
+
+  // Delete the agent
+  await AgentModel.delete(agent.id);
+
+  // Verify prompts are cascade-deleted
+  const orphanedPrompts = await AgentSuggestedPromptModel.getForAgent(
+    agent.id,
+  );
+  expect(orphanedPrompts).toHaveLength(0);
+});

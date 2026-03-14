@@ -1,5 +1,5 @@
 {
-  "id": "d272ee4a-e670-452e-9b79-87aad3fee7a4",
+  "id": "40473703-0c08-4d33-8672-c1e38dd3d8a6",
   "prevId": "d474f803-c63d-4d9b-ab33-f9a4f7607ac0",
   "version": "7",
   "dialect": "postgresql",
@@ -690,8 +690,7 @@
         },
         "scope": {
           "name": "scope",
-          "type": "agent_scope",
-          "typeSchema": "public",
+          "type": "text",
           "primaryKey": false,
           "notNull": true,
           "default": "'personal'"
@@ -7730,15 +7729,6 @@
     }
   },
   "enums": {
-    "public.agent_scope": {
-      "name": "agent_scope",
-      "schema": "public",
-      "values": [
-        "personal",
-        "team",
-        "org"
-      ]
-    },
     "public.conversation_share_visibility": {
       "name": "conversation_share_visibility",
       "schema": "public",

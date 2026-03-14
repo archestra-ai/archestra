@@ -4,19 +4,12 @@ import {
   boolean,
   index,
   jsonb,
-  pgEnum,
   pgTable,
   text,
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
-import type { AgentType, BuiltInAgentConfig } from "@/types/agent";
-
-export const agentScopeEnum = pgEnum("agent_scope", [
-  "personal",
-  "team",
-  "org",
-]);
+import type { AgentScope, AgentType, BuiltInAgentConfig } from "@/types/agent";
 
 import chatApiKeysTable from "./chat-api-key";
 import identityProvidersTable from "./identity-provider";
@@ -49,7 +42,7 @@ const agentsTable = pgTable(
     authorId: text("author_id").references(() => usersTable.id, {
       onDelete: "set null",
     }),
-    scope: agentScopeEnum("scope").notNull().default("personal"),
+    scope: text("scope").$type<AgentScope>().notNull().default("personal"),
     name: text("name").notNull(),
     isDefault: boolean("is_default").notNull().default(false),
     considerContextUntrusted: boolean("consider_context_untrusted")

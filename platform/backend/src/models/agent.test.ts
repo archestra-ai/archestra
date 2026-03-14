@@ -5,6 +5,7 @@ import {
   TOOL_ARTIFACT_WRITE_FULL_NAME,
   TOOL_TODO_WRITE_FULL_NAME,
 } from "@shared";
+import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
 import AgentModel from "./agent";
 import MemberModel from "./member";
@@ -937,6 +938,85 @@ describe("AgentModel", () => {
         true,
       );
       expect(resultByTeam.data).toHaveLength(4);
+    });
+
+    test("sortBy knowledgeSourcesCount orders by combined knowledge base and connector count", async ({
+      makeAdmin,
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const admin = await makeAdmin();
+      const org = await makeOrganization();
+
+      // Create 3 agents with varying knowledge sources
+      await AgentModel.create({
+        name: "No Sources",
+        teams: [],
+        scope: "org",
+      });
+      const agentSome = await AgentModel.create({
+        name: "Some Sources",
+        teams: [],
+        scope: "org",
+      });
+      const agentMany = await AgentModel.create({
+        name: "Many Sources",
+        teams: [],
+        scope: "org",
+      });
+
+      // agentSome: 1 knowledge base + 1 connector = 2 sources
+      const kb1 = await makeKnowledgeBase(org.id);
+      const connector1 = await makeKnowledgeBaseConnector(kb1.id, org.id);
+      await db.insert(schema.agentKnowledgeBasesTable).values({
+        agentId: agentSome.id,
+        knowledgeBaseId: kb1.id,
+      });
+      await db.insert(schema.agentConnectorAssignmentsTable).values({
+        agentId: agentSome.id,
+        connectorId: connector1.id,
+      });
+
+      // agentMany: 2 knowledge bases + 2 connectors = 4 sources
+      const kb2 = await makeKnowledgeBase(org.id);
+      const kb3 = await makeKnowledgeBase(org.id);
+      const connector2 = await makeKnowledgeBaseConnector(kb2.id, org.id);
+      const connector3 = await makeKnowledgeBaseConnector(kb3.id, org.id);
+      await db.insert(schema.agentKnowledgeBasesTable).values([
+        { agentId: agentMany.id, knowledgeBaseId: kb2.id },
+        { agentId: agentMany.id, knowledgeBaseId: kb3.id },
+      ]);
+      await db.insert(schema.agentConnectorAssignmentsTable).values([
+        { agentId: agentMany.id, connectorId: connector2.id },
+        { agentId: agentMany.id, connectorId: connector3.id },
+      ]);
+
+      // Sort descending - Many Sources (4) > Some Sources (2) > No Sources (0)
+      const resultDesc = await AgentModel.findAllPaginated(
+        { limit: 10, offset: 0 },
+        { sortBy: "knowledgeSourcesCount", sortDirection: "desc" },
+        {},
+        admin.id,
+        true,
+      );
+      expect(resultDesc.data).toHaveLength(3);
+      expect(resultDesc.data[0].name).toBe("Many Sources");
+      expect(resultDesc.data[1].name).toBe("Some Sources");
+      expect(resultDesc.data[2].name).toBe("No Sources");
+
+      // Sort ascending - No Sources (0) > Some Sources (2) > Many Sources (4)
+      const resultAsc = await AgentModel.findAllPaginated(
+        { limit: 10, offset: 0 },
+        { sortBy: "knowledgeSourcesCount", sortDirection: "asc" },
+        {},
+        admin.id,
+        true,
+      );
+      expect(resultAsc.data).toHaveLength(3);
+      expect(resultAsc.data[0].name).toBe("No Sources");
+      expect(resultAsc.data[1].name).toBe("Some Sources");
+      expect(resultAsc.data[2].name).toBe("Many Sources");
     });
 
     test("pagination offset works correctly with many tools", async ({

@@ -49,7 +49,6 @@ class StaleSessionError extends Error {
   }
 }
 
-
 /**
  * Token authentication context for dynamic credential resolution
  */

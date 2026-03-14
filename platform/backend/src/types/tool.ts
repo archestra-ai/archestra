@@ -21,7 +21,6 @@ export const SelectToolSchema = createSelectSchema(schema.toolsTable, {
 
 export const ExtendedSelectToolSchema = SelectToolSchema.omit({
   agentId: true,
-  mcpServerId: true,
 }).extend({
   // Nullable for MCP tools
   agent: z

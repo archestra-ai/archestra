@@ -1,11 +1,4 @@
-import {
-  boolean,
-  pgTable,
-  text,
-  timestamp,
-  unique,
-  uuid,
-} from "drizzle-orm/pg-core";
+import { boolean, pgTable, timestamp, unique, uuid } from "drizzle-orm/pg-core";
 import agentsTable from "./agent";
 import mcpServerTable from "./mcp-server";
 import toolsTable from "./tool";

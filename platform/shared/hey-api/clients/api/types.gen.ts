@@ -11740,7 +11740,6 @@ export type GetAgentsResponses = {
                 id: string;
                 agentId: string | null;
                 catalogId: string | null;
-                mcpServerId: string | null;
                 delegateToAgentId: string | null;
                 name: string;
                 /**
@@ -11929,7 +11928,6 @@ export type CreateAgentResponses = {
             id: string;
             agentId: string | null;
             catalogId: string | null;
-            mcpServerId: string | null;
             delegateToAgentId: string | null;
             name: string;
             /**
@@ -12093,7 +12091,6 @@ export type GetAllAgentsResponses = {
             id: string;
             agentId: string | null;
             catalogId: string | null;
-            mcpServerId: string | null;
             delegateToAgentId: string | null;
             name: string;
             /**
@@ -12240,7 +12237,6 @@ export type GetDefaultMcpGatewayResponses = {
             id: string;
             agentId: string | null;
             catalogId: string | null;
-            mcpServerId: string | null;
             delegateToAgentId: string | null;
             name: string;
             /**
@@ -12387,7 +12383,6 @@ export type GetDefaultLlmProxyResponses = {
             id: string;
             agentId: string | null;
             catalogId: string | null;
-            mcpServerId: string | null;
             delegateToAgentId: string | null;
             name: string;
             /**
@@ -12615,7 +12610,6 @@ export type GetAgentResponses = {
             id: string;
             agentId: string | null;
             catalogId: string | null;
-            mcpServerId: string | null;
             delegateToAgentId: string | null;
             name: string;
             /**
@@ -12797,7 +12791,6 @@ export type UpdateAgentResponses = {
             id: string;
             agentId: string | null;
             catalogId: string | null;
-            mcpServerId: string | null;
             delegateToAgentId: string | null;
             name: string;
             /**
@@ -13249,7 +13242,6 @@ export type GetAllAgentToolsResponses = {
     200: {
         data: Array<{
             id: string;
-            responseModifierTemplate: string | null;
             credentialSourceMcpServerId: string | null;
             executionSourceMcpServerId: string | null;
             useDynamicTeamCredential: boolean;
@@ -13722,7 +13714,6 @@ export type GetAgentToolsResponses = {
         id: string;
         agentId: string | null;
         catalogId: string | null;
-        mcpServerId: string | null;
         delegateToAgentId: string | null;
         name: string;
         /**
@@ -13754,7 +13745,6 @@ export type GetAgentToolsResponse = GetAgentToolsResponses[keyof GetAgentToolsRe
 
 export type UpdateAgentToolData = {
     body?: {
-        responseModifierTemplate?: string | null;
         credentialSourceMcpServerId?: string | null;
         executionSourceMcpServerId?: string | null;
         useDynamicTeamCredential?: boolean;
@@ -13833,7 +13823,6 @@ export type UpdateAgentToolResponses = {
         id?: string;
         agentId?: string;
         toolId?: string;
-        responseModifierTemplate?: string | null;
         credentialSourceMcpServerId?: string | null;
         executionSourceMcpServerId?: string | null;
         useDynamicTeamCredential?: boolean;
@@ -37513,7 +37502,6 @@ export type GetToolsWithAssignmentsResponses = {
                 executionSourceMcpServerId: string | null;
                 executionOwnerEmail: string | null;
                 useDynamicTeamCredential: boolean;
-                responseModifierTemplate: string | null;
             }>;
         }>;
         pagination: {

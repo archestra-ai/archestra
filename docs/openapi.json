@@ -36812,12 +36812,6 @@
                                   "format": "uuid",
                                   "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                                 },
-                                "mcpServerId": {
-                                  "nullable": true,
-                                  "type": "string",
-                                  "format": "uuid",
-                                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                                },
                                 "delegateToAgentId": {
                                   "nullable": true,
                                   "type": "string",
@@ -36871,7 +36865,6 @@
                                 "id",
                                 "agentId",
                                 "catalogId",
-                                "mcpServerId",
                                 "delegateToAgentId",
                                 "name",
                                 "description",
@@ -37599,12 +37592,6 @@
                             "format": "uuid",
                             "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                           },
-                          "mcpServerId": {
-                            "nullable": true,
-                            "type": "string",
-                            "format": "uuid",
-                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                          },
                           "delegateToAgentId": {
                             "nullable": true,
                             "type": "string",
@@ -37658,7 +37645,6 @@
                           "id",
                           "agentId",
                           "catalogId",
-                          "mcpServerId",
                           "delegateToAgentId",
                           "name",
                           "description",
@@ -38221,12 +38207,6 @@
                               "format": "uuid",
                               "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                             },
-                            "mcpServerId": {
-                              "nullable": true,
-                              "type": "string",
-                              "format": "uuid",
-                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                            },
                             "delegateToAgentId": {
                               "nullable": true,
                               "type": "string",
@@ -38280,7 +38260,6 @@
                             "id",
                             "agentId",
                             "catalogId",
-                            "mcpServerId",
                             "delegateToAgentId",
                             "name",
                             "description",
@@ -38783,12 +38762,6 @@
                             "format": "uuid",
                             "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                           },
-                          "mcpServerId": {
-                            "nullable": true,
-                            "type": "string",
-                            "format": "uuid",
-                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                          },
                           "delegateToAgentId": {
                             "nullable": true,
                             "type": "string",
@@ -38842,7 +38815,6 @@
                           "id",
                           "agentId",
                           "catalogId",
-                          "mcpServerId",
                           "delegateToAgentId",
                           "name",
                           "description",
@@ -39344,12 +39316,6 @@
                             "format": "uuid",
                             "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                           },
-                          "mcpServerId": {
-                            "nullable": true,
-                            "type": "string",
-                            "format": "uuid",
-                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                          },
                           "delegateToAgentId": {
                             "nullable": true,
                             "type": "string",
@@ -39403,7 +39369,6 @@
                           "id",
                           "agentId",
                           "catalogId",
-                          "mcpServerId",
                           "delegateToAgentId",
                           "name",
                           "description",
@@ -39917,12 +39882,6 @@
                             "format": "uuid",
                             "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                           },
-                          "mcpServerId": {
-                            "nullable": true,
-                            "type": "string",
-                            "format": "uuid",
-                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                          },
                           "delegateToAgentId": {
                             "nullable": true,
                             "type": "string",
@@ -39976,7 +39935,6 @@
                           "id",
                           "agentId",
                           "catalogId",
-                          "mcpServerId",
                           "delegateToAgentId",
                           "name",
                           "description",
@@ -40660,12 +40618,6 @@
                             "format": "uuid",
                             "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                           },
-                          "mcpServerId": {
-                            "nullable": true,
-                            "type": "string",
-                            "format": "uuid",
-                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                          },
                           "delegateToAgentId": {
                             "nullable": true,
                             "type": "string",
@@ -40719,7 +40671,6 @@
                           "id",
                           "agentId",
                           "catalogId",
-                          "mcpServerId",
                           "delegateToAgentId",
                           "name",
                           "description",
@@ -42427,10 +42378,6 @@
                             "format": "uuid",
                             "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                           },
-                          "responseModifierTemplate": {
-                            "nullable": true,
-                            "type": "string"
-                          },
                           "credentialSourceMcpServerId": {
                             "nullable": true,
                             "type": "string",
@@ -42518,7 +42465,6 @@
                         },
                         "required": [
                           "id",
-                          "responseModifierTemplate",
                           "credentialSourceMcpServerId",
                           "executionSourceMcpServerId",
                           "useDynamicTeamCredential",
@@ -44060,12 +44006,6 @@
                         "format": "uuid",
                         "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                       },
-                      "mcpServerId": {
-                        "nullable": true,
-                        "type": "string",
-                        "format": "uuid",
-                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                      },
                       "delegateToAgentId": {
                         "nullable": true,
                         "type": "string",
@@ -44119,7 +44059,6 @@
                       "id",
                       "agentId",
                       "catalogId",
-                      "mcpServerId",
                       "delegateToAgentId",
                       "name",
                       "description",
@@ -44362,10 +44301,6 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "responseModifierTemplate": {
-                    "nullable": true,
-                    "type": "string"
-                  },
                   "credentialSourceMcpServerId": {
                     "nullable": true,
                     "type": "string",
@@ -44420,10 +44355,6 @@
                       "type": "string",
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                    },
-                    "responseModifierTemplate": {
-                      "nullable": true,
-                      "type": "string"
                     },
                     "credentialSourceMcpServerId": {
                       "nullable": true,
@@ -132426,10 +132357,6 @@
                                 },
                                 "useDynamicTeamCredential": {
                                   "type": "boolean"
-                                },
-                                "responseModifierTemplate": {
-                                  "nullable": true,
-                                  "type": "string"
                                 }
                               },
                               "required": [
@@ -132439,8 +132366,7 @@
                                 "credentialOwnerEmail",
                                 "executionSourceMcpServerId",
                                 "executionOwnerEmail",
-                                "useDynamicTeamCredential",
-                                "responseModifierTemplate"
+                                "useDynamicTeamCredential"
                               ],
                               "additionalProperties": false
                             }

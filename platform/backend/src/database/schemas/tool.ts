@@ -10,7 +10,6 @@ import {
 import type { ToolParametersContent } from "@/types";
 import agentsTable from "./agent";
 import mcpCatalogTable from "./internal-mcp-catalog";
-import mcpServerTable from "./mcp-server";
 
 const toolsTable = pgTable(
   "tools",

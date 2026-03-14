@@ -1,5 +1,5 @@
 {
-  "id": "5e9723fb-4527-46b9-a40f-25376a9dc5a0",
+  "id": "ac524b08-f086-4818-ba0d-a91d6d70a9ca",
   "prevId": "d474f803-c63d-4d9b-ab33-f9a4f7607ac0",
   "version": "7",
   "dialect": "postgresql",
@@ -443,7 +443,23 @@
           "default": "now()"
         }
       },
-      "indexes": {},
+      "indexes": {
+        "agent_suggested_prompts_agent_id_idx": {
+          "name": "agent_suggested_prompts_agent_id_idx",
+          "columns": [
+            {
+              "expression": "agent_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {
         "agent_suggested_prompts_agent_id_agents_id_fk": {
           "name": "agent_suggested_prompts_agent_id_agents_id_fk",

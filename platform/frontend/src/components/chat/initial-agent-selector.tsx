@@ -810,20 +810,21 @@ function AgentSettingsView({
           </div>
         </div>
         <div className="flex items-center gap-4 shrink-0">
-          {agent?.createdAt && (() => {
-            const authorName = agent.authorName ?? appName;
-            return (
-              <div className="flex items-center gap-2 text-xs text-muted-foreground whitespace-nowrap">
-                <div className="h-5 w-5 rounded-full bg-green-500 flex items-center justify-center text-[10px] font-medium text-white shrink-0">
-                  {authorName.charAt(0).toUpperCase()}
+          {agent?.createdAt &&
+            (() => {
+              const authorName = agent.authorName ?? appName;
+              return (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground whitespace-nowrap">
+                  <div className="h-5 w-5 rounded-full bg-green-500 flex items-center justify-center text-[10px] font-medium text-white shrink-0">
+                    {authorName.charAt(0).toUpperCase()}
+                  </div>
+                  <span>
+                    Created by {authorName} on{" "}
+                    {new Date(agent.createdAt).toLocaleDateString()}
+                  </span>
                 </div>
-                <span>
-                  Created by {authorName} on{" "}
-                  {new Date(agent.createdAt).toLocaleDateString()}
-                </span>
-              </div>
-            );
-          })()}
+              );
+            })()}
           {isSaving && (
             <Loader2 className="size-3.5 animate-spin text-muted-foreground" />
           )}

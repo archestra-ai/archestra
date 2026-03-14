@@ -61,7 +61,7 @@ However, **RBAC (role-based access control) is still enforced**. Every tool is m
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `id` | `string` | No | The ID of the agent to retrieve |
+| `idOrName` | `string` | No | The ID or name of the agent to retrieve. If a valid UUID is provided, looks up by ID; otherwise, falls back to a name search. |
 | `name` | `string` | No | Search by name (partial match). |
 
 #### list_agents
@@ -111,7 +111,7 @@ However, **RBAC (role-based access control) is still enforced**. Every tool is m
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `id` | `string` | No | The ID of the LLM proxy to retrieve |
+| `idOrName` | `string` | No | The ID or name of the LLM proxy to retrieve. If a valid UUID is provided, looks up by ID; otherwise, falls back to a name search. |
 | `name` | `string` | No | Search by name (partial match). Only returns your personal proxies. |
 
 ### MCP Gateways
@@ -135,7 +135,7 @@ However, **RBAC (role-based access control) is still enforced**. Every tool is m
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `id` | `string` | No | The ID of the MCP gateway to retrieve |
+| `idOrName` | `string` | No | The ID or name of the MCP gateway to retrieve. If a valid UUID is provided, looks up by ID; otherwise, falls back to a name search. |
 | `name` | `string` | No | Search by name (partial match). Only returns your personal gateways. |
 
 ### MCP Servers

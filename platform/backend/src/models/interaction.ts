@@ -110,14 +110,7 @@ function computeRequestType(
   return hasTaskTool ? "main" : "subagent";
 }
 
-/**
- * Check if a string is a valid UUID format
- */
-export function isUuid(str: string): boolean {
-  const uuidRegex =
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  return uuidRegex.test(str);
-}
+export { isUuid } from "../utils/uuid";
 
 /**
  * Extract all agent IDs from external agent IDs.

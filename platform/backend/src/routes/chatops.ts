@@ -1,4 +1,5 @@
 import { AUTO_PROVISIONED_INVITATION_STATUS, RouteId } from "@shared";
+import { isUuid } from "@/utils/uuid";
 import { WebClient } from "@slack/web-api";
 import { ActivityTypes, TeamsInfo, TurnContext } from "botbuilder";
 import { MicrosoftAppCredentials } from "botframework-connector";
@@ -276,7 +277,7 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
             // Resolve workspaceId to proper UUID (aadGroupId) for team channels.
             // Bot Framework may provide team.id (thread format) instead of aadGroupId.
             // TeamsInfo.getTeamDetails() uses RSC permissions — no Azure AD app permissions needed.
-            if (message.workspaceId && !isValidUUID(message.workspaceId)) {
+            if (message.workspaceId && !isUuid(message.workspaceId)) {
               try {
                 const teamDetails = await TeamsInfo.getTeamDetails(context);
                 if (teamDetails?.aadGroupId) {
@@ -1927,9 +1928,3 @@ function collectWorkspaceIds(teamData: {
   return [...ids];
 }
 
-const UUID_REGEX =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-function isValidUUID(value: string): boolean {
-  return UUID_REGEX.test(value);
-}

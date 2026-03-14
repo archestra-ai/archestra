@@ -11,7 +11,7 @@ import {
 import config from "@/config";
 import logger from "@/logging";
 import { AgentModel, KnowledgeBaseModel, TeamModel } from "@/models";
-import { isUuid } from "@/models/interaction";
+import { isUuid } from "@/utils/uuid";
 import type { Agent } from "@/types";
 import {
   assignMcpServerTools,
@@ -212,9 +212,10 @@ export const tools: Tool[] = [
     inputSchema: {
       type: "object",
       properties: {
-        id: {
+        idOrName: {
           type: "string",
-          description: "The ID of the agent to retrieve",
+          description:
+            "The ID or name of the agent to retrieve. If a valid UUID is provided, looks up by ID; otherwise, falls back to a name search.",
         },
         name: {
           type: "string",
@@ -233,9 +234,10 @@ export const tools: Tool[] = [
     inputSchema: {
       type: "object",
       properties: {
-        id: {
+        idOrName: {
           type: "string",
-          description: "The ID of the LLM proxy to retrieve",
+          description:
+            "The ID or name of the LLM proxy to retrieve. If a valid UUID is provided, looks up by ID; otherwise, falls back to a name search.",
         },
         name: {
           type: "string",
@@ -255,9 +257,10 @@ export const tools: Tool[] = [
     inputSchema: {
       type: "object",
       properties: {
-        id: {
+        idOrName: {
           type: "string",
-          description: "The ID of the MCP gateway to retrieve",
+          description:
+            "The ID or name of the MCP gateway to retrieve. If a valid UUID is provided, looks up by ID; otherwise, falls back to a name search.",
         },
         name: {
           type: "string",
@@ -499,7 +502,7 @@ export async function handleTool(
     logger.info(
       {
         agentId: contextAgent.id,
-        requestedId: args?.id,
+        requestedIdOrName: args?.idOrName,
         requestedName: args?.name,
         type: expectedType,
       },
@@ -507,11 +510,11 @@ export async function handleTool(
     );
 
     try {
-      const id = args?.id as string | undefined;
+      const idOrName = args?.idOrName as string | undefined;
       const name = args?.name as string | undefined;
 
-      if (!id && !name) {
-        return errorResult("either id or name parameter is required");
+      if (!idOrName && !name) {
+        return errorResult("either idOrName or name parameter is required");
       }
 
       const isAdmin =
@@ -525,8 +528,8 @@ export async function handleTool(
 
       let record: Agent | null | undefined;
 
-      if (id) {
-        record = await AgentModel.findByIdOrName(id, context.userId, isAdmin, expectedType);
+      if (idOrName) {
+        record = await AgentModel.findByIdOrName(idOrName, context.userId, isAdmin, expectedType);
       }
       if (!record && name) {
         record = await AgentModel.findByIdOrName(name, context.userId, isAdmin, expectedType);

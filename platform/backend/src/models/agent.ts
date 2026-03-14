@@ -42,7 +42,7 @@ import AgentLabelModel from "./agent-label";
 import AgentTeamModel from "./agent-team";
 import MemberModel from "./member";
 import ToolModel from "./tool";
-import { isUuid } from "./interaction";
+import { isUuid } from "../utils/uuid";
 
 class AgentModel {
   /**

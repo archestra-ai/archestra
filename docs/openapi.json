@@ -36953,11 +36953,13 @@
                               "properties": {
                                 "summaryTitle": {
                                   "type": "string",
-                                  "minLength": 1
+                                  "minLength": 1,
+                                  "maxLength": 50
                                 },
                                 "prompt": {
                                   "type": "string",
-                                  "minLength": 1
+                                  "minLength": 1,
+                                  "maxLength": 5000
                                 }
                               },
                               "required": [
@@ -37426,11 +37428,13 @@
                       "properties": {
                         "summaryTitle": {
                           "type": "string",
-                          "minLength": 1
+                          "minLength": 1,
+                          "maxLength": 50
                         },
                         "prompt": {
                           "type": "string",
-                          "minLength": 1
+                          "minLength": 1,
+                          "maxLength": 5000
                         }
                       },
                       "required": [
@@ -37735,11 +37739,13 @@
                         "properties": {
                           "summaryTitle": {
                             "type": "string",
-                            "minLength": 1
+                            "minLength": 1,
+                            "maxLength": 50
                           },
                           "prompt": {
                             "type": "string",
-                            "minLength": 1
+                            "minLength": 1,
+                            "maxLength": 5000
                           }
                         },
                         "required": [
@@ -38351,11 +38357,13 @@
                           "properties": {
                             "summaryTitle": {
                               "type": "string",
-                              "minLength": 1
+                              "minLength": 1,
+                              "maxLength": 50
                             },
                             "prompt": {
                               "type": "string",
-                              "minLength": 1
+                              "minLength": 1,
+                              "maxLength": 5000
                             }
                           },
                           "required": [
@@ -38907,11 +38915,13 @@
                         "properties": {
                           "summaryTitle": {
                             "type": "string",
-                            "minLength": 1
+                            "minLength": 1,
+                            "maxLength": 50
                           },
                           "prompt": {
                             "type": "string",
-                            "minLength": 1
+                            "minLength": 1,
+                            "maxLength": 5000
                           }
                         },
                         "required": [
@@ -39462,11 +39472,13 @@
                         "properties": {
                           "summaryTitle": {
                             "type": "string",
-                            "minLength": 1
+                            "minLength": 1,
+                            "maxLength": 50
                           },
                           "prompt": {
                             "type": "string",
-                            "minLength": 1
+                            "minLength": 1,
+                            "maxLength": 5000
                           }
                         },
                         "required": [
@@ -40029,11 +40041,13 @@
                         "properties": {
                           "summaryTitle": {
                             "type": "string",
-                            "minLength": 1
+                            "minLength": 1,
+                            "maxLength": 50
                           },
                           "prompt": {
                             "type": "string",
-                            "minLength": 1
+                            "minLength": 1,
+                            "maxLength": 5000
                           }
                         },
                         "required": [
@@ -40451,11 +40465,13 @@
                       "properties": {
                         "summaryTitle": {
                           "type": "string",
-                          "minLength": 1
+                          "minLength": 1,
+                          "maxLength": 50
                         },
                         "prompt": {
                           "type": "string",
-                          "minLength": 1
+                          "minLength": 1,
+                          "maxLength": 5000
                         }
                       },
                       "required": [
@@ -40767,11 +40783,13 @@
                         "properties": {
                           "summaryTitle": {
                             "type": "string",
-                            "minLength": 1
+                            "minLength": 1,
+                            "maxLength": 50
                           },
                           "prompt": {
                             "type": "string",
-                            "minLength": 1
+                            "minLength": 1,
+                            "maxLength": 5000
                           }
                         },
                         "required": [

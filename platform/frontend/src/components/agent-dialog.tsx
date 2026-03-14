@@ -433,9 +433,9 @@ function AccessLevelSelector({
     <div className="space-y-4">
       {/* ACCESS LEVEL */}
       <div className="space-y-2">
-        <Label>
+        <h3 className="text-sm font-semibold">
           Who can use this {agentTypeDisplayName[agentType] || "agent"}
-        </Label>
+        </h3>
 
         {expanded ? (
           <div className="space-y-1.5">
@@ -616,6 +616,7 @@ export function AgentDialog({
   const [suggestedPrompts, setSuggestedPrompts] = useState<
     Array<{ summaryTitle: string; prompt: string }>
   >([]);
+  const [suggestedPromptsOpen, setSuggestedPromptsOpen] = useState(false);
   const [selectedDelegationTargetIds, setSelectedDelegationTargetIds] =
     useState<string[]>([]);
   const [assignedTeamIds, setAssignedTeamIds] = useState<string[]>([]);
@@ -669,6 +670,7 @@ export function AgentDialog({
         setDescription(agentData.description || "");
         setSystemPrompt(agentData.systemPrompt || "");
         setSuggestedPrompts(agentData.suggestedPrompts);
+        setSuggestedPromptsOpen(false);
         setLlmApiKeyId(agentData.llmApiKeyId);
         setLlmModel(agentData.llmModel);
         // Reset delegation targets - will be populated by the next useEffect when data loads
@@ -695,6 +697,7 @@ export function AgentDialog({
         setDescription("");
         setSystemPrompt("");
         setSuggestedPrompts([]);
+        setSuggestedPromptsOpen(false);
         setLlmApiKeyId(null);
         setLlmModel(null);
         setSelectedDelegationTargetIds([]);
@@ -867,6 +870,11 @@ export function AgentDialog({
     // Save any unsaved label before submitting
     const updatedLabels = agentLabelsRef.current?.saveUnsavedLabel() || labels;
 
+    // Filter out incomplete suggested prompts (empty title or prompt)
+    const validSuggestedPrompts = suggestedPrompts.filter(
+      (sp) => sp.summaryTitle.trim() && sp.prompt.trim(),
+    );
+
     try {
       let savedAgentId: string;
 
@@ -919,7 +927,7 @@ export function AgentDialog({
               systemPrompt: trimmedSystemPrompt || null,
               llmApiKeyId: llmApiKeyId || null,
               llmModel: llmModel || null,
-              suggestedPrompts,
+              suggestedPrompts: validSuggestedPrompts,
             }),
             ...(agentType === "mcp_gateway" && {
               identityProviderId: identityProviderId || null,
@@ -950,7 +958,7 @@ export function AgentDialog({
             systemPrompt: trimmedSystemPrompt || null,
             llmApiKeyId: llmApiKeyId || null,
             llmModel: llmModel || null,
-            suggestedPrompts,
+            suggestedPrompts: validSuggestedPrompts,
           }),
           ...(agentType === "mcp_gateway" && {
             identityProviderId: identityProviderId || null,
@@ -1164,117 +1172,177 @@ export function AgentDialog({
 
             {/* Section 2: Instruction (Agent only) */}
             {isInternalAgent && (
-              <div className="rounded-lg border bg-card p-4 space-y-4">
-                <h3 className="text-sm font-semibold">Instruction</h3>
+              <div className="rounded-lg border bg-card p-4">
                 <SystemPromptEditor
                   value={systemPrompt}
                   onChange={setSystemPrompt}
                   readOnly={isBuiltIn}
+                  variant="section"
                 />
               </div>
             )}
 
-            {/* Suggested Prompts (Agent only, not built-in) */}
+            {/* Suggested Prompts (Agent only, not built-in, collapsible) */}
             {isInternalAgent && !isBuiltIn && (
-              <div className="rounded-lg border bg-card p-4 space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="text-sm font-semibold">Suggested Prompts</h3>
-                    <p className="text-xs text-muted-foreground">
-                      Shown to users when starting a new chat. Title max{" "}
-                      {MAX_SUGGESTED_PROMPT_TITLE_LENGTH} chars, prompt max{" "}
-                      {MAX_SUGGESTED_PROMPT_TEXT_LENGTH} chars.
-                    </p>
-                  </div>
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <span>
+              <Collapsible
+                open={suggestedPromptsOpen}
+                onOpenChange={setSuggestedPromptsOpen}
+                className="group"
+              >
+                <div className="rounded-lg border bg-card">
+                  {suggestedPrompts.length > 0 ? (
+                    <CollapsibleTrigger className="flex w-full items-center justify-between p-4 transition-colors [&:hover:not(:has(button:hover))]:bg-muted/50 [&[data-state=open]>div>svg]:rotate-90">
+                      <div className="text-left">
+                        <h3 className="text-sm font-semibold">
+                          Suggested Prompts
+                          <span className="ml-1.5 text-xs font-normal text-muted-foreground">
+                            ({suggestedPrompts.length})
+                          </span>
+                        </h3>
+                        <p className="text-xs text-muted-foreground">
+                          Shown to users when starting a new chat. Max{" "}
+                          {MAX_SUGGESTED_PROMPTS} prompts, title max{" "}
+                          {MAX_SUGGESTED_PROMPT_TITLE_LENGTH} chars, prompt max{" "}
+                          {MAX_SUGGESTED_PROMPT_TEXT_LENGTH} chars.
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        {suggestedPromptsOpen && (
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span>
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    disabled={
+                                      suggestedPrompts.length >=
+                                      MAX_SUGGESTED_PROMPTS
+                                    }
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setSuggestedPrompts((prev) => [
+                                        ...prev,
+                                        { summaryTitle: "", prompt: "" },
+                                      ]);
+                                    }}
+                                  >
+                                    <Plus className="h-4 w-4 mr-1" />
+                                    Add
+                                  </Button>
+                                </span>
+                              </TooltipTrigger>
+                              {suggestedPrompts.length >=
+                                MAX_SUGGESTED_PROMPTS && (
+                                <TooltipContent>
+                                  Maximum of {MAX_SUGGESTED_PROMPTS} suggested
+                                  prompts reached
+                                </TooltipContent>
+                              )}
+                            </Tooltip>
+                          </TooltipProvider>
+                        )}
+                        <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform" />
+                      </div>
+                    </CollapsibleTrigger>
+                  ) : (
+                    <div className="flex items-center justify-between p-4">
+                      <div>
+                        <h3 className="text-sm font-semibold">
+                          Suggested Prompts
+                        </h3>
+                        <p className="text-xs text-muted-foreground">
+                          Shown to users when starting a new chat. Max{" "}
+                          {MAX_SUGGESTED_PROMPTS} prompts, title max{" "}
+                          {MAX_SUGGESTED_PROMPT_TITLE_LENGTH} chars, prompt max{" "}
+                          {MAX_SUGGESTED_PROMPT_TEXT_LENGTH} chars.
+                        </p>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setSuggestedPrompts([
+                            { summaryTitle: "", prompt: "" },
+                          ]);
+                          setSuggestedPromptsOpen(true);
+                        }}
+                      >
+                        <Plus className="h-4 w-4 mr-1" />
+                        Add
+                      </Button>
+                    </div>
+                  )}
+                  <CollapsibleContent>
+                    <div className="border-t p-4 space-y-4">
+                      {suggestedPrompts.map((sp, index) => (
+                        <div
+                          // biome-ignore lint/suspicious/noArrayIndexKey: items have no stable ID
+                          key={`sp-${index}`}
+                          className="space-y-2 rounded-md border p-3 relative"
+                        >
                           <Button
                             type="button"
-                            variant="outline"
-                            size="sm"
-                            disabled={
-                              suggestedPrompts.length >= MAX_SUGGESTED_PROMPTS
-                            }
-                            onClick={() =>
-                              setSuggestedPrompts((prev) => [
-                                ...prev,
-                                { summaryTitle: "", prompt: "" },
-                              ])
-                            }
+                            variant="ghost"
+                            size="icon"
+                            className="absolute top-2 right-2 h-6 w-6"
+                            onClick={() => {
+                              setSuggestedPrompts((prev) => {
+                                const next = prev.filter((_, i) => i !== index);
+                                if (next.length === 0)
+                                  setSuggestedPromptsOpen(false);
+                                return next;
+                              });
+                            }}
                           >
-                            <Plus className="h-4 w-4 mr-1" />
-                            Add
+                            <X className="h-3 w-3" />
                           </Button>
-                        </span>
-                      </TooltipTrigger>
-                      {suggestedPrompts.length >= MAX_SUGGESTED_PROMPTS && (
-                        <TooltipContent>
-                          Maximum of {MAX_SUGGESTED_PROMPTS} suggested prompts
-                          reached
-                        </TooltipContent>
-                      )}
-                    </Tooltip>
-                  </TooltipProvider>
+                          <div className="space-y-1 pr-8">
+                            <Label className="text-xs">Button Label</Label>
+                            <Input
+                              value={sp.summaryTitle}
+                              onChange={(e) =>
+                                setSuggestedPrompts((prev) =>
+                                  prev.map((p, i) =>
+                                    i === index
+                                      ? {
+                                          ...p,
+                                          summaryTitle: e.target.value,
+                                        }
+                                      : p,
+                                  ),
+                                )
+                              }
+                              placeholder="e.g. Summarize recent changes"
+                              maxLength={MAX_SUGGESTED_PROMPT_TITLE_LENGTH}
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-xs">Prompt</Label>
+                            <Textarea
+                              value={sp.prompt}
+                              onChange={(e) =>
+                                setSuggestedPrompts((prev) =>
+                                  prev.map((p, i) =>
+                                    i === index
+                                      ? { ...p, prompt: e.target.value }
+                                      : p,
+                                  ),
+                                )
+                              }
+                              placeholder="The full prompt sent when clicked"
+                              className="min-h-[60px]"
+                              maxLength={MAX_SUGGESTED_PROMPT_TEXT_LENGTH}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </CollapsibleContent>
                 </div>
-                {suggestedPrompts.map((sp, index) => (
-                  <div
-                    // biome-ignore lint/suspicious/noArrayIndexKey: no other way to key the item
-                    key={`sp-${index}`}
-                    className="space-y-2 rounded-md border p-3 relative"
-                  >
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="absolute top-2 right-2 h-6 w-6"
-                      onClick={() =>
-                        setSuggestedPrompts((prev) =>
-                          prev.filter((_, i) => i !== index),
-                        )
-                      }
-                    >
-                      <X className="h-3 w-3" />
-                    </Button>
-                    <div className="space-y-1 pr-8">
-                      <Label className="text-xs">Button Label</Label>
-                      <Input
-                        value={sp.summaryTitle}
-                        onChange={(e) =>
-                          setSuggestedPrompts((prev) =>
-                            prev.map((p, i) =>
-                              i === index
-                                ? { ...p, summaryTitle: e.target.value }
-                                : p,
-                            ),
-                          )
-                        }
-                        placeholder="e.g. Summarize recent changes"
-                        maxLength={MAX_SUGGESTED_PROMPT_TITLE_LENGTH}
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Prompt</Label>
-                      <Textarea
-                        value={sp.prompt}
-                        onChange={(e) =>
-                          setSuggestedPrompts((prev) =>
-                            prev.map((p, i) =>
-                              i === index
-                                ? { ...p, prompt: e.target.value }
-                                : p,
-                            ),
-                          )
-                        }
-                        placeholder="The full prompt sent when clicked"
-                        className="min-h-[60px]"
-                        maxLength={MAX_SUGGESTED_PROMPT_TEXT_LENGTH}
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
+              </Collapsible>
             )}
 
             {/* Section 3: Capabilities (Tools, Subagents, Knowledge Sources) */}
@@ -1504,7 +1572,7 @@ export function AgentDialog({
                 {/* LLM Configuration (Agent and Built-in) */}
                 {(isInternalAgent || isBuiltIn) && (
                   <div className="space-y-2">
-                    <Label>LLM Configuration</Label>
+                    <h3 className="text-sm font-semibold">LLM Configuration</h3>
                     <p className="text-sm text-muted-foreground">
                       {selectedApiKey && selectedApiKey.scope !== "org_wide"
                         ? "Selected key will be available to everyone who has access to this agent."

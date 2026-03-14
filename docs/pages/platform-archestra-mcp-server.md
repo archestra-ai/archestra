@@ -56,8 +56,8 @@ However, **RBAC (role-based access control) is still enforced**. Every tool is m
 | `mcpServerIds` | `string[]` | No | Array of MCP server IDs whose tools should be assigned to the agent. Use get_mcp_servers to look up IDs by name. When the user mentions MCP servers by name, always look up their IDs and pass them here. |
 | `subAgentIds` | `string[]` | No | Array of agent IDs to assign as sub-agents (delegations) to the agent. Use list_agents or get_agent to look up IDs by name. When the user mentions sub-agents by name, always look up their IDs and pass them here. |
 | `suggestedPrompts` | `object[]` | No | Array of suggested prompts shown to users when starting a new chat with this agent (optional). Each prompt has a summaryTitle (button label) and prompt (full text). |
-| `suggestedPrompts[].summaryTitle` | `string` | Yes | Short title shown on the suggestion button in chat |
-| `suggestedPrompts[].prompt` | `string` | Yes | The full prompt text sent when the suggestion is clicked |
+| `suggestedPrompts[].summaryTitle` | `string` | Yes | Short title shown on the suggestion button in chat (max 50 chars) |
+| `suggestedPrompts[].prompt` | `string` | Yes | The full prompt text sent when the suggestion is clicked (max 5000 chars) |
 
 #### get_agent
 
@@ -91,8 +91,8 @@ However, **RBAC (role-based access control) is still enforced**. Every tool is m
 | `mcpServerIds` | `string[]` | No | Array of MCP server IDs whose tools should be assigned to the agent (additive). Use get_mcp_servers to look up IDs by name. |
 | `subAgentIds` | `string[]` | No | Array of agent IDs to assign as sub-agents (additive). Use list_agents or get_agent to look up IDs by name. |
 | `suggestedPrompts` | `object[]` | No | Array of suggested prompts shown in chat (replaces existing). Each has summaryTitle (button label) and prompt (full text). |
-| `suggestedPrompts[].summaryTitle` | `string` | Yes | Short title shown on the suggestion button in chat |
-| `suggestedPrompts[].prompt` | `string` | Yes | The full prompt text sent when the suggestion is clicked |
+| `suggestedPrompts[].summaryTitle` | `string` | Yes | Short title shown on the suggestion button in chat (max 50 chars) |
+| `suggestedPrompts[].prompt` | `string` | Yes | The full prompt text sent when the suggestion is clicked (max 5000 chars) |
 
 ### LLM Proxies
 

@@ -5,10 +5,8 @@ import {
   getDocsUrl,
   SYSTEM_PROMPT_TEMPLATE_EXPRESSIONS,
 } from "@shared";
-import Link from "next/link";
 
 import { Editor } from "@/components/editor";
-import { Label } from "@/components/ui/label";
 import { computeHandlebarsReplaceOffsets } from "@/lib/handlebars-completion";
 
 export function SystemPromptEditor({
@@ -16,36 +14,48 @@ export function SystemPromptEditor({
   onChange,
   readOnly,
   height = "200px",
+  variant = "default",
 }: {
   value: string;
   onChange: (value: string) => void;
   readOnly?: boolean;
   height?: string;
+  /** "section" uses bold h3 (matching section headings), "default" uses lighter text */
+  variant?: "default" | "section";
 }) {
   return (
     <div className="space-y-2">
-      <Label>Instructions</Label>
-      <p className="text-xs text-muted-foreground">
-        Supports{" "}
-        <Link
-          href="https://handlebarsjs.com/"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="underline hover:text-foreground"
-        >
-          Handlebars
-        </Link>{" "}
-        templating. See{" "}
-        <a
-          href={getDocsUrl(DocsPage.PlatformAgents, "system-prompt-templating")}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="underline hover:text-foreground"
-        >
-          docs
-        </a>{" "}
-        for details and all available variables and functions.
-      </p>
+      <div>
+        {variant === "section" ? (
+          <h3 className="text-sm font-semibold">Instruction</h3>
+        ) : (
+          <p className="text-sm font-medium">Instruction</p>
+        )}
+        <p className="text-xs text-muted-foreground">
+          System prompt used by the agent. Supports{" "}
+          <a
+            href="https://handlebarsjs.com/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline hover:text-foreground"
+          >
+            Handlebars
+          </a>{" "}
+          templating — see{" "}
+          <a
+            href={getDocsUrl(
+              DocsPage.PlatformAgents,
+              "system-prompt-templating",
+            )}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline hover:text-foreground"
+          >
+            docs
+          </a>{" "}
+          for available variables.
+        </p>
+      </div>
       <div className="border rounded-md overflow-hidden">
         <Editor
           height={height}
@@ -60,6 +70,7 @@ export function SystemPromptEditor({
             fontSize: 13,
             lineNumbers: "on",
             scrollBeyondLastLine: false,
+            scrollbar: { alwaysConsumeMouseWheel: false },
             wordWrap: "on",
             automaticLayout: true,
             readOnly,

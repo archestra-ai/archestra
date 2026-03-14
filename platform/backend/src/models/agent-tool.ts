@@ -302,7 +302,7 @@ class AgentToolModel {
 
   /**
    * Bulk insert multiple agent-tool assignments in a single query.
-   * Skips auto-configure for bulk operations (caller should handle if needed).
+   * Checks auto-configure setting once (not per-row) to avoid N+1 queries.
    */
   static async bulkCreate(
     values: Array<{
@@ -321,17 +321,70 @@ class AgentToolModel {
       .values(values)
       .returning();
 
-    // Fire auto-configure for each newly created tool assignment
-    for (const row of rows) {
-      AgentToolModel.triggerAutoConfigureIfEnabled(
-        row.id,
-        row.agentId,
-        row.toolId,
-        organizationId,
-      );
-    }
+    // Fire auto-configure in background, checking the setting only once for all rows
+    AgentToolModel.triggerBulkAutoConfigureIfEnabled(rows, organizationId);
 
     return rows;
+  }
+
+  /**
+   * Check auto-configure setting once, then trigger for each tool.
+   * Avoids N+1 getBuiltInAgent queries when bulk-creating assignments.
+   */
+  private static triggerBulkAutoConfigureIfEnabled(
+    rows: Array<{ id: string; agentId: string; toolId: string }>,
+    knownOrganizationId?: string,
+  ) {
+    if (rows.length === 0) return;
+
+    const resolveOrgId = knownOrganizationId
+      ? Promise.resolve(knownOrganizationId)
+      : db
+          .select({ organizationId: schema.agentsTable.organizationId })
+          .from(schema.agentsTable)
+          .where(eq(schema.agentsTable.id, rows[0].agentId))
+          .limit(1)
+          .then((r) => (r.length > 0 ? r[0].organizationId : null));
+
+    resolveOrgId
+      .then(async (orgId) => {
+        if (!orgId) return;
+
+        const { policyConfigurationService } = await import(
+          "@/agents/subagents/policy-configuration"
+        );
+        const { default: AgentModel } = await import("./agent");
+
+        // Check auto-configure setting ONCE for all rows
+        const builtInAgent = await AgentModel.getBuiltInAgent(
+          BUILT_IN_AGENT_IDS.POLICY_CONFIG,
+          orgId,
+        );
+        const config = builtInAgent?.builtInAgentConfig;
+        if (
+          config?.name !== BUILT_IN_AGENT_IDS.POLICY_CONFIG ||
+          !config.autoConfigureOnToolAssignment
+        ) {
+          return;
+        }
+
+        // Trigger per-tool (these are the actual policy configuration calls)
+        for (const row of rows) {
+          await policyConfigurationService.configurePoliciesForToolWithTimeout({
+            toolId: row.toolId,
+            organizationId: orgId,
+          });
+        }
+      })
+      .catch((error) => {
+        logger.error(
+          {
+            rowCount: rows.length,
+            error: error instanceof Error ? error.message : String(error),
+          },
+          "Failed to trigger bulk auto-configure for new agent-tools",
+        );
+      });
   }
 
   private static triggerAutoConfigureIfEnabled(

@@ -2285,10 +2285,11 @@ describe("AgentModel", () => {
 
       const result = await AgentModel.findByIdsForPermissionCheck([agent.id]);
 
-      const entry = result.get(agent.id)!;
-      expect(entry.teamIds).toHaveLength(2);
-      expect(entry.teamIds).toContain(team1.id);
-      expect(entry.teamIds).toContain(team2.id);
+      const entry = result.get(agent.id);
+      expect(entry).toBeDefined();
+      expect(entry?.teamIds).toHaveLength(2);
+      expect(entry?.teamIds).toContain(team1.id);
+      expect(entry?.teamIds).toContain(team2.id);
     });
 
     test("returns empty teamIds for agent with no teams", async ({

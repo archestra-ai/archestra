@@ -1085,7 +1085,8 @@ describe("AgentToolModel.findAll", () => {
       });
 
       // Create agent-tool assignment — this should trigger auto-configure
-      await AgentToolModel.create(agent.id, tool.id);
+      // Pass organizationId to avoid async DB lookup race condition
+      await AgentToolModel.create(agent.id, tool.id, undefined, org.id);
 
       // Wait for the async fire-and-forget to complete
       await vi.waitFor(
@@ -1473,7 +1474,7 @@ describe("AgentToolModel.triggerAutoConfigureIfEnabled (private)", () => {
     });
 
     // Call private method directly with known organizationId
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // biome-ignore lint/suspicious/noExplicitAny: accessing private method for testing
     (AgentToolModel as any).triggerAutoConfigureIfEnabled(
       "fake-agent-tool-id",
       agent.id,
@@ -1533,7 +1534,7 @@ describe("AgentToolModel.triggerAutoConfigureIfEnabled (private)", () => {
     });
 
     // Call without organizationId — should look it up from DB
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // biome-ignore lint/suspicious/noExplicitAny: accessing private method for testing
     (AgentToolModel as any).triggerAutoConfigureIfEnabled(
       "fake-agent-tool-id",
       agent.id,
@@ -1570,7 +1571,7 @@ describe("AgentToolModel.triggerAutoConfigureIfEnabled (private)", () => {
     const tool = await makeTool({ name: "trigger-no-agent" });
 
     // Call with a non-existent agent ID and no organizationId
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // biome-ignore lint/suspicious/noExplicitAny: accessing private method for testing
     (AgentToolModel as any).triggerAutoConfigureIfEnabled(
       "fake-agent-tool-id",
       "00000000-0000-0000-0000-000000000000",

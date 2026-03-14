@@ -67205,7 +67205,11 @@
                         "type": "object",
                         "properties": {
                           "id": {
-                            "type": "string"
+                            "type": "string",
+                            "enum": [
+                              "ms-teams",
+                              "slack"
+                            ]
                           },
                           "displayName": {
                             "type": "string"
@@ -67215,9 +67219,34 @@
                           },
                           "credentials": {
                             "type": "object",
-                            "additionalProperties": {
-                              "type": "string"
-                            }
+                            "properties": {
+                              "botToken": {
+                                "type": "string"
+                              },
+                              "appId": {
+                                "type": "string"
+                              },
+                              "appSecret": {
+                                "type": "string"
+                              },
+                              "tenantId": {
+                                "type": "string"
+                              },
+                              "signingSecret": {
+                                "type": "string"
+                              },
+                              "appLevelToken": {
+                                "type": "string"
+                              },
+                              "connectionMode": {
+                                "type": "string",
+                                "enum": [
+                                  "webhook",
+                                  "socket"
+                                ]
+                              }
+                            },
+                            "additionalProperties": false
                           },
                           "dmInfo": {
                             "type": "object",

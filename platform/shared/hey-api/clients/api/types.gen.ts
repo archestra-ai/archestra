@@ -20122,11 +20122,17 @@ export type GetChatOpsStatusResponses = {
      */
     200: {
         providers: Array<{
-            id: string;
+            id: 'ms-teams' | 'slack';
             displayName: string;
             configured: boolean;
             credentials?: {
-                [key: string]: string;
+                botToken?: string;
+                appId?: string;
+                appSecret?: string;
+                tenantId?: string;
+                signingSecret?: string;
+                appLevelToken?: string;
+                connectionMode?: 'webhook' | 'socket';
             };
             dmInfo?: {
                 botUserId?: string;

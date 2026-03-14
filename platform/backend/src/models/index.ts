@@ -10,7 +10,6 @@ export { default as ApiKeyModelModel } from "./api-key-model";
 export { default as BrowserTabStateModel } from "./browser-tab-state";
 export { default as ChatApiKeyModel } from "./chat-api-key";
 export { default as ChatOpsChannelBindingModel } from "./chatops-channel-binding";
-export type { MsTeamsConfig, SlackConfig } from "./chatops-config";
 export { default as ChatOpsConfigModel } from "./chatops-config";
 export { default as ChatOpsProcessedMessageModel } from "./chatops-processed-message";
 export { default as ConnectorRunModel } from "./connector-run";

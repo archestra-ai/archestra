@@ -41,6 +41,7 @@ import {
   type ChatOpsProvider,
   type ChatOpsProviderType,
   ChatOpsProviderTypeSchema,
+  ChatOpsStatusResponseSchema,
   type IncomingChatMessage,
 } from "@/types/chatops";
 import {
@@ -887,35 +888,7 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.GetChatOpsStatus,
         description: "Get chatops provider configuration status",
         tags: ["ChatOps"],
-        response: constructResponseSchema(
-          z.object({
-            providers: z.array(
-              z.object({
-                id: ChatOpsProviderTypeSchema,
-                displayName: z.string(),
-                configured: z.boolean(),
-                credentials: z
-                  .object({
-                    botToken: z.string().optional(),
-                    appId: z.string().optional(),
-                    appSecret: z.string().optional(),
-                    tenantId: z.string().optional(),
-                    signingSecret: z.string().optional(),
-                    appLevelToken: z.string().optional(),
-                    connectionMode: ChatOpsConnectionModeSchema.optional(),
-                  })
-                  .optional(),
-                dmInfo: z
-                  .object({
-                    botUserId: z.string().optional(),
-                    teamId: z.string().optional(),
-                    appId: z.string().optional(),
-                  })
-                  .optional(),
-              }),
-            ),
-          }),
-        ),
+        response: constructResponseSchema(ChatOpsStatusResponseSchema),
       },
     },
     async (_, reply) => {

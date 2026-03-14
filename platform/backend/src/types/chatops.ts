@@ -14,6 +14,42 @@ export type ChatOpsConnectionMode = z.infer<typeof ChatOpsConnectionModeSchema>;
 export const ChatOpsStatusSchema = z.enum(["configured", "unassigned"]);
 export type ChatOpsStatus = z.infer<typeof ChatOpsStatusSchema>;
 
+/** Credentials shape returned by the chatops status endpoint */
+export const ChatOpsProviderCredentialsSchema = z
+  .object({
+    botToken: z.string().optional(),
+    appId: z.string().optional(),
+    appSecret: z.string().optional(),
+    tenantId: z.string().optional(),
+    signingSecret: z.string().optional(),
+    appLevelToken: z.string().optional(),
+    connectionMode: ChatOpsConnectionModeSchema.optional(),
+  })
+  .optional();
+
+/** DM info returned by the chatops status endpoint */
+export const ChatOpsDmInfoSchema = z
+  .object({
+    botUserId: z.string().optional(),
+    teamId: z.string().optional(),
+    appId: z.string().optional(),
+  })
+  .optional();
+
+/** Single provider entry in the chatops status response */
+export const ChatOpsProviderInfoSchema = z.object({
+  id: ChatOpsProviderTypeSchema,
+  displayName: z.string(),
+  configured: z.boolean(),
+  credentials: ChatOpsProviderCredentialsSchema,
+  dmInfo: ChatOpsDmInfoSchema,
+});
+
+/** Full chatops status response schema */
+export const ChatOpsStatusResponseSchema = z.object({
+  providers: z.array(ChatOpsProviderInfoSchema),
+});
+
 /**
  * Represents an incoming chat message from a chatops provider
  */
@@ -404,4 +440,25 @@ export interface MSTeamsConfig {
     clientId: string;
     clientSecret: string;
   };
+}
+
+/** MS Teams config stored as a DB secret */
+export interface MsTeamsDbConfig {
+  enabled: boolean;
+  appId: string;
+  appSecret: string;
+  tenantId: string;
+  graphTenantId: string;
+  graphClientId: string;
+  graphClientSecret: string;
+}
+
+/** Slack config stored as a DB secret */
+export interface SlackDbConfig {
+  enabled: boolean;
+  botToken: string;
+  signingSecret: string;
+  appId: string;
+  connectionMode?: ChatOpsConnectionMode;
+  appLevelToken?: string;
 }

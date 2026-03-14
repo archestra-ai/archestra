@@ -8,9 +8,9 @@ import logger from "@/logging";
 import {
   AgentModel,
   ChatOpsChannelBindingModel,
-  type SlackConfig,
   UserModel,
 } from "@/models";
+import type { SlackDbConfig } from "@/types";
 import type {
   ChatOpsConnectionMode,
   ChatOpsEventHandler,
@@ -51,13 +51,13 @@ class SlackProvider implements ChatOpsProvider {
   private botUserId: string | null = null;
   private teamId: string | null = null;
   private teamName: string | null = null;
-  private config: SlackConfig;
+  private config: SlackDbConfig;
   private socketModeClient: SocketModeClient | null = null;
   private eventHandler: ChatOpsEventHandler | null = null;
   private socketDedup = new EventDedupMap();
   private missingScopes: string[] = [];
 
-  constructor(slackConfig: SlackConfig) {
+  constructor(slackConfig: SlackDbConfig) {
     this.config = slackConfig;
   }
 

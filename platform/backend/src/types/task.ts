@@ -6,6 +6,8 @@ import {
 import { z } from "zod";
 import { schema } from "@/database";
 
+export type TaskHandler = (payload: Record<string, unknown>) => Promise<void>;
+
 export const TaskStatusSchema = z.enum([
   "pending",
   "processing",

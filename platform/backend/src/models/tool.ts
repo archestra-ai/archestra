@@ -1,7 +1,6 @@
 import {
   AGENT_TOOL_PREFIX,
   ARCHESTRA_MCP_SERVER_NAME,
-  DEFAULT_APP_NAME,
   DEFAULT_ARCHESTRA_TOOL_NAMES,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
   parseFullToolName,
@@ -590,8 +589,8 @@ class ToolModel {
       .insert(schema.internalMcpCatalogTable)
       .values({
         id: catalogId,
-        name: DEFAULT_APP_NAME,
-        description: `Built-in ${DEFAULT_APP_NAME} tools for managing profiles, limits, policies, and MCP servers.`,
+        name: "Archestra",
+        description: `Built-in Archestra tools for managing profiles, limits, policies, and MCP servers.`,
         serverType: "builtin",
         requiresAuth: false,
       })

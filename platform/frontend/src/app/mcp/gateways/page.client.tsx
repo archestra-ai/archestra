@@ -345,53 +345,36 @@ function McpGateways({
         const scope = agent.scope;
         return (
           <div className="font-medium">
-            <div className="flex items-center gap-2">
-              {agent.name}
-              <AgentBadge type={scope} />
-              {agent.agentType === "profile" && (
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Badge
-                        variant="outline"
-                        className="bg-orange-500/10 text-orange-600 border-orange-500/30 text-xs cursor-help"
-                      >
-                        Profile
-                      </Badge>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      This is a legacy entity that works both as MCP Gateway and
-                      LLM Proxy
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              )}
-              {agent.labels && agent.labels.length > 0 && (
-                <LabelTags labels={agent.labels} />
-              )}
+            <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:gap-2">
+              <span className="break-words min-w-0">{agent.name}</span>
+              <div className="flex flex-wrap items-center gap-2">
+                <AgentBadge type={scope} />
+                {agent.agentType === "profile" && (
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Badge
+                          variant="outline"
+                          className="bg-orange-500/10 text-orange-600 border-orange-500/30 text-xs cursor-help"
+                        >
+                          Profile
+                        </Badge>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        This is a legacy entity that works both as MCP Gateway
+                        and LLM Proxy
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                )}
+                {agent.labels && agent.labels.length > 0 && (
+                  <LabelTags labels={agent.labels} />
+                )}
+              </div>
             </div>
           </div>
         );
       },
-    },
-    {
-      id: "createdAt",
-      accessorKey: "createdAt",
-      header: ({ column }) => (
-        <Button
-          variant="ghost"
-          className="h-auto !p-0 font-medium hover:bg-transparent"
-          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-        >
-          Created
-          <SortIcon isSorted={column.getIsSorted()} />
-        </Button>
-      ),
-      cell: ({ row }) => (
-        <div className="font-mono text-xs">
-          {formatDate({ date: row.original.createdAt })}
-        </div>
-      ),
     },
     {
       id: "toolsCount",
@@ -471,15 +454,17 @@ function McpGateways({
           (isTeamScoped && !!isTeamAdmin && !!isMemberOfAgentTeam) ||
           (isPersonal && isOwner);
         return (
-          <McpGatewayActions
-            agent={agent}
-            canModify={canModify}
-            onConnect={setConnectingGateway}
-            onEdit={(agentData) => {
-              setEditingGateway(agentData);
-            }}
-            onDelete={setDeletingGatewayId}
-          />
+          <div className="flex w-full justify-end">
+            <McpGatewayActions
+              agent={agent}
+              canModify={canModify}
+              onConnect={setConnectingGateway}
+              onEdit={(agentData) => {
+                setEditingGateway(agentData);
+              }}
+              onDelete={setDeletingGatewayId}
+            />
+          </div>
         );
       },
     },

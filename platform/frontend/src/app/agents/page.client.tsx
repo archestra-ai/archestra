@@ -368,15 +368,17 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
         const scope = agent.scope;
         return (
           <div className="font-medium">
-            <div className="flex items-start gap-2">
+            <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:gap-2">
               <span className="break-words min-w-0">{agent.name}</span>
-              <AgentBadge type={agent.builtIn ? "builtIn" : scope} />
-              {agent.labels && agent.labels.length > 0 && (
-                <LabelTags labels={agent.labels} />
-              )}
+              <div className="flex flex-wrap items-center gap-2">
+                <AgentBadge type={agent.builtIn ? "builtIn" : scope} />
+                {agent.labels && agent.labels.length > 0 && (
+                  <LabelTags labels={agent.labels} />
+                )}
+              </div>
             </div>
             {agent.description && (
-              <div className="text-[11px] text-muted-foreground truncate">
+              <div className="text-[11px] text-muted-foreground line-clamp-2">
                 {agent.description}
               </div>
             )}
@@ -481,15 +483,17 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
           (isTeamScoped && !!isAgentTeamAdmin && !!isMemberOfAgentTeam) ||
           (isPersonal && isOwner);
         return (
-          <AgentActions
-            agent={agent}
-            canModify={canModify}
-            onConnect={setConnectingAgent}
-            onEdit={(agentData) => {
-              setEditingAgent(agentData);
-            }}
-            onDelete={setDeletingAgentId}
-          />
+          <div className="flex w-full justify-end">
+            <AgentActions
+              agent={agent}
+              canModify={canModify}
+              onConnect={setConnectingAgent}
+              onEdit={(agentData) => {
+                setEditingAgent(agentData);
+              }}
+              onDelete={setDeletingAgentId}
+            />
+          </div>
         );
       },
     },

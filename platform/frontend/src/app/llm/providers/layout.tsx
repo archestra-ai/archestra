@@ -33,7 +33,7 @@ const PAGE_CONFIG: Record<string, { title: string; description: string }> = {
   "/llm/providers/models": {
     title: "Models",
     description:
-      "Models available from your configured API keys",
+      'Models available from your configured API keys. Use "Refresh Models" to re-fetch models and capabilities from providers.',
   },
 };
 

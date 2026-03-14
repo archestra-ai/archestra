@@ -1,6 +1,6 @@
 import { describe, expect, test } from "@/test";
 import {
-  buildRenderedPrompts,
+  buildRenderedAgentSystemPrompt,
   evaluateRoleMappingTemplate,
   extractGroupsWithTemplate,
   promptNeedsRendering,
@@ -488,7 +488,7 @@ describe("promptNeedsRendering", () => {
   });
 });
 
-describe("buildRenderedPrompts", () => {
+describe("buildRenderedAgentSystemPrompt", () => {
   const context = {
     user: {
       name: "Alice",
@@ -498,7 +498,7 @@ describe("buildRenderedPrompts", () => {
   };
 
   test("returns empty arrays when systemPrompt is null", () => {
-    const result = buildRenderedPrompts({
+    const result = buildRenderedAgentSystemPrompt({
       systemPrompt: null,
       context: null,
     });
@@ -506,7 +506,7 @@ describe("buildRenderedPrompts", () => {
   });
 
   test("returns raw prompt when no templating needed", () => {
-    const result = buildRenderedPrompts({
+    const result = buildRenderedAgentSystemPrompt({
       systemPrompt: "Be helpful",
       context: null,
     });
@@ -514,7 +514,7 @@ describe("buildRenderedPrompts", () => {
   });
 
   test("renders templates when context is provided and prompt contains handlebars", () => {
-    const result = buildRenderedPrompts({
+    const result = buildRenderedAgentSystemPrompt({
       systemPrompt: "Hello {{user.name}}",
       context,
     });
@@ -522,7 +522,7 @@ describe("buildRenderedPrompts", () => {
   });
 
   test("skips rendering when context is null even if prompt has braces", () => {
-    const result = buildRenderedPrompts({
+    const result = buildRenderedAgentSystemPrompt({
       systemPrompt: "Hello {{user.name}}",
       context: null,
     });

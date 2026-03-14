@@ -23,7 +23,7 @@ import {
 } from "@/models";
 import { mapProviderError, ProviderError } from "@/routes/chat/errors";
 import {
-  buildRenderedPrompts,
+  buildRenderedAgentSystemPrompt,
   promptNeedsRendering,
   type SystemPromptContext,
 } from "@/templating";
@@ -153,7 +153,7 @@ export async function executeA2AMessage(
     };
   }
 
-  const { systemPromptParts } = buildRenderedPrompts({
+  const { systemPromptParts } = buildRenderedAgentSystemPrompt({
     systemPrompt: agent.systemPrompt,
     context: promptContext,
   });

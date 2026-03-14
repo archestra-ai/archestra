@@ -44,7 +44,7 @@ import {
 } from "@/models";
 import { startActiveChatSpan } from "@/observability/tracing";
 import {
-  buildRenderedPrompts,
+  buildRenderedAgentSystemPrompt,
   promptNeedsRendering,
   type SystemPromptContext,
 } from "@/templating";
@@ -209,7 +209,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         };
       }
 
-      const { systemPromptParts } = buildRenderedPrompts({
+      const { systemPromptParts } = buildRenderedAgentSystemPrompt({
         systemPrompt: agent.systemPrompt,
         context: promptContext,
       });

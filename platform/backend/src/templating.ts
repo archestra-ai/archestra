@@ -178,7 +178,7 @@ export function promptNeedsRendering(
  * Skips template rendering (and avoids requiring a context) when the prompts
  * don't contain Handlebars syntax.
  */
-export function buildRenderedPrompts(params: {
+export function buildRenderedAgentSystemPrompt(params: {
   systemPrompt: string | null;
   context: SystemPromptContext | null;
 }): { systemPromptParts: string[] } {

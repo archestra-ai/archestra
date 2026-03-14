@@ -17,6 +17,7 @@ import { Label } from "@/components/ui/label";
 import { useChatOpsStatus } from "@/lib/chatops.query";
 import { useUpdateSlackChatOpsConfig } from "@/lib/chatops-config.query";
 import { usePublicBaseUrl } from "@/lib/config.query";
+import { useOrganization } from "@/lib/organization.query";
 import { useAppName } from "@/lib/use-app-name";
 
 type ConnectionMode = NonNullable<
@@ -191,6 +192,10 @@ export function SlackSetupDialog({
 
 function StepAppearanceAndConnect({ stepNumber }: { stepNumber: number }) {
   const configuredAppName = useAppName();
+  const { data: organization } = useOrganization();
+  const logoUrl =
+    (organization as Record<string, unknown>)?.iconLogo as string | null ??
+    "/logo-slack.png";
   return (
     <div
       className="grid flex-1 gap-6"
@@ -217,7 +222,7 @@ function StepAppearanceAndConnect({ stepNumber }: { stepNumber: number }) {
             <span className="pt-0.5">
               Upload an app icon (
               <a
-                href="/logo-slack.png"
+                href={logoUrl}
                 download={`${configuredAppName.toLowerCase()}-logo.png`}
                 className="text-primary underline hover:no-underline"
               >

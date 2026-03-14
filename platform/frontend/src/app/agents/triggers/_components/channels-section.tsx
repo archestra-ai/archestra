@@ -1,6 +1,6 @@
 "use client";
 
-import type { archestraApiTypes } from "@shared";
+import type { AgentScope, archestraApiTypes } from "@shared";
 import {
   Bot,
   CheckIcon,
@@ -60,7 +60,7 @@ import type { ProviderConfig } from "./types";
 interface Agent {
   id: string;
   name: string;
-  scope: "personal" | "team" | "org";
+  scope: AgentScope;
   authorId?: string | null;
 }
 

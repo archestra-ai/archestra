@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import type { AgentScope, AgentType } from "@/types";
 
 // Raw agent data for direct database insertion (without junction table fields like teams)
 type MockAgentRaw = {
@@ -6,8 +7,8 @@ type MockAgentRaw = {
   name: string;
   organizationId: string;
   authorId: string | null;
-  scope: "personal" | "team" | "org";
-  agentType: "profile" | "mcp_gateway" | "llm_proxy" | "agent";
+  scope: AgentScope;
+  agentType: AgentType;
 
   isDefault: boolean;
   considerContextUntrusted: boolean;

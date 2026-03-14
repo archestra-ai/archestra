@@ -210,8 +210,8 @@ class AgentModel {
     userId?: string,
     isAgentAdmin?: boolean,
     options?: {
-      agentType?: "profile" | "mcp_gateway" | "llm_proxy" | "agent";
-      agentTypes?: ("profile" | "mcp_gateway" | "llm_proxy" | "agent")[];
+      agentType?: AgentType;
+      agentTypes?: AgentType[];
       excludeBuiltIn?: boolean;
       scope?: AgentScope;
     },
@@ -329,7 +329,7 @@ class AgentModel {
    */
   static async findByOrganizationId(
     organizationId: string,
-    options?: { agentType?: "profile" | "mcp_gateway" | "llm_proxy" | "agent" },
+    options?: { agentType?: AgentType },
   ): Promise<Agent[]> {
     const whereConditions: SQL[] = [
       eq(schema.agentsTable.organizationId, organizationId),
@@ -407,7 +407,7 @@ class AgentModel {
   static async findByOrganizationIdAndAccessibleTeams(
     organizationId: string,
     accessibleAgentIds: string[],
-    options?: { agentType?: "profile" | "mcp_gateway" | "llm_proxy" | "agent" },
+    options?: { agentType?: AgentType },
   ): Promise<Agent[]> {
     if (accessibleAgentIds.length === 0) {
       return [];
@@ -552,8 +552,8 @@ class AgentModel {
     sorting?: SortingQuery,
     filters?: {
       name?: string;
-      agentType?: "profile" | "mcp_gateway" | "llm_proxy" | "agent";
-      agentTypes?: ("profile" | "mcp_gateway" | "llm_proxy" | "agent")[];
+      agentType?: AgentType;
+      agentTypes?: AgentType[];
       scope?: AgentScopeFilter;
       teamIds?: string[];
       authorIds?: string[];

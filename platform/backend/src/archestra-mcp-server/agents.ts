@@ -11,7 +11,7 @@ import {
 import config from "@/config";
 import logger from "@/logging";
 import { AgentModel, KnowledgeBaseModel, TeamModel } from "@/models";
-import type { Agent } from "@/types";
+import type { Agent, AgentScope } from "@/types";
 import {
   assignMcpServerTools,
   assignSubAgentDelegations,
@@ -455,7 +455,7 @@ export async function handleTool(
 
       // Build create params - only agents get prompt fields
       const scope =
-        (args?.scope as "team" | "personal" | "org") ??
+        (args?.scope as AgentScope) ??
         (teams.length > 0
           ? "team"
           : targetAgentType === "agent"
@@ -605,7 +605,7 @@ export async function handleTool(
 
     try {
       const name = args?.name as string | undefined;
-      const scope = args?.scope as "personal" | "team" | "org" | undefined;
+      const scope = args?.scope as AgentScope | undefined;
       const limit = Math.min((args?.limit as number) ?? 20, 100);
 
       const results = await AgentModel.findAllPaginated(

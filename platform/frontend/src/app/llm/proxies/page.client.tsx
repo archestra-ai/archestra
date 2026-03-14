@@ -3,6 +3,7 @@
 import {
   archestraApiSdk,
   type archestraApiTypes,
+  type AgentType,
   DocsPage,
   E2eTestId,
   getDocsUrl,
@@ -271,7 +272,7 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
   const [connectingProxy, setConnectingProxy] = useState<{
     id: string;
     name: string;
-    agentType: "profile" | "mcp_gateway" | "llm_proxy" | "agent";
+    agentType: AgentType;
   } | null>(null);
   const [editingProxy, setEditingProxy] = useState<ProxyData | null>(null);
   const [deletingProxyId, setDeletingProxyId] = useState<string | null>(null);
@@ -587,7 +588,7 @@ function ConnectProxyDialog({
   agent: {
     id: string;
     name: string;
-    agentType: "profile" | "mcp_gateway" | "llm_proxy" | "agent";
+    agentType: AgentType;
   };
   open: boolean;
   onOpenChange: (open: boolean) => void;

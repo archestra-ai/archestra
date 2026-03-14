@@ -3,6 +3,7 @@
 import {
   archestraApiSdk,
   type archestraApiTypes,
+  type AgentType,
   DocsPage,
   E2eTestId,
   getDocsUrl,
@@ -280,7 +281,7 @@ function McpGateways({
   const [connectingGateway, setConnectingGateway] = useState<{
     id: string;
     name: string;
-    agentType: "profile" | "mcp_gateway" | "llm_proxy" | "agent";
+    agentType: AgentType;
   } | null>(null);
   const [editingGateway, setEditingGateway] = useState<GatewayData | null>(
     null,
@@ -601,7 +602,7 @@ function GatewayConnectionColumns({
   agentType,
 }: {
   agentId: string;
-  agentType: "profile" | "mcp_gateway" | "llm_proxy" | "agent";
+  agentType: AgentType;
 }) {
   const [activeTab, setActiveTab] = useState<"proxy" | "mcp">("mcp");
 
@@ -694,7 +695,7 @@ function ConnectGatewayDialog({
   agent: {
     id: string;
     name: string;
-    agentType: "profile" | "mcp_gateway" | "llm_proxy" | "agent";
+    agentType: AgentType;
   };
   open: boolean;
   onOpenChange: (open: boolean) => void;

@@ -5,6 +5,8 @@ import {
   type archestraApiTypes,
   DocsPage,
   getDocsUrl,
+  type AgentScope,
+  type AgentType,
   getResourceForAgentType,
   providerDisplayNames,
   type SupportedProvider,
@@ -294,7 +296,7 @@ function SubagentsEditor({
 
 // Helper functions for type-specific UI text
 function getDialogTitle(
-  agentType: "profile" | "mcp_gateway" | "llm_proxy" | "agent",
+  agentType: AgentType,
   isEdit: boolean,
 ): string {
   const titles: Record<string, { create: string; edit: string }> = {
@@ -307,7 +309,7 @@ function getDialogTitle(
 }
 
 function getSuccessMessage(
-  agentType: "profile" | "mcp_gateway" | "llm_proxy" | "agent",
+  agentType: AgentType,
   isUpdate: boolean,
 ): string {
   const messages: Record<string, { create: string; update: string }> = {
@@ -332,7 +334,7 @@ function getSuccessMessage(
 }
 
 function getNamePlaceholder(
-  agentType: "profile" | "mcp_gateway" | "llm_proxy" | "agent",
+  agentType: AgentType,
 ): string {
   const placeholders: Record<string, string> = {
     mcp_gateway: "Enter MCP Gateway name",
@@ -387,12 +389,12 @@ function AccessLevelSelector({
   hasNoAvailableTeams,
   showTeamRequired,
 }: {
-  scope: "personal" | "team" | "org";
-  onScopeChange: (scope: "personal" | "team" | "org") => void;
+  scope: AgentScope;
+  onScopeChange: (scope: AgentScope) => void;
   isAdmin: boolean;
   isTeamAdmin: boolean;
-  initialScope?: "personal" | "team" | "org";
-  agentType: "profile" | "mcp_gateway" | "llm_proxy" | "agent";
+  initialScope?: AgentScope;
+  agentType: AgentType;
   teams: Array<{ id: string; name: string }> | undefined;
   assignedTeamIds: string[];
   onTeamIdsChange: (ids: string[]) => void;
@@ -560,7 +562,7 @@ interface AgentDialogProps {
   /** Agent to edit. If null/undefined, creates a new agent */
   agent?: Agent | null;
   /** Agent type: 'agent' for internal agents with prompts, 'profile' for external profiles */
-  agentType?: "profile" | "mcp_gateway" | "llm_proxy" | "agent";
+  agentType?: AgentType;
   /** Callback when a new agent/profile is created (not called for updates) */
   onCreated?: (created: { id: string; name: string }) => void;
 }
@@ -638,7 +640,7 @@ export function AgentDialog({
   const [identityProviderId, setIdentityProviderId] = useState<string | null>(
     null,
   );
-  const [scope, setScope] = useState<"personal" | "team" | "org">("personal");
+  const [scope, setScope] = useState<AgentScope>("personal");
   const [knowledgeBaseIds, setKnowledgeBaseIds] = useState<string[]>([]);
   const [connectorIds, setConnectorIds] = useState<string[]>([]);
   const [autoConfigureOnToolAssignment, setAutoConfigureOnToolAssignment] =

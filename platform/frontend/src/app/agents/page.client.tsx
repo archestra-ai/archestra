@@ -3,6 +3,7 @@
 import {
   archestraApiSdk,
   type archestraApiTypes,
+  type AgentType,
   DocsPage,
   E2eTestId,
   getDocsUrl,
@@ -266,7 +267,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
   const [connectingAgent, setConnectingAgent] = useState<{
     id: string;
     name: string;
-    agentType: "profile" | "mcp_gateway" | "llm_proxy" | "agent";
+    agentType: AgentType;
   } | null>(null);
   const [editingAgent, setEditingAgent] = useState<AgentData | null>(null);
   const [deletingAgentId, setDeletingAgentId] = useState<string | null>(null);
@@ -648,7 +649,7 @@ function ConnectAgentDialog({
   agent: {
     id: string;
     name: string;
-    agentType: "profile" | "mcp_gateway" | "llm_proxy" | "agent";
+    agentType: AgentType;
   };
   open: boolean;
   onOpenChange: (open: boolean) => void;

@@ -1,6 +1,6 @@
 "use client";
 
-import type { DocsPage } from "@shared";
+import type { AgentType, DocsPage } from "@shared";
 import { getDocsUrl } from "@shared";
 import type { LucideIcon } from "lucide-react";
 import { ArrowRight, Bot, ExternalLink, Network, Route } from "lucide-react";
@@ -26,7 +26,7 @@ const AGENT_TYPE_CONFIG: Record<
 interface ConnectDialogProps {
   agent: {
     name: string;
-    agentType: "profile" | "mcp_gateway" | "llm_proxy" | "agent";
+    agentType: AgentType;
   };
   open: boolean;
   onOpenChange: (open: boolean) => void;

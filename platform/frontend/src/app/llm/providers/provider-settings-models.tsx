@@ -3,17 +3,15 @@
 import type { ColumnDef } from "@tanstack/react-table";
 import {
   ArrowLeftRight,
-  Check,
-  Loader2,
   Pencil,
   RefreshCw,
   Search,
   Server,
 } from "lucide-react";
 import Image from "next/image";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSetProviderAction } from "./layout";
 import { PROVIDER_CONFIG } from "@/components/chat-api-key-form";
-import { LoadingWrapper } from "@/components/loading";
 import {
   BestModelBadge,
   FastestModelBadge,
@@ -34,11 +32,12 @@ import {
   type ModelWithApiKeys,
   useModelsWithApiKeys,
 } from "@/lib/chat-models.query";
-import { useSyncChatModels } from "@/lib/chat-settings.query";
+import { useChatApiKeys, useSyncChatModels } from "@/lib/chat-settings.query";
 import { EditModelDialog } from "./edit-model-dialog";
 
 export function ProviderSettingsModels() {
   const { data: models = [], isPending, refetch } = useModelsWithApiKeys();
+  const { data: apiKeys = [] } = useChatApiKeys();
   const syncModelsMutation = useSyncChatModels();
   const [search, setSearch] = useState("");
   const [apiKeyFilter, setApiKeyFilter] = useState<string>("all");
@@ -87,6 +86,22 @@ export function ProviderSettingsModels() {
     await syncModelsMutation.mutateAsync();
     await refetch();
   }, [syncModelsMutation, refetch]);
+
+  const setProviderAction = useSetProviderAction();
+  useEffect(() => {
+    setProviderAction(
+      <Button
+        onClick={handleRefresh}
+        disabled={syncModelsMutation.isPending}
+      >
+        <RefreshCw
+          className={`h-4 w-4 mr-2 ${syncModelsMutation.isPending ? "animate-spin" : ""}`}
+        />
+        Refresh Models
+      </Button>,
+    );
+    return () => setProviderAction(null);
+  }, [setProviderAction, syncModelsMutation.isPending, handleRefresh]);
 
   const columns: ColumnDef<ModelWithApiKeys>[] = useMemo(
     () => [
@@ -199,55 +214,6 @@ export function ProviderSettingsModels() {
         },
       },
       {
-        accessorKey: "capabilities.inputModalities",
-        header: "Input",
-        cell: ({ row }) => {
-          if (hasUnknownCapabilities(row.original)) return null;
-          const modalities = row.original.capabilities?.inputModalities;
-          if (!modalities || modalities.length === 0) return null;
-          return (
-            <div className="flex flex-wrap gap-1">
-              {modalities.map((modality) => (
-                <Badge key={modality} variant="secondary" className="text-xs">
-                  {modality}
-                </Badge>
-              ))}
-            </div>
-          );
-        },
-      },
-      {
-        accessorKey: "capabilities.outputModalities",
-        header: "Output",
-        cell: ({ row }) => {
-          if (hasUnknownCapabilities(row.original)) return null;
-          const modalities = row.original.capabilities?.outputModalities;
-          if (!modalities || modalities.length === 0) return null;
-          return (
-            <div className="flex flex-wrap gap-1">
-              {modalities.map((modality) => (
-                <Badge key={modality} variant="secondary" className="text-xs">
-                  {modality}
-                </Badge>
-              ))}
-            </div>
-          );
-        },
-      },
-      {
-        accessorKey: "capabilities.supportsToolCalling",
-        header: "Tools",
-        cell: ({ row }) => {
-          if (hasUnknownCapabilities(row.original)) return null;
-          const supportsTools = row.original.capabilities?.supportsToolCalling;
-          if (supportsTools === null || supportsTools === undefined)
-            return null;
-          return supportsTools ? (
-            <Check className="h-4 w-4 text-green-500" />
-          ) : null;
-        },
-      },
-      {
         id: "actions",
         header: "",
         cell: ({ row }) => (
@@ -267,99 +233,60 @@ export function ProviderSettingsModels() {
 
   return (
     <>
-      <LoadingWrapper
-        isPending={isPending}
-        loadingFallback={
-          <div className="flex items-center justify-center h-32">
-            <Loader2 className="h-6 w-6 animate-spin" />
-          </div>
-        }
-      >
-        <div className="space-y-4">
-          <div className="flex justify-between items-center">
-            <div>
-              <h2 className="text-lg font-semibold">Available Models</h2>
-              <p className="text-sm text-muted-foreground">
-                Models available from your configured API keys. Click the edit
-                button to update pricing and modalities. Use Refresh to re-fetch
-                models and capabilities from providers.
-              </p>
-            </div>
-            <Button
-              variant="outline"
-              onClick={handleRefresh}
-              disabled={syncModelsMutation.isPending}
-            >
-              <RefreshCw
-                className={`h-4 w-4 mr-2 ${syncModelsMutation.isPending ? "animate-spin" : ""}`}
+      <div className="space-y-4">
+        {models.length > 0 && (
+          <div className="flex items-center gap-2">
+            <div className="relative w-72">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search models..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="pl-8"
               />
-              Refresh models
-            </Button>
-          </div>
-
-          {models.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              <p>
-                No models available.{" "}
-                <a
-                  href="/llm/providers/api-keys"
-                  className="underline hover:text-foreground"
-                >
-                  Add an API key
-                </a>{" "}
-                to see available models.
-              </p>
             </div>
-          ) : (
-            <>
-              <div className="flex items-center gap-2">
-                <div className="relative w-72">
-                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Search models..."
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    className="pl-8"
-                  />
-                </div>
-                <Select value={apiKeyFilter} onValueChange={setApiKeyFilter}>
-                  <SelectTrigger className="w-[200px]">
-                    <SelectValue placeholder="All API keys" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All API keys</SelectItem>
-                    {availableApiKeys.map(([id, { name, provider }]) => {
-                      const config = PROVIDER_CONFIG[provider];
-                      return (
-                        <SelectItem key={id} value={id}>
-                          <div className="flex items-center gap-2">
-                            {config && (
-                              <Image
-                                src={config.icon}
-                                alt={config.name}
-                                width={16}
-                                height={16}
-                                className="rounded dark:invert"
-                              />
-                            )}
-                            <span>{name}</span>
-                          </div>
-                        </SelectItem>
-                      );
-                    })}
-                  </SelectContent>
-                </Select>
-              </div>
-              <DataTable
-                columns={columns}
-                data={filteredModels}
-                getRowId={(row) => row.id}
-                hideSelectedCount
-              />
-            </>
-          )}
-        </div>
-      </LoadingWrapper>
+            <Select value={apiKeyFilter} onValueChange={setApiKeyFilter}>
+              <SelectTrigger className="w-[200px]">
+                <SelectValue placeholder="All API keys" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All API keys</SelectItem>
+                {availableApiKeys.map(([id, { name, provider }]) => {
+                  const config = PROVIDER_CONFIG[provider];
+                  return (
+                    <SelectItem key={id} value={id}>
+                      <div className="flex items-center gap-2">
+                        {config && (
+                          <Image
+                            src={config.icon}
+                            alt={config.name}
+                            width={16}
+                            height={16}
+                            className="rounded dark:invert"
+                          />
+                        )}
+                        <span>{name}</span>
+                      </div>
+                    </SelectItem>
+                  );
+                })}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+        <DataTable
+          columns={columns}
+          data={filteredModels}
+          getRowId={(row) => row.id}
+          hideSelectedCount
+          isLoading={isPending}
+          emptyMessage={
+            apiKeys.length === 0
+              ? "No models available. Add an API key to see available models."
+              : "No models found matching your search"
+          }
+        />
+      </div>
 
       {editingModel && (
         <EditModelDialog

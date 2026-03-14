@@ -3,14 +3,14 @@
 import type { archestraApiTypes } from "@shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import { formatDistanceToNow } from "date-fns";
-import { Loader2, Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 import Image from "next/image";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSetProviderAction } from "./layout";
 import {
   type ChatApiKeyResponse,
   PROVIDER_CONFIG,
 } from "@/components/chat-api-key-form";
-import { LoadingWrapper } from "@/components/loading";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import {
@@ -152,85 +152,54 @@ export function ProviderSettingsVirtualKeys() {
   // API keys that can have virtual keys (including system keys for keyless providers like Vertex AI)
   const parentableKeys = apiKeys;
 
+  const setProviderAction = useSetProviderAction();
+  useEffect(() => {
+    setProviderAction(
+      <Button
+        onClick={() => setIsCreateDialogOpen(true)}
+        disabled={parentableKeys.length === 0}
+      >
+        <Plus className="h-4 w-4 mr-2" />
+        Create Virtual Key
+      </Button>,
+    );
+    return () => setProviderAction(null);
+  }, [setProviderAction, parentableKeys.length]);
+
   return (
-    <LoadingWrapper
-      isPending={isPending}
-      loadingFallback={
-        <div className="flex items-center justify-center h-64">
-          <Loader2 className="h-8 w-8 animate-spin" />
-        </div>
-      }
-    >
-      <div className="space-y-4">
-        <div className="flex justify-between items-center">
-          <div>
-            <h2 className="text-lg font-semibold">Virtual API Keys</h2>
-            <p className="text-sm text-muted-foreground">
-              Virtual keys let external clients use your provider keys via the
-              LLM Proxy without exposing the real API key
-            </p>
-          </div>
-          <Button
-            onClick={() => setIsCreateDialogOpen(true)}
-            disabled={parentableKeys.length === 0}
-          >
-            <Plus className="h-4 w-4 mr-2" />
-            Create Virtual Key
-          </Button>
-        </div>
+    <>
+      <DataTable
+        columns={columns}
+        data={virtualKeys}
+        getRowId={(row) => row.id}
+        hideSelectedCount
+        isLoading={isPending}
+        emptyMessage={
+          parentableKeys.length === 0
+            ? "Add an API key first to create virtual keys"
+            : "No virtual keys yet"
+        }
+        manualPagination
+        pagination={{
+          pageIndex,
+          pageSize,
+          total: paginationMeta?.total ?? 0,
+        }}
+        onPaginationChange={handlePaginationChange}
+      />
 
-        {parentableKeys.length === 0 && (
-          <div className="text-center py-8 text-muted-foreground">
-            <p>
-              <a
-                href="/llm/providers/api-keys"
-                className="underline hover:text-foreground"
-              >
-                Add an API key
-              </a>{" "}
-              first to create virtual keys.
-            </p>
-          </div>
-        )}
+      <CreateVirtualKeyDialog
+        open={isCreateDialogOpen}
+        onOpenChange={setIsCreateDialogOpen}
+        parentableKeys={parentableKeys}
+        defaultExpirationSeconds={defaultExpirationSeconds ?? null}
+      />
 
-        {(paginationMeta?.total ?? 0) > 0 && (
-          <DataTable
-            columns={columns}
-            data={virtualKeys}
-            getRowId={(row) => row.id}
-            hideSelectedCount
-            manualPagination
-            pagination={{
-              pageIndex,
-              pageSize,
-              total: paginationMeta?.total ?? 0,
-            }}
-            onPaginationChange={handlePaginationChange}
-          />
-        )}
-
-        {virtualKeys.length === 0 && parentableKeys.length > 0 && (
-          <div className="text-center py-8 text-muted-foreground">
-            <p>
-              No virtual keys yet. Create one to let external clients use your
-              provider keys securely.
-            </p>
-          </div>
-        )}
-
-        <CreateVirtualKeyDialog
-          open={isCreateDialogOpen}
-          onOpenChange={setIsCreateDialogOpen}
-          parentableKeys={parentableKeys}
-          defaultExpirationSeconds={defaultExpirationSeconds ?? null}
-        />
-
-        <DeleteVirtualKeyDialog
-          open={isDeleteDialogOpen}
-          onOpenChange={setIsDeleteDialogOpen}
-          virtualKey={deletingKey}
-        />
-      </div>
-    </LoadingWrapper>
+      <DeleteVirtualKeyDialog
+        open={isDeleteDialogOpen}
+        onOpenChange={setIsDeleteDialogOpen}
+        virtualKey={deletingKey}
+      />
+    </>
   );
 }

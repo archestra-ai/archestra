@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSetProviderAction } from "./layout";
 import { useForm } from "react-hook-form";
 import {
   ChatApiKeyForm,
@@ -31,7 +32,6 @@ import {
   PLACEHOLDER_KEY,
   PROVIDER_CONFIG,
 } from "@/components/chat-api-key-form";
-import { LoadingWrapper } from "@/components/loading";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -250,6 +250,21 @@ export function ProviderSettingsApiKeys() {
   const editFormValues = editForm.watch();
   const isEditValid = Boolean(editFormValues.name);
 
+  const setProviderAction = useSetProviderAction();
+  useEffect(() => {
+    setProviderAction(
+      <PermissionButton
+        permissions={{ llmProvider: ["create"] }}
+        onClick={() => setIsCreateDialogOpen(true)}
+        data-testid={E2eTestId.AddChatApiKeyButton}
+      >
+        <Plus className="h-4 w-4 mr-2" />
+        Add API Key
+      </PermissionButton>,
+    );
+    return () => setProviderAction(null);
+  }, [setProviderAction]);
+
   const columns: ColumnDef<ChatApiKeyResponse>[] = useMemo(
     () => [
       {
@@ -420,33 +435,8 @@ export function ProviderSettingsApiKeys() {
   );
 
   return (
-    <LoadingWrapper
-      isPending={isPending}
-      loadingFallback={
-        <div className="flex items-center justify-center h-64">
-          <Loader2 className="h-8 w-8 animate-spin" />
-        </div>
-      }
-    >
+    <>
       <div className="space-y-4">
-        <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-3">
-          <div>
-            <h2 className="text-lg font-semibold">LLM API Keys</h2>
-            <p className="text-sm text-muted-foreground">
-              Manage API keys for LLM providers used in Chat and LLM Proxy
-            </p>
-          </div>
-          <PermissionButton
-            permissions={{ llmProvider: ["create"] }}
-            className="shrink-0"
-            onClick={() => setIsCreateDialogOpen(true)}
-            data-testid={E2eTestId.AddChatApiKeyButton}
-          >
-            <Plus className="h-4 w-4 mr-2" />
-            Add API Key
-          </PermissionButton>
-        </div>
-
         {byosEnabled &&
           apiKeys.some((key) => key.secretStorageType === "database") && (
             <Alert variant="destructive">
@@ -466,6 +456,8 @@ export function ProviderSettingsApiKeys() {
             data={apiKeys}
             getRowId={(row) => row.id}
             hideSelectedCount
+            isLoading={isPending}
+            emptyMessage="No API keys configured"
           />
         </div>
 
@@ -589,6 +581,6 @@ export function ProviderSettingsApiKeys() {
           </DialogContent>
         </Dialog>
       </div>
-    </LoadingWrapper>
+    </>
   );
 }

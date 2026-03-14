@@ -590,7 +590,8 @@ class ToolModel {
       .values({
         id: catalogId,
         name: "Archestra",
-        description: `Built-in Archestra tools for managing profiles, limits, policies, and MCP servers.`,
+        description:
+          "Built-in Archestra tools for managing profiles, limits, policies, and MCP servers.",
         serverType: "builtin",
         requiresAuth: false,
       })

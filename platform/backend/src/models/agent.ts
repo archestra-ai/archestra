@@ -740,6 +740,28 @@ class AgentModel {
           eq(schema.agentsTable.id, toolsCountSubquery.agentId),
         )
         .orderBy(direction(sql`COALESCE(${toolsCountSubquery.toolsCount}, 0)`));
+    } else if (sorting?.sortBy === "knowledgeSourcesCount") {
+      const knowledgeSourcesCountSubquery = db
+        .select({
+          agentId: schema.agentsTable.id,
+          knowledgeSourcesCount:
+            sql<number>`(SELECT COUNT(*) FROM agent_knowledge_base WHERE agent_id = ${schema.agentsTable.id}) + (SELECT COUNT(*) FROM agent_connector_assignment WHERE agent_id = ${schema.agentsTable.id})`.as(
+              "knowledgeSourcesCount",
+            ),
+        })
+        .from(schema.agentsTable)
+        .as("knowledgeSourcesCounts");
+
+      query = query
+        .leftJoin(
+          knowledgeSourcesCountSubquery,
+          eq(schema.agentsTable.id, knowledgeSourcesCountSubquery.agentId),
+        )
+        .orderBy(
+          direction(
+            sql`COALESCE(${knowledgeSourcesCountSubquery.knowledgeSourcesCount}, 0)`,
+          ),
+        );
     } else if (sorting?.sortBy === "team") {
       const teamNameSubquery = db
         .select({
@@ -866,8 +888,9 @@ class AgentModel {
         return direction(schema.agentsTable.createdAt);
       case "toolsCount":
       case "subagentsCount":
+      case "knowledgeSourcesCount":
       case "team":
-        // toolsCount, subagentsCount, and team sorting use a separate query path.
+        // toolsCount, subagentsCount, knowledgeSourcesCount, and team sorting use a separate query path.
         // This fallback should never be reached for these sort types.
         return direction(schema.agentsTable.createdAt); // Fallback
       default:

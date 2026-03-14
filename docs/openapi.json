@@ -36641,6 +36641,7 @@
                 "createdAt",
                 "toolsCount",
                 "subagentsCount",
+                "knowledgeSourcesCount",
                 "team"
               ]
             },

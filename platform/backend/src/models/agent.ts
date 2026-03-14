@@ -352,12 +352,13 @@ class AgentModel {
       return [];
     }
 
-    const [teamsMap, labelsMap, kbMap, connectorMap, toolsResult] =
+    const [teamsMap, labelsMap, kbMap, connectorMap, suggestedPromptsMap, toolsResult] =
       await Promise.all([
         AgentTeamModel.getTeamDetailsForAgents(agentIds),
         AgentLabelModel.getLabelsForAgents(agentIds),
         AgentKnowledgeBaseModel.getKnowledgeBaseIdsForAgents(agentIds),
         AgentConnectorAssignmentModel.getConnectorIdsForAgents(agentIds),
+        AgentSuggestedPromptModel.getForAgents(agentIds),
         db
           .select({
             agentId: schema.agentToolsTable.agentId,
@@ -389,7 +390,7 @@ class AgentModel {
       labels: labelsMap.get(agent.id) || [],
       knowledgeBaseIds: kbMap.get(agent.id) || [],
       connectorIds: connectorMap.get(agent.id) || [],
-      suggestedPrompts: [],
+      suggestedPrompts: suggestedPromptsMap.get(agent.id) || [],
     }));
   }
 
@@ -427,12 +428,13 @@ class AgentModel {
       return [];
     }
 
-    const [teamsMap, labelsMap, kbMap, connectorMap, toolsResult] =
+    const [teamsMap, labelsMap, kbMap, connectorMap, suggestedPromptsMap, toolsResult] =
       await Promise.all([
         AgentTeamModel.getTeamDetailsForAgents(agentIds),
         AgentLabelModel.getLabelsForAgents(agentIds),
         AgentKnowledgeBaseModel.getKnowledgeBaseIdsForAgents(agentIds),
         AgentConnectorAssignmentModel.getConnectorIdsForAgents(agentIds),
+        AgentSuggestedPromptModel.getForAgents(agentIds),
         db
           .select({
             agentId: schema.agentToolsTable.agentId,
@@ -464,7 +466,7 @@ class AgentModel {
       labels: labelsMap.get(agent.id) || [],
       knowledgeBaseIds: kbMap.get(agent.id) || [],
       connectorIds: connectorMap.get(agent.id) || [],
-      suggestedPrompts: [],
+      suggestedPrompts: suggestedPromptsMap.get(agent.id) || [],
     }));
   }
 

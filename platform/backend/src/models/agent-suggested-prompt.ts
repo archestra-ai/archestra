@@ -11,22 +11,22 @@ class AgentSuggestedPromptModel {
     agentId: string,
     prompts: SuggestedPromptInput[],
   ): Promise<void> {
-    // Delete existing prompts
-    await db
-      .delete(schema.agentSuggestedPromptsTable)
-      .where(eq(schema.agentSuggestedPromptsTable.agentId, agentId));
+    await db.transaction(async (tx) => {
+      await tx
+        .delete(schema.agentSuggestedPromptsTable)
+        .where(eq(schema.agentSuggestedPromptsTable.agentId, agentId));
 
-    if (prompts.length === 0) return;
+      if (prompts.length === 0) return;
 
-    // Insert new prompts with sort order
-    await db.insert(schema.agentSuggestedPromptsTable).values(
-      prompts.map((p, index) => ({
-        agentId,
-        summaryTitle: p.summaryTitle,
-        prompt: p.prompt,
-        sortOrder: index,
-      })),
-    );
+      await tx.insert(schema.agentSuggestedPromptsTable).values(
+        prompts.map((p, index) => ({
+          agentId,
+          summaryTitle: p.summaryTitle,
+          prompt: p.prompt,
+          sortOrder: index,
+        })),
+      );
+    });
   }
 
   /**

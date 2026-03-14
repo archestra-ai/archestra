@@ -353,7 +353,6 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     {
       id: "name",
       accessorKey: "name",
-      size: 270,
       header: ({ column }) => (
         <Button
           variant="ghost"
@@ -388,7 +387,6 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     {
       id: "toolsCount",
       accessorKey: "toolsCount",
-      size: 80,
       header: ({ column }) => (
         <Button
           variant="ghost"
@@ -407,10 +405,17 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
       },
     },
     {
-      id: "knowledgeSources",
-      size: 140,
-      enableSorting: false,
-      header: "Knowledge Sources",
+      id: "knowledgeSourcesCount",
+      header: ({ column }) => (
+        <Button
+          variant="ghost"
+          className="h-auto !p-0 font-medium hover:bg-transparent"
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+        >
+          Knowledge Sources
+          <SortIcon isSorted={column.getIsSorted()} />
+        </Button>
+      ),
       cell: ({ row }) => {
         const count =
           (row.original.knowledgeBaseIds?.length ?? 0) +
@@ -421,7 +426,6 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     {
       id: "subagentsCount",
       accessorKey: "subagentsCount",
-      size: 80,
       header: ({ column }) => (
         <Button
           variant="ghost"
@@ -443,7 +447,6 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
       ? [
           {
             id: "team",
-            size: 120,
             header: "Accessible to",
             enableSorting: false,
             cell: ({ row }: { row: { original: AgentData } }) => (
@@ -461,7 +464,6 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     {
       id: "actions",
       header: "Actions",
-      size: 200,
       enableHiding: false,
       cell: ({ row }) => {
         const agent = row.original;

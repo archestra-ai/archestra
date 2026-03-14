@@ -116,7 +116,6 @@ export function ProviderSettingsModels() {
       {
         accessorKey: "modelId",
         header: "Model ID",
-        size: 250,
         cell: ({ row }) => (
           <div className="flex items-center gap-2">
             <span className="font-mono text-sm">{row.original.modelId}</span>
@@ -251,7 +250,6 @@ export function ProviderSettingsModels() {
       {
         id: "actions",
         header: "",
-        size: 50,
         cell: ({ row }) => (
           <Button
             variant="ghost"

@@ -330,7 +330,6 @@ function McpGateways({
     {
       id: "name",
       accessorKey: "name",
-      size: 300,
       header: ({ column }) => (
         <Button
           variant="ghost"
@@ -455,7 +454,6 @@ function McpGateways({
     {
       id: "actions",
       header: "Actions",
-      size: 176,
       enableHiding: false,
       cell: ({ row }) => {
         const agent = row.original;

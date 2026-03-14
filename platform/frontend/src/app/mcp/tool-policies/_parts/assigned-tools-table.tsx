@@ -469,8 +469,6 @@ export function AssignedToolsTable({
           );
         },
         size: 200,
-        minSize: 200,
-        maxSize: 200,
       },
       {
         id: "origin",
@@ -530,7 +528,6 @@ export function AssignedToolsTable({
             </TooltipProvider>
           );
         },
-        size: 180,
       },
       {
         id: "assignmentCount",
@@ -543,7 +540,6 @@ export function AssignedToolsTable({
             </Badge>
           );
         },
-        size: 100,
       },
       {
         id: "callPolicy",
@@ -612,7 +608,6 @@ export function AssignedToolsTable({
             </WithPermissions>
           );
         },
-        size: 140,
       },
       {
         id: "toolResultTreatment",
@@ -696,7 +691,6 @@ export function AssignedToolsTable({
             </WithPermissions>
           );
         },
-        size: 140,
       },
       {
         id: "actions",
@@ -720,7 +714,6 @@ export function AssignedToolsTable({
             )}
           </WithPermissions>
         ),
-        size: 60,
       },
     ],
     [

@@ -157,7 +157,6 @@ function KnowledgeBaseDetail({ id }: { id: string }) {
     {
       id: "actions",
       header: "Actions",
-      size: 100,
       cell: ({ row }) => (
         <Button
           variant="ghost"

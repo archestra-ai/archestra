@@ -265,10 +265,9 @@ export function useAssignConnectorToKnowledgeBases() {
     mutationFn: async ({
       connectorId,
       knowledgeBaseIds,
-    }: {
-      connectorId: string;
-      knowledgeBaseIds: string[];
-    }) => {
+    }: { connectorId: string } & NonNullable<
+      archestraApiTypes.AssignConnectorToKnowledgeBasesData["body"]
+    >) => {
       const { data, error } = await assignConnectorToKnowledgeBases({
         path: { id: connectorId },
         body: { knowledgeBaseIds },

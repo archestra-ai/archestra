@@ -1,8 +1,8 @@
 import {
   archestraApiSdk,
+  type archestraApiTypes,
   PLAYWRIGHT_MCP_CATALOG_ID,
   PLAYWRIGHT_MCP_SERVER_NAME,
-  type SupportedProvider,
 } from "@shared";
 import {
   keepPreviousData,
@@ -103,12 +103,7 @@ export function useCreateConversation() {
       selectedModel,
       selectedProvider,
       chatApiKeyId,
-    }: {
-      agentId: string;
-      selectedModel?: string;
-      selectedProvider?: SupportedProvider;
-      chatApiKeyId?: string | null;
-    }) => {
+    }: NonNullable<archestraApiTypes.CreateChatConversationData["body"]>) => {
       const { data, error } = await createChatConversation({
         body: {
           agentId,
@@ -149,15 +144,9 @@ export function useUpdateConversation() {
       chatApiKeyId,
       agentId,
       pinnedAt,
-    }: {
-      id: string;
-      title?: string | null;
-      selectedModel?: string;
-      selectedProvider?: SupportedProvider;
-      chatApiKeyId?: string | null;
-      agentId?: string;
-      pinnedAt?: string | null;
-    }) => {
+    }: { id: string } & NonNullable<
+      archestraApiTypes.UpdateChatConversationData["body"]
+    >) => {
       const { data, error } = await updateChatConversation({
         path: { id },
         body: {

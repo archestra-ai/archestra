@@ -456,10 +456,11 @@ export function useDropEmbeddingConfig() {
  */
 export function useTestEmbeddingConnection() {
   return useMutation({
-    mutationFn: async (params: {
-      embeddingChatApiKeyId: string;
-      embeddingModel: string;
-    }) => {
+    mutationFn: async (
+      params: NonNullable<
+        archestraApiTypes.TestEmbeddingConnectionData["body"]
+      >,
+    ) => {
       const { data, error } = await archestraApiSdk.testEmbeddingConnection({
         body: params,
       });

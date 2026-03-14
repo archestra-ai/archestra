@@ -172,14 +172,7 @@ export function useBulkAssignTools() {
       assignments,
       mcpServerId,
       skipInvalidation,
-    }: {
-      assignments: Array<{
-        agentId: string;
-        toolId: string;
-        credentialSourceMcpServerId?: string | null;
-        executionSourceMcpServerId?: string | null;
-        useDynamicTeamCredential?: boolean;
-      }>;
+    }: NonNullable<archestraApiTypes.BulkAssignToolsData["body"]> & {
       mcpServerId?: string | null;
       skipInvalidation?: boolean;
     }) => {

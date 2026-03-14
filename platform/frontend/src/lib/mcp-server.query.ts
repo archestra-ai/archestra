@@ -219,15 +219,11 @@ export function useMcpServerInstallationStatus(
 export function useReauthenticateMcpServer() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (data: {
-      id: string;
-      name: string;
-      secretId?: string;
-      accessToken?: string;
-      userConfigValues?: Record<string, string>;
-      environmentValues?: Record<string, string>;
-      isByosVault?: boolean;
-    }) => {
+    mutationFn: async (
+      data: { id: string; name: string } & NonNullable<
+        archestraApiTypes.ReauthenticateMcpServerData["body"]
+      >,
+    ) => {
       const { id, name, ...body } = data;
       const response = await reauthenticateMcpServer({
         path: { id },
@@ -258,13 +254,11 @@ export function useReauthenticateMcpServer() {
 export function useReinstallMcpServer() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (data: {
-      id: string;
-      name: string;
-      environmentValues?: Record<string, string>;
-      isByosVault?: boolean;
-      serviceAccount?: string;
-    }) => {
+    mutationFn: async (
+      data: { id: string; name: string } & NonNullable<
+        archestraApiTypes.ReinstallMcpServerData["body"]
+      >,
+    ) => {
       const { id, name, ...body } = data;
       const response = await reinstallMcpServer({
         path: { id },

@@ -1,19 +1,17 @@
 "use client";
 import { archestraApiSdk, type archestraApiTypes, E2eTestId } from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { ColumnDef } from "@tanstack/react-table";
 
-import { Key, Link2, Plus, Settings, Trash2, Users, Vault } from "lucide-react";
-
+import { Key, Link2, Plus, Trash2, Users, Vault, X } from "lucide-react";
 import { lazy, useState } from "react";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+  type TableRowAction,
+  TableRowActions,
+} from "@/components/table-row-actions";
+import { Button } from "@/components/ui/button";
+import { DataTable } from "@/components/ui/data-table";
 import {
   Dialog,
   DialogContent,
@@ -27,14 +25,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import config from "@/lib/config";
 import { useFeature } from "@/lib/config.query";
 import { type TeamToken, useTokens } from "@/lib/team-token.query";
+import { formatDate } from "@/lib/utils";
 import { TeamMembersDialog } from "./team-members-dialog";
 import { TokenManagerDialog } from "./token-manager-dialog";
 
@@ -72,6 +66,9 @@ export function TeamsList() {
   // Form state
   const [teamName, setTeamName] = useState("");
   const [teamDescription, setTeamDescription] = useState("");
+
+  // Search
+  const [search, setSearch] = useState("");
 
   // Tokens query
   const { data: tokensData, isLoading: tokensLoading } = useTokens();
@@ -140,156 +137,181 @@ export function TeamsList() {
     }
   };
 
-  if (isLoading) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Teams</CardTitle>
-          <CardDescription>Loading teams...</CardDescription>
-        </CardHeader>
-      </Card>
-    );
-  }
+  const filteredTeams = (teams ?? []).filter((team) => {
+    if (!search) return true;
+    return team.name.toLowerCase().includes(search.toLowerCase());
+  });
+
+  const columns: ColumnDef<Team>[] = [
+    {
+      id: "name",
+      accessorKey: "name",
+      header: "Name",
+      enableSorting: false,
+      cell: ({ row }) => {
+        const team = row.original;
+        return (
+          <div>
+            <div className="font-medium">{team.name}</div>
+            {team.description && (
+              <div className="text-xs text-muted-foreground truncate max-w-md">
+                {team.description}
+              </div>
+            )}
+          </div>
+        );
+      },
+    },
+    {
+      id: "members",
+      header: "Members",
+      enableSorting: false,
+      cell: ({ row }) => {
+        const count = row.original.members?.length || 0;
+        return (
+          <div className="text-sm">
+            {count} member{count !== 1 ? "s" : ""}
+          </div>
+        );
+      },
+    },
+    {
+      id: "createdAt",
+      accessorKey: "createdAt",
+      header: "Created",
+      enableSorting: false,
+      cell: ({ row }) => {
+        const createdAt = row.original.createdAt;
+        if (!createdAt) return <span className="text-muted-foreground">-</span>;
+        return (
+          <div className="text-sm text-muted-foreground">
+            {formatDate({ date: createdAt })}
+          </div>
+        );
+      },
+    },
+    {
+      id: "actions",
+      header: "Actions",
+      enableSorting: false,
+      cell: ({ row }) => {
+        const team = row.original;
+        const actions: TableRowAction[] = [
+          {
+            icon: <Key className="h-4 w-4" />,
+            label: "Manage MCP/A2A Gateway Token",
+            permissions: { team: ["update"] } as const,
+            disabled: tokensLoading,
+            disabledTooltip: tokensLoading ? "Loading tokens..." : undefined,
+            onClick: () => {
+              const teamToken = tokens?.find((t) => t.team?.id === team.id);
+              if (teamToken) {
+                setSelectedToken(teamToken);
+                setTokenDialogOpen(true);
+              } else {
+                toast.error("No token found for this team");
+              }
+            },
+          },
+          {
+            icon: <Users className="h-4 w-4" />,
+            label: "Manage Members",
+            permissions: { team: ["update"] } as const,
+            testId: `${E2eTestId.ManageMembersButton}-${team.name}`,
+            onClick: () => {
+              setSelectedTeam(team);
+              setMembersDialogOpen(true);
+            },
+          },
+          ...(byosEnabled
+            ? [
+                {
+                  icon: <Vault className="h-4 w-4" />,
+                  label: "Configure Vault Folder",
+                  permissions: { team: ["update"] } as const,
+                  testId: `${E2eTestId.ConfigureVaultFolderButton}-${team.name}`,
+                  onClick: () => {
+                    setSelectedTeam(team);
+                    setVaultFolderDialogOpen(true);
+                  },
+                },
+              ]
+            : []),
+          ...(config.enterpriseFeatures.core
+            ? [
+                {
+                  icon: <Link2 className="h-4 w-4" />,
+                  label: "Configure SSO Team Sync",
+                  permissions: { team: ["update"] } as const,
+                  testId: `${E2eTestId.ConfigureIdpTeamSyncButton}-${team.id}`,
+                  onClick: () => {
+                    setSelectedTeam(team);
+                    setExternalGroupsDialogOpen(true);
+                  },
+                },
+              ]
+            : []),
+          {
+            icon: <Trash2 className="h-4 w-4" />,
+            label: "Delete",
+            permissions: { team: ["delete"] } as const,
+            variant: "destructive" as const,
+            onClick: () => {
+              setTeamToDelete(team);
+              setDeleteDialogOpen(true);
+            },
+          },
+        ];
+
+        return <TableRowActions actions={actions} />;
+      },
+    },
+  ];
 
   return (
     <>
-      <Card>
-        <CardHeader>
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-            <div>
-              <CardTitle>Teams</CardTitle>
-              <CardDescription>
-                Manage teams to organize access to Agents, MCP Gateways, LLM
-                Proxies, and MCP servers
-              </CardDescription>
-            </div>
-            <PermissionButton
-              permissions={{ team: ["create"] }}
-              onClick={() => setCreateDialogOpen(true)}
-              className="shrink-0 self-start md:self-auto"
-            >
-              <Plus className="mr-2 h-4 w-4" />
-              Create Team
-            </PermissionButton>
+      <div className="space-y-6">
+        <div className="flex items-center justify-between gap-4">
+          <div className="relative max-w-md flex-1">
+            <Input
+              placeholder="Search teams by name..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+            {search && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7"
+                onClick={() => setSearch("")}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            )}
           </div>
-        </CardHeader>
-        <CardContent>
-          {!teams || teams.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-8 text-center">
-              <Users className="mb-4 h-12 w-12 text-muted-foreground" />
-              <p className="text-sm text-muted-foreground">
-                There are no teams you have access to
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {teams.map((team) => (
-                <div
-                  key={team.id}
-                  className="flex flex-col md:flex-row md:items-center md:justify-between rounded-lg border p-4 gap-3"
-                >
-                  <div className="flex-1 min-w-0">
-                    <h3 className="font-semibold">{team.name}</h3>
-                    {team.description && (
-                      <p className="text-sm text-muted-foreground">
-                        {team.description}
-                      </p>
-                    )}
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {team.members?.length || 0} member
-                      {(team.members?.length || 0) !== 1 ? "s" : ""}
-                    </p>
-                  </div>
-                  <div className="flex flex-wrap gap-2 shrink-0">
-                    <PermissionButton
-                      permissions={{ team: ["update"] }}
-                      variant="outline"
-                      size="sm"
-                      disabled={tokensLoading}
-                      onClick={() => {
-                        const teamToken = tokens?.find(
-                          (t) => t.team?.id === team.id,
-                        );
-                        if (teamToken) {
-                          setSelectedToken(teamToken);
-                          setTokenDialogOpen(true);
-                        } else {
-                          toast.error("No token found for this team");
-                        }
-                      }}
-                    >
-                      <Key className="mr-2 h-4 w-4" />
-                      Manage Token
-                    </PermissionButton>
-                    <PermissionButton
-                      permissions={{ team: ["update"] }}
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        setSelectedTeam(team);
-                        setMembersDialogOpen(true);
-                      }}
-                      data-testid={`${E2eTestId.ManageMembersButton}-${team.name}`}
-                    >
-                      <Settings className="mr-2 h-4 w-4" />
-                      Manage Members
-                    </PermissionButton>
-                    {byosEnabled && (
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <PermissionButton
-                            permissions={{ team: ["update"] }}
-                            variant="outline"
-                            size="sm"
-                            data-testid={`${E2eTestId.ConfigureVaultFolderButton}-${team.name}`}
-                            onClick={() => {
-                              setSelectedTeam(team);
-                              setVaultFolderDialogOpen(true);
-                            }}
-                          >
-                            <Vault className="h-4 w-4" />
-                          </PermissionButton>
-                        </TooltipTrigger>
-                        <TooltipContent>Configure Vault Folder</TooltipContent>
-                      </Tooltip>
-                    )}
-                    {config.enterpriseFeatures.core && (
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <PermissionButton
-                            permissions={{ team: ["update"] }}
-                            variant="outline"
-                            size="sm"
-                            data-testid={`${E2eTestId.ConfigureIdpTeamSyncButton}-${team.id}`}
-                            onClick={() => {
-                              setSelectedTeam(team);
-                              setExternalGroupsDialogOpen(true);
-                            }}
-                          >
-                            <Link2 className="h-4 w-4" />
-                          </PermissionButton>
-                        </TooltipTrigger>
-                        <TooltipContent>Configure SSO Team Sync</TooltipContent>
-                      </Tooltip>
-                    )}
-                    <PermissionButton
-                      permissions={{ team: ["delete"] }}
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        setTeamToDelete(team);
-                        setDeleteDialogOpen(true);
-                      }}
-                    >
-                      <Trash2 className="h-4 w-4 text-destructive" />
-                    </PermissionButton>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+          <PermissionButton
+            permissions={{ team: ["create"] }}
+            onClick={() => setCreateDialogOpen(true)}
+            className="shrink-0"
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            Create Team
+          </PermissionButton>
+        </div>
+
+        <DataTable
+          columns={columns}
+          data={filteredTeams}
+          isLoading={isLoading}
+          emptyIcon={<Users className="h-10 w-10" />}
+          emptyMessage={
+            search
+              ? "No teams found matching your search"
+              : "No teams found"
+          }
+          hideSelectedCount
+        />
+      </div>
 
       <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
         <DialogContent className="max-w-3xl">

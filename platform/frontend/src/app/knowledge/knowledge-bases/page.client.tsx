@@ -1,10 +1,13 @@
 "use client";
 
 import type { archestraApiTypes } from "@shared";
+import type { ColumnDef } from "@tanstack/react-table";
 import { formatDistanceToNow } from "date-fns";
 import {
   ArrowLeft,
   Check,
+  ChevronDown,
+  ChevronRight,
   Globe,
   Link2,
   Pencil,
@@ -21,8 +24,13 @@ import { KnowledgePageLayout } from "@/app/knowledge/_parts/knowledge-page-layou
 import { ConnectorStatusDot } from "@/app/knowledge/knowledge-bases/_parts/connector-enabled-dot";
 import { ConnectorStatusBadge } from "@/app/knowledge/knowledge-bases/_parts/connector-status-badge";
 import { LoadingSpinner } from "@/components/loading";
+import {
+  type TableRowAction,
+  TableRowActions,
+} from "@/components/table-row-actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { DataTable } from "@/components/ui/data-table";
 import {
   Dialog,
   DialogContent,
@@ -64,15 +72,6 @@ import { CreateKnowledgeBaseDialog } from "./_parts/create-knowledge-base-dialog
 import { EditConnectorDialog } from "./_parts/edit-connector-dialog";
 import { EditKnowledgeBaseDialog } from "./_parts/edit-knowledge-base-dialog";
 
-const AGENT_TYPE_LABELS: Record<string, string> = {
-  agent: "Agent",
-  mcp_gateway: "MCP Gateway",
-};
-
-function formatAgentType(agentType: string): string {
-  return AGENT_TYPE_LABELS[agentType] ?? agentType;
-}
-
 type KnowledgeBaseItem =
   archestraApiTypes.GetKnowledgeBasesResponses["200"]["data"][number];
 
@@ -88,13 +87,147 @@ export default function KnowledgeBasesPage() {
 
 function KnowledgeBasesList() {
   const { data: knowledgeBases, isPending } = useKnowledgeBases();
+  const { data: teams } = useTeams();
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [editingItem, setEditingItem] = useState<KnowledgeBaseItem | null>(
     null,
   );
+  const [addConnectorKbId, setAddConnectorKbId] = useState<string | null>(null);
 
   const items = knowledgeBases?.data ?? [];
+
+  const columns: ColumnDef<KnowledgeBaseItem>[] = [
+    {
+      id: "expand",
+      size: 40,
+      header: () => null,
+      cell: ({ row }) => (
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7"
+          onClick={(e) => {
+            e.stopPropagation();
+            row.toggleExpanded();
+          }}
+        >
+          {row.getIsExpanded() ? (
+            <ChevronDown className="h-4 w-4" />
+          ) : (
+            <ChevronRight className="h-4 w-4" />
+          )}
+        </Button>
+      ),
+    },
+    {
+      id: "name",
+      accessorKey: "name",
+      header: "Name",
+      cell: ({ row }) => {
+        const kb = row.original;
+        return (
+          <div>
+            <div className="font-medium">{kb.name}</div>
+            {kb.description && (
+              <div className="text-xs text-muted-foreground truncate max-w-md">
+                {kb.description}
+              </div>
+            )}
+          </div>
+        );
+      },
+    },
+    {
+      id: "connectors",
+      header: "Connectors",
+      cell: ({ row }) => <div>{row.original.connectors.length}</div>,
+    },
+    {
+      id: "docsIndexed",
+      header: "Docs Indexed",
+      cell: ({ row }) => <div>{row.original.totalDocsIndexed}</div>,
+    },
+    {
+      id: "visibility",
+      header: "Visibility",
+      cell: ({ row }) => {
+        const kb = row.original;
+        const isOrgWide = kb.visibility === "org-wide";
+        const isTeamScoped = kb.visibility === "team-scoped";
+        const isAutoSync = kb.visibility === "auto-sync-permissions";
+        const VisibilityIcon = isAutoSync
+          ? RefreshCw
+          : isOrgWide
+            ? Globe
+            : Users;
+        const matchedTeams = isTeamScoped
+          ? (teams ?? []).filter((t) => kb.teamIds.includes(t.id))
+          : [];
+
+        if (isTeamScoped && matchedTeams.length > 0) {
+          return (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Badge variant="outline" className="gap-1.5 cursor-default">
+                    <VisibilityIcon className="h-3.5 w-3.5" />
+                    Team-scoped
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">
+                  <div className="space-y-0.5">
+                    {matchedTeams.map((team) => (
+                      <div key={team.id} className="text-xs">
+                        {team.name}
+                      </div>
+                    ))}
+                  </div>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          );
+        }
+
+        return (
+          <Badge variant="outline" className="gap-1.5">
+            <VisibilityIcon className="h-3.5 w-3.5" />
+            {isAutoSync
+              ? "Auto Sync"
+              : isOrgWide
+                ? "Org-wide"
+                : "Team-scoped"}
+          </Badge>
+        );
+      },
+    },
+    {
+      id: "actions",
+      header: "Actions",
+      cell: ({ row }) => {
+        const kb = row.original;
+        const actions: TableRowAction[] = [
+          {
+            icon: <Plus className="h-4 w-4" />,
+            label: "Add connector",
+            onClick: () => setAddConnectorKbId(kb.id),
+          },
+          {
+            icon: <Pencil className="h-4 w-4" />,
+            label: "Edit",
+            onClick: () => setEditingItem(kb),
+          },
+          {
+            icon: <Trash2 className="h-4 w-4" />,
+            label: "Delete",
+            variant: "destructive",
+            onClick: () => setDeletingId(kb.id),
+          },
+        ];
+        return <TableRowActions actions={actions} />;
+      },
+    },
+  ];
 
   return (
     <KnowledgePageLayout
@@ -110,16 +243,15 @@ function KnowledgeBasesList() {
             No knowledge bases found. Create one to get started.
           </div>
         ) : (
-          <div className="space-y-3">
-            {items.map((kb) => (
-              <KnowledgeBaseCard
-                key={kb.id}
-                kb={kb}
-                onEdit={() => setEditingItem(kb)}
-                onDelete={() => setDeletingId(kb.id)}
-              />
-            ))}
-          </div>
+          <DataTable
+            columns={columns}
+            data={items}
+            renderSubComponent={({ row }) => (
+              <ExpandedConnectors knowledgeBaseId={row.original.id} />
+            )}
+            emptyMessage="No knowledge bases found"
+            hideSelectedCount
+          />
         )}
 
         <CreateKnowledgeBaseDialog
@@ -142,195 +274,29 @@ function KnowledgeBasesList() {
             onOpenChange={(open) => !open && setDeletingId(null)}
           />
         )}
+
+        {addConnectorKbId && (
+          <AddConnectorDialog
+            knowledgeBaseId={addConnectorKbId}
+            assignedConnectorIds={
+              new Set(
+                items
+                  .find((kb) => kb.id === addConnectorKbId)
+                  ?.connectors.map((c) => c.id) ?? [],
+              )
+            }
+            open={!!addConnectorKbId}
+            onOpenChange={(open) => !open && setAddConnectorKbId(null)}
+          />
+        )}
       </div>
     </KnowledgePageLayout>
   );
 }
 
-function KnowledgeBaseCard({
-  kb,
-  onEdit,
-  onDelete,
-}: {
-  kb: KnowledgeBaseItem;
-  onEdit: () => void;
-  onDelete: () => void;
-}) {
-  const [isAddConnectorOpen, setIsAddConnectorOpen] = useState(false);
-  const { data: teams } = useTeams();
-  const isOrgWide = kb.visibility === "org-wide";
-  const isTeamScoped = kb.visibility === "team-scoped";
-  const isAutoSync = kb.visibility === "auto-sync-permissions";
-  const VisibilityIcon = isAutoSync ? RefreshCw : isOrgWide ? Globe : Users;
-  const totalConnectors = kb.connectors.length;
-  const matchedTeams = isTeamScoped
-    ? (teams ?? []).filter((t) => kb.teamIds.includes(t.id))
-    : [];
-
-  return (
-    <div className="rounded-lg border">
-      {/* Card header */}
-      <div className="flex w-full flex-wrap items-center gap-x-4 gap-y-3 px-5 py-4 text-left">
-        <div className="flex flex-col gap-0.5 min-w-0 flex-1">
-          <span className="text-xl font-semibold">{kb.name}</span>
-          {kb.description && (
-            <span className="text-sm text-muted-foreground truncate">
-              {kb.description}
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-x-6 shrink-0 order-last lg:order-none w-full lg:w-auto pl-9 lg:pl-0">
-          <StatItem label="Connectors" value={String(totalConnectors)} />
-          <StatItem label="Docs Indexed" value={String(kb.totalDocsIndexed)} />
-          <StatItem
-            label="Visibility"
-            value={
-              isTeamScoped && matchedTeams.length > 0 ? (
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Badge
-                        variant="outline"
-                        className="gap-1.5 cursor-default"
-                      >
-                        <VisibilityIcon className="h-3.5 w-3.5" />
-                        Team-scoped
-                      </Badge>
-                    </TooltipTrigger>
-                    <TooltipContent side="bottom">
-                      <div className="space-y-0.5">
-                        {matchedTeams.map((team) => (
-                          <div key={team.id} className="text-xs">
-                            {team.name}
-                          </div>
-                        ))}
-                      </div>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              ) : (
-                <Badge variant="outline" className="gap-1.5">
-                  <VisibilityIcon className="h-3.5 w-3.5" />
-                  {isAutoSync
-                    ? "Auto Sync"
-                    : isOrgWide
-                      ? "Org-wide"
-                      : "Team-scoped"}
-                </Badge>
-              )
-            }
-          />
-          <StatItem
-            label="Assigned To"
-            value={
-              kb.assignedAgents.length > 0 ? (
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span className="cursor-default">
-                        {String(kb.assignedAgents.length)}
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent side="bottom">
-                      <div className="space-y-2">
-                        {Object.entries(
-                          kb.assignedAgents.reduce<
-                            Record<string, typeof kb.assignedAgents>
-                          >((groups, agent) => {
-                            const label = formatAgentType(agent.agentType);
-                            if (!groups[label]) groups[label] = [];
-                            groups[label].push(agent);
-                            return groups;
-                          }, {}),
-                        ).map(([type, agents]) => (
-                          <div key={type}>
-                            <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-0.5">
-                              {type}
-                            </div>
-                            {agents.map((agent) => (
-                              <div key={agent.id} className="text-xs pl-1">
-                                {agent.name}
-                              </div>
-                            ))}
-                          </div>
-                        ))}
-                      </div>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              ) : (
-                "0"
-              )
-            }
-          />
-        </div>
-        <div className="flex items-center gap-1 shrink-0">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={(e) => {
-              e.stopPropagation();
-              setIsAddConnectorOpen(true);
-            }}
-          >
-            <Plus className="h-4 w-4 text-muted-foreground" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={(e) => {
-              e.stopPropagation();
-              onEdit();
-            }}
-          >
-            <Pencil className="h-4 w-4 text-muted-foreground" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={(e) => {
-              e.stopPropagation();
-              onDelete();
-            }}
-          >
-            <Trash2 className="h-4 w-4 text-muted-foreground" />
-          </Button>
-        </div>
-      </div>
-
-      {/* Connectors panel */}
-      <div className="border-t">
-        <ExpandedConnectors knowledgeBaseId={kb.id} />
-      </div>
-
-      <AddConnectorDialog
-        knowledgeBaseId={kb.id}
-        assignedConnectorIds={new Set(kb.connectors.map((c) => c.id))}
-        open={isAddConnectorOpen}
-        onOpenChange={setIsAddConnectorOpen}
-      />
-    </div>
-  );
-}
-
-function StatItem({
-  label,
-  value,
-  className,
-}: {
-  label: string;
-  value: React.ReactNode;
-  className?: string;
-}) {
-  return (
-    <div className={cn("flex flex-col gap-0.5", className)}>
-      <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-        {label}
-      </span>
-      <span className="text-base font-semibold">{value}</span>
-    </div>
-  );
-}
+// ===
+// Expanded connectors sub-row
+// ===
 
 type ConnectorItem =
   archestraApiTypes.GetConnectorsResponses["200"]["data"][number];
@@ -373,7 +339,7 @@ function ExpandedConnectors({ knowledgeBaseId }: { knowledgeBaseId: string }) {
             <TableHead className="uppercase text-xs tracking-wider text-right bg-muted">
               Status
             </TableHead>
-            <TableHead className="uppercase text-xs tracking-wider text-center w-[100px] bg-muted">
+            <TableHead className="uppercase text-xs tracking-wider bg-muted" data-column-id="actions">
               Actions
             </TableHead>
           </TableRow>
@@ -426,38 +392,29 @@ function ExpandedConnectors({ knowledgeBaseId }: { knowledgeBaseId: string }) {
                   )}
                 </div>
               </TableCell>
-              <TableCell>
+              <TableCell data-column-id="actions">
                 {/* biome-ignore lint/a11y/useKeyWithClickEvents: stopPropagation wrapper for action buttons inside clickable row */}
                 {/* biome-ignore lint/a11y/noStaticElementInteractions: wrapper only prevents row click propagation */}
                 <div
-                  className="flex items-center justify-center gap-1"
+                  className="flex justify-end gap-1"
                   onClick={(e) => e.stopPropagation()}
                 >
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7"
-                    onClick={() => setEditingConnector(connector)}
-                  >
-                    <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
-                  </Button>
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7"
-                          onClick={() => setRemovingConnectorId(connector.id)}
-                        >
-                          <Unlink className="h-3.5 w-3.5 text-muted-foreground" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        Remove from knowledge base
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
+                  <TableRowActions
+                    actions={[
+                      {
+                        icon: <Pencil className="h-4 w-4" />,
+                        label: "Edit connector",
+                        onClick: () => setEditingConnector(connector),
+                      },
+                      {
+                        icon: <Unlink className="h-4 w-4" />,
+                        label: "Remove from knowledge base",
+                        variant: "destructive",
+                        onClick: () => setRemovingConnectorId(connector.id),
+                      },
+                    ]}
+                    size="sm"
+                  />
                 </div>
               </TableCell>
             </TableRow>
@@ -484,6 +441,10 @@ function ExpandedConnectors({ knowledgeBaseId }: { knowledgeBaseId: string }) {
     </>
   );
 }
+
+// ===
+// Dialogs
+// ===
 
 function AddConnectorDialog({
   knowledgeBaseId,

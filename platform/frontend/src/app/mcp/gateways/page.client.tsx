@@ -531,30 +531,27 @@ function McpGateways({
               <ActiveFilterBadges />
             </div>
 
-            {!agents || agents.length === 0 ? (
-              <div className="text-muted-foreground">
-                {nameFilter || scopeFromUrl || labelsFromUrl
-                  ? "No MCP gateways found matching your filters"
-                  : "No MCP gateways found"}
-              </div>
-            ) : (
-              <div data-testid={E2eTestId.AgentsTable}>
-                <DataTable
-                  columns={columns}
-                  data={agents}
-                  sorting={sorting}
-                  onSortingChange={handleSortingChange}
-                  manualSorting={true}
-                  manualPagination={true}
-                  pagination={{
-                    pageIndex,
-                    pageSize,
-                    total: pagination?.total || 0,
-                  }}
-                  onPaginationChange={handlePaginationChange}
-                />
-              </div>
-            )}
+            <div data-testid={E2eTestId.AgentsTable}>
+              <DataTable
+                columns={columns}
+                data={agents}
+                sorting={sorting}
+                onSortingChange={handleSortingChange}
+                manualSorting={true}
+                manualPagination={true}
+                pagination={{
+                  pageIndex,
+                  pageSize,
+                  total: pagination?.total || 0,
+                }}
+                onPaginationChange={handlePaginationChange}
+                emptyMessage={
+                  nameFilter || scopeFromUrl || labelsFromUrl
+                    ? "No MCP gateways found matching your filters"
+                    : "No MCP gateways found"
+                }
+              />
+            </div>
 
             <AgentDialog
               open={isCreateDialogOpen}

@@ -15,7 +15,7 @@ import {
   useReactTable,
   type VisibilityState,
 } from "@tanstack/react-table";
-import { Loader2 } from "lucide-react";
+import { Inbox, Loader2 } from "lucide-react";
 import React, { useState } from "react";
 
 import {
@@ -57,6 +57,8 @@ interface DataTableProps<TData, TValue> {
   isLoading?: boolean;
   /** Custom empty state message (defaults to "No results") */
   emptyMessage?: string;
+  /** Icon to show in the empty state (defaults to Inbox) */
+  emptyIcon?: React.ReactNode;
 }
 
 export function DataTable<TData, TValue>({
@@ -76,6 +78,7 @@ export function DataTable<TData, TValue>({
   renderSubComponent,
   isLoading = false,
   emptyMessage = "No results",
+  emptyIcon,
 }: DataTableProps<TData, TValue>) {
   const [internalSorting, setInternalSorting] = useState<SortingState>([]);
   const [expanded, setExpanded] = useState<ExpandedState>({});
@@ -235,20 +238,20 @@ export function DataTable<TData, TValue>({
               <TableRow>
                 <TableCell
                   colSpan={columns.length}
-                  className="h-24 text-center"
+                  className="py-0"
                 >
-                  {isLoading ? (
-                    <div className="flex items-center justify-center gap-2">
-                      <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                      <span className="text-sm text-muted-foreground">
-                        Loading...
-                      </span>
-                    </div>
-                  ) : (
-                    <span className="text-sm text-muted-foreground">
-                      {emptyMessage}
-                    </span>
-                  )}
+                  <div className="flex flex-col items-center justify-center py-12 text-center">
+                    {isLoading ? (
+                      <Loader2 className="mb-3 h-10 w-10 animate-spin text-muted-foreground" />
+                    ) : (
+                      <div className="mb-3 text-muted-foreground">
+                        {emptyIcon ?? <Inbox className="h-10 w-10" />}
+                      </div>
+                    )}
+                    <p className="text-sm text-muted-foreground">
+                      {isLoading ? "Loading..." : emptyMessage}
+                    </p>
+                  </div>
                 </TableCell>
               </TableRow>
             )}

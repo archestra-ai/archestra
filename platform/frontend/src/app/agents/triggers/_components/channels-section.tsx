@@ -323,24 +323,6 @@ export function ChannelsSection({
               <LoadingSpinner className="h-3 w-3 animate-spin text-muted-foreground absolute right-[-20px] top-[7px]" />
             )}
           </h2>
-          {hasAnyChannels && counts && (
-            <div className="flex items-end gap-3 text-xs text-muted-foreground ml-4">
-              <span className="inline-flex items-center gap-1.5 text-xs font-medium">
-                <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/50" />
-                Total: {totalCount}
-              </span>
-              |
-              <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-600 dark:text-emerald-400 opacity-90">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                Configured: {counts.configured}
-              </span>
-              |
-              <span className="inline-flex items-center gap-1.5 text-xs font-medium text-amber-600 dark:text-amber-400 opacity-90">
-                <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-                Unassigned: {counts.unassigned}
-              </span>
-            </div>
-          )}
         </div>
         <p className="text-xs text-muted-foreground mt-1">
           New channels appear after adding the bot to a channel and the first
@@ -380,24 +362,46 @@ export function ChannelsSection({
 
           {/* Status filter pills */}
           <div className="flex gap-1 flex-wrap">
-            {(["all", "configured", "unassigned"] as const).map((status) => (
-              <Button
-                key={status}
-                variant="ghost"
-                size="sm"
-                className={cn(
-                  "h-7 text-xs rounded-full",
-                  statusFromUrl === status && "bg-primary/10 text-primary",
-                )}
-                onClick={() => handleStatusChange(status)}
-              >
-                {status === "all"
-                  ? "All"
-                  : status === "configured"
-                    ? "Configured"
-                    : "Unassigned"}
-              </Button>
-            ))}
+            <Button
+              variant="ghost"
+              size="sm"
+              className={cn(
+                "h-7 text-xs rounded-full gap-1.5",
+                statusFromUrl === "all" && "bg-primary/10 text-primary",
+              )}
+              onClick={() => handleStatusChange("all")}
+            >
+              <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/50" />
+              All{counts ? ` (${totalCount})` : ""}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className={cn(
+                "h-7 text-xs rounded-full gap-1.5",
+                statusFromUrl === "configured"
+                  ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                  : "text-muted-foreground",
+              )}
+              onClick={() => handleStatusChange("configured")}
+            >
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+              Configured{counts ? ` (${counts.configured})` : ""}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className={cn(
+                "h-7 text-xs rounded-full gap-1.5",
+                statusFromUrl === "unassigned"
+                  ? "bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                  : "text-muted-foreground",
+              )}
+              onClick={() => handleStatusChange("unassigned")}
+            >
+              <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+              Unassigned{counts ? ` (${counts.unassigned})` : ""}
+            </Button>
 
             {/* Workspace filter */}
             {hasMultipleWorkspaces && (

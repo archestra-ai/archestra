@@ -8,6 +8,12 @@ import type { A2AAttachment } from "@/agents/a2a-executor";
 export const ChatOpsProviderTypeSchema = z.enum(["ms-teams", "slack"]);
 export type ChatOpsProviderType = z.infer<typeof ChatOpsProviderTypeSchema>;
 
+export const ChatOpsConnectionModeSchema = z.enum(["webhook", "socket"]);
+export type ChatOpsConnectionMode = z.infer<typeof ChatOpsConnectionModeSchema>;
+
+export const ChatOpsStatusSchema = z.enum(["configured", "unassigned"]);
+export type ChatOpsStatus = z.infer<typeof ChatOpsStatusSchema>;
+
 /**
  * Represents an incoming chat message from a chatops provider
  */

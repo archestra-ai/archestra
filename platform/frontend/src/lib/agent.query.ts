@@ -18,8 +18,6 @@ const {
   updateAgent,
   getLabelKeys,
   getLabelValues,
-  getAgentVersions,
-  rollbackAgent,
   getMemberDefaultAgent,
 } = archestraApiSdk;
 
@@ -254,14 +252,6 @@ export function useLabelValues(params?: { key?: string }) {
   });
 }
 
-// ============================================================================
-// Internal Agents (Prompt-based agents) - Version History & Rollback
-// ============================================================================
-
-/**
- * Get internal agents only (agents with prompts).
- * Non-suspense version for components that need loading states.
- */
 /**
  * Get the current user's default agent ID.
  */
@@ -300,46 +290,6 @@ export function useOrgScopedAgents() {
         query: { agentType: "agent", excludeBuiltIn: true, scope: "org" },
       });
       return response.data ?? [];
-    },
-  });
-}
-
-/**
- * Get version history for an internal agent.
- * Only applicable to internal agents (agents with prompts).
- */
-export function useAgentVersions(id: string | undefined) {
-  return useQuery({
-    queryKey: ["agents", id, "versions"],
-    queryFn: async () => {
-      if (!id) return null;
-      const response = await getAgentVersions({ path: { id } });
-      return response.data ?? null;
-    },
-    enabled: !!id,
-  });
-}
-
-/**
- * Rollback an internal agent to a previous version.
- * Only applicable to internal agents (agents with prompts).
- */
-export function useRollbackAgent() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async ({ id, version }: { id: string; version: number }) => {
-      const response = await rollbackAgent({
-        path: { id },
-        body: { version },
-      });
-      return response.data;
-    },
-    onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ["agents"] });
-      queryClient.invalidateQueries({ queryKey: ["agents", variables.id] });
-      queryClient.invalidateQueries({
-        queryKey: ["agents", variables.id, "versions"],
-      });
     },
   });
 }

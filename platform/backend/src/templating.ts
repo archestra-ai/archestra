@@ -176,25 +176,22 @@ export function promptNeedsRendering(
 }
 
 /**
- * Build rendered system and user prompt parts from an agent's prompts.
+ * Build rendered system prompt parts from an agent's prompts.
  * Skips template rendering (and avoids requiring a context) when the prompts
  * don't contain Handlebars syntax.
  */
 export function buildRenderedPrompts(params: {
   systemPrompt: string | null;
-  userPrompt: string | null;
   context: SystemPromptContext | null;
-}): { systemPromptParts: string[]; userPromptParts: string[] } {
+}): { systemPromptParts: string[] } {
   const systemPromptParts: string[] = [];
-  const userPromptParts: string[] = [];
 
-  if (!params.systemPrompt && !params.userPrompt) {
-    return { systemPromptParts, userPromptParts };
+  if (!params.systemPrompt) {
+    return { systemPromptParts };
   }
 
   const needsRendering =
-    params.context != null &&
-    promptNeedsRendering(params.systemPrompt, params.userPrompt);
+    params.context != null && promptNeedsRendering(params.systemPrompt);
 
   if (params.systemPrompt) {
     systemPromptParts.push(
@@ -203,15 +200,8 @@ export function buildRenderedPrompts(params: {
         : params.systemPrompt,
     );
   }
-  if (params.userPrompt) {
-    userPromptParts.push(
-      needsRendering && params.context
-        ? renderSystemPrompt(params.userPrompt, params.context)
-        : params.userPrompt,
-    );
-  }
 
-  return { systemPromptParts, userPromptParts };
+  return { systemPromptParts };
 }
 
 /**

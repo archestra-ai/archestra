@@ -193,12 +193,12 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         user: { id: user.id, email: user.email, name: user.name },
       });
 
-      // Build system prompt from agent's systemPrompt and userPrompt fields
+      // Build system prompt from agent's systemPrompt field
       let systemPrompt: string | undefined;
 
       // Build template context only when prompts use Handlebars syntax
       let promptContext: SystemPromptContext | null = null;
-      if (promptNeedsRendering(agent.systemPrompt, agent.userPrompt)) {
+      if (promptNeedsRendering(agent.systemPrompt)) {
         const userTeams = await TeamModel.getUserTeams(user.id);
         promptContext = {
           user: {
@@ -209,9 +209,8 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         };
       }
 
-      const { systemPromptParts, userPromptParts } = buildRenderedPrompts({
+      const { systemPromptParts } = buildRenderedPrompts({
         systemPrompt: agent.systemPrompt,
-        userPrompt: agent.userPrompt,
         context: promptContext,
       });
 
@@ -220,10 +219,9 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         "When a tool execution is not approved by the user, do not retry it. Explain what happened and ask the user what they'd like to do instead.",
       );
 
-      // Combine all prompts into system prompt (system prompts first, then user prompts)
-      if (systemPromptParts.length > 0 || userPromptParts.length > 0) {
-        const allParts = [...systemPromptParts, ...userPromptParts];
-        systemPrompt = allParts.join("\n\n");
+      // Combine all prompts into system prompt
+      if (systemPromptParts.length > 0) {
+        systemPrompt = systemPromptParts.join("\n\n");
       }
 
       // Use stored provider if available, otherwise detect from model name for backward compatibility
@@ -246,7 +244,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           provider,
           providerSource: conversation.selectedProvider ? "stored" : "detected",
           hasSystemPromptParts: systemPromptParts.length > 0,
-          hasUserPromptParts: userPromptParts.length > 0,
           systemPromptProvided: !!systemPrompt,
           externalAgentId,
         },

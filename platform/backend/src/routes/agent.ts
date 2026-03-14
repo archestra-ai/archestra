@@ -22,7 +22,6 @@ import { metrics } from "@/observability";
 import {
   type AgentScope,
   AgentScopeFilterSchema,
-  AgentVersionsResponseSchema,
   ApiError,
   BuiltInAgentConfigSchema,
   constructResponseSchema,
@@ -706,118 +705,6 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       return reply.send({ success: true });
-    },
-  );
-
-  // Version history endpoint (internal agents only)
-  fastify.get(
-    "/api/agents/:id/versions",
-    {
-      schema: {
-        operationId: RouteId.GetAgentVersions,
-        description:
-          "Get version history for an internal agent. Only applicable to internal agents.",
-        tags: ["Agents"],
-        params: z.object({
-          id: UuidIdSchema,
-        }),
-        response: constructResponseSchema(AgentVersionsResponseSchema),
-      },
-    },
-    async ({ params: { id }, user, organizationId }, reply) => {
-      // Fetch agent to determine its type
-      const agent = await AgentModel.findById(id, user.id, true);
-      if (!agent) {
-        throw new ApiError(404, "Agent not found");
-      }
-
-      // Single DB query for all permission checks on this agent type
-      const checker = await getAgentTypePermissionChecker({
-        userId: user.id,
-        organizationId,
-      });
-
-      // Check read permission (return 404 to avoid leaking existence)
-      try {
-        checker.require(agent.agentType, "read");
-      } catch {
-        throw new ApiError(404, "Agent not found");
-      }
-
-      const versions = await AgentModel.getVersions(
-        id,
-        user.id,
-        checker.isAdmin(agent.agentType),
-      );
-
-      if (!versions) {
-        throw new ApiError(
-          404,
-          "Agent not found or not an internal agent (versioning only applies to internal agents)",
-        );
-      }
-
-      return reply.send(versions);
-    },
-  );
-
-  // Rollback endpoint (internal agents only)
-  fastify.post(
-    "/api/agents/:id/rollback",
-    {
-      schema: {
-        operationId: RouteId.RollbackAgent,
-        description:
-          "Rollback an internal agent to a previous version. Only applicable to internal agents.",
-        tags: ["Agents"],
-        params: z.object({
-          id: UuidIdSchema,
-        }),
-        body: z.object({
-          version: z
-            .number()
-            .int()
-            .positive()
-            .describe("Version to rollback to"),
-        }),
-        response: constructResponseSchema(SelectAgentSchema),
-      },
-    },
-    async (
-      { params: { id }, body: { version }, user, organizationId },
-      reply,
-    ) => {
-      // Fetch agent to determine its type
-      const agent = await AgentModel.findById(id, user.id, true);
-      if (!agent) {
-        throw new ApiError(404, "Agent not found");
-      }
-
-      // Check update permission for this agent's type (return 404 to avoid leaking existence)
-      const checker = await getAgentTypePermissionChecker({
-        userId: user.id,
-        organizationId,
-      });
-      try {
-        checker.require(agent.agentType, "update");
-      } catch {
-        throw new ApiError(404, "Agent not found");
-      }
-
-      if (agent.agentType !== "agent") {
-        throw new ApiError(
-          400,
-          "Rollback only applies to internal agents (agentType='agent')",
-        );
-      }
-
-      const rolledBackAgent = await AgentModel.rollback(id, version);
-
-      if (!rolledBackAgent) {
-        throw new ApiError(404, "Version not found in agent history");
-      }
-
-      return reply.send(rolledBackAgent);
     },
   );
 

@@ -17,6 +17,7 @@ import {
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
+  type FormEvent,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -29,6 +30,7 @@ import { CreateCatalogDialog } from "@/app/mcp/registry/_parts/create-catalog-di
 import { CustomServerRequestDialog } from "@/app/mcp/registry/_parts/custom-server-request-dialog";
 import { AgentDialog } from "@/components/agent-dialog";
 import type { PromptInputProps } from "@/components/ai-elements/prompt-input";
+import { Suggestion } from "@/components/ai-elements/suggestion";
 import { AppLogo } from "@/components/app-logo";
 import { ButtonWithTooltip } from "@/components/button-with-tooltip";
 import { BrowserPanel } from "@/components/chat/browser-panel";
@@ -38,7 +40,6 @@ import {
   PlaywrightInstallDialog,
   usePlaywrightSetupRequired,
 } from "@/components/chat/playwright-install-dialog";
-import { PromptVersionHistoryDialog } from "@/components/chat/prompt-version-history-dialog";
 import { RightSidePanel } from "@/components/chat/right-side-panel";
 import { ShareConversationDialog } from "@/components/chat/share-conversation-dialog";
 import { StreamTimeoutWarning } from "@/components/chat/stream-timeout-warning";
@@ -225,11 +226,6 @@ export default function ChatPage() {
   // Track which agentId URL param has been consumed (so we don't re-apply the same one after user clears selection,
   // but do apply a new one when navigating from a different agent page)
   const urlParamsConsumedRef = useRef<string | null>(null);
-
-  // Version history dialog state
-  const [versionHistoryAgent, setVersionHistoryAgent] = useState<
-    (typeof internalAgents)[number] | null
-  >(null);
 
   // Resolve which agent to use on page load (URL param > localStorage > first available).
   // Stores the resolved agent in a ref so the model init effect can read it synchronously.
@@ -1632,11 +1628,37 @@ export default function ChatPage() {
                     conversationId={conversationId}
                   />
                 )}
-                <div className="flex-1 flex items-center justify-center p-4">
-                  <div className="w-full max-w-4xl space-y-24">
-                    <div className="flex justify-center scale-150">
-                      <AppLogo />
-                    </div>
+                <div className="flex-1 flex flex-col items-center justify-center p-4 gap-8">
+                  <div className="scale-150">
+                    <AppLogo />
+                  </div>
+                  {(() => {
+                    const currentAgent = internalAgents.find(
+                      (a) => a.id === initialAgentId,
+                    );
+                    const prompts = currentAgent?.suggestedPrompts;
+                    if (!prompts || prompts.length === 0) return null;
+                    return (
+                      <div className="flex flex-wrap items-center justify-center gap-2 max-w-2xl">
+                        {prompts.map((sp) => (
+                          <Suggestion
+                            key={sp.summaryTitle}
+                            suggestion={sp.summaryTitle}
+                            onClick={() => {
+                              const syntheticEvent = {
+                                preventDefault: () => {},
+                              } as unknown as FormEvent<HTMLFormElement>;
+                              handleInitialSubmit(
+                                { text: sp.prompt, files: [] },
+                                syntheticEvent,
+                              );
+                            }}
+                          />
+                        ))}
+                      </div>
+                    );
+                  })()}
+                  <div className="w-full max-w-4xl">
                     <ArchestraPromptInput
                       onSubmit={handleInitialSubmit}
                       status={
@@ -1722,16 +1744,6 @@ export default function ChatPage() {
               : undefined
         }
         agentType="agent"
-      />
-
-      <PromptVersionHistoryDialog
-        open={!!versionHistoryAgent}
-        onOpenChange={(open) => {
-          if (!open) {
-            setVersionHistoryAgent(null);
-          }
-        }}
-        agent={versionHistoryAgent}
       />
 
       {conversationId && (

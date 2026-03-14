@@ -36698,9 +36698,6 @@
                           "name": {
                             "type": "string"
                           },
-                          "isDemo": {
-                            "type": "boolean"
-                          },
                           "isDefault": {
                             "type": "boolean"
                           },
@@ -36719,49 +36716,6 @@
                           "systemPrompt": {
                             "nullable": true,
                             "type": "string"
-                          },
-                          "userPrompt": {
-                            "nullable": true,
-                            "type": "string"
-                          },
-                          "promptVersion": {
-                            "nullable": true,
-                            "type": "integer",
-                            "minimum": -2147483648,
-                            "maximum": 2147483647
-                          },
-                          "promptHistory": {
-                            "nullable": true,
-                            "anyOf": [
-                              {
-                                "anyOf": [
-                                  {
-                                    "type": "string"
-                                  },
-                                  {
-                                    "type": "number"
-                                  },
-                                  {
-                                    "type": "boolean"
-                                  },
-                                  {
-                                    "type": "string",
-                                    "nullable": true,
-                                    "enum": [
-                                      null
-                                    ]
-                                  }
-                                ]
-                              },
-                              {
-                                "type": "object",
-                                "additionalProperties": {}
-                              },
-                              {
-                                "type": "array",
-                                "items": {}
-                              }
-                            ]
                           },
                           "description": {
                             "nullable": true,
@@ -36996,6 +36950,28 @@
                             "items": {
                               "type": "string"
                             }
+                          },
+                          "suggestedPrompts": {
+                            "default": [],
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "summaryTitle": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "prompt": {
+                                  "type": "string",
+                                  "minLength": 1
+                                }
+                              },
+                              "required": [
+                                "summaryTitle",
+                                "prompt"
+                              ],
+                              "additionalProperties": false
+                            }
                           }
                         },
                         "required": [
@@ -37004,14 +36980,10 @@
                           "authorId",
                           "scope",
                           "name",
-                          "isDemo",
                           "isDefault",
                           "considerContextUntrusted",
                           "agentType",
                           "systemPrompt",
-                          "userPrompt",
-                          "promptVersion",
-                          "promptHistory",
                           "description",
                           "icon",
                           "incomingEmailEnabled",
@@ -37028,7 +37000,8 @@
                           "teams",
                           "labels",
                           "knowledgeBaseIds",
-                          "connectorIds"
+                          "connectorIds",
+                          "suggestedPrompts"
                         ],
                         "additionalProperties": false
                       }
@@ -37321,9 +37294,6 @@
                   "name": {
                     "type": "string"
                   },
-                  "isDemo": {
-                    "type": "boolean"
-                  },
                   "isDefault": {
                     "type": "boolean"
                   },
@@ -37340,10 +37310,6 @@
                     ]
                   },
                   "systemPrompt": {
-                    "nullable": true,
-                    "type": "string"
-                  },
-                  "userPrompt": {
                     "nullable": true,
                     "type": "string"
                   },
@@ -37457,6 +37423,26 @@
                     "items": {
                       "type": "string"
                     }
+                  },
+                  "suggestedPrompts": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "summaryTitle": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "prompt": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": [
+                        "summaryTitle",
+                        "prompt"
+                      ]
+                    }
                   }
                 },
                 "required": [
@@ -37499,9 +37485,6 @@
                     "name": {
                       "type": "string"
                     },
-                    "isDemo": {
-                      "type": "boolean"
-                    },
                     "isDefault": {
                       "type": "boolean"
                     },
@@ -37520,49 +37503,6 @@
                     "systemPrompt": {
                       "nullable": true,
                       "type": "string"
-                    },
-                    "userPrompt": {
-                      "nullable": true,
-                      "type": "string"
-                    },
-                    "promptVersion": {
-                      "nullable": true,
-                      "type": "integer",
-                      "minimum": -2147483648,
-                      "maximum": 2147483647
-                    },
-                    "promptHistory": {
-                      "nullable": true,
-                      "anyOf": [
-                        {
-                          "anyOf": [
-                            {
-                              "type": "string"
-                            },
-                            {
-                              "type": "number"
-                            },
-                            {
-                              "type": "boolean"
-                            },
-                            {
-                              "type": "string",
-                              "nullable": true,
-                              "enum": [
-                                null
-                              ]
-                            }
-                          ]
-                        },
-                        {
-                          "type": "object",
-                          "additionalProperties": {}
-                        },
-                        {
-                          "type": "array",
-                          "items": {}
-                        }
-                      ]
                     },
                     "description": {
                       "nullable": true,
@@ -37797,6 +37737,28 @@
                       "items": {
                         "type": "string"
                       }
+                    },
+                    "suggestedPrompts": {
+                      "default": [],
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "summaryTitle": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "prompt": {
+                            "type": "string",
+                            "minLength": 1
+                          }
+                        },
+                        "required": [
+                          "summaryTitle",
+                          "prompt"
+                        ],
+                        "additionalProperties": false
+                      }
                     }
                   },
                   "required": [
@@ -37805,14 +37767,10 @@
                     "authorId",
                     "scope",
                     "name",
-                    "isDemo",
                     "isDefault",
                     "considerContextUntrusted",
                     "agentType",
                     "systemPrompt",
-                    "userPrompt",
-                    "promptVersion",
-                    "promptHistory",
                     "description",
                     "icon",
                     "incomingEmailEnabled",
@@ -37829,7 +37787,8 @@
                     "teams",
                     "labels",
                     "knowledgeBaseIds",
-                    "connectorIds"
+                    "connectorIds",
+                    "suggestedPrompts"
                   ],
                   "additionalProperties": false
                 }
@@ -38148,9 +38107,6 @@
                       "name": {
                         "type": "string"
                       },
-                      "isDemo": {
-                        "type": "boolean"
-                      },
                       "isDefault": {
                         "type": "boolean"
                       },
@@ -38169,49 +38125,6 @@
                       "systemPrompt": {
                         "nullable": true,
                         "type": "string"
-                      },
-                      "userPrompt": {
-                        "nullable": true,
-                        "type": "string"
-                      },
-                      "promptVersion": {
-                        "nullable": true,
-                        "type": "integer",
-                        "minimum": -2147483648,
-                        "maximum": 2147483647
-                      },
-                      "promptHistory": {
-                        "nullable": true,
-                        "anyOf": [
-                          {
-                            "anyOf": [
-                              {
-                                "type": "string"
-                              },
-                              {
-                                "type": "number"
-                              },
-                              {
-                                "type": "boolean"
-                              },
-                              {
-                                "type": "string",
-                                "nullable": true,
-                                "enum": [
-                                  null
-                                ]
-                              }
-                            ]
-                          },
-                          {
-                            "type": "object",
-                            "additionalProperties": {}
-                          },
-                          {
-                            "type": "array",
-                            "items": {}
-                          }
-                        ]
                       },
                       "description": {
                         "nullable": true,
@@ -38446,6 +38359,28 @@
                         "items": {
                           "type": "string"
                         }
+                      },
+                      "suggestedPrompts": {
+                        "default": [],
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "summaryTitle": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "prompt": {
+                              "type": "string",
+                              "minLength": 1
+                            }
+                          },
+                          "required": [
+                            "summaryTitle",
+                            "prompt"
+                          ],
+                          "additionalProperties": false
+                        }
                       }
                     },
                     "required": [
@@ -38454,14 +38389,10 @@
                       "authorId",
                       "scope",
                       "name",
-                      "isDemo",
                       "isDefault",
                       "considerContextUntrusted",
                       "agentType",
                       "systemPrompt",
-                      "userPrompt",
-                      "promptVersion",
-                      "promptHistory",
                       "description",
                       "icon",
                       "incomingEmailEnabled",
@@ -38478,7 +38409,8 @@
                       "teams",
                       "labels",
                       "knowledgeBaseIds",
-                      "connectorIds"
+                      "connectorIds",
+                      "suggestedPrompts"
                     ],
                     "additionalProperties": false
                   }
@@ -38737,9 +38669,6 @@
                     "name": {
                       "type": "string"
                     },
-                    "isDemo": {
-                      "type": "boolean"
-                    },
                     "isDefault": {
                       "type": "boolean"
                     },
@@ -38758,49 +38687,6 @@
                     "systemPrompt": {
                       "nullable": true,
                       "type": "string"
-                    },
-                    "userPrompt": {
-                      "nullable": true,
-                      "type": "string"
-                    },
-                    "promptVersion": {
-                      "nullable": true,
-                      "type": "integer",
-                      "minimum": -2147483648,
-                      "maximum": 2147483647
-                    },
-                    "promptHistory": {
-                      "nullable": true,
-                      "anyOf": [
-                        {
-                          "anyOf": [
-                            {
-                              "type": "string"
-                            },
-                            {
-                              "type": "number"
-                            },
-                            {
-                              "type": "boolean"
-                            },
-                            {
-                              "type": "string",
-                              "nullable": true,
-                              "enum": [
-                                null
-                              ]
-                            }
-                          ]
-                        },
-                        {
-                          "type": "object",
-                          "additionalProperties": {}
-                        },
-                        {
-                          "type": "array",
-                          "items": {}
-                        }
-                      ]
                     },
                     "description": {
                       "nullable": true,
@@ -39035,6 +38921,28 @@
                       "items": {
                         "type": "string"
                       }
+                    },
+                    "suggestedPrompts": {
+                      "default": [],
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "summaryTitle": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "prompt": {
+                            "type": "string",
+                            "minLength": 1
+                          }
+                        },
+                        "required": [
+                          "summaryTitle",
+                          "prompt"
+                        ],
+                        "additionalProperties": false
+                      }
                     }
                   },
                   "required": [
@@ -39043,14 +38951,10 @@
                     "authorId",
                     "scope",
                     "name",
-                    "isDemo",
                     "isDefault",
                     "considerContextUntrusted",
                     "agentType",
                     "systemPrompt",
-                    "userPrompt",
-                    "promptVersion",
-                    "promptHistory",
                     "description",
                     "icon",
                     "incomingEmailEnabled",
@@ -39067,7 +38971,8 @@
                     "teams",
                     "labels",
                     "knowledgeBaseIds",
-                    "connectorIds"
+                    "connectorIds",
+                    "suggestedPrompts"
                   ],
                   "additionalProperties": false
                 }
@@ -39325,9 +39230,6 @@
                     "name": {
                       "type": "string"
                     },
-                    "isDemo": {
-                      "type": "boolean"
-                    },
                     "isDefault": {
                       "type": "boolean"
                     },
@@ -39346,49 +39248,6 @@
                     "systemPrompt": {
                       "nullable": true,
                       "type": "string"
-                    },
-                    "userPrompt": {
-                      "nullable": true,
-                      "type": "string"
-                    },
-                    "promptVersion": {
-                      "nullable": true,
-                      "type": "integer",
-                      "minimum": -2147483648,
-                      "maximum": 2147483647
-                    },
-                    "promptHistory": {
-                      "nullable": true,
-                      "anyOf": [
-                        {
-                          "anyOf": [
-                            {
-                              "type": "string"
-                            },
-                            {
-                              "type": "number"
-                            },
-                            {
-                              "type": "boolean"
-                            },
-                            {
-                              "type": "string",
-                              "nullable": true,
-                              "enum": [
-                                null
-                              ]
-                            }
-                          ]
-                        },
-                        {
-                          "type": "object",
-                          "additionalProperties": {}
-                        },
-                        {
-                          "type": "array",
-                          "items": {}
-                        }
-                      ]
                     },
                     "description": {
                       "nullable": true,
@@ -39623,6 +39482,28 @@
                       "items": {
                         "type": "string"
                       }
+                    },
+                    "suggestedPrompts": {
+                      "default": [],
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "summaryTitle": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "prompt": {
+                            "type": "string",
+                            "minLength": 1
+                          }
+                        },
+                        "required": [
+                          "summaryTitle",
+                          "prompt"
+                        ],
+                        "additionalProperties": false
+                      }
                     }
                   },
                   "required": [
@@ -39631,14 +39512,10 @@
                     "authorId",
                     "scope",
                     "name",
-                    "isDemo",
                     "isDefault",
                     "considerContextUntrusted",
                     "agentType",
                     "systemPrompt",
-                    "userPrompt",
-                    "promptVersion",
-                    "promptHistory",
                     "description",
                     "icon",
                     "incomingEmailEnabled",
@@ -39655,7 +39532,8 @@
                     "teams",
                     "labels",
                     "knowledgeBaseIds",
-                    "connectorIds"
+                    "connectorIds",
+                    "suggestedPrompts"
                   ],
                   "additionalProperties": false
                 }
@@ -39925,9 +39803,6 @@
                     "name": {
                       "type": "string"
                     },
-                    "isDemo": {
-                      "type": "boolean"
-                    },
                     "isDefault": {
                       "type": "boolean"
                     },
@@ -39946,49 +39821,6 @@
                     "systemPrompt": {
                       "nullable": true,
                       "type": "string"
-                    },
-                    "userPrompt": {
-                      "nullable": true,
-                      "type": "string"
-                    },
-                    "promptVersion": {
-                      "nullable": true,
-                      "type": "integer",
-                      "minimum": -2147483648,
-                      "maximum": 2147483647
-                    },
-                    "promptHistory": {
-                      "nullable": true,
-                      "anyOf": [
-                        {
-                          "anyOf": [
-                            {
-                              "type": "string"
-                            },
-                            {
-                              "type": "number"
-                            },
-                            {
-                              "type": "boolean"
-                            },
-                            {
-                              "type": "string",
-                              "nullable": true,
-                              "enum": [
-                                null
-                              ]
-                            }
-                          ]
-                        },
-                        {
-                          "type": "object",
-                          "additionalProperties": {}
-                        },
-                        {
-                          "type": "array",
-                          "items": {}
-                        }
-                      ]
                     },
                     "description": {
                       "nullable": true,
@@ -40223,6 +40055,28 @@
                       "items": {
                         "type": "string"
                       }
+                    },
+                    "suggestedPrompts": {
+                      "default": [],
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "summaryTitle": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "prompt": {
+                            "type": "string",
+                            "minLength": 1
+                          }
+                        },
+                        "required": [
+                          "summaryTitle",
+                          "prompt"
+                        ],
+                        "additionalProperties": false
+                      }
                     }
                   },
                   "required": [
@@ -40231,14 +40085,10 @@
                     "authorId",
                     "scope",
                     "name",
-                    "isDemo",
                     "isDefault",
                     "considerContextUntrusted",
                     "agentType",
                     "systemPrompt",
-                    "userPrompt",
-                    "promptVersion",
-                    "promptHistory",
                     "description",
                     "icon",
                     "incomingEmailEnabled",
@@ -40255,7 +40105,8 @@
                     "teams",
                     "labels",
                     "knowledgeBaseIds",
-                    "connectorIds"
+                    "connectorIds",
+                    "suggestedPrompts"
                   ],
                   "additionalProperties": false
                 }
@@ -40500,9 +40351,6 @@
                   "name": {
                     "type": "string"
                   },
-                  "isDemo": {
-                    "type": "boolean"
-                  },
                   "isDefault": {
                     "type": "boolean"
                   },
@@ -40519,10 +40367,6 @@
                     ]
                   },
                   "systemPrompt": {
-                    "nullable": true,
-                    "type": "string"
-                  },
-                  "userPrompt": {
                     "nullable": true,
                     "type": "string"
                   },
@@ -40633,6 +40477,26 @@
                     "items": {
                       "type": "string"
                     }
+                  },
+                  "suggestedPrompts": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "summaryTitle": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "prompt": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": [
+                        "summaryTitle",
+                        "prompt"
+                      ]
+                    }
                   }
                 }
               }
@@ -40682,9 +40546,6 @@
                     "name": {
                       "type": "string"
                     },
-                    "isDemo": {
-                      "type": "boolean"
-                    },
                     "isDefault": {
                       "type": "boolean"
                     },
@@ -40703,49 +40564,6 @@
                     "systemPrompt": {
                       "nullable": true,
                       "type": "string"
-                    },
-                    "userPrompt": {
-                      "nullable": true,
-                      "type": "string"
-                    },
-                    "promptVersion": {
-                      "nullable": true,
-                      "type": "integer",
-                      "minimum": -2147483648,
-                      "maximum": 2147483647
-                    },
-                    "promptHistory": {
-                      "nullable": true,
-                      "anyOf": [
-                        {
-                          "anyOf": [
-                            {
-                              "type": "string"
-                            },
-                            {
-                              "type": "number"
-                            },
-                            {
-                              "type": "boolean"
-                            },
-                            {
-                              "type": "string",
-                              "nullable": true,
-                              "enum": [
-                                null
-                              ]
-                            }
-                          ]
-                        },
-                        {
-                          "type": "object",
-                          "additionalProperties": {}
-                        },
-                        {
-                          "type": "array",
-                          "items": {}
-                        }
-                      ]
                     },
                     "description": {
                       "nullable": true,
@@ -40980,6 +40798,28 @@
                       "items": {
                         "type": "string"
                       }
+                    },
+                    "suggestedPrompts": {
+                      "default": [],
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "summaryTitle": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "prompt": {
+                            "type": "string",
+                            "minLength": 1
+                          }
+                        },
+                        "required": [
+                          "summaryTitle",
+                          "prompt"
+                        ],
+                        "additionalProperties": false
+                      }
                     }
                   },
                   "required": [
@@ -40988,14 +40828,10 @@
                     "authorId",
                     "scope",
                     "name",
-                    "isDemo",
                     "isDefault",
                     "considerContextUntrusted",
                     "agentType",
                     "systemPrompt",
-                    "userPrompt",
-                    "promptVersion",
-                    "promptHistory",
                     "description",
                     "icon",
                     "incomingEmailEnabled",
@@ -41012,7 +40848,8 @@
                     "teams",
                     "labels",
                     "knowledgeBaseIds",
-                    "connectorIds"
+                    "connectorIds",
+                    "suggestedPrompts"
                   ],
                   "additionalProperties": false
                 }
@@ -41263,1266 +41100,6 @@
                   },
                   "required": [
                     "success"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_validation_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authentication_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authorization_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_not_found_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_conflict_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_internal_server_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/agents/{id}/versions": {
-      "get": {
-        "operationId": "getAgentVersions",
-        "tags": [
-          "Agents"
-        ],
-        "description": "Get version history for an internal agent. Only applicable to internal agents.",
-        "parameters": [
-          {
-            "schema": {
-              "type": "string",
-              "format": "uuid",
-              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
-            },
-            "in": "path",
-            "name": "id",
-            "required": true
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "current": {
-                      "type": "object",
-                      "properties": {
-                        "id": {
-                          "type": "string",
-                          "format": "uuid",
-                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                        },
-                        "organizationId": {
-                          "type": "string"
-                        },
-                        "authorId": {
-                          "nullable": true,
-                          "type": "string"
-                        },
-                        "scope": {
-                          "type": "string",
-                          "enum": [
-                            "personal",
-                            "team",
-                            "org"
-                          ]
-                        },
-                        "name": {
-                          "type": "string"
-                        },
-                        "isDemo": {
-                          "type": "boolean"
-                        },
-                        "isDefault": {
-                          "type": "boolean"
-                        },
-                        "considerContextUntrusted": {
-                          "type": "boolean"
-                        },
-                        "agentType": {
-                          "type": "string",
-                          "enum": [
-                            "profile",
-                            "mcp_gateway",
-                            "llm_proxy",
-                            "agent"
-                          ]
-                        },
-                        "systemPrompt": {
-                          "nullable": true,
-                          "type": "string"
-                        },
-                        "userPrompt": {
-                          "nullable": true,
-                          "type": "string"
-                        },
-                        "promptVersion": {
-                          "nullable": true,
-                          "type": "integer",
-                          "minimum": -2147483648,
-                          "maximum": 2147483647
-                        },
-                        "promptHistory": {
-                          "nullable": true,
-                          "anyOf": [
-                            {
-                              "anyOf": [
-                                {
-                                  "type": "string"
-                                },
-                                {
-                                  "type": "number"
-                                },
-                                {
-                                  "type": "boolean"
-                                },
-                                {
-                                  "type": "string",
-                                  "nullable": true,
-                                  "enum": [
-                                    null
-                                  ]
-                                }
-                              ]
-                            },
-                            {
-                              "type": "object",
-                              "additionalProperties": {}
-                            },
-                            {
-                              "type": "array",
-                              "items": {}
-                            }
-                          ]
-                        },
-                        "description": {
-                          "nullable": true,
-                          "type": "string"
-                        },
-                        "icon": {
-                          "nullable": true,
-                          "type": "string"
-                        },
-                        "incomingEmailEnabled": {
-                          "type": "boolean"
-                        },
-                        "incomingEmailSecurityMode": {
-                          "type": "string",
-                          "enum": [
-                            "private",
-                            "internal",
-                            "public"
-                          ]
-                        },
-                        "incomingEmailAllowedDomain": {
-                          "nullable": true,
-                          "type": "string"
-                        },
-                        "llmApiKeyId": {
-                          "nullable": true,
-                          "type": "string",
-                          "format": "uuid",
-                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                        },
-                        "llmModel": {
-                          "nullable": true,
-                          "type": "string"
-                        },
-                        "identityProviderId": {
-                          "nullable": true,
-                          "type": "string"
-                        },
-                        "builtInAgentConfig": {
-                          "nullable": true,
-                          "oneOf": [
-                            {
-                              "type": "object",
-                              "properties": {
-                                "name": {
-                                  "type": "string",
-                                  "enum": [
-                                    "policy-configuration-subagent"
-                                  ]
-                                },
-                                "autoConfigureOnToolAssignment": {
-                                  "type": "boolean"
-                                }
-                              },
-                              "required": [
-                                "name",
-                                "autoConfigureOnToolAssignment"
-                              ],
-                              "additionalProperties": false
-                            }
-                          ]
-                        },
-                        "builtIn": {
-                          "nullable": true,
-                          "type": "boolean"
-                        },
-                        "createdAt": {
-                          "type": "string",
-                          "format": "date-time"
-                        },
-                        "updatedAt": {
-                          "type": "string",
-                          "format": "date-time"
-                        },
-                        "tools": {
-                          "type": "array",
-                          "items": {
-                            "type": "object",
-                            "properties": {
-                              "id": {
-                                "type": "string",
-                                "format": "uuid",
-                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                              },
-                              "agentId": {
-                                "nullable": true,
-                                "type": "string",
-                                "format": "uuid",
-                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                              },
-                              "catalogId": {
-                                "nullable": true,
-                                "type": "string",
-                                "format": "uuid",
-                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                              },
-                              "mcpServerId": {
-                                "nullable": true,
-                                "type": "string",
-                                "format": "uuid",
-                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                              },
-                              "delegateToAgentId": {
-                                "nullable": true,
-                                "type": "string",
-                                "format": "uuid",
-                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                              },
-                              "name": {
-                                "type": "string"
-                              },
-                              "parameters": {
-                                "anyOf": [
-                                  {
-                                    "description": "\n    https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217\n\n    The parameters the functions accepts, described as a JSON Schema object. See the\n    [guide](https://platform.openai.com/docs/guides/function-calling) for examples,\n    and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for\n    documentation about the format.\n\n    Omitting parameters defines a function with an empty parameter list.\n  ",
-                                    "type": "object",
-                                    "additionalProperties": {}
-                                  }
-                                ]
-                              },
-                              "description": {
-                                "nullable": true,
-                                "type": "string"
-                              },
-                              "policiesAutoConfiguredAt": {
-                                "nullable": true,
-                                "type": "string",
-                                "format": "date-time"
-                              },
-                              "policiesAutoConfiguringStartedAt": {
-                                "nullable": true,
-                                "type": "string",
-                                "format": "date-time"
-                              },
-                              "policiesAutoConfiguredReasoning": {
-                                "nullable": true,
-                                "type": "string"
-                              },
-                              "policiesAutoConfiguredModel": {
-                                "nullable": true,
-                                "type": "string"
-                              },
-                              "createdAt": {
-                                "type": "string",
-                                "format": "date-time"
-                              },
-                              "updatedAt": {
-                                "type": "string",
-                                "format": "date-time"
-                              }
-                            },
-                            "required": [
-                              "id",
-                              "agentId",
-                              "catalogId",
-                              "mcpServerId",
-                              "delegateToAgentId",
-                              "name",
-                              "description",
-                              "policiesAutoConfiguredAt",
-                              "policiesAutoConfiguringStartedAt",
-                              "policiesAutoConfiguredReasoning",
-                              "policiesAutoConfiguredModel",
-                              "createdAt",
-                              "updatedAt"
-                            ],
-                            "additionalProperties": false
-                          }
-                        },
-                        "teams": {
-                          "type": "array",
-                          "items": {
-                            "type": "object",
-                            "properties": {
-                              "id": {
-                                "type": "string"
-                              },
-                              "name": {
-                                "type": "string"
-                              }
-                            },
-                            "required": [
-                              "id",
-                              "name"
-                            ],
-                            "additionalProperties": false
-                          }
-                        },
-                        "labels": {
-                          "type": "array",
-                          "items": {
-                            "type": "object",
-                            "properties": {
-                              "key": {
-                                "type": "string",
-                                "minLength": 1
-                              },
-                              "value": {
-                                "type": "string",
-                                "minLength": 1
-                              },
-                              "keyId": {
-                                "type": "string",
-                                "format": "uuid",
-                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
-                              },
-                              "valueId": {
-                                "type": "string",
-                                "format": "uuid",
-                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
-                              }
-                            },
-                            "required": [
-                              "key",
-                              "value"
-                            ],
-                            "additionalProperties": false
-                          }
-                        },
-                        "authorName": {
-                          "nullable": true,
-                          "type": "string"
-                        },
-                        "knowledgeBaseIds": {
-                          "type": "array",
-                          "items": {
-                            "type": "string"
-                          }
-                        },
-                        "connectorIds": {
-                          "type": "array",
-                          "items": {
-                            "type": "string"
-                          }
-                        }
-                      },
-                      "required": [
-                        "id",
-                        "organizationId",
-                        "authorId",
-                        "scope",
-                        "name",
-                        "isDemo",
-                        "isDefault",
-                        "considerContextUntrusted",
-                        "agentType",
-                        "systemPrompt",
-                        "userPrompt",
-                        "promptVersion",
-                        "promptHistory",
-                        "description",
-                        "icon",
-                        "incomingEmailEnabled",
-                        "incomingEmailSecurityMode",
-                        "incomingEmailAllowedDomain",
-                        "llmApiKeyId",
-                        "llmModel",
-                        "identityProviderId",
-                        "builtInAgentConfig",
-                        "builtIn",
-                        "createdAt",
-                        "updatedAt",
-                        "tools",
-                        "teams",
-                        "labels",
-                        "knowledgeBaseIds",
-                        "connectorIds"
-                      ],
-                      "additionalProperties": false
-                    },
-                    "history": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "version": {
-                            "type": "number"
-                          },
-                          "userPrompt": {
-                            "nullable": true,
-                            "type": "string"
-                          },
-                          "systemPrompt": {
-                            "nullable": true,
-                            "type": "string"
-                          },
-                          "createdAt": {
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "version",
-                          "userPrompt",
-                          "systemPrompt",
-                          "createdAt"
-                        ],
-                        "additionalProperties": false
-                      }
-                    }
-                  },
-                  "required": [
-                    "current",
-                    "history"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_validation_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authentication_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authorization_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_not_found_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_conflict_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_internal_server_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/agents/{id}/rollback": {
-      "post": {
-        "operationId": "rollbackAgent",
-        "tags": [
-          "Agents"
-        ],
-        "description": "Rollback an internal agent to a previous version. Only applicable to internal agents.",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "version": {
-                    "type": "integer",
-                    "exclusiveMinimum": true,
-                    "maximum": 9007199254740991,
-                    "description": "Version to rollback to"
-                  }
-                },
-                "required": [
-                  "version"
-                ]
-              }
-            }
-          },
-          "required": true
-        },
-        "parameters": [
-          {
-            "schema": {
-              "type": "string",
-              "format": "uuid",
-              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
-            },
-            "in": "path",
-            "name": "id",
-            "required": true
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "id": {
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                    },
-                    "organizationId": {
-                      "type": "string"
-                    },
-                    "authorId": {
-                      "nullable": true,
-                      "type": "string"
-                    },
-                    "scope": {
-                      "type": "string",
-                      "enum": [
-                        "personal",
-                        "team",
-                        "org"
-                      ]
-                    },
-                    "name": {
-                      "type": "string"
-                    },
-                    "isDemo": {
-                      "type": "boolean"
-                    },
-                    "isDefault": {
-                      "type": "boolean"
-                    },
-                    "considerContextUntrusted": {
-                      "type": "boolean"
-                    },
-                    "agentType": {
-                      "type": "string",
-                      "enum": [
-                        "profile",
-                        "mcp_gateway",
-                        "llm_proxy",
-                        "agent"
-                      ]
-                    },
-                    "systemPrompt": {
-                      "nullable": true,
-                      "type": "string"
-                    },
-                    "userPrompt": {
-                      "nullable": true,
-                      "type": "string"
-                    },
-                    "promptVersion": {
-                      "nullable": true,
-                      "type": "integer",
-                      "minimum": -2147483648,
-                      "maximum": 2147483647
-                    },
-                    "promptHistory": {
-                      "nullable": true,
-                      "anyOf": [
-                        {
-                          "anyOf": [
-                            {
-                              "type": "string"
-                            },
-                            {
-                              "type": "number"
-                            },
-                            {
-                              "type": "boolean"
-                            },
-                            {
-                              "type": "string",
-                              "nullable": true,
-                              "enum": [
-                                null
-                              ]
-                            }
-                          ]
-                        },
-                        {
-                          "type": "object",
-                          "additionalProperties": {}
-                        },
-                        {
-                          "type": "array",
-                          "items": {}
-                        }
-                      ]
-                    },
-                    "description": {
-                      "nullable": true,
-                      "type": "string"
-                    },
-                    "icon": {
-                      "nullable": true,
-                      "type": "string"
-                    },
-                    "incomingEmailEnabled": {
-                      "type": "boolean"
-                    },
-                    "incomingEmailSecurityMode": {
-                      "type": "string",
-                      "enum": [
-                        "private",
-                        "internal",
-                        "public"
-                      ]
-                    },
-                    "incomingEmailAllowedDomain": {
-                      "nullable": true,
-                      "type": "string"
-                    },
-                    "llmApiKeyId": {
-                      "nullable": true,
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                    },
-                    "llmModel": {
-                      "nullable": true,
-                      "type": "string"
-                    },
-                    "identityProviderId": {
-                      "nullable": true,
-                      "type": "string"
-                    },
-                    "builtInAgentConfig": {
-                      "nullable": true,
-                      "oneOf": [
-                        {
-                          "type": "object",
-                          "properties": {
-                            "name": {
-                              "type": "string",
-                              "enum": [
-                                "policy-configuration-subagent"
-                              ]
-                            },
-                            "autoConfigureOnToolAssignment": {
-                              "type": "boolean"
-                            }
-                          },
-                          "required": [
-                            "name",
-                            "autoConfigureOnToolAssignment"
-                          ],
-                          "additionalProperties": false
-                        }
-                      ]
-                    },
-                    "builtIn": {
-                      "nullable": true,
-                      "type": "boolean"
-                    },
-                    "createdAt": {
-                      "type": "string",
-                      "format": "date-time"
-                    },
-                    "updatedAt": {
-                      "type": "string",
-                      "format": "date-time"
-                    },
-                    "tools": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "id": {
-                            "type": "string",
-                            "format": "uuid",
-                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                          },
-                          "agentId": {
-                            "nullable": true,
-                            "type": "string",
-                            "format": "uuid",
-                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                          },
-                          "catalogId": {
-                            "nullable": true,
-                            "type": "string",
-                            "format": "uuid",
-                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                          },
-                          "mcpServerId": {
-                            "nullable": true,
-                            "type": "string",
-                            "format": "uuid",
-                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                          },
-                          "delegateToAgentId": {
-                            "nullable": true,
-                            "type": "string",
-                            "format": "uuid",
-                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                          },
-                          "name": {
-                            "type": "string"
-                          },
-                          "parameters": {
-                            "anyOf": [
-                              {
-                                "description": "\n    https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217\n\n    The parameters the functions accepts, described as a JSON Schema object. See the\n    [guide](https://platform.openai.com/docs/guides/function-calling) for examples,\n    and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for\n    documentation about the format.\n\n    Omitting parameters defines a function with an empty parameter list.\n  ",
-                                "type": "object",
-                                "additionalProperties": {}
-                              }
-                            ]
-                          },
-                          "description": {
-                            "nullable": true,
-                            "type": "string"
-                          },
-                          "policiesAutoConfiguredAt": {
-                            "nullable": true,
-                            "type": "string",
-                            "format": "date-time"
-                          },
-                          "policiesAutoConfiguringStartedAt": {
-                            "nullable": true,
-                            "type": "string",
-                            "format": "date-time"
-                          },
-                          "policiesAutoConfiguredReasoning": {
-                            "nullable": true,
-                            "type": "string"
-                          },
-                          "policiesAutoConfiguredModel": {
-                            "nullable": true,
-                            "type": "string"
-                          },
-                          "createdAt": {
-                            "type": "string",
-                            "format": "date-time"
-                          },
-                          "updatedAt": {
-                            "type": "string",
-                            "format": "date-time"
-                          }
-                        },
-                        "required": [
-                          "id",
-                          "agentId",
-                          "catalogId",
-                          "mcpServerId",
-                          "delegateToAgentId",
-                          "name",
-                          "description",
-                          "policiesAutoConfiguredAt",
-                          "policiesAutoConfiguringStartedAt",
-                          "policiesAutoConfiguredReasoning",
-                          "policiesAutoConfiguredModel",
-                          "createdAt",
-                          "updatedAt"
-                        ],
-                        "additionalProperties": false
-                      }
-                    },
-                    "teams": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "id": {
-                            "type": "string"
-                          },
-                          "name": {
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "id",
-                          "name"
-                        ],
-                        "additionalProperties": false
-                      }
-                    },
-                    "labels": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "key": {
-                            "type": "string",
-                            "minLength": 1
-                          },
-                          "value": {
-                            "type": "string",
-                            "minLength": 1
-                          },
-                          "keyId": {
-                            "type": "string",
-                            "format": "uuid",
-                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
-                          },
-                          "valueId": {
-                            "type": "string",
-                            "format": "uuid",
-                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
-                          }
-                        },
-                        "required": [
-                          "key",
-                          "value"
-                        ],
-                        "additionalProperties": false
-                      }
-                    },
-                    "authorName": {
-                      "nullable": true,
-                      "type": "string"
-                    },
-                    "knowledgeBaseIds": {
-                      "type": "array",
-                      "items": {
-                        "type": "string"
-                      }
-                    },
-                    "connectorIds": {
-                      "type": "array",
-                      "items": {
-                        "type": "string"
-                      }
-                    }
-                  },
-                  "required": [
-                    "id",
-                    "organizationId",
-                    "authorId",
-                    "scope",
-                    "name",
-                    "isDemo",
-                    "isDefault",
-                    "considerContextUntrusted",
-                    "agentType",
-                    "systemPrompt",
-                    "userPrompt",
-                    "promptVersion",
-                    "promptHistory",
-                    "description",
-                    "icon",
-                    "incomingEmailEnabled",
-                    "incomingEmailSecurityMode",
-                    "incomingEmailAllowedDomain",
-                    "llmApiKeyId",
-                    "llmModel",
-                    "identityProviderId",
-                    "builtInAgentConfig",
-                    "builtIn",
-                    "createdAt",
-                    "updatedAt",
-                    "tools",
-                    "teams",
-                    "labels",
-                    "knowledgeBaseIds",
-                    "connectorIds"
                   ],
                   "additionalProperties": false
                 }
@@ -62690,10 +61267,6 @@
                             "nullable": true,
                             "type": "string"
                           },
-                          "userPrompt": {
-                            "nullable": true,
-                            "type": "string"
-                          },
                           "agentType": {
                             "type": "string",
                             "enum": [
@@ -62712,7 +61285,6 @@
                           "id",
                           "name",
                           "systemPrompt",
-                          "userPrompt",
                           "agentType",
                           "llmApiKeyId"
                         ],
@@ -63146,10 +61718,6 @@
                           "nullable": true,
                           "type": "string"
                         },
-                        "userPrompt": {
-                          "nullable": true,
-                          "type": "string"
-                        },
                         "agentType": {
                           "type": "string",
                           "enum": [
@@ -63168,7 +61736,6 @@
                         "id",
                         "name",
                         "systemPrompt",
-                        "userPrompt",
                         "agentType",
                         "llmApiKeyId"
                       ],
@@ -63561,10 +62128,6 @@
                           "nullable": true,
                           "type": "string"
                         },
-                        "userPrompt": {
-                          "nullable": true,
-                          "type": "string"
-                        },
                         "agentType": {
                           "type": "string",
                           "enum": [
@@ -63583,7 +62146,6 @@
                         "id",
                         "name",
                         "systemPrompt",
-                        "userPrompt",
                         "agentType",
                         "llmApiKeyId"
                       ],
@@ -64034,10 +62596,6 @@
                           "nullable": true,
                           "type": "string"
                         },
-                        "userPrompt": {
-                          "nullable": true,
-                          "type": "string"
-                        },
                         "agentType": {
                           "type": "string",
                           "enum": [
@@ -64056,7 +62614,6 @@
                         "id",
                         "name",
                         "systemPrompt",
-                        "userPrompt",
                         "agentType",
                         "llmApiKeyId"
                       ],
@@ -64979,10 +63536,6 @@
                           "nullable": true,
                           "type": "string"
                         },
-                        "userPrompt": {
-                          "nullable": true,
-                          "type": "string"
-                        },
                         "agentType": {
                           "type": "string",
                           "enum": [
@@ -65001,7 +63554,6 @@
                         "id",
                         "name",
                         "systemPrompt",
-                        "userPrompt",
                         "agentType",
                         "llmApiKeyId"
                       ],
@@ -65422,10 +63974,6 @@
                           "nullable": true,
                           "type": "string"
                         },
-                        "userPrompt": {
-                          "nullable": true,
-                          "type": "string"
-                        },
                         "agentType": {
                           "type": "string",
                           "enum": [
@@ -65444,7 +63992,6 @@
                         "id",
                         "name",
                         "systemPrompt",
-                        "userPrompt",
                         "agentType",
                         "llmApiKeyId"
                       ],
@@ -67454,10 +66001,6 @@
                           "nullable": true,
                           "type": "string"
                         },
-                        "userPrompt": {
-                          "nullable": true,
-                          "type": "string"
-                        },
                         "agentType": {
                           "type": "string",
                           "enum": [
@@ -67476,7 +66019,6 @@
                         "id",
                         "name",
                         "systemPrompt",
-                        "userPrompt",
                         "agentType",
                         "llmApiKeyId"
                       ],
@@ -67893,10 +66435,6 @@
                           "nullable": true,
                           "type": "string"
                         },
-                        "userPrompt": {
-                          "nullable": true,
-                          "type": "string"
-                        },
                         "agentType": {
                           "type": "string",
                           "enum": [
@@ -67915,7 +66453,6 @@
                         "id",
                         "name",
                         "systemPrompt",
-                        "userPrompt",
                         "agentType",
                         "llmApiKeyId"
                       ],

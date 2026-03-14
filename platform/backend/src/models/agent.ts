@@ -28,8 +28,6 @@ import {
 import logger from "@/logging";
 import type {
   Agent,
-  AgentHistoryEntry,
-  AgentVersionsResponse,
   InsertAgent,
   PaginationQuery,
   SortingQuery,
@@ -39,6 +37,7 @@ import type { AgentScope, AgentScopeFilter, AgentType } from "@/types/agent";
 import AgentConnectorAssignmentModel from "./agent-connector-assignment";
 import AgentKnowledgeBaseModel from "./agent-knowledge-base";
 import AgentLabelModel from "./agent-label";
+import AgentSuggestedPromptModel from "./agent-suggested-prompt";
 import AgentTeamModel from "./agent-team";
 import MemberModel from "./member";
 import ToolModel from "./tool";
@@ -85,6 +84,21 @@ class AgentModel {
   }
 
   /**
+   * Populate suggestedPrompts on agents via batch lookup.
+   */
+  private static async populateSuggestedPrompts(
+    agents: Agent[],
+  ): Promise<void> {
+    const agentIds = agents.map((a) => a.id);
+    if (agentIds.length === 0) return;
+
+    const promptsMap = await AgentSuggestedPromptModel.getForAgents(agentIds);
+    for (const agent of agents) {
+      agent.suggestedPrompts = promptsMap.get(agent.id) ?? [];
+    }
+  }
+
+  /**
    * Populate connectorIds on agents via batch lookup from the junction table.
    */
   private static async populateConnectorIds(agents: Agent[]): Promise<void> {
@@ -99,7 +113,14 @@ class AgentModel {
   }
 
   static async create(
-    { teams, labels, knowledgeBaseIds, connectorIds, ...agent }: InsertAgent,
+    {
+      teams,
+      labels,
+      knowledgeBaseIds,
+      connectorIds,
+      suggestedPrompts,
+      ...agent
+    }: InsertAgent,
     authorId?: string,
   ): Promise<Agent> {
     // Auto-assign organizationId if not provided
@@ -143,6 +164,14 @@ class AgentModel {
       );
     }
 
+    // Sync suggested prompts if provided
+    if (suggestedPrompts && suggestedPrompts.length > 0) {
+      await AgentSuggestedPromptModel.syncForAgent(
+        createdAgent.id,
+        suggestedPrompts,
+      );
+    }
+
     // For internal agents, create a delegation tool so other agents can delegate to this one
     if (createdAgent.agentType === "agent") {
       await ToolModel.findOrCreateDelegationTool(createdAgent.id);
@@ -170,6 +199,7 @@ class AgentModel {
       labels: await AgentLabelModel.getLabelsForAgent(createdAgent.id),
       knowledgeBaseIds: knowledgeBaseIds ?? [],
       connectorIds: connectorIds ?? [],
+      suggestedPrompts: suggestedPrompts ?? [],
     };
   }
 
@@ -259,6 +289,7 @@ class AgentModel {
           labels: [],
           knowledgeBaseIds: [],
           connectorIds: [],
+          suggestedPrompts: [],
         });
       }
 
@@ -287,6 +318,7 @@ class AgentModel {
       AgentModel.populateAuthorNames(agents),
       AgentModel.populateKnowledgeBaseIds(agents),
       AgentModel.populateConnectorIds(agents),
+      AgentModel.populateSuggestedPrompts(agents),
     ]);
 
     return agents;
@@ -357,6 +389,7 @@ class AgentModel {
       labels: labelsMap.get(agent.id) || [],
       knowledgeBaseIds: kbMap.get(agent.id) || [],
       connectorIds: connectorMap.get(agent.id) || [],
+      suggestedPrompts: [],
     }));
   }
 
@@ -431,6 +464,7 @@ class AgentModel {
       labels: labelsMap.get(agent.id) || [],
       knowledgeBaseIds: kbMap.get(agent.id) || [],
       connectorIds: connectorMap.get(agent.id) || [],
+      suggestedPrompts: [],
     }));
   }
 
@@ -768,6 +802,7 @@ class AgentModel {
           labels: [],
           knowledgeBaseIds: [],
           connectorIds: [],
+          suggestedPrompts: [],
         });
       }
 
@@ -796,6 +831,7 @@ class AgentModel {
       AgentModel.populateAuthorNames(agents),
       AgentModel.populateKnowledgeBaseIds(agents),
       AgentModel.populateConnectorIds(agents),
+      AgentModel.populateSuggestedPrompts(agents),
     ]);
 
     return createPaginatedResult(agents, Number(totalResult), pagination);
@@ -963,9 +999,13 @@ class AgentModel {
       labels,
       knowledgeBaseIds,
       connectorIds,
+      suggestedPrompts: [],
     };
 
-    await AgentModel.populateAuthorNames([result]);
+    await Promise.all([
+      AgentModel.populateAuthorNames([result]),
+      AgentModel.populateSuggestedPrompts([result]),
+    ]);
 
     return result;
   }
@@ -1034,6 +1074,7 @@ class AgentModel {
       connectorIds: await AgentConnectorAssignmentModel.getConnectorIds(
         agent.id,
       ),
+      suggestedPrompts: [],
     };
   }
 
@@ -1079,6 +1120,7 @@ class AgentModel {
         connectorIds: await AgentConnectorAssignmentModel.getConnectorIds(
           agent.id,
         ),
+        suggestedPrompts: [],
       };
     }
 
@@ -1111,13 +1153,19 @@ class AgentModel {
       labels,
       knowledgeBaseIds,
       connectorIds,
+      suggestedPrompts,
       ...agent
     }: Partial<UpdateAgent>,
   ): Promise<Agent | null> {
     let updatedAgent:
       | Omit<
           Agent,
-          "tools" | "teams" | "labels" | "knowledgeBaseIds" | "connectorIds"
+          | "tools"
+          | "teams"
+          | "labels"
+          | "knowledgeBaseIds"
+          | "connectorIds"
+          | "suggestedPrompts"
         >
       | undefined;
 
@@ -1191,12 +1239,18 @@ class AgentModel {
       await AgentConnectorAssignmentModel.syncForAgent(id, connectorIds);
     }
 
+    // Sync suggested prompts if provided
+    if (suggestedPrompts !== undefined) {
+      await AgentSuggestedPromptModel.syncForAgent(id, suggestedPrompts);
+    }
+
     const [
       toolRows,
       currentTeams,
       currentLabels,
       currentKbIds,
       currentConnectorIds,
+      currentSuggestedPrompts,
     ] = await Promise.all([
       db
         .select({ tool: schema.toolsTable })
@@ -1205,12 +1259,15 @@ class AgentModel {
           schema.toolsTable,
           eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
         )
-        .where(eq(schema.agentToolsTable.agentId, updatedAgent.id)),
+        .where(eq(schema.agentToolsTable.agentId, updatedAgent?.id)),
       AgentTeamModel.getTeamDetailsForAgent(id),
       AgentLabelModel.getLabelsForAgent(id),
       AgentKnowledgeBaseModel.getKnowledgeBaseIds(id),
       AgentConnectorAssignmentModel.getConnectorIds(id),
+      AgentSuggestedPromptModel.getForAgents([id]),
     ]);
+
+    if (!updatedAgent) return null;
 
     return {
       ...updatedAgent,
@@ -1219,128 +1276,7 @@ class AgentModel {
       labels: currentLabels,
       knowledgeBaseIds: currentKbIds,
       connectorIds: currentConnectorIds,
-    };
-  }
-
-  /**
-   * Update an internal agent with versioning - creates a new version by pushing current to history.
-   * Only applies to internal agents (agentType='agent').
-   * The agent ID stays the same (no FK migration needed).
-   */
-  static async updateWithVersion(
-    id: string,
-    input: Partial<UpdateAgent>,
-  ): Promise<Agent | null> {
-    const agent = await AgentModel.findById(id);
-    if (!agent || agent.agentType !== "agent") {
-      return null;
-    }
-
-    // Create history entry from current state
-    const historyEntry: AgentHistoryEntry = {
-      version: agent.promptVersion || 1,
-      userPrompt: agent.userPrompt || null,
-      systemPrompt: agent.systemPrompt || null,
-      createdAt: agent.updatedAt.toISOString(),
-    };
-
-    // Update in-place with new version
-    const [updated] = await db
-      .update(schema.agentsTable)
-      .set({
-        name: input.name ?? agent.name,
-        systemPrompt: input.systemPrompt ?? agent.systemPrompt,
-        userPrompt: input.userPrompt ?? agent.userPrompt,
-        promptVersion: (agent.promptVersion || 1) + 1,
-        promptHistory: sql`${schema.agentsTable.promptHistory} || ${JSON.stringify([historyEntry])}::jsonb`,
-      })
-      .where(eq(schema.agentsTable.id, id))
-      .returning();
-
-    if (!updated) {
-      return null;
-    }
-
-    // Sync tool names if name changed
-    if (input.name && input.name !== agent.name) {
-      await ToolModel.syncDelegationToolNames(id, input.name);
-
-      // Invalidate tool cache for all parent agents so they pick up the new tool name
-      const parentAgentIds = await ToolModel.getParentAgentIds(id);
-      for (const parentAgentId of parentAgentIds) {
-        clearChatMcpClient(parentAgentId);
-      }
-    }
-
-    return AgentModel.findById(id);
-  }
-
-  /**
-   * Rollback an internal agent to a specific version number.
-   * Copies content from history entry to current fields and increments version.
-   * Only applies to internal agents (agentType='agent').
-   */
-  static async rollback(
-    id: string,
-    targetVersion: number,
-  ): Promise<Agent | null> {
-    const agent = await AgentModel.findById(id);
-    if (!agent || agent.agentType !== "agent") {
-      return null;
-    }
-
-    // Find the target version in history
-    const targetEntry = agent.promptHistory?.find(
-      (h) => h.version === targetVersion,
-    );
-    if (!targetEntry) {
-      return null;
-    }
-
-    // Create history entry from current state before rollback
-    const historyEntry: AgentHistoryEntry = {
-      version: agent.promptVersion || 1,
-      userPrompt: agent.userPrompt || null,
-      systemPrompt: agent.systemPrompt || null,
-      createdAt: agent.updatedAt.toISOString(),
-    };
-
-    // Rollback by copying target content to current and incrementing version
-    const [updated] = await db
-      .update(schema.agentsTable)
-      .set({
-        userPrompt: targetEntry.userPrompt,
-        systemPrompt: targetEntry.systemPrompt,
-        promptVersion: (agent.promptVersion || 1) + 1,
-        promptHistory: sql`${schema.agentsTable.promptHistory} || ${JSON.stringify([historyEntry])}::jsonb`,
-      })
-      .where(eq(schema.agentsTable.id, id))
-      .returning();
-
-    if (!updated) {
-      return null;
-    }
-
-    return AgentModel.findById(id);
-  }
-
-  /**
-   * Get all versions of an internal agent (current + history).
-   * Only applies to internal agents (agentType='agent').
-   */
-  static async getVersions(
-    agentId: string,
-    userId?: string,
-    isAgentAdmin?: boolean,
-  ): Promise<AgentVersionsResponse | null> {
-    const agent = await AgentModel.findById(agentId, userId, isAgentAdmin);
-    if (!agent || agent.agentType !== "agent") {
-      return null;
-    }
-
-    return {
-      current: agent,
-      history: agent.promptHistory || [],
+      suggestedPrompts: currentSuggestedPrompts.get(id) ?? [],
     };
   }
 
@@ -1391,6 +1327,7 @@ class AgentModel {
         row.id,
       ),
       connectorIds: await AgentConnectorAssignmentModel.getConnectorIds(row.id),
+      suggestedPrompts: [],
     };
   }
 

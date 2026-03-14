@@ -106,7 +106,6 @@ class ConversationShareModel {
           id: schema.agentsTable.id,
           name: schema.agentsTable.name,
           systemPrompt: schema.agentsTable.systemPrompt,
-          userPrompt: schema.agentsTable.userPrompt,
           agentType: schema.agentsTable.agentType,
           llmApiKeyId: schema.agentsTable.llmApiKeyId,
         },

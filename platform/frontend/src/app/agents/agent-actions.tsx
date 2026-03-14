@@ -1,5 +1,5 @@
 import { E2eTestId } from "@shared";
-import { Grip, MessageSquare, Pencil, Plug, Trash2 } from "lucide-react";
+import { MessageSquare, Pencil, Plug, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
@@ -102,26 +102,6 @@ export function AgentActions({
         >
           <Link href={`/chat/new?agent_id=${agent.id}`}>
             <MessageSquare className="h-4 w-4" />
-          </Link>
-        </Button>
-      )}
-      {isBuiltIn ? (
-        <DisabledBuiltInButton
-          aria-label="Agent Builder"
-          tooltip="Built-in agents cannot use Agent Builder"
-        >
-          <Grip className="h-4 w-4" />
-        </DisabledBuiltInButton>
-      ) : (
-        <Button
-          variant="outline"
-          size="icon-sm"
-          aria-label="Agent Builder"
-          asChild
-          onClick={(e) => e.stopPropagation()}
-        >
-          <Link href={`/agents/builder?agentId=${agent.id}`}>
-            <Grip className="h-4 w-4" />
           </Link>
         </Button>
       )}

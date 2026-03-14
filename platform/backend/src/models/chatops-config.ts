@@ -1,7 +1,7 @@
 import { SLACK_DEFAULT_CONNECTION_MODE } from "@/agents/chatops/constants";
 import logger from "@/logging";
 import { secretManager } from "@/secrets-manager";
-import type { SecretValue } from "@/types";
+import type { ChatOpsConnectionMode, SecretValue } from "@/types";
 import SecretModel from "./secret";
 
 /**
@@ -29,7 +29,7 @@ export interface SlackConfig {
   botToken: string;
   signingSecret: string;
   appId: string;
-  connectionMode?: "webhook" | "socket";
+  connectionMode?: ChatOpsConnectionMode;
   appLevelToken?: string;
 }
 

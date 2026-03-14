@@ -146,45 +146,6 @@ Provide a brief summary (2-3 sentences) of the key information discovered. Focus
 }
 
 /**
- * Seeds default Chat Assistant internal agent
- */
-async function seedChatAssistantAgent(): Promise<void> {
-  const org = await OrganizationModel.getOrCreateDefaultOrganization();
-
-  // Check if Chat Assistant already exists
-  const existing = await db
-    .select({ id: schema.agentsTable.id })
-    .from(schema.agentsTable)
-    .where(
-      and(
-        eq(schema.agentsTable.organizationId, org.id),
-        eq(schema.agentsTable.name, "Chat Assistant"),
-      ),
-    )
-    .limit(1);
-
-  if (existing.length > 0) {
-    logger.info("Chat Assistant internal agent already exists, skipping");
-    return;
-  }
-
-  const systemPrompt = `You are a helpful AI assistant. You can help users with various tasks using the tools available to you.`;
-
-  const [_inserted] = await db
-    .insert(schema.agentsTable)
-    .values({
-      organizationId: org.id,
-      name: "Chat Assistant",
-      agentType: "agent",
-      scope: "org",
-      systemPrompt,
-    })
-    .returning({ id: schema.agentsTable.id });
-
-  logger.info("Seeded Chat Assistant internal agent");
-}
-
-/**
  * Seeds Archestra MCP catalog and tools.
  * ToolModel.seedArchestraTools handles catalog creation with onConflictDoNothing().
  * Tools are NOT automatically assigned to agents - users must assign them manually.
@@ -619,7 +580,6 @@ export async function seedRequiredStartingData(): Promise<void> {
   // Create default agents before seeding internal agents
   await AgentModel.getMCPGatewayOrCreateDefault();
   await AgentModel.getLLMProxyOrCreateDefault();
-  await seedChatAssistantAgent();
   await seedPolicyConfigAgent();
   await seedArchestraCatalogAndTools();
   await seedPlaywrightCatalog();

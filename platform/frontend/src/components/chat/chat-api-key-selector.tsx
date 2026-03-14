@@ -108,10 +108,7 @@ export function ChatApiKeySelector({
 
   // Group keys by provider for display
   const keysByProvider = useMemo(() => {
-    const grouped: Record<SupportedProvider, ChatApiKey[]> = {} as Record<
-      SupportedProvider,
-      ChatApiKey[]
-    >;
+    const grouped = {} as Record<SupportedProvider, ChatApiKey[]>;
 
     for (const key of availableKeys) {
       if (!grouped[key.provider]) {

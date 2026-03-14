@@ -8,7 +8,7 @@ type MockAgentRaw = {
   authorId: string | null;
   scope: "personal" | "team" | "org";
   agentType: "profile" | "mcp_gateway" | "llm_proxy" | "agent";
-  isDemo: boolean;
+
   isDefault: boolean;
   considerContextUntrusted: boolean;
 };
@@ -50,7 +50,7 @@ export function generateMockAgents(
         scope: "personal",
         agentType: params.agentType,
         teamIds: [],
-        isDemo: false,
+
         isDefault: false,
         considerContextUntrusted: false,
       });
@@ -68,7 +68,7 @@ export function generateMockAgents(
         scope: "team",
         agentType: params.agentType,
         teamIds: [config.teamId],
-        isDemo: false,
+
         isDefault: false,
         considerContextUntrusted: false,
       });
@@ -85,7 +85,6 @@ export function generateMockAgents(
       scope: "org",
       agentType: params.agentType,
       teamIds: [],
-      isDemo: false,
       isDefault: false,
       considerContextUntrusted: false,
     });

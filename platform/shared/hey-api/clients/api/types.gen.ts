@@ -11717,16 +11717,10 @@ export type GetAgentsResponses = {
             authorId: string | null;
             scope: 'personal' | 'team' | 'org';
             name: string;
-            isDemo: boolean;
             isDefault: boolean;
             considerContextUntrusted: boolean;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
             systemPrompt: string | null;
-            userPrompt: string | null;
-            promptVersion: number | null;
-            promptHistory: string | number | boolean | null | {
-                [key: string]: unknown;
-            } | Array<unknown> | null;
             description: string | null;
             icon: string | null;
             incomingEmailEnabled: boolean;
@@ -11785,6 +11779,10 @@ export type GetAgentsResponses = {
             authorName?: string | null;
             knowledgeBaseIds: Array<string>;
             connectorIds: Array<string>;
+            suggestedPrompts: Array<{
+                summaryTitle: string;
+                prompt: string;
+            }>;
         }>;
         pagination: {
             currentPage: number;
@@ -11804,12 +11802,10 @@ export type CreateAgentData = {
         organizationId?: string;
         scope: 'personal' | 'team' | 'org';
         name: string;
-        isDemo?: boolean;
         isDefault?: boolean;
         considerContextUntrusted?: boolean;
         agentType?: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
         systemPrompt?: string | null;
-        userPrompt?: string | null;
         description?: string | null;
         icon?: string | null;
         incomingEmailEnabled?: boolean;
@@ -11831,6 +11827,10 @@ export type CreateAgentData = {
         }>;
         knowledgeBaseIds?: Array<string>;
         connectorIds?: Array<string>;
+        suggestedPrompts?: Array<{
+            summaryTitle: string;
+            prompt: string;
+        }>;
     };
     path?: never;
     query?: never;
@@ -11906,16 +11906,10 @@ export type CreateAgentResponses = {
         authorId: string | null;
         scope: 'personal' | 'team' | 'org';
         name: string;
-        isDemo: boolean;
         isDefault: boolean;
         considerContextUntrusted: boolean;
         agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
         systemPrompt: string | null;
-        userPrompt: string | null;
-        promptVersion: number | null;
-        promptHistory: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown> | null;
         description: string | null;
         icon: string | null;
         incomingEmailEnabled: boolean;
@@ -11974,6 +11968,10 @@ export type CreateAgentResponses = {
         authorName?: string | null;
         knowledgeBaseIds: Array<string>;
         connectorIds: Array<string>;
+        suggestedPrompts: Array<{
+            summaryTitle: string;
+            prompt: string;
+        }>;
     };
 };
 
@@ -12072,16 +12070,10 @@ export type GetAllAgentsResponses = {
         authorId: string | null;
         scope: 'personal' | 'team' | 'org';
         name: string;
-        isDemo: boolean;
         isDefault: boolean;
         considerContextUntrusted: boolean;
         agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
         systemPrompt: string | null;
-        userPrompt: string | null;
-        promptVersion: number | null;
-        promptHistory: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown> | null;
         description: string | null;
         icon: string | null;
         incomingEmailEnabled: boolean;
@@ -12140,6 +12132,10 @@ export type GetAllAgentsResponses = {
         authorName?: string | null;
         knowledgeBaseIds: Array<string>;
         connectorIds: Array<string>;
+        suggestedPrompts: Array<{
+            summaryTitle: string;
+            prompt: string;
+        }>;
     }>;
 };
 
@@ -12221,16 +12217,10 @@ export type GetDefaultMcpGatewayResponses = {
         authorId: string | null;
         scope: 'personal' | 'team' | 'org';
         name: string;
-        isDemo: boolean;
         isDefault: boolean;
         considerContextUntrusted: boolean;
         agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
         systemPrompt: string | null;
-        userPrompt: string | null;
-        promptVersion: number | null;
-        promptHistory: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown> | null;
         description: string | null;
         icon: string | null;
         incomingEmailEnabled: boolean;
@@ -12289,6 +12279,10 @@ export type GetDefaultMcpGatewayResponses = {
         authorName?: string | null;
         knowledgeBaseIds: Array<string>;
         connectorIds: Array<string>;
+        suggestedPrompts: Array<{
+            summaryTitle: string;
+            prompt: string;
+        }>;
     };
 };
 
@@ -12370,16 +12364,10 @@ export type GetDefaultLlmProxyResponses = {
         authorId: string | null;
         scope: 'personal' | 'team' | 'org';
         name: string;
-        isDemo: boolean;
         isDefault: boolean;
         considerContextUntrusted: boolean;
         agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
         systemPrompt: string | null;
-        userPrompt: string | null;
-        promptVersion: number | null;
-        promptHistory: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown> | null;
         description: string | null;
         icon: string | null;
         incomingEmailEnabled: boolean;
@@ -12438,6 +12426,10 @@ export type GetDefaultLlmProxyResponses = {
         authorName?: string | null;
         knowledgeBaseIds: Array<string>;
         connectorIds: Array<string>;
+        suggestedPrompts: Array<{
+            summaryTitle: string;
+            prompt: string;
+        }>;
     };
 };
 
@@ -12600,16 +12592,10 @@ export type GetAgentResponses = {
         authorId: string | null;
         scope: 'personal' | 'team' | 'org';
         name: string;
-        isDemo: boolean;
         isDefault: boolean;
         considerContextUntrusted: boolean;
         agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
         systemPrompt: string | null;
-        userPrompt: string | null;
-        promptVersion: number | null;
-        promptHistory: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown> | null;
         description: string | null;
         icon: string | null;
         incomingEmailEnabled: boolean;
@@ -12668,6 +12654,10 @@ export type GetAgentResponses = {
         authorName?: string | null;
         knowledgeBaseIds: Array<string>;
         connectorIds: Array<string>;
+        suggestedPrompts: Array<{
+            summaryTitle: string;
+            prompt: string;
+        }>;
     };
 };
 
@@ -12678,12 +12668,10 @@ export type UpdateAgentData = {
         organizationId?: string;
         scope?: 'personal' | 'team' | 'org';
         name?: string;
-        isDemo?: boolean;
         isDefault?: boolean;
         considerContextUntrusted?: boolean;
         agentType?: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
         systemPrompt?: string | null;
-        userPrompt?: string | null;
         description?: string | null;
         icon?: string | null;
         incomingEmailEnabled?: boolean;
@@ -12705,6 +12693,10 @@ export type UpdateAgentData = {
         }>;
         knowledgeBaseIds?: Array<string>;
         connectorIds?: Array<string>;
+        suggestedPrompts?: Array<{
+            summaryTitle: string;
+            prompt: string;
+        }>;
     };
     path: {
         id: string;
@@ -12782,16 +12774,10 @@ export type UpdateAgentResponses = {
         authorId: string | null;
         scope: 'personal' | 'team' | 'org';
         name: string;
-        isDemo: boolean;
         isDefault: boolean;
         considerContextUntrusted: boolean;
         agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
         systemPrompt: string | null;
-        userPrompt: string | null;
-        promptVersion: number | null;
-        promptHistory: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown> | null;
         description: string | null;
         icon: string | null;
         incomingEmailEnabled: boolean;
@@ -12850,325 +12836,14 @@ export type UpdateAgentResponses = {
         authorName?: string | null;
         knowledgeBaseIds: Array<string>;
         connectorIds: Array<string>;
+        suggestedPrompts: Array<{
+            summaryTitle: string;
+            prompt: string;
+        }>;
     };
 };
 
 export type UpdateAgentResponse = UpdateAgentResponses[keyof UpdateAgentResponses];
-
-export type GetAgentVersionsData = {
-    body?: never;
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/agents/{id}/versions';
-};
-
-export type GetAgentVersionsErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type GetAgentVersionsError = GetAgentVersionsErrors[keyof GetAgentVersionsErrors];
-
-export type GetAgentVersionsResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        current: {
-            id: string;
-            organizationId: string;
-            authorId: string | null;
-            scope: 'personal' | 'team' | 'org';
-            name: string;
-            isDemo: boolean;
-            isDefault: boolean;
-            considerContextUntrusted: boolean;
-            agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
-            systemPrompt: string | null;
-            userPrompt: string | null;
-            promptVersion: number | null;
-            promptHistory: string | number | boolean | null | {
-                [key: string]: unknown;
-            } | Array<unknown> | null;
-            description: string | null;
-            icon: string | null;
-            incomingEmailEnabled: boolean;
-            incomingEmailSecurityMode: 'private' | 'internal' | 'public';
-            incomingEmailAllowedDomain: string | null;
-            llmApiKeyId: string | null;
-            llmModel: string | null;
-            identityProviderId: string | null;
-            builtInAgentConfig: {
-                name: 'policy-configuration-subagent';
-                autoConfigureOnToolAssignment: boolean;
-            } | null;
-            builtIn: boolean | null;
-            createdAt: string;
-            updatedAt: string;
-            tools: Array<{
-                id: string;
-                agentId: string | null;
-                catalogId: string | null;
-                mcpServerId: string | null;
-                delegateToAgentId: string | null;
-                name: string;
-                /**
-                 *
-                 * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
-                 *
-                 * The parameters the functions accepts, described as a JSON Schema object. See the
-                 * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
-                 * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
-                 * documentation about the format.
-                 *
-                 * Omitting parameters defines a function with an empty parameter list.
-                 *
-                 */
-                parameters?: {
-                    [key: string]: unknown;
-                };
-                description: string | null;
-                policiesAutoConfiguredAt: string | null;
-                policiesAutoConfiguringStartedAt: string | null;
-                policiesAutoConfiguredReasoning: string | null;
-                policiesAutoConfiguredModel: string | null;
-                createdAt: string;
-                updatedAt: string;
-            }>;
-            teams: Array<{
-                id: string;
-                name: string;
-            }>;
-            labels: Array<{
-                key: string;
-                value: string;
-                keyId?: string;
-                valueId?: string;
-            }>;
-            authorName?: string | null;
-            knowledgeBaseIds: Array<string>;
-            connectorIds: Array<string>;
-        };
-        history: Array<{
-            version: number;
-            userPrompt: string | null;
-            systemPrompt: string | null;
-            createdAt: string;
-        }>;
-    };
-};
-
-export type GetAgentVersionsResponse = GetAgentVersionsResponses[keyof GetAgentVersionsResponses];
-
-export type RollbackAgentData = {
-    body: {
-        /**
-         * Version to rollback to
-         */
-        version: number;
-    };
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/agents/{id}/rollback';
-};
-
-export type RollbackAgentErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type RollbackAgentError = RollbackAgentErrors[keyof RollbackAgentErrors];
-
-export type RollbackAgentResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        organizationId: string;
-        authorId: string | null;
-        scope: 'personal' | 'team' | 'org';
-        name: string;
-        isDemo: boolean;
-        isDefault: boolean;
-        considerContextUntrusted: boolean;
-        agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
-        systemPrompt: string | null;
-        userPrompt: string | null;
-        promptVersion: number | null;
-        promptHistory: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown> | null;
-        description: string | null;
-        icon: string | null;
-        incomingEmailEnabled: boolean;
-        incomingEmailSecurityMode: 'private' | 'internal' | 'public';
-        incomingEmailAllowedDomain: string | null;
-        llmApiKeyId: string | null;
-        llmModel: string | null;
-        identityProviderId: string | null;
-        builtInAgentConfig: {
-            name: 'policy-configuration-subagent';
-            autoConfigureOnToolAssignment: boolean;
-        } | null;
-        builtIn: boolean | null;
-        createdAt: string;
-        updatedAt: string;
-        tools: Array<{
-            id: string;
-            agentId: string | null;
-            catalogId: string | null;
-            mcpServerId: string | null;
-            delegateToAgentId: string | null;
-            name: string;
-            /**
-             *
-             * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
-             *
-             * The parameters the functions accepts, described as a JSON Schema object. See the
-             * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
-             * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
-             * documentation about the format.
-             *
-             * Omitting parameters defines a function with an empty parameter list.
-             *
-             */
-            parameters?: {
-                [key: string]: unknown;
-            };
-            description: string | null;
-            policiesAutoConfiguredAt: string | null;
-            policiesAutoConfiguringStartedAt: string | null;
-            policiesAutoConfiguredReasoning: string | null;
-            policiesAutoConfiguredModel: string | null;
-            createdAt: string;
-            updatedAt: string;
-        }>;
-        teams: Array<{
-            id: string;
-            name: string;
-        }>;
-        labels: Array<{
-            key: string;
-            value: string;
-            keyId?: string;
-            valueId?: string;
-        }>;
-        authorName?: string | null;
-        knowledgeBaseIds: Array<string>;
-        connectorIds: Array<string>;
-    };
-};
-
-export type RollbackAgentResponse = RollbackAgentResponses[keyof RollbackAgentResponses];
 
 export type GetLabelKeysData = {
     body?: never;
@@ -18794,7 +18469,6 @@ export type GetChatConversationsResponses = {
             id: string;
             name: string;
             systemPrompt: string | null;
-            userPrompt: string | null;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
             llmApiKeyId: string | null;
         } | null;
@@ -18901,7 +18575,6 @@ export type CreateChatConversationResponses = {
             id: string;
             name: string;
             systemPrompt: string | null;
-            userPrompt: string | null;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
             llmApiKeyId: string | null;
         } | null;
@@ -19083,7 +18756,6 @@ export type GetChatConversationResponses = {
             id: string;
             name: string;
             systemPrompt: string | null;
-            userPrompt: string | null;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
             llmApiKeyId: string | null;
         } | null;
@@ -19194,7 +18866,6 @@ export type UpdateChatConversationResponses = {
             id: string;
             name: string;
             systemPrompt: string | null;
-            userPrompt: string | null;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
             llmApiKeyId: string | null;
         } | null;
@@ -19385,7 +19056,6 @@ export type GenerateChatConversationTitleResponses = {
             id: string;
             name: string;
             systemPrompt: string | null;
-            userPrompt: string | null;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
             llmApiKeyId: string | null;
         } | null;
@@ -19492,7 +19162,6 @@ export type UpdateChatMessageResponses = {
             id: string;
             name: string;
             systemPrompt: string | null;
-            userPrompt: string | null;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
             llmApiKeyId: string | null;
         } | null;
@@ -20085,7 +19754,6 @@ export type GetSharedConversationResponses = {
             id: string;
             name: string;
             systemPrompt: string | null;
-            userPrompt: string | null;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
             llmApiKeyId: string | null;
         } | null;
@@ -20191,7 +19859,6 @@ export type ForkSharedConversationResponses = {
             id: string;
             name: string;
             systemPrompt: string | null;
-            userPrompt: string | null;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
             llmApiKeyId: string | null;
         } | null;

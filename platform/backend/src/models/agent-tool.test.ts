@@ -1433,10 +1433,7 @@ describe("AgentToolModel.triggerAutoConfigureIfEnabled (private)", () => {
     makeTeam,
   }) => {
     const spy = vi
-      .spyOn(
-        policyConfigurationService,
-        "configurePoliciesForToolWithTimeout",
-      )
+      .spyOn(policyConfigurationService, "configurePoliciesForToolWithTimeout")
       .mockResolvedValue({ success: true });
 
     const org = await makeOrganization();
@@ -1489,10 +1486,7 @@ describe("AgentToolModel.triggerAutoConfigureIfEnabled (private)", () => {
     makeTeam,
   }) => {
     const spy = vi
-      .spyOn(
-        policyConfigurationService,
-        "configurePoliciesForToolWithTimeout",
-      )
+      .spyOn(policyConfigurationService, "configurePoliciesForToolWithTimeout")
       .mockResolvedValue({ success: true });
 
     const org = await makeOrganization();
@@ -1541,10 +1535,7 @@ describe("AgentToolModel.triggerAutoConfigureIfEnabled (private)", () => {
     makeTool,
   }) => {
     const spy = vi
-      .spyOn(
-        policyConfigurationService,
-        "configurePoliciesForToolWithTimeout",
-      )
+      .spyOn(policyConfigurationService, "configurePoliciesForToolWithTimeout")
       .mockResolvedValue({ success: true });
 
     const tool = await makeTool({ name: "trigger-no-agent" });

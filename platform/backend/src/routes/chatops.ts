@@ -29,6 +29,8 @@ import {
 } from "@/models";
 import {
   ApiError,
+  ChatOpsConnectionModeSchema,
+  ChatOpsStatusSchema,
   constructResponseSchema,
   createPaginatedResponseSchema,
   createSortingQuerySchema,
@@ -931,7 +933,7 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
             provider: ChatOpsProviderTypeSchema.optional(),
             workspaceId: z.string().optional(),
             search: z.string().optional(),
-            status: z.enum(["configured", "unassigned"]).optional(),
+            status: ChatOpsStatusSchema.optional(),
           })
           .merge(PaginationQuerySchema)
           .merge(
@@ -1282,7 +1284,7 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
           botToken: z.string().max(512).optional(),
           signingSecret: z.string().max(256).optional(),
           appId: z.string().max(256).optional(),
-          connectionMode: z.enum(["webhook", "socket"]).optional(),
+          connectionMode: ChatOpsConnectionModeSchema.optional(),
           appLevelToken: z.string().max(512).optional(),
         }),
         response: constructResponseSchema(z.object({ success: z.boolean() })),

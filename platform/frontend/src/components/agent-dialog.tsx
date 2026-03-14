@@ -21,6 +21,7 @@ import {
   Key,
   Loader2,
   Lock,
+  Plus,
   User,
   Users,
   X,
@@ -112,6 +113,7 @@ import config from "@/lib/config";
 import { useFeature } from "@/lib/config.query";
 import { useConnectors } from "@/lib/connector.query";
 import { useKnowledgeBases } from "@/lib/knowledge-base.query";
+import { useAppName } from "@/lib/use-app-name";
 import { cn } from "@/lib/utils";
 
 const { useIdentityProviders } = config.enterpriseFeatures.core
@@ -559,8 +561,6 @@ interface AgentDialogProps {
   agent?: Agent | null;
   /** Agent type: 'agent' for internal agents with prompts, 'profile' for external profiles */
   agentType?: "profile" | "mcp_gateway" | "llm_proxy" | "agent";
-  /** Callback when viewing version history (internal agents only) */
-  onViewVersionHistory?: (agent: Agent) => void;
   /** Callback when a new agent/profile is created (not called for updates) */
   onCreated?: (created: { id: string; name: string }) => void;
 }
@@ -572,6 +572,7 @@ export function AgentDialog({
   agentType = "profile",
   onCreated,
 }: AgentDialogProps) {
+  const appName = useAppName();
   const { data: allInternalAgents = [] } = useInternalAgents();
   const createAgent = useCreateProfile();
   const updateAgent = useUpdateProfile();
@@ -614,8 +615,10 @@ export function AgentDialog({
   const [name, setName] = useState("");
   const [icon, setIcon] = useState<string | null>(null);
   const [description, setDescription] = useState("");
-  const [userPrompt, setUserPrompt] = useState("");
   const [systemPrompt, setSystemPrompt] = useState("");
+  const [suggestedPrompts, setSuggestedPrompts] = useState<
+    Array<{ summaryTitle: string; prompt: string }>
+  >([]);
   const [selectedDelegationTargetIds, setSelectedDelegationTargetIds] =
     useState<string[]>([]);
   const [assignedTeamIds, setAssignedTeamIds] = useState<string[]>([]);
@@ -664,58 +667,27 @@ export function AgentDialog({
       const agentData = freshAgent || agent;
 
       if (agentData) {
-        // Edit mode
         setName(agentData.name);
-        setIcon(
-          (agentData as unknown as Record<string, unknown>).icon as
-            | string
-            | null,
-        );
+        setIcon(agentData.icon);
         setDescription(agentData.description || "");
-        setUserPrompt(agentData.userPrompt || "");
         setSystemPrompt(agentData.systemPrompt || "");
-        setLlmApiKeyId(agentData.llmApiKeyId ?? null);
-        setLlmModel(agentData.llmModel ?? null);
+        setSuggestedPrompts(agentData.suggestedPrompts);
+        setLlmApiKeyId(agentData.llmApiKeyId);
+        setLlmModel(agentData.llmModel);
         // Reset delegation targets - will be populated by the next useEffect when data loads
         setSelectedDelegationTargetIds([]);
-        // Teams and labels
-        const agentTeams = agentData.teams as unknown as
-          | Array<{ id: string; name: string }>
-          | undefined;
-        setAssignedTeamIds(agentTeams?.map((t) => t.id) || []);
-        setLabels(agentData.labels || []);
-        setConsiderContextUntrusted(
-          agentData.considerContextUntrusted || false,
-        );
-        // Identity provider ID (for MCP Gateway JWKS auth)
-        setIdentityProviderId(agentData.identityProviderId ?? null);
-        // Knowledge graph
-        setKnowledgeBaseIds(
-          ((agentData as Record<string, unknown>).knowledgeBaseIds as
-            | string[]
-            | undefined) ?? [],
-        );
-        setConnectorIds(
-          ((agentData as Record<string, unknown>).connectorIds as
-            | string[]
-            | undefined) ?? [],
-        );
-        // Scope
-        setScope(
-          ((agentData as Record<string, unknown>).scope as
-            | "personal"
-            | "team"
-            | "org") ?? "personal",
-        );
-        // Email invocation settings
-        setIncomingEmailEnabled(agentData.incomingEmailEnabled || false);
-        setIncomingEmailSecurityMode(
-          agentData.incomingEmailSecurityMode || "private",
-        );
+        setAssignedTeamIds(agentData.teams.map((t) => t.id));
+        setLabels(agentData.labels);
+        setConsiderContextUntrusted(agentData.considerContextUntrusted);
+        setIdentityProviderId(agentData.identityProviderId);
+        setKnowledgeBaseIds(agentData.knowledgeBaseIds);
+        setConnectorIds(agentData.connectorIds);
+        setScope(agentData.scope);
+        setIncomingEmailEnabled(agentData.incomingEmailEnabled);
+        setIncomingEmailSecurityMode(agentData.incomingEmailSecurityMode);
         setIncomingEmailAllowedDomain(
           agentData.incomingEmailAllowedDomain || "",
         );
-        // Built-in agent config
         setAutoConfigureOnToolAssignment(
           agentData.builtInAgentConfig?.autoConfigureOnToolAssignment ?? false,
         );
@@ -724,8 +696,8 @@ export function AgentDialog({
         setName("");
         setIcon(null);
         setDescription("");
-        setUserPrompt("");
         setSystemPrompt("");
+        setSuggestedPrompts([]);
         setLlmApiKeyId(null);
         setLlmModel(null);
         setSelectedDelegationTargetIds([]);
@@ -841,9 +813,7 @@ export function AgentDialog({
       if (!key) return;
 
       // Auto-select model: always prefer bestModelId, fall back to first model when switching providers
-      const bestModelId = (key as Record<string, unknown>).bestModelId as
-        | string
-        | null;
+      const bestModelId = key.bestModelId;
       if (bestModelId) {
         setLlmModel(bestModelId);
       } else if (currentLlmProvider !== key.provider) {
@@ -864,7 +834,6 @@ export function AgentDialog({
 
   const handleSave = useCallback(async () => {
     const trimmedName = name.trim();
-    const trimmedUserPrompt = userPrompt.trim();
     const trimmedSystemPrompt = systemPrompt.trim();
 
     if (!trimmedName) {
@@ -950,10 +919,10 @@ export function AgentDialog({
             agentType: agentType,
             ...(isInternalAgent && {
               description: description.trim() || null,
-              userPrompt: trimmedUserPrompt || null,
               systemPrompt: trimmedSystemPrompt || null,
               llmApiKeyId: llmApiKeyId || null,
               llmModel: llmModel || null,
+              suggestedPrompts,
             }),
             ...(agentType === "mcp_gateway" && {
               identityProviderId: identityProviderId || null,
@@ -981,10 +950,10 @@ export function AgentDialog({
           agentType: agentType,
           ...(isInternalAgent && {
             description: description.trim() || null,
-            userPrompt: trimmedUserPrompt || null,
             systemPrompt: trimmedSystemPrompt || null,
             llmApiKeyId: llmApiKeyId || null,
             llmModel: llmModel || null,
+            suggestedPrompts,
           }),
           ...(agentType === "mcp_gateway" && {
             identityProviderId: identityProviderId || null,
@@ -1043,8 +1012,8 @@ export function AgentDialog({
     name,
     icon,
     description,
-    userPrompt,
     systemPrompt,
+    suggestedPrompts,
     assignedTeamIds,
     labels,
     considerContextUntrusted,
@@ -1084,12 +1053,31 @@ export function AgentDialog({
         onInteractOutside={(e) => e.preventDefault()}
       >
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            {isBuiltIn
-              ? `Edit ${agent?.name ?? "Built-In Agent"}`
-              : getDialogTitle(agentType, !!agent)}
-            {!isBuiltIn && <AgentBadge type={scope} className="font-normal" />}
-          </DialogTitle>
+          <div className="flex items-center justify-between pr-6">
+            <DialogTitle className="flex items-center gap-2">
+              {isBuiltIn
+                ? `Edit ${agent?.name ?? "Built-In Agent"}`
+                : getDialogTitle(agentType, !!agent)}
+              {!isBuiltIn && (
+                <AgentBadge type={scope} className="font-normal" />
+              )}
+            </DialogTitle>
+            {agent?.createdAt &&
+              (() => {
+                const createdBy = agent.authorName ?? appName;
+                return (
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground font-normal whitespace-nowrap">
+                    <div className="h-5 w-5 rounded-full bg-green-500 flex items-center justify-center text-[10px] font-medium text-white shrink-0">
+                      {createdBy.charAt(0).toUpperCase()}
+                    </div>
+                    <span>
+                      Created by {createdBy} on{" "}
+                      {new Date(agent.createdAt).toLocaleDateString()}
+                    </span>
+                  </div>
+                );
+              })()}
+          </div>
           {isBuiltIn && agent?.description && (
             <p className="text-sm text-muted-foreground">
               {agent.description}.{" "}
@@ -1186,6 +1174,87 @@ export function AgentDialog({
                   onChange={setSystemPrompt}
                   readOnly={isBuiltIn}
                 />
+              </div>
+            )}
+
+            {/* Suggested Prompts (Agent only, not built-in) */}
+            {isInternalAgent && !isBuiltIn && (
+              <div className="rounded-lg border bg-card p-4 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-sm font-semibold">Suggested Prompts</h3>
+                    <p className="text-xs text-muted-foreground">
+                      Shown to users when starting a new chat
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      setSuggestedPrompts((prev) => [
+                        ...prev,
+                        { summaryTitle: "", prompt: "" },
+                      ])
+                    }
+                  >
+                    <Plus className="h-4 w-4 mr-1" />
+                    Add
+                  </Button>
+                </div>
+                {suggestedPrompts.map((sp, index) => (
+                  <div
+                    key={`sp-${sp.summaryTitle || index}`}
+                    className="space-y-2 rounded-md border p-3 relative"
+                  >
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="absolute top-2 right-2 h-6 w-6"
+                      onClick={() =>
+                        setSuggestedPrompts((prev) =>
+                          prev.filter((_, i) => i !== index),
+                        )
+                      }
+                    >
+                      <X className="h-3 w-3" />
+                    </Button>
+                    <div className="space-y-1 pr-8">
+                      <Label className="text-xs">Button Label</Label>
+                      <Input
+                        value={sp.summaryTitle}
+                        onChange={(e) =>
+                          setSuggestedPrompts((prev) =>
+                            prev.map((p, i) =>
+                              i === index
+                                ? { ...p, summaryTitle: e.target.value }
+                                : p,
+                            ),
+                          )
+                        }
+                        placeholder="e.g. Summarize recent changes"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Prompt</Label>
+                      <Textarea
+                        value={sp.prompt}
+                        onChange={(e) =>
+                          setSuggestedPrompts((prev) =>
+                            prev.map((p, i) =>
+                              i === index
+                                ? { ...p, prompt: e.target.value }
+                                : p,
+                            ),
+                          )
+                        }
+                        placeholder="The full prompt sent when clicked"
+                        className="min-h-[60px]"
+                      />
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
 
@@ -1403,14 +1472,7 @@ export function AgentDialog({
                     }}
                     isAdmin={!!isAdmin}
                     isTeamAdmin={!!isTeamAdmin}
-                    initialScope={
-                      agent
-                        ? (((agent as Record<string, unknown>).scope as
-                            | "personal"
-                            | "team"
-                            | "org") ?? undefined)
-                        : undefined
-                    }
+                    initialScope={agent?.scope}
                     agentType={agentType}
                     teams={teams}
                     assignedTeamIds={assignedTeamIds}

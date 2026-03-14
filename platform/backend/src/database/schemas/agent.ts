@@ -3,7 +3,6 @@ import { type SQL, sql } from "drizzle-orm";
 import {
   boolean,
   index,
-  integer,
   jsonb,
   pgEnum,
   pgTable,
@@ -11,11 +10,7 @@ import {
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
-import type {
-  AgentHistoryEntry,
-  AgentType,
-  BuiltInAgentConfig,
-} from "@/types/agent";
+import type { AgentType, BuiltInAgentConfig } from "@/types/agent";
 
 export const agentScopeEnum = pgEnum("agent_scope", [
   "personal",
@@ -43,7 +38,6 @@ import usersTable from "./user";
  *
  * Internal agents (agent_type = 'agent'):
  *   - Chat agents with system/user prompts
- *   - Support version history and rollback
  *   - Can delegate to other internal agents via delegation tools
  *   - Can be triggered by ChatOps providers
  */
@@ -57,7 +51,6 @@ const agentsTable = pgTable(
     }),
     scope: agentScopeEnum("scope").notNull().default("personal"),
     name: text("name").notNull(),
-    isDemo: boolean("is_demo").notNull().default(false),
     isDefault: boolean("is_default").notNull().default(false),
     considerContextUntrusted: boolean("consider_context_untrusted")
       .notNull()
@@ -68,11 +61,6 @@ const agentsTable = pgTable(
       .default("mcp_gateway"),
     // Prompt fields (only used when agentType = 'agent')
     systemPrompt: text("system_prompt"),
-    userPrompt: text("user_prompt"),
-    promptVersion: integer("prompt_version").default(1),
-    promptHistory: jsonb("prompt_history")
-      .$type<AgentHistoryEntry[]>()
-      .default([]),
     // Description (only used when agentType = 'agent')
     /** Human-readable description of the agent */
     description: text("description"),

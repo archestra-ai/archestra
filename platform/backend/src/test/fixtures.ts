@@ -228,7 +228,6 @@ async function makeInternalAgent(
   return await makeAgent({
     agentType: "agent",
     systemPrompt: "You are a test agent",
-    userPrompt: "{{message}}",
     ...overrides,
   });
 }

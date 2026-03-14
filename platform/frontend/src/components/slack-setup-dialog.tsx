@@ -1,6 +1,11 @@
 "use client";
 
-import { DocsPage, getDocsUrl, SLACK_REQUIRED_BOT_SCOPES } from "@shared";
+import {
+  type archestraApiTypes,
+  DocsPage,
+  getDocsUrl,
+  SLACK_REQUIRED_BOT_SCOPES,
+} from "@shared";
 import { ExternalLink } from "lucide-react";
 import * as React from "react";
 import { useState } from "react";
@@ -12,8 +17,13 @@ import { Label } from "@/components/ui/label";
 import { useChatOpsStatus } from "@/lib/chatops.query";
 import { useUpdateSlackChatOpsConfig } from "@/lib/chatops-config.query";
 import { usePublicBaseUrl } from "@/lib/config.query";
+import { useAppName } from "@/lib/use-app-name";
 
-type ConnectionMode = "webhook" | "socket";
+type ConnectionMode = NonNullable<
+  NonNullable<
+    archestraApiTypes.UpdateSlackChatOpsConfigData["body"]
+  >["connectionMode"]
+>;
 
 interface SlackSetupDialogProps {
   open: boolean;
@@ -26,12 +36,13 @@ export function SlackSetupDialog({
   onOpenChange,
   connectionMode,
 }: SlackSetupDialogProps) {
+  const configuredAppName = useAppName();
   const publicBaseUrl = usePublicBaseUrl();
 
   const mutation = useUpdateSlackChatOpsConfig();
   const { data: chatOpsProviders } = useChatOpsStatus();
   const slack = chatOpsProviders?.find((p) => p.id === "slack");
-  const creds = slack?.credentials as Record<string, string> | undefined;
+  const creds = slack?.credentials;
 
   const [saving, setSaving] = useState(false);
 
@@ -168,8 +179,8 @@ export function SlackSetupDialog({
       title="Setup Slack"
       description={
         <>
-          Follow these steps to connect your Archestra agents to Slack. Find out
-          more in our{" "}
+          Follow these steps to connect your {configuredAppName} agents to
+          Slack. Find out more in our{" "}
           <a
             href={getDocsUrl(DocsPage.PlatformSlack)}
             target="_blank"
@@ -188,6 +199,7 @@ export function SlackSetupDialog({
 }
 
 function StepAppearanceAndConnect({ stepNumber }: { stepNumber: number }) {
+  const configuredAppName = useAppName();
   return (
     <div
       className="grid flex-1 gap-6"
@@ -195,7 +207,7 @@ function StepAppearanceAndConnect({ stepNumber }: { stepNumber: number }) {
     >
       <StepCard
         stepNumber={stepNumber}
-        title="Customize App Appearance and connect Archestra"
+        title={`Customize App Appearance and connect ${configuredAppName}`}
       >
         <ol className="space-y-3">
           <li className="flex gap-3 text-sm leading-relaxed">
@@ -218,7 +230,7 @@ function StepAppearanceAndConnect({ stepNumber }: { stepNumber: number }) {
                 download="archestra-logo.png"
                 className="text-primary underline hover:no-underline"
               >
-                download Archestra logo
+                download {configuredAppName} logo
               </a>
               )
             </span>
@@ -423,7 +435,7 @@ function buildSlackManifest(params: {
   const manifest: any = {
     display_information: {
       name: appName,
-      description: "Archestra AI Agent",
+      description: `${appName} AI Agent`,
     },
     features: {
       app_home: {
@@ -435,7 +447,7 @@ function buildSlackManifest(params: {
         always_online: true,
       },
       assistant_view: {
-        assistant_description: "Your AI-powered Archestra assistant",
+        assistant_description: `Your AI-powered ${appName} assistant`,
       },
       slash_commands: isSocket
         ? [
@@ -528,7 +540,8 @@ function StepManifestWebhook({
   onAppIdChange: (v: string) => void;
   onSigningSecretChange: (v: string) => void;
 }) {
-  const [appName, setAppName] = useState("Archestra");
+  const configuredAppName = useAppName();
+  const [appName, setAppName] = useState(configuredAppName);
 
   const manifest = buildSlackManifest({
     appName,
@@ -550,7 +563,7 @@ function StepManifestWebhook({
             id="manifest-app-name"
             value={appName}
             onChange={(e) => setAppName(e.target.value)}
-            placeholder="Archestra"
+            placeholder={configuredAppName}
           />
           <p className="text-xs text-muted-foreground">
             The name will be injected into the manifest automatically.
@@ -645,7 +658,8 @@ function StepManifestSocket({
   appId: string;
   onAppIdChange: (v: string) => void;
 }) {
-  const [appName, setAppName] = useState("Archestra");
+  const configuredAppName = useAppName();
+  const [appName, setAppName] = useState(configuredAppName);
 
   const manifest = buildSlackManifest({
     appName,
@@ -667,7 +681,7 @@ function StepManifestSocket({
             id="manifest-app-name-socket"
             value={appName}
             onChange={(e) => setAppName(e.target.value)}
-            placeholder="Archestra"
+            placeholder={configuredAppName}
           />
           <p className="text-xs text-muted-foreground">
             The name will be injected into the manifest automatically.

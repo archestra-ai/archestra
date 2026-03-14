@@ -94,10 +94,6 @@ export const tools: Tool[] = [
           type: "string",
           description: "System prompt for the agent (optional)",
         },
-        userPrompt: {
-          type: "string",
-          description: "User prompt for the agent (optional)",
-        },
         description: {
           type: "string",
           description:
@@ -118,6 +114,27 @@ export const tools: Tool[] = [
           items: { type: "string" },
           description:
             "Array of agent IDs to assign as sub-agents (delegations) to the agent. Use list_agents or get_agent to look up IDs by name. When the user mentions sub-agents by name, always look up their IDs and pass them here.",
+        },
+        suggestedPrompts: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              summaryTitle: {
+                type: "string",
+                description:
+                  "Short title shown on the suggestion button in chat",
+              },
+              prompt: {
+                type: "string",
+                description:
+                  "The full prompt text sent when the suggestion is clicked",
+              },
+            },
+            required: ["summaryTitle", "prompt"],
+          },
+          description:
+            "Array of suggested prompts shown to users when starting a new chat with this agent (optional). Each prompt has a summaryTitle (button label) and prompt (full text).",
         },
       },
       required: ["name"],
@@ -321,10 +338,6 @@ export const tools: Tool[] = [
           type: "string",
           description: "New system prompt for the agent",
         },
-        userPrompt: {
-          type: "string",
-          description: "New user prompt for the agent",
-        },
         icon: {
           type: "string",
           description: "An emoji character to use as the agent icon",
@@ -366,6 +379,27 @@ export const tools: Tool[] = [
           items: { type: "string" },
           description:
             "Array of agent IDs to assign as sub-agents (additive). Use list_agents or get_agent to look up IDs by name.",
+        },
+        suggestedPrompts: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              summaryTitle: {
+                type: "string",
+                description:
+                  "Short title shown on the suggestion button in chat",
+              },
+              prompt: {
+                type: "string",
+                description:
+                  "The full prompt text sent when the suggestion is clicked",
+              },
+            },
+            required: ["summaryTitle", "prompt"],
+          },
+          description:
+            "Array of suggested prompts shown in chat (replaces existing). Each has summaryTitle (button label) and prompt (full text).",
         },
       },
       required: ["id"],
@@ -437,13 +471,17 @@ export async function handleTool(
 
       if (targetAgentType === "agent") {
         const systemPrompt = args?.systemPrompt as string | undefined;
-        const userPrompt = args?.userPrompt as string | undefined;
         const description = args?.description as string | undefined;
         const icon = args?.icon as string | undefined;
+        const suggestedPrompts = args?.suggestedPrompts as
+          | Array<{ summaryTitle: string; prompt: string }>
+          | undefined;
         if (systemPrompt) createParams.systemPrompt = systemPrompt;
-        if (userPrompt) createParams.userPrompt = userPrompt;
         if (description) createParams.description = description;
         if (icon) createParams.icon = icon;
+        if (suggestedPrompts && suggestedPrompts.length > 0) {
+          createParams.suggestedPrompts = suggestedPrompts;
+        }
       }
 
       const created = await AgentModel.create(
@@ -683,8 +721,6 @@ export async function handleTool(
         updateData.description = args.description;
       if (args?.systemPrompt !== undefined)
         updateData.systemPrompt = args.systemPrompt;
-      if (args?.userPrompt !== undefined)
-        updateData.userPrompt = args.userPrompt;
       if (args?.icon !== undefined) updateData.icon = args.icon;
       if (args?.scope !== undefined) updateData.scope = args.scope;
       if (args?.teams !== undefined) updateData.teams = args.teams;
@@ -693,6 +729,13 @@ export async function handleTool(
         updateData.labels = deduplicateLabels(
           args.labels as Array<{ key: string; value: string }>,
         );
+      }
+
+      if (args?.suggestedPrompts !== undefined) {
+        updateData.suggestedPrompts = args.suggestedPrompts as Array<{
+          summaryTitle: string;
+          prompt: string;
+        }>;
       }
 
       // Update agent

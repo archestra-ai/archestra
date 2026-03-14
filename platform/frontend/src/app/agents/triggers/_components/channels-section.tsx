@@ -1,5 +1,6 @@
 "use client";
 
+import type { archestraApiTypes } from "@shared";
 import {
   Bot,
   CheckIcon,
@@ -51,6 +52,7 @@ import {
   useRefreshChatOpsChannelDiscovery,
   useUpdateChatOpsBinding,
 } from "@/lib/chatops.query";
+import { useAppName } from "@/lib/use-app-name";
 import { cn } from "@/lib/utils";
 import { ChannelsEmptyState } from "./channels-empty-state";
 import type { ProviderConfig } from "./types";
@@ -65,14 +67,18 @@ interface Agent {
 const VIRTUAL_DM_ID = "__virtual-dm__";
 const DEFAULT_PAGE_SIZE = 20;
 
-type StatusFilter = "all" | "configured" | "unassigned";
-type SortByColumn = "channelName" | "createdAt";
+type BindingsQuery = NonNullable<
+  archestraApiTypes.ListChatOpsBindingsData["query"]
+>;
+type StatusFilter = "all" | NonNullable<BindingsQuery["status"]>;
+type SortByColumn = NonNullable<BindingsQuery["sortBy"]>;
 
 export function ChannelsSection({
   providerConfig,
 }: {
   providerConfig: ProviderConfig;
 }) {
+  const appName = useAppName();
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
@@ -340,7 +346,7 @@ export function ChannelsSection({
           New channels appear after adding the bot to a channel and the first
           interaction with it.
           <br />
-          Then, assign a default agent to each channel you want Archestra bot to
+          Then, assign a default agent to each channel you want {appName} bot to
           reply in. Use the Assign button below or{" "}
           <code className="bg-muted px-1 py-0.5 rounded text-xs">
             {providerConfig.slashCommand}

@@ -66,7 +66,7 @@ export default function SlackPage() {
 
   const ngrokDomain = configData?.features.ngrokDomain;
   const slack = chatOpsProviders?.find((p) => p.id === "slack");
-  const slackCreds = slack?.credentials as Record<string, string> | undefined;
+  const slackCreds = slack?.credentials;
 
   const resetMutation = useUpdateSlackChatOpsConfig();
 

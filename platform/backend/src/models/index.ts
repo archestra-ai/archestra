@@ -3,6 +3,7 @@ export { default as AgentModel } from "./agent";
 export { default as AgentConnectorAssignmentModel } from "./agent-connector-assignment";
 export { default as AgentKnowledgeBaseModel } from "./agent-knowledge-base";
 export { default as AgentLabelModel } from "./agent-label";
+export { default as AgentSuggestedPromptModel } from "./agent-suggested-prompt";
 export { default as AgentTeamModel } from "./agent-team";
 export { default as AgentToolModel } from "./agent-tool";
 export { default as ApiKeyModelModel } from "./api-key-model";

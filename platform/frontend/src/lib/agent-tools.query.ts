@@ -17,7 +17,6 @@ const {
   getAgentDelegations,
   syncAgentDelegations,
   deleteAgentDelegation,
-  getAllDelegationConnections,
 } = archestraApiSdk;
 
 type GetAllProfileToolsQueryParams = NonNullable<
@@ -363,28 +362,6 @@ export const agentDelegationsQueryKeys = {
   connections: ["agent-delegations", "connections"] as const,
   byAgent: (agentId: string) => ["agent-delegations", agentId] as const,
 };
-
-/**
- * Get all delegation connections for the organization.
- * Used for canvas visualization.
- */
-export function useAllDelegationConnections() {
-  return useQuery({
-    queryKey: agentDelegationsQueryKeys.connections,
-    queryFn: async () => {
-      const response = await getAllDelegationConnections();
-      if (response.error) {
-        handleApiError(response.error);
-      }
-      return (
-        response.data ?? {
-          connections: [],
-          agents: [],
-        }
-      );
-    },
-  });
-}
 
 /**
  * Get all delegation targets for an internal agent.

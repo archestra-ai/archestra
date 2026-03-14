@@ -12,6 +12,7 @@ import {
   UserModel,
 } from "@/models";
 import type {
+  ChatOpsConnectionMode,
   ChatOpsEventHandler,
   ChatOpsProvider,
   ChatOpsProviderType,
@@ -21,7 +22,7 @@ import type {
   DiscoveredChannel,
   IncomingChatMessage,
   ThreadHistoryParams,
-} from "@/types/chatops";
+} from "@/types";
 import {
   autoProvisionUser,
   buildWelcomeMessage,
@@ -72,7 +73,7 @@ class SlackProvider implements ChatOpsProvider {
     return this.config.connectionMode === "socket";
   }
 
-  getConnectionMode(): "webhook" | "socket" {
+  getConnectionMode(): ChatOpsConnectionMode {
     return this.config.connectionMode === "webhook"
       ? "webhook"
       : SLACK_DEFAULT_CONNECTION_MODE;

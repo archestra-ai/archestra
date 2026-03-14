@@ -42,18 +42,13 @@ test.describe("Agents API CRUD", () => {
 
   test("should create a new agent", async ({ request, createAgent }) => {
     const uniqueSuffix = crypto.randomUUID().slice(0, 8);
-    const newAgent = {
-      name: `Test Agent for Integration ${uniqueSuffix}`,
-      isDemo: false,
-      teams: [],
-    };
+    const agentName = `Test Agent for Integration ${uniqueSuffix}`;
 
-    const response = await createAgent(request, newAgent.name, "personal");
+    const response = await createAgent(request, agentName, "personal");
     const agent = await response.json();
 
     expect(agent).toHaveProperty("id");
-    expect(agent.name).toBe(newAgent.name);
-    expect(agent.isDemo).toBe(newAgent.isDemo);
+    expect(agent.name).toBe(agentName);
     expect(Array.isArray(agent.tools)).toBe(true);
     expect(Array.isArray(agent.teams)).toBe(true);
   });
@@ -96,25 +91,21 @@ test.describe("Agents API CRUD", () => {
     );
     const createdAgent = await createResponse.json();
 
-    const updateData = {
-      name: `Updated Test Agent ${uniqueSuffix}`,
-      isDemo: true,
-    };
+    const updatedName = `Updated Test Agent ${uniqueSuffix}`;
 
     const updateResponse = await makeApiRequest({
       request,
       method: "put",
       urlSuffix: `/api/agents/${createdAgent.id}`,
-      data: updateData,
+      data: { name: updatedName },
     });
     const updatedAgent = await updateResponse.json();
 
     expect(updatedAgent).toHaveProperty("id");
-    expect(updatedAgent.name).toBe(updateData.name);
-    expect(updatedAgent.isDemo).toBe(updateData.isDemo);
+    expect(updatedAgent.name).toBe(updatedName);
   });
 
-  test("should update systemPrompt and userPrompt", async ({
+  test("should update systemPrompt and suggestedPrompts", async ({
     request,
     createAgent,
     makeApiRequest,
@@ -127,7 +118,7 @@ test.describe("Agents API CRUD", () => {
     );
     const createdAgent = await createResponse.json();
 
-    // Set agentType to 'agent' and set prompts
+    // Set agentType to 'agent' and set prompts with suggested prompts
     const setResponse = await makeApiRequest({
       request,
       method: "put",
@@ -135,26 +126,47 @@ test.describe("Agents API CRUD", () => {
       data: {
         agentType: "agent",
         systemPrompt: "You are a test assistant",
-        userPrompt: "User prompt text",
+        suggestedPrompts: [
+          { summaryTitle: "Hello", prompt: "Say hello to me" },
+          { summaryTitle: "Help", prompt: "Help me with something" },
+        ],
       },
     });
     const withPrompts = await setResponse.json();
     expect(withPrompts.systemPrompt).toBe("You are a test assistant");
-    expect(withPrompts.userPrompt).toBe("User prompt text");
+    expect(withPrompts.suggestedPrompts).toHaveLength(2);
+    expect(withPrompts.suggestedPrompts[0].summaryTitle).toBe("Hello");
+    expect(withPrompts.suggestedPrompts[0].prompt).toBe("Say hello to me");
+    expect(withPrompts.suggestedPrompts[1].summaryTitle).toBe("Help");
 
-    // Clear prompts by setting to null
+    // Update suggested prompts (replaces)
+    const updateResponse = await makeApiRequest({
+      request,
+      method: "put",
+      urlSuffix: `/api/agents/${createdAgent.id}`,
+      data: {
+        suggestedPrompts: [
+          { summaryTitle: "New prompt", prompt: "A new prompt" },
+        ],
+      },
+    });
+    const updated = await updateResponse.json();
+    expect(updated.suggestedPrompts).toHaveLength(1);
+    expect(updated.suggestedPrompts[0].summaryTitle).toBe("New prompt");
+
+    // Clear suggested prompts
     const clearResponse = await makeApiRequest({
       request,
       method: "put",
       urlSuffix: `/api/agents/${createdAgent.id}`,
       data: {
         systemPrompt: null,
-        userPrompt: null,
+        suggestedPrompts: [],
       },
     });
     const cleared = await clearResponse.json();
     expect(cleared.systemPrompt).toBeNull();
-    expect(cleared.userPrompt).toBeNull();
+    expect(cleared.suggestedPrompts).toHaveLength(0);
 
     // Verify persistence
     const getResponse = await makeApiRequest({
@@ -164,7 +176,33 @@ test.describe("Agents API CRUD", () => {
     });
     const fetched = await getResponse.json();
     expect(fetched.systemPrompt).toBeNull();
-    expect(fetched.userPrompt).toBeNull();
+    expect(fetched.suggestedPrompts).toHaveLength(0);
+  });
+
+  test("should create agent with suggestedPrompts", async ({
+    request,
+    makeApiRequest,
+  }) => {
+    const uniqueSuffix = crypto.randomUUID().slice(0, 8);
+    const createResponse = await makeApiRequest({
+      request,
+      method: "post",
+      urlSuffix: "/api/agents",
+      data: {
+        name: `Agent With Suggestions ${uniqueSuffix}`,
+        agentType: "agent",
+        scope: "personal",
+        teams: [],
+        suggestedPrompts: [
+          { summaryTitle: "Quick start", prompt: "Get me started" },
+        ],
+      },
+    });
+    const agent = await createResponse.json();
+
+    expect(agent.suggestedPrompts).toHaveLength(1);
+    expect(agent.suggestedPrompts[0].summaryTitle).toBe("Quick start");
+    expect(agent.suggestedPrompts[0].prompt).toBe("Get me started");
   });
 
   test("should delete an agent", async ({

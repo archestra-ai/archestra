@@ -49,6 +49,7 @@ import {
   parsePolicyDenied,
 } from "@/lib/llmProviders/common";
 import { useMcpInstallOrchestrator } from "@/lib/mcp-install-orchestrator.hook";
+import { useMcpAppsToolMeta } from "@/lib/mcp-apps.query";
 import { useOrganization } from "@/lib/organization.query";
 import { hasThinkingTags, parseThinkingTags } from "@/lib/parse-thinking";
 import { cn } from "@/lib/utils";
@@ -60,6 +61,7 @@ import { EditableUserMessage } from "./editable-user-message";
 import { ExpiredAuthTool } from "./expired-auth-tool";
 import { InlineChatError } from "./inline-chat-error";
 import { hasKnowledgeBaseToolCall } from "./knowledge-graph-citations";
+import { McpAppTool } from "./mcp-app-tool";
 import { McpInstallDialogs } from "./mcp-install-dialogs";
 import { PolicyDeniedTool } from "./policy-denied-tool";
 import { TodoWriteTool } from "./todo-write-tool";
@@ -139,6 +141,9 @@ export function ChatMessages({
   });
   const { data: organization } = useOrganization();
   const orchestrator = useMcpInstallOrchestrator();
+
+  // Fetch MCP Apps metadata for tools that support interactive UI
+  const { data: mcpAppsToolMeta } = useMcpAppsToolMeta(agentId);
 
   // Build tool name → icon map from agent tools + catalog data
   const { data: agentTools } = useProfileToolsWithIds(agentId);
@@ -738,6 +743,7 @@ export function ChatMessages({
                             agentId={agentId}
                             isDebugging={isDebugging}
                             canExpandToolCalls={canExpandToolCalls}
+                            mcpAppsToolMeta={mcpAppsToolMeta}
                             onToolApprovalResponse={onToolApprovalResponse}
                             onInstallMcp={
                               orchestrator.triggerInstallByCatalogId
@@ -779,6 +785,7 @@ export function ChatMessages({
                               toolName={toolName}
                               agentId={agentId}
                               isDebugging={isDebugging}
+                              mcpAppsToolMeta={mcpAppsToolMeta}
                               onToolApprovalResponse={onToolApprovalResponse}
                               onInstallMcp={
                                 orchestrator.triggerInstallByCatalogId
@@ -868,6 +875,7 @@ function MessageTool({
   agentId,
   isDebugging,
   canExpandToolCalls = true,
+  mcpAppsToolMeta,
   onToolApprovalResponse,
   onInstallMcp,
   onReauthMcp,
@@ -878,6 +886,8 @@ function MessageTool({
   agentId?: string;
   isDebugging?: boolean;
   canExpandToolCalls?: boolean;
+  // biome-ignore lint/suspicious/noExplicitAny: MCP Apps metadata has dynamic structure
+  mcpAppsToolMeta?: Record<string, any>;
   onToolApprovalResponse?: (params: {
     id: string;
     approved: boolean;
@@ -1000,6 +1010,23 @@ function MessageTool({
         toolResultPart={toolResultPart}
         errorText={errorText}
         onToolApprovalResponse={onToolApprovalResponse}
+      />
+    );
+  }
+
+  // Check if this tool has MCP Apps UI support
+  const toolMeta = mcpAppsToolMeta?.[toolName];
+  if (toolMeta?.ui?.resourceUri && agentId && !errorText) {
+    return (
+      <McpAppTool
+        toolName={toolName}
+        agentId={agentId}
+        part={part}
+        toolResultPart={toolResultPart}
+        resourceUri={toolMeta.ui.resourceUri}
+        csp={toolMeta.ui.csp}
+        permissions={toolMeta.ui.permissions}
+        prefersBorder={toolMeta.ui.prefersBorder}
       />
     );
   }

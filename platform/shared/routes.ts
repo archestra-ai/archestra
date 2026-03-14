@@ -248,6 +248,10 @@ export const RouteId = {
   GetChatModels: "getChatModels",
   SyncChatModels: "syncChatModels",
 
+  // MCP Apps Routes
+  GetMcpAppsToolMeta: "getMcpAppsToolMeta",
+  GetMcpAppResource: "getMcpAppResource",
+
   // Chat API Key Routes
   GetChatApiKeys: "getChatApiKeys",
   GetAvailableChatApiKeys: "getAvailableChatApiKeys",

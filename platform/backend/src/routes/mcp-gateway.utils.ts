@@ -4,6 +4,7 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
+  ReadResourceRequestSchema,
   type Tool,
 } from "@modelcontextprotocol/sdk/types.js";
 import {
@@ -32,8 +33,10 @@ import {
   AgentKnowledgeBaseModel,
   AgentModel,
   AgentTeamModel,
+  InternalMcpCatalogModel,
   KnowledgeBaseConnectorModel,
   KnowledgeBaseModel,
+  McpServerModel,
   McpToolCallModel,
   MemberModel,
   OAuthAccessTokenModel,
@@ -42,6 +45,7 @@ import {
   UserModel,
   UserTokenModel,
 } from "@/models";
+import { secretManager } from "@/secrets-manager";
 import { metrics } from "@/observability";
 import {
   ATTR_MCP_IS_ERROR_RESULT,
@@ -96,6 +100,7 @@ export async function createAgentServer(
     {
       capabilities: {
         tools: { listChanged: false },
+        resources: {},
       },
     },
   );
@@ -131,6 +136,9 @@ export async function createAgentServer(
     // the agent's actual knowledge base names and connector types
     const kbToolDescription = await buildKnowledgeSourcesDescription(agentId);
 
+    // Fetch _meta.ui from upstream MCP servers for MCP Apps support
+    const upstreamMeta = await fetchUpstreamToolMeta(agentId, tokenAuth);
+
     const toolsList = permittedTools.map(
       ({ name, description, parameters }) => ({
         name,
@@ -141,7 +149,7 @@ export async function createAgentServer(
             : description,
         inputSchema: parameters,
         annotations: {},
-        _meta: {},
+        _meta: upstreamMeta.get(name) ?? {},
       }),
     );
 
@@ -389,6 +397,29 @@ export async function createAgentServer(
       }
     },
   );
+
+  // Handle resources/read for MCP Apps UI resources (ui:// URIs)
+  server.setRequestHandler(ReadResourceRequestSchema, async ({ params }) => {
+    const { uri } = params;
+
+    if (!uri.startsWith("ui://")) {
+      throw {
+        code: -32602,
+        message: `Unsupported resource URI scheme: ${uri}`,
+      };
+    }
+
+    // Forward the resource read to the upstream MCP server that owns this UI resource
+    const resource = await fetchUpstreamResource(uri, agentId, tokenAuth);
+    if (!resource) {
+      throw {
+        code: -32602,
+        message: `Resource not found: ${uri}`,
+      };
+    }
+
+    return { contents: [resource] };
+  });
 
   logger.info({ agentId }, "MCP server instance created");
   return { server, agent };
@@ -1068,4 +1099,178 @@ export async function buildKnowledgeSourcesDescription(
   });
 
   return description;
+}
+
+// =============================================================================
+// MCP Apps support: upstream tool _meta and UI resource forwarding
+// =============================================================================
+
+/**
+ * Cache for upstream tool _meta.ui metadata.
+ * Key: agentId, Value: Map<toolName, _meta object>
+ * Cached for 60 seconds to avoid hammering upstream servers on every tools/list.
+ */
+const upstreamMetaCache = new Map<
+  string,
+  { meta: Map<string, Record<string, unknown>>; expiresAt: number }
+>();
+const UPSTREAM_META_CACHE_TTL_MS = 60_000;
+
+/**
+ * Fetch _meta (especially _meta.ui) from upstream MCP servers for all tools
+ * assigned to an agent. This enables MCP Apps support by forwarding UI metadata
+ * from upstream servers through the gateway.
+ *
+ * Returns a map of tool name -> _meta object (only for tools that have _meta.ui).
+ */
+async function fetchUpstreamToolMeta(
+  agentId: string,
+  _tokenAuth?: TokenAuthContext,
+): Promise<Map<string, Record<string, unknown>>> {
+  // Check cache first
+  const cached = upstreamMetaCache.get(agentId);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.meta;
+  }
+
+  const metaMap = new Map<string, Record<string, unknown>>();
+
+  try {
+    // Get unique catalog IDs from the agent's tools
+    const mcpTools = await ToolModel.getMcpToolsByAgent(agentId);
+    const catalogIds = [
+      ...new Set(mcpTools.filter((t) => t.catalogId).map((t) => t.catalogId!)),
+    ];
+
+    // For each catalog, find MCP servers and inspect them for _meta.ui
+    for (const catalogId of catalogIds) {
+      try {
+        const catalogItem =
+          await InternalMcpCatalogModel.findById(catalogId);
+        if (!catalogItem) continue;
+
+        const mcpServers = await McpServerModel.findByCatalogId(catalogId);
+        if (mcpServers.length === 0) continue;
+
+        const server = mcpServers[0];
+        const secretRecord = server.secretId
+          ? await secretManager().getSecret(server.secretId)
+          : null;
+        const secrets = secretRecord?.secret ?? {};
+
+        // Use inspectServer (tools/list) to get full tool metadata
+        const result = await mcpClient.inspectServer({
+          catalogItem,
+          mcpServerId: server.id,
+          secrets,
+          method: "tools/list",
+        });
+
+        // Extract _meta.ui from each tool
+        // biome-ignore lint/suspicious/noExplicitAny: inspectServer returns dynamic results
+        const toolsResult = result as any;
+        if (toolsResult?.tools) {
+          for (const tool of toolsResult.tools) {
+            if (tool._meta?.ui) {
+              // Map the full tool name (server__tool) to the _meta
+              const fullName = `${catalogItem.name}${MCP_SERVER_TOOL_NAME_SEPARATOR}${tool.name}`;
+              metaMap.set(fullName, tool._meta);
+            }
+          }
+        }
+      } catch (error) {
+        logger.debug(
+          {
+            agentId,
+            catalogId,
+            err: error instanceof Error ? error.message : String(error),
+          },
+          "Failed to fetch _meta from upstream MCP server (non-fatal)",
+        );
+      }
+    }
+  } catch (error) {
+    logger.debug(
+      {
+        agentId,
+        err: error instanceof Error ? error.message : String(error),
+      },
+      "Failed to fetch upstream tool metadata (non-fatal)",
+    );
+  }
+
+  // Cache the result
+  upstreamMetaCache.set(agentId, {
+    meta: metaMap,
+    expiresAt: Date.now() + UPSTREAM_META_CACHE_TTL_MS,
+  });
+
+  return metaMap;
+}
+
+/**
+ * Fetch a UI resource from an upstream MCP server by its ui:// URI.
+ * Iterates through MCP servers for the agent's catalog items to find the resource.
+ */
+async function fetchUpstreamResource(
+  uri: string,
+  agentId: string,
+  _tokenAuth?: TokenAuthContext,
+): Promise<{ uri: string; mimeType: string; text?: string; blob?: string } | null> {
+  try {
+    // Get unique catalog IDs from the agent's tools
+    const mcpTools = await ToolModel.getMcpToolsByAgent(agentId);
+    const catalogIds = [
+      ...new Set(mcpTools.filter((t) => t.catalogId).map((t) => t.catalogId!)),
+    ];
+
+    for (const catalogId of catalogIds) {
+      try {
+        const catalogItem =
+          await InternalMcpCatalogModel.findById(catalogId);
+        if (!catalogItem) continue;
+
+        const mcpServers = await McpServerModel.findByCatalogId(catalogId);
+        if (mcpServers.length === 0) continue;
+
+        const server = mcpServers[0];
+        const secretRecord = server.secretId
+          ? await secretManager().getSecret(server.secretId)
+          : null;
+        const secrets = secretRecord?.secret ?? {};
+
+        // Use inspectServer approach: connect, read resource, disconnect
+        const result = await mcpClient.readResource({
+          catalogItem,
+          mcpServerId: server.id,
+          secrets,
+          uri,
+        });
+
+        if (result) {
+          return result;
+        }
+      } catch (error) {
+        logger.debug(
+          {
+            uri,
+            catalogId,
+            err: error instanceof Error ? error.message : String(error),
+          },
+          "Resource not found on this server, trying next",
+        );
+      }
+    }
+  } catch (error) {
+    logger.warn(
+      {
+        uri,
+        agentId,
+        err: error instanceof Error ? error.message : String(error),
+      },
+      "Failed to fetch upstream resource",
+    );
+  }
+
+  return null;
 }

@@ -1698,6 +1698,61 @@ class McpClient {
   }
 
   /**
+   * Read a resource from an upstream MCP server.
+   * Used for fetching MCP Apps UI resources (ui:// URIs).
+   */
+  async readResource(params: {
+    catalogItem: InternalMcpCatalog;
+    mcpServerId: string;
+    secrets: Record<string, unknown>;
+    uri: string;
+  }): Promise<{
+    uri: string;
+    mimeType: string;
+    text?: string;
+    blob?: string;
+  } | null> {
+    const { catalogItem, mcpServerId, secrets, uri } = params;
+
+    const transport = await this.getTransport(
+      catalogItem,
+      mcpServerId,
+      secrets,
+    );
+
+    const client = new Client(
+      { name: "archestra-mcp-apps", version: "1.0.0" },
+      { capabilities: {} },
+    );
+
+    try {
+      await Promise.race([
+        client.connect(transport),
+        this.createTimeout(15000, "Connection timeout"),
+      ]);
+
+      const result = await Promise.race([
+        client.readResource({ uri }),
+        this.createTimeout(15000, "Read resource timeout"),
+      ]);
+
+      if (result?.contents?.[0]) {
+        const content = result.contents[0];
+        return {
+          uri: content.uri,
+          mimeType: content.mimeType || "text/html;profile=mcp-app",
+          text: typeof content.text === "string" ? content.text : undefined,
+          blob: typeof content.blob === "string" ? content.blob : undefined,
+        };
+      }
+
+      return null;
+    } finally {
+      await client.close().catch(() => {});
+    }
+  }
+
+  /**
    * Disconnect from an MCP server
    */
   async disconnect(clientId: string): Promise<void> {

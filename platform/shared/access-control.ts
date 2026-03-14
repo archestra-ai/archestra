@@ -692,6 +692,12 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetChatMcpTools]: {
     chat: ["read"],
   },
+  [RouteId.GetMcpAppsToolMeta]: {
+    chat: ["read"],
+  },
+  [RouteId.GetMcpAppResource]: {
+    chat: ["read"],
+  },
   [RouteId.GetChatModels]: {
     chat: ["read"],
   },

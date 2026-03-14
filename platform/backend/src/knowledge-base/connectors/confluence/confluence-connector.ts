@@ -6,8 +6,8 @@ import type {
   ConnectorCredentials,
   ConnectorDocument,
   ConnectorSyncBatch,
-} from "@/types/knowledge-connector";
-import { ConfluenceConfigSchema } from "@/types/knowledge-connector";
+} from "@/types";
+import { ConfluenceConfigSchema } from "@/types";
 import {
   BaseConnector,
   buildCheckpoint,

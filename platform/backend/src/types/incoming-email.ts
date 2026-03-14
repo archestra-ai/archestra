@@ -8,7 +8,7 @@ import { schema } from "@/database";
 import {
   type EmailProviderType,
   EmailProviderTypeSchema,
-} from "@/types/email-provider-type";
+} from "./email-provider-type";
 
 // Re-export for convenience
 export { type EmailProviderType, EmailProviderTypeSchema };

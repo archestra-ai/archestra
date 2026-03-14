@@ -1,8 +1,5 @@
 import { describe, expect, test } from "@/test";
-import type {
-  ConnectorSyncBatch,
-  ConnectorType,
-} from "@/types/knowledge-connector";
+import type { ConnectorSyncBatch, ConnectorType } from "@/types";
 import { BaseConnector, buildCheckpoint } from "./base-connector";
 
 /**

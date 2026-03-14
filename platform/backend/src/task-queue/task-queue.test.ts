@@ -57,7 +57,7 @@ vi.mock("@/logging", () => ({
 
 // Import after mocks are set up
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
-import type { Task } from "@/types/task";
+import type { Task } from "@/types";
 import { taskQueueService } from "./task-queue";
 
 // Helper to create a fake task

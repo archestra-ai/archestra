@@ -28,12 +28,14 @@ import {
 import logger from "@/logging";
 import type {
   Agent,
+  AgentScope,
+  AgentScopeFilter,
+  AgentType,
   InsertAgent,
   PaginationQuery,
   SortingQuery,
   UpdateAgent,
 } from "@/types";
-import type { AgentScope, AgentScopeFilter, AgentType } from "@/types/agent";
 import AgentConnectorAssignmentModel from "./agent-connector-assignment";
 import AgentKnowledgeBaseModel from "./agent-knowledge-base";
 import AgentLabelModel from "./agent-label";

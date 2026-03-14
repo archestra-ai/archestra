@@ -12,8 +12,8 @@ import type {
   ConnectorSyncBatch,
   JiraCheckpoint,
   JiraConfig,
-} from "@/types/knowledge-connector";
-import { JiraConfigSchema } from "@/types/knowledge-connector";
+} from "@/types";
+import { JiraConfigSchema } from "@/types";
 import {
   BaseConnector,
   buildCheckpoint,

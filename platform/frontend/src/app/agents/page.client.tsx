@@ -448,24 +448,10 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
             enableSorting: false,
             cell: ({ row }: { row: { original: AgentData } }) => (
               <VisibilityBadge
-                scope={
-                  (row.original as unknown as Record<string, unknown>)
-                    .scope as string
-                }
-                teams={
-                  row.original.teams as unknown as Array<{
-                    id: string;
-                    name: string;
-                  }>
-                }
-                authorId={
-                  (row.original as unknown as Record<string, unknown>)
-                    .authorId as string | null
-                }
-                authorName={
-                  (row.original as unknown as Record<string, unknown>)
-                    .authorName as string | null
-                }
+                scope={row.original.scope}
+                teams={row.original.teams}
+                authorId={row.original.authorId}
+                authorName={row.original.authorName}
                 currentUserId={currentUserId}
               />
             ),
@@ -479,14 +465,9 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
       enableHiding: false,
       cell: ({ row }) => {
         const agent = row.original;
-        const scope = (agent as unknown as Record<string, unknown>).scope as
-          | string
-          | undefined;
-        const authorId = (agent as unknown as Record<string, unknown>)
-          .authorId as string | null | undefined;
-        const agentTeams = (
-          agent as unknown as { teams?: Array<{ id: string }> }
-        ).teams;
+        const scope = agent.scope;
+        const authorId = agent.authorId;
+        const agentTeams = agent.teams;
         const isPersonal = scope === "personal";
         const isTeamScoped = scope === "team";
         const isOwner = !!currentUserId && authorId === currentUserId;

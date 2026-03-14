@@ -1,6 +1,6 @@
 import { vi } from "vitest";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
-import type { ConnectorSyncBatch } from "@/types/knowledge-connector";
+import type { ConnectorSyncBatch } from "@/types";
 import { GithubConnector } from "./github-connector";
 
 // Mock @octokit/rest SDK

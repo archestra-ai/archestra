@@ -63,7 +63,6 @@ export type AgentToolSortDirection = z.infer<
   typeof AgentToolSortDirectionSchema
 >;
 
-/** Shape returned by ToolModel.getMcpToolsAssignedToAgent */
 export type McpToolAssignment = {
   toolName: string;
   credentialSourceMcpServerId: string | null;

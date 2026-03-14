@@ -6,7 +6,7 @@ import type {
   ConnectorItemFailure,
   ConnectorSyncBatch,
   ConnectorType,
-} from "@/types/knowledge-connector";
+} from "@/types";
 
 /**
  * Build a connector checkpoint with `lastSyncedAt` derived from the last

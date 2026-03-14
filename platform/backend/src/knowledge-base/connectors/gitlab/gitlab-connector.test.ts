@@ -1,6 +1,6 @@
 import { vi } from "vitest";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
-import type { ConnectorSyncBatch } from "@/types/knowledge-connector";
+import type { ConnectorSyncBatch } from "@/types";
 import { GitlabConnector } from "./gitlab-connector";
 
 // Mock @gitbeaker/rest SDK

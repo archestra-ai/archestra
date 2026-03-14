@@ -29,7 +29,6 @@ import {
 } from "@/models";
 import {
   ApiError,
-  ChatOpsChannelBindingResponseSchema,
   type ChatOpsConnectionMode,
   ChatOpsConnectionModeSchema,
   type ChatOpsProvider,
@@ -42,8 +41,11 @@ import {
   createSortingQuerySchema,
   type IncomingChatMessage,
   PaginationQuerySchema,
-  UpdateChatOpsChannelBindingSchema,
 } from "@/types";
+import {
+  ChatOpsChannelBindingResponseSchema,
+  UpdateChatOpsChannelBindingSchema,
+} from "@/types/chatops-channel-binding";
 
 /**
  * Fastify preParsing hook that captures the raw request body before content-type

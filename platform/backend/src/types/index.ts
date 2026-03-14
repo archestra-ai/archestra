@@ -8,7 +8,7 @@ export * from "./api";
 export * from "./autonomy-policies";
 export * from "./chat-api-key";
 export * from "./chatops";
-export * from "./chatops-channel-binding";
+// chatops-channel-binding uses @/database (drizzle-zod) — import directly to avoid circular deps
 export * from "./common-llm-format";
 export * from "./conversation";
 export * from "./conversation-share";

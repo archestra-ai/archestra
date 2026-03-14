@@ -44,7 +44,8 @@ export function usePublicBaseUrl(): string {
   const { data, isLoading } = useConfig();
   if (isLoading || !data) return "";
   if (data.features.ngrokDomain) {
-    return `https://${data.features.ngrokDomain}`;
+    const domain = data.features.ngrokDomain.replace(/^https?:\/\//, "");
+    return `https://${domain}`;
   }
   if (typeof window !== "undefined") {
     return window.location.origin;

@@ -21,31 +21,63 @@ const {
 // ===== Query hooks =====
 
 export function useConnectors(
-  params?: string | { knowledgeBaseId?: string; enabled?: boolean },
+  params?:
+    | string
+    | {
+        knowledgeBaseId?: string;
+        enabled?: boolean;
+        limit?: number;
+        offset?: number;
+      },
 ) {
   const knowledgeBaseId =
     typeof params === "string" ? params : params?.knowledgeBaseId;
   const enabled = typeof params === "object" ? params?.enabled : undefined;
+  const limit = typeof params === "object" ? params?.limit : undefined;
+  const offset = typeof params === "object" ? params?.offset : undefined;
   return useQuery({
     queryKey: knowledgeBaseId
-      ? ["connectors", { knowledgeBaseId }]
-      : ["connectors"],
+      ? ["connectors", { knowledgeBaseId, limit, offset }]
+      : ["connectors", { limit, offset }],
     queryFn: async () => {
       const { data, error } = await getConnectors({
-        query: { knowledgeBaseId },
+        query: {
+          knowledgeBaseId,
+          limit: limit ?? 100,
+          offset: offset ?? 0,
+        },
       });
       if (error) {
         handleApiError(error);
         return null;
       }
-      return data;
+      return data?.data ?? [];
     },
     enabled,
     refetchInterval: (query) => {
-      const hasRunning = query.state.data?.data?.some(
+      const hasRunning = query.state.data?.some(
         (c) => c.lastSyncStatus === "running",
       );
       return hasRunning ? 3000 : false;
+    },
+  });
+}
+
+export function useConnectorsPaginated(params: {
+  limit: number;
+  offset: number;
+  search?: string;
+  connectorType?: string;
+}) {
+  return useQuery({
+    queryKey: ["connectors", "paginated", params],
+    queryFn: async () => {
+      const { data, error } = await getConnectors({ query: params });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
     },
   });
 }

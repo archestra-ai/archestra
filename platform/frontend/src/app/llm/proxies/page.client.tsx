@@ -318,6 +318,7 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
     {
       id: "name",
       accessorKey: "name",
+      size: 240,
       header: ({ column }) => (
         <Button
           variant="ghost"

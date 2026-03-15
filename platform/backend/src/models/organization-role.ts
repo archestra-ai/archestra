@@ -6,6 +6,7 @@ import {
   type PredefinedRoleName,
   PredefinedRoleNameSchema,
   type Resource,
+  roleDescriptions,
 } from "@shared";
 import { predefinedPermissionsMap } from "@shared/access-control";
 import { and, eq, getTableColumns, sql } from "drizzle-orm";
@@ -20,6 +21,7 @@ const generatePredefinedRole = (
   id: role,
   role: role,
   name: role,
+  description: roleDescriptions[role],
   organizationId,
   permission: OrganizationRoleModel.getPredefinedRolePermissions(role),
   predefined: true,
@@ -396,6 +398,82 @@ class OrganizationRoleModel {
       // Return predefined roles as fallback
       return predefinedRoles;
     }
+  }
+
+  /**
+   * List roles for an organization with pagination and optional name filtering.
+   * Predefined roles are always ordered first.
+   */
+  static async getAllPaginated(params: {
+    organizationId: string;
+    limit: number;
+    offset: number;
+    name?: string;
+    isAdmin: boolean;
+  }): Promise<{ data: OrganizationRole[]; total: number }> {
+    const { organizationId, limit, offset, name, isAdmin } = params;
+
+    const normalizedSearch = name?.trim().toLowerCase();
+    const predefinedRoles = OrganizationRoleModel.getPredefinedOnly(
+      organizationId,
+    ).filter((role) => {
+      if (!normalizedSearch) return true;
+      return role.name.toLowerCase().includes(normalizedSearch);
+    });
+
+    if (!isAdmin) {
+      const pagedPredefined = predefinedRoles.slice(offset, offset + limit);
+      return {
+        data: pagedPredefined,
+        total: predefinedRoles.length,
+      };
+    }
+
+    const customFilters = [
+      eq(schema.organizationRolesTable.organizationId, organizationId),
+      ...(normalizedSearch
+        ? [sql`LOWER(${schema.organizationRolesTable.name}) LIKE ${`%${normalizedSearch}%`}`]
+        : []),
+    ];
+
+    const [{ count: customTotal = 0 }] = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(schema.organizationRolesTable)
+      .where(and(...customFilters));
+
+    const predefinedCount = predefinedRoles.length;
+    const total = predefinedCount + customTotal;
+
+    const takeFromPredefined =
+      offset < predefinedCount ? predefinedRoles.slice(offset, offset + limit) : [];
+    const remainingLimit = Math.max(0, limit - takeFromPredefined.length);
+    const customOffset =
+      offset < predefinedCount ? 0 : Math.max(0, offset - predefinedCount);
+
+    const customRoles =
+      remainingLimit > 0
+        ? await db
+            .select({
+              ...getTableColumns(schema.organizationRolesTable),
+              predefined: sql<boolean>`false`,
+            })
+            .from(schema.organizationRolesTable)
+            .where(and(...customFilters))
+            .orderBy(schema.organizationRolesTable.name)
+            .limit(remainingLimit)
+            .offset(customOffset)
+        : [];
+
+    return {
+      data: [
+        ...takeFromPredefined,
+        ...customRoles.map((role) => ({
+          ...role,
+          permission: JSON.parse(role.permission),
+        })),
+      ],
+      total,
+    };
   }
 
   /**

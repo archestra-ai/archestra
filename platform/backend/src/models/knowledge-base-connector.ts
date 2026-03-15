@@ -1,4 +1,4 @@
-import { and, count, desc, eq, inArray } from "drizzle-orm";
+import { and, count, desc, eq, ilike, inArray, or } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type {
   InsertKnowledgeBaseConnector,
@@ -44,6 +44,51 @@ class KnowledgeBaseConnectorModel {
       );
 
     return result?.count ?? 0;
+  }
+
+  static async findByOrganizationPaginated(params: {
+    organizationId: string;
+    limit: number;
+    offset: number;
+    search?: string;
+    connectorType?: string;
+  }): Promise<{ data: KnowledgeBaseConnector[]; total: number }> {
+    const { organizationId, limit, offset, search, connectorType } = params;
+    const searchPattern = search ? `%${search}%` : null;
+
+    const filters = [
+      eq(schema.knowledgeBaseConnectorsTable.organizationId, organizationId),
+      ...(connectorType
+        ? [eq(schema.knowledgeBaseConnectorsTable.connectorType, connectorType)]
+        : []),
+      ...(searchPattern
+        ? [
+            or(
+              ilike(schema.knowledgeBaseConnectorsTable.name, searchPattern),
+              ilike(
+                schema.knowledgeBaseConnectorsTable.description,
+                searchPattern,
+              ),
+            ),
+          ]
+        : []),
+    ];
+
+    const [data, totalResult] = await Promise.all([
+      db
+        .select()
+        .from(schema.knowledgeBaseConnectorsTable)
+        .where(and(...filters))
+        .orderBy(desc(schema.knowledgeBaseConnectorsTable.createdAt))
+        .limit(limit)
+        .offset(offset),
+      db
+        .select({ count: count() })
+        .from(schema.knowledgeBaseConnectorsTable)
+        .where(and(...filters)),
+    ]);
+
+    return { data, total: totalResult[0]?.count ?? 0 };
   }
 
   static async findByKnowledgeBaseId(

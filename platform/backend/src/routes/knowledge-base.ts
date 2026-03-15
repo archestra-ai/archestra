@@ -285,6 +285,8 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["Connectors"],
         querystring: PaginationQuerySchema.extend({
           knowledgeBaseId: z.string().optional(),
+          search: z.string().optional(),
+          connectorType: ConnectorTypeSchema.optional(),
         }),
         response: constructResponseSchema(
           createPaginatedResponseSchema(
@@ -296,7 +298,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (
-      { query: { limit, offset, knowledgeBaseId }, organizationId },
+      { query: { limit, offset, knowledgeBaseId, search, connectorType }, organizationId },
       reply,
     ) => {
       let data: Awaited<
@@ -312,14 +314,17 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           );
         total = data.length;
       } else {
-        [data, total] = await Promise.all([
-          KnowledgeBaseConnectorModel.findByOrganization({
+        const result = await KnowledgeBaseConnectorModel.findByOrganizationPaginated(
+          {
             organizationId,
             limit,
             offset,
-          }),
-          KnowledgeBaseConnectorModel.countByOrganization(organizationId),
-        ]);
+            search,
+            connectorType,
+          },
+        );
+        data = result.data;
+        total = result.total;
       }
 
       // Enrich connectors with assigned agents (batch query to avoid N+1)

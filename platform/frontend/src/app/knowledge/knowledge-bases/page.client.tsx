@@ -14,16 +14,14 @@ import {
   Plus,
   RefreshCw,
   Trash2,
-  Unlink,
   Users,
 } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { KnowledgePageLayout } from "@/app/knowledge/_parts/knowledge-page-layout";
 import { ConnectorStatusDot } from "@/app/knowledge/knowledge-bases/_parts/connector-enabled-dot";
 import { ConnectorStatusBadge } from "@/app/knowledge/knowledge-bases/_parts/connector-status-badge";
-import { LoadingSpinner } from "@/components/loading";
 import {
   type TableRowAction,
   TableRowActions,
@@ -41,14 +39,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
@@ -62,10 +52,10 @@ import {
 } from "@/lib/connector.query";
 import {
   useDeleteKnowledgeBase,
-  useKnowledgeBases,
+  useKnowledgeBasesPaginated,
 } from "@/lib/knowledge-base.query";
 import { useTeams } from "@/lib/team.query";
-import { cn, formatDate } from "@/lib/utils";
+import { cn, DEFAULT_TABLE_LIMIT, formatDate } from "@/lib/utils";
 import { ConnectorTypeIcon } from "./_parts/connector-icons";
 import { CreateConnectorDialog } from "./_parts/create-connector-dialog";
 import { CreateKnowledgeBaseDialog } from "./_parts/create-knowledge-base-dialog";
@@ -86,7 +76,21 @@ export default function KnowledgeBasesPage() {
 }
 
 function KnowledgeBasesList() {
-  const { data: knowledgeBases, isPending } = useKnowledgeBases();
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+
+  const pageFromUrl = searchParams.get("page");
+  const pageSizeFromUrl = searchParams.get("pageSize");
+  const pageIndex = Number(pageFromUrl || "1") - 1;
+  const pageSize = Number(pageSizeFromUrl || DEFAULT_TABLE_LIMIT);
+  const offset = pageIndex * pageSize;
+
+  const { data: knowledgeBases, isPending, isFetching } =
+    useKnowledgeBasesPaginated({
+      limit: pageSize,
+      offset,
+    });
   const { data: teams } = useTeams();
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -96,6 +100,7 @@ function KnowledgeBasesList() {
   const [addConnectorKbId, setAddConnectorKbId] = useState<string | null>(null);
 
   const items = knowledgeBases?.data ?? [];
+  const pagination = knowledgeBases?.pagination;
 
   const columns: ColumnDef<KnowledgeBaseItem>[] = [
     {
@@ -238,21 +243,28 @@ function KnowledgeBasesList() {
       isPending={isPending}
     >
       <div>
-        {items.length === 0 ? (
-          <div className="text-muted-foreground">
-            No knowledge bases found. Create one to get started.
-          </div>
-        ) : (
-          <DataTable
-            columns={columns}
-            data={items}
-            renderSubComponent={({ row }) => (
-              <ExpandedConnectors knowledgeBaseId={row.original.id} />
-            )}
-            emptyMessage="No knowledge bases found"
-            hideSelectedCount
-          />
-        )}
+        <DataTable
+          columns={columns}
+          data={items}
+          renderSubComponent={({ row }) => (
+            <ExpandedConnectors knowledgeBaseId={row.original.id} />
+          )}
+          emptyMessage="No knowledge bases found"
+          hideSelectedCount
+          manualPagination
+          pagination={{
+            pageIndex,
+            pageSize,
+            total: pagination?.total || 0,
+          }}
+          onPaginationChange={(newPagination) => {
+            const params = new URLSearchParams(searchParams.toString());
+            params.set("page", String(newPagination.pageIndex + 1));
+            params.set("pageSize", String(newPagination.pageSize));
+            router.push(`${pathname}?${params.toString()}`, { scroll: false });
+          }}
+          isLoading={isFetching}
+        />
 
         <CreateKnowledgeBaseDialog
           open={isCreateDialogOpen}
@@ -310,117 +322,91 @@ function ExpandedConnectors({ knowledgeBaseId }: { knowledgeBaseId: string }) {
     null,
   );
 
-  if (isPending) {
-    return (
-      <div className="flex items-center justify-center py-6">
-        <LoadingSpinner />
-      </div>
-    );
-  }
-
   const items = connectors?.data ?? [];
 
-  if (items.length === 0) {
-    return (
-      <div className="px-6 py-4 text-sm text-muted-foreground">
-        No connectors configured.
-      </div>
-    );
-  }
+  const columns: ColumnDef<ConnectorItem>[] = [
+    {
+      id: "name",
+      header: "Connector",
+      cell: ({ row }) => (
+        <div className="flex items-center gap-3">
+          <ConnectorStatusDot
+            enabled={row.original.enabled}
+            lastSyncStatus={row.original.lastSyncStatus}
+          />
+          <Badge variant="secondary" className="gap-1.5 capitalize">
+            <ConnectorTypeIcon
+              type={row.original.connectorType}
+              className="h-3.5 w-3.5"
+            />
+            {row.original.connectorType}
+          </Badge>
+          <span className="font-medium">{row.original.name}</span>
+        </div>
+      ),
+    },
+    {
+      id: "status",
+      header: "Status",
+      cell: ({ row }) =>
+        row.original.lastSyncAt ? (
+          <div className="flex items-center gap-2">
+            <ConnectorStatusBadge status={row.original.lastSyncStatus} />
+            <span
+              className="text-xs text-muted-foreground"
+              title={formatDate({ date: row.original.lastSyncAt })}
+            >
+              {formatDistanceToNow(new Date(row.original.lastSyncAt), {
+                addSuffix: true,
+              })}
+            </span>
+          </div>
+        ) : (
+          <span className="text-xs text-muted-foreground">Never synced</span>
+        ),
+    },
+    {
+      id: "actions",
+      header: "Actions",
+      cell: ({ row }) => (
+        <TableRowActions
+          actions={[
+            {
+              icon: <Pencil className="h-4 w-4" />,
+              label: "Edit connector",
+              onClick: () => setEditingConnector(row.original),
+            },
+            {
+              icon: <Trash2 className="h-4 w-4" />,
+              label: "Remove from knowledge base",
+              variant: "destructive",
+              onClick: () => setRemovingConnectorId(row.original.id),
+            },
+          ]}
+          size="sm"
+        />
+      ),
+    },
+  ];
 
   return (
     <>
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead className="uppercase text-xs tracking-wider bg-muted">
-              Connectors
-            </TableHead>
-            <TableHead className="uppercase text-xs tracking-wider text-right bg-muted">
-              Status
-            </TableHead>
-            <TableHead className="uppercase text-xs tracking-wider bg-muted" data-column-id="actions">
-              Actions
-            </TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {items.map((connector) => (
-            <TableRow
-              key={connector.id}
-              className="hover:bg-muted/50 cursor-pointer"
-              onClick={() =>
-                router.push(
-                  `/knowledge/connectors/${connector.id}?from=knowledge-bases`,
-                )
-              }
-            >
-              <TableCell>
-                <div className="flex items-center gap-3">
-                  <ConnectorStatusDot
-                    enabled={connector.enabled}
-                    lastSyncStatus={connector.lastSyncStatus}
-                  />
-                  <Badge variant="secondary" className="gap-1.5 capitalize">
-                    <ConnectorTypeIcon
-                      type={connector.connectorType}
-                      className="h-3.5 w-3.5"
-                    />
-                    {connector.connectorType}
-                  </Badge>
-                  <span className="font-medium">{connector.name}</span>
-                </div>
-              </TableCell>
-              <TableCell className="text-right">
-                <div className="flex items-center justify-end gap-2">
-                  {connector.lastSyncAt ? (
-                    <>
-                      <ConnectorStatusBadge status={connector.lastSyncStatus} />
-                      <span
-                        className="text-xs text-muted-foreground"
-                        title={formatDate({ date: connector.lastSyncAt })}
-                      >
-                        {formatDistanceToNow(new Date(connector.lastSyncAt), {
-                          addSuffix: true,
-                        })}
-                      </span>
-                    </>
-                  ) : (
-                    <span className="text-xs text-muted-foreground">
-                      Never synced
-                    </span>
-                  )}
-                </div>
-              </TableCell>
-              <TableCell data-column-id="actions">
-                {/* biome-ignore lint/a11y/useKeyWithClickEvents: stopPropagation wrapper for action buttons inside clickable row */}
-                {/* biome-ignore lint/a11y/noStaticElementInteractions: wrapper only prevents row click propagation */}
-                <div
-                  className="flex justify-end gap-1"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <TableRowActions
-                    actions={[
-                      {
-                        icon: <Pencil className="h-4 w-4" />,
-                        label: "Edit connector",
-                        onClick: () => setEditingConnector(connector),
-                      },
-                      {
-                        icon: <Unlink className="h-4 w-4" />,
-                        label: "Remove from knowledge base",
-                        variant: "destructive",
-                        onClick: () => setRemovingConnectorId(connector.id),
-                      },
-                    ]}
-                    size="sm"
-                  />
-                </div>
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+      <div className="p-4">
+        <DataTable
+          columns={columns}
+          data={items}
+          getRowId={(row) => row.id}
+          hideSelectedCount
+          isLoading={isPending}
+          emptyMessage="No connectors configured"
+          onRowClick={(row) =>
+            router.push(
+              `/knowledge/connectors/${row.id}?from=knowledge-bases`,
+            )
+          }
+          manualPagination
+        />
+      </div>
 
       {editingConnector && (
         <EditConnectorDialog

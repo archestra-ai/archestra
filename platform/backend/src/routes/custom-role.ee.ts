@@ -15,6 +15,7 @@ const CreateUpdateRoleNameSchema = z
   .string()
   .min(1, "Role name is required")
   .max(50, "Role name must be less than 50 characters");
+const RoleDescriptionSchema = z.string().max(200).optional();
 
 const CustomRoleIdSchema = z
   .string()
@@ -48,13 +49,14 @@ const customRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["Roles"],
         body: z.object({
           name: CreateUpdateRoleNameSchema,
+          description: RoleDescriptionSchema,
           permission: PermissionsSchema,
         }),
         response: constructResponseSchema(SelectOrganizationRoleSchema),
       },
     },
     async (request, reply) => {
-      const { name, permission } = request.body;
+      const { name, description, permission } = request.body;
       const { organizationId, user } = request;
 
       // Get user's permissions to validate they can grant these permissions
@@ -95,6 +97,7 @@ const customRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
             permission,
             additionalFields: {
               name,
+              description,
             },
             organizationId,
           },
@@ -138,6 +141,7 @@ const customRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }),
         body: z.object({
           name: CreateUpdateRoleNameSchema.optional(),
+          description: RoleDescriptionSchema,
           permission: PermissionsSchema.optional(),
         }),
         response: constructResponseSchema(SelectOrganizationRoleSchema),
@@ -146,7 +150,7 @@ const customRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async (
       {
         params: { roleId },
-        body: { name, permission },
+        body: { name, description, permission },
         user,
         organizationId,
         headers,
@@ -191,6 +195,7 @@ const customRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Build update data
       const updateData: Record<string, unknown> = {};
       if (name) updateData.name = name;
+      if (description !== undefined) updateData.description = description;
       if (permission) updateData.permission = permission;
 
       const result = await betterAuth.api.updateOrgRole({

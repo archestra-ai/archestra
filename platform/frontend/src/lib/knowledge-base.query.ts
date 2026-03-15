@@ -37,14 +37,33 @@ export function useKnowledgeBases(params?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ["knowledge-bases"],
     queryFn: async () => {
-      const { data, error } = await getKnowledgeBases();
+      const { data, error } = await getKnowledgeBases({
+        query: { limit: 100, offset: 0 },
+      });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data?.data ?? [];
+    },
+    enabled: params?.enabled,
+  });
+}
+
+export function useKnowledgeBasesPaginated(params: {
+  limit: number;
+  offset: number;
+}) {
+  return useQuery({
+    queryKey: ["knowledge-bases", "paginated", params],
+    queryFn: async () => {
+      const { data, error } = await getKnowledgeBases({ query: params });
       if (error) {
         handleApiError(error);
         return null;
       }
       return data;
     },
-    enabled: params?.enabled,
   });
 }
 

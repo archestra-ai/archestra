@@ -51,6 +51,11 @@ describe("OrganizationRoleModel", () => {
         OrganizationRoleModel.getPredefinedRolePermissions(MEMBER_ROLE_NAME);
       expect(permissions).toEqual(predefinedPermissionsMap[MEMBER_ROLE_NAME]);
     });
+
+    test("should include apiKey:create for editor role", () => {
+      const permissions = predefinedPermissionsMap[EDITOR_ROLE_NAME];
+      expect(permissions.apiKey).toContain("create");
+    });
   });
 
   describe("getById", () => {

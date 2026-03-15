@@ -1,9 +1,9 @@
 import { archestraApiSdk, type archestraApiTypes } from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  DEFAULT_AGENTS_PAGE_SIZE,
   DEFAULT_SORT_BY,
   DEFAULT_SORT_DIRECTION,
+  DEFAULT_TABLE_LIMIT,
   handleApiError,
 } from "./utils";
 
@@ -65,7 +65,7 @@ export function useProfilesPaginated(
 
   // Check if we can use initialData (server-side fetched data)
   // Only use it for the first page (offset 0), default sorting, no search filter,
-  // no scope filter, AND matching default page size (20)
+  // no scope filter, AND matching default table page size
   // Note: agentTypes is allowed since the server fetches with the page-specific agentTypes
   const useInitialData =
     offset === 0 &&
@@ -77,7 +77,7 @@ export function useProfilesPaginated(
     authorIds === undefined &&
     excludeAuthorIds === undefined &&
     labels === undefined &&
-    (limit === undefined || limit === DEFAULT_AGENTS_PAGE_SIZE);
+    (limit === undefined || limit === DEFAULT_TABLE_LIMIT);
 
   return useQuery({
     queryKey: [

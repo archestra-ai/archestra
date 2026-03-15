@@ -353,6 +353,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     {
       id: "name",
       accessorKey: "name",
+      size: 240,
       header: ({ column }) => (
         <Button
           variant="ghost"
@@ -483,17 +484,15 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
           (isTeamScoped && !!isAgentTeamAdmin && !!isMemberOfAgentTeam) ||
           (isPersonal && isOwner);
         return (
-          <div className="flex w-full justify-end">
-            <AgentActions
-              agent={agent}
-              canModify={canModify}
-              onConnect={setConnectingAgent}
-              onEdit={(agentData) => {
-                setEditingAgent(agentData);
-              }}
-              onDelete={setDeletingAgentId}
-            />
-          </div>
+          <AgentActions
+            agent={agent}
+            canModify={canModify}
+            onConnect={setConnectingAgent}
+            onEdit={(agentData) => {
+              setEditingAgent(agentData);
+            }}
+            onDelete={setDeletingAgentId}
+          />
         );
       },
     },

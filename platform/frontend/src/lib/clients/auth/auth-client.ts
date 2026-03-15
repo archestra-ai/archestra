@@ -42,6 +42,10 @@ export const authClient = createAuthClient({
               type: "string",
               required: true,
             },
+            description: {
+              type: "string",
+              required: false,
+            },
           },
         },
       }),

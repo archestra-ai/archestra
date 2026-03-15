@@ -330,6 +330,7 @@ function McpGateways({
     {
       id: "name",
       accessorKey: "name",
+      size: 240,
       header: ({ column }) => (
         <Button
           variant="ghost"
@@ -454,17 +455,15 @@ function McpGateways({
           (isTeamScoped && !!isTeamAdmin && !!isMemberOfAgentTeam) ||
           (isPersonal && isOwner);
         return (
-          <div className="flex w-full justify-end">
-            <McpGatewayActions
-              agent={agent}
-              canModify={canModify}
-              onConnect={setConnectingGateway}
-              onEdit={(agentData) => {
-                setEditingGateway(agentData);
-              }}
-              onDelete={setDeletingGatewayId}
-            />
-          </div>
+          <McpGatewayActions
+            agent={agent}
+            canModify={canModify}
+            onConnect={setConnectingGateway}
+            onEdit={(agentData) => {
+              setEditingGateway(agentData);
+            }}
+            onDelete={setDeletingGatewayId}
+          />
         );
       },
     },

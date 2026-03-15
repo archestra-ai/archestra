@@ -2,11 +2,10 @@
 
 import type { ColumnDef } from "@tanstack/react-table";
 import { formatDistanceToNow } from "date-fns";
-import { Plus, Shield, Trash2, UserCog } from "lucide-react";
+import { Copy, Plus, Shield, Trash2, UserCog } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
-import { useSettingsAction } from "@/app/settings/settings-context";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { FormDialog } from "@/components/form-dialog";
 import { InviteByLinkCard } from "@/components/invite-by-link-card";
@@ -41,6 +40,10 @@ import {
 import { useActiveOrganization } from "@/lib/organization.query";
 import { useRoles } from "@/lib/role.query";
 import { cn } from "@/lib/utils";
+import {
+  useDeletePendingSignupMember,
+  useMemberSignupStatus,
+} from "@/lib/organization.query";
 
 const DEFAULT_PAGE_SIZE = 10;
 
@@ -79,12 +82,18 @@ function UsersPageContent() {
     >
       {activeOrg ? (
         <div className="space-y-6">
-          <InviteHeaderButton organizationId={activeOrg.id} />
-
           {activeTab === "users" ? (
-            <MembersTab activeTab={activeTab} onTabChange={setActiveTab} />
+            <MembersTab
+              activeTab={activeTab}
+              onTabChange={setActiveTab}
+              organizationId={activeOrg.id}
+            />
           ) : (
-            <InvitationsTab activeTab={activeTab} onTabChange={setActiveTab} />
+            <InvitationsTab
+              activeTab={activeTab}
+              onTabChange={setActiveTab}
+              organizationId={activeOrg.id}
+            />
           )}
         </div>
       ) : (
@@ -126,18 +135,15 @@ function TabButtons({
   );
 }
 
-function InviteHeaderButton({ organizationId }: { organizationId: string }) {
+function InviteUserButton({ organizationId }: { organizationId: string }) {
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
   const { data: canInvite } = useHasPermissions({ invitation: ["create"] });
   const invitationsEnabled = !config.disableInvitations;
-  const { setActionButton } = useSettingsAction();
 
-  useEffect(() => {
-    if (!invitationsEnabled || !canInvite) {
-      setActionButton(null);
-      return;
-    }
-    setActionButton(
+  if (!invitationsEnabled || !canInvite) return null;
+
+  return (
+    <>
       <PermissionButton
         permissions={{ invitation: ["create"] }}
         onClick={() => setInviteDialogOpen(true)}
@@ -145,22 +151,17 @@ function InviteHeaderButton({ organizationId }: { organizationId: string }) {
       >
         <Plus className="mr-2 h-4 w-4" />
         Invite User
-      </PermissionButton>,
-    );
-    return () => setActionButton(null);
-  }, [setActionButton, invitationsEnabled, canInvite, setInviteDialogOpen]);
+      </PermissionButton>
 
-  if (!invitationsEnabled || !canInvite) return null;
-
-  return (
-    <FormDialog
-      open={inviteDialogOpen}
-      onOpenChange={setInviteDialogOpen}
-      title="Invite User"
-      size="small"
-    >
-      <InviteByLinkCard organizationId={organizationId} />
-    </FormDialog>
+      <FormDialog
+        open={inviteDialogOpen}
+        onOpenChange={setInviteDialogOpen}
+        title="Invite User"
+        size="small"
+      >
+        <InviteByLinkCard organizationId={organizationId} />
+      </FormDialog>
+    </>
   );
 }
 
@@ -171,9 +172,11 @@ function InviteHeaderButton({ organizationId }: { organizationId: string }) {
 function MembersTab({
   activeTab,
   onTabChange,
+  organizationId,
 }: {
   activeTab: string;
   onTabChange: (tab: string) => void;
+  organizationId: string;
 }) {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -200,6 +203,9 @@ function MembersTab({
 
   const updateMemberRole = useUpdateMemberRole();
   const removeMember = useRemoveMember();
+  const { data: signupStatus } = useMemberSignupStatus();
+  const pendingSignupMembers = signupStatus?.pendingSignupMembers ?? [];
+  const deletePendingSignupMember = useDeletePendingSignupMember();
 
   const [changingRole, setChangingRole] = useState<{
     member: Member;
@@ -303,10 +309,95 @@ function MembersTab({
           className="relative max-w-sm flex-1"
         />
         <RoleFilterDropdown />
-        <div className="ml-auto">
+        <div className="ml-auto flex items-center gap-2">
           <TabButtons activeTab={activeTab} onTabChange={onTabChange} />
+          <InviteUserButton organizationId={organizationId} />
         </div>
       </div>
+
+      {pendingSignupMembers.length > 0 && (
+        <div className="mb-6">
+          <h3 className="mb-3 text-sm font-semibold text-muted-foreground">
+            Auto-provisioned Users
+          </h3>
+          <DataTable
+            columns={[
+              {
+                id: "user",
+                header: "User",
+                cell: ({ row }) => {
+                  const member = row.original;
+                  const initials = getInitials(member.name || member.email);
+                  return (
+                    <div className="flex items-center gap-3">
+                      <Avatar className="h-8 w-8">
+                        {member.image && (
+                          <AvatarImage src={member.image} alt={member.name} />
+                        )}
+                        <AvatarFallback className="text-xs">
+                          {initials}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="min-w-0">
+                        <div className="font-medium truncate">
+                          {member.name || "Unknown"}
+                        </div>
+                        <div className="text-xs text-muted-foreground truncate">
+                          {member.email}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                },
+              },
+              {
+                id: "role",
+                header: "Role",
+                cell: ({ row }) => (
+                  <Badge variant="outline" className="capitalize">
+                    {row.original.role}
+                  </Badge>
+                ),
+              },
+              {
+                id: "actions",
+                header: "Actions",
+                cell: ({ row }) => (
+                  <TableRowActions
+                    actions={[
+                      {
+                        icon: <Copy className="h-4 w-4" />,
+                        label: "Copy invitation link",
+                        disabled: !row.original.invitationId,
+                        disabledTooltip: row.original.invitationId
+                          ? undefined
+                          : "No invitation link available",
+                        onClick: async () => {
+                          if (!row.original.invitationId) return;
+                          const link = `${window.location.origin}/auth/sign-up-with-invitation?invitationId=${row.original.invitationId}&email=${encodeURIComponent(row.original.email)}`;
+                          await navigator.clipboard.writeText(link);
+                        },
+                      },
+                      {
+                        icon: <Trash2 className="h-4 w-4" />,
+                        label: "Remove pending user",
+                        variant: "destructive",
+                        permissions: { member: ["delete"] },
+                        onClick: () =>
+                          deletePendingSignupMember.mutate(row.original.userId),
+                      },
+                    ]}
+                  />
+                ),
+              },
+            ]}
+            data={pendingSignupMembers}
+            getRowId={(row) => row.userId}
+            hideSelectedCount
+            manualPagination
+          />
+        </div>
+      )}
 
       <LoadingWrapper
         isPending={isPending}
@@ -463,9 +554,11 @@ function ChangeRoleDialog({
 function InvitationsTab({
   activeTab,
   onTabChange,
+  organizationId,
 }: {
   activeTab: string;
   onTabChange: (tab: string) => void;
+  organizationId: string;
 }) {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -564,6 +657,7 @@ function InvitationsTab({
         <div className="ml-auto">
           <TabButtons activeTab={activeTab} onTabChange={onTabChange} />
         </div>
+        <InviteUserButton organizationId={organizationId} />
       </div>
 
       <LoadingWrapper

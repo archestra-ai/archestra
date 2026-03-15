@@ -6,8 +6,6 @@ import { toast } from "sonner";
 import { twMerge } from "tailwind-merge";
 
 export const DEFAULT_TABLE_LIMIT = 10;
-export const DEFAULT_AGENTS_PAGE_SIZE = 20;
-export const DEFAULT_TOOLS_PAGE_SIZE = 50;
 
 // Default sorting values - used for both initial state and SSR matching
 export const DEFAULT_SORT_BY = "createdAt" as const;

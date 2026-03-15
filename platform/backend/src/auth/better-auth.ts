@@ -111,6 +111,10 @@ export const auth: any = betterAuth({
               type: "string",
               required: true,
             },
+            description: {
+              type: "string",
+              required: false,
+            },
           },
         },
       },

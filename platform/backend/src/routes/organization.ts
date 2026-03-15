@@ -405,6 +405,10 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
             pendingSignupMembers: z.array(
               z.object({
                 userId: z.string(),
+                name: z.string().nullable(),
+                email: z.string(),
+                image: z.string().nullable(),
+                role: z.string(),
                 provider: z.string().nullable(),
                 invitationId: z.string().nullable(),
               }),
@@ -471,14 +475,33 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Get emails for pending users
       const pendingUsers = await db
-        .select({ id: schema.usersTable.id, email: schema.usersTable.email })
-        .from(schema.usersTable)
-        .where(inArray(schema.usersTable.id, pendingUserIds));
+        .select({
+          id: schema.usersTable.id,
+          email: schema.usersTable.email,
+          name: schema.usersTable.name,
+          image: schema.usersTable.image,
+          role: schema.membersTable.role,
+        })
+        .from(schema.membersTable)
+        .innerJoin(
+          schema.usersTable,
+          eq(schema.membersTable.userId, schema.usersTable.id),
+        )
+        .where(
+          and(
+            eq(schema.membersTable.organizationId, organizationId),
+            inArray(schema.usersTable.id, pendingUserIds),
+          ),
+        );
 
       const pendingSignupMembers = pendingUsers.map((u) => {
         const inv = emailToInvitation.get(u.email);
         return {
           userId: u.id,
+          name: u.name,
+          email: u.email,
+          image: u.image,
+          role: u.role,
           provider: inv?.provider ?? null,
           invitationId: inv?.invitationId ?? null,
         };

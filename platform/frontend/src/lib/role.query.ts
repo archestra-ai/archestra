@@ -22,12 +22,41 @@ export const roleKeys = {
  * Hook to fetch all roles for the organization
  */
 export function useRoles(params?: {
-  initialData?: archestraApiTypes.GetRolesResponses["200"];
+  initialData?: archestraApiTypes.GetRolesResponses["200"]["data"];
 }) {
   return useQuery({
     queryKey: roleKeys.lists(),
-    queryFn: async () => (await getRoles()).data ?? [],
+    queryFn: async () => {
+      const { data } = await getRoles({ query: { limit: 100, offset: 0 } });
+      return data?.data ?? [];
+    },
     initialData: params?.initialData,
+  });
+}
+
+export function useRolesPaginated(params: {
+  limit: number;
+  offset: number;
+  name?: string;
+}) {
+  return useQuery({
+    queryKey: [...roleKeys.lists(), "paginated", params],
+    queryFn: async () => {
+      const { data } = await getRoles({ query: params });
+      return (
+        data ?? {
+          data: [],
+          pagination: {
+            currentPage: 1,
+            limit: params.limit,
+            total: 0,
+            totalPages: 0,
+            hasNext: false,
+            hasPrev: false,
+          },
+        }
+      );
+    },
   });
 }
 
@@ -130,11 +159,13 @@ export function useCustomRoles() {
   return useQuery({
     queryKey: roleKeys.custom(),
     queryFn: async () => {
-      const { data } = await archestraApiSdk.getRoles();
-      if (!data) return [];
+      const { data } = await archestraApiSdk.getRoles({
+        query: { limit: 100, offset: 0 },
+      });
+      if (!data?.data) return [];
 
       // Filter to only custom roles (non-predefined)
-      return data.filter((role) => !role.predefined);
+      return data.data.filter((role) => !role.predefined);
     },
     enabled: userIsAuthenticated && !!canReadRoles,
     retry: false,

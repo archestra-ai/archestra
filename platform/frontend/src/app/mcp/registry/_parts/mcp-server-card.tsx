@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  ARCHESTRA_MCP_CATALOG_ID,
   archestraApiSdk,
   type archestraApiTypes,
   E2eTestId,
@@ -17,10 +16,10 @@ import {
   User,
   Wrench,
 } from "lucide-react";
-import Image from "next/image";
 import { useState } from "react";
 import { toast } from "sonner";
 
+import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import {
   Avatar,
   AvatarFallback,
@@ -94,55 +93,6 @@ export type McpServerCardProps = {
   /** When true, renders as a built-in Playwright server (non-editable, personal-only) */
   isBuiltInPlaywright?: boolean;
 };
-
-function McpCatalogIcon({
-  icon,
-  catalogId,
-  size = 20,
-}: {
-  icon?: string | null;
-  catalogId?: string;
-  size?: number;
-}) {
-  if (!icon && catalogId === ARCHESTRA_MCP_CATALOG_ID) {
-    return (
-      <Image
-        src="/logo.png"
-        alt="Archestra"
-        width={size}
-        height={size}
-        className="shrink-0 rounded-sm object-contain"
-      />
-    );
-  }
-
-  if (!icon) {
-    return (
-      <Server
-        className="shrink-0 text-muted-foreground"
-        style={{ width: size, height: size }}
-      />
-    );
-  }
-
-  if (icon.startsWith("data:")) {
-    return (
-      <Image
-        src={icon}
-        alt="MCP server icon"
-        width={size}
-        height={size}
-        className="shrink-0 rounded-sm object-contain"
-      />
-    );
-  }
-
-  return (
-    <span className="shrink-0 leading-none" style={{ fontSize: size }}>
-      {icon}
-    </span>
-  );
-}
 
 export type McpServerCardVariant = "remote" | "local" | "builtin";
 

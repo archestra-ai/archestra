@@ -36,6 +36,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ConnectorTypeIcon } from "@/app/knowledge/knowledge-bases/_parts/connector-icons";
 import { AgentBadge } from "@/components/agent-badge";
+import type { AgentIconVariant } from "@/components/agent-icon";
 import { AgentIconPicker } from "@/components/agent-icon-picker";
 import {
   type ProfileLabel,
@@ -477,6 +478,7 @@ interface AgentDialogProps {
   agent?: Agent | null;
   /** Agent type: 'agent' for internal agents with prompts, 'profile' for external profiles */
   agentType?: AgentType;
+  defaultIconType?: AgentIconVariant;
   /** Callback when a new agent/profile is created (not called for updates) */
   onCreated?: (created: { id: string; name: string }) => void;
 }
@@ -486,6 +488,7 @@ export function AgentDialog({
   onOpenChange,
   agent,
   agentType = "profile",
+  defaultIconType = "agent",
   onCreated,
 }: AgentDialogProps) {
   const appName = useAppName();
@@ -1037,7 +1040,11 @@ export function AgentDialog({
               {/* Name + Icon (hidden for built-in agents, shown in dialog title) */}
               {!isBuiltIn && (
                 <div className="space-y-4">
-                  <AgentIconPicker value={icon} onChange={setIcon} />
+                  <AgentIconPicker
+                    value={icon}
+                    onChange={setIcon}
+                    fallbackType={defaultIconType}
+                  />
                   <div className="space-y-2">
                     <Label htmlFor="agentName">Name *</Label>
                     <Input

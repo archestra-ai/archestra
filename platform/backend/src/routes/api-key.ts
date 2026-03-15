@@ -70,7 +70,10 @@ const apiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         return reply.send(normalizeCreatedApiKeyResponse(apiKey));
       } catch (error) {
-        throw toApiError(error, 400);
+        throw toApiError(error, {
+          fallbackStatusCode: 400,
+          fallbackMessage: "Failed to create API key",
+        });
       }
     },
   );
@@ -103,7 +106,10 @@ const apiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         return reply.send(result);
       } catch (error) {
-        throw toApiError(error, 500);
+        throw toApiError(error, {
+          fallbackStatusCode: 500,
+          fallbackMessage: "Failed to delete API key",
+        });
       }
     },
   );
@@ -113,31 +119,56 @@ export default apiKeyRoutes;
 
 // === Internal helpers
 
-function toApiError(error: unknown, fallbackStatusCode: number): ApiError {
+function toApiError(
+  error: unknown,
+  params: { fallbackStatusCode: number; fallbackMessage: string },
+): ApiError {
   if (error instanceof ApiError) {
     return error;
   }
 
+  const statusCode = getStatusCode(error, params.fallbackStatusCode);
+  const message = getApiKeyErrorMessage(statusCode, params.fallbackMessage);
+
   if (error instanceof Error) {
-    const statusCode = getStatusCode(error, fallbackStatusCode);
-    return new ApiError(statusCode, error.message);
+    return new ApiError(statusCode, message);
   }
 
-  return new ApiError(fallbackStatusCode, "API key request failed");
+  return new ApiError(statusCode, message);
 }
 
-function getStatusCode(error: Error, fallbackStatusCode: number): number {
-  const maybeStatusCode = (error as Error & { statusCode?: unknown })
-    .statusCode;
+function getStatusCode(error: unknown, fallbackStatusCode: number): number {
+  const maybeStatusCode = (
+    error as Error & { statusCode?: unknown; status?: unknown }
+  ).statusCode;
   if (typeof maybeStatusCode === "number") {
     return maybeStatusCode;
   }
 
-  if (error.message.toLowerCase().includes("not found")) {
-    return 404;
+  const maybeStatus = (error as Error & { status?: unknown }).status;
+  if (typeof maybeStatus === "number") {
+    return maybeStatus;
   }
 
   return fallbackStatusCode;
+}
+
+function getApiKeyErrorMessage(
+  statusCode: number,
+  fallbackMessage: string,
+): string {
+  switch (statusCode) {
+    case 400:
+      return fallbackMessage;
+    case 401:
+      return "Authentication required";
+    case 403:
+      return "Forbidden";
+    case 404:
+      return "API key not found";
+    default:
+      return fallbackMessage;
+  }
 }
 
 function normalizeCreatedApiKeyResponse(apiKey: {

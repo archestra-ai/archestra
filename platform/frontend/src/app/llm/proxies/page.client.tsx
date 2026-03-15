@@ -27,6 +27,7 @@ import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { AgentBadge } from "@/components/agent-badge";
 import { AgentDialog } from "@/components/agent-dialog";
+import { AgentIcon } from "@/components/agent-icon";
 import {
   ActiveFilterBadges,
   AgentScopeFilter,
@@ -298,6 +299,21 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
 
   const columns: ColumnDef<ProxyData>[] = [
     {
+      id: "icon",
+      size: 40,
+      enableSorting: false,
+      header: "",
+      cell: ({ row }) => (
+        <div className="flex items-center justify-center">
+          <AgentIcon
+            icon={row.original.icon}
+            size={20}
+            fallbackType="llm_proxy"
+          />
+        </div>
+      ),
+    },
+    {
       id: "name",
       accessorKey: "name",
       size: 240,
@@ -484,6 +500,7 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
               open={isCreateDialogOpen}
               onOpenChange={setIsCreateDialogOpen}
               agentType="llm_proxy"
+              defaultIconType="llm_proxy"
               onCreated={(proxy) => {
                 setIsCreateDialogOpen(false);
                 setConnectingProxy({ ...proxy, agentType: "llm_proxy" });
@@ -503,6 +520,7 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
               onOpenChange={(open) => !open && setEditingProxy(null)}
               agent={editingProxy}
               agentType={editingProxy?.agentType || "llm_proxy"}
+              defaultIconType="llm_proxy"
             />
 
             {deletingProxyId && (

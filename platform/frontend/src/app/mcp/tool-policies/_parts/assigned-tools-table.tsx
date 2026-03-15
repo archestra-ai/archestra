@@ -10,6 +10,7 @@ import { ChevronDown, ChevronUp, Loader2, Pencil, Wand2 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { LoadingSpinner } from "@/components/loading";
+import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { PermissivePolicyOverlay } from "@/components/permissive-policy-overlay";
 import { WithPermissions } from "@/components/roles/with-permissions";
 import { SearchInput } from "@/components/search-input";
@@ -489,8 +490,13 @@ export function AssignedToolsTable({
                   <TooltipTrigger asChild>
                     <Badge
                       variant="default"
-                      className="bg-indigo-500 max-w-[150px]"
+                      className="bg-indigo-500 max-w-[180px] gap-1.5"
                     >
+                      <McpCatalogIcon
+                        icon={catalogItem.icon}
+                        catalogId={catalogItem.id}
+                        size={14}
+                      />
                       <span className="truncate">{catalogItem.name}</span>
                     </Badge>
                   </TooltipTrigger>
@@ -743,6 +749,34 @@ export function AssignedToolsTable({
               ...uniqueOrigins.map((origin) => ({
                 value: origin.id,
                 label: origin.name,
+                content: (
+                  <div className="flex items-center gap-2 min-w-0">
+                    <McpCatalogIcon
+                      icon={
+                        internalMcpCatalogItems?.find(
+                          (item) => item.id === origin.id,
+                        )?.icon
+                      }
+                      catalogId={origin.id}
+                      size={16}
+                    />
+                    <span className="truncate">{origin.name}</span>
+                  </div>
+                ),
+                selectedContent: (
+                  <div className="flex items-center gap-2 min-w-0">
+                    <McpCatalogIcon
+                      icon={
+                        internalMcpCatalogItems?.find(
+                          (item) => item.id === origin.id,
+                        )?.icon
+                      }
+                      catalogId={origin.id}
+                      size={16}
+                    />
+                    <span className="truncate">{origin.name}</span>
+                  </div>
+                ),
               })),
             ]}
             className="w-[200px]"

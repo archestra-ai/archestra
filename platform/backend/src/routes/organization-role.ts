@@ -2,6 +2,7 @@ import { PredefinedRoleNameSchema, RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { hasPermission } from "@/auth";
+import { calculatePaginationMeta } from "@/database/utils/pagination";
 import { OrganizationRoleModel } from "@/models";
 import {
   ApiError,
@@ -50,19 +51,9 @@ const organizationRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         isAdmin: canManageRoles,
       });
 
-      const currentPage = Math.floor(offset / limit) + 1;
-      const totalPages = Math.ceil(result.total / limit);
-
       return reply.send({
         data: result.data,
-        pagination: {
-          currentPage,
-          limit,
-          total: result.total,
-          totalPages,
-          hasNext: currentPage < totalPages,
-          hasPrev: currentPage > 1,
-        },
+        pagination: calculatePaginationMeta(result.total, { limit, offset }),
       });
     },
   );

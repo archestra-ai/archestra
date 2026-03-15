@@ -3,6 +3,7 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { hasAnyAgentTypeAdminPermission, hasPermission } from "@/auth";
 import config from "@/config";
+import { calculatePaginationMeta } from "@/database/utils/pagination";
 import { AgentToolModel, TeamModel } from "@/models";
 import {
   AddTeamExternalGroupBodySchema,
@@ -52,14 +53,7 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         });
         return reply.send({
           data: result.data,
-          pagination: {
-            currentPage: Math.floor(offset / limit) + 1,
-            limit,
-            total: result.total,
-            totalPages: Math.ceil(result.total / limit),
-            hasNext: offset + limit < result.total,
-            hasPrev: offset > 0,
-          },
+          pagination: calculatePaginationMeta(result.total, { limit, offset }),
         });
       }
       // Team admins see all teams in the organization
@@ -71,14 +65,7 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
       return reply.send({
         data: result.data,
-        pagination: {
-          currentPage: Math.floor(offset / limit) + 1,
-          limit,
-          total: result.total,
-          totalPages: Math.ceil(result.total / limit),
-          hasNext: offset + limit < result.total,
-          hasPrev: offset > 0,
-        },
+        pagination: calculatePaginationMeta(result.total, { limit, offset }),
       });
     },
   );

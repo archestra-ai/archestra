@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import { useActiveOrganization } from "./organization.query";
+import { calculatePaginationMeta } from "./pagination";
 
 const { getMembers } = archestraApiSdk;
 
@@ -115,14 +116,11 @@ export function useInvitationsPaginated(
 
       return {
         data: paginatedInvitations,
-        pagination: {
-          currentPage: Math.floor(query.offset / query.limit) + 1,
+        pagination: calculatePaginationMeta({
           limit: query.limit,
+          offset: query.offset,
           total: allInvitations.length,
-          totalPages: Math.ceil(allInvitations.length / query.limit),
-          hasNext: query.offset + query.limit < allInvitations.length,
-          hasPrev: query.offset > 0,
-        },
+        }),
       };
     },
     enabled: !!activeOrganization?.id,
@@ -218,13 +216,10 @@ export function useCancelInvitationMutation() {
 function buildEmptyPaginatedInvitations(query: InvitationsQuery) {
   return {
     data: [] as Invitation[],
-    pagination: {
-      currentPage: 1,
+    pagination: calculatePaginationMeta({
       limit: query.limit,
+      offset: query.offset,
       total: 0,
-      totalPages: 0,
-      hasNext: false,
-      hasPrev: false,
-    },
+    }),
   };
 }

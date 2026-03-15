@@ -93,20 +93,13 @@ class KnowledgeBaseModel {
     return result.rowCount !== null && result.rowCount > 0;
   }
 
-  static async countByOrganization(
-    params:
-      | string
-      | {
-          organizationId: string;
-          search?: string;
-        },
-  ): Promise<number> {
-    const organizationId =
-      typeof params === "string" ? params : params.organizationId;
-    const search = typeof params === "string" ? undefined : params.search;
-    const normalizedSearch = search?.trim();
+  static async countByOrganization(params: {
+    organizationId: string;
+    search?: string;
+  }): Promise<number> {
+    const normalizedSearch = params.search?.trim();
     const filters = [
-      eq(schema.knowledgeBasesTable.organizationId, organizationId),
+      eq(schema.knowledgeBasesTable.organizationId, params.organizationId),
       ...(normalizedSearch
         ? [
             or(

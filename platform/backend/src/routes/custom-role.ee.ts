@@ -15,7 +15,12 @@ const CreateUpdateRoleNameSchema = z
   .string()
   .min(1, "Role name is required")
   .max(50, "Role name must be less than 50 characters");
-const RoleDescriptionSchema = z.string().max(200).optional();
+const RoleDescriptionSchema = z
+  .string()
+  .max(200)
+  .transform((value) => value.trim())
+  .optional()
+  .transform((value) => (value ? value : undefined));
 
 const CustomRoleIdSchema = z
   .string()
@@ -283,7 +288,15 @@ function normalizeRoleResponse(roleData: {
 
 function parsePermissions(value: unknown) {
   if (typeof value === "string") {
-    return JSON.parse(value);
+    try {
+      return JSON.parse(value);
+    } catch (error) {
+      logger.warn(
+        { error, permission: value },
+        "Failed to parse custom role permissions JSON",
+      );
+      return {};
+    }
   }
 
   return value;

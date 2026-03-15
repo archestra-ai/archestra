@@ -55,6 +55,7 @@ export default function ModelsPage() {
   const { data: models = [], isPending, refetch } = useModelsWithApiKeys();
   const { data: apiKeys = [] } = useChatApiKeys();
   const syncModelsMutation = useSyncChatModels();
+  const [isRefreshingModels, setIsRefreshingModels] = useState(false);
   const [search, setSearch] = useState("");
   const [apiKeyFilter, setApiKeyFilter] = useState<string>("all");
   const [editingModel, setEditingModel] = useState<ModelWithApiKeys | null>(
@@ -99,22 +100,27 @@ export default function ModelsPage() {
   }, [models]);
 
   const handleRefresh = useCallback(async () => {
-    await syncModelsMutation.mutateAsync();
-    await refetch();
+    setIsRefreshingModels(true);
+    try {
+      await syncModelsMutation.mutateAsync();
+      await refetch();
+    } finally {
+      setIsRefreshingModels(false);
+    }
   }, [syncModelsMutation, refetch]);
 
   const setProviderAction = useSetProviderAction();
   useEffect(() => {
     setProviderAction(
-      <Button onClick={handleRefresh} disabled={syncModelsMutation.isPending}>
+      <Button onClick={handleRefresh} disabled={isRefreshingModels}>
         <RefreshCw
-          className={`h-4 w-4 mr-2 ${syncModelsMutation.isPending ? "animate-spin" : ""}`}
+          className={`h-4 w-4 mr-2 ${isRefreshingModels ? "animate-spin" : ""}`}
         />
-        Refresh Models
+        {isRefreshingModels ? "Refreshing..." : "Refresh Models"}
       </Button>,
     );
     return () => setProviderAction(null);
-  }, [setProviderAction, syncModelsMutation.isPending, handleRefresh]);
+  }, [setProviderAction, isRefreshingModels, handleRefresh]);
 
   const columns: ColumnDef<ModelWithApiKeys>[] = useMemo(
     () => [

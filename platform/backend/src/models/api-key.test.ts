@@ -52,6 +52,29 @@ describe("ApiKeyModel", () => {
       expect(apiKeys[1]?.permissions).toEqual({ agent: ["read"] });
       expect(apiKeys[1]?.metadata).toEqual({ source: "test" });
     });
+
+    test("returns null metadata and permissions for malformed JSON values", async ({
+      makeUser,
+    }) => {
+      const user = await makeUser();
+
+      await db.insert(schema.apikeysTable).values({
+        id: crypto.randomUUID(),
+        name: "Broken key",
+        key: "hashed-broken",
+        userId: user.id,
+        enabled: true,
+        createdAt: new Date("2026-02-01T00:00:00.000Z"),
+        updatedAt: new Date("2026-02-01T00:00:00.000Z"),
+        permissions: "{not-json}",
+        metadata: "{not-json}",
+      });
+
+      const [apiKey] = await ApiKeyModel.listByUserId(user.id);
+
+      expect(apiKey?.permissions).toBeNull();
+      expect(apiKey?.metadata).toBeNull();
+    });
   });
 
   describe("findByIdForUser", () => {

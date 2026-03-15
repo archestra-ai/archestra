@@ -355,6 +355,7 @@ export function McpCatalogForm({
           <div className="border rounded-lg p-5 space-y-4">
             <AgentIconPicker
               value={form.watch("icon") ?? null}
+              fallbackType="server"
               onChange={(icon) =>
                 form.setValue("icon", icon, { shouldDirty: true })
               }

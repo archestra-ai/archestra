@@ -6,6 +6,11 @@ import { DEFAULT_TABLE_LIMIT } from "./utils";
 
 type QueryParamUpdates = Record<string, string | null | undefined>;
 
+/**
+ * Use URL-backed table state for server-paginated or shareable table views.
+ * Simple client-only filtering can stay in local component state when deep
+ * linking is not valuable.
+ */
 export function useDataTableQueryParams(params?: { defaultPageSize?: number }) {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -32,7 +37,11 @@ export function useDataTableQueryParams(params?: { defaultPageSize?: number }) {
           nextParams.set(key, value);
         }
       }
-      router.push(`${pathname}?${nextParams.toString()}`, { scroll: false });
+      const nextQueryString = nextParams.toString();
+      router.push(
+        nextQueryString ? `${pathname}?${nextQueryString}` : pathname,
+        { scroll: false },
+      );
     },
     [pathname, router, searchParams],
   );

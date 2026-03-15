@@ -1,12 +1,9 @@
 "use client";
 
-import {
-  ARCHESTRA_MCP_CATALOG_ID,
-  type McpDeploymentStatusEntry,
-} from "@shared";
-import { AlertCircle, PlugZap, RefreshCw, Server, XIcon } from "lucide-react";
-import Image from "next/image";
+import type { McpDeploymentStatusEntry } from "@shared";
+import { AlertCircle, PlugZap, RefreshCw, XIcon } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
+import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -109,42 +106,7 @@ function SidebarIcon({
   icon?: string | null;
   catalogId?: string;
 }) {
-  const size = 28;
-  if (!icon && catalogId === ARCHESTRA_MCP_CATALOG_ID) {
-    return (
-      <Image
-        src="/logo.png"
-        alt="Archestra"
-        width={size}
-        height={size}
-        className="shrink-0 rounded-sm object-contain"
-      />
-    );
-  }
-  if (!icon) {
-    return (
-      <Server
-        className="shrink-0 text-muted-foreground"
-        style={{ width: size, height: size }}
-      />
-    );
-  }
-  if (icon.startsWith("data:")) {
-    return (
-      <Image
-        src={icon}
-        alt="MCP server icon"
-        width={size}
-        height={size}
-        className="shrink-0 rounded-sm object-contain"
-      />
-    );
-  }
-  return (
-    <span className="shrink-0 leading-none" style={{ fontSize: size }}>
-      {icon}
-    </span>
-  );
+  return <McpCatalogIcon icon={icon} catalogId={catalogId} size={28} />;
 }
 
 export function McpServerSettingsDialog({

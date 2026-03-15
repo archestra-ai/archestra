@@ -27,6 +27,7 @@ import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { AgentBadge } from "@/components/agent-badge";
 import { AgentDialog } from "@/components/agent-dialog";
+import { AgentIcon } from "@/components/agent-icon";
 import {
   ActiveFilterBadges,
   AgentScopeFilter,
@@ -314,6 +315,21 @@ function McpGateways({
 
   const columns: ColumnDef<GatewayData>[] = [
     {
+      id: "icon",
+      size: 40,
+      enableSorting: false,
+      header: "",
+      cell: ({ row }) => (
+        <div className="flex items-center justify-center">
+          <AgentIcon
+            icon={row.original.icon}
+            size={20}
+            fallbackType="mcp_gateway"
+          />
+        </div>
+      ),
+    },
+    {
       id: "name",
       accessorKey: "name",
       size: 240,
@@ -542,6 +558,7 @@ function McpGateways({
               open={isCreateDialogOpen}
               onOpenChange={setIsCreateDialogOpen}
               agentType="mcp_gateway"
+              defaultIconType="mcp_gateway"
               onCreated={(gateway) => {
                 setIsCreateDialogOpen(false);
                 setConnectingGateway({ ...gateway, agentType: "mcp_gateway" });
@@ -561,6 +578,7 @@ function McpGateways({
               onOpenChange={(open) => !open && setEditingGateway(null)}
               agent={editingGateway}
               agentType={editingGateway?.agentType || "mcp_gateway"}
+              defaultIconType="mcp_gateway"
             />
 
             {deletingGatewayId && (

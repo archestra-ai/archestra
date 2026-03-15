@@ -104,6 +104,7 @@ export function useMcpToolCalls({
     initialData:
       offset === 0 &&
       limit === DEFAULT_TABLE_LIMIT &&
+      !agentId &&
       sortBy === "createdAt" &&
       sortDirection === "desc" &&
       !startDate &&

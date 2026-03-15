@@ -10,6 +10,7 @@ import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { FormDialog } from "@/components/form-dialog";
 import { InviteByLinkCard } from "@/components/invite-by-link-card";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
+import { RoleOptionLabel } from "@/components/role-type-icon";
 import { SearchInput } from "@/components/search-input";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -443,6 +444,14 @@ function MembersTab({
           }}
           onPaginationChange={handlePaginationChange}
           isLoading={isFetching}
+          hasActiveFilters={Boolean(nameFilter || roleFilter)}
+          onClearFilters={() => {
+            const params = new URLSearchParams(searchParams.toString());
+            params.delete("name");
+            params.delete("role");
+            params.set("page", "1");
+            router.push(`${pathname}?${params.toString()}`, { scroll: false });
+          }}
         />
       </LoadingWrapper>
 
@@ -489,6 +498,7 @@ function RoleFilterDropdown() {
   const { data: roles = [] } = useRoles();
 
   const currentRole = searchParams.get("role") || "all";
+  const selectedRole = roles.find((role) => role.role === currentRole);
 
   const handleChange = useCallback(
     (value: string) => {
@@ -506,17 +516,25 @@ function RoleFilterDropdown() {
 
   return (
     <Select value={currentRole} onValueChange={handleChange}>
-      <SelectTrigger className="w-[160px]">
-        <div className="flex items-center gap-2">
-          <Shield className="h-4 w-4 text-muted-foreground" />
-          <SelectValue placeholder="Filter by role" />
-        </div>
+      <SelectTrigger className="w-[180px]">
+        {selectedRole ? (
+          <RoleOptionLabel
+            predefined={selectedRole.predefined}
+            label={selectedRole.name}
+            className="pr-6"
+          />
+        ) : (
+          <div className="flex items-center gap-2 text-muted-foreground">
+            <Shield className="h-4 w-4" />
+            <SelectValue placeholder="Filter by role" />
+          </div>
+        )}
       </SelectTrigger>
       <SelectContent>
         <SelectItem value="all">All Roles</SelectItem>
         {roles.map((role) => (
           <SelectItem key={role.id} value={role.role}>
-            <span className="capitalize">{role.name}</span>
+            <RoleOptionLabel predefined={role.predefined} label={role.name} />
           </SelectItem>
         ))}
       </SelectContent>
@@ -538,6 +556,10 @@ function ChangeRoleDialog({
   isPending: boolean;
 }) {
   const [selectedRole, setSelectedRole] = useState(member.role);
+
+  useEffect(() => {
+    setSelectedRole(member.role);
+  }, [member.role]);
 
   return (
     <FormDialog

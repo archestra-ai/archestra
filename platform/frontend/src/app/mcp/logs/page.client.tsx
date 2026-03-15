@@ -4,7 +4,7 @@ import { type archestraApiTypes, parseFullToolName } from "@shared";
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
 import { ChevronDown, ChevronUp, User } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { SearchInput } from "@/components/search-input";
 import { TruncatedText } from "@/components/truncated-text";
 import { Badge } from "@/components/ui/badge";
@@ -76,7 +76,8 @@ function McpToolCallsTable({
   // Get URL params for filters
   const startDateFromUrl = searchParams.get("startDate");
   const endDateFromUrl = searchParams.get("endDate");
-  const profileIdFromUrl = searchParams.get("profileId");
+  const profileIdFromUrl =
+    searchParams.get("profileId") || searchParams.get("profileID");
   const searchFromUrl = searchParams.get("search");
 
   const [profileFilter, setProfileFilter] = useState(profileIdFromUrl || "all");
@@ -87,6 +88,10 @@ function McpToolCallsTable({
   const [sorting, setSorting] = useState<SortingState>([
     { id: "createdAt", desc: true },
   ]);
+
+  useEffect(() => {
+    setProfileFilter(profileIdFromUrl || "all");
+  }, [profileIdFromUrl]);
 
   // Helper to update URL params
   const updateUrlParams = useCallback(
@@ -111,6 +116,7 @@ function McpToolCallsTable({
       setPagination((prev) => ({ ...prev, pageIndex: 0 })); // Reset to first page
       updateUrlParams({
         profileId: value === "all" ? null : value,
+        profileID: null,
       });
     },
     [updateUrlParams],
@@ -371,6 +377,7 @@ function McpToolCallsTable({
     dateTimePicker.clearDateRange();
     updateUrlParams({
       profileId: null,
+      profileID: null,
       startDate: null,
       endDate: null,
       search: null,

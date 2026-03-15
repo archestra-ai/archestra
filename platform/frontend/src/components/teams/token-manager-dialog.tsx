@@ -4,16 +4,10 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Check, Copy, Key, RefreshCw } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { FormDialog } from "@/components/form-dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { DialogStickyFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { type TeamToken, useRotateToken } from "@/lib/team-token.query";
@@ -94,21 +88,24 @@ export function TokenManagerDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-xl">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Key className="h-5 w-5" />
-            {token.name}
-          </DialogTitle>
-          <DialogDescription>
-            {token.teamId
-              ? `Token for ${token.team?.name || "team"} access`
-              : "Organization-wide access token"}
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="space-y-4 py-4">
+    <FormDialog
+      open={open}
+      onOpenChange={handleOpenChange}
+      title={
+        <span className="flex items-center gap-2">
+          <Key className="h-5 w-5" />
+          {token.name}
+        </span>
+      }
+      description={
+        token.teamId
+          ? `Token for ${token.team?.name || "team"} access`
+          : "Organization-wide access token"
+      }
+      size="medium"
+      className="max-w-xl"
+    >
+      <div className="min-h-0 flex-1 overflow-y-auto py-4 pr-2 -mr-2 space-y-4">
           <div className="space-y-2">
             <Label>Token Preview</Label>
             <div className="flex gap-2">
@@ -170,22 +167,21 @@ export function TokenManagerDialog({
           )}
         </div>
 
-        <DialogFooter className="flex justify-between sm:justify-between">
-          <Button
-            variant={confirmRotate ? "destructive" : "outline"}
-            onClick={handleRotate}
-            disabled={rotateMutation.isPending}
-          >
-            <RefreshCw
-              className={`mr-2 h-4 w-4 ${rotateMutation.isPending ? "animate-spin" : ""}`}
-            />
-            {confirmRotate ? "Confirm Rotate" : "Rotate Token"}
-          </Button>
-          <Button variant="outline" onClick={() => handleOpenChange(false)}>
-            Close
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+      <DialogStickyFooter className="justify-between sm:justify-between">
+        <Button
+          variant={confirmRotate ? "destructive" : "outline"}
+          onClick={handleRotate}
+          disabled={rotateMutation.isPending}
+        >
+          <RefreshCw
+            className={`mr-2 h-4 w-4 ${rotateMutation.isPending ? "animate-spin" : ""}`}
+          />
+          {confirmRotate ? "Confirm Rotate" : "Rotate Token"}
+        </Button>
+        <Button variant="outline" onClick={() => handleOpenChange(false)}>
+          Close
+        </Button>
+      </DialogStickyFooter>
+    </FormDialog>
   );
 }

@@ -25,6 +25,7 @@ import {
   type ChatApiKeyFormValues,
   PLACEHOLDER_KEY,
 } from "@/components/chat-api-key-form";
+import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { WithPermissions } from "@/components/roles/with-permissions";
 import {
@@ -33,15 +34,7 @@ import {
 } from "@/components/settings/settings-block";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogForm,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { DialogForm } from "@/components/ui/dialog";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   Select,
@@ -434,24 +427,23 @@ function DropEmbeddingConfigDialog({
 }) {
   const dropMutation = useDropEmbeddingConfig();
 
-  const handleDrop = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleDrop = async () => {
     await dropMutation.mutateAsync();
     onOpenChange(false);
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>Drop Embedding Configuration</DialogTitle>
-          <DialogDescription>
+    <DeleteConfirmDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Drop Embedding Configuration"
+      description={
+        <div className="space-y-3">
+          <p>
             This will delete all embedded documents and reset connector
             checkpoints. Connectors and knowledge bases are preserved — the next
             sync will re-ingest everything with the new embedding model.
-          </DialogDescription>
-        </DialogHeader>
-        <DialogForm onSubmit={handleDrop}>
+          </p>
           <Alert variant="destructive" className="py-2">
             <AlertTriangle className="h-4 w-4" />
             <AlertDescription className="text-xs">
@@ -459,28 +451,13 @@ function DropEmbeddingConfigDialog({
               knowledge bases will not be affected.
             </AlertDescription>
           </Alert>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              variant="destructive"
-              disabled={dropMutation.isPending}
-            >
-              {dropMutation.isPending && (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              )}
-              Drop Embedding Config
-            </Button>
-          </DialogFooter>
-        </DialogForm>
-      </DialogContent>
-    </Dialog>
+        </div>
+      }
+      isPending={dropMutation.isPending}
+      onConfirm={handleDrop}
+      confirmLabel="Drop Embedding Config"
+      pendingLabel="Dropping..."
+    />
   );
 }
 

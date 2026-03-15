@@ -10,10 +10,12 @@ import {
 } from "@shared";
 import { allAvailableActions } from "@shared/access-control";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Eye, Pencil, Plus, Shield, Trash2 } from "lucide-react";
+import { Eye, Pencil, Plus, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useSetSettingsAction } from "@/app/settings/layout";
+import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { RoleTypeIcon } from "@/components/role-type-icon";
 import { SearchInput } from "@/components/search-input";
 import {
   type TableRowAction,
@@ -22,24 +24,11 @@ import {
 import { FormDialog } from "@/components/form-dialog";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogForm,
-  DialogHeader,
-  DialogStickyFooter,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { DialogForm, DialogStickyFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import {
   useCreateRole,
   useDeleteRole,
@@ -57,8 +46,14 @@ type Role = archestraApiTypes.GetRoleResponses["200"];
  */
 export function RolesList() {
   const setActionButton = useSetSettingsAction();
-  const { pageIndex, pageSize, offset, searchParams, setPagination } =
-    useDataTableQueryParams();
+  const {
+    pageIndex,
+    pageSize,
+    offset,
+    searchParams,
+    setPagination,
+    updateQueryParams,
+  } = useDataTableQueryParams();
   const nameFilter = searchParams.get("name") || undefined;
   const { data: rolesResponse, isLoading } = useRolesPaginated({
     limit: pageSize,
@@ -210,16 +205,7 @@ export function RolesList() {
       header: "",
       cell: ({ row }) => (
         <div className="flex items-center justify-center">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Shield
-                className={`h-4 w-4 ${row.original.predefined ? "text-primary" : "text-muted-foreground"}`}
-              />
-            </TooltipTrigger>
-            <TooltipContent>
-              {row.original.predefined ? "Predefined" : "Custom"}
-            </TooltipContent>
-          </Tooltip>
+          <RoleTypeIcon predefined={row.original.predefined} withTooltip />
         </div>
       ),
     },
@@ -227,6 +213,7 @@ export function RolesList() {
       id: "name",
       accessorKey: "name",
       header: "Name",
+      size: 520,
       enableSorting: false,
       cell: ({ row }) => {
         const role = row.original;
@@ -308,6 +295,13 @@ export function RolesList() {
             total,
           }}
           onPaginationChange={setPagination}
+          hasActiveFilters={Boolean(nameFilter)}
+          onClearFilters={() =>
+            updateQueryParams({
+              name: null,
+              page: "1",
+            })
+          }
           emptyMessage="No roles found"
           hideSelectedCount
         />
@@ -428,91 +422,80 @@ export function RolesList() {
         </DialogForm>
       </FormDialog>
 
-      {/* View Predefined Role Dialog (read-only) */}
-      <Dialog
+      <FormDialog
         open={viewPermissionsDialogOpen}
-        onOpenChange={setViewPermissionsDialogOpen}
+        onOpenChange={(open) => {
+          setViewPermissionsDialogOpen(open);
+          if (!open) {
+            setViewPermissionsRole(null);
+          }
+        }}
+        title="View Predefined Role"
+        description="This is a predefined role. It cannot be modified."
+        size="large"
       >
-        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>View Predefined Role</DialogTitle>
-            <DialogDescription>
-              This is a predefined role. It cannot be modified.
-            </DialogDescription>
-          </DialogHeader>
-          {viewPermissionsRole && (
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="view-name">Role Name</Label>
-                <Input
-                  id="view-name"
-                  value={viewPermissionsRole.name}
-                  readOnly
-                  className="capitalize"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="view-description">Description</Label>
-                <Textarea
-                  id="view-description"
-                  value={
-                    viewPermissionsRole.description ||
-                    roleDescriptions[
-                      viewPermissionsRole.name as PredefinedRoleName
-                    ] ||
-                    ""
-                  }
-                  readOnly
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Permissions</Label>
-                <RolePermissionBuilder
-                  permission={viewPermissionsRole.permission}
-                  onChange={() => {}}
-                  userPermissions={viewPermissionsRole.permission}
-                  readOnly
-                  readOnlyTooltip="This is a predefined role. Permissions cannot be modified."
-                />
-              </div>
+        {viewPermissionsRole && (
+          <div className="min-h-0 flex-1 overflow-y-auto py-4 pr-2 -mr-2 space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="view-name">Role Name</Label>
+              <Input
+                id="view-name"
+                value={viewPermissionsRole.name}
+                readOnly
+                className="capitalize"
+              />
             </div>
-          )}
-        </DialogContent>
-      </Dialog>
+            <div className="space-y-2">
+              <Label htmlFor="view-description">Description</Label>
+              <Textarea
+                id="view-description"
+                value={
+                  viewPermissionsRole.description ||
+                  roleDescriptions[viewPermissionsRole.name as PredefinedRoleName] ||
+                  ""
+                }
+                readOnly
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Permissions</Label>
+              <RolePermissionBuilder
+                permission={viewPermissionsRole.permission}
+                onChange={() => {}}
+                userPermissions={viewPermissionsRole.permission}
+                readOnly
+                readOnlyTooltip="This is a predefined role. Permissions cannot be modified."
+              />
+            </div>
+          </div>
+        )}
+        <DialogStickyFooter>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
+              setViewPermissionsDialogOpen(false);
+              setViewPermissionsRole(null);
+            }}
+          >
+            Close
+          </Button>
+        </DialogStickyFooter>
+      </FormDialog>
 
-      {/* Delete Confirm Dialog */}
-      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Delete Role</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to delete the role "{roleToDelete?.name}"?
-              This action cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogForm onSubmit={handleDeleteRole}>
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  setDeleteDialogOpen(false);
-                  setRoleToDelete(null);
-                }}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                variant="destructive"
-                disabled={deleteMutation.isPending}
-              >
-                {deleteMutation.isPending ? "Deleting..." : "Delete"}
-              </Button>
-            </DialogFooter>
-          </DialogForm>
-        </DialogContent>
-      </Dialog>
+      <DeleteConfirmDialog
+        open={deleteDialogOpen}
+        onOpenChange={(open) => {
+          setDeleteDialogOpen(open);
+          if (!open) {
+            setRoleToDelete(null);
+          }
+        }}
+        title="Delete Role"
+        description={`Are you sure you want to delete the role "${roleToDelete?.name ?? ""}"? This action cannot be undone.`}
+        isPending={deleteMutation.isPending}
+        onConfirm={handleDeleteRole}
+      />
     </>
   );
 }

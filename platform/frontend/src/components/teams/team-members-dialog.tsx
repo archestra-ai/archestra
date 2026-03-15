@@ -5,15 +5,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { FormDialog } from "@/components/form-dialog";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { DialogStickyFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -109,16 +103,14 @@ export function TeamMembersDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[550px]">
-        <DialogHeader>
-          <DialogTitle>Manage Team Members</DialogTitle>
-          <DialogDescription>
-            Add or remove members from "{team.name}"
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="space-y-4 py-4">
+    <FormDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Manage Team Members"
+      description={`Add or remove members from "${team.name}"`}
+      size="medium"
+    >
+      <div className="min-h-0 flex-1 overflow-y-auto py-4 pr-2 -mr-2 space-y-4">
           {availableMembers.length > 0 && (
             <div className="space-y-2">
               <Label>Add Member</Label>
@@ -186,12 +178,11 @@ export function TeamMembersDialog({
           </div>
         </div>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Close
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+      <DialogStickyFooter>
+        <Button variant="outline" onClick={() => onOpenChange(false)}>
+          Close
+        </Button>
+      </DialogStickyFooter>
+    </FormDialog>
   );
 }

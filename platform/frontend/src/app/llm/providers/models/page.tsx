@@ -303,10 +303,15 @@ export default function ModelsPage() {
           getRowId={(row) => row.id}
           hideSelectedCount
           isLoading={isPending}
+          hasActiveFilters={Boolean(search || apiKeyFilter !== "all")}
+          onClearFilters={() => {
+            setSearch("");
+            setApiKeyFilter("all");
+          }}
           emptyMessage={
             apiKeys.length === 0
               ? "No models available. Add an API key to see available models."
-              : "No models found matching your search"
+              : "No models found"
           }
         />
       </div>

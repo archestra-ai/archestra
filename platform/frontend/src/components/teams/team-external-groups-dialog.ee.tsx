@@ -5,16 +5,10 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertCircle, Link2, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { FormDialog } from "@/components/form-dialog";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { DialogStickyFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import config from "@/lib/config";
@@ -101,41 +95,35 @@ export function TeamExternalGroupsDialog({
 
   if (!config.enterpriseFeatures.core) {
     return (
-      <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="sm:max-w-[550px]">
-          <DialogHeader>
-            <DialogTitle>External Group Sync</DialogTitle>
-            <DialogDescription>
-              Automatically sync team membership based on SSO groups
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-4">
-            <EnterpriseLicenseRequired featureName="Team Sync" />
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => onOpenChange(false)}>
-              Close
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <FormDialog
+        open={open}
+        onOpenChange={onOpenChange}
+        title="External Group Sync"
+        description="Automatically sync team membership based on SSO groups"
+        size="medium"
+      >
+        <div className="min-h-0 flex-1 overflow-y-auto py-4 pr-2 -mr-2">
+          <EnterpriseLicenseRequired featureName="Team Sync" />
+        </div>
+        <DialogStickyFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Close
+          </Button>
+        </DialogStickyFooter>
+      </FormDialog>
     );
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[600px]">
-        <DialogHeader>
-          <DialogTitle>External Group Sync</DialogTitle>
-          <DialogDescription>
-            Configure automatic team membership synchronization for "{team.name}
-            " based on SSO groups. When users log in via SSO, they will be
-            automatically added to or removed from this team based on their
-            group memberships.
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="space-y-6 py-4">
+    <FormDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title="External Group Sync"
+      description={`Configure automatic team membership synchronization for "${team.name}" based on SSO groups. When users log in via SSO, they will be automatically added to or removed from this team based on their group memberships.`}
+      size="medium"
+      className="sm:max-w-[600px]"
+    >
+      <div className="min-h-0 flex-1 overflow-y-auto py-4 pr-2 -mr-2 space-y-6">
           {/* Add new group mapping */}
           <div className="space-y-2">
             <Label>Add External Group Mapping</Label>
@@ -240,14 +228,13 @@ export function TeamExternalGroupsDialog({
               </p>
             </AlertDescription>
           </Alert>
-        </div>
+      </div>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Close
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+      <DialogStickyFooter>
+        <Button variant="outline" onClick={() => onOpenChange(false)}>
+          Close
+        </Button>
+      </DialogStickyFooter>
+    </FormDialog>
   );
 }

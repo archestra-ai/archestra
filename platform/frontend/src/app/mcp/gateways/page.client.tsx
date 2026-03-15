@@ -519,11 +519,26 @@ function McpGateways({
                   total: pagination?.total || 0,
                 }}
                 onPaginationChange={handlePaginationChange}
-                emptyMessage={
-                  nameFilter || scopeFromUrl || labelsFromUrl
-                    ? "No MCP gateways found matching your filters"
-                    : "No MCP gateways found"
+                hasActiveFilters={Boolean(
+                  nameFilter ||
+                    scopeFromUrl ||
+                    teamIdsFromUrl ||
+                    authorIdsFromUrl ||
+                    excludeAuthorIdsFromUrl ||
+                    labelsFromUrl,
+                )}
+                onClearFilters={() =>
+                  updateQueryParams({
+                    name: null,
+                    scope: null,
+                    teamIds: null,
+                    authorIds: null,
+                    excludeAuthorIds: null,
+                    labels: null,
+                    page: "1",
+                  })
                 }
+                emptyMessage="No MCP gateways found"
               />
             </div>
 

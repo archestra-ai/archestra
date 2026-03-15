@@ -10,27 +10,20 @@ import {
   roleDescriptions,
 } from "@shared";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Eye, Shield } from "lucide-react";
+import { Eye } from "lucide-react";
 import { useEffect, useState } from "react";
 import { EnterpriseLicenseRequired } from "@/components/enterprise-license-required";
+import { FormDialog } from "@/components/form-dialog";
+import { RoleTypeIcon } from "@/components/role-type-icon";
 import { SearchInput } from "@/components/search-input";
 import {
   type TableRowAction,
   TableRowActions,
 } from "@/components/table-row-actions";
 import { DataTable } from "@/components/ui/data-table";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { Badge } from "@/components/ui/badge";
+import { DialogStickyFooter } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 import { useRolesPaginated } from "@/lib/role.query";
 import { useDataTableQueryParams } from "@/lib/use-data-table-query-params";
 import { useSetSettingsAction } from "@/app/settings/layout";
@@ -39,7 +32,14 @@ type Role = archestraApiTypes.GetRoleResponses["200"];
 
 export function RolesList() {
   const setActionButton = useSetSettingsAction();
-  const { pageIndex, pageSize, offset, searchParams, setPagination } =
+  const {
+    pageIndex,
+    pageSize,
+    offset,
+    searchParams,
+    setPagination,
+    updateQueryParams,
+  } =
     useDataTableQueryParams();
   const nameFilter = searchParams.get("name") || undefined;
   const { data: rolesResponse, isLoading } = useRolesPaginated({
@@ -67,14 +67,7 @@ export function RolesList() {
       header: "",
       cell: ({ row }) => (
         <div className="flex items-center justify-center">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Shield className="h-4 w-4 text-muted-foreground" />
-            </TooltipTrigger>
-            <TooltipContent>
-              {row.original.predefined ? "Predefined" : "Custom"}
-            </TooltipContent>
-          </Tooltip>
+          <RoleTypeIcon predefined={row.original.predefined} withTooltip />
         </div>
       ),
     },
@@ -82,6 +75,7 @@ export function RolesList() {
       id: "name",
       accessorKey: "name",
       header: "Name",
+      size: 520,
       enableSorting: false,
       cell: ({ row }) => {
         const role = row.original;
@@ -140,6 +134,13 @@ export function RolesList() {
           total,
         }}
         onPaginationChange={setPagination}
+        hasActiveFilters={Boolean(nameFilter)}
+        onClearFilters={() =>
+          updateQueryParams({
+            name: null,
+            page: "1",
+          })
+        }
         emptyMessage="No roles found"
         hideSelectedCount
       />
@@ -174,23 +175,26 @@ function ViewPermissionsDialog({
   if (!role) return null;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="capitalize">
-            {role.name} Permissions
-          </DialogTitle>
-          <DialogDescription>
-            {role.predefined
-              ? "This is a predefined role. Permissions cannot be modified."
-              : "Viewing permissions for this role."}
-          </DialogDescription>
-        </DialogHeader>
-        <div className="py-4">
-          <ReadOnlyPermissions permission={role.permission} />
-        </div>
-      </DialogContent>
-    </Dialog>
+    <FormDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title={<span className="capitalize">{role.name} Permissions</span>}
+      description={
+        role.predefined
+          ? "This is a predefined role. Permissions cannot be modified."
+          : "Viewing permissions for this role."
+      }
+      size="large"
+    >
+      <div className="min-h-0 flex-1 overflow-y-auto py-4 pr-2 -mr-2">
+        <ReadOnlyPermissions permission={role.permission} />
+      </div>
+      <DialogStickyFooter>
+        <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+          Close
+        </Button>
+      </DialogStickyFooter>
+    </FormDialog>
   );
 }
 

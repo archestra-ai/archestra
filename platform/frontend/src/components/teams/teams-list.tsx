@@ -4,32 +4,26 @@ import { archestraApiSdk, type archestraApiTypes, E2eTestId } from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
 
-import { Key, Link2, Plus, Trash2, Users, Vault, X } from "lucide-react";
+import { Key, Link2, Plus, Trash2, Users, Vault } from "lucide-react";
 import { Suspense, lazy, useEffect, useState } from "react";
 import { toast } from "sonner";
+import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { FormDialog } from "@/components/form-dialog";
 import {
   type TableRowAction,
   TableRowActions,
 } from "@/components/table-row-actions";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogForm,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { DialogForm, DialogStickyFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { Textarea } from "@/components/ui/textarea";
 import config from "@/lib/config";
 import { useFeature } from "@/lib/config.query";
+import { formatRelativeTimeFromNow } from "@/lib/format-relative-time";
 import { type TeamToken, useTokens } from "@/lib/team-token.query";
-import { formatDate } from "@/lib/utils";
 import { TeamMembersDialog } from "./team-members-dialog";
 import { TokenManagerDialog } from "./token-manager-dialog";
 
@@ -203,7 +197,7 @@ export function TeamsList() {
         if (!createdAt) return <span className="text-muted-foreground">-</span>;
         return (
           <div className="text-sm text-muted-foreground">
-            {formatDate({ date: createdAt })}
+            {formatRelativeTimeFromNow(createdAt)}
           </div>
         );
       },
@@ -296,16 +290,6 @@ export function TeamsList() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
-            {search && (
-              <Button
-                variant="ghost"
-                size="icon"
-                className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7"
-                onClick={() => setSearch("")}
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            )}
           </div>
         </div>
 
@@ -313,90 +297,70 @@ export function TeamsList() {
           columns={columns}
           data={filteredTeams}
           isLoading={isLoading}
+          hasActiveFilters={Boolean(search)}
+          onClearFilters={() => setSearch("")}
           emptyIcon={<Users className="h-10 w-10" />}
-          emptyMessage={
-            search
-              ? "No teams found matching your search"
-              : "No teams found"
-          }
+          emptyMessage="No teams found"
           hideSelectedCount
         />
       </div>
 
-      <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
-        <DialogContent className="max-w-3xl">
-          <DialogHeader>
-            <DialogTitle>Create New Team</DialogTitle>
-            <DialogDescription>
-              Create a team to organize access to profiles and MCP servers
-            </DialogDescription>
-          </DialogHeader>
-          <DialogForm onSubmit={handleCreateTeam}>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="name">Team Name *</Label>
-                <Input
-                  id="name"
-                  placeholder="Engineering Team"
-                  value={teamName}
-                  onChange={(e) => setTeamName(e.target.value)}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="description">Description</Label>
-                <Textarea
-                  id="description"
-                  placeholder="Team for engineering staff..."
-                  value={teamDescription}
-                  onChange={(e) => setTeamDescription(e.target.value)}
-                />
-              </div>
+      <FormDialog
+        open={createDialogOpen}
+        onOpenChange={setCreateDialogOpen}
+        title="Create New Team"
+        description="Create a team to organize access to profiles and MCP servers"
+        size="medium"
+      >
+        <DialogForm className="flex min-h-0 flex-1 flex-col" onSubmit={handleCreateTeam}>
+          <div className="min-h-0 flex-1 overflow-y-auto py-4 pr-2 -mr-2 space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="name">Team Name *</Label>
+              <Input
+                id="name"
+                placeholder="Engineering Team"
+                value={teamName}
+                onChange={(e) => setTeamName(e.target.value)}
+              />
             </div>
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setCreateDialogOpen(false)}
-              >
-                Cancel
-              </Button>
-              <Button type="submit" disabled={createMutation.isPending}>
-                {createMutation.isPending ? "Creating..." : "Create Team"}
-              </Button>
-            </DialogFooter>
-          </DialogForm>
-        </DialogContent>
-      </Dialog>
+            <div className="space-y-2">
+              <Label htmlFor="description">Description</Label>
+              <Textarea
+                id="description"
+                placeholder="Team for engineering staff..."
+                value={teamDescription}
+                onChange={(e) => setTeamDescription(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogStickyFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setCreateDialogOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" disabled={createMutation.isPending}>
+              {createMutation.isPending ? "Creating..." : "Create Team"}
+            </Button>
+          </DialogStickyFooter>
+        </DialogForm>
+      </FormDialog>
 
-      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Delete Team</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to delete "{teamToDelete?.name}"? This
-              action cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogForm onSubmit={handleDeleteTeam}>
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setDeleteDialogOpen(false)}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                variant="destructive"
-                disabled={deleteMutation.isPending}
-              >
-                {deleteMutation.isPending ? "Deleting..." : "Delete"}
-              </Button>
-            </DialogFooter>
-          </DialogForm>
-        </DialogContent>
-      </Dialog>
+      <DeleteConfirmDialog
+        open={deleteDialogOpen}
+        onOpenChange={(open) => {
+          setDeleteDialogOpen(open);
+          if (!open) {
+            setTeamToDelete(null);
+          }
+        }}
+        title="Delete Team"
+        description={`Are you sure you want to delete "${teamToDelete?.name ?? ""}"? This action cannot be undone.`}
+        isPending={deleteMutation.isPending}
+        onConfirm={handleDeleteTeam}
+      />
 
       {selectedTeam && membersDialogOpen && (
         <TeamMembersDialog

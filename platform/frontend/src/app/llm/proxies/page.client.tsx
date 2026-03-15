@@ -460,11 +460,26 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
                   total: pagination?.total || 0,
                 }}
                 onPaginationChange={handlePaginationChange}
-                emptyMessage={
-                  nameFilter || scopeFromUrl || labelsFromUrl
-                    ? "No LLM proxies found matching your filters"
-                    : "No LLM proxies found"
+                hasActiveFilters={Boolean(
+                  nameFilter ||
+                    scopeFromUrl ||
+                    teamIdsFromUrl ||
+                    authorIdsFromUrl ||
+                    excludeAuthorIdsFromUrl ||
+                    labelsFromUrl,
+                )}
+                onClearFilters={() =>
+                  updateQueryParams({
+                    name: null,
+                    scope: null,
+                    teamIds: null,
+                    authorIds: null,
+                    excludeAuthorIds: null,
+                    labels: null,
+                    page: "1",
+                  })
                 }
+                emptyMessage="No LLM proxies found"
               />
             </div>
 

@@ -32,6 +32,7 @@ import {
   formatRelativeTime,
   formatRelativeTimeFromNow,
 } from "@/lib/format-relative-time";
+import { formatDate } from "@/lib/utils";
 import { useSetSettingsAction } from "../layout";
 
 type CreateApiKeyFormValues = {
@@ -206,8 +207,8 @@ export default function ApiKeysSettingsPage() {
         size={createdApiKeyValue ? "small" : "medium"}
         className={createdApiKeyValue ? undefined : "sm:max-w-lg"}
       >
-        <DialogForm onSubmit={handleCreate}>
-          <div className="space-y-4 py-2">
+        <DialogForm className="flex min-h-0 flex-1 flex-col" onSubmit={handleCreate}>
+          <div className="min-h-0 flex-1 overflow-y-auto py-4 pr-2 -mr-2 space-y-4">
             {createdApiKeyValue ? (
               <>
                 <div className="flex items-center gap-2 text-sm font-medium">

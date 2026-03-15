@@ -12,16 +12,23 @@ const TABS = [
   { label: "Optimization Rules", href: "/llm/optimization-rules" },
 ];
 
-const PAGE_CONFIG: Record<string, { title: React.ReactNode; description: React.ReactNode }> = {
+const PAGE_CONFIG: Record<
+  string,
+  { title: React.ReactNode; description: React.ReactNode }
+> = {
   "/llm/costs": {
     title: "Costs",
     description: (
       <>
-        Monitor usage costs and savings across teams, agents, and models. View and edit model token prices in {" "}
-        <Link href="/llm/providers/models" className="text-primary hover:underline">
+        Monitor usage costs and savings across teams, agents, and models. View
+        and edit model token prices in{" "}
+        <Link
+          href="/llm/providers/models"
+          className="text-primary hover:underline"
+        >
           Model Settings
         </Link>
-        . Check {" "}
+        . Check{" "}
         <a
           href={getDocsUrl(DocsPage.PlatformObservability)}
           target="_blank"
@@ -36,11 +43,13 @@ const PAGE_CONFIG: Record<string, { title: React.ReactNode; description: React.R
   },
   "/llm/limits": {
     title: "Limits",
-    description: "Control LLM spend with scoped limits for teams and the organization.",
+    description:
+      "Control LLM spend with scoped limits for teams and the organization.",
   },
   "/llm/optimization-rules": {
     title: "Optimization Rules",
-    description: "Route requests to lower-cost models based on provider, model, and request conditions.",
+    description:
+      "Route requests to lower-cost models based on provider, model, and request conditions.",
   },
 };
 

@@ -119,7 +119,10 @@ export function SearchableSelect({
             {hint}
           </div>
         )}
-        <div className="max-h-[300px] overflow-y-auto p-1" onWheelCapture={(event) => event.stopPropagation()}>
+        <div
+          className="max-h-[300px] overflow-y-auto p-1"
+          onWheelCapture={(event) => event.stopPropagation()}
+        >
           {filteredItems.length === 0 ? (
             <div className="px-4 py-6 text-center text-sm text-muted-foreground">
               {allowCustom && searchQuery ? (

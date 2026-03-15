@@ -119,9 +119,9 @@ export function ArchestraCatalogTab({
   );
 
   return (
-    <div className="w-full space-y-2 mt-4">
-      <div className="flex items-end gap-4 ml-1">
-        <div className="flex-1">
+    <div className="w-full space-y-2">
+      <div className="ml-1 grid grid-cols-1 items-end gap-4 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,0.5fr)_minmax(0,0.5fr)]">
+        <div className="min-w-0">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <DebouncedInput
@@ -134,42 +134,36 @@ export function ArchestraCatalogTab({
           </div>
         </div>
 
-        <div className="flex flex-col gap-1">
-          <span className="text-sm font-medium text-muted-foreground">
-            Type
-          </span>
+        <div className="min-w-0">
           <Select
             value={filters.type}
             onValueChange={(value) =>
               setFilters({ ...filters, type: value as ServerType })
             }
           >
-            <SelectTrigger className="w-[140px]">
-              <SelectValue placeholder="Select type" />
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="All types" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All</SelectItem>
+              <SelectItem value="all">All types</SelectItem>
               <SelectItem value="remote">Remote</SelectItem>
               <SelectItem value="local">Local</SelectItem>
             </SelectContent>
           </Select>
         </div>
 
-        <div className="flex flex-col gap-1">
-          <span className="text-sm font-medium text-muted-foreground">
-            Category
-          </span>
+        <div className="min-w-0">
           <Select
             value={filters.category}
             onValueChange={(value) =>
               setFilters({ ...filters, category: value as SelectedCategory })
             }
           >
-            <SelectTrigger className="w-[140px]">
-              <SelectValue placeholder="Select category" />
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="All categories" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All</SelectItem>
+              <SelectItem value="all">All categories</SelectItem>
               {availableCategories.map((category) => (
                 <SelectItem key={category} value={category}>
                   {category}

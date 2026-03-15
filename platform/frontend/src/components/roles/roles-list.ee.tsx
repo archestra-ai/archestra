@@ -22,7 +22,11 @@ import {
 } from "@/components/table-row-actions";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
-import { DialogBody, DialogForm, DialogStickyFooter } from "@/components/ui/dialog";
+import {
+  DialogBody,
+  DialogForm,
+  DialogStickyFooter,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PermissionButton } from "@/components/ui/permission-button";

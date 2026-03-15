@@ -19,8 +19,8 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import {
-  DialogBody,
   Dialog,
+  DialogBody,
   DialogContent,
   DialogHeader,
   DialogTitle,
@@ -190,107 +190,104 @@ export function ToolDetailsDialog({
         </DialogHeader>
 
         <DialogBody className="space-y-4">
-            {tool.policiesAutoConfiguredReasoning && (
-              <div className="flex items-start gap-3 rounded-lg border border-border bg-card p-4">
-                <Sparkles className="h-4 w-4 mt-0.5 shrink-0 text-purple-400" />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium">
-                      AI Policy Reasoning
+          {tool.policiesAutoConfiguredReasoning && (
+            <div className="flex items-start gap-3 rounded-lg border border-border bg-card p-4">
+              <Sparkles className="h-4 w-4 mt-0.5 shrink-0 text-purple-400" />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium">
+                    AI Policy Reasoning
+                  </span>
+                  {tool.policiesAutoConfiguredAt && (
+                    <span className="text-xs text-muted-foreground">
+                      {formatDistanceToNow(
+                        new Date(tool.policiesAutoConfiguredAt),
+                        { addSuffix: true },
+                      )}
+                      {tool.policiesAutoConfiguredModel &&
+                        ` with ${tool.policiesAutoConfiguredModel}`}
                     </span>
-                    {tool.policiesAutoConfiguredAt && (
-                      <span className="text-xs text-muted-foreground">
-                        {formatDistanceToNow(
-                          new Date(tool.policiesAutoConfiguredAt),
-                          { addSuffix: true },
-                        )}
-                        {tool.policiesAutoConfiguredModel &&
-                          ` with ${tool.policiesAutoConfiguredModel}`}
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    {tool.policiesAutoConfiguredReasoning}
-                  </p>
+                  )}
                 </div>
+                <p className="text-sm text-muted-foreground mt-1">
+                  {tool.policiesAutoConfiguredReasoning}
+                </p>
               </div>
-            )}
+            </div>
+          )}
 
-            <ToolReadonlyDetails tool={tool} />
+          <ToolReadonlyDetails tool={tool} />
 
-            {/* Assignments Section */}
-            <Collapsible
-              open={assignmentsOpen}
-              onOpenChange={setAssignmentsOpen}
-            >
-              <div className="border border-border rounded-lg bg-card">
-                <CollapsibleTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    className="w-full flex items-center justify-between p-4 hover:bg-muted/50 rounded-t-lg"
-                  >
-                    <div className="flex items-center gap-2">
-                      <User className="h-4 w-4" />
-                      <span className="font-semibold text-sm">
-                        Assignments to Agents and MCP Gateways
-                      </span>
-                      <Badge variant="secondary" className="ml-2">
-                        {tool.assignmentCount}
-                      </Badge>
+          {/* Assignments Section */}
+          <Collapsible open={assignmentsOpen} onOpenChange={setAssignmentsOpen}>
+            <div className="border border-border rounded-lg bg-card">
+              <CollapsibleTrigger asChild>
+                <Button
+                  variant="ghost"
+                  className="w-full flex items-center justify-between p-4 hover:bg-muted/50 rounded-t-lg"
+                >
+                  <div className="flex items-center gap-2">
+                    <User className="h-4 w-4" />
+                    <span className="font-semibold text-sm">
+                      Assignments to Agents and MCP Gateways
+                    </span>
+                    <Badge variant="secondary" className="ml-2">
+                      {tool.assignmentCount}
+                    </Badge>
+                  </div>
+                  {assignmentsOpen ? (
+                    <ChevronDown className="h-4 w-4" />
+                  ) : (
+                    <ChevronRight className="h-4 w-4" />
+                  )}
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <div className="border-t border-border">
+                  {tool.assignments.length === 0 ? (
+                    <div className="p-4 text-sm text-muted-foreground text-center">
+                      Not assigned to agent or MCP gateway.
                     </div>
-                    {assignmentsOpen ? (
-                      <ChevronDown className="h-4 w-4" />
-                    ) : (
-                      <ChevronRight className="h-4 w-4" />
-                    )}
-                  </Button>
-                </CollapsibleTrigger>
-                <CollapsibleContent>
-                  <div className="border-t border-border">
-                    {tool.assignments.length === 0 ? (
-                      <div className="p-4 text-sm text-muted-foreground text-center">
-                        Not assigned to agent or MCP gateway.
-                      </div>
-                    ) : (
-                      <div className="divide-y divide-border">
-                        {tool.assignments.map((assignment) => {
-                          const credentialDisplay =
-                            getCredentialDisplay(assignment);
-                          return (
-                            <div
-                              key={assignment.agentToolId}
-                              className="p-4 space-y-3"
-                            >
-                              <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-3">
-                                  <Badge variant="secondary" className="gap-1">
-                                    <Layers className="h-3 w-3" />
-                                    {assignment.agent.name}
-                                  </Badge>
-                                  {credentialDisplay && (
-                                    <>
-                                      <span className="text-muted-foreground">
-                                        →
-                                      </span>
-                                      <span className="text-sm text-muted-foreground">
-                                        {credentialDisplay}
-                                      </span>
-                                    </>
-                                  )}
-                                </div>
+                  ) : (
+                    <div className="divide-y divide-border">
+                      {tool.assignments.map((assignment) => {
+                        const credentialDisplay =
+                          getCredentialDisplay(assignment);
+                        return (
+                          <div
+                            key={assignment.agentToolId}
+                            className="p-4 space-y-3"
+                          >
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-3">
+                                <Badge variant="secondary" className="gap-1">
+                                  <Layers className="h-3 w-3" />
+                                  {assignment.agent.name}
+                                </Badge>
+                                {credentialDisplay && (
+                                  <>
+                                    <span className="text-muted-foreground">
+                                      →
+                                    </span>
+                                    <span className="text-sm text-muted-foreground">
+                                      {credentialDisplay}
+                                    </span>
+                                  </>
+                                )}
                               </div>
                             </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                </CollapsibleContent>
-              </div>
-            </Collapsible>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </CollapsibleContent>
+            </div>
+          </Collapsible>
 
-            <ToolResultPolicies tool={tool} />
-            <ToolCallPolicies tool={tool} />
+          <ToolResultPolicies tool={tool} />
+          <ToolCallPolicies tool={tool} />
         </DialogBody>
       </DialogContent>
     </Dialog>

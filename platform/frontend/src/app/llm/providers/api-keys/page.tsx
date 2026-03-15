@@ -525,6 +525,7 @@ export default function ApiKeysPage() {
           isLoading={isPending}
           emptyMessage="No API keys configured"
           hasActiveFilters={Boolean(search || providerFilter !== "all")}
+          filteredEmptyMessage="No LLM provider API keys match your filters. Try adjusting your search."
           onClearFilters={() =>
             updateQueryParams({
               search: null,

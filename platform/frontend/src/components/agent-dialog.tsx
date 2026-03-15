@@ -101,6 +101,10 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
+  VisibilitySelector as SharedVisibilitySelector,
+  type VisibilityOption,
+} from "@/components/visibility-selector";
+import {
   useCreateProfile,
   useInternalAgents,
   useProfile,
@@ -396,11 +400,7 @@ function AccessLevelSelector({
   hasNoAvailableTeams: boolean;
   showTeamRequired: boolean;
 }) {
-  const [expanded, setExpanded] = useState(false);
   const scopeOptions = getScopeOptions(agentType);
-  const selected =
-    scopeOptions.find((o) => o.value === scope) ?? scopeOptions[0];
-
   const canShareWithTeams = isAdmin || isTeamAdmin;
 
   const isOptionDisabled = (value: string) => {
@@ -429,104 +429,23 @@ function AccessLevelSelector({
     return "";
   };
 
+  const options: VisibilityOption<AgentScope>[] = scopeOptions.map(
+    (option) => ({
+      ...option,
+      disabled: isOptionDisabled(option.value),
+      disabledReason: isOptionDisabled(option.value)
+        ? getDisabledReason(option.value)
+        : undefined,
+    }),
+  );
+
   return (
-    <div className="space-y-4">
-      {/* ACCESS LEVEL */}
-      <div className="space-y-2">
-        <h3 className="text-sm font-semibold">
-          Who can use this {agentTypeDisplayName[agentType] || "agent"}
-        </h3>
-
-        {expanded ? (
-          <div className="space-y-1.5">
-            {scopeOptions.map((option) => {
-              const Icon = option.icon;
-              const disabled = isOptionDisabled(option.value);
-              const isSelected = scope === option.value;
-              return (
-                <TooltipProvider key={option.value}>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <button
-                        type="button"
-                        disabled={disabled}
-                        onClick={() => {
-                          if (!disabled) {
-                            onScopeChange(option.value);
-                            setExpanded(false);
-                          }
-                        }}
-                        className={`w-full flex items-center gap-3 rounded-lg border p-3 text-left transition-colors ${
-                          isSelected
-                            ? "bg-primary text-primary-foreground border-primary"
-                            : disabled
-                              ? "opacity-50 cursor-not-allowed"
-                              : "hover:bg-muted/50 cursor-pointer"
-                        }`}
-                      >
-                        <div
-                          className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md ${
-                            isSelected ? "bg-primary-foreground/20" : "bg-muted"
-                          }`}
-                        >
-                          <Icon className="h-4 w-4" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="text-sm font-medium">
-                            {option.label}
-                          </div>
-                          <div
-                            className={`text-xs ${
-                              isSelected
-                                ? "text-primary-foreground/70"
-                                : "text-muted-foreground"
-                            }`}
-                          >
-                            {option.description}
-                          </div>
-                        </div>
-                        <div
-                          className={`h-4 w-4 shrink-0 rounded-full border-2 flex items-center justify-center ${
-                            isSelected
-                              ? "border-primary-foreground"
-                              : "border-muted-foreground/30"
-                          }`}
-                        >
-                          {isSelected && <CheckIcon className="h-2.5 w-2.5" />}
-                        </div>
-                      </button>
-                    </TooltipTrigger>
-                    {disabled && (
-                      <TooltipContent>
-                        {getDisabledReason(option.value)}
-                      </TooltipContent>
-                    )}
-                  </Tooltip>
-                </TooltipProvider>
-              );
-            })}
-          </div>
-        ) : (
-          <button
-            type="button"
-            onClick={() => setExpanded(true)}
-            className="w-full flex items-center gap-3 rounded-lg border p-3 text-left hover:bg-muted/50 transition-colors cursor-pointer"
-          >
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-muted">
-              <selected.icon className="h-4 w-4" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="text-sm font-medium">{selected.label}</div>
-              <div className="text-xs text-muted-foreground">
-                {selected.description}
-              </div>
-            </div>
-            <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
-          </button>
-        )}
-      </div>
-
-      {/* SHARE WITH — only shown for team-scoped */}
+    <SharedVisibilitySelector
+      heading={`Who can use this ${agentTypeDisplayName[agentType] || "agent"}`}
+      value={scope}
+      options={options}
+      onValueChange={onScopeChange}
+    >
       {scope === "team" && (
         <div className="space-y-2">
           <Label>Teams{showTeamRequired && " *"}</Label>
@@ -547,7 +466,7 @@ function AccessLevelSelector({
           />
         </div>
       )}
-    </div>
+    </SharedVisibilitySelector>
   );
 }
 

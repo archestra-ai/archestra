@@ -10,8 +10,8 @@ import { Button } from "@/components/ui/button";
 import { DialogStickyFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { SearchableSelect } from "@/components/ui/searchable-select";
-import { useActiveOrganization } from "@/lib/organization.query";
 import { useMembersPaginated } from "@/lib/member.query";
+import { useActiveOrganization } from "@/lib/organization.query";
 
 interface Team {
   id: string;
@@ -180,7 +180,8 @@ export function TeamMembersDialog({
                   >
                     <div>
                       <p className="text-sm font-medium">
-                        {getMemberEmail(orgMember) || getMemberDisplayName(member)}
+                        {getMemberEmail(orgMember) ||
+                          getMemberDisplayName(member)}
                       </p>
                       <p className="text-xs text-muted-foreground">
                         Role: {member.role}

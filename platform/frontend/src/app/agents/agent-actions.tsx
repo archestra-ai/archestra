@@ -25,7 +25,7 @@ export function AgentActions({
   onEdit,
   onDelete,
 }: AgentActionsProps) {
-  const isBuiltIn = agent.builtIn;
+  const isBuiltIn = Boolean(agent.builtIn);
 
   const actions: TableRowAction[] = [
     {

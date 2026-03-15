@@ -40,9 +40,9 @@ import {
   useUpdateMemberRole,
 } from "@/lib/member.query";
 import {
+  type PendingSignupMember,
   useActiveOrganization,
   useDeletePendingSignupMember,
-  type PendingSignupMember,
   useMemberSignupStatus,
 } from "@/lib/organization.query";
 import { useRoles } from "@/lib/role.query";
@@ -227,12 +227,11 @@ function MembersTab({
   const updateMemberRole = useUpdateMemberRole();
   const removeMember = useRemoveMember();
   const { data: signupStatus } = useMemberSignupStatus();
-  const pendingSignupMembers =
-    signupStatus?.pendingSignupMembers.length
-      ? signupStatus.pendingSignupMembers
-      : process.env.NODE_ENV === "development"
-        ? DEV_MOCK_PENDING_SIGNUP_MEMBERS
-        : [];
+  const pendingSignupMembers = signupStatus?.pendingSignupMembers.length
+    ? signupStatus.pendingSignupMembers
+    : process.env.NODE_ENV === "development"
+      ? DEV_MOCK_PENDING_SIGNUP_MEMBERS
+      : [];
   const deletePendingSignupMember = useDeletePendingSignupMember();
 
   const [changingRole, setChangingRole] = useState<{
@@ -413,7 +412,9 @@ function MembersTab({
           columns={columns}
           data={tableRows}
           manualPagination
-          getRowId={(row) => ("provider" in row ? `pending-${row.userId}` : row.id)}
+          getRowId={(row) =>
+            "provider" in row ? `pending-${row.userId}` : row.id
+          }
           pagination={{
             pageIndex,
             pageSize,

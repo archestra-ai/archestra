@@ -7,6 +7,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts";
 import { useSetCostsAction } from "@/app/llm/(costs)/layout";
+import { FormDialog } from "@/components/form-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -17,9 +18,12 @@ import {
   ChartTooltip,
   ChartTooltipContent,
 } from "@/components/ui/chart";
-import { FormDialog } from "@/components/form-dialog";
 import { DateTimePicker } from "@/components/ui/date-time-picker";
-import { DialogBody, DialogForm, DialogStickyFooter } from "@/components/ui/dialog";
+import {
+  DialogBody,
+  DialogForm,
+  DialogStickyFooter,
+} from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -508,7 +512,10 @@ export default function StatisticsPage() {
         description="Set a custom time period for the statistics view."
         size="small"
       >
-        <DialogForm className="flex min-h-0 flex-1 flex-col" onSubmit={handleCustomTimeframe}>
+        <DialogForm
+          className="flex min-h-0 flex-1 flex-col"
+          onSubmit={handleCustomTimeframe}
+        >
           <DialogBody>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">

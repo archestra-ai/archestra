@@ -5,6 +5,7 @@ import {
   INTERACTION_SOURCE_DISPLAY,
   type InteractionSource,
 } from "@shared";
+import type { ColumnDef } from "@tanstack/react-table";
 import { Database, Layers, MessageSquare, User } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -69,6 +70,7 @@ function formatDuration(start: Date | string, end: Date | string): string {
 
 type SessionData =
   archestraApiTypes.GetInteractionSessionsResponses["200"]["data"][number];
+type UniqueUser = archestraApiTypes.GetUniqueUserIdsResponses["200"][number];
 
 function getSessionDisplayData(session: SessionData) {
   const isSingleInteraction =
@@ -292,8 +294,8 @@ function SessionsTable({
               {isArchestraChat ? (
                 <>
                   <span className="truncate">
-                    {conversationTitle.length > 60
-                      ? `${conversationTitle.slice(0, 60)}...`
+                    {(conversationTitle ?? "").length > 60
+                      ? `${(conversationTitle ?? "").slice(0, 60)}...`
                       : conversationTitle}
                   </span>
                   <Link
@@ -334,7 +336,9 @@ function SessionsTable({
                 </span>
               ) : session.source?.startsWith("knowledge:") ? (
                 <span className="text-muted-foreground">
-                  {INTERACTION_SOURCE_DISPLAY[session.source]?.label ??
+                  {INTERACTION_SOURCE_DISPLAY[
+                    session.source as keyof typeof INTERACTION_SOURCE_DISPLAY
+                  ]?.label ??
                     session.source}
                 </span>
               ) : (
@@ -495,7 +499,7 @@ function SessionsTable({
           placeholder="Filter by User"
           items={[
             { value: "all", label: "All Users" },
-            ...(uniqueUsers?.map((user) => ({
+            ...(uniqueUsers?.map((user: UniqueUser) => ({
               value: user.id,
               label: user.name || user.id,
             })) || []),

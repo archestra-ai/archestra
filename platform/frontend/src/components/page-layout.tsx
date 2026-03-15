@@ -74,9 +74,7 @@ export function PageLayout({
               <h1 className="mb-2 text-2xl font-semibold tracking-tight">
                 {title}
               </h1>
-              <div className="text-sm text-muted-foreground">
-                {description}
-              </div>
+              <div className="text-sm text-muted-foreground">{description}</div>
             </div>
             {actionButton && <div className="shrink-0">{actionButton}</div>}
           </div>

@@ -141,7 +141,9 @@ export function LlmModelSearchableSelect({
           label: option.model,
           searchText: `${providerDisplayNames[option.provider]} ${option.model}`,
           description: undefined,
-          content: <LlmModelOptionLabel option={option} showPricing={showPricing} />,
+          content: (
+            <LlmModelOptionLabel option={option} showPricing={showPricing} />
+          ),
           selectedContent: (
             <LlmModelSelectedValue option={option} showPricing={showPricing} />
           ),

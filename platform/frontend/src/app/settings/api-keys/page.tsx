@@ -9,8 +9,8 @@ import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ExpirationDateTimeField } from "@/components/expiration-date-time-field";
 import { FormDialog } from "@/components/form-dialog";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
-import { TableRowActions } from "@/components/table-row-actions";
 import { SearchInput } from "@/components/search-input";
+import { TableRowActions } from "@/components/table-row-actions";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -98,7 +98,7 @@ export default function ApiKeysSettingsPage() {
         header: "Token",
         cell: ({ row }) => (
           <code className="text-xs font-mono">
-            {(row.original.start || row.original.prefix)
+            {row.original.start || row.original.prefix
               ? `${row.original.start || row.original.prefix}...`
               : "Hidden"}
           </code>
@@ -117,7 +117,7 @@ export default function ApiKeysSettingsPage() {
       {
         accessorKey: "createdAt",
         header: "Created",
-        cell: ({ row }) => formatDate({ date: row.original.createdAt }),
+        cell: ({ row }) => formatRelativeTimeFromNow(row.original.createdAt),
       },
       {
         accessorKey: "lastRequest",

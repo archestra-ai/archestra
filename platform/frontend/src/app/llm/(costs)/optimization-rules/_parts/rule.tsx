@@ -129,7 +129,9 @@ function ModelSelect({
   if (models.length === 0) {
     return (
       <div className="px-2 text-sm">
-        <span className="text-muted-foreground">No pricing configured for models.</span>{" "}
+        <span className="text-muted-foreground">
+          No pricing configured for models.
+        </span>{" "}
         <Link
           href="/llm/providers/models"
           className="hover:text-foreground hover:underline"
@@ -145,6 +147,7 @@ function ModelSelect({
     !isAvailable && model
       ? [
           {
+            provider: SupportedProviders.OPENAI,
             model,
             pricePerMillionInput: "0",
             pricePerMillionOutput: "0",
@@ -287,6 +290,18 @@ type RuleProps = Omit<OptimizationRule, "createdAt" | "updatedAt"> & {
   className?: string;
 };
 
+type OptimizationRuleFormProps = Pick<
+  OptimizationRule,
+  "enabled" | "entityType" | "entityId" | "conditions" | "provider" | "targetModel"
+> & {
+  tokenPrices: TokenPrices;
+  teams?: Team[];
+  onChange?: (
+    data: Omit<OptimizationRule, "id" | "createdAt" | "updatedAt">,
+  ) => void;
+  onToggle?: (enabled: boolean) => void;
+};
+
 export function OptimizationRuleForm({
   enabled,
   entityType,
@@ -298,7 +313,7 @@ export function OptimizationRuleForm({
   teams = [],
   onChange,
   onToggle,
-}: Omit<RuleProps, "className" | "editable" | "switchDisabled">) {
+}: OptimizationRuleFormProps) {
   const [formData, setFormData] = useState({
     enabled,
     entityType,
@@ -325,9 +340,7 @@ export function OptimizationRuleForm({
     onChange?.(updated);
   };
 
-  const models = sortModelsByPrice(
-    tokenPrices,
-  );
+  const models = sortModelsByPrice(tokenPrices);
 
   const addCondition = () => {
     const hasContentLength = formData.conditions.some((c) => "maxLength" in c);
@@ -383,10 +396,14 @@ export function OptimizationRuleForm({
           model={formData.targetModel}
           models={models}
           onChange={(value) => {
-            const selectedModel = models.find((modelOption) => modelOption.model === value);
+            const selectedModel = models.find(
+              (modelOption) => modelOption.model === value,
+            );
             updateFormData({
               targetModel: value,
-              provider: (selectedModel?.provider as SupportedProvider) ?? formData.provider,
+              provider:
+                (selectedModel?.provider as SupportedProvider) ??
+                formData.provider,
             });
           }}
           editable
@@ -402,7 +419,12 @@ export function OptimizationRuleForm({
             </div>
           </div>
           {formData.conditions.length < 2 && (
-            <Button type="button" variant="outline" size="sm" onClick={addCondition}>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={addCondition}
+            >
               <Plus className="mr-2 h-4 w-4" />
               Add condition
             </Button>
@@ -526,7 +548,6 @@ export function Rule({
       conditions: newConditions,
     });
   };
-
 
   const models = sortModelsByPrice(
     tokenPrices.filter((price) => price.provider === formData.provider),

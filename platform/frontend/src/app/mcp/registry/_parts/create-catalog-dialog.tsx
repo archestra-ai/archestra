@@ -90,13 +90,32 @@ export function CreateCatalogDialog({
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
       <DialogContent className="max-w-5xl h-[90vh] flex flex-col overflow-hidden">
-        <DialogHeader>
-          <DialogTitle>Add MCP Server to the Private Registry</DialogTitle>
-          <DialogDescription>
-            {step === "form"
-              ? "Once you add an MCP server here, it will be available for installation."
-              : "Select a server from the online catalog to pre-fill the form."}
-          </DialogDescription>
+        <DialogHeader
+          className={
+            step === "catalog-browse"
+              ? "sm:flex-row sm:items-center sm:justify-between"
+              : undefined
+          }
+        >
+          <div className="space-y-2">
+            <DialogTitle>Add MCP Server to the Private Registry</DialogTitle>
+            <DialogDescription>
+              {step === "form"
+                ? "Once you add an MCP server here, it will be available for installation."
+                : "Select a server from the online catalog to pre-fill the form."}
+            </DialogDescription>
+          </div>
+          {step === "catalog-browse" && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setStep("form")}
+              className="mr-8 self-center"
+            >
+              <ArrowLeft className="mr-1 h-4 w-4" />
+              Back to form
+            </Button>
+          )}
         </DialogHeader>
 
         {step === "form" && (
@@ -110,13 +129,7 @@ export function CreateCatalogDialog({
         )}
 
         {step === "catalog-browse" && (
-          <div className="min-h-0 flex flex-1 flex-col overflow-y-auto px-4 py-4">
-            <div className="mb-2 flex justify-end">
-              <Button variant="ghost" size="sm" onClick={() => setStep("form")}>
-                <ArrowLeft className="h-4 w-4 mr-1" />
-                Back to form
-              </Button>
-            </div>
+          <div className="min-h-0 flex flex-1 flex-col overflow-y-auto px-4 pb-4 pt-3">
             <ArchestraCatalogTab
               catalogItems={catalogItems}
               onSelectServer={handleSelectFromCatalog}

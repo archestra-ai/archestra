@@ -13,7 +13,11 @@ import { TableRowActions } from "@/components/table-row-actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
-import { DialogBody, DialogForm, DialogStickyFooter } from "@/components/ui/dialog";
+import {
+  DialogBody,
+  DialogForm,
+  DialogStickyFooter,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PermissionButton } from "@/components/ui/permission-button";
@@ -25,8 +29,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useModelsWithApiKeys } from "@/lib/chat-models.query";
-import { useDataTableQueryParams } from "@/lib/use-data-table-query-params";
 import {
   useCreateLimit,
   useDeleteLimit,
@@ -35,7 +44,7 @@ import {
 } from "@/lib/limits.query";
 import { useOrganization } from "@/lib/organization.query";
 import { useTeams } from "@/lib/team.query";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { useDataTableQueryParams } from "@/lib/use-data-table-query-params";
 
 type LimitData = archestraApiTypes.GetLimitsResponses["200"][number];
 type LimitEntityType = archestraApiTypes.CreateLimitData["body"]["entityType"];
@@ -68,7 +77,6 @@ function formatNumericInput(value: string) {
   return Number(value).toLocaleString("en-US");
 }
 
-
 export default function LimitsPage() {
   const setActionButton = useSetCostsAction();
   const { data: limits = [], isPending } = useLimits();
@@ -87,7 +95,8 @@ export default function LimitsPage() {
   const [editingLimit, setEditingLimit] = useState<LimitData | null>(null);
   const [limitToDelete, setLimitToDelete] = useState<LimitData | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [formState, setFormState] = useState<LimitFormState>(DEFAULT_FORM_STATE);
+  const [formState, setFormState] =
+    useState<LimitFormState>(DEFAULT_FORM_STATE);
 
   const llmLimits = useMemo(
     () => limits.filter((limit) => limit.limitType === "token_cost"),
@@ -115,7 +124,10 @@ export default function LimitsPage() {
 
   useEffect(() => {
     setActionButton(
-      <PermissionButton permissions={{ llmLimit: ["create"] }} onClick={handleCreateOpen}>
+      <PermissionButton
+        permissions={{ llmLimit: ["create"] }}
+        onClick={handleCreateOpen}
+      >
         <Plus className="mr-2 h-4 w-4" />
         Add Limit
       </PermissionButton>,
@@ -124,8 +136,7 @@ export default function LimitsPage() {
     return () => setActionButton(null);
   }, [handleCreateOpen, setActionButton]);
 
-
-  function handleEditOpen(limit: LimitData) {
+  const handleEditOpen = useCallback((limit: LimitData) => {
     setEditingLimit(limit);
     setFormState({
       entityType: limit.entityType as LimitEntityType,
@@ -135,39 +146,49 @@ export default function LimitsPage() {
     });
     setModelToAdd("");
     setIsDialogOpen(true);
-  }
+  }, []);
 
-  function getEntityLabel(limit: LimitData) {
-    if (limit.entityType === "organization") return "Organization";
-    const team = teams.find((candidate) => candidate.id === limit.entityId);
-    return team?.name ?? "Unknown team";
-  }
+  const getEntityLabel = useCallback(
+    (limit: LimitData) => {
+      if (limit.entityType === "organization") return "Organization";
+      const team = teams.find((candidate) => candidate.id === limit.entityId);
+      return team?.name ?? "Unknown team";
+    },
+    [teams],
+  );
 
-  function getUsageStatus(limit: LimitData): {
-    percentage: number;
-    status: UsageStatus;
-    actualUsage: number;
-    actualLimit: number;
-  } {
-    const actualUsage = (limit.modelUsage ?? []).reduce(
-      (sum, usage) => sum + usage.cost,
-      0,
-    );
-    const actualLimit = limit.limitValue;
-    const percentage = actualLimit > 0 ? (actualUsage / actualLimit) * 100 : 0;
-    if (percentage >= 90) {
-      return { percentage, status: "danger", actualUsage, actualLimit };
-    }
-    if (percentage >= 75) {
-      return { percentage, status: "warning", actualUsage, actualLimit };
-    }
-    return { percentage, status: "safe", actualUsage, actualLimit };
-  }
+  const getUsageStatus = useCallback(
+    (
+      limit: LimitData,
+    ): {
+      percentage: number;
+      status: UsageStatus;
+      actualUsage: number;
+      actualLimit: number;
+    } => {
+      const actualUsage = (limit.modelUsage ?? []).reduce(
+        (sum, usage) => sum + usage.cost,
+        0,
+      );
+      const actualLimit = limit.limitValue;
+      const percentage =
+        actualLimit > 0 ? (actualUsage / actualLimit) * 100 : 0;
+      if (percentage >= 90) {
+        return { percentage, status: "danger", actualUsage, actualLimit };
+      }
+      if (percentage >= 75) {
+        return { percentage, status: "warning", actualUsage, actualLimit };
+      }
+      return { percentage, status: "safe", actualUsage, actualLimit };
+    },
+    [],
+  );
 
   const filteredLimits = useMemo(() => {
     return llmLimits.filter((limit) => {
       const usageStatus = getUsageStatus(limit).status;
-      const matchesStatus = statusFilter === "all" || usageStatus === statusFilter;
+      const matchesStatus =
+        statusFilter === "all" || usageStatus === statusFilter;
       const matchesAppliedTo =
         appliedToFilter === "all" || limit.entityType === appliedToFilter;
       const matchesModel =
@@ -176,7 +197,7 @@ export default function LimitsPage() {
 
       return matchesStatus && matchesAppliedTo && matchesModel;
     });
-  }, [appliedToFilter, llmLimits, modelFilter, statusFilter]);
+  }, [appliedToFilter, llmLimits, modelFilter, statusFilter, getUsageStatus]);
 
   const columns = useMemo<ColumnDef<LimitData>[]>(
     () => [
@@ -274,11 +295,13 @@ export default function LimitsPage() {
         ),
       },
     ],
-    [teams],
+    [getEntityLabel, getUsageStatus, handleEditOpen],
   );
 
   const hasActiveFilters =
-    statusFilter !== "all" || appliedToFilter !== "all" || modelFilter !== "all";
+    statusFilter !== "all" ||
+    appliedToFilter !== "all" ||
+    modelFilter !== "all";
 
   async function handleSubmit() {
     const body = {
@@ -293,7 +316,10 @@ export default function LimitsPage() {
     };
 
     if (editingLimit) {
-      const result = await updateLimit.mutateAsync({ id: editingLimit.id, ...body });
+      const result = await updateLimit.mutateAsync({
+        id: editingLimit.id,
+        ...body,
+      });
       if (result) {
         setIsDialogOpen(false);
         setEditingLimit(null);
@@ -321,7 +347,12 @@ export default function LimitsPage() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap gap-3">
-        <Select value={statusFilter} onValueChange={(value) => updateQueryParams({ status: value === "all" ? null : value })}>
+        <Select
+          value={statusFilter}
+          onValueChange={(value) =>
+            updateQueryParams({ status: value === "all" ? null : value })
+          }
+        >
           <SelectTrigger className="w-full sm:w-[220px]">
             <SelectValue placeholder="All statuses" />
           </SelectTrigger>
@@ -333,7 +364,12 @@ export default function LimitsPage() {
           </SelectContent>
         </Select>
 
-        <Select value={appliedToFilter} onValueChange={(value) => updateQueryParams({ appliedTo: value === "all" ? null : value })}>
+        <Select
+          value={appliedToFilter}
+          onValueChange={(value) =>
+            updateQueryParams({ appliedTo: value === "all" ? null : value })
+          }
+        >
           <SelectTrigger className="w-full sm:w-[220px]">
             <SelectValue placeholder="All scopes" />
           </SelectTrigger>
@@ -358,7 +394,10 @@ export default function LimitsPage() {
         />
       </div>
 
-      <LoadingWrapper isPending={isPending} loadingFallback={<LoadingSpinner />}>
+      <LoadingWrapper
+        isPending={isPending}
+        loadingFallback={<LoadingSpinner />}
+      >
         <DataTable
           columns={columns}
           data={filteredLimits}
@@ -378,7 +417,13 @@ export default function LimitsPage() {
         description="Configure scoped LLM token-cost limits for the organization or a team."
         size="medium"
       >
-        <DialogForm className="flex min-h-0 flex-1 flex-col" onSubmit={(e) => { e.preventDefault(); void handleSubmit(); }}>
+        <DialogForm
+          className="flex min-h-0 flex-1 flex-col"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void handleSubmit();
+          }}
+        >
           <DialogBody className="space-y-4">
             <div className="space-y-2">
               <Label>Apply to</Label>
@@ -386,7 +431,11 @@ export default function LimitsPage() {
                 <Select
                   value={formState.entityType}
                   onValueChange={(value: LimitEntityType) =>
-                    setFormState((current) => ({ ...current, entityType: value, entityId: "" }))
+                    setFormState((current) => ({
+                      ...current,
+                      entityType: value,
+                      entityId: "",
+                    }))
                   }
                 >
                   <SelectTrigger className="w-full sm:flex-1">
@@ -401,7 +450,12 @@ export default function LimitsPage() {
                 {formState.entityType === "team" && (
                   <Select
                     value={formState.entityId}
-                    onValueChange={(value) => setFormState((current) => ({ ...current, entityId: value }))}
+                    onValueChange={(value) =>
+                      setFormState((current) => ({
+                        ...current,
+                        entityId: value,
+                      }))
+                    }
                   >
                     <SelectTrigger className="w-full sm:flex-1">
                       <SelectValue placeholder="Select team" />
@@ -447,7 +501,9 @@ export default function LimitsPage() {
                       onClick={() =>
                         setFormState((current) => ({
                           ...current,
-                          model: current.model.filter((currentModel) => currentModel !== model),
+                          model: current.model.filter(
+                            (currentModel) => currentModel !== model,
+                          ),
                         }))
                       }
                     >
@@ -474,10 +530,19 @@ export default function LimitsPage() {
             </div>
           </DialogBody>
           <DialogStickyFooter className="mt-0">
-            <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setIsDialogOpen(false)}
+            >
               Cancel
             </Button>
-            <Button type="submit" disabled={!canSubmit || createLimit.isPending || updateLimit.isPending}>
+            <Button
+              type="submit"
+              disabled={
+                !canSubmit || createLimit.isPending || updateLimit.isPending
+              }
+            >
               {editingLimit ? "Save changes" : "Create limit"}
             </Button>
           </DialogStickyFooter>

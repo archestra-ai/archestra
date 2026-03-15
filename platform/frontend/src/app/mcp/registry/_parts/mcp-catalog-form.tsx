@@ -2,7 +2,16 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import type { archestraApiTypes } from "@shared";
-import { ChevronRight, Globe, Info, Plus, Server, Trash2 } from "lucide-react";
+import {
+  ChevronRight,
+  Globe,
+  Info,
+  Lock,
+  Plus,
+  Server,
+  Trash2,
+  Users,
+} from "lucide-react";
 import { lazy, useEffect, useMemo, useRef, useState } from "react";
 import { useFieldArray, useForm } from "react-hook-form";
 import { AgentIconPicker } from "@/components/agent-icon-picker";
@@ -47,6 +56,10 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  type VisibilityOption,
+  VisibilitySelector,
+} from "@/components/visibility-selector";
 import { LOCAL_MCP_DISABLED_MESSAGE } from "@/consts";
 import { useHasPermissions } from "@/lib/auth.query";
 import { useFeature } from "@/lib/config.query";
@@ -195,6 +208,37 @@ export function McpCatalogForm({
   });
   const { data: teams } = useTeams();
   const currentScope = form.watch("scope");
+  const visibilityOptions = useMemo<
+    Array<VisibilityOption<"personal" | "team" | "org">>
+  >(
+    () => [
+      {
+        value: "personal",
+        label: "Personal",
+        description: "Only you can access this MCP server.",
+        icon: Lock,
+      },
+      {
+        value: "team",
+        label: "Teams",
+        description: "Share this MCP server with selected teams.",
+        icon: Users,
+        disabled: !isAdmin || !teams?.length,
+        disabledReason: !isAdmin
+          ? "Only admins can assign MCP servers to teams."
+          : "Create a team first to share this MCP server.",
+      },
+      {
+        value: "org",
+        label: "Organization",
+        description: "Anyone in your organization can access this MCP server.",
+        icon: Globe,
+        disabled: !isAdmin,
+        disabledReason: "Only admins can make MCP servers organization-wide.",
+      },
+    ],
+    [isAdmin, teams],
+  );
 
   // Check if BYOS feature is available (enterprise license)
   const showByosOption = useFeature("byosEnabled");
@@ -360,61 +404,47 @@ export function McpCatalogForm({
               name="scope"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Visibility</FormLabel>
-                  <Select
-                    value={field.value ?? "personal"}
-                    onValueChange={(value) => {
-                      field.onChange(value);
-                      if (value !== "team") {
-                        form.setValue("teams", [], { shouldDirty: true });
+                  <FormControl>
+                    <VisibilitySelector
+                      value={
+                        (field.value ?? "personal") as
+                          | "personal"
+                          | "team"
+                          | "org"
                       }
-                    }}
-                  >
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select visibility" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value="personal">
-                        Personal (draft, only you)
-                      </SelectItem>
-                      {isAdmin && (
-                        <SelectItem value="team">
-                          Team (visible to team members)
-                        </SelectItem>
+                      options={visibilityOptions}
+                      onValueChange={(value) => {
+                        field.onChange(value);
+                        if (value !== "team") {
+                          form.setValue("teams", [], { shouldDirty: true });
+                        }
+                      }}
+                    >
+                      {currentScope === "team" && (
+                        <div className="space-y-2">
+                          <Label>Teams</Label>
+                          <MultiSelectCombobox
+                            options={
+                              teams?.map((t) => ({
+                                label: t.name,
+                                value: t.id,
+                              })) ?? []
+                            }
+                            value={form.watch("teams") ?? []}
+                            onChange={(ids) =>
+                              form.setValue("teams", ids, { shouldDirty: true })
+                            }
+                            placeholder="Select teams..."
+                            emptyMessage="No teams found"
+                          />
+                        </div>
                       )}
-                      {isAdmin && (
-                        <SelectItem value="org">
-                          Organization (visible to everyone)
-                        </SelectItem>
-                      )}
-                    </SelectContent>
-                  </Select>
+                    </VisibilitySelector>
+                  </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
             />
-
-            {currentScope === "team" && (
-              <div className="space-y-2">
-                <Label>Teams</Label>
-                <MultiSelectCombobox
-                  options={
-                    teams?.map((t) => ({
-                      label: t.name,
-                      value: t.id,
-                    })) ?? []
-                  }
-                  value={form.watch("teams") ?? []}
-                  onChange={(ids) =>
-                    form.setValue("teams", ids, { shouldDirty: true })
-                  }
-                  placeholder="Select teams..."
-                  emptyMessage="No teams found"
-                />
-              </div>
-            )}
 
             {mode === "create" && (
               <div className="space-y-2">

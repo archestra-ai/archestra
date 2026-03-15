@@ -43,7 +43,6 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { MultiSelect } from "@/components/ui/multi-select";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   type ModelWithApiKeys,
   useModelsWithApiKeys,
@@ -286,6 +285,7 @@ export default function ModelsPage() {
           hideSelectedCount
           isLoading={isPending}
           hasActiveFilters={Boolean(search || apiKeyFilter !== "all")}
+          filteredEmptyMessage="No models match your filters. Try adjusting your search."
           onClearFilters={() => {
             setSearch("");
             setApiKeyFilter("all");

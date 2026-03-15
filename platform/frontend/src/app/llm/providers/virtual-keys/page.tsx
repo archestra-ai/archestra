@@ -43,7 +43,10 @@ import {
   useDeleteVirtualApiKey,
 } from "@/lib/chat-settings.query";
 import { useFeature } from "@/lib/config.query";
-import { formatRelativeTime } from "@/lib/format-relative-time";
+import {
+  formatRelativeTime,
+  formatRelativeTimeFromNow,
+} from "@/lib/format-relative-time";
 import { useDataTableQueryParams } from "@/lib/use-data-table-query-params";
 import { useSetProviderAction } from "../layout";
 
@@ -128,7 +131,7 @@ export default function VirtualKeysPage() {
         header: "Created",
         cell: ({ row }) => (
           <span className="text-sm text-muted-foreground">
-            {formatRelativeTime(row.original.createdAt)}
+            {formatRelativeTimeFromNow(row.original.createdAt)}
           </span>
         ),
       },
@@ -241,6 +244,7 @@ export default function VirtualKeysPage() {
         }}
         onPaginationChange={setPagination}
         hasActiveFilters={Boolean(search || chatApiKeyIdFilter !== "all")}
+        filteredEmptyMessage="No virtual keys match your filters. Try adjusting your search."
         onClearFilters={() =>
           updateQueryParams({
             search: null,

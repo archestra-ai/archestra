@@ -5,7 +5,7 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { Edit, Plus, Power, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSetCostsAction } from "@/app/llm/(costs)/layout";
-import { OptimizationRuleForm, Rule } from "@/app/llm/(costs)/optimization-rules/_parts/rule";
+import { OptimizationRuleForm } from "@/app/llm/(costs)/optimization-rules/_parts/rule";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { FormDialog } from "@/components/form-dialog";
 import { LlmModelSearchableSelect } from "@/components/llm-model-select";
@@ -15,11 +15,20 @@ import { TableRowActions } from "@/components/table-row-actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
-import { DialogBody, DialogForm, DialogStickyFooter } from "@/components/ui/dialog";
+import {
+  DialogBody,
+  DialogForm,
+  DialogStickyFooter,
+} from "@/components/ui/dialog";
 import { PermissionButton } from "@/components/ui/permission-button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useModelsWithApiKeys } from "@/lib/chat-models.query";
-import { useDataTableQueryParams } from "@/lib/use-data-table-query-params";
 import type { OptimizationRule } from "@/lib/optimization-rule.query";
 import {
   useCreateOptimizationRule,
@@ -29,6 +38,7 @@ import {
 } from "@/lib/optimization-rule.query";
 import { useOrganization } from "@/lib/organization.query";
 import { useTeams } from "@/lib/team.query";
+import { useDataTableQueryParams } from "@/lib/use-data-table-query-params";
 
 const DEFAULT_RULE = {
   entityType: "organization",
@@ -80,7 +90,9 @@ export default function OptimizationRulesPage() {
 
   const [draft, setDraft] = useState<RuleDraft>(DEFAULT_RULE);
   const [editingRule, setEditingRule] = useState<OptimizationRule | null>(null);
-  const [ruleToDelete, setRuleToDelete] = useState<OptimizationRule | null>(null);
+  const [ruleToDelete, setRuleToDelete] = useState<OptimizationRule | null>(
+    null,
+  );
   const [isDialogOpen, setIsDialogOpen] = useState(false);
 
   const tokenPrices = useMemo(
@@ -114,7 +126,10 @@ export default function OptimizationRulesPage() {
 
   useEffect(() => {
     setActionButton(
-      <PermissionButton permissions={{ llmLimit: ["create"] }} onClick={handleCreateOpen}>
+      <PermissionButton
+        permissions={{ llmLimit: ["create"] }}
+        onClick={handleCreateOpen}
+      >
         <Plus className="mr-2 h-4 w-4" />
         Add Rule
       </PermissionButton>,
@@ -141,7 +156,9 @@ export default function OptimizationRulesPage() {
           if (row.original.entityType === "organization") {
             return "Organization";
           }
-          const team = teams.find((candidate) => candidate.id === row.original.entityId);
+          const team = teams.find(
+            (candidate) => candidate.id === row.original.entityId,
+          );
           return team?.name ?? "Unknown team";
         },
       },
@@ -225,7 +242,9 @@ export default function OptimizationRulesPage() {
 
   async function handleSubmit() {
     const entityId =
-      draft.entityType === "organization" ? (organization?.id ?? "") : draft.entityId;
+      draft.entityType === "organization"
+        ? (organization?.id ?? "")
+        : draft.entityId;
 
     if (editingRule) {
       const result = await updateRule.mutateAsync({
@@ -268,7 +287,9 @@ export default function OptimizationRulesPage() {
   }, [appliedToFilter, providerFilter, rules, targetModelFilter]);
 
   const hasActiveFilters =
-    appliedToFilter !== "all" || providerFilter !== "all" || targetModelFilter !== "all";
+    appliedToFilter !== "all" ||
+    providerFilter !== "all" ||
+    targetModelFilter !== "all";
 
   return (
     <div className="space-y-4">
@@ -321,7 +342,10 @@ export default function OptimizationRulesPage() {
         />
       </div>
 
-      <LoadingWrapper isPending={isPending} loadingFallback={<LoadingSpinner />}>
+      <LoadingWrapper
+        isPending={isPending}
+        loadingFallback={<LoadingSpinner />}
+      >
         <DataTable
           columns={columns}
           data={filteredRules}
@@ -329,7 +353,11 @@ export default function OptimizationRulesPage() {
           hasActiveFilters={hasActiveFilters}
           filteredEmptyMessage="No optimization rules match your filters. Try adjusting your search."
           onClearFilters={() =>
-            updateQueryParams({ appliedTo: null, provider: null, targetModel: null })
+            updateQueryParams({
+              appliedTo: null,
+              provider: null,
+              targetModel: null,
+            })
           }
         />
       </LoadingWrapper>
@@ -337,25 +365,46 @@ export default function OptimizationRulesPage() {
       <FormDialog
         open={isDialogOpen}
         onOpenChange={setIsDialogOpen}
-        title={editingRule ? "Edit optimization rule" : "Create optimization rule"}
+        title={
+          editingRule ? "Edit optimization rule" : "Create optimization rule"
+        }
         description="Configure when requests should route to a cheaper target model."
         size="medium"
       >
-        <DialogForm className="flex min-h-0 flex-1 flex-col" onSubmit={(e) => { e.preventDefault(); void handleSubmit(); }}>
+        <DialogForm
+          className="flex min-h-0 flex-1 flex-col"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void handleSubmit();
+          }}
+        >
           <DialogBody>
             <OptimizationRuleForm
               {...draft}
               tokenPrices={tokenPrices}
               teams={teams}
               onChange={setDraft}
-              onToggle={(enabled) => setDraft((current) => ({ ...current, enabled }))}
+              onToggle={(enabled) =>
+                setDraft((current) => ({ ...current, enabled }))
+              }
             />
           </DialogBody>
           <DialogStickyFooter className="mt-0">
-            <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setIsDialogOpen(false)}
+            >
               Cancel
             </Button>
-            <Button type="submit" disabled={!draft.targetModel || createRule.isPending || updateRule.isPending}>
+            <Button
+              type="submit"
+              disabled={
+                !draft.targetModel ||
+                createRule.isPending ||
+                updateRule.isPending
+              }
+            >
               {editingRule ? "Save changes" : "Create rule"}
             </Button>
           </DialogStickyFooter>

@@ -7,6 +7,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { CopyButton } from "@/components/copy-button";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { ExpirationDateTimeField } from "@/components/expiration-date-time-field";
 import { FormDialog } from "@/components/form-dialog";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { TableRowActions } from "@/components/table-row-actions";
@@ -33,16 +34,18 @@ import { useSetSettingsAction } from "../layout";
 
 type CreateApiKeyFormValues = {
   name: string;
-  expiresInDays: string;
+  expiresAt: Date | null;
 };
 
 const DEFAULT_FORM_VALUES: CreateApiKeyFormValues = {
   name: "",
-  expiresInDays: "",
+  expiresAt: null,
 };
 
 export default function ApiKeysSettingsPage() {
   const setActionButton = useSetSettingsAction();
+  const { data: canReadApiKeys, isPending: isCheckingPermissions } =
+    useHasPermissions({ apiKey: ["read"] });
   const { data: apiKeys = [], isPending } = useApiKeys();
   const { data: canDeleteApiKeys } = useHasPermissions({ apiKey: ["delete"] });
   const createApiKeyMutation = useCreateApiKey();
@@ -147,8 +150,12 @@ export default function ApiKeysSettingsPage() {
   }, [canDeleteApiKeys]);
 
   const handleCreate = form.handleSubmit(async (values) => {
-    const expiresInDays = values.expiresInDays.trim();
-    const expiresIn = expiresInDays ? Number(expiresInDays) * 24 * 60 * 60 : null;
+    const expiresIn = values.expiresAt
+      ? Math.max(
+          1,
+          Math.floor((values.expiresAt.getTime() - Date.now()) / 1000),
+        )
+      : null;
 
     const createdApiKey = await createApiKeyMutation.mutateAsync({
       name: values.name.trim() || undefined,
@@ -160,7 +167,6 @@ export default function ApiKeysSettingsPage() {
     }
 
     setCreatedApiKeyValue(createdApiKey.key);
-    setIsCreateDialogOpen(false);
     form.reset(DEFAULT_FORM_VALUES);
   });
 
@@ -172,28 +178,14 @@ export default function ApiKeysSettingsPage() {
 
   return (
     <div className="space-y-6">
-      {createdApiKeyValue && (
-        <Alert>
-          <KeyRound className="h-4 w-4" />
-          <AlertTitle>Copy your new API key now</AlertTitle>
-          <AlertDescription className="space-y-3">
-            <p>This is the only time Archestra will show the full key value.</p>
-            <div className="flex gap-2">
-              <Input readOnly value={createdApiKeyValue} className="font-mono text-xs" />
-              <CopyButton text={createdApiKeyValue} />
-            </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setCreatedApiKeyValue(null)}
-            >
-              Dismiss
-            </Button>
+      {!isCheckingPermissions && !canReadApiKeys ? (
+        <Alert variant="destructive">
+          <AlertTitle>Access denied</AlertTitle>
+          <AlertDescription>
+            You do not have permission to view API keys.
           </AlertDescription>
         </Alert>
-      )}
-
+      ) : (
       <LoadingWrapper
         isPending={isPending}
         loadingFallback={<LoadingSpinner />}
@@ -204,43 +196,86 @@ export default function ApiKeysSettingsPage() {
           emptyMessage="No API keys yet"
         />
       </LoadingWrapper>
+      )}
 
       <FormDialog
         open={isCreateDialogOpen}
-        onOpenChange={setIsCreateDialogOpen}
-        title="Create API key"
-        description="Create a new personal API key for programmatic access."
-        size="medium"
+        onOpenChange={(open) => {
+          setIsCreateDialogOpen(open);
+          if (!open) {
+            setCreatedApiKeyValue(null);
+            form.reset(DEFAULT_FORM_VALUES);
+          }
+        }}
+        title={createdApiKeyValue ? "API key created" : "Create API key"}
+        description={
+          createdApiKeyValue
+            ? "Copy this key now. It will not be shown again after you close this dialog."
+            : "Create a new personal API key for programmatic access."
+        }
+        size={createdApiKeyValue ? "small" : "medium"}
+        className={
+          createdApiKeyValue ? undefined : "sm:max-w-lg max-h-[90vh] overflow-y-auto"
+        }
       >
         <DialogForm onSubmit={handleCreate}>
           <div className="space-y-4 py-2">
-            <div className="space-y-2">
-              <Label htmlFor="name">Name</Label>
-              <Input id="name" placeholder="CI token" {...form.register("name")} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="expiresInDays">Expiration in days</Label>
-              <Input
-                id="expiresInDays"
-                type="number"
-                min="1"
-                placeholder="Leave blank for no expiration"
-                {...form.register("expiresInDays")}
-              />
-            </div>
+            {createdApiKeyValue ? (
+              <>
+                <div className="flex items-center gap-2 text-sm font-medium">
+                  <KeyRound className="h-4 w-4" />
+                  Copy this key now. It won&apos;t be shown again.
+                </div>
+                <div className="flex gap-2">
+                  <Input
+                    readOnly
+                    value={createdApiKeyValue}
+                    className="font-mono text-xs"
+                  />
+                  <CopyButton text={createdApiKeyValue} />
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="name">Name</Label>
+                  <Input
+                    id="name"
+                    placeholder="CI token"
+                    {...form.register("name")}
+                  />
+                </div>
+                <ExpirationDateTimeField
+                  value={form.watch("expiresAt")}
+                  onChange={(value) => form.setValue("expiresAt", value)}
+                  noExpirationText="Key will never expire"
+                  formatExpiration={(value) =>
+                    value
+                      ? formatDate({ date: new Date(value).toISOString() })
+                      : ""
+                  }
+                />
+              </>
+            )}
           </div>
           <DialogStickyFooter>
             <Button
               type="button"
               variant="outline"
-              onClick={() => setIsCreateDialogOpen(false)}
+              onClick={() => {
+                setIsCreateDialogOpen(false);
+                setCreatedApiKeyValue(null);
+                form.reset(DEFAULT_FORM_VALUES);
+              }}
               disabled={createApiKeyMutation.isPending}
             >
-              Cancel
+              {createdApiKeyValue ? "Close" : "Cancel"}
             </Button>
-            <Button type="submit" disabled={createApiKeyMutation.isPending}>
-              Create
-            </Button>
+            {!createdApiKeyValue && (
+              <Button type="submit" disabled={createApiKeyMutation.isPending}>
+                Create
+              </Button>
+            )}
           </DialogStickyFooter>
         </DialogForm>
       </FormDialog>

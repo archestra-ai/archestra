@@ -7,10 +7,9 @@ import {
   ApiKeyIdParamsSchema,
   ApiKeyResponseSchema,
   ApiKeyWithValueResponseSchema,
-  constructResponseSchema,
   CreateApiKeyBodySchema,
+  constructResponseSchema,
   DeleteApiKeyResponseSchema,
-  UpdateApiKeyBodySchema,
 } from "@/types";
 
 const apiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
@@ -69,44 +68,7 @@ const apiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           body: request.body,
         });
 
-        return reply.send(apiKey);
-      } catch (error) {
-        throw toApiError(error, 400);
-      }
-    },
-  );
-
-  fastify.patch(
-    "/api/api-keys/:id",
-    {
-      schema: {
-        operationId: RouteId.UpdateApiKey,
-        description: "Update an Archestra API key for the authenticated user",
-        tags: ["API Keys"],
-        params: ApiKeyIdParamsSchema,
-        body: UpdateApiKeyBodySchema,
-        response: constructResponseSchema(ApiKeyResponseSchema),
-      },
-    },
-    async (request, reply) => {
-      const existingApiKey = await ApiKeyModel.findByIdForUser(
-        request.params.id,
-        request.user.id,
-      );
-      if (!existingApiKey) {
-        throw new ApiError(404, "API key not found");
-      }
-
-      try {
-        const apiKey = await betterAuth.api.updateApiKey({
-          headers: new Headers(request.headers as HeadersInit),
-          body: {
-            keyId: request.params.id,
-            ...request.body,
-          },
-        });
-
-        return reply.send(apiKey);
+        return reply.send(normalizeCreatedApiKeyResponse(apiKey));
       } catch (error) {
         throw toApiError(error, 400);
       }
@@ -165,7 +127,8 @@ function toApiError(error: unknown, fallbackStatusCode: number): ApiError {
 }
 
 function getStatusCode(error: Error, fallbackStatusCode: number): number {
-  const maybeStatusCode = (error as Error & { statusCode?: unknown }).statusCode;
+  const maybeStatusCode = (error as Error & { statusCode?: unknown })
+    .statusCode;
   if (typeof maybeStatusCode === "number") {
     return maybeStatusCode;
   }
@@ -175,4 +138,45 @@ function getStatusCode(error: Error, fallbackStatusCode: number): number {
   }
 
   return fallbackStatusCode;
+}
+
+function normalizeCreatedApiKeyResponse(apiKey: {
+  id: string;
+  name: string | null;
+  start: string | null;
+  prefix: string | null;
+  userId: string;
+  enabled: boolean | null;
+  lastRequest: string | Date | null;
+  expiresAt: string | Date | null;
+  createdAt: string | Date;
+  updatedAt: string | Date;
+  metadata?: Record<string, unknown> | null;
+  permissions?: Record<string, string[]> | null;
+  key: string;
+}) {
+  return {
+    id: apiKey.id,
+    name: apiKey.name,
+    start: apiKey.start,
+    prefix: apiKey.prefix,
+    userId: apiKey.userId,
+    enabled: apiKey.enabled,
+    lastRequest: toDateOrNull(apiKey.lastRequest),
+    expiresAt: toDateOrNull(apiKey.expiresAt),
+    createdAt: toDate(apiKey.createdAt),
+    updatedAt: toDate(apiKey.updatedAt),
+    metadata: apiKey.metadata ?? null,
+    permissions: apiKey.permissions ?? null,
+    key: apiKey.key,
+  };
+}
+
+function toDate(value: string | Date): Date {
+  return value instanceof Date ? value : new Date(value);
+}
+
+function toDateOrNull(value: string | Date | null): Date | null {
+  if (!value) return null;
+  return toDate(value);
 }

@@ -11,11 +11,11 @@ import {
   PROVIDER_CONFIG,
 } from "@/components/chat-api-key-form";
 import { CopyableCode } from "@/components/copyable-code";
+import { ExpirationDateTimeField } from "@/components/expiration-date-time-field";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
-import { DateTimePicker } from "@/components/ui/date-time-picker";
 import {
   Dialog,
   DialogContent,
@@ -351,40 +351,12 @@ function CreateVirtualKeyDialog({
                 </div>
 
                 <div className="space-y-2">
-                  <Label>
-                    Expiration{" "}
-                    <span className="text-muted-foreground font-normal">
-                      ({Intl.DateTimeFormat().resolvedOptions().timeZone})
-                    </span>
-                  </Label>
-                  <div className="flex items-center gap-2">
-                    <DateTimePicker
-                      value={expiresAt ?? undefined}
-                      onChange={(date) => setExpiresAt(date ?? null)}
-                      disabledDate={(date) => {
-                        const today = new Date();
-                        today.setHours(0, 0, 0, 0);
-                        return date < today;
-                      }}
-                      placeholder="No expiration"
-                      className="flex-1"
-                    />
-                    {expiresAt && (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setExpiresAt(null)}
-                      >
-                        Never
-                      </Button>
-                    )}
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    {expiresAt
-                      ? `Expires ${formatExpiration(expiresAt)}`
-                      : "Key will never expire"}
-                  </p>
+                  <ExpirationDateTimeField
+                    value={expiresAt}
+                    onChange={setExpiresAt}
+                    noExpirationText="Key will never expire"
+                    formatExpiration={formatExpiration}
+                  />
                 </div>
               </>
             )}

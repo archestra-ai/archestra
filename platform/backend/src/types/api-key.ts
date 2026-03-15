@@ -1,14 +1,12 @@
 import {
   createInsertSchema,
   createSelectSchema,
-  createUpdateSchema,
 } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
 
 export const SelectApiKeySchema = createSelectSchema(schema.apikeysTable);
 export const InsertApiKeySchema = createInsertSchema(schema.apikeysTable);
-export const UpdateApiKeySchema = createUpdateSchema(schema.apikeysTable);
 
 export const ApiKeyPermissionsSchema = z.record(z.string(), z.array(z.string()));
 export const ApiKeyMetadataSchema = z.record(z.string(), z.unknown());
@@ -37,17 +35,6 @@ export const CreateApiKeyBodySchema = InsertApiKeySchema.pick({
     expiresIn: z.number().int().positive().nullable().optional(),
   })
   .strict();
-
-export const UpdateApiKeyBodySchema = UpdateApiKeySchema.pick({
-  name: true,
-  enabled: true,
-})
-  .extend({
-    expiresIn: z.number().int().positive().nullable().optional(),
-  })
-  .refine((value) => Object.keys(value).length > 0, {
-    message: "At least one field must be provided",
-  });
 
 export const ApiKeyIdParamsSchema = z.object({
   id: z.string(),

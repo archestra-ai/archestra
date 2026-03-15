@@ -1,6 +1,7 @@
 import { archestraApiSdk, type archestraApiTypes } from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { useHasPermissions } from "./auth.query";
 import { handleApiError, toApiError } from "./utils";
 
 export type UserApiKey = archestraApiTypes.GetApiKeysResponses["200"][number];
@@ -8,6 +9,8 @@ export type UserApiKey = archestraApiTypes.GetApiKeysResponses["200"][number];
 const { getApiKeys, createApiKey, deleteApiKey } = archestraApiSdk;
 
 export function useApiKeys() {
+  const { data: canReadApiKeys } = useHasPermissions({ apiKey: ["read"] });
+
   return useQuery({
     queryKey: ["api-keys"],
     queryFn: async () => {
@@ -19,6 +22,7 @@ export function useApiKeys() {
 
       return data ?? [];
     },
+    enabled: !!canReadApiKeys,
   });
 }
 

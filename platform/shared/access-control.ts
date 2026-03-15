@@ -27,13 +27,11 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   // Agents
   agent: ["read", "create", "update", "delete", "team-admin", "admin"],
   agentTrigger: ["read", "create", "update", "delete"],
-  agentSettings: ["read", "update"],
 
   // LLM
   llmProxy: ["read", "create", "update", "delete", "team-admin", "admin"],
   llmProvider: ["read", "create", "update", "delete"],
   llmLimit: ["read", "create", "update", "delete"],
-  llmSettings: ["read", "update"],
   llmCost: ["read"],
 
   // MCP
@@ -45,7 +43,6 @@ export const allAvailableActions: Record<Resource, Action[]> = {
 
   // Knowledge
   knowledgeBase: ["read", "create", "update", "delete"],
-  knowledgeSettings: ["read", "update"],
 
   // Dual LLM
   dualLlmConfig: ["read", "create", "update", "delete"],
@@ -56,13 +53,16 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   log: ["read"],
 
   // Administration (overrides better-auth defaults to add "read" where needed)
+  apiKey: ["read", "create", "delete"],
+  agentSettings: ["read", "update"],
+  llmSettings: ["read", "update"],
+  knowledgeSettings: ["read", "update"],
   member: ["read", "create", "update", "delete"],
+  invitation: ["create", "cancel"],
   ac: ["read", "create", "update", "delete"],
   team: ["read", "create", "update", "delete", "admin"],
-  invitation: ["create", "cancel"],
   identityProvider: ["read", "create", "update", "delete"],
   secret: ["read", "update"],
-  apiKey: ["read", "create", "update", "delete"],
   organizationSettings: ["read", "update"],
 
   // UI behavior resources
@@ -79,13 +79,11 @@ export const editorPermissions: Record<Resource, Action[]> = {
   // Agents
   agent: ["read", "create", "update", "delete", "team-admin"],
   agentTrigger: ["read", "create", "update", "delete"],
-  agentSettings: [],
 
   // LLM
   llmProxy: ["read", "create", "update", "delete", "team-admin"],
   llmProvider: ["read", "create", "update", "delete"],
   llmLimit: ["read", "create", "update", "delete"],
-  llmSettings: ["read", "update"],
   llmCost: ["read"],
 
   // MCP
@@ -97,7 +95,6 @@ export const editorPermissions: Record<Resource, Action[]> = {
 
   // Knowledge
   knowledgeBase: ["read", "create", "update", "delete"],
-  knowledgeSettings: ["read", "update"],
 
   // Dual LLM
   dualLlmConfig: ["read"],
@@ -107,25 +104,26 @@ export const editorPermissions: Record<Resource, Action[]> = {
   chat: ["read", "create", "update", "delete"],
   log: ["read"],
 
-  // Administration
+  // Administration (overrides better-auth defaults to add "read" where needed)
+  apiKey: ["read", "create", "delete"],
+  agentSettings: [],
+  llmSettings: ["read", "update"],
+  knowledgeSettings: ["read", "update"],
+  member: ["read"],
+  invitation: ["read"],
+  ac: ["read"],
   team: ["read"],
+  identityProvider: ["read"],
   secret: ["read"],
-  apiKey: ["read", "create", "update", "delete"],
   organizationSettings: ["read", "update"],
 
-  /*
-   * Empty arrays below are required for Record<Resource, Action[]> type compatibility.
-   * These resources exist but editors have no permissions for them.
-   * "organization" is a better-auth internal resource not exposed to users.
-   */
-  member: [],
-  invitation: [],
-  identityProvider: [],
-  ac: [],
+  // UI behavior resources
   simpleView: [],
   chatAgentPicker: ["enable"],
   chatProviderSettings: ["enable"],
   chatExpandToolCalls: ["enable"],
+
+  // better-auth internal resource — not exposed to users, kept for ACL compatibility
   organization: [],
 };
 
@@ -133,13 +131,11 @@ export const memberPermissions: Record<Resource, Action[]> = {
   // Agents
   agent: ["read", "create", "update", "delete"],
   agentTrigger: [],
-  agentSettings: [],
 
   // LLM
   llmProxy: ["read", "create", "update", "delete"],
   llmProvider: ["read"],
   llmLimit: [],
-  llmSettings: [],
   llmCost: [],
 
   // MCP
@@ -151,7 +147,6 @@ export const memberPermissions: Record<Resource, Action[]> = {
 
   // Knowledge
   knowledgeBase: ["read"],
-  knowledgeSettings: [],
 
   // Dual LLM
   dualLlmConfig: [],
@@ -161,27 +156,26 @@ export const memberPermissions: Record<Resource, Action[]> = {
   chat: ["read", "create", "update", "delete"],
   log: [],
 
-  // Administration
+  // Administration (overrides better-auth defaults to add "read" where needed)
+  apiKey: ["read", "create", "delete"],
+  agentSettings: [],
+  llmSettings: [],
+  knowledgeSettings: [],
+  member: [],
+  invitation: [],
+  ac: [],
   team: ["read"],
+  identityProvider: [],
   secret: [],
-  apiKey: ["read", "create", "update", "delete"],
   organizationSettings: [],
 
-  // UI behavior
+  // UI behavior resources
   simpleView: ["enable"],
   chatAgentPicker: [],
   chatProviderSettings: [],
   chatExpandToolCalls: ["enable"],
 
-  /*
-   * Empty arrays below are required for Record<Resource, Action[]> type compatibility.
-   * These resources exist but members have no permissions for them.
-   * "organization" is a better-auth internal resource not exposed to users.
-   */
-  member: [],
-  invitation: [],
-  identityProvider: [],
-  ac: [],
+  // better-auth internal resource — not exposed to users, kept for ACL compatibility
   organization: [],
 };
 
@@ -314,7 +308,6 @@ export const permissionDescriptions: Record<string, string> = {
   "secret:update": "Modify secrets manager settings and test connectivity",
   "apiKey:read": "View API keys",
   "apiKey:create": "Create API keys",
-  "apiKey:update": "Modify API keys",
   "apiKey:delete": "Delete API keys",
   "organizationSettings:read":
     "View organization settings (appearance, authentication, etc)",
@@ -751,9 +744,6 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.CreateApiKey]: {
     apiKey: ["create"],
   },
-  [RouteId.UpdateApiKey]: {
-    apiKey: ["update"],
-  },
   [RouteId.DeleteApiKey]: {
     apiKey: ["delete"],
   },
@@ -1021,7 +1011,6 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
 
   // Settings
   "/settings/account": {},
-  "/settings/auth": {},
   "/settings/api-keys": { apiKey: ["read"] },
   "/settings/dual-llm": { dualLlmConfig: ["read"] },
   "/settings/llm": { llmSettings: ["read"] },

@@ -2640,6 +2640,34 @@ export default class K8sDeployment {
     return `${days}d`;
   }
 
+    /**
+   * Get available tools from this MCP server deployment.
+   * Supports MCP Apps (e.g., n8n-mcp, excalidraw-mcp) that expose a UI.
+   */
+  getAvailableTools(): any[] {
+    const tools: any[] = [];
+    const name = this.mcpServer.name.toLowerCase();
+    const isApp =
+      name.includes('n8n') ||
+      name.includes('excalidraw') ||
+      name.includes('mcp-ui') ||
+      name.includes('app');
+    if (isApp) {
+      tools.push({
+        id: `${this.mcpServer.id}_app`,
+        name: this.mcpServer.name,
+        description: `Graphical UI for ${this.mcpServer.name} MCP component`,
+        mcpServerId: this.mcpServer.id,
+        mcpServerName: this.mcpServer.name,
+        mcpAppUrl:
+          this.httpEndpointUrl ??
+          `http://${this.deploymentName}-service:8080/ui`,
+        analysis: { status: 'completed', is_read: true, is_write: true },
+      });
+    }
+    return tools;
+  }
+
   get containerName(): string {
     // Return the deployment name (label selector will find the pod)
     return this.deploymentName;

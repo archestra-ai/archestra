@@ -22,7 +22,6 @@ import {
   User,
   Users,
 } from "lucide-react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
@@ -61,11 +60,11 @@ import { useDeleteProfile, useProfilesPaginated } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import {
-  DEFAULT_AGENTS_PAGE_SIZE,
   DEFAULT_SORT_BY,
   DEFAULT_SORT_DIRECTION,
   formatDate,
 } from "@/lib/utils";
+import { useDataTableQueryParams } from "@/lib/use-data-table-query-params";
 import { LlmProxyActions } from "./llm-proxy-actions";
 
 type LlmProxiesInitialData = {
@@ -186,13 +185,16 @@ function VisibilityBadge({
 }
 
 function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
-  const searchParams = useSearchParams();
-  const router = useRouter();
-  const pathname = usePathname();
+  const {
+    searchParams,
+    pageIndex,
+    pageSize,
+    offset,
+    updateQueryParams,
+    setPagination,
+  } = useDataTableQueryParams();
 
   // Get pagination/filter params from URL
-  const pageFromUrl = searchParams.get("page");
-  const pageSizeFromUrl = searchParams.get("pageSize");
   const nameFilter = searchParams.get("name") || "";
   const sortByFromUrl = searchParams.get("sortBy") as
     | "name"
@@ -214,10 +216,6 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
   const authorIdsFromUrl = searchParams.get("authorIds");
   const excludeAuthorIdsFromUrl = searchParams.get("excludeAuthorIds");
   const labelsFromUrl = searchParams.get("labels");
-
-  const pageIndex = Number(pageFromUrl || "1") - 1;
-  const pageSize = Number(pageSizeFromUrl || DEFAULT_AGENTS_PAGE_SIZE);
-  const offset = pageIndex * pageSize;
 
   // Default sorting
   const sortBy = sortByFromUrl || DEFAULT_SORT_BY;
@@ -243,8 +241,10 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
   const { data: userTeams } = useQuery({
     queryKey: ["teams"],
     queryFn: async () => {
-      const { data } = await archestraApiSdk.getTeams();
-      return data || [];
+      const { data } = await archestraApiSdk.getTeams({
+        query: { limit: 100, offset: 0 },
+      });
+      return data?.data || [];
     },
     initialData: initialData?.teams,
   });
@@ -284,29 +284,29 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
         typeof updater === "function" ? updater(sorting) : updater;
       setSorting(newSorting);
 
-      const params = new URLSearchParams(searchParams.toString());
       if (newSorting.length > 0) {
-        params.set("sortBy", newSorting[0].id);
-        params.set("sortDirection", newSorting[0].desc ? "desc" : "asc");
+        updateQueryParams({
+          page: "1",
+          sortBy: newSorting[0].id,
+          sortDirection: newSorting[0].desc ? "desc" : "asc",
+        });
       } else {
-        params.delete("sortBy");
-        params.delete("sortDirection");
+        updateQueryParams({
+          page: "1",
+          sortBy: null,
+          sortDirection: null,
+        });
       }
-      params.set("page", "1"); // Reset to first page when sorting changes
-      router.push(`${pathname}?${params.toString()}`, { scroll: false });
     },
-    [sorting, searchParams, router, pathname],
+    [sorting, updateQueryParams],
   );
 
   // Update URL when pagination changes
   const handlePaginationChange = useCallback(
     (newPagination: { pageIndex: number; pageSize: number }) => {
-      const params = new URLSearchParams(searchParams.toString());
-      params.set("page", String(newPagination.pageIndex + 1));
-      params.set("pageSize", String(newPagination.pageSize));
-      router.push(`${pathname}?${params.toString()}`, { scroll: false });
+      setPagination(newPagination);
     },
-    [searchParams, router, pathname],
+    [setPagination],
   );
 
   const agents = agentsResponse?.data || [];

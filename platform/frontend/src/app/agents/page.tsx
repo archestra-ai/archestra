@@ -7,7 +7,7 @@ import {
 import { ServerErrorFallback } from "@/components/error-fallback";
 import { getServerApiHeaders } from "@/lib/server-utils";
 import {
-  DEFAULT_AGENTS_PAGE_SIZE,
+  DEFAULT_TABLE_LIMIT,
   DEFAULT_SORT_BY,
   DEFAULT_SORT_DIRECTION,
   handleApiError,
@@ -30,14 +30,17 @@ export default async function AgentsPageServer() {
       archestraApiSdk.getAgents({
         headers,
         query: {
-          limit: DEFAULT_AGENTS_PAGE_SIZE,
+          limit: DEFAULT_TABLE_LIMIT,
           offset: 0,
           sortBy: DEFAULT_SORT_BY,
           sortDirection: DEFAULT_SORT_DIRECTION,
           agentTypes: ["agent"],
         },
       }),
-      archestraApiSdk.getTeams({ headers }),
+      archestraApiSdk.getTeams({
+        headers,
+        query: { limit: 100, offset: 0 },
+      }),
     ]);
     if (agentsResponse.error) {
       handleApiError(agentsResponse.error);
@@ -47,7 +50,7 @@ export default async function AgentsPageServer() {
     }
     initialData = {
       agents: agentsResponse.data || null,
-      teams: teamsResponse.data || [],
+      teams: teamsResponse.data?.data || [],
     };
   } catch (error) {
     return <ServerErrorFallback error={error as ErrorExtended} />;

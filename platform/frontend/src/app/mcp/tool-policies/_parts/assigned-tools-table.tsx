@@ -14,7 +14,6 @@ import {
   Search,
   Wand2,
 } from "lucide-react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { LoadingSpinner } from "@/components/loading";
@@ -66,8 +65,9 @@ import { isMcpToolByProperties } from "@/lib/tool.utils";
 import {
   DEFAULT_FILTER_ALL,
   DEFAULT_SORT_BY,
-  DEFAULT_TOOLS_PAGE_SIZE,
+  DEFAULT_TABLE_LIMIT,
 } from "@/lib/utils";
+import { useDataTableQueryParams } from "@/lib/use-data-table-query-params";
 import type { ToolsInitialData } from "../page";
 import { CallPolicyToggle } from "./call-policy-toggle";
 
@@ -119,22 +119,16 @@ export function AssignedToolsTable({
     initialData: initialData?.internalMcpCatalog,
   });
 
-  const searchParams = useSearchParams();
-  const router = useRouter();
-  const pathname = usePathname();
+  const { searchParams, pageIndex, pageSize, updateQueryParams, setPagination } =
+    useDataTableQueryParams();
 
   // Get URL params
-  const pageFromUrl = searchParams.get("page");
-  const pageSizeFromUrl = searchParams.get("pageSize");
   const searchFromUrl = searchParams.get("search");
   const originFromUrl = searchParams.get("origin");
   const sortByFromUrl = searchParams.get("sortBy") as ToolsSortByValues;
   const sortDirectionFromUrl = searchParams.get(
     "sortDirection",
   ) as ToolsSortDirectionValues;
-
-  const pageIndex = Number(pageFromUrl || "1") - 1;
-  const pageSize = Number(pageSizeFromUrl || DEFAULT_TOOLS_PAGE_SIZE);
 
   // State
   const [originFilter, setOriginFilter] = useState(
@@ -162,7 +156,7 @@ export function AssignedToolsTable({
   // Only use initialData for first page with default sorting and no filters
   const useInitialData =
     pageIndex === 0 &&
-    pageSize === DEFAULT_TOOLS_PAGE_SIZE &&
+    pageSize === DEFAULT_TABLE_LIMIT &&
     !searchFromUrl &&
     originFilter === DEFAULT_FILTER_ALL &&
     (sorting[0]?.id === DEFAULT_SORT_BY || !sorting[0]?.id) &&
@@ -187,32 +181,14 @@ export function AssignedToolsTable({
   const tools = toolsData?.data ?? [];
 
   // Helper to update URL params
-  const updateUrlParams = useCallback(
-    (updates: Record<string, string | null>) => {
-      const params = new URLSearchParams(searchParams.toString());
-      Object.entries(updates).forEach(([key, value]) => {
-        if (value === null || value === "" || value === "all") {
-          params.delete(key);
-        } else {
-          params.set(key, value);
-        }
-      });
-      router.push(`${pathname}?${params.toString()}`, { scroll: false });
-    },
-    [searchParams, router, pathname],
-  );
-
   const handlePaginationChange = useCallback(
     (newPagination: { pageIndex: number; pageSize: number }) => {
       setRowSelection({});
       setSelectedTools([]);
 
-      updateUrlParams({
-        page: String(newPagination.pageIndex + 1),
-        pageSize: String(newPagination.pageSize),
-      });
+      setPagination(newPagination);
     },
-    [updateUrlParams],
+    [setPagination],
   );
 
   const handleRowSelectionChange = useCallback(
@@ -236,23 +212,30 @@ export function AssignedToolsTable({
   const handleOriginFilterChange = useCallback(
     (value: string) => {
       setOriginFilter(value);
-      updateUrlParams({
+      updateQueryParams({
         origin: value === "all" ? null : value,
         page: "1", // Reset to first page
       });
       setRowSelection({});
       setSelectedTools([]);
     },
-    [updateUrlParams],
+    [updateQueryParams],
   );
 
   const handleSortingChange = useCallback(
     (newSorting: SortingState) => {
       setSorting(newSorting);
       if (newSorting.length > 0) {
-        updateUrlParams({
+        updateQueryParams({
+          page: "1",
           sortBy: newSorting[0].id,
           sortDirection: newSorting[0].desc ? "desc" : "asc",
+        });
+      } else {
+        updateQueryParams({
+          page: "1",
+          sortBy: null,
+          sortDirection: null,
         });
       }
 
@@ -268,7 +251,7 @@ export function AssignedToolsTable({
         setRowSelection(newSelection);
       }
     },
-    [updateUrlParams, rowSelection, tools],
+    [updateQueryParams, rowSelection, tools],
   );
 
   const handleBulkAction = useCallback(
@@ -1065,7 +1048,7 @@ export function AssignedToolsTable({
                 onClick={() => {
                   handleSearchChange();
                   handleOriginFilterChange(DEFAULT_FILTER_ALL);
-                  updateUrlParams({ search: null, page: "1" });
+                  updateQueryParams({ search: null, page: "1" });
                 }}
               >
                 Clear all filters

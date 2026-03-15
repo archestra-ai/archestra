@@ -43,8 +43,8 @@ export function PermissivePolicyOverlay({
                     <>
                       <br />
                       Enable security engine in&nbsp;
-                      <Link href="/settings/security" className="underline">
-                        Security Settings
+                      <Link href="/settings/agents" className="underline">
+                        Agent Settings
                       </Link>
                     </>
                   )}

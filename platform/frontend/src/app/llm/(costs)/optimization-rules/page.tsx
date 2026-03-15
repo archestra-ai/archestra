@@ -1,17 +1,25 @@
 "use client";
 
+import { providerDisplayNames } from "@shared";
+import type { ColumnDef } from "@tanstack/react-table";
 import { Edit, Plus, Power, Trash2 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
-import { Rule } from "@/app/llm/(costs)/optimization-rules/_parts/rule";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSetCostsAction } from "@/app/llm/(costs)/layout";
+import { OptimizationRuleForm, Rule } from "@/app/llm/(costs)/optimization-rules/_parts/rule";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { FormDialog } from "@/components/form-dialog";
+import { LlmModelSearchableSelect } from "@/components/llm-model-select";
+import { LlmProviderOptionLabel } from "@/components/llm-provider-options";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { TableRowActions } from "@/components/table-row-actions";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { DataTable } from "@/components/ui/data-table";
 import { DialogBody, DialogForm, DialogStickyFooter } from "@/components/ui/dialog";
 import { PermissionButton } from "@/components/ui/permission-button";
-import { useSetCostsAction } from "@/app/llm/(costs)/layout";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useModelsWithApiKeys } from "@/lib/chat-models.query";
+import { useDataTableQueryParams } from "@/lib/use-data-table-query-params";
 import type { OptimizationRule } from "@/lib/optimization-rule.query";
 import {
   useCreateOptimizationRule,
@@ -33,6 +41,29 @@ const DEFAULT_RULE = {
 
 type RuleDraft = Omit<OptimizationRule, "id" | "createdAt" | "updatedAt">;
 
+function getProviderLogoName(provider: keyof typeof providerDisplayNames) {
+  const logoNames = {
+    openai: "openai",
+    anthropic: "anthropic",
+    gemini: "google",
+    bedrock: "amazon-bedrock",
+    cerebras: "cerebras",
+    cohere: "cohere",
+    mistral: "mistral",
+    perplexity: "perplexity",
+    groq: "groq",
+    xai: "xai",
+    openrouter: "openrouter",
+    vllm: "vllm",
+    ollama: "ollama-cloud",
+    zhipuai: "zhipuai",
+    deepseek: "deepseek",
+    minimax: "minimax",
+  } as const;
+
+  return logoNames[provider];
+}
+
 export default function OptimizationRulesPage() {
   const setActionButton = useSetCostsAction();
   const { data: rules = [], isPending } = useOptimizationRules();
@@ -42,6 +73,10 @@ export default function OptimizationRulesPage() {
   const createRule = useCreateOptimizationRule();
   const updateRule = useUpdateOptimizationRule();
   const deleteRule = useDeleteOptimizationRule();
+  const { searchParams, updateQueryParams } = useDataTableQueryParams();
+  const appliedToFilter = searchParams.get("appliedTo") || "all";
+  const providerFilter = searchParams.get("provider") || "all";
+  const targetModelFilter = searchParams.get("targetModel") || "all";
 
   const [draft, setDraft] = useState<RuleDraft>(DEFAULT_RULE);
   const [editingRule, setEditingRule] = useState<OptimizationRule | null>(null);
@@ -59,6 +94,24 @@ export default function OptimizationRulesPage() {
     [modelsWithApiKeys],
   );
 
+  const modelOptions = useMemo(
+    () =>
+      tokenPrices.map((model) => ({
+        value: model.model,
+        model: model.model,
+        provider: model.provider,
+        pricePerMillionInput: model.pricePerMillionInput,
+        pricePerMillionOutput: model.pricePerMillionOutput,
+      })),
+    [tokenPrices],
+  );
+
+  const handleCreateOpen = useCallback(() => {
+    setEditingRule(null);
+    setDraft(DEFAULT_RULE);
+    setIsDialogOpen(true);
+  }, []);
+
   useEffect(() => {
     setActionButton(
       <PermissionButton permissions={{ llmLimit: ["create"] }} onClick={handleCreateOpen}>
@@ -68,26 +121,107 @@ export default function OptimizationRulesPage() {
     );
 
     return () => setActionButton(null);
-  }, [setActionButton]);
+  }, [handleCreateOpen, setActionButton]);
 
-  function handleCreateOpen() {
-    setEditingRule(null);
-    setDraft(DEFAULT_RULE);
-    setIsDialogOpen(true);
-  }
-
-  function handleEditOpen(rule: OptimizationRule) {
-    setEditingRule(rule);
-    setDraft({
-      entityType: rule.entityType,
-      entityId: rule.entityId,
-      conditions: rule.conditions,
-      provider: rule.provider,
-      targetModel: rule.targetModel,
-      enabled: rule.enabled,
-    });
-    setIsDialogOpen(true);
-  }
+  const columns = useMemo<ColumnDef<OptimizationRule>[]>(
+    () => [
+      {
+        accessorKey: "enabled",
+        header: "Status",
+        cell: ({ row }) => (
+          <Badge variant={row.original.enabled ? "secondary" : "outline"}>
+            {row.original.enabled ? "Enabled" : "Disabled"}
+          </Badge>
+        ),
+      },
+      {
+        accessorKey: "entityId",
+        header: "Applied to",
+        cell: ({ row }) => {
+          if (row.original.entityType === "organization") {
+            return "Organization";
+          }
+          const team = teams.find((candidate) => candidate.id === row.original.entityId);
+          return team?.name ?? "Unknown team";
+        },
+      },
+      {
+        accessorKey: "provider",
+        header: "Provider",
+        cell: ({ row }) => (
+          <LlmProviderOptionLabel
+            icon={`https://models.dev/logos/${getProviderLogoName(row.original.provider)}.svg`}
+            name={providerDisplayNames[row.original.provider]}
+          />
+        ),
+      },
+      {
+        accessorKey: "targetModel",
+        header: "Target model",
+        cell: ({ row }) => row.original.targetModel,
+      },
+      {
+        id: "conditions",
+        header: "Conditions",
+        cell: ({ row }) => (
+          <div className="max-w-xl text-sm text-muted-foreground">
+            {row.original.conditions
+              .map((condition) =>
+                "maxLength" in condition
+                  ? `Max length ${condition.maxLength}`
+                  : condition.hasTools
+                    ? "Has tools"
+                    : "No tools",
+              )
+              .join(" and ")}
+          </div>
+        ),
+      },
+      {
+        id: "actions",
+        header: "Actions",
+        cell: ({ row }) => (
+          <TableRowActions
+            actions={[
+              {
+                icon: <Power className="h-4 w-4" />,
+                label: row.original.enabled ? "Disable rule" : "Enable rule",
+                onClick: async () => {
+                  await updateRule.mutateAsync({
+                    id: row.original.id,
+                    enabled: !row.original.enabled,
+                  });
+                },
+              },
+              {
+                icon: <Edit className="h-4 w-4" />,
+                label: "Edit rule",
+                onClick: () => {
+                  setEditingRule(row.original);
+                  setDraft({
+                    entityType: row.original.entityType,
+                    entityId: row.original.entityId,
+                    conditions: row.original.conditions,
+                    provider: row.original.provider,
+                    targetModel: row.original.targetModel,
+                    enabled: row.original.enabled,
+                  });
+                  setIsDialogOpen(true);
+                },
+              },
+              {
+                icon: <Trash2 className="h-4 w-4" />,
+                label: "Delete rule",
+                variant: "destructive",
+                onClick: () => setRuleToDelete(row.original),
+              },
+            ]}
+          />
+        ),
+      },
+    ],
+    [teams, updateRule],
+  );
 
   async function handleSubmit() {
     const entityId =
@@ -121,44 +255,83 @@ export default function OptimizationRulesPage() {
     setRuleToDelete(null);
   }
 
+  const filteredRules = useMemo(() => {
+    return rules.filter((rule) => {
+      const matchesAppliedTo =
+        appliedToFilter === "all" || rule.entityType === appliedToFilter;
+      const matchesProvider =
+        providerFilter === "all" || rule.provider === providerFilter;
+      const matchesTargetModel =
+        targetModelFilter === "all" || rule.targetModel === targetModelFilter;
+      return matchesAppliedTo && matchesProvider && matchesTargetModel;
+    });
+  }, [appliedToFilter, providerFilter, rules, targetModelFilter]);
+
+  const hasActiveFilters =
+    appliedToFilter !== "all" || providerFilter !== "all" || targetModelFilter !== "all";
+
   return (
     <div className="space-y-4">
-      <LoadingWrapper isPending={isPending} loadingFallback={<LoadingSpinner />}>
-        {rules.length === 0 ? (
-          <div className="rounded-md border px-6 py-12 text-center text-sm text-muted-foreground">
-            No optimization rules configured yet.
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {rules.map((rule) => (
-              <div key={rule.id} className="flex items-start justify-between gap-4 rounded-md border px-4 py-4">
-                <Rule {...rule} tokenPrices={tokenPrices} teams={teams} className="min-w-0 flex-1" />
-                <TableRowActions
-                  actions={[
-                    {
-                      icon: <Power className="h-4 w-4" />,
-                      label: rule.enabled ? "Disable rule" : "Enable rule",
-                      onClick: async () => {
-                        await updateRule.mutateAsync({ id: rule.id, enabled: !rule.enabled });
-                      },
-                    },
-                    {
-                      icon: <Edit className="h-4 w-4" />,
-                      label: "Edit rule",
-                      onClick: () => handleEditOpen(rule),
-                    },
-                    {
-                      icon: <Trash2 className="h-4 w-4" />,
-                      label: "Delete rule",
-                      variant: "destructive",
-                      onClick: () => setRuleToDelete(rule),
-                    },
-                  ]}
-                />
-              </div>
+      <div className="flex flex-wrap gap-3">
+        <Select
+          value={appliedToFilter}
+          onValueChange={(value) =>
+            updateQueryParams({ appliedTo: value === "all" ? null : value })
+          }
+        >
+          <SelectTrigger className="w-full sm:w-[220px]">
+            <SelectValue placeholder="All applied to" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All applied to</SelectItem>
+            <SelectItem value="organization">Organization</SelectItem>
+            <SelectItem value="team">Team</SelectItem>
+          </SelectContent>
+        </Select>
+
+        <Select
+          value={providerFilter}
+          onValueChange={(value) =>
+            updateQueryParams({ provider: value === "all" ? null : value })
+          }
+        >
+          <SelectTrigger className="w-full sm:w-[220px]">
+            <SelectValue placeholder="All providers" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All providers</SelectItem>
+            {Object.entries(providerDisplayNames).map(([provider, name]) => (
+              <SelectItem key={provider} value={provider}>
+                {name}
+              </SelectItem>
             ))}
-          </div>
-        )}
+          </SelectContent>
+        </Select>
+
+        <LlmModelSearchableSelect
+          value={targetModelFilter}
+          onValueChange={(value) =>
+            updateQueryParams({ targetModel: value === "all" ? null : value })
+          }
+          options={modelOptions}
+          placeholder="All target models"
+          className="sm:max-w-[320px]"
+          includeAllOption
+          allLabel="All target models"
+        />
+      </div>
+
+      <LoadingWrapper isPending={isPending} loadingFallback={<LoadingSpinner />}>
+        <DataTable
+          columns={columns}
+          data={filteredRules}
+          emptyMessage="No optimization rules configured yet"
+          hasActiveFilters={hasActiveFilters}
+          filteredEmptyMessage="No optimization rules match your filters. Try adjusting your search."
+          onClearFilters={() =>
+            updateQueryParams({ appliedTo: null, provider: null, targetModel: null })
+          }
+        />
       </LoadingWrapper>
 
       <FormDialog
@@ -166,19 +339,16 @@ export default function OptimizationRulesPage() {
         onOpenChange={setIsDialogOpen}
         title={editingRule ? "Edit optimization rule" : "Create optimization rule"}
         description="Configure when requests should route to a cheaper target model."
-        size="large"
+        size="medium"
       >
         <DialogForm className="flex min-h-0 flex-1 flex-col" onSubmit={(e) => { e.preventDefault(); void handleSubmit(); }}>
           <DialogBody>
-            <Rule
+            <OptimizationRuleForm
               {...draft}
-              id="draft"
               tokenPrices={tokenPrices}
               teams={teams}
-              editable
               onChange={setDraft}
               onToggle={(enabled) => setDraft((current) => ({ ...current, enabled }))}
-              className="flex-col items-start gap-4"
             />
           </DialogBody>
           <DialogStickyFooter className="mt-0">

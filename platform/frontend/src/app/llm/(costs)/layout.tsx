@@ -1,5 +1,7 @@
 "use client";
 
+import { DocsPage, getDocsUrl } from "@shared";
+import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { createContext, useContext, useMemo, useState } from "react";
 import { PageLayout } from "@/components/page-layout";
@@ -10,10 +12,27 @@ const TABS = [
   { label: "Optimization Rules", href: "/llm/optimization-rules" },
 ];
 
-const PAGE_CONFIG: Record<string, { title: string; description: string }> = {
+const PAGE_CONFIG: Record<string, { title: React.ReactNode; description: React.ReactNode }> = {
   "/llm/costs": {
     title: "Costs",
-    description: "Monitor usage costs and savings across teams, agents, and models.",
+    description: (
+      <>
+        Monitor usage costs and savings across teams, agents, and models. View and edit model token prices in {" "}
+        <Link href="/llm/providers/models" className="text-primary hover:underline">
+          Model Settings
+        </Link>
+        . Check {" "}
+        <a
+          href={getDocsUrl(DocsPage.PlatformObservability)}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-primary hover:underline"
+        >
+          Prometheus metrics capabilities
+        </a>{" "}
+        to get cost-related insights at scale.
+      </>
+    ),
   },
   "/llm/limits": {
     title: "Limits",

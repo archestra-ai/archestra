@@ -20,7 +20,6 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { KnowledgePageLayout } from "@/app/knowledge/_parts/knowledge-page-layout";
-import { ConnectorStatusDot } from "@/app/knowledge/knowledge-bases/_parts/connector-enabled-dot";
 import { ConnectorStatusBadge } from "@/app/knowledge/knowledge-bases/_parts/connector-status-badge";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { SearchInput } from "@/components/search-input";
@@ -350,18 +349,18 @@ function ExpandedConnectors({ knowledgeBaseId }: { knowledgeBaseId: string }) {
       header: "Connector",
       cell: ({ row }) => (
         <div className="flex items-center gap-3">
-          <ConnectorStatusDot
-            enabled={row.original.enabled}
-            lastSyncStatus={row.original.lastSyncStatus}
-          />
-          <Badge variant="secondary" className="gap-1.5 capitalize">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-muted">
             <ConnectorTypeIcon
               type={row.original.connectorType}
-              className="h-3.5 w-3.5"
+              className="h-5 w-5"
             />
-            {row.original.connectorType}
-          </Badge>
-          <span className="font-medium">{row.original.name}</span>
+          </div>
+          <div className="min-w-0">
+            <div className="font-medium truncate">{row.original.name}</div>
+            <div className="text-xs text-muted-foreground truncate">
+              {row.original.description || row.original.connectorType}
+            </div>
+          </div>
         </div>
       ),
     },

@@ -15,7 +15,14 @@ interface SearchableSelectProps {
   onValueChange: (value: string) => void;
   placeholder?: string;
   searchPlaceholder?: string;
-  items: Array<{ value: string; label: string; description?: string; searchText?: string; content?: React.ReactNode }>;
+  items: Array<{
+    value: string;
+    label: string;
+    description?: string;
+    searchText?: string;
+    content?: React.ReactNode;
+    selectedContent?: React.ReactNode;
+  }>;
   className?: string;
   disabled?: boolean;
   allowCustom?: boolean;
@@ -73,13 +80,17 @@ export function SearchableSelect({
           aria-expanded={open}
           disabled={disabled}
           className={cn(
-            "w-[200px] justify-between font-normal",
+            "h-auto min-h-9 w-[200px] justify-between py-2 font-normal",
             !value && "text-muted-foreground",
             className,
           )}
         >
-          <span className="truncate">
-            {selectedItem ? (selectedItem.content ?? selectedItem.label) : value || placeholder}
+          <span className="min-w-0 flex-1 truncate text-left">
+            {selectedItem
+              ? (selectedItem.selectedContent ??
+                selectedItem.content ??
+                selectedItem.label)
+              : value || placeholder}
           </span>
           <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
@@ -108,7 +119,7 @@ export function SearchableSelect({
             {hint}
           </div>
         )}
-        <div className="max-h-[300px] overflow-y-auto p-1">
+        <div className="max-h-[300px] overflow-y-auto p-1" onWheelCapture={(event) => event.stopPropagation()}>
           {filteredItems.length === 0 ? (
             <div className="px-4 py-6 text-center text-sm text-muted-foreground">
               {allowCustom && searchQuery ? (

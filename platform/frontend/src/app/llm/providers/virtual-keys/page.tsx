@@ -124,6 +124,15 @@ export default function VirtualKeysPage() {
         },
       },
       {
+        accessorKey: "createdAt",
+        header: "Created",
+        cell: ({ row }) => (
+          <span className="text-sm text-muted-foreground">
+            {formatRelativeTime(row.original.createdAt)}
+          </span>
+        ),
+      },
+      {
         accessorKey: "expiresAt",
         header: "Expires",
         cell: ({ row }) => (

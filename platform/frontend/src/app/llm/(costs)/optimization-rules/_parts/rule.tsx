@@ -147,7 +147,7 @@ function ModelSelect({
     !isAvailable && model
       ? [
           {
-            provider: SupportedProviders.OPENAI,
+            provider: "openai",
             model,
             pricePerMillionInput: "0",
             pricePerMillionOutput: "0",
@@ -292,7 +292,12 @@ type RuleProps = Omit<OptimizationRule, "createdAt" | "updatedAt"> & {
 
 type OptimizationRuleFormProps = Pick<
   OptimizationRule,
-  "enabled" | "entityType" | "entityId" | "conditions" | "provider" | "targetModel"
+  | "enabled"
+  | "entityType"
+  | "entityId"
+  | "conditions"
+  | "provider"
+  | "targetModel"
 > & {
   tokenPrices: TokenPrices;
   teams?: Team[];

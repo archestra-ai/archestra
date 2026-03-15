@@ -434,9 +434,7 @@ export async function assignEngineeringTeamToDefaultProfileViaApi({
     );
   }
 
-  const defaultTeam = teams.find(
-    (team) => team.name === DEFAULT_TEAM_NAME,
-  );
+  const defaultTeam = teams.find((team) => team.name === DEFAULT_TEAM_NAME);
   if (!defaultTeam) {
     const teamNames = teams.map((t) => t.name).join(", ");
     throw new Error(

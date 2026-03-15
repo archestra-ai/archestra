@@ -338,8 +338,7 @@ function SessionsTable({
                 <span className="text-muted-foreground">
                   {INTERACTION_SOURCE_DISPLAY[
                     session.source as keyof typeof INTERACTION_SOURCE_DISPLAY
-                  ]?.label ??
-                    session.source}
+                  ]?.label ?? session.source}
                 </span>
               ) : (
                 <span className="text-muted-foreground">No message</span>

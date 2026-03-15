@@ -19,6 +19,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import {
+  DialogBody,
   Dialog,
   DialogContent,
   DialogHeader,
@@ -99,8 +100,8 @@ export function ToolDetailsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[90vw] max-w-[1600px] max-h-[85vh] flex flex-col">
-        <DialogHeader className="shrink-0">
+      <DialogContent className="max-w-5xl h-[90vh] flex flex-col overflow-hidden">
+        <DialogHeader className="sticky top-0 z-10 shrink-0 bg-background">
           <div className="flex items-start justify-between">
             <div className="flex-1 min-w-0">
               {tool.description ? (
@@ -188,8 +189,7 @@ export function ToolDetailsDialog({
           </div>
         </DialogHeader>
 
-        <div className="flex-1 overflow-y-auto pr-2 -mr-2">
-          <div className="space-y-6">
+        <DialogBody className="space-y-4">
             {tool.policiesAutoConfiguredReasoning && (
               <div className="flex items-start gap-3 rounded-lg border border-border bg-card p-4">
                 <Sparkles className="h-4 w-4 mt-0.5 shrink-0 text-purple-400" />
@@ -289,12 +289,9 @@ export function ToolDetailsDialog({
               </div>
             </Collapsible>
 
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-              <ToolCallPolicies tool={tool} />
-              <ToolResultPolicies tool={tool} />
-            </div>
-          </div>
-        </div>
+            <ToolResultPolicies tool={tool} />
+            <ToolCallPolicies tool={tool} />
+        </DialogBody>
       </DialogContent>
     </Dialog>
   );

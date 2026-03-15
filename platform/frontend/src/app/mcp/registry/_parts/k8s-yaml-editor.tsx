@@ -99,7 +99,7 @@ export function K8sYamlEditor({
   }
 
   return (
-    <div className="space-y-3">
+    <div className="flex min-h-0 flex-1 flex-col gap-3">
       {/* Validation Errors */}
       {validationErrors.length > 0 && (
         <Alert variant="destructive">
@@ -146,14 +146,14 @@ export function K8sYamlEditor({
       </div>
 
       {/* Monaco Editor */}
-      <div className="border rounded-md overflow-hidden">
+      <div className="min-h-0 flex-1 overflow-hidden rounded-md border">
         <Editor
-          height="400px"
+          height="100%"
           defaultLanguage="yaml"
           value={value || ""}
           onChange={handleEditorChange}
           loading={
-            <div className="flex items-center justify-center h-[400px] w-full bg-muted/50">
+            <div className="flex h-full items-center justify-center w-full bg-muted/50">
               <p className="text-sm text-muted-foreground">Loading editor...</p>
             </div>
           }

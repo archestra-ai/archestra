@@ -469,7 +469,11 @@ function SessionsTable({
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap gap-4">
-        <SearchInput placeholder="Search sessions..." paramName="search" />
+        <SearchInput
+          objectNamePlural="logs"
+          searchFields={["session ID", "model", "message"]}
+          paramName="search"
+        />
 
         <SearchableSelect
           value={profileFilter}
@@ -543,7 +547,7 @@ function SessionsTable({
         isLoading={isFetching}
         hasActiveFilters={hasFilters}
         emptyMessage="No LLM proxy logs found. Logs will appear here when agents start making requests."
-        filteredEmptyMessage="No results match your filters. Try adjusting your search."
+        filteredEmptyMessage="No LLM logs match your filters. Try adjusting your search."
         onClearFilters={clearFilters}
         onRowClick={(session) => {
           const { isSingleInteraction } = getSessionDisplayData(session);

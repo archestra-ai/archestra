@@ -15,12 +15,14 @@ interface SearchableSelectProps {
   onValueChange: (value: string) => void;
   placeholder?: string;
   searchPlaceholder?: string;
-  items: Array<{ value: string; label: string; description?: string }>;
+  items: Array<{ value: string; label: string; description?: string; searchText?: string; content?: React.ReactNode }>;
   className?: string;
   disabled?: boolean;
   allowCustom?: boolean;
   showSearchIcon?: boolean;
   hint?: string;
+  onSearchQueryChange?: (value: string) => void;
+  emptyMessage?: string;
 }
 
 export function SearchableSelect({
@@ -34,6 +36,8 @@ export function SearchableSelect({
   allowCustom = false,
   showSearchIcon = true,
   hint,
+  onSearchQueryChange,
+  emptyMessage = "No results found.",
 }: SearchableSelectProps) {
   const [open, setOpen] = React.useState(false);
   const [searchQuery, setSearchQuery] = React.useState("");
@@ -44,7 +48,7 @@ export function SearchableSelect({
     const query = searchQuery.toLowerCase();
     return items.filter(
       (item) =>
-        item.label.toLowerCase().includes(query) ||
+        (item.searchText ?? item.label).toLowerCase().includes(query) ||
         item.description?.toLowerCase().includes(query),
     );
   }, [items, searchQuery]);
@@ -75,7 +79,7 @@ export function SearchableSelect({
           )}
         >
           <span className="truncate">
-            {selectedItem ? selectedItem.label : value || placeholder}
+            {selectedItem ? (selectedItem.content ?? selectedItem.label) : value || placeholder}
           </span>
           <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
@@ -91,7 +95,10 @@ export function SearchableSelect({
           <input
             placeholder={searchPlaceholder}
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              onSearchQueryChange?.(e.target.value);
+            }}
             onKeyDown={handleKeyDown}
             className="flex w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
           />
@@ -113,7 +120,7 @@ export function SearchableSelect({
                   to use &quot;{searchQuery}&quot;
                 </>
               ) : (
-                "No results found."
+                emptyMessage
               )}
             </div>
           ) : (
@@ -132,7 +139,7 @@ export function SearchableSelect({
                 )}
               >
                 <span className="truncate min-w-0">
-                  {item.label}
+                  {item.content ?? item.label}
                   {item.description && (
                     <span className="block text-xs text-muted-foreground truncate">
                       {item.description}

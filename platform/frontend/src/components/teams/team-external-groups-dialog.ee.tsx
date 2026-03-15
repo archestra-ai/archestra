@@ -102,7 +102,7 @@ export function TeamExternalGroupsDialog({
         description="Automatically sync team membership based on SSO groups"
         size="medium"
       >
-        <div className="min-h-0 flex-1 overflow-y-auto py-4 pr-2 -mr-2">
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
           <EnterpriseLicenseRequired featureName="Team Sync" />
         </div>
         <DialogStickyFooter>
@@ -123,7 +123,7 @@ export function TeamExternalGroupsDialog({
       size="medium"
       className="sm:max-w-[600px]"
     >
-      <div className="min-h-0 flex-1 overflow-y-auto py-4 pr-2 -mr-2 space-y-6">
+      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 space-y-6">
         {/* Add new group mapping */}
         <div className="space-y-2">
           <Label>Add External Group Mapping</Label>

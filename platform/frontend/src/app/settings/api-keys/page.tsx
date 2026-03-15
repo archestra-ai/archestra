@@ -10,6 +10,7 @@ import { ExpirationDateTimeField } from "@/components/expiration-date-time-field
 import { FormDialog } from "@/components/form-dialog";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { TableRowActions } from "@/components/table-row-actions";
+import { SearchInput } from "@/components/search-input";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -52,6 +53,7 @@ export default function ApiKeysSettingsPage() {
   const deleteApiKeyMutation = useDeleteApiKey();
 
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [search, setSearch] = useState("");
   const [apiKeyToDelete, setApiKeyToDelete] = useState<UserApiKey | null>(null);
   const [createdApiKeyValue, setCreatedApiKeyValue] = useState<string | null>(
     null,
@@ -75,6 +77,15 @@ export default function ApiKeysSettingsPage() {
     return () => setActionButton(null);
   }, [setActionButton]);
 
+  const filteredApiKeys = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    if (!query) return apiKeys;
+
+    return apiKeys.filter((apiKey) =>
+      (apiKey.name ?? "").toLowerCase().includes(query),
+    );
+  }, [apiKeys, search]);
+
   const columns: ColumnDef<UserApiKey>[] = useMemo(() => {
     const baseColumns: ColumnDef<UserApiKey>[] = [
       {
@@ -84,10 +95,12 @@ export default function ApiKeysSettingsPage() {
       },
       {
         accessorKey: "start",
-        header: "Prefix",
+        header: "Token",
         cell: ({ row }) => (
           <code className="text-xs font-mono">
-            {row.original.start || row.original.prefix || "Hidden"}
+            {(row.original.start || row.original.prefix)
+              ? `${row.original.start || row.original.prefix}...`
+              : "Hidden"}
           </code>
         ),
       },
@@ -100,6 +113,11 @@ export default function ApiKeysSettingsPage() {
           ) : (
             <Badge variant="outline">Disabled</Badge>
           ),
+      },
+      {
+        accessorKey: "createdAt",
+        header: "Created",
+        cell: ({ row }) => formatDate({ date: row.original.createdAt }),
       },
       {
         accessorKey: "lastRequest",
@@ -179,11 +197,23 @@ export default function ApiKeysSettingsPage() {
           isPending={isPending}
           loadingFallback={<LoadingSpinner />}
         >
-          <DataTable
-            columns={columns}
-            data={apiKeys}
-            emptyMessage="No API keys yet"
-          />
+          <div className="space-y-4">
+            <SearchInput
+              value={search}
+              onSearchChange={setSearch}
+              syncQueryParams={false}
+              objectNamePlural="API keys"
+              searchFields={["key name"]}
+            />
+            <DataTable
+              columns={columns}
+              data={filteredApiKeys}
+              emptyMessage="No API keys yet"
+              hasActiveFilters={search.trim().length > 0}
+              filteredEmptyMessage="No API keys match your search. Try adjusting your search."
+              onClearFilters={() => setSearch("")}
+            />
+          </div>
         </LoadingWrapper>
       )}
 
@@ -209,7 +239,7 @@ export default function ApiKeysSettingsPage() {
           className="flex min-h-0 flex-1 flex-col"
           onSubmit={handleCreate}
         >
-          <div className="min-h-0 flex-1 overflow-y-auto py-4 pr-2 -mr-2 space-y-4">
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 space-y-4">
             {createdApiKeyValue ? (
               <>
                 <div className="flex items-center gap-2 text-sm font-medium">

@@ -410,6 +410,9 @@ export function McpLogsContent({
   }, []);
 
   const isDebugDisabled = currentDeploymentStatus?.state !== "running";
+  const contentTabClassName = hideHeader
+    ? "flex flex-1 min-h-0 flex-col pt-4"
+    : "mt-2 flex flex-1 min-h-0 flex-col";
 
   return (
     <>
@@ -574,7 +577,7 @@ export function McpLogsContent({
           </TabsList>
         )}
 
-        <TabsContent value="logs" className="flex flex-col flex-1 min-h-0 mt-2">
+        <TabsContent value="logs" className={contentTabClassName}>
           <div className="flex flex-col gap-4 flex-1 min-h-0">
             <div className="flex flex-col gap-2 flex-1 min-h-0">
               {isDeploymentFailed && currentDeploymentStatus?.error && (
@@ -728,10 +731,7 @@ export function McpLogsContent({
           </div>
         </TabsContent>
 
-        <TabsContent
-          value="inspector"
-          className="flex flex-col flex-1 min-h-0 mt-2"
-        >
+        <TabsContent value="inspector" className={contentTabClassName}>
           {serverId && (
             <McpInspector
               serverId={serverId}
@@ -740,10 +740,7 @@ export function McpLogsContent({
           )}
         </TabsContent>
 
-        <TabsContent
-          value="debug"
-          className="flex flex-col flex-1 min-h-0 mt-2"
-        >
+        <TabsContent value="debug" className={contentTabClassName}>
           {serverId && (
             <McpExecTerminal
               serverId={serverId}

@@ -114,9 +114,9 @@ export function RolesList() {
     <>
       <div className="mb-6 flex items-center gap-4">
         <SearchInput
-          placeholder="Search roles by name..."
+          objectNamePlural="roles"
+          searchFields={["name"]}
           paramName="name"
-          className="relative max-w-sm flex-1"
         />
       </div>
 
@@ -183,7 +183,7 @@ function ViewPermissionsDialog({
       }
       size="large"
     >
-      <div className="min-h-0 flex-1 overflow-y-auto py-4 pr-2 -mr-2">
+      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
         <ReadOnlyPermissions permission={role.permission} />
       </div>
       <DialogStickyFooter>

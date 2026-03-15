@@ -9,6 +9,8 @@ import { AlertCircle, Plus } from "lucide-react";
 import Link from "next/link";
 import React, { useEffect, useState } from "react";
 import { Condition } from "@/app/llm/(costs)/optimization-rules/_parts/condition";
+import { LlmModelSearchableSelect } from "@/components/llm-model-select";
+import { LlmProviderSelectItems } from "@/components/llm-provider-options";
 import { WithPermissions } from "@/components/roles/with-permissions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -84,17 +86,17 @@ export function ProviderSelect({
 
   return (
     <Select value={provider} onValueChange={onChange}>
-      <SelectTrigger size="sm" className="!h-7">
+      <SelectTrigger size="sm" className="!h-7 min-w-44">
         <SelectValue />
       </SelectTrigger>
       <SelectContent>
-        {providers.map((providerItem) => {
-          return (
-            <SelectItem key={providerItem} value={providerItem}>
-              {providerDisplayNames[providerItem]}
-            </SelectItem>
-          );
-        })}
+        <LlmProviderSelectItems
+          options={providers.map((providerItem) => ({
+            value: providerItem,
+            icon: `https://models.dev/logos/${providerItem}.svg`,
+            name: providerDisplayNames[providerItem],
+          }))}
+        />
       </SelectContent>
     </Select>
   );
@@ -198,33 +200,20 @@ function ModelSelect({
   }
 
   return (
-    <Select value={model || undefined} onValueChange={onChange}>
-      <SelectTrigger
-        size="sm"
-        className="max-w-36 bg-green-100 border-green-200 !h-7"
-      >
-        <SelectValue placeholder="Select target model" />
-      </SelectTrigger>
-      <SelectContent>
-        {modelsWithCurrent.map((price) => {
-          const hasPricing =
-            price.pricePerMillionInput !== "0" ||
-            price.pricePerMillionOutput !== "0";
-          return (
-            <SelectItem
-              key={price.model}
-              value={price.model}
-              className={!hasPricing ? "text-muted-foreground" : ""}
-            >
-              {price.model}
-              {hasPricing
-                ? ` ($${price.pricePerMillionInput} / $${price.pricePerMillionOutput})`
-                : " (no pricing)"}
-            </SelectItem>
-          );
-        })}
-      </SelectContent>
-    </Select>
+    <LlmModelSearchableSelect
+      value={model}
+      onValueChange={onChange}
+      options={modelsWithCurrent.map((price) => ({
+        value: price.model,
+        model: price.model,
+        provider,
+        pricePerMillionInput: price.pricePerMillionInput,
+        pricePerMillionOutput: price.pricePerMillionOutput,
+      }))}
+      placeholder="Select target model..."
+      className="min-w-64"
+      showPricing
+    />
   );
 }
 

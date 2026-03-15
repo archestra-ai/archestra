@@ -69,7 +69,7 @@ function InviteByLinkCardContent({
 
   return (
     <DialogForm className="flex min-h-0 flex-1 flex-col" onSubmit={() => {}}>
-      <div className="min-h-0 flex-1 overflow-y-auto py-4 pr-2 -mr-2 space-y-4">
+      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 space-y-4">
         {!invitationLink ? (
           <>
             <div className="space-y-2">

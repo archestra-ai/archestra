@@ -22,7 +22,7 @@ import {
 } from "@/components/table-row-actions";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
-import { DialogForm, DialogStickyFooter } from "@/components/ui/dialog";
+import { DialogBody, DialogForm, DialogStickyFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PermissionButton } from "@/components/ui/permission-button";
@@ -277,9 +277,9 @@ export function RolesList() {
     <>
       <div className="space-y-6">
         <SearchInput
-          placeholder="Search roles by name..."
+          objectNamePlural="roles"
+          searchFields={["name"]}
           paramName="name"
-          className="relative max-w-sm"
         />
 
         <DataTable
@@ -317,7 +317,7 @@ export function RolesList() {
           className="flex min-h-0 flex-1 flex-col"
           onSubmit={handleCreateRole}
         >
-          <div className="min-h-0 flex-1 overflow-y-auto py-4 pr-2 -mr-2 space-y-4">
+          <DialogBody className="space-y-4 pb-4">
             <div className="space-y-2">
               <Label htmlFor="name">Role Name *</Label>
               <Input
@@ -344,8 +344,8 @@ export function RolesList() {
                 userPermissions={allAvailableActions}
               />
             </div>
-          </div>
-          <DialogStickyFooter>
+          </DialogBody>
+          <DialogStickyFooter className="mt-0">
             <Button
               type="button"
               variant="outline"
@@ -377,7 +377,7 @@ export function RolesList() {
           className="flex min-h-0 flex-1 flex-col"
           onSubmit={handleEditRole}
         >
-          <div className="min-h-0 flex-1 overflow-y-auto py-4 pr-2 -mr-2 space-y-4">
+          <DialogBody className="space-y-4 pb-4">
             <div className="space-y-2">
               <Label htmlFor="edit-name">Role Name *</Label>
               <Input
@@ -404,8 +404,8 @@ export function RolesList() {
                 userPermissions={allAvailableActions}
               />
             </div>
-          </div>
-          <DialogStickyFooter>
+          </DialogBody>
+          <DialogStickyFooter className="mt-0">
             <Button
               type="button"
               variant="outline"
@@ -439,13 +439,13 @@ export function RolesList() {
         size="large"
       >
         {viewPermissionsRole && (
-          <div className="min-h-0 flex-1 overflow-y-auto py-4 pr-2 -mr-2 space-y-4">
+          <DialogBody className="space-y-4 pb-4">
             <div className="space-y-2">
               <Label htmlFor="view-name">Role Name</Label>
               <Input
                 id="view-name"
                 value={viewPermissionsRole.name}
-                readOnly
+                disabled
                 className="capitalize"
               />
             </div>
@@ -460,7 +460,7 @@ export function RolesList() {
                   ] ||
                   ""
                 }
-                readOnly
+                disabled
               />
             </div>
             <div className="space-y-2">
@@ -473,9 +473,9 @@ export function RolesList() {
                 readOnlyTooltip="This is a predefined role. Permissions cannot be modified."
               />
             </div>
-          </div>
+          </DialogBody>
         )}
-        <DialogStickyFooter>
+        <DialogStickyFooter className="mt-0">
           <Button
             type="button"
             variant="outline"

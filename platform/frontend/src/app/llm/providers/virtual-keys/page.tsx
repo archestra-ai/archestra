@@ -11,9 +11,12 @@ import {
 } from "@/components/chat-api-key-form";
 import { CopyableCode } from "@/components/copyable-code";
 import { ExpirationDateTimeField } from "@/components/expiration-date-time-field";
+import {
+  LlmProviderApiKeyFilterSelect,
+  LlmProviderApiKeySelectItems,
+} from "@/components/llm-provider-options";
 import { SearchInput } from "@/components/search-input";
 import { TableRowActions } from "@/components/table-row-actions";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import {
@@ -30,7 +33,6 @@ import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
-  SelectItem,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -186,11 +188,11 @@ export default function VirtualKeysPage() {
     <>
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center">
         <SearchInput
-          placeholder="Search virtual keys by name..."
+          objectNamePlural="virtual keys"
+          searchFields={["name"]}
           paramName="search"
-          className="sm:max-w-sm"
         />
-        <Select
+        <LlmProviderApiKeyFilterSelect
           value={chatApiKeyIdFilter}
           onValueChange={(value) =>
             updateQueryParams({
@@ -198,31 +200,17 @@ export default function VirtualKeysPage() {
               page: "1",
             })
           }
-        >
-          <SelectTrigger className="w-full sm:w-[280px]">
-            <SelectValue placeholder="All provider API keys" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All provider API keys</SelectItem>
-            {parentableKeys.map((key) => {
-              const config = PROVIDER_CONFIG[key.provider];
-              return (
-                <SelectItem key={key.id} value={key.id}>
-                  <div className="flex items-center gap-2">
-                    <Image
-                      src={config.icon}
-                      alt={config.name}
-                      width={16}
-                      height={16}
-                      className="rounded dark:invert"
-                    />
-                    <span>{key.name}</span>
-                  </div>
-                </SelectItem>
-              );
-            })}
-          </SelectContent>
-        </Select>
+          allLabel="All provider API keys"
+          options={parentableKeys.map((key) => {
+            const config = PROVIDER_CONFIG[key.provider];
+            return {
+              value: key.id,
+              icon: config.icon,
+              providerName: config.name,
+              keyName: key.name,
+            };
+          })}
+        />
       </div>
 
       <DataTable
@@ -369,26 +357,18 @@ function CreateVirtualKeyDialog({
                       <SelectValue placeholder="Select an API key" />
                     </SelectTrigger>
                     <SelectContent>
-                      {parentableKeys.map((key) => {
-                        const config = PROVIDER_CONFIG[key.provider];
-                        return (
-                          <SelectItem key={key.id} value={key.id}>
-                            <div className="flex items-center gap-2">
-                              <Image
-                                src={config.icon}
-                                alt={config.name}
-                                width={16}
-                                height={16}
-                                className="rounded dark:invert"
-                              />
-                              <span>{key.name}</span>
-                              <Badge variant="outline" className="text-xs">
-                                {config.name}
-                              </Badge>
-                            </div>
-                          </SelectItem>
-                        );
-                      })}
+                      <LlmProviderApiKeySelectItems
+                        options={parentableKeys.map((key) => {
+                          const config = PROVIDER_CONFIG[key.provider];
+                          return {
+                            value: key.id,
+                            icon: config.icon,
+                            providerName: config.name,
+                            keyName: key.name,
+                            secondaryLabel: config.name,
+                          };
+                        })}
+                      />
                     </SelectContent>
                   </Select>
                 </div>

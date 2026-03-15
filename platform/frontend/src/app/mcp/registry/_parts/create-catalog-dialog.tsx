@@ -100,28 +100,23 @@ export function CreateCatalogDialog({
         </DialogHeader>
 
         {step === "form" && (
-          <div className="min-h-0 flex-1 overflow-y-auto pr-2 -mr-2">
-            <McpCatalogForm
-              mode="create"
-              onSubmit={onSubmit}
-              footer={footer}
-              catalogButton={catalogButton}
-              formValues={prefilledValues}
-            />
-          </div>
+          <McpCatalogForm
+            mode="create"
+            onSubmit={onSubmit}
+            footer={footer}
+            catalogButton={catalogButton}
+            formValues={prefilledValues}
+          />
         )}
 
         {step === "catalog-browse" && (
-          <div className="min-h-0 flex flex-1 flex-col overflow-y-auto pr-2 -mr-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setStep("form")}
-              className="self-start mb-2"
-            >
-              <ArrowLeft className="h-4 w-4 mr-1" />
-              Back to form
-            </Button>
+          <div className="min-h-0 flex flex-1 flex-col overflow-y-auto px-4 py-4">
+            <div className="mb-2 flex justify-end">
+              <Button variant="ghost" size="sm" onClick={() => setStep("form")}>
+                <ArrowLeft className="h-4 w-4 mr-1" />
+                Back to form
+              </Button>
+            </div>
             <ArchestraCatalogTab
               catalogItems={catalogItems}
               onSelectServer={handleSelectFromCatalog}

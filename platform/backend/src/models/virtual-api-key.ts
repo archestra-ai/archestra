@@ -159,7 +159,9 @@ class VirtualApiKeyModel {
     }
 
     if (chatApiKeyId) {
-      whereConditions.push(eq(schema.virtualApiKeysTable.chatApiKeyId, chatApiKeyId));
+      whereConditions.push(
+        eq(schema.virtualApiKeysTable.chatApiKeyId, chatApiKeyId),
+      );
     }
 
     const whereClause = and(...whereConditions);

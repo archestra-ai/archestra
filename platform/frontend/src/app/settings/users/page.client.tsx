@@ -6,6 +6,7 @@ import { Copy, Plus, Shield, Trash2, UserCog } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
+import { AuthProviderIcon } from "@/components/auth-provider-icon";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { FormDialog } from "@/components/form-dialog";
 import { InviteByLinkCard } from "@/components/invite-by-link-card";
@@ -17,7 +18,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
-import { DialogStickyFooter } from "@/components/ui/dialog";
+import { DialogBody, DialogStickyFooter } from "@/components/ui/dialog";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { RoleSelect } from "@/components/ui/role-select";
 import {
@@ -41,6 +42,7 @@ import {
 import {
   useActiveOrganization,
   useDeletePendingSignupMember,
+  type PendingSignupMember,
   useMemberSignupStatus,
 } from "@/lib/organization.query";
 import { useRoles } from "@/lib/role.query";
@@ -48,6 +50,27 @@ import { cn } from "@/lib/utils";
 import { useSetSettingsAction } from "../layout";
 
 const DEFAULT_PAGE_SIZE = 10;
+
+const DEV_MOCK_PENDING_SIGNUP_MEMBERS: PendingSignupMember[] = [
+  {
+    userId: "dev-mock-pending-user-1",
+    name: "Taylor Admin",
+    email: "taylor.admin@example.com",
+    image: null,
+    role: "admin",
+    provider: "google",
+    invitationId: "dev-mock-invitation-1",
+  },
+  {
+    userId: "dev-mock-pending-user-2",
+    name: "Jordan Member",
+    email: "jordan.member@example.com",
+    image: null,
+    role: "member",
+    provider: "okta",
+    invitationId: "dev-mock-invitation-2",
+  },
+];
 
 export default function UsersPageClient() {
   return (
@@ -150,7 +173,6 @@ function InviteUserButton({ organizationId }: { organizationId: string }) {
       <PermissionButton
         permissions={{ invitation: ["create"] }}
         onClick={() => setInviteDialogOpen(true)}
-        size="sm"
       >
         <Plus className="mr-2 h-4 w-4" />
         Invite User
@@ -205,7 +227,12 @@ function MembersTab({
   const updateMemberRole = useUpdateMemberRole();
   const removeMember = useRemoveMember();
   const { data: signupStatus } = useMemberSignupStatus();
-  const pendingSignupMembers = signupStatus?.pendingSignupMembers ?? [];
+  const pendingSignupMembers =
+    signupStatus?.pendingSignupMembers.length
+      ? signupStatus.pendingSignupMembers
+      : process.env.NODE_ENV === "development"
+        ? DEV_MOCK_PENDING_SIGNUP_MEMBERS
+        : [];
   const deletePendingSignupMember = useDeletePendingSignupMember();
 
   const [changingRole, setChangingRole] = useState<{
@@ -225,14 +252,30 @@ function MembersTab({
 
   const members = membersResponse?.data || [];
   const pagination = membersResponse?.pagination;
+  const tableRows =
+    pageIndex === 0 ? [...pendingSignupMembers, ...members] : members;
 
-  const columns: ColumnDef<Member>[] = [
+  const columns: ColumnDef<Member | PendingSignupMember>[] = [
     {
       id: "avatar",
       size: 40,
       header: "",
       cell: ({ row }) => {
         const member = row.original;
+        if ("provider" in member) {
+          return (
+            <div className="flex items-center justify-center">
+              <div className="flex h-8 w-8 items-center justify-center rounded-full border bg-muted/40">
+                <AuthProviderIcon
+                  providerId={member.provider}
+                  size={16}
+                  className="rounded-sm"
+                />
+              </div>
+            </div>
+          );
+        }
+
         const initials = getInitials(member.name || member.email);
         return (
           <div className="flex items-center justify-center">
@@ -254,7 +297,9 @@ function MembersTab({
       header: "User",
       cell: ({ row }) => (
         <div className="min-w-0">
-          <div className="font-medium truncate">{row.original.name}</div>
+          <div className="font-medium truncate">
+            {row.original.name || "Unknown"}
+          </div>
           <div className="text-xs text-muted-foreground truncate">
             {row.original.email}
           </div>
@@ -273,13 +318,18 @@ function MembersTab({
     {
       id: "joined",
       header: "Joined",
-      cell: ({ row }) => (
-        <span className="text-sm text-muted-foreground">
-          {formatDistanceToNow(new Date(row.original.createdAt), {
-            addSuffix: true,
-          })}
-        </span>
-      ),
+      cell: ({ row }) =>
+        "provider" in row.original ? (
+          <span className="text-sm text-muted-foreground">
+            Pending (auto-provisioned)
+          </span>
+        ) : (
+          <span className="text-sm text-muted-foreground">
+            {formatDistanceToNow(new Date(row.original.createdAt), {
+              addSuffix: true,
+            })}
+          </span>
+        ),
     },
     {
       id: "actions",
@@ -287,6 +337,36 @@ function MembersTab({
       enableHiding: false,
       cell: ({ row }) => {
         const member = row.original;
+        if ("provider" in member) {
+          return (
+            <TableRowActions
+              actions={[
+                {
+                  icon: <Copy className="h-4 w-4" />,
+                  label: "Copy invitation link",
+                  disabled: !member.invitationId,
+                  disabledTooltip: member.invitationId
+                    ? undefined
+                    : "No invitation link available",
+                  onClick: async () => {
+                    if (!member.invitationId) return;
+                    const link = `${window.location.origin}/auth/sign-up-with-invitation?invitationId=${member.invitationId}&email=${encodeURIComponent(member.email)}`;
+                    await navigator.clipboard.writeText(link);
+                  },
+                },
+                {
+                  icon: <Trash2 className="h-4 w-4" />,
+                  label: "Remove pending user",
+                  variant: "destructive",
+                  permissions: { member: ["delete"] },
+                  onClick: () =>
+                    deletePendingSignupMember.mutate(member.userId),
+                },
+              ]}
+            />
+          );
+        }
+
         return (
           <TableRowActions
             actions={[
@@ -315,9 +395,9 @@ function MembersTab({
     <>
       <div className="flex items-center gap-4 mb-4">
         <SearchInput
-          placeholder="Search by name or email..."
+          objectNamePlural="users"
+          searchFields={["name", "email"]}
           paramName="name"
-          className="relative max-w-sm flex-1"
         />
         <RoleFilterDropdown />
         <div className="ml-auto flex items-center gap-2">
@@ -325,112 +405,19 @@ function MembersTab({
         </div>
       </div>
 
-      {pendingSignupMembers.length > 0 && (
-        <div className="mb-6">
-          <h3 className="mb-3 text-sm font-semibold text-muted-foreground">
-            Auto-provisioned Users
-          </h3>
-          <DataTable
-            columns={[
-              {
-                id: "avatar",
-                size: 40,
-                header: "",
-                cell: ({ row }) => {
-                  const member = row.original;
-                  const initials = getInitials(member.name || member.email);
-                  return (
-                    <div className="flex items-center justify-center">
-                      <Avatar className="h-8 w-8">
-                        {member.image && (
-                          <AvatarImage
-                            src={member.image}
-                            alt={member.name ?? undefined}
-                          />
-                        )}
-                        <AvatarFallback className="text-xs">
-                          {initials}
-                        </AvatarFallback>
-                      </Avatar>
-                    </div>
-                  );
-                },
-              },
-              {
-                id: "user",
-                header: "User",
-                cell: ({ row }) => (
-                  <div className="min-w-0">
-                    <div className="font-medium truncate">
-                      {row.original.name || "Unknown"}
-                    </div>
-                    <div className="text-xs text-muted-foreground truncate">
-                      {row.original.email}
-                    </div>
-                  </div>
-                ),
-              },
-              {
-                id: "role",
-                header: "Role",
-                cell: ({ row }) => (
-                  <Badge variant="outline" className="capitalize">
-                    {row.original.role}
-                  </Badge>
-                ),
-              },
-              {
-                id: "actions",
-                header: "Actions",
-                cell: ({ row }) => (
-                  <TableRowActions
-                    actions={[
-                      {
-                        icon: <Copy className="h-4 w-4" />,
-                        label: "Copy invitation link",
-                        disabled: !row.original.invitationId,
-                        disabledTooltip: row.original.invitationId
-                          ? undefined
-                          : "No invitation link available",
-                        onClick: async () => {
-                          if (!row.original.invitationId) return;
-                          const link = `${window.location.origin}/auth/sign-up-with-invitation?invitationId=${row.original.invitationId}&email=${encodeURIComponent(row.original.email)}`;
-                          await navigator.clipboard.writeText(link);
-                        },
-                      },
-                      {
-                        icon: <Trash2 className="h-4 w-4" />,
-                        label: "Remove pending user",
-                        variant: "destructive",
-                        permissions: { member: ["delete"] },
-                        onClick: () =>
-                          deletePendingSignupMember.mutate(row.original.userId),
-                      },
-                    ]}
-                  />
-                ),
-              },
-            ]}
-            data={pendingSignupMembers}
-            getRowId={(row) => row.userId}
-            hideSelectedCount
-            manualPagination
-          />
-        </div>
-      )}
-
       <LoadingWrapper
         isPending={isPending}
         loadingFallback={<LoadingSpinner />}
       >
         <DataTable
           columns={columns}
-          data={members}
+          data={tableRows}
           manualPagination
+          getRowId={(row) => ("provider" in row ? `pending-${row.userId}` : row.id)}
           pagination={{
             pageIndex,
             pageSize,
-            total: pagination?.total || 0,
+            total: (pagination?.total || 0) + pendingSignupMembers.length,
           }}
           onPaginationChange={handlePaginationChange}
           isLoading={isFetching}
@@ -566,13 +553,13 @@ function ChangeRoleDialog({
       }
       size="small"
     >
-      <div className="space-y-4">
+      <DialogBody className="space-y-4">
         <RoleSelect
           value={selectedRole}
           onValueChange={setSelectedRole}
           className="w-full"
         />
-      </div>
+      </DialogBody>
       <DialogStickyFooter>
         <Button variant="outline" onClick={() => onOpenChange(false)}>
           Cancel
@@ -654,7 +641,10 @@ function InvitationsTab({
         const isExpired = new Date(row.original.expiresAt) < new Date();
         return (
           <Badge variant={isExpired ? "destructive" : "secondary"}>
-            {isExpired ? "Expired" : row.original.status}
+            {isExpired
+              ? "Expired"
+              : row.original.status.charAt(0).toUpperCase() +
+                row.original.status.slice(1).toLowerCase()}
           </Badge>
         );
       },

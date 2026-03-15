@@ -9,11 +9,9 @@ import {
   PROVIDERS_WITH_OPTIONAL_API_KEY,
 } from "@shared";
 import { Building2, CheckCircle2, User, Users } from "lucide-react";
-import Image from "next/image";
 import Link from "next/link";
 import { lazy, Suspense, useEffect, useMemo } from "react";
 import type { UseFormReturn } from "react-hook-form";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -26,6 +24,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { useFeature, useProviderBaseUrls } from "@/lib/config.query";
 import { useTeams } from "@/lib/team.query";
+import { LlmProviderSelectItems } from "./llm-provider-options";
 import { WithPermissions } from "./roles/with-permissions";
 
 const ExternalSecretSelector = lazy(
@@ -372,39 +371,23 @@ export function ChatApiKeyForm({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {Object.entries(PROVIDER_CONFIG)
-                  .sort(([, a], [, b]) => a.name.localeCompare(b.name))
-                  .map(([key, config]) => {
-                    const isGeminiDisabledByVertexAi =
-                      key === "gemini" && geminiVertexAiEnabled;
-                    const isDisabled =
-                      !config.enabled || isGeminiDisabledByVertexAi;
+                <LlmProviderSelectItems
+                  options={Object.entries(PROVIDER_CONFIG)
+                    .sort(([, a], [, b]) => a.name.localeCompare(b.name))
+                    .map(([key, config]) => {
+                      const isGeminiDisabledByVertexAi =
+                        key === "gemini" && geminiVertexAiEnabled;
 
-                    return (
-                      <SelectItem key={key} value={key} disabled={isDisabled}>
-                        <div className="flex items-center gap-2">
-                          <Image
-                            src={config.icon}
-                            alt={config.name}
-                            width={16}
-                            height={16}
-                            className="rounded dark:invert"
-                          />
-                          <span>{config.name}</span>
-                          {!config.enabled && (
-                            <Badge variant="outline" className="ml-2 text-xs">
-                              Coming Soon
-                            </Badge>
-                          )}
-                          {isGeminiDisabledByVertexAi && (
-                            <Badge variant="secondary" className="ml-2 text-xs">
-                              Vertex AI
-                            </Badge>
-                          )}
-                        </div>
-                      </SelectItem>
-                    );
-                  })}
+                      return {
+                        value: key,
+                        icon: config.icon,
+                        name: config.name,
+                        disabled: !config.enabled || isGeminiDisabledByVertexAi,
+                        showComingSoon: !config.enabled,
+                        showGeminiVertexAiBadge: isGeminiDisabledByVertexAi,
+                      };
+                    })}
+                />
               </SelectContent>
             </Select>
           </div>

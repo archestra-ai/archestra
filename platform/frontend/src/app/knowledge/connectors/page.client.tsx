@@ -8,7 +8,6 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { KnowledgePageLayout } from "@/app/knowledge/_parts/knowledge-page-layout";
-import { ConnectorStatusDot } from "@/app/knowledge/knowledge-bases/_parts/connector-enabled-dot";
 import { ConnectorTypeIcon } from "@/app/knowledge/knowledge-bases/_parts/connector-icons";
 import { ConnectorStatusBadge } from "@/app/knowledge/knowledge-bases/_parts/connector-status-badge";
 import { CreateConnectorDialog } from "@/app/knowledge/knowledge-bases/_parts/create-connector-dialog";
@@ -165,10 +164,6 @@ function ConnectorsList() {
       header: "Status",
       cell: ({ row }) => (
         <div className="flex items-center gap-2">
-          <ConnectorStatusDot
-            enabled={row.original.enabled}
-            lastSyncStatus={row.original.lastSyncStatus}
-          />
           {row.original.lastSyncAt ? (
             <>
               <ConnectorStatusBadge status={row.original.lastSyncStatus} />
@@ -237,9 +232,9 @@ function ConnectorsList() {
         <div className="mb-6 flex flex-col gap-2">
           <div className="flex items-center gap-4">
             <SearchInput
-              placeholder="Search connectors by name or description..."
+              objectNamePlural="connectors"
+              searchFields={["name", "description"]}
               paramName="search"
-              className="relative max-w-md flex-1"
             />
             <Select
               value={connectorTypeFilter}
@@ -311,7 +306,9 @@ function ConnectorsList() {
 function AssignedAgentsTooltip({ connector }: { connector: ConnectorItem }) {
   const { assignedAgents } = connector;
 
-  if (!assignedAgents || assignedAgents.length === 0) return null;
+  if (!assignedAgents || assignedAgents.length === 0) {
+    return <span className="text-xs text-muted-foreground">Not assigned</span>;
+  }
 
   return (
     <TooltipProvider>

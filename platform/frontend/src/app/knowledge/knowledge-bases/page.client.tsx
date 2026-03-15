@@ -253,9 +253,9 @@ function KnowledgeBasesList() {
         <div className="mb-6 flex flex-col gap-2">
           <div className="flex items-center gap-4">
             <SearchInput
-              placeholder="Search knowledge bases by name or description..."
+              objectNamePlural="knowledge bases"
+              searchFields={["name", "description"]}
               paramName="search"
-              className="relative max-w-md flex-1"
             />
           </div>
         </div>
@@ -418,7 +418,7 @@ function ExpandedConnectors({ knowledgeBaseId }: { knowledgeBaseId: string }) {
           getRowId={(row) => row.id}
           hideSelectedCount
           isLoading={isPending}
-          emptyMessage="No connectors configured"
+          emptyMessage="No connectors associated with this knowledge base"
           onRowClick={(row) =>
             router.push(`/knowledge/connectors/${row.id}?from=knowledge-bases`)
           }

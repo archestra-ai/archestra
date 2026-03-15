@@ -406,7 +406,11 @@ function McpToolCallsTable({
 
   // Shared search input component
   const searchInputComponent = (
-    <SearchInput placeholder="Search tools, servers..." paramName="search" />
+    <SearchInput
+      objectNamePlural="tool calls"
+      searchFields={["tool name", "server name"]}
+      paramName="search"
+    />
   );
 
   return (
@@ -452,7 +456,7 @@ function McpToolCallsTable({
         isLoading={isFetching}
         hasActiveFilters={hasFilters}
         emptyMessage="No MCP tool calls found. Tool calls will appear here when agents use MCP tools."
-        filteredEmptyMessage="No results match your filters. Try adjusting your search."
+        filteredEmptyMessage="No MCP logs match your filters. Try adjusting your search."
         onClearFilters={clearFilters}
         onRowClick={(row) => {
           router.push(`/mcp/logs/${row.id}`);

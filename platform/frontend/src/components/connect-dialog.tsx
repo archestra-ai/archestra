@@ -7,7 +7,7 @@ import { ArrowRight, Bot, ExternalLink, Network, Route } from "lucide-react";
 import type { ReactNode } from "react";
 import { FormDialog } from "@/components/form-dialog";
 import { Button } from "@/components/ui/button";
-import { DialogStickyFooter } from "@/components/ui/dialog";
+import { DialogBody, DialogStickyFooter } from "@/components/ui/dialog";
 
 const AGENT_TYPE_CONFIG: Record<
   string,
@@ -56,9 +56,9 @@ export function ConnectDialog({
       }
       size="large"
     >
-      <div className="flex-1 overflow-y-auto px-6 py-5">{children}</div>
+      <DialogBody className="pb-4">{children}</DialogBody>
 
-      <DialogStickyFooter className="justify-between">
+      <DialogStickyFooter className="mt-0 sm:justify-between sm:[&>*:first-child]:mr-auto">
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <ExternalLink className="h-3.5 w-3.5 shrink-0" />
           <span>

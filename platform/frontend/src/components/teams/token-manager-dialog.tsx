@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import { FormDialog } from "@/components/form-dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { DialogStickyFooter } from "@/components/ui/dialog";
+import { DialogBody, DialogStickyFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { type TeamToken, useRotateToken } from "@/lib/team-token.query";
@@ -105,7 +105,7 @@ export function TokenManagerDialog({
       size="medium"
       className="max-w-xl"
     >
-      <div className="min-h-0 flex-1 overflow-y-auto py-4 pr-2 -mr-2 space-y-4">
+      <DialogBody className="space-y-4">
         <div className="space-y-2">
           <Label>Token Preview</Label>
           <div className="flex gap-2">
@@ -165,7 +165,7 @@ export function TokenManagerDialog({
             </AlertDescription>
           </Alert>
         )}
-      </div>
+      </DialogBody>
 
       <DialogStickyFooter className="justify-between sm:justify-between">
         <Button

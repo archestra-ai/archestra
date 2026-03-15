@@ -1101,7 +1101,7 @@ export function AgentDialog({
           className="flex min-h-0 flex-1 flex-col"
           onSubmit={handleSave}
         >
-          <div className="min-h-0 flex-1 overflow-y-auto py-4 pr-2 -mr-2 space-y-4">
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 pb-4 space-y-4">
             {agentType === "profile" && (
               <Alert variant="warning">
                 <AlertTriangle className="h-4 w-4" />
@@ -2003,7 +2003,7 @@ export function AgentDialog({
             )}
           </div>
 
-          <DialogStickyFooter>
+          <DialogStickyFooter className="mt-0">
             <Button type="button" variant="outline" onClick={handleClose}>
               Cancel
             </Button>

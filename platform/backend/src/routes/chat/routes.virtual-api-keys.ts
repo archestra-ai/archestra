@@ -32,7 +32,10 @@ const virtualApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ),
       },
     },
-    async ({ query: { limit, offset, search, chatApiKeyId }, organizationId }, reply) => {
+    async (
+      { query: { limit, offset, search, chatApiKeyId }, organizationId },
+      reply,
+    ) => {
       const result = await VirtualApiKeyModel.findAllByOrganization({
         organizationId,
         pagination: { limit, offset },

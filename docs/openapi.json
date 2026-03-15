@@ -58124,6 +58124,43 @@
           "Chat API Keys"
         ],
         "description": "Get all chat API keys visible to the current user based on scope access",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "query",
+            "name": "search",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "openai",
+                "gemini",
+                "anthropic",
+                "bedrock",
+                "cohere",
+                "cerebras",
+                "mistral",
+                "perplexity",
+                "groq",
+                "xai",
+                "openrouter",
+                "vllm",
+                "ollama",
+                "zhipuai",
+                "deepseek",
+                "minimax"
+              ]
+            },
+            "in": "query",
+            "name": "provider",
+            "required": false
+          }
+        ],
         "responses": {
           "200": {
             "description": "Default Response",
@@ -135797,6 +135834,25 @@
             },
             "in": "query",
             "name": "offset",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "query",
+            "name": "search",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "query",
+            "name": "chatApiKeyId",
             "required": false
           }
         ],

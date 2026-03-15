@@ -180,7 +180,7 @@ export function CreateConnectorDialog({
                 Select a connector type to get started.
               </DialogDescription>
             </DialogHeader>
-            <div className="min-h-0 flex-1 overflow-y-auto py-2 pr-2 -mr-2">
+            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-2">
               <div className="grid grid-cols-2 gap-3">
                 {CONNECTOR_OPTIONS.map((option) => (
                   <button
@@ -239,7 +239,7 @@ export function CreateConnectorDialog({
                 </DialogDescription>
               </DialogHeader>
 
-              <div className="min-h-0 flex-1 space-y-4 overflow-y-auto py-4 pr-2 -mr-2">
+              <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4">
                 <FormField
                   control={form.control}
                   name="name"

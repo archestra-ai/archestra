@@ -135,6 +135,11 @@ export const auth: any = betterAuth({
       enableSessionForAPIKeys: true,
       apiKeyHeaders: [apiKeyAuthorizationHeaderName],
       defaultPrefix: ARCHESTRA_TOKEN_PREFIX,
+      startingCharactersConfig: {
+        shouldStore: true,
+        // Store enough characters to show `archestra_8594...` style previews.
+        charactersLength: 14,
+      },
       rateLimit: {
         enabled: false,
       },

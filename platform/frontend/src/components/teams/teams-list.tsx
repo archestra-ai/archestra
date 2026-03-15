@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { useSetSettingsAction } from "@/app/settings/layout";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { FormDialog } from "@/components/form-dialog";
+import { SearchInput } from "@/components/search-input";
 import {
   type TableRowAction,
   TableRowActions,
@@ -209,6 +210,16 @@ export function TeamsList() {
         const team = row.original;
         const actions: TableRowAction[] = [
           {
+            icon: <Users className="h-4 w-4" />,
+            label: "Manage Members",
+            permissions: { team: ["update"] } as const,
+            testId: `${E2eTestId.ManageMembersButton}-${team.name}`,
+            onClick: () => {
+              setSelectedTeam(team);
+              setMembersDialogOpen(true);
+            },
+          },
+          {
             icon: <Key className="h-4 w-4" />,
             label: "Manage MCP/A2A Gateway Token",
             permissions: { team: ["update"] } as const,
@@ -222,16 +233,6 @@ export function TeamsList() {
               } else {
                 toast.error("No token found for this team");
               }
-            },
-          },
-          {
-            icon: <Users className="h-4 w-4" />,
-            label: "Manage Members",
-            permissions: { team: ["update"] } as const,
-            testId: `${E2eTestId.ManageMembersButton}-${team.name}`,
-            onClick: () => {
-              setSelectedTeam(team);
-              setMembersDialogOpen(true);
             },
           },
           ...(byosEnabled
@@ -283,13 +284,13 @@ export function TeamsList() {
     <>
       <div className="space-y-6">
         <div className="flex items-center justify-between gap-4">
-          <div className="relative max-w-md flex-1">
-            <Input
-              placeholder="Search teams by name..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </div>
+          <SearchInput
+            objectNamePlural="teams"
+            searchFields={["name"]}
+            value={search}
+            onSearchChange={setSearch}
+            syncQueryParams={false}
+          />
         </div>
 
         <DataTable
@@ -315,7 +316,7 @@ export function TeamsList() {
           className="flex min-h-0 flex-1 flex-col"
           onSubmit={handleCreateTeam}
         >
-          <div className="min-h-0 flex-1 overflow-y-auto py-4 pr-2 -mr-2 space-y-4">
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 space-y-4">
             <div className="space-y-2">
               <Label htmlFor="name">Team Name *</Label>
               <Input

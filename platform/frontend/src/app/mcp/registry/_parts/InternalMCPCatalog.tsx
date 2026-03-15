@@ -8,11 +8,10 @@ import {
   MCP_CATALOG_SERVER_QUERY_PARAM,
 } from "@shared";
 import { useQueryClient } from "@tanstack/react-query";
-import { Search, X } from "lucide-react";
+import { Search } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { DebouncedInput } from "@/components/debounced-input";
 import {
   LabelFilterBadges,
   LabelKeyRowBase,
@@ -24,6 +23,7 @@ import {
   OAuthConfirmationDialog,
   type OAuthInstallResult,
 } from "@/components/oauth-confirmation-dialog";
+import { SearchInput } from "@/components/search-input";
 import { Button } from "@/components/ui/button";
 import { useHasPermissions } from "@/lib/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
@@ -1051,39 +1051,31 @@ export function InternalMCPCatalog({
     [parsedLabels, searchParams, router, pathname],
   );
 
-  const handleClearLabels = useCallback(() => {
+  const handleClearFilters = useCallback(() => {
     const params = new URLSearchParams(searchParams.toString());
+    params.delete("search");
     params.delete("labels");
     router.replace(`${pathname}?${params.toString()}`, { scroll: false });
   }, [searchParams, router, pathname]);
 
   const hasLabelFilters = parsedLabels && Object.keys(parsedLabels).length > 0;
+  const hasActiveFilters = Boolean(
+    searchQueryFromUrl.trim() || hasLabelFilters,
+  );
 
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2">
-        <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground z-10 pointer-events-none" />
-          <DebouncedInput
-            placeholder="Search registry by name..."
-            initialValue={searchQueryFromUrl}
-            onChange={handleSearchChange}
-            debounceMs={300}
-            className="pl-9 bg-background/50 backdrop-blur-sm border-border/50 focus:border-primary/50 transition-colors"
-          />
-        </div>
+        <SearchInput
+          objectNamePlural="MCP servers"
+          searchFields={["name"]}
+          value={searchQueryFromUrl}
+          onSearchChange={handleSearchChange}
+          syncQueryParams={false}
+          debounceMs={300}
+          inputClassName="w-full bg-background/50 backdrop-blur-sm border-border/50 focus:border-primary/50 transition-colors pl-9"
+        />
         <McpCatalogLabelFilter />
-        {hasLabelFilters && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleClearLabels}
-            className="h-9 px-2 text-muted-foreground"
-          >
-            <X className="h-4 w-4 mr-1" />
-            Clear
-          </Button>
-        )}
       </div>
       {hasLabelFilters && (
         <LabelFilterBadges onRemoveLabel={handleRemoveLabel} />
@@ -1201,12 +1193,25 @@ export function InternalMCPCatalog({
           </div>
         ) : (
           draftItems.length === 0 && (
-            <div className="py-8 text-center">
-              <p className="text-muted-foreground">
-                {searchQueryFromUrl.trim() || hasLabelFilters
-                  ? "No MCP servers match the current filters."
-                  : "No MCP servers found."}
-              </p>
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              {hasActiveFilters ? (
+                <>
+                  <Search className="mb-4 h-10 w-10 text-muted-foreground" />
+                  <p className="text-muted-foreground">
+                    No MCP servers match your filters. Try adjusting your
+                    search.
+                  </p>
+                  <Button
+                    variant="outline"
+                    className="mt-4"
+                    onClick={handleClearFilters}
+                  >
+                    Clear filters
+                  </Button>
+                </>
+              ) : (
+                <p className="text-muted-foreground">No MCP servers found.</p>
+              )}
             </div>
           )
         )}

@@ -32,12 +32,20 @@ export function DeleteConfirmDialog({
       size="small"
     >
       <DialogForm
+        className="flex min-h-0 flex-1 flex-col"
+        onKeyDown={(e) => {
+          if (e.key !== "Enter" || e.shiftKey || e.nativeEvent.isComposing) {
+            return;
+          }
+          e.preventDefault();
+          onConfirm();
+        }}
         onSubmit={(e) => {
           e.preventDefault();
           onConfirm();
         }}
       >
-        <DialogStickyFooter>
+        <DialogStickyFooter className="mt-0">
           <Button
             type="button"
             variant="outline"

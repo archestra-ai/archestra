@@ -32,6 +32,7 @@ import {
   PROVIDER_CONFIG,
 } from "@/components/chat-api-key-form";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { LlmProviderSelectItems } from "@/components/llm-provider-options";
 import { SearchInput } from "@/components/search-input";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -90,7 +91,8 @@ export default function ApiKeysPage() {
   const { searchParams, updateQueryParams } = useDataTableQueryParams();
   const search = searchParams.get("search") || "";
   const providerFilter = searchParams.get("provider") || "all";
-  const { data: apiKeys = [], isPending } = useChatApiKeys({
+  const { data: allApiKeys = [] } = useChatApiKeys();
+  const { data: queriedApiKeys = [], isPending } = useChatApiKeys({
     search: search || undefined,
     provider:
       providerFilter === "all"
@@ -283,6 +285,39 @@ export default function ApiKeysPage() {
     return () => setProviderAction(null);
   }, [setProviderAction]);
 
+  const apiKeys = useMemo(() => {
+    const normalizedSearch = search.trim().toLowerCase();
+
+    return queriedApiKeys.filter((apiKey) => {
+      const matchesSearch =
+        !normalizedSearch ||
+        apiKey.name.toLowerCase().includes(normalizedSearch);
+      const matchesProvider =
+        providerFilter === "all" || apiKey.provider === providerFilter;
+
+      return matchesSearch && matchesProvider;
+    });
+  }, [queriedApiKeys, providerFilter, search]);
+
+  const providerOptions = useMemo(() => {
+    const seen = new Set<string>();
+    return allApiKeys
+      .filter((apiKey) => {
+        if (seen.has(apiKey.provider)) return false;
+        seen.add(apiKey.provider);
+        return true;
+      })
+      .map((apiKey) => {
+        const config = PROVIDER_CONFIG[apiKey.provider];
+        return {
+          value: apiKey.provider,
+          icon: config.icon,
+          name: config.name,
+        };
+      })
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [allApiKeys]);
+
   const columns: ColumnDef<ChatApiKeyResponse>[] = useMemo(
     () => [
       {
@@ -446,9 +481,9 @@ export default function ApiKeysPage() {
     <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
         <SearchInput
-          placeholder="Search API keys by name..."
+          objectNamePlural="API keys"
+          searchFields={["name"]}
           paramName="search"
-          className="sm:max-w-sm"
         />
         <Select
           value={providerFilter}
@@ -463,20 +498,7 @@ export default function ApiKeysPage() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All providers</SelectItem>
-            {Object.entries(PROVIDER_CONFIG).map(([provider, config]) => (
-              <SelectItem key={provider} value={provider}>
-                <div className="flex items-center gap-2">
-                  <Image
-                    src={config.icon}
-                    alt={config.name}
-                    width={16}
-                    height={16}
-                    className="rounded dark:invert"
-                  />
-                  <span>{config.name}</span>
-                </div>
-              </SelectItem>
-            ))}
+            <LlmProviderSelectItems options={providerOptions} />
           </SelectContent>
         </Select>
       </div>
@@ -525,7 +547,7 @@ export default function ApiKeysPage() {
             onSubmit={handleCreate}
             className="flex min-h-0 flex-1 flex-col"
           >
-            <div className="min-h-0 flex-1 overflow-y-auto py-4 pr-2 -mr-2">
+            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
               <ChatApiKeyForm
                 mode="full"
                 showConsoleLink={false}
@@ -570,7 +592,7 @@ export default function ApiKeysPage() {
             onSubmit={handleEdit}
             className="flex min-h-0 flex-1 flex-col"
           >
-            <div className="min-h-0 flex-1 overflow-y-auto py-4 pr-2 -mr-2">
+            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
               {selectedApiKey && (
                 <ChatApiKeyForm
                   mode="full"

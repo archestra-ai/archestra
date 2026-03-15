@@ -492,9 +492,9 @@ function McpGateways({
             <div className="mb-6 flex flex-col gap-2">
               <div className="flex items-center gap-4">
                 <SearchInput
-                  placeholder="Search gateways by name..."
+                  objectNamePlural="gateways"
+                  searchFields={["name"]}
                   paramName="name"
-                  className="relative max-w-md flex-1"
                 />
                 <AgentScopeFilter />
               </div>

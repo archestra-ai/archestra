@@ -9,14 +9,9 @@ import { FormDialog } from "@/components/form-dialog";
 import { Button } from "@/components/ui/button";
 import { DialogStickyFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { useActiveOrganization } from "@/lib/organization.query";
+import { useMembersPaginated } from "@/lib/member.query";
 
 interface Team {
   id: string;
@@ -30,6 +25,33 @@ interface TeamMembersDialogProps {
   team: Team;
 }
 
+function getMemberDisplayName(member: unknown): string {
+  const record = member as {
+    userId?: string;
+    name?: string | null;
+    email?: string | null;
+    user?: { name?: string | null; email?: string | null } | null;
+  };
+
+  return (
+    record.user?.name ||
+    record.name ||
+    record.user?.email ||
+    record.email ||
+    record.userId ||
+    "Unknown user"
+  );
+}
+
+function getMemberEmail(member: unknown): string | null {
+  const record = member as {
+    email?: string | null;
+    user?: { email?: string | null } | null;
+  };
+
+  return record.user?.email || record.email || null;
+}
+
 export function TeamMembersDialog({
   open,
   onOpenChange,
@@ -37,7 +59,7 @@ export function TeamMembersDialog({
 }: TeamMembersDialogProps) {
   const queryClient = useQueryClient();
   const { data: activeOrg } = useActiveOrganization();
-  const [selectedUserId, setSelectedUserId] = useState<string>("");
+  const [memberSearch, setMemberSearch] = useState("");
 
   const { data: teamMembers } = useQuery({
     queryKey: ["teamMembers", team.id],
@@ -50,10 +72,16 @@ export function TeamMembersDialog({
     enabled: open,
   });
 
+  const { data: membersResponse } = useMembersPaginated({
+    limit: 20,
+    offset: 0,
+    name: memberSearch || undefined,
+  });
+
   // Get organization members to show in dropdown
   const orgMembers = activeOrg?.members || [];
   const memberUserIds = new Set(teamMembers?.map((m) => m.userId) || []);
-  const availableMembers = orgMembers.filter(
+  const availableMembers = (membersResponse?.data ?? orgMembers).filter(
     (member) => !memberUserIds.has(member.userId),
   );
 
@@ -72,7 +100,7 @@ export function TeamMembersDialog({
       queryClient.invalidateQueries({ queryKey: ["teams"] });
       queryClient.invalidateQueries({ queryKey: ["mcp-servers"] });
       queryClient.invalidateQueries({ queryKey: ["tools"] });
-      setSelectedUserId("");
+      setMemberSearch("");
       toast.success("Member added to team successfully");
     },
     onError: (error: Error) => {
@@ -107,31 +135,27 @@ export function TeamMembersDialog({
       open={open}
       onOpenChange={onOpenChange}
       title="Manage Team Members"
-      description={`Add or remove members from "${team.name}"`}
+      description={`Add or remove users from "${team.name}"`}
       size="medium"
     >
-      <div className="min-h-0 flex-1 overflow-y-auto py-4 pr-2 -mr-2 space-y-4">
+      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 space-y-4">
         {availableMembers.length > 0 && (
           <div className="space-y-2">
-            <Label>Add Member</Label>
-            <div className="flex gap-2">
-              <Select value={selectedUserId} onValueChange={handleAddMember}>
-                <SelectTrigger className="flex-1">
-                  <SelectValue placeholder="Select a member" />
-                </SelectTrigger>
-                <SelectContent>
-                  {availableMembers.map((member) => (
-                    <SelectItem
-                      key={member.id}
-                      value={member.userId}
-                      className="cursor-pointer"
-                    >
-                      {member.user.email || member.userId}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            <Label>Add User</Label>
+            <SearchableSelect
+              value=""
+              onValueChange={handleAddMember}
+              placeholder="Select a user"
+              searchPlaceholder="Search users by name or email"
+              className="w-full"
+              onSearchQueryChange={setMemberSearch}
+              items={availableMembers.map((member) => ({
+                value: member.userId,
+                label: getMemberDisplayName(member),
+                description: getMemberEmail(member) || undefined,
+              }))}
+              emptyMessage="No matching users found."
+            />
           </div>
         )}
 
@@ -156,7 +180,7 @@ export function TeamMembersDialog({
                   >
                     <div>
                       <p className="text-sm font-medium">
-                        {orgMember?.user.email || member.userId}
+                        {getMemberEmail(orgMember) || getMemberDisplayName(member)}
                       </p>
                       <p className="text-xs text-muted-foreground">
                         Role: {member.role}

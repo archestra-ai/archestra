@@ -727,9 +727,9 @@ export function AssignedToolsTable({
       <div className="space-y-6">
         <div className="flex flex-wrap gap-4">
           <SearchInput
-            placeholder="Search tools by name..."
+            objectNamePlural="tools"
+            searchFields={["name"]}
             paramName="search"
-            className="relative flex-1 min-w-[200px] max-w-md"
             onSearchChange={handleSearchChange}
           />
 

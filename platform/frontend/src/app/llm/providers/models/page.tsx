@@ -7,18 +7,19 @@ import {
   Pencil,
   RefreshCw,
   RotateCcw,
-  Search,
   Server,
 } from "lucide-react";
 import Image from "next/image";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { PROVIDER_CONFIG } from "@/components/chat-api-key-form";
+import { LlmProviderApiKeyFilterSelect } from "@/components/llm-provider-options";
 import {
   BestModelBadge,
   FastestModelBadge,
   UnknownCapabilitiesBadge,
 } from "@/components/model-badges";
+import { SearchInput } from "@/components/search-input";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -42,13 +43,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { MultiSelect } from "@/components/ui/multi-select";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   type ModelWithApiKeys,
   useModelsWithApiKeys,
@@ -257,42 +252,31 @@ export default function ModelsPage() {
       <div className="space-y-4">
         {models.length > 0 && (
           <div className="flex items-center gap-2">
-            <div className="relative w-72">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search models..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="pl-8"
-              />
-            </div>
-            <Select value={apiKeyFilter} onValueChange={setApiKeyFilter}>
-              <SelectTrigger className="w-[200px]">
-                <SelectValue placeholder="All API keys" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All API keys</SelectItem>
-                {availableApiKeys.map(([id, { name, provider }]) => {
-                  const config = PROVIDER_CONFIG[provider];
-                  return (
-                    <SelectItem key={id} value={id}>
-                      <div className="flex items-center gap-2">
-                        {config && (
-                          <Image
-                            src={config.icon}
-                            alt={config.name}
-                            width={16}
-                            height={16}
-                            className="rounded dark:invert"
-                          />
-                        )}
-                        <span>{name}</span>
-                      </div>
-                    </SelectItem>
-                  );
-                })}
-              </SelectContent>
-            </Select>
+            <SearchInput
+              objectNamePlural="models"
+              searchFields={["model ID"]}
+              value={search}
+              onSearchChange={setSearch}
+              syncQueryParams={false}
+            />
+            <LlmProviderApiKeyFilterSelect
+              value={apiKeyFilter}
+              onValueChange={setApiKeyFilter}
+              allLabel="All provider API keys"
+              className="w-full sm:w-[280px]"
+              options={availableApiKeys.flatMap(([id, { name, provider }]) => {
+                const config = PROVIDER_CONFIG[provider];
+                if (!config) return [];
+                return [
+                  {
+                    value: id,
+                    icon: config.icon,
+                    providerName: config.name,
+                    keyName: name,
+                  },
+                ];
+              })}
+            />
           </div>
         )}
         <DataTable
@@ -413,7 +397,7 @@ function EditModelDialog({
             onSubmit={form.handleSubmit(handleSubmit)}
             className="flex min-h-0 flex-1 flex-col"
           >
-            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto py-4 pr-2 -mr-2">
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4">
               {/* Read-only: Provider */}
               <div className="space-y-1">
                 <span className="text-sm font-medium">Provider</span>

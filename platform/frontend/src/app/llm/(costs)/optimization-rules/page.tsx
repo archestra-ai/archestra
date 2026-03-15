@@ -127,7 +127,7 @@ export default function OptimizationRulesPage() {
   useEffect(() => {
     setActionButton(
       <PermissionButton
-        permissions={{ llmLimit: ["create"] }}
+        permissions={{ optimizationRule: ["create"] }}
         onClick={handleCreateOpen}
       >
         <Plus className="mr-2 h-4 w-4" />
@@ -203,6 +203,7 @@ export default function OptimizationRulesPage() {
               {
                 icon: <Power className="h-4 w-4" />,
                 label: row.original.enabled ? "Disable rule" : "Enable rule",
+                permissions: { optimizationRule: ["update"] },
                 onClick: async () => {
                   await updateRule.mutateAsync({
                     id: row.original.id,
@@ -213,6 +214,7 @@ export default function OptimizationRulesPage() {
               {
                 icon: <Edit className="h-4 w-4" />,
                 label: "Edit rule",
+                permissions: { optimizationRule: ["update"] },
                 onClick: () => {
                   setEditingRule(row.original);
                   setDraft({
@@ -229,6 +231,7 @@ export default function OptimizationRulesPage() {
               {
                 icon: <Trash2 className="h-4 w-4" />,
                 label: "Delete rule",
+                permissions: { optimizationRule: ["delete"] },
                 variant: "destructive",
                 onClick: () => setRuleToDelete(row.original),
               },

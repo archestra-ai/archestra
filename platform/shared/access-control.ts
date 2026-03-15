@@ -32,6 +32,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   llmProxy: ["read", "create", "update", "delete", "team-admin", "admin"],
   llmProvider: ["read", "create", "update", "delete"],
   llmLimit: ["read", "create", "update", "delete"],
+  optimizationRule: ["read", "create", "update", "delete"],
   llmCost: ["read"],
 
   // MCP
@@ -84,6 +85,7 @@ export const editorPermissions: Record<Resource, Action[]> = {
   llmProxy: ["read", "create", "update", "delete", "team-admin"],
   llmProvider: ["read", "create", "update", "delete"],
   llmLimit: ["read", "create", "update", "delete"],
+  optimizationRule: ["read", "create", "update", "delete"],
   llmCost: ["read"],
 
   // MCP
@@ -136,6 +138,7 @@ export const memberPermissions: Record<Resource, Action[]> = {
   llmProxy: ["read", "create", "update", "delete"],
   llmProvider: ["read"],
   llmLimit: [],
+  optimizationRule: [],
   llmCost: [],
 
   // MCP
@@ -261,6 +264,10 @@ export const permissionDescriptions: Record<string, string> = {
   "llmLimit:create": "Create new usage limits",
   "llmLimit:update": "Modify existing usage limits",
   "llmLimit:delete": "Remove usage limits",
+  "optimizationRule:read": "View optimization rules",
+  "optimizationRule:create": "Create new optimization rules",
+  "optimizationRule:update": "Modify optimization rules",
+  "optimizationRule:delete": "Remove optimization rules",
   "llmSettings:read": "View LLM settings (compression, cleanup interval)",
   "llmSettings:update": "Modify LLM settings",
   "agentSettings:read":
@@ -782,6 +789,18 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.DeleteLimit]: {
     llmLimit: ["delete"],
   },
+  [RouteId.GetOptimizationRules]: {
+    optimizationRule: ["read"],
+  },
+  [RouteId.CreateOptimizationRule]: {
+    optimizationRule: ["create"],
+  },
+  [RouteId.UpdateOptimizationRule]: {
+    optimizationRule: ["update"],
+  },
+  [RouteId.DeleteOptimizationRule]: {
+    optimizationRule: ["delete"],
+  },
   [RouteId.UpdateAppearanceSettings]: {
     organizationSettings: ["update"],
   },
@@ -871,19 +890,6 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetCostSavingsStatistics]: {
     llmCost: ["read"],
   },
-  [RouteId.GetOptimizationRules]: {
-    llmProxy: ["read"],
-  },
-  [RouteId.CreateOptimizationRule]: {
-    llmProxy: ["create"],
-  },
-  [RouteId.UpdateOptimizationRule]: {
-    llmProxy: ["update"],
-  },
-  [RouteId.DeleteOptimizationRule]: {
-    llmProxy: ["delete"],
-  },
-
   // Secrets Routes
   [RouteId.GetSecretsType]: {
     secret: ["read"],
@@ -991,7 +997,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/llm/providers/models": { llmProvider: ["read"] },
   "/llm/limits": { llmLimit: ["read"] },
   "/llm/costs": { llmCost: ["read"] },
-  "/llm/optimization-rules": { llmProxy: ["read"] },
+  "/llm/optimization-rules": { optimizationRule: ["read"] },
 
   // MCP
   "/mcp/registry": { mcpRegistry: ["read"] },

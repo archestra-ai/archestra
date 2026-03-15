@@ -41,6 +41,7 @@ Full access to core resources and settings, but cannot manage users, roles, or i
 | LLM Proxies | `read`, `create`, `update`, `delete`, `team-admin` |
 | LLM Providers | `read`, `create`, `update`, `delete` |
 | LLM Limits | `read`, `create`, `update`, `delete` |
+| Optimization Rules | `read`, `create`, `update`, `delete` |
 | LLM Costs | `read` |
 | MCP Gateways | `read`, `create`, `update`, `delete`, `team-admin` |
 | Tools & Policies | `read`, `create`, `update`, `delete` |
@@ -187,6 +188,10 @@ The following table lists all available permissions that can be assigned to cust
 | `member:create` | Add new members to the organization |
 | `member:update` | Change member roles and settings |
 | `member:delete` | Remove members from the organization |
+| `optimizationRule:read` | View optimization rules |
+| `optimizationRule:create` | Create new optimization rules |
+| `optimizationRule:update` | Modify optimization rules |
+| `optimizationRule:delete` | Remove optimization rules |
 | `organizationSettings:read` | View organization settings (appearance, authentication, etc) |
 | `organizationSettings:update` | Customize organization appearance, authentication, etc |
 | `secret:read` | View secrets manager configuration |

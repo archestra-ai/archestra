@@ -29,12 +29,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { useModelsWithApiKeys } from "@/lib/chat-models.query";
 import {
   useCreateLimit,
@@ -249,27 +243,21 @@ export default function LimitsPage() {
         cell: ({ row }) => {
           const usage = getUsageStatus(row.original);
           return (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="w-[180px] cursor-default">
-                    <Progress
-                      value={Math.min(usage.percentage, 100)}
-                      className={
-                        usage.status === "danger"
-                          ? "bg-red-100"
-                          : usage.status === "warning"
-                            ? "bg-orange-100"
-                            : undefined
-                      }
-                    />
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>{`${formatCurrencyWhole(usage.actualUsage)} / ${formatCurrencyWhole(usage.actualLimit)} (${usage.percentage.toFixed(1)}%)`}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <div className="w-[180px]">
+              <Progress
+                value={Math.min(usage.percentage, 100)}
+                className={
+                  usage.status === "danger"
+                    ? "bg-red-100"
+                    : usage.status === "warning"
+                      ? "bg-orange-100"
+                      : undefined
+                }
+              />
+              <p className="mt-1 text-left text-xs text-muted-foreground">
+                {`${formatCurrencyWhole(usage.actualUsage)} / ${formatCurrencyWhole(usage.actualLimit)} (${usage.percentage.toFixed(1)}%)`}
+              </p>
+            </div>
           );
         },
       },

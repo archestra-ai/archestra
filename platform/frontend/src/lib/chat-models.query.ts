@@ -14,6 +14,10 @@ import { toast } from "sonner";
 import { handleApiError } from "./utils";
 
 const { getChatModels, getModelsWithApiKeys, updateModel } = archestraApiSdk;
+type ChatModelsQuery = NonNullable<
+  archestraApiTypes.GetChatModelsData["query"]
+>;
+type ChatModelsParams = Partial<ChatModelsQuery>;
 
 /**
  * Chat model type from the API response.
@@ -30,7 +34,7 @@ export type ModelCapabilities = NonNullable<ChatModel["capabilities"]>;
  * Fetch available chat models from all configured providers.
  * When apiKeyId is provided, only returns models linked to that specific key.
  */
-export function useChatModels(params?: { apiKeyId?: string | null }) {
+export function useChatModels(params?: ChatModelsParams) {
   const apiKeyId = params?.apiKeyId;
   return useQuery({
     queryKey: ["chat-models", apiKeyId ?? null],
@@ -55,7 +59,7 @@ export function useChatModels(params?: { apiKeyId?: string | null }) {
  * Returns models grouped by provider with loading/error states.
  * When apiKeyId is provided, only returns models linked to that specific key.
  */
-export function useModelsByProvider(params?: { apiKeyId?: string | null }) {
+export function useModelsByProvider(params?: ChatModelsParams) {
   const query = useChatModels(params);
 
   // Memoize to prevent creating new object reference on every render

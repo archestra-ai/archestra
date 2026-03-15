@@ -7,6 +7,8 @@ type TeamsResponse = archestraApiTypes.GetTeamsResponses["200"];
 export type Team = TeamsResponse["data"][number];
 type Teams = Team[];
 export type TeamWithVaultPath = Team & { vaultPath?: string | null };
+type TeamsQuery = NonNullable<archestraApiTypes.GetTeamsData["query"]>;
+type TeamsPaginatedParams = Pick<TeamsQuery, "limit" | "offset" | "name">;
 
 export function useTeams(params?: { initialData?: Teams; enabled?: boolean }) {
   return useQuery({
@@ -20,11 +22,7 @@ export function useTeams(params?: { initialData?: Teams; enabled?: boolean }) {
   });
 }
 
-export function useTeamsPaginated(params: {
-  limit: number;
-  offset: number;
-  name?: string;
-}) {
+export function useTeamsPaginated(params: TeamsPaginatedParams) {
   return useQuery({
     queryKey: ["teams", "paginated", params],
     queryFn: async () => {

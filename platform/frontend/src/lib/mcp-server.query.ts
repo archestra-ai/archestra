@@ -23,12 +23,16 @@ const {
   reinstallMcpServer,
 } = archestraApiSdk;
 
-export function useMcpServers(params?: {
+type McpServersQuery = Partial<
+  NonNullable<archestraApiTypes.GetMcpServersData["query"]>
+>;
+type McpServersParams = McpServersQuery & {
   initialData?: archestraApiTypes.GetMcpServersResponses["200"];
   hasInstallingServers?: boolean;
-  catalogId?: string;
   enabled?: boolean;
-}) {
+};
+
+export function useMcpServers(params?: McpServersParams) {
   return useQuery({
     // Include catalogId in queryKey only when provided to maintain cache separation
     queryKey: params?.catalogId
@@ -52,7 +56,7 @@ export function useMcpServers(params?: {
  *
  * @param catalogId - Optional catalog ID to filter. If provided, only returns servers for that catalog.
  */
-export function useMcpServersGroupedByCatalog(params?: { catalogId?: string }) {
+export function useMcpServersGroupedByCatalog(params?: McpServersQuery) {
   const { data: servers } = useMcpServers({ catalogId: params?.catalogId });
   const { data: session } = authClient.useSession();
   const currentUserId = session?.user?.id;

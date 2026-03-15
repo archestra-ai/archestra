@@ -504,7 +504,7 @@ export function AgentDialog({
   const connectors = connectorsData ?? [];
   const agentLlmApiKeyId = agent?.llmApiKeyId;
   const { data: availableApiKeys = [] } = useAvailableChatApiKeys({
-    includeKeyId: agentLlmApiKeyId,
+    includeKeyId: agentLlmApiKeyId ?? undefined,
   });
   const { modelsByProvider } = useModelsByProvider();
 

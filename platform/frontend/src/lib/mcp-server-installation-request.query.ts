@@ -15,9 +15,28 @@ const {
 export type McpServerInstallationRequest =
   archestraApiTypes.GetMcpServerInstallationRequestResponses["200"];
 
-export function useMcpServerInstallationRequests(params?: {
-  status?: "pending" | "approved" | "declined";
-}) {
+type McpServerInstallationRequestsQuery = Partial<
+  NonNullable<archestraApiTypes.GetMcpServerInstallationRequestsData["query"]>
+>;
+type ApproveInstallationRequestParams =
+  archestraApiTypes.ApproveMcpServerInstallationRequestData["path"] &
+    NonNullable<
+      archestraApiTypes.ApproveMcpServerInstallationRequestData["body"]
+    >;
+type DeclineInstallationRequestParams =
+  archestraApiTypes.DeclineMcpServerInstallationRequestData["path"] &
+    NonNullable<
+      archestraApiTypes.DeclineMcpServerInstallationRequestData["body"]
+    >;
+type AddInstallationRequestNoteParams =
+  archestraApiTypes.AddMcpServerInstallationRequestNoteData["path"] &
+    NonNullable<
+      archestraApiTypes.AddMcpServerInstallationRequestNoteData["body"]
+    >;
+
+export function useMcpServerInstallationRequests(
+  params?: McpServerInstallationRequestsQuery,
+) {
   return useQuery({
     queryKey: ["mcp-server-installation-requests", params?.status],
     queryFn: async () => {
@@ -72,9 +91,7 @@ export function useApproveMcpServerInstallationRequest() {
     mutationFn: async ({
       id,
       adminResponse,
-    }: { id: string } & NonNullable<
-      archestraApiTypes.ApproveMcpServerInstallationRequestData["body"]
-    >) => {
+    }: ApproveInstallationRequestParams) => {
       const response = await approveMcpServerInstallationRequest({
         path: { id },
         body: adminResponse ? { adminResponse } : {},
@@ -106,9 +123,7 @@ export function useDeclineMcpServerInstallationRequest() {
     mutationFn: async ({
       id,
       adminResponse,
-    }: { id: string } & NonNullable<
-      archestraApiTypes.DeclineMcpServerInstallationRequestData["body"]
-    >) => {
+    }: DeclineInstallationRequestParams) => {
       const response = await declineMcpServerInstallationRequest({
         path: { id },
         body: adminResponse ? { adminResponse } : {},
@@ -134,12 +149,7 @@ export function useDeclineMcpServerInstallationRequest() {
 export function useAddMcpServerInstallationRequestNote() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({
-      id,
-      content,
-    }: { id: string } & NonNullable<
-      archestraApiTypes.AddMcpServerInstallationRequestNoteData["body"]
-    >) => {
+    mutationFn: async ({ id, content }: AddInstallationRequestNoteParams) => {
       const response = await addMcpServerInstallationRequestNote({
         path: { id },
         body: { content },

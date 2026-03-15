@@ -7,6 +7,9 @@ import { DEFAULT_TABLE_LIMIT, handleApiError } from "./utils";
 const { getRoles, createRole, getRole, updateRole, deleteRole } =
   archestraApiSdk;
 
+type RolesQuery = NonNullable<archestraApiTypes.GetRolesData["query"]>;
+type RolesPaginatedParams = Pick<RolesQuery, "limit" | "offset" | "name">;
+
 /**
  * Query keys for role-related queries
  */
@@ -36,11 +39,7 @@ export function useRoles(params?: {
   });
 }
 
-export function useRolesPaginated(params: {
-  limit: number;
-  offset: number;
-  name?: string;
-}) {
+export function useRolesPaginated(params: RolesPaginatedParams) {
   return useQuery({
     queryKey: [...roleKeys.lists(), "paginated", params],
     queryFn: async () => {

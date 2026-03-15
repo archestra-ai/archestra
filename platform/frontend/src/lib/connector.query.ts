@@ -18,18 +18,23 @@ const {
   getConnectorKnowledgeBases,
 } = archestraApiSdk;
 
+type ConnectorsQuery = NonNullable<
+  archestraApiTypes.GetConnectorsData["query"]
+>;
+type ConnectorsListParams = Pick<
+  ConnectorsQuery,
+  "knowledgeBaseId" | "limit" | "offset"
+> & {
+  enabled?: boolean;
+};
+type ConnectorsPaginatedParams = Pick<
+  ConnectorsQuery,
+  "limit" | "offset" | "search" | "connectorType"
+>;
+
 // ===== Query hooks =====
 
-export function useConnectors(
-  params?:
-    | string
-    | {
-        knowledgeBaseId?: string;
-        enabled?: boolean;
-        limit?: number;
-        offset?: number;
-      },
-) {
+export function useConnectors(params?: string | Partial<ConnectorsListParams>) {
   const knowledgeBaseId =
     typeof params === "string" ? params : params?.knowledgeBaseId;
   const enabled = typeof params === "object" ? params?.enabled : undefined;
@@ -63,16 +68,7 @@ export function useConnectors(
   });
 }
 
-export function useConnectorsPaginated(params: {
-  limit: number;
-  offset: number;
-  search?: string;
-  connectorType?: archestraApiTypes.GetConnectorsData["query"] extends infer T
-    ? T extends { connectorType?: infer ConnectorType }
-      ? ConnectorType
-      : never
-    : never;
-}) {
+export function useConnectorsPaginated(params: ConnectorsPaginatedParams) {
   return useQuery({
     queryKey: ["connectors", "paginated", params],
     placeholderData: (previousData) => previousData,

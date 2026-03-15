@@ -62,7 +62,7 @@ export default function AgentSettingsPage() {
   });
 
   const { data: allModels, isPending: modelsLoading } = useChatModels({
-    apiKeyId: selectedApiKeyId || null,
+    apiKeyId: selectedApiKeyId || undefined,
   });
 
   const updateAgentMutation = useUpdateAgentSettings(

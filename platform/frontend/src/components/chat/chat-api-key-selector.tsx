@@ -88,7 +88,7 @@ export function ChatApiKeySelector({
   // Include agent's configured key even if user doesn't have direct access
   const { data: availableKeys = [], isLoading: isLoadingKeys } =
     useAvailableChatApiKeys({
-      includeKeyId: agentLlmApiKeyId,
+      includeKeyId: agentLlmApiKeyId ?? undefined,
     });
 
   // Combined loading state - wait for both API keys and models

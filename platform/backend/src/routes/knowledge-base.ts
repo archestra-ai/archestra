@@ -301,7 +301,10 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (
-      { query: { limit, offset, knowledgeBaseId, search, connectorType }, organizationId },
+      {
+        query: { limit, offset, knowledgeBaseId, search, connectorType },
+        organizationId,
+      },
       reply,
     ) => {
       let data: Awaited<
@@ -317,15 +320,14 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           );
         total = data.length;
       } else {
-        const result = await KnowledgeBaseConnectorModel.findByOrganizationPaginated(
-          {
+        const result =
+          await KnowledgeBaseConnectorModel.findByOrganizationPaginated({
             organizationId,
             limit,
             offset,
             search,
             connectorType,
-          },
-        );
+          });
         data = result.data;
         total = result.total;
       }

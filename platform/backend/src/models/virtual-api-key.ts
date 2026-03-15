@@ -1,6 +1,6 @@
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { ARCHESTRA_TOKEN_PREFIX } from "@shared";
-import { count, eq } from "drizzle-orm";
+import { and, count, eq, ilike } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { PaginatedResult } from "@/database/utils/pagination";
 import { createPaginatedResult } from "@/database/utils/pagination";
@@ -143,13 +143,26 @@ class VirtualApiKeyModel {
   static async findAllByOrganization(params: {
     organizationId: string;
     pagination: PaginationQuery;
+    search?: string;
+    chatApiKeyId?: string;
   }): Promise<PaginatedResult<VirtualApiKeyWithParentInfo>> {
-    const { organizationId, pagination } = params;
+    const { organizationId, pagination, search, chatApiKeyId } = params;
 
-    const whereClause = eq(
-      schema.chatApiKeysTable.organizationId,
-      organizationId,
-    );
+    const whereConditions = [
+      eq(schema.chatApiKeysTable.organizationId, organizationId),
+    ];
+
+    if (search) {
+      whereConditions.push(
+        ilike(schema.virtualApiKeysTable.name, `%${search.trim()}%`),
+      );
+    }
+
+    if (chatApiKeyId) {
+      whereConditions.push(eq(schema.virtualApiKeysTable.chatApiKeyId, chatApiKeyId));
+    }
+
+    const whereClause = and(...whereConditions);
 
     const [rows, [{ total }]] = await Promise.all([
       db

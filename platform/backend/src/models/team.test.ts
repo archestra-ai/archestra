@@ -1124,7 +1124,7 @@ describe("TeamModel", () => {
       expect(result.data).toHaveLength(1);
       expect(result.data[0].members).toBeDefined();
       expect(result.data[0].members).toHaveLength(1);
-      expect(result.data[0].members![0].userId).toBe(user.id);
+      expect(result.data[0].members?.[0].userId).toBe(user.id);
     });
 
     test("does not include teams from other orgs", async ({

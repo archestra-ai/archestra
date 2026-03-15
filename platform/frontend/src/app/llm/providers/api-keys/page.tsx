@@ -32,6 +32,7 @@ import {
   PROVIDER_CONFIG,
 } from "@/components/chat-api-key-form";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { SearchInput } from "@/components/search-input";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -49,6 +50,13 @@ import {
 import { InlineTag } from "@/components/ui/inline-tag";
 import { PermissionButton } from "@/components/ui/permission-button";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   type ChatApiKeyScope,
   useChatApiKeys,
   useCreateChatApiKey,
@@ -57,6 +65,7 @@ import {
 } from "@/lib/chat-settings.query";
 import { useFeature } from "@/lib/config.query";
 import { useOrganization } from "@/lib/organization.query";
+import { useDataTableQueryParams } from "@/lib/use-data-table-query-params";
 import { useSetProviderAction } from "../layout";
 
 const SCOPE_ICONS: Record<ChatApiKeyScope, React.ReactNode> = {
@@ -78,7 +87,16 @@ const DEFAULT_FORM_VALUES: ChatApiKeyFormValues = {
 };
 
 export default function ApiKeysPage() {
-  const { data: apiKeys = [], isPending } = useChatApiKeys();
+  const { searchParams, updateQueryParams } = useDataTableQueryParams();
+  const search = searchParams.get("search") || "";
+  const providerFilter = searchParams.get("provider") || "all";
+  const { data: apiKeys = [], isPending } = useChatApiKeys({
+    search: search || undefined,
+    provider:
+      providerFilter === "all"
+        ? undefined
+        : (providerFilter as ChatApiKeyResponse["provider"]),
+  });
   const { data: organization } = useOrganization();
   const createMutation = useCreateChatApiKey();
   const updateMutation = useUpdateChatApiKey();
@@ -426,6 +444,43 @@ export default function ApiKeysPage() {
 
   return (
     <div className="space-y-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <SearchInput
+          placeholder="Search API keys by name..."
+          paramName="search"
+          className="sm:max-w-sm"
+        />
+        <Select
+          value={providerFilter}
+          onValueChange={(value) =>
+            updateQueryParams({
+              provider: value === "all" ? null : value,
+            })
+          }
+        >
+          <SelectTrigger className="w-full sm:w-[240px]">
+            <SelectValue placeholder="All providers" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All providers</SelectItem>
+            {Object.entries(PROVIDER_CONFIG).map(([provider, config]) => (
+              <SelectItem key={provider} value={provider}>
+                <div className="flex items-center gap-2">
+                  <Image
+                    src={config.icon}
+                    alt={config.name}
+                    width={16}
+                    height={16}
+                    className="rounded dark:invert"
+                  />
+                  <span>{config.name}</span>
+                </div>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
       {byosEnabled &&
         apiKeys.some((key) => key.secretStorageType === "database") && (
           <Alert variant="destructive">
@@ -447,6 +502,13 @@ export default function ApiKeysPage() {
           hideSelectedCount
           isLoading={isPending}
           emptyMessage="No API keys configured"
+          hasActiveFilters={Boolean(search || providerFilter !== "all")}
+          onClearFilters={() =>
+            updateQueryParams({
+              search: null,
+              provider: null,
+            })
+          }
         />
       </div>
 

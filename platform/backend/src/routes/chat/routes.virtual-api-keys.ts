@@ -23,16 +23,21 @@ const virtualApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description:
           "Get all virtual API keys for the organization, with parent API key info",
         tags: ["Virtual API Keys"],
-        querystring: PaginationQuerySchema,
+        querystring: PaginationQuerySchema.extend({
+          search: z.string().trim().min(1).optional(),
+          chatApiKeyId: z.string().uuid().optional(),
+        }),
         response: constructResponseSchema(
           createPaginatedResponseSchema(VirtualApiKeyWithParentInfoSchema),
         ),
       },
     },
-    async ({ query: { limit, offset }, organizationId }, reply) => {
+    async ({ query: { limit, offset, search, chatApiKeyId }, organizationId }, reply) => {
       const result = await VirtualApiKeyModel.findAllByOrganization({
         organizationId,
         pagination: { limit, offset },
+        search,
+        chatApiKeyId,
       });
       return reply.send(result);
     },

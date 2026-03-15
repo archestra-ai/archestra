@@ -28,11 +28,22 @@ const {
   deleteVirtualApiKey,
 } = archestraApiSdk;
 
-export function useChatApiKeys(params?: { enabled?: boolean }) {
+export function useChatApiKeys(params?: {
+  enabled?: boolean;
+  search?: string;
+  provider?: SupportedProvider;
+}) {
+  const search = params?.search;
+  const provider = params?.provider;
   return useQuery({
-    queryKey: ["chat-api-keys"],
+    queryKey: ["chat-api-keys", search, provider],
     queryFn: async () => {
-      const { data, error } = await getChatApiKeys();
+      const { data, error } = await getChatApiKeys({
+        query: {
+          search: search || undefined,
+          provider: provider || undefined,
+        },
+      });
       if (error) {
         handleApiError(error);
         return [];
@@ -230,14 +241,23 @@ export function useDeleteVirtualApiKey() {
 export function useAllVirtualApiKeys(params?: {
   limit?: number;
   offset?: number;
+  search?: string;
+  chatApiKeyId?: string;
 }) {
   const limit = params?.limit ?? 20;
   const offset = params?.offset ?? 0;
+  const search = params?.search;
+  const chatApiKeyId = params?.chatApiKeyId;
   return useQuery({
-    queryKey: ["all-virtual-api-keys", limit, offset],
+    queryKey: ["all-virtual-api-keys", limit, offset, search, chatApiKeyId],
     queryFn: async () => {
       const { data, error } = await getAllVirtualApiKeys({
-        query: { limit, offset },
+        query: {
+          limit,
+          offset,
+          search: search || undefined,
+          chatApiKeyId: chatApiKeyId || undefined,
+        },
       });
       if (error) {
         handleApiError(error);

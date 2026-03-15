@@ -4,7 +4,7 @@ import {
   parseVaultReference,
   type SupportedProvider,
 } from "@shared";
-import { and, asc, desc, eq, inArray, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { computeSecretStorageType } from "@/secrets-manager/utils";
 import type {
@@ -70,6 +70,10 @@ class ChatApiKeyModel {
     userId: string,
     userTeamIds: string[],
     isAgentAdmin: boolean,
+    filters?: {
+      search?: string;
+      provider?: SupportedProvider;
+    },
   ): Promise<ChatApiKeyWithScopeInfo[]> {
     // Build conditions based on visibility rules
     const conditions = [
@@ -119,6 +123,16 @@ class ChatApiKeyModel {
       if (userOrCondition) {
         conditions.push(userOrCondition);
       }
+    }
+
+    if (filters?.search) {
+      conditions.push(
+        ilike(schema.chatApiKeysTable.name, `%${filters.search.trim()}%`),
+      );
+    }
+
+    if (filters?.provider) {
+      conditions.push(eq(schema.chatApiKeysTable.provider, filters.provider));
     }
 
     // Query with team, user, and secrets table joins.

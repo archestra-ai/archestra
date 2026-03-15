@@ -1,14 +1,14 @@
-import {
-  createInsertSchema,
-  createSelectSchema,
-} from "drizzle-zod";
+import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
 
 export const SelectApiKeySchema = createSelectSchema(schema.apikeysTable);
 export const InsertApiKeySchema = createInsertSchema(schema.apikeysTable);
 
-export const ApiKeyPermissionsSchema = z.record(z.string(), z.array(z.string()));
+export const ApiKeyPermissionsSchema = z.record(
+  z.string(),
+  z.array(z.string()),
+);
 export const ApiKeyMetadataSchema = z.record(z.string(), z.unknown());
 
 export const ApiKeyResponseSchema = z.object({
@@ -48,4 +48,6 @@ export const DeleteApiKeyResponseSchema = z.object({
 
 export type SelectApiKey = z.infer<typeof SelectApiKeySchema>;
 export type ApiKeyResponse = z.infer<typeof ApiKeyResponseSchema>;
-export type ApiKeyWithValueResponse = z.infer<typeof ApiKeyWithValueResponseSchema>;
+export type ApiKeyWithValueResponse = z.infer<
+  typeof ApiKeyWithValueResponseSchema
+>;

@@ -11,6 +11,7 @@ import {
 } from "@/components/chat-api-key-form";
 import { CopyableCode } from "@/components/copyable-code";
 import { ExpirationDateTimeField } from "@/components/expiration-date-time-field";
+import { SearchInput } from "@/components/search-input";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -41,18 +42,29 @@ import {
 } from "@/lib/chat-settings.query";
 import { useFeature } from "@/lib/config.query";
 import { formatRelativeTime } from "@/lib/format-relative-time";
+import { useDataTableQueryParams } from "@/lib/use-data-table-query-params";
 import { useSetProviderAction } from "../layout";
 
 type VirtualKeyWithParent =
   archestraApiTypes.GetAllVirtualApiKeysResponses["200"]["data"][number];
 
 export default function VirtualKeysPage() {
-  const [pageIndex, setPageIndex] = useState(0);
-  const [pageSize, setPageSize] = useState(10);
+  const {
+    searchParams,
+    pageIndex,
+    pageSize,
+    offset,
+    setPagination,
+    updateQueryParams,
+  } = useDataTableQueryParams();
+  const search = searchParams.get("search") || "";
+  const chatApiKeyIdFilter = searchParams.get("chatApiKeyId") || "all";
 
   const { data: response, isPending } = useAllVirtualApiKeys({
     limit: pageSize,
-    offset: pageIndex * pageSize,
+    offset,
+    search: search || undefined,
+    chatApiKeyId: chatApiKeyIdFilter === "all" ? undefined : chatApiKeyIdFilter,
   });
   const virtualKeys = response?.data ?? [];
   const paginationMeta = response?.pagination;
@@ -66,14 +78,6 @@ export default function VirtualKeysPage() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [deletingKey, setDeletingKey] = useState<VirtualKeyWithParent | null>(
     null,
-  );
-
-  const handlePaginationChange = useCallback(
-    (pagination: { pageIndex: number; pageSize: number }) => {
-      setPageIndex(pagination.pageIndex);
-      setPageSize(pagination.pageSize);
-    },
-    [],
   );
 
   const columns: ColumnDef<VirtualKeyWithParent>[] = useMemo(
@@ -180,6 +184,47 @@ export default function VirtualKeysPage() {
 
   return (
     <>
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+        <SearchInput
+          placeholder="Search virtual keys by name..."
+          paramName="search"
+          className="sm:max-w-sm"
+        />
+        <Select
+          value={chatApiKeyIdFilter}
+          onValueChange={(value) =>
+            updateQueryParams({
+              chatApiKeyId: value === "all" ? null : value,
+              page: "1",
+            })
+          }
+        >
+          <SelectTrigger className="w-full sm:w-[280px]">
+            <SelectValue placeholder="All provider API keys" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All provider API keys</SelectItem>
+            {parentableKeys.map((key) => {
+              const config = PROVIDER_CONFIG[key.provider];
+              return (
+                <SelectItem key={key.id} value={key.id}>
+                  <div className="flex items-center gap-2">
+                    <Image
+                      src={config.icon}
+                      alt={config.name}
+                      width={16}
+                      height={16}
+                      className="rounded dark:invert"
+                    />
+                    <span>{key.name}</span>
+                  </div>
+                </SelectItem>
+              );
+            })}
+          </SelectContent>
+        </Select>
+      </div>
+
       <DataTable
         columns={columns}
         data={virtualKeys}
@@ -197,7 +242,15 @@ export default function VirtualKeysPage() {
           pageSize,
           total: paginationMeta?.total ?? 0,
         }}
-        onPaginationChange={handlePaginationChange}
+        onPaginationChange={setPagination}
+        hasActiveFilters={Boolean(search || chatApiKeyIdFilter !== "all")}
+        onClearFilters={() =>
+          updateQueryParams({
+            search: null,
+            chatApiKeyId: null,
+            page: "1",
+          })
+        }
       />
 
       <CreateVirtualKeyDialog

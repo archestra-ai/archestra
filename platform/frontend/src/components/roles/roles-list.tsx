@@ -18,7 +18,6 @@ import {
   type TableRowAction,
   TableRowActions,
 } from "@/components/table-row-actions";
-import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/ui/data-table";
 import {
   Dialog,
@@ -27,6 +26,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useRolesPaginated } from "@/lib/role.query";
 import { useDataTableQueryParams } from "@/lib/use-data-table-query-params";
 import { useSetSettingsAction } from "@/app/settings/layout";
@@ -58,12 +62,19 @@ export function RolesList() {
   const columns: ColumnDef<Role>[] = [
     {
       id: "icon",
-      size: 40,
+      size: 24,
       enableSorting: false,
       header: "",
-      cell: () => (
+      cell: ({ row }) => (
         <div className="flex items-center justify-center">
-          <Shield className="h-5 w-5 text-muted-foreground" />
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Shield className="h-4 w-4 text-muted-foreground" />
+            </TooltipTrigger>
+            <TooltipContent>
+              {row.original.predefined ? "Predefined" : "Custom"}
+            </TooltipContent>
+          </Tooltip>
         </div>
       ),
     },
@@ -89,17 +100,6 @@ export function RolesList() {
           </div>
         );
       },
-    },
-    {
-      id: "type",
-      header: "Type",
-      enableSorting: false,
-      cell: ({ row }) =>
-        row.original.predefined ? (
-          <Badge variant="secondary">Predefined</Badge>
-        ) : (
-          <Badge variant="outline">Custom</Badge>
-        ),
     },
     {
       id: "actions",

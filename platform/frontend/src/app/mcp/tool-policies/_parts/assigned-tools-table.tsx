@@ -11,7 +11,6 @@ import {
   ChevronUp,
   Loader2,
   Pencil,
-  Search,
   Wand2,
 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
@@ -20,6 +19,7 @@ import { LoadingSpinner } from "@/components/loading";
 import { PermissivePolicyOverlay } from "@/components/permissive-policy-overlay";
 import { WithPermissions } from "@/components/roles/with-permissions";
 import { SearchInput } from "@/components/search-input";
+import { TableRowActions } from "@/components/table-row-actions";
 import { TruncatedText } from "@/components/truncated-text";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -350,6 +350,16 @@ export function AssignedToolsTable({
     setSelectedTools([]);
   }, []);
 
+  const clearFilters = useCallback(() => {
+    setOriginFilter(DEFAULT_FILTER_ALL);
+    handleSearchChange();
+    updateQueryParams({
+      search: null,
+      origin: null,
+      page: "1",
+    });
+  }, [handleSearchChange, updateQueryParams]);
+
   const isRowFieldUpdating = useCallback(
     (id: string, field: "callPolicy" | "resultPolicyAction") => {
       return Array.from(updatingRows).some(
@@ -679,23 +689,16 @@ export function AssignedToolsTable({
         id: "actions",
         header: "Actions",
         cell: ({ row }) => (
-          <WithPermissions
-            permissions={{ toolPolicy: ["update"] }}
-            noPermissionHandle="tooltip"
-          >
-            {({ hasPermission }) => (
-              <Button
-                variant="outline"
-                size="icon"
-                className="h-8 w-8"
-                aria-label="Edit policies"
-                disabled={!hasPermission}
-                onClick={() => onToolClick(row.original)}
-              >
-                <Pencil className="h-4 w-4" />
-              </Button>
-            )}
-          </WithPermissions>
+          <TableRowActions
+            actions={[
+              {
+                icon: <Pencil className="h-4 w-4" />,
+                label: "Edit policies",
+                permissions: { toolPolicy: ["update"] },
+                onClick: () => onToolClick(row.original),
+              },
+            ]}
+          />
         ),
       },
     ],
@@ -1029,51 +1032,30 @@ export function AssignedToolsTable({
           </div>
         </div>
 
-        {isLoading ? (
-          <div className="flex flex-col items-center justify-center py-16 text-center">
-            <LoadingSpinner />
-          </div>
-        ) : tools.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 text-center">
-            <Search className="mb-4 h-12 w-12 text-muted-foreground/50" />
-            <h3 className="mb-2 text-lg font-semibold">No tools found</h3>
-            <p className="mb-4 text-sm text-muted-foreground">
-              {searchFromUrl || originFilter !== DEFAULT_FILTER_ALL
-                ? "No tools match your filters. Try adjusting your search or filters."
-                : "No tools have been assigned yet."}
-            </p>
-            {(searchFromUrl || originFilter !== DEFAULT_FILTER_ALL) && (
-              <Button
-                variant="outline"
-                onClick={() => {
-                  handleSearchChange();
-                  handleOriginFilterChange(DEFAULT_FILTER_ALL);
-                  updateQueryParams({ search: null, page: "1" });
-                }}
-              >
-                Clear all filters
-              </Button>
-            )}
-          </div>
-        ) : (
-          <DataTable
-            columns={columns}
-            data={tools}
-            sorting={sorting}
-            onSortingChange={handleSortingChange}
-            manualSorting={true}
-            manualPagination={true}
-            pagination={{
-              pageIndex,
-              pageSize,
-              total: toolsData?.pagination?.total ?? 0,
-            }}
-            onPaginationChange={handlePaginationChange}
-            rowSelection={rowSelection}
-            onRowSelectionChange={handleRowSelectionChange}
-            getRowId={(row) => row.id}
-          />
-        )}
+        <DataTable
+          columns={columns}
+          data={tools}
+          sorting={sorting}
+          onSortingChange={handleSortingChange}
+          manualSorting
+          manualPagination
+          pagination={{
+            pageIndex,
+            pageSize,
+            total: toolsData?.pagination?.total ?? 0,
+          }}
+          onPaginationChange={handlePaginationChange}
+          rowSelection={rowSelection}
+          onRowSelectionChange={handleRowSelectionChange}
+          getRowId={(row) => row.id}
+          isLoading={isLoading}
+          hasActiveFilters={
+            !!searchFromUrl || originFilter !== DEFAULT_FILTER_ALL
+          }
+          emptyMessage="No tools have been assigned yet."
+          filteredEmptyMessage="No tools match your filters. Try adjusting your search."
+          onClearFilters={clearFilters}
+        />
       </div>
     </PermissivePolicyOverlay>
   );

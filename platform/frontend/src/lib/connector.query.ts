@@ -75,6 +75,7 @@ export function useConnectorsPaginated(params: {
 }) {
   return useQuery({
     queryKey: ["connectors", "paginated", params],
+    placeholderData: (previousData) => previousData,
     queryFn: async () => {
       const { data, error } = await getConnectors({ query: params });
       if (error) {

@@ -5,7 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
 
 import { Key, Link2, Plus, Trash2, Users, Vault, X } from "lucide-react";
-import { lazy, useEffect, useState } from "react";
+import { Suspense, lazy, useEffect, useState } from "react";
 import { toast } from "sonner";
 import {
   type TableRowAction,
@@ -398,24 +398,30 @@ export function TeamsList() {
         </DialogContent>
       </Dialog>
 
-      {selectedTeam && (
-        <>
-          <TeamMembersDialog
-            open={membersDialogOpen}
-            onOpenChange={setMembersDialogOpen}
-            team={selectedTeam}
-          />
-          <TeamExternalGroupsDialog
-            open={externalGroupsDialogOpen}
-            onOpenChange={setExternalGroupsDialogOpen}
-            team={selectedTeam}
-          />
+      {selectedTeam && membersDialogOpen && (
+        <TeamMembersDialog
+          open={membersDialogOpen}
+          onOpenChange={setMembersDialogOpen}
+          team={selectedTeam}
+        />
+      )}
+
+      {selectedTeam && externalGroupsDialogOpen && (
+        <TeamExternalGroupsDialog
+          open={externalGroupsDialogOpen}
+          onOpenChange={setExternalGroupsDialogOpen}
+          team={selectedTeam}
+        />
+      )}
+
+      {selectedTeam && vaultFolderDialogOpen && (
+        <Suspense fallback={null}>
           <TeamVaultFolderDialog
             open={vaultFolderDialogOpen}
             onOpenChange={setVaultFolderDialogOpen}
             team={selectedTeam}
           />
-        </>
+        </Suspense>
       )}
 
       {selectedToken && (

@@ -436,10 +436,12 @@ class OrganizationRoleModel {
         : []),
     ];
 
-    const [{ count: customTotal = 0 }] = await db
+    const [{ count: customTotalRaw = 0 }] = await db
       .select({ count: sql<number>`count(*)` })
       .from(schema.organizationRolesTable)
       .where(and(...customFilters));
+
+    const customTotal = Number(customTotalRaw);
 
     const predefinedCount = predefinedRoles.length;
     const total = predefinedCount + customTotal;

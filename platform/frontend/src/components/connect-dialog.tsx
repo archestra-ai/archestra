@@ -10,6 +10,7 @@ import {
   Dialog,
   DialogContent,
   DialogHeader,
+  DialogStickyFooter,
   DialogTitle,
 } from "@/components/ui/dialog";
 
@@ -46,8 +47,7 @@ export function ConnectDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-5xl h-[90vh] p-0 flex flex-col border-0">
-        {/* Header with gradient */}
+      <DialogContent className="max-w-5xl h-[90vh] p-0 flex flex-col overflow-hidden border-0">
         <div className="relative bg-gradient-to-br from-primary/10 via-primary/5 to-background px-6 pt-6 pb-5 shrink-0">
           <div className="absolute inset-0 bg-grid-white/[0.02] pointer-events-none" />
           <div className="relative">
@@ -64,11 +64,9 @@ export function ConnectDialog({
           </div>
         </div>
 
-        {/* Content */}
         <div className="flex-1 overflow-y-auto px-6 py-5">{children}</div>
 
-        {/* Footer */}
-        <div className="flex items-center justify-between px-6 py-4 border-t bg-muted/30 shrink-0">
+        <DialogStickyFooter className="justify-between bg-muted/30">
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <ExternalLink className="h-3.5 w-3.5 shrink-0" />
             <span>
@@ -92,7 +90,7 @@ export function ConnectDialog({
             Done
             <ArrowRight className="ml-2 h-4 w-4" />
           </Button>
-        </div>
+        </DialogStickyFooter>
       </DialogContent>
     </Dialog>
   );

@@ -53,9 +53,11 @@ export function useKnowledgeBases(params?: { enabled?: boolean }) {
 export function useKnowledgeBasesPaginated(params: {
   limit: number;
   offset: number;
+  search?: string;
 }) {
   return useQuery({
     queryKey: ["knowledge-bases", "paginated", params],
+    placeholderData: (previousData) => previousData,
     queryFn: async () => {
       const { data, error } = await getKnowledgeBases({ query: params });
       if (error) {

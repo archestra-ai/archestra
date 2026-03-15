@@ -19,22 +19,27 @@ import {
   type TableRowAction,
   TableRowActions,
 } from "@/components/table-row-actions";
-import { Badge } from "@/components/ui/badge";
+import { FormDialog } from "@/components/form-dialog";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogForm,
   DialogHeader,
+  DialogStickyFooter,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import {
   useCreateRole,
   useDeleteRole,
@@ -200,14 +205,21 @@ export function RolesList() {
   const columns: ColumnDef<Role>[] = [
     {
       id: "icon",
-      size: 40,
+      size: 24,
       enableSorting: false,
       header: "",
       cell: ({ row }) => (
         <div className="flex items-center justify-center">
-          <Shield
-            className={`h-5 w-5 ${row.original.predefined ? "text-primary" : "text-muted-foreground"}`}
-          />
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Shield
+                className={`h-4 w-4 ${row.original.predefined ? "text-primary" : "text-muted-foreground"}`}
+              />
+            </TooltipTrigger>
+            <TooltipContent>
+              {row.original.predefined ? "Predefined" : "Custom"}
+            </TooltipContent>
+          </Tooltip>
         </div>
       ),
     },
@@ -231,17 +243,6 @@ export function RolesList() {
           </div>
         );
       },
-    },
-    {
-      id: "type",
-      header: "Type",
-      enableSorting: false,
-      cell: ({ row }) =>
-        row.original.predefined ? (
-          <Badge variant="secondary">Predefined</Badge>
-        ) : (
-          <Badge variant="outline">Custom</Badge>
-        ),
     },
     {
       id: "actions",
@@ -313,18 +314,15 @@ export function RolesList() {
       </div>
 
       {/* Create Role Dialog */}
-      <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
-        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Create Custom Role</DialogTitle>
-            <DialogDescription>
-              Create a new custom role with specific permissions. Users with
-              this role will only have access to the selected resources and
-              actions.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogForm onSubmit={handleCreateRole}>
-            <div className="space-y-4 py-4">
+      <FormDialog
+        open={createDialogOpen}
+        onOpenChange={setCreateDialogOpen}
+        title="Create Custom Role"
+        description="Create a new custom role with specific permissions. Users with this role will only have access to the selected resources and actions."
+        size="large"
+      >
+        <DialogForm className="flex min-h-0 flex-1 flex-col" onSubmit={handleCreateRole}>
+          <div className="min-h-0 flex-1 overflow-y-auto py-4 pr-2 -mr-2 space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="name">Role Name *</Label>
                 <Input
@@ -351,40 +349,37 @@ export function RolesList() {
                   userPermissions={allAvailableActions}
                 />
               </div>
-            </div>
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  setCreateDialogOpen(false);
-                  setRoleName("");
-                  setRoleDescription("");
-                  setPermission({});
-                }}
-              >
-                Cancel
-              </Button>
-              <Button type="submit" disabled={createMutation.isPending}>
-                {createMutation.isPending ? "Creating..." : "Create Role"}
-              </Button>
-            </DialogFooter>
-          </DialogForm>
-        </DialogContent>
-      </Dialog>
+          </div>
+          <DialogStickyFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setCreateDialogOpen(false);
+                setRoleName("");
+                setRoleDescription("");
+                setPermission({});
+              }}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" disabled={createMutation.isPending}>
+              {createMutation.isPending ? "Creating..." : "Create Role"}
+            </Button>
+          </DialogStickyFooter>
+        </DialogForm>
+      </FormDialog>
 
       {/* Edit Role Dialog */}
-      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
-        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Edit Role</DialogTitle>
-            <DialogDescription>
-              Modify the role name and permissions. Changes will affect all
-              users with this role.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogForm onSubmit={handleEditRole}>
-            <div className="space-y-4 py-4">
+      <FormDialog
+        open={editDialogOpen}
+        onOpenChange={setEditDialogOpen}
+        title="Edit Role"
+        description="Modify the role name and permissions. Changes will affect all users with this role."
+        size="large"
+      >
+        <DialogForm className="flex min-h-0 flex-1 flex-col" onSubmit={handleEditRole}>
+          <div className="min-h-0 flex-1 overflow-y-auto py-4 pr-2 -mr-2 space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="edit-name">Role Name *</Label>
                 <Input
@@ -411,28 +406,27 @@ export function RolesList() {
                   userPermissions={allAvailableActions}
                 />
               </div>
-            </div>
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  setEditDialogOpen(false);
-                  setSelectedRole(null);
-                  setRoleName("");
-                  setRoleDescription("");
-                  setPermission({});
-                }}
-              >
-                Cancel
-              </Button>
-              <Button type="submit" disabled={updateMutation.isPending}>
-                {updateMutation.isPending ? "Saving..." : "Save Changes"}
-              </Button>
-            </DialogFooter>
-          </DialogForm>
-        </DialogContent>
-      </Dialog>
+          </div>
+          <DialogStickyFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setEditDialogOpen(false);
+                setSelectedRole(null);
+                setRoleName("");
+                setRoleDescription("");
+                setPermission({});
+              }}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" disabled={updateMutation.isPending}>
+              {updateMutation.isPending ? "Saving..." : "Save Changes"}
+            </Button>
+          </DialogStickyFooter>
+        </DialogForm>
+      </FormDialog>
 
       {/* View Predefined Role Dialog (read-only) */}
       <Dialog
@@ -477,6 +471,8 @@ export function RolesList() {
                   permission={viewPermissionsRole.permission}
                   onChange={() => {}}
                   userPermissions={viewPermissionsRole.permission}
+                  readOnly
+                  readOnlyTooltip="This is a predefined role. Permissions cannot be modified."
                 />
               </div>
             </div>

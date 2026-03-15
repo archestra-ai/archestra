@@ -2,7 +2,6 @@
 
 import type { archestraApiTypes } from "@shared";
 import type { ColumnDef } from "@tanstack/react-table";
-import { formatDistanceToNow } from "date-fns";
 import { Key, Loader2, Plus, Trash2 } from "lucide-react";
 import Image from "next/image";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -41,6 +40,7 @@ import {
   useDeleteVirtualApiKey,
 } from "@/lib/chat-settings.query";
 import { useFeature } from "@/lib/config.query";
+import { formatRelativeTime } from "@/lib/format-relative-time";
 import { useSetProviderAction } from "../layout";
 
 type VirtualKeyWithParent =
@@ -140,7 +140,7 @@ export default function VirtualKeysPage() {
       },
       {
         id: "actions",
-        header: "",
+        header: "Actions",
         cell: ({ row }) => (
           <TableRowActions
             actions={[
@@ -457,10 +457,7 @@ function DeleteVirtualKeyDialog({
 // --- Internal helpers ---
 
 function formatExpiration(date: Date | string | null): string {
-  if (!date) return "Never";
-  const d = typeof date === "string" ? new Date(date) : date;
-  if (d <= new Date()) return "Expired";
-  return formatDistanceToNow(d, { addSuffix: true });
+  return formatRelativeTime(date);
 }
 
 function computeDefaultExpiresAt(defaultSeconds: number | null): Date | null {

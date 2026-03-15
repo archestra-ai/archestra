@@ -237,13 +237,14 @@ function MembersTab({
 
   const columns: ColumnDef<Member>[] = [
     {
-      id: "user",
-      header: "User",
+      id: "avatar",
+      size: 40,
+      header: "",
       cell: ({ row }) => {
         const member = row.original;
         const initials = getInitials(member.name || member.email);
         return (
-          <div className="flex items-center gap-3">
+          <div className="flex items-center justify-center">
             <Avatar className="h-8 w-8">
               {member.image && (
                 <AvatarImage
@@ -253,15 +254,21 @@ function MembersTab({
               )}
               <AvatarFallback className="text-xs">{initials}</AvatarFallback>
             </Avatar>
-            <div className="min-w-0">
-              <div className="font-medium truncate">{member.name}</div>
-              <div className="text-xs text-muted-foreground truncate">
-                {member.email}
-              </div>
-            </div>
           </div>
         );
       },
+    },
+    {
+      id: "user",
+      header: "User",
+      cell: ({ row }) => (
+        <div className="min-w-0">
+          <div className="font-medium truncate">{row.original.name}</div>
+          <div className="text-xs text-muted-foreground truncate">
+            {row.original.email}
+          </div>
+        </div>
+      ),
     },
     {
       id: "role",
@@ -335,13 +342,14 @@ function MembersTab({
           <DataTable
             columns={[
               {
-                id: "user",
-                header: "User",
+                id: "avatar",
+                size: 40,
+                header: "",
                 cell: ({ row }) => {
                   const member = row.original;
                   const initials = getInitials(member.name || member.email);
                   return (
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center justify-center">
                       <Avatar className="h-8 w-8">
                         {member.image && (
                           <AvatarImage
@@ -353,17 +361,23 @@ function MembersTab({
                           {initials}
                         </AvatarFallback>
                       </Avatar>
-                      <div className="min-w-0">
-                        <div className="font-medium truncate">
-                          {member.name || "Unknown"}
-                        </div>
-                        <div className="text-xs text-muted-foreground truncate">
-                          {member.email}
-                        </div>
-                      </div>
                     </div>
                   );
                 },
+              },
+              {
+                id: "user",
+                header: "User",
+                cell: ({ row }) => (
+                  <div className="min-w-0">
+                    <div className="font-medium truncate">
+                      {row.original.name || "Unknown"}
+                    </div>
+                    <div className="text-xs text-muted-foreground truncate">
+                      {row.original.email}
+                    </div>
+                  </div>
+                ),
               },
               {
                 id: "role",

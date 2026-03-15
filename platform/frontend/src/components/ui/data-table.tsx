@@ -15,9 +15,10 @@ import {
   useReactTable,
   type VisibilityState,
 } from "@tanstack/react-table";
-import { Inbox, Loader2 } from "lucide-react";
+import { Inbox, Loader2, Search } from "lucide-react";
 import React, { useState } from "react";
 
+import { Button } from "@/components/ui/button";
 import {
   Table,
   TableBody,
@@ -27,6 +28,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { DataTablePagination } from "./data-table-pagination";
+
+const COMPACT_ICON_COLUMN_IDS = new Set(["icon", "avatar"]);
 
 interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[];
@@ -59,6 +62,12 @@ interface DataTableProps<TData, TValue> {
   emptyMessage?: string;
   /** Icon to show in the empty state (defaults to Inbox) */
   emptyIcon?: React.ReactNode;
+  /** Whether filters/search are currently active */
+  hasActiveFilters?: boolean;
+  /** Message to show when filters/search produce no results */
+  filteredEmptyMessage?: string;
+  /** Called when the user clears active filters from the empty state */
+  onClearFilters?: () => void;
 }
 
 export function DataTable<TData, TValue>({
@@ -79,6 +88,9 @@ export function DataTable<TData, TValue>({
   isLoading = false,
   emptyMessage = "No results",
   emptyIcon,
+  hasActiveFilters = false,
+  filteredEmptyMessage = "No results match your filters. Try adjusting your search.",
+  onClearFilters,
 }: DataTableProps<TData, TValue>) {
   const [internalSorting, setInternalSorting] = useState<SortingState>([]);
   const [expanded, setExpanded] = useState<ExpandedState>({});
@@ -176,6 +188,11 @@ export function DataTable<TData, TValue>({
                     <TableHead
                       key={header.id}
                       data-column-id={header.column.id}
+                      className={
+                        COMPACT_ICON_COLUMN_IDS.has(header.column.id)
+                          ? "w-0 px-2 md:px-2"
+                          : undefined
+                      }
                       style={
                         header.column.columnDef.size
                           ? { width: header.getSize() }
@@ -209,6 +226,11 @@ export function DataTable<TData, TValue>({
                       <TableCell
                         key={cell.id}
                         data-column-id={cell.column.id}
+                        className={
+                          COMPACT_ICON_COLUMN_IDS.has(cell.column.id)
+                            ? "px-2 md:px-2"
+                            : undefined
+                        }
                         style={
                           cell.column.columnDef.size
                             ? { width: cell.column.getSize() }
@@ -245,12 +267,30 @@ export function DataTable<TData, TValue>({
                       <Loader2 className="mb-3 h-10 w-10 animate-spin text-muted-foreground" />
                     ) : (
                       <div className="mb-3 text-muted-foreground">
-                        {emptyIcon ?? <Inbox className="h-10 w-10" />}
+                        {hasActiveFilters ? (
+                          <Search className="h-10 w-10" />
+                        ) : (
+                          emptyIcon ?? <Inbox className="h-10 w-10" />
+                        )}
                       </div>
                     )}
                     <p className="text-sm text-muted-foreground">
-                      {isLoading ? "Loading..." : emptyMessage}
+                      {isLoading
+                        ? "Loading..."
+                        : hasActiveFilters
+                          ? filteredEmptyMessage
+                          : emptyMessage}
                     </p>
+                    {!isLoading && hasActiveFilters && onClearFilters && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="mt-4"
+                        onClick={onClearFilters}
+                      >
+                        Clear filters
+                      </Button>
+                    )}
                   </div>
                 </TableCell>
               </TableRow>

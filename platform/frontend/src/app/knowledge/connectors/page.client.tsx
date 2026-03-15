@@ -133,6 +133,10 @@ function ConnectorsList() {
     [searchParams, router, pathname],
   );
 
+  const clearFilters = useCallback(() => {
+    router.push(pathname, { scroll: false });
+  }, [router, pathname]);
+
   const columns: ColumnDef<ConnectorItem>[] = [
     {
       id: "icon",
@@ -233,7 +237,7 @@ function ConnectorsList() {
       description="Manage data connectors that feed into your knowledge bases."
       createLabel="Create Connector"
       onCreateClick={() => setIsCreateDialogOpen(true)}
-      isPending={isPending}
+      isPending={isPending && !connectors}
     >
       <div>
         <div className="mb-6 flex flex-col gap-2">
@@ -270,6 +274,11 @@ function ConnectorsList() {
           data={items}
           getRowId={(row) => row.id}
           emptyMessage="No connectors found"
+          hasActiveFilters={
+            !!search || connectorTypeFilter !== "all"
+          }
+          onClearFilters={clearFilters}
+          filteredEmptyMessage="No connectors match your filters. Try adjusting your search."
           hideSelectedCount
           manualPagination
           pagination={{

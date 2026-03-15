@@ -15,11 +15,18 @@ import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 interface RolePermissionBuilderProps {
   permission: Permissions;
   onChange: (permission: Permissions) => void;
   userPermissions: Permissions;
+  readOnly?: boolean;
+  readOnlyTooltip?: string;
 }
 
 // Human-readable labels for actions
@@ -38,6 +45,8 @@ export function RolePermissionBuilder({
   permission,
   onChange,
   userPermissions,
+  readOnly = false,
+  readOnlyTooltip,
 }: RolePermissionBuilderProps) {
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(
     new Set(),
@@ -196,14 +205,23 @@ export function RolePermissionBuilder({
               {Object.keys(permission).length !== 1 ? "s" : ""}
             </p>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => onChange({})}
-            disabled={getTotalPermissionCount() === 0}
-          >
-            Clear All
-          </Button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => onChange({})}
+                  disabled={readOnly || getTotalPermissionCount() === 0}
+                >
+                  Clear All
+                </Button>
+              </span>
+            </TooltipTrigger>
+            {readOnly && readOnlyTooltip && (
+              <TooltipContent>{readOnlyTooltip}</TooltipContent>
+            )}
+          </Tooltip>
         </div>
       </Card>
 
@@ -228,6 +246,7 @@ export function RolePermissionBuilder({
                 <Checkbox
                   id={`category-${category}`}
                   checked={isCategorySelected}
+                  disabled={readOnly}
                   onCheckedChange={(checked) => {
                     if (checked) {
                       selectAllForCategory(category);
@@ -269,6 +288,7 @@ export function RolePermissionBuilder({
                               <Checkbox
                                 id={`${resource}-all`}
                                 checked={isFullySelected}
+                                disabled={readOnly}
                                 onCheckedChange={(checked) => {
                                   if (checked) {
                                     selectAllForResource(resource);
@@ -322,6 +342,7 @@ export function RolePermissionBuilder({
                                   <Checkbox
                                     id={`${resource}-${action}`}
                                     checked={isSelected}
+                                    disabled={readOnly}
                                     onCheckedChange={() => {
                                       toggleAction(resource, action);
                                     }}

@@ -108,11 +108,7 @@ const customRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
 
         logger.info({ role: result.roleData }, "Role created successfully");
-        return reply.send({
-          ...result.roleData,
-          updatedAt: result.roleData.updatedAt || result.roleData.createdAt,
-          predefined: false,
-        });
+        return reply.send(normalizeRoleResponse(result.roleData));
       } catch (error) {
         const err = error as {
           status?: string;
@@ -211,11 +207,7 @@ const customRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(500, "Role updated but data not returned");
       }
 
-      return reply.send({
-        ...result.roleData,
-        updatedAt: result.roleData.updatedAt || new Date(),
-        predefined: false,
-      });
+      return reply.send(normalizeRoleResponse(result.roleData));
     },
   );
 
@@ -263,3 +255,40 @@ const customRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
 };
 
 export default customRoleRoutes;
+
+// === Internal helpers
+
+function normalizeRoleResponse(roleData: {
+  id: string;
+  organizationId: string;
+  role: string;
+  name: string;
+  description?: string | null;
+  permission: unknown;
+  createdAt: Date | string;
+  updatedAt?: Date | string | null;
+}) {
+  return {
+    id: roleData.id,
+    organizationId: roleData.organizationId,
+    role: roleData.role,
+    name: roleData.name,
+    description: roleData.description ?? null,
+    permission: parsePermissions(roleData.permission),
+    createdAt: toDate(roleData.createdAt),
+    updatedAt: roleData.updatedAt ? toDate(roleData.updatedAt) : null,
+    predefined: false,
+  };
+}
+
+function parsePermissions(value: unknown) {
+  if (typeof value === "string") {
+    return JSON.parse(value);
+  }
+
+  return value;
+}
+
+function toDate(value: Date | string): Date {
+  return value instanceof Date ? value : new Date(value);
+}

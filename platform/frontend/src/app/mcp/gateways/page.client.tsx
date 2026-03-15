@@ -32,6 +32,7 @@ import {
   AgentScopeFilter,
 } from "@/components/agent-scope-filter";
 import { ConnectDialog } from "@/components/connect-dialog";
+import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { LabelTags } from "@/components/label-tags";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { McpConnectionInstructions } from "@/components/mcp-connection-instructions";
@@ -41,15 +42,6 @@ import { SearchInput } from "@/components/search-input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogForm,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { PermissionButton } from "@/components/ui/permission-button";
 import {
   Tooltip,
@@ -202,7 +194,6 @@ function McpGateways({
     setPagination,
   } = useDataTableQueryParams();
 
-  // Get pagination/filter params from URL
   const nameFilter = searchParams.get("name") || "";
   const sortByFromUrl = searchParams.get("sortBy") as
     | "name"
@@ -226,7 +217,6 @@ function McpGateways({
   const excludeAuthorIdsFromUrl = searchParams.get("excludeAuthorIds");
   const labelsFromUrl = searchParams.get("labels");
 
-  // Default sorting
   const sortBy = sortByFromUrl || DEFAULT_SORT_BY;
   const sortDirection = sortDirectionFromUrl || DEFAULT_SORT_DIRECTION;
 
@@ -270,7 +260,6 @@ function McpGateways({
     { id: sortBy, desc: sortDirection === "desc" },
   ]);
 
-  // Sync sorting state with URL params
   useEffect(() => {
     setSorting([{ id: sortBy, desc: sortDirection === "desc" }]);
   }, [sortBy, sortDirection]);
@@ -293,7 +282,6 @@ function McpGateways({
     null,
   );
 
-  // Update URL when sorting changes
   const handleSortingChange = useCallback(
     (updater: SortingState | ((old: SortingState) => SortingState)) => {
       const newSorting =
@@ -317,7 +305,6 @@ function McpGateways({
     [sorting, updateQueryParams],
   );
 
-  // Update URL when pagination changes
   const handlePaginationChange = useCallback(
     (newPagination: { pageIndex: number; pageSize: number }) => {
       setPagination(newPagination);
@@ -590,7 +577,6 @@ function GatewayConnectionColumns({
 
   return (
     <div className="space-y-6">
-      {/* Tab Selection with inline features */}
       <div className="flex gap-3">
         <button
           type="button"
@@ -619,7 +605,6 @@ function GatewayConnectionColumns({
           </div>
         </button>
 
-        {/* Show LLM Proxy tab for profile type (backwards compatibility) */}
         {agentType === "profile" && (
           <button
             type="button"
@@ -650,7 +635,6 @@ function GatewayConnectionColumns({
         )}
       </div>
 
-      {/* Content - render all tabs, hide inactive ones to preload */}
       <div className="relative">
         <div className={activeTab === "mcp" ? "block" : "hidden"}>
           <div className="p-4 rounded-lg border bg-card">
@@ -717,34 +701,15 @@ function DeleteGatewayDialog({
   }, [agentId, deleteGateway, onOpenChange]);
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>Delete MCP Gateway</DialogTitle>
-          <DialogDescription>
-            Are you sure you want to delete this MCP Gateway? This action cannot
-            be undone.
-          </DialogDescription>
-        </DialogHeader>
-        <DialogForm onSubmit={handleDelete}>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              variant="destructive"
-              disabled={deleteGateway.isPending}
-            >
-              {deleteGateway.isPending ? "Deleting..." : "Delete MCP Gateway"}
-            </Button>
-          </DialogFooter>
-        </DialogForm>
-      </DialogContent>
-    </Dialog>
+    <DeleteConfirmDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Delete MCP Gateway"
+      description="Are you sure you want to delete this MCP Gateway? This action cannot be undone."
+      isPending={deleteGateway.isPending}
+      onConfirm={handleDelete}
+      confirmLabel="Delete MCP Gateway"
+      pendingLabel="Deleting..."
+    />
   );
 }

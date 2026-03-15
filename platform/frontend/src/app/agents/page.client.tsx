@@ -31,15 +31,7 @@ import { SearchInput } from "@/components/search-input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogForm,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { PermissionButton } from "@/components/ui/permission-button";
 import {
   Tooltip,
@@ -337,6 +329,19 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
   const agents = agentsResponse?.data || [];
   const pagination = agentsResponse?.pagination;
   const showLoading = isPending && !initialData?.agents;
+  const hasActiveFilters = !!(nameFilter || scopeFromUrl || labelsFromUrl);
+
+  const clearFilters = useCallback(() => {
+    updateQueryParams({
+      page: "1",
+      name: null,
+      scope: null,
+      teamIds: null,
+      authorIds: null,
+      excludeAuthorIds: null,
+      labels: null,
+    });
+  }, [updateQueryParams]);
 
   const columns: ColumnDef<AgentData>[] = [
     {
@@ -507,16 +512,8 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
         title="Agents"
         description={
           <p className="text-sm text-muted-foreground">
-            Agents are internal AI assistants with system prompts, tools, and
-            integrations like ChatOps, email, and A2A.{" "}
-            <a
-              href={getDocsUrl(DocsPage.PlatformAgents)}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="underline hover:text-foreground"
-            >
-              Read more in the docs
-            </a>
+            Agents are AI assistants with system prompts, tools, knowledge
+            sources, and integrations like ChatOps, email, and A2A.
           </p>
         }
         actionButton={
@@ -558,11 +555,10 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                   total: pagination?.total || 0,
                 }}
                 onPaginationChange={handlePaginationChange}
-                emptyMessage={
-                  nameFilter || scopeFromUrl || labelsFromUrl
-                    ? "No agents found matching your filters"
-                    : "No agents found"
-                }
+                emptyMessage="No agents found"
+                hasActiveFilters={hasActiveFilters}
+                filteredEmptyMessage="No agents match your filters. Try adjusting your search."
+                onClearFilters={clearFilters}
               />
             </div>
 
@@ -669,34 +665,15 @@ function DeleteAgentDialog({
   }, [agentId, deleteAgent, onOpenChange]);
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>Delete Agent</DialogTitle>
-          <DialogDescription>
-            Are you sure you want to delete this agent? This action cannot be
-            undone.
-          </DialogDescription>
-        </DialogHeader>
-        <DialogForm onSubmit={handleDelete}>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              variant="destructive"
-              disabled={deleteAgent.isPending}
-            >
-              {deleteAgent.isPending ? "Deleting..." : "Delete Agent"}
-            </Button>
-          </DialogFooter>
-        </DialogForm>
-      </DialogContent>
-    </Dialog>
+    <DeleteConfirmDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Delete Agent"
+      description="Are you sure you want to delete this agent? This action cannot be undone."
+      isPending={deleteAgent.isPending}
+      onConfirm={handleDelete}
+      confirmLabel="Delete Agent"
+      pendingLabel="Deleting..."
+    />
   );
 }

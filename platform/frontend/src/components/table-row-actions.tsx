@@ -33,7 +33,7 @@ export function TableRowActions({
   const buttonSize = size === "sm" ? "icon-sm" : "icon";
 
   return (
-    <div className="flex justify-end">
+    <div className="flex">
       <ButtonGroup>
         {actions.map((action) => (
           <ActionButton key={action.label} action={action} size={buttonSize} />

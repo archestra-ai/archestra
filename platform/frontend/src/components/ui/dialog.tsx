@@ -138,8 +138,9 @@ function DialogStickyFooter({
     <div
       data-slot="dialog-footer"
       className={cn(
-        // Counteract DialogContent's p-6 padding: -mx-6/px-6 extend to edges, bottom-[-24px] sticks to bottom
-        "sticky bottom-[-24px] bg-background pt-4 pb-4 border-t -mx-6 px-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end",
+        // Counteract DialogContent's p-6 padding and keep footer spacing even on all sides.
+        // z-10 keeps the footer above scrollable content, and the pseudo-element masks the scrollbar gutter.
+        "relative sticky bottom-0 z-10 -mx-6 -mb-6 rounded-b-lg border-t bg-background px-3 py-3 shadow-[0_-1px_0_0_hsl(var(--border)),0_-12px_24px_-24px_hsl(var(--foreground)/0.3)] after:pointer-events-none after:absolute after:inset-y-0 after:right-0 after:w-4 after:rounded-br-lg after:bg-background after:content-[''] [&>*]:relative [&>*]:z-10 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end",
         className,
       )}
       {...props}

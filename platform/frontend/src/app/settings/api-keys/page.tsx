@@ -1,7 +1,6 @@
 "use client";
 
 import type { ColumnDef } from "@tanstack/react-table";
-import { formatDistanceToNowStrict } from "date-fns";
 import { KeyRound, Plus, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
@@ -29,7 +28,10 @@ import {
   useDeleteApiKey,
   type UserApiKey,
 } from "@/lib/api-key.query";
-import { formatDate } from "@/lib/utils";
+import {
+  formatRelativeTime,
+  formatRelativeTimeFromNow,
+} from "@/lib/format-relative-time";
 import { useSetSettingsAction } from "../layout";
 
 type CreateApiKeyFormValues = {
@@ -100,27 +102,15 @@ export default function ApiKeysSettingsPage() {
           ),
       },
       {
-        accessorKey: "createdAt",
-        header: "Created",
-        cell: ({ row }) => formatDate({ date: row.original.createdAt }),
-      },
-      {
         accessorKey: "lastRequest",
         header: "Last used",
         cell: ({ row }) =>
-          row.original.lastRequest
-            ? formatDistanceToNowStrict(new Date(row.original.lastRequest), {
-                addSuffix: true,
-              })
-            : "Never",
+          formatRelativeTimeFromNow(row.original.lastRequest),
       },
       {
         accessorKey: "expiresAt",
         header: "Expires",
-        cell: ({ row }) =>
-          row.original.expiresAt
-            ? formatDate({ date: row.original.expiresAt })
-            : "Never",
+        cell: ({ row }) => formatRelativeTime(row.original.expiresAt),
       },
     ];
 
@@ -132,7 +122,7 @@ export default function ApiKeysSettingsPage() {
       ...baseColumns,
       {
         id: "actions",
-        header: "",
+        header: "Actions",
         cell: ({ row }) => (
           <TableRowActions
             actions={[
@@ -214,9 +204,7 @@ export default function ApiKeysSettingsPage() {
             : "Create a new personal API key for programmatic access."
         }
         size={createdApiKeyValue ? "small" : "medium"}
-        className={
-          createdApiKeyValue ? undefined : "sm:max-w-lg max-h-[90vh] overflow-y-auto"
-        }
+        className={createdApiKeyValue ? undefined : "sm:max-w-lg"}
       >
         <DialogForm onSubmit={handleCreate}>
           <div className="space-y-4 py-2">

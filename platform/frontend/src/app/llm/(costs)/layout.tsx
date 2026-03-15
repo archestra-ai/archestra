@@ -12,7 +12,7 @@ export default function CostsLayout({
       title="Costs & Limits"
       description="Monitor and manage your AI model usage costs across all profiles and teams."
       tabs={[
-        { label: "Statistics", href: "/llm/costs" },
+        { label: "Costs", href: "/llm/costs" },
         { label: "Limits", href: "/llm/limits" },
         { label: "Optimization Rules", href: "/llm/optimization-rules" },
       ]}

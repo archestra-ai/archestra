@@ -5,7 +5,6 @@ import type { ColumnDef, SortingState } from "@tanstack/react-table";
 import { ChevronDown, ChevronUp, User } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
-import { LogsEmptyState } from "@/components/logs-empty-state";
 import { SearchInput } from "@/components/search-input";
 import { TruncatedText } from "@/components/truncated-text";
 import { Badge } from "@/components/ui/badge";
@@ -366,6 +365,19 @@ function McpToolCallsTable({
     dateTimePicker.dateRange !== undefined ||
     !!searchFromUrl;
 
+  const clearFilters = useCallback(() => {
+    setProfileFilter("all");
+    setPagination((prev) => ({ ...prev, pageIndex: 0 }));
+    dateTimePicker.clearDateRange();
+    updateUrlParams({
+      profileId: null,
+      startDate: null,
+      endDate: null,
+      search: null,
+      page: "1",
+    });
+  }, [dateTimePicker, updateUrlParams]);
+
   // Shared date picker component
   const datePickerComponent = (
     <DateTimeRangePicker
@@ -390,36 +402,6 @@ function McpToolCallsTable({
     <SearchInput placeholder="Search tools, servers..." paramName="search" />
   );
 
-  if (!mcpToolCalls || mcpToolCalls.length === 0) {
-    return (
-      <div className="space-y-4">
-        <div className="flex flex-wrap gap-4">
-          {searchInputComponent}
-          <SearchableSelect
-            value={profileFilter}
-            onValueChange={handleProfileFilterChange}
-            placeholder="Filter by MCP Gateway"
-            items={[
-              { value: "all", label: "All Agents & MCP Gateways" },
-              ...(agents?.map((agent) => ({
-                value: agent.id,
-                label: agent.name,
-              })) || []),
-            ]}
-            className="w-[200px]"
-          />
-          {datePickerComponent}
-        </div>
-
-        <LogsEmptyState
-          isLoading={isFetching}
-          hasFilters={hasFilters}
-          emptyMessage="No MCP tool calls found. Tool calls will appear here when agents use MCP tools."
-        />
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap gap-4">
@@ -438,20 +420,6 @@ function McpToolCallsTable({
           className="w-[200px]"
         />
         {datePickerComponent}
-
-        {hasFilters && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              handleProfileFilterChange("all");
-              dateTimePicker.clearDateRange();
-              updateUrlParams({ search: null });
-            }}
-          >
-            Clear all filters
-          </Button>
-        )}
       </div>
 
       <DataTable
@@ -474,6 +442,11 @@ function McpToolCallsTable({
         manualSorting
         sorting={sorting}
         onSortingChange={setSorting}
+        isLoading={isFetching}
+        hasActiveFilters={hasFilters}
+        emptyMessage="No MCP tool calls found. Tool calls will appear here when agents use MCP tools."
+        filteredEmptyMessage="No results match your filters. Try adjusting your search."
+        onClearFilters={clearFilters}
         onRowClick={(row) => {
           router.push(`/mcp/logs/${row.id}`);
         }}

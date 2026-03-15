@@ -26,8 +26,8 @@ type FormDialogProps = {
 
 const sizeClasses: Record<DialogSize, string> = {
   small: "sm:max-w-md",
-  medium: "max-w-2xl max-h-[85vh] flex flex-col overflow-y-auto",
-  large: "max-w-5xl h-[90vh] flex flex-col overflow-y-auto",
+  medium: "max-w-2xl max-h-[85vh] flex flex-col overflow-hidden",
+  large: "max-w-5xl h-[90vh] flex flex-col overflow-hidden",
 };
 
 export function FormDialog({

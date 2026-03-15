@@ -60,20 +60,23 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.GetKnowledgeBases,
         description: "List all knowledge bases for the organization",
         tags: ["Knowledge Bases"],
-        querystring: PaginationQuerySchema,
+        querystring: PaginationQuerySchema.extend({
+          search: z.string().optional(),
+        }),
         response: constructResponseSchema(
           createPaginatedResponseSchema(KnowledgeBaseWithConnectorsSchema),
         ),
       },
     },
-    async ({ query: { limit, offset }, organizationId }, reply) => {
+    async ({ query: { limit, offset, search }, organizationId }, reply) => {
       const [knowledgeBases, total] = await Promise.all([
         KnowledgeBaseModel.findByOrganization({
           organizationId,
           limit,
           offset,
+          search,
         }),
-        KnowledgeBaseModel.countByOrganization(organizationId),
+        KnowledgeBaseModel.countByOrganization({ organizationId, search }),
       ]);
 
       const kbIds = knowledgeBases.map((kb) => kb.id);

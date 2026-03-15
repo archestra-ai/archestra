@@ -376,7 +376,7 @@ export default function ApiKeysPage() {
       },
       {
         id: "actions",
-        header: "",
+        header: "Actions",
         cell: ({ row }) => {
           const isSystem = row.original.isSystem;
           const keyUsage = getKeyUsage(row.original.id);

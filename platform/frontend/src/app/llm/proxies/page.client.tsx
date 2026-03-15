@@ -32,6 +32,7 @@ import {
   AgentScopeFilter,
 } from "@/components/agent-scope-filter";
 import { ConnectDialog } from "@/components/connect-dialog";
+import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { LabelTags } from "@/components/label-tags";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
@@ -40,15 +41,6 @@ import { SearchInput } from "@/components/search-input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogForm,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { PermissionButton } from "@/components/ui/permission-button";
 import {
   Tooltip,
@@ -62,7 +54,6 @@ import { authClient } from "@/lib/clients/auth/auth-client";
 import {
   DEFAULT_SORT_BY,
   DEFAULT_SORT_DIRECTION,
-  formatDate,
 } from "@/lib/utils";
 import { useDataTableQueryParams } from "@/lib/use-data-table-query-params";
 import { LlmProxyActions } from "./llm-proxy-actions";
@@ -194,7 +185,6 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
     setPagination,
   } = useDataTableQueryParams();
 
-  // Get pagination/filter params from URL
   const nameFilter = searchParams.get("name") || "";
   const sortByFromUrl = searchParams.get("sortBy") as
     | "name"
@@ -217,7 +207,6 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
   const excludeAuthorIdsFromUrl = searchParams.get("excludeAuthorIds");
   const labelsFromUrl = searchParams.get("labels");
 
-  // Default sorting
   const sortBy = sortByFromUrl || DEFAULT_SORT_BY;
   const sortDirection = sortDirectionFromUrl || DEFAULT_SORT_DIRECTION;
 
@@ -261,7 +250,6 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
     { id: sortBy, desc: sortDirection === "desc" },
   ]);
 
-  // Sync sorting state with URL params
   useEffect(() => {
     setSorting([{ id: sortBy, desc: sortDirection === "desc" }]);
   }, [sortBy, sortDirection]);
@@ -277,7 +265,6 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
   const [editingProxy, setEditingProxy] = useState<ProxyData | null>(null);
   const [deletingProxyId, setDeletingProxyId] = useState<string | null>(null);
 
-  // Update URL when sorting changes
   const handleSortingChange = useCallback(
     (updater: SortingState | ((old: SortingState) => SortingState)) => {
       const newSorting =
@@ -301,7 +288,6 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
     [sorting, updateQueryParams],
   );
 
-  // Update URL when pagination changes
   const handlePaginationChange = useCallback(
     (newPagination: { pageIndex: number; pageSize: number }) => {
       setPagination(newPagination);
@@ -313,7 +299,6 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
   const pagination = agentsResponse?.pagination;
   const showLoading = isPending && !initialData?.agents;
 
-  // LLM Proxies table columns - no Tools or Subagents
   const columns: ColumnDef<ProxyData>[] = [
     {
       id: "name",
@@ -362,25 +347,6 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
           </div>
         );
       },
-    },
-    {
-      id: "createdAt",
-      accessorKey: "createdAt",
-      header: ({ column }) => (
-        <Button
-          variant="ghost"
-          className="h-auto !p-0 font-medium hover:bg-transparent"
-          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-        >
-          Created
-          <SortIcon isSorted={column.getIsSorted()} />
-        </Button>
-      ),
-      cell: ({ row }) => (
-        <div className="font-mono text-xs">
-          {formatDate({ date: row.original.createdAt })}
-        </div>
-      ),
     },
     ...(isAdmin
       ? [
@@ -544,7 +510,6 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
 function ProxyConnectionColumns({ agentId }: { agentId: string }) {
   return (
     <div className="space-y-6">
-      {/* Single tab for LLM Proxy */}
       <div className="flex gap-3">
         <div className="flex-1 flex flex-col gap-2 p-3 rounded-lg bg-blue-500/5 border-2 border-blue-500/30">
           <div className="flex items-center gap-2">
@@ -568,7 +533,6 @@ function ProxyConnectionColumns({ agentId }: { agentId: string }) {
         </div>
       </div>
 
-      {/* Content */}
       <div className="p-4 rounded-lg border bg-card">
         <ProxyConnectionInstructions agentId={agentId} />
       </div>
@@ -621,34 +585,15 @@ function DeleteProxyDialog({
   }, [agentId, deleteProxy, onOpenChange]);
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>Delete LLM Proxy</DialogTitle>
-          <DialogDescription>
-            Are you sure you want to delete this LLM Proxy? This action cannot
-            be undone.
-          </DialogDescription>
-        </DialogHeader>
-        <DialogForm onSubmit={handleDelete}>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              variant="destructive"
-              disabled={deleteProxy.isPending}
-            >
-              {deleteProxy.isPending ? "Deleting..." : "Delete LLM Proxy"}
-            </Button>
-          </DialogFooter>
-        </DialogForm>
-      </DialogContent>
-    </Dialog>
+    <DeleteConfirmDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Delete LLM Proxy"
+      description="Are you sure you want to delete this LLM Proxy? This action cannot be undone."
+      isPending={deleteProxy.isPending}
+      onConfirm={handleDelete}
+      confirmLabel="Delete LLM Proxy"
+      pendingLabel="Deleting..."
+    />
   );
 }

@@ -10,17 +10,8 @@ import {
 } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { TruncatedText } from "@/components/truncated-text";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -423,46 +414,21 @@ export function ChatSidebarSection() {
         )}
       </SidebarMenuSub>
 
-      <AlertDialog
+      <DeleteConfirmDialog
         open={deleteConfirmId !== null}
         onOpenChange={(open) => !open && setDeleteConfirmId(null)}
-      >
-        <AlertDialogContent
-          onOpenAutoFocus={(e) => {
-            e.preventDefault();
-            const target = e.currentTarget as HTMLElement | null;
-            const action = target?.querySelector<HTMLButtonElement>(
-              "[data-slot='alert-dialog-action']",
-            );
-            action?.focus();
-          }}
-        >
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete conversation?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This action cannot be undone. This will permanently delete the
-              conversation and all its messages.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={deleteConversationMutation.isPending}>
-              Cancel
-            </AlertDialogCancel>
-            <AlertDialogAction
-              onClick={async () => {
-                if (deleteConfirmId) {
-                  await handleDeleteConversation(deleteConfirmId);
-                  setDeleteConfirmId(null); // Close dialog only after successful deletion
-                }
-              }}
-              disabled={deleteConversationMutation.isPending}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              {deleteConversationMutation.isPending ? "Deleting..." : "Delete"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+        title="Delete conversation?"
+        description="This action cannot be undone. This will permanently delete the conversation and all its messages."
+        isPending={deleteConversationMutation.isPending}
+        onConfirm={async () => {
+          if (deleteConfirmId) {
+            await handleDeleteConversation(deleteConfirmId);
+            setDeleteConfirmId(null);
+          }
+        }}
+        confirmLabel="Delete"
+        pendingLabel="Deleting..."
+      />
     </>
   );
 }

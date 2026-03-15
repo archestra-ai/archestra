@@ -1,6 +1,5 @@
 "use client";
 
-import { X } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
 import {
@@ -11,7 +10,6 @@ import {
   serializeLabels,
 } from "@/components/label-select";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { MultiSelect } from "@/components/ui/multi-select";
 import {
   Select,
@@ -36,10 +34,8 @@ type ScopeValue =
 
 export function AgentScopeFilter({
   showBuiltIn = false,
-  onClearSearch,
 }: {
   showBuiltIn?: boolean;
-  onClearSearch?: () => void;
 }) {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -75,17 +71,6 @@ export function AgentScopeFilter({
   const selectedAuthorIds = useMemo(
     () => (authorIdsParam ? authorIdsParam.split(",") : []),
     [authorIdsParam],
-  );
-
-  const nameFilter = searchParams.get("name");
-  const labelsParam = searchParams.get("labels");
-  const hasActiveFilters = !!(
-    scope ||
-    teamIdsParam ||
-    authorIdsParam ||
-    excludeAuthorIdsParam ||
-    nameFilter ||
-    labelsParam
   );
 
   const { data: labelKeys } = useLabelKeys();
@@ -157,18 +142,6 @@ export function AgentScopeFilter({
     [updateUrlParams],
   );
 
-  const handleClearAll = useCallback(() => {
-    onClearSearch?.();
-    updateUrlParams({
-      scope: null,
-      teamIds: null,
-      authorIds: null,
-      excludeAuthorIds: null,
-      name: null,
-      labels: null,
-    });
-  }, [updateUrlParams, onClearSearch]);
-
   const teamItems = useMemo(
     () => (teams ?? []).map((t) => ({ value: t.id, label: t.name })),
     [teams],
@@ -233,17 +206,6 @@ export function AgentScopeFilter({
         labelKeys={labelKeys}
         LabelKeyRowComponent={AgentLabelKeyRow}
       />
-      {hasActiveFilters && (
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={handleClearAll}
-          className="h-9 px-2 text-muted-foreground"
-        >
-          <X className="h-4 w-4 mr-1" />
-          Clear
-        </Button>
-      )}
     </div>
   );
 }

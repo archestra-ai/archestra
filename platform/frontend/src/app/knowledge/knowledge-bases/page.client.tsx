@@ -28,6 +28,7 @@ import {
 } from "@/components/table-row-actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { SearchInput } from "@/components/search-input";
 import { DataTable } from "@/components/ui/data-table";
 import {
   Dialog,
@@ -82,6 +83,7 @@ function KnowledgeBasesList() {
 
   const pageFromUrl = searchParams.get("page");
   const pageSizeFromUrl = searchParams.get("pageSize");
+  const search = searchParams.get("search") || "";
   const pageIndex = Number(pageFromUrl || "1") - 1;
   const pageSize = Number(pageSizeFromUrl || DEFAULT_TABLE_LIMIT);
   const offset = pageIndex * pageSize;
@@ -90,6 +92,7 @@ function KnowledgeBasesList() {
     useKnowledgeBasesPaginated({
       limit: pageSize,
       offset,
+      search: search || undefined,
     });
   const { data: teams } = useTeams();
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
@@ -101,6 +104,12 @@ function KnowledgeBasesList() {
 
   const items = knowledgeBases?.data ?? [];
   const pagination = knowledgeBases?.pagination;
+  const clearFilters = useCallback(() => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("search");
+    params.set("page", "1");
+    router.push(`${pathname}?${params.toString()}`, { scroll: false });
+  }, [pathname, router, searchParams]);
 
   const columns: ColumnDef<KnowledgeBaseItem>[] = [
     {
@@ -240,9 +249,19 @@ function KnowledgeBasesList() {
       description="Manage knowledge bases and their data connectors."
       createLabel="Create Knowledge Base"
       onCreateClick={() => setIsCreateDialogOpen(true)}
-      isPending={isPending}
+      isPending={isPending && !knowledgeBases}
     >
       <div>
+        <div className="mb-6 flex flex-col gap-2">
+          <div className="flex items-center gap-4">
+            <SearchInput
+              placeholder="Search knowledge bases by name or description..."
+              paramName="search"
+              className="relative max-w-md flex-1"
+            />
+          </div>
+        </div>
+
         <DataTable
           columns={columns}
           data={items}
@@ -250,12 +269,15 @@ function KnowledgeBasesList() {
             <ExpandedConnectors knowledgeBaseId={row.original.id} />
           )}
           emptyMessage="No knowledge bases found"
+          hasActiveFilters={!!search}
+          filteredEmptyMessage="No knowledge bases match your filters. Try adjusting your search."
+          onClearFilters={clearFilters}
           hideSelectedCount
           manualPagination
           pagination={{
             pageIndex,
             pageSize,
-            total: pagination?.total || 0,
+            total: pagination?.total ?? 0,
           }}
           onPaginationChange={(newPagination) => {
             const params = new URLSearchParams(searchParams.toString());

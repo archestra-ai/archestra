@@ -89,7 +89,7 @@ export function CreateCatalogDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="max-w-5xl h-[90vh] overflow-y-auto overflow-x-hidden">
+      <DialogContent className="max-w-5xl h-[90vh] flex flex-col overflow-hidden">
         <DialogHeader>
           <DialogTitle>Add MCP Server to the Private Registry</DialogTitle>
           <DialogDescription>
@@ -100,17 +100,19 @@ export function CreateCatalogDialog({
         </DialogHeader>
 
         {step === "form" && (
-          <McpCatalogForm
-            mode="create"
-            onSubmit={onSubmit}
-            footer={footer}
-            catalogButton={catalogButton}
-            formValues={prefilledValues}
-          />
+          <div className="min-h-0 flex-1 overflow-y-auto pr-2 -mr-2">
+            <McpCatalogForm
+              mode="create"
+              onSubmit={onSubmit}
+              footer={footer}
+              catalogButton={catalogButton}
+              formValues={prefilledValues}
+            />
+          </div>
         )}
 
         {step === "catalog-browse" && (
-          <div className="flex flex-col">
+          <div className="min-h-0 flex flex-1 flex-col overflow-y-auto pr-2 -mr-2">
             <Button
               variant="ghost"
               size="sm"

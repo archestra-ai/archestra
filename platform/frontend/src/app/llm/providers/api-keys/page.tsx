@@ -31,6 +31,7 @@ import {
   PLACEHOLDER_KEY,
   PROVIDER_CONFIG,
 } from "@/components/chat-api-key-form";
+import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -40,7 +41,6 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogForm,
   DialogHeader,
   DialogStickyFooter,
@@ -452,15 +452,18 @@ export default function ApiKeysPage() {
 
       {/* Create Dialog */}
       <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-lg max-h-[90vh] flex flex-col overflow-hidden">
           <DialogHeader>
             <DialogTitle>Add API Key</DialogTitle>
             <DialogDescription>
               Add a new LLM provider API key for use in Chat and LLM Proxy
             </DialogDescription>
           </DialogHeader>
-          <DialogForm onSubmit={handleCreate}>
-            <div className="py-2">
+          <DialogForm
+            onSubmit={handleCreate}
+            className="flex min-h-0 flex-1 flex-col"
+          >
+            <div className="min-h-0 flex-1 overflow-y-auto py-4 pr-2 -mr-2">
               <ChatApiKeyForm
                 mode="full"
                 showConsoleLink={false}
@@ -494,15 +497,18 @@ export default function ApiKeysPage() {
 
       {/* Edit Dialog */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-lg max-h-[90vh] flex flex-col overflow-hidden">
           <DialogHeader>
             <DialogTitle>Edit API Key</DialogTitle>
             <DialogDescription>
               Update the name, API key value, or scope
             </DialogDescription>
           </DialogHeader>
-          <DialogForm onSubmit={handleEdit}>
-            <div className="py-4">
+          <DialogForm
+            onSubmit={handleEdit}
+            className="flex min-h-0 flex-1 flex-col"
+          >
+            <div className="min-h-0 flex-1 overflow-y-auto py-4 pr-2 -mr-2">
               {selectedApiKey && (
                 <ChatApiKeyForm
                   mode="full"
@@ -537,38 +543,16 @@ export default function ApiKeysPage() {
       </Dialog>
 
       {/* Delete Confirmation Dialog */}
-      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Delete API Key</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to delete &quot;{selectedApiKey?.name}
-              &quot;? This action cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogForm onSubmit={handleDelete}>
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setIsDeleteDialogOpen(false)}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                variant="destructive"
-                disabled={deleteMutation.isPending}
-              >
-                {deleteMutation.isPending && (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                )}
-                Delete
-              </Button>
-            </DialogFooter>
-          </DialogForm>
-        </DialogContent>
-      </Dialog>
+      <DeleteConfirmDialog
+        open={isDeleteDialogOpen}
+        onOpenChange={setIsDeleteDialogOpen}
+        title="Delete API Key"
+        description={`Are you sure you want to delete "${selectedApiKey?.name}"? This action cannot be undone.`}
+        isPending={deleteMutation.isPending}
+        onConfirm={handleDelete}
+        confirmLabel="Delete API Key"
+        pendingLabel="Deleting..."
+      />
     </div>
   );
 }

@@ -26,6 +26,7 @@ import {
   type TableRowAction,
   TableRowActions,
 } from "@/components/table-row-actions";
+import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { SearchInput } from "@/components/search-input";
@@ -34,7 +35,6 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogForm,
   DialogHeader,
   DialogTitle,
@@ -676,36 +676,16 @@ function RemoveConnectorDialog({
   }, [connectorId, knowledgeBaseId, unassignMutation, onOpenChange]);
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>Remove Connector</DialogTitle>
-          <DialogDescription>
-            Are you sure you want to remove this connector from the knowledge
-            base? The connector itself will not be deleted and can be re-added
-            later.
-          </DialogDescription>
-        </DialogHeader>
-        <DialogForm onSubmit={handleRemove}>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              variant="destructive"
-              disabled={unassignMutation.isPending}
-            >
-              {unassignMutation.isPending ? "Removing..." : "Remove Connector"}
-            </Button>
-          </DialogFooter>
-        </DialogForm>
-      </DialogContent>
-    </Dialog>
+    <DeleteConfirmDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Remove Connector"
+      description="Are you sure you want to remove this connector from the knowledge base? The connector itself will not be deleted and can be re-added later."
+      isPending={unassignMutation.isPending}
+      onConfirm={handleRemove}
+      confirmLabel="Remove Connector"
+      pendingLabel="Removing..."
+    />
   );
 }
 
@@ -728,37 +708,15 @@ function DeleteKnowledgeBaseDialog({
   }, [knowledgeBaseId, deleteKnowledgeBase, onOpenChange]);
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>Delete Knowledge Base</DialogTitle>
-          <DialogDescription>
-            Are you sure you want to delete this knowledge base? Connectors will
-            not be deleted but will be unlinked from this knowledge base. This
-            action cannot be undone.
-          </DialogDescription>
-        </DialogHeader>
-        <DialogForm onSubmit={handleDelete}>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              variant="destructive"
-              disabled={deleteKnowledgeBase.isPending}
-            >
-              {deleteKnowledgeBase.isPending
-                ? "Deleting..."
-                : "Delete Knowledge Base"}
-            </Button>
-          </DialogFooter>
-        </DialogForm>
-      </DialogContent>
-    </Dialog>
+    <DeleteConfirmDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Delete Knowledge Base"
+      description="Are you sure you want to delete this knowledge base? Connectors will not be deleted but will be unlinked from this knowledge base. This action cannot be undone."
+      isPending={deleteKnowledgeBase.isPending}
+      onConfirm={handleDelete}
+      confirmLabel="Delete Knowledge Base"
+      pendingLabel="Deleting..."
+    />
   );
 }

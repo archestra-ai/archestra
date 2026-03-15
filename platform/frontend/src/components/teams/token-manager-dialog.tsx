@@ -100,7 +100,7 @@ export function TokenManagerDialog({
       description={
         token.teamId
           ? `Token for ${token.team?.name || "team"} access`
-          : "Organization-wide access token"
+          : "Team access token"
       }
       size="medium"
       className="max-w-xl"

@@ -19,8 +19,10 @@ interface EditCatalogDialogProps {
 export function EditCatalogDialog({ item, onClose }: EditCatalogDialogProps) {
   return (
     <Dialog open={!!item} onOpenChange={onClose}>
-      <DialogContent className="max-w-5xl h-[85vh] overflow-y-auto overflow-x-hidden">
-        {item && <EditCatalogContent item={item} onClose={onClose} />}
+      <DialogContent className="max-w-5xl h-[85vh] flex flex-col overflow-hidden">
+        <div className="min-h-0 flex-1 overflow-y-auto pr-2 -mr-2">
+          {item && <EditCatalogContent item={item} onClose={onClose} />}
+        </div>
       </DialogContent>
     </Dialog>
   );

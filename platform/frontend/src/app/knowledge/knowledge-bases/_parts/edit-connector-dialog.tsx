@@ -14,6 +14,7 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogForm,
   DialogHeader,
   DialogStickyFooter,
   DialogTitle,
@@ -131,7 +132,7 @@ export function EditConnectorDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col overflow-y-auto">
+      <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col overflow-hidden">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <div className="flex h-7 w-7 items-center justify-center rounded-md bg-muted">
@@ -145,8 +146,11 @@ export function EditConnectorDialog({
         </DialogHeader>
 
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(handleSubmit)}>
-            <div className="space-y-4">
+          <DialogForm
+            onSubmit={form.handleSubmit(handleSubmit)}
+            className="flex min-h-0 flex-1 flex-col"
+          >
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto py-4 pr-2 -mr-2">
               <FormField
                 control={form.control}
                 name="enabled"
@@ -376,7 +380,7 @@ export function EditConnectorDialog({
                 {updateConnector.isPending ? "Saving..." : "Save Changes"}
               </Button>
             </DialogStickyFooter>
-          </form>
+          </DialogForm>
         </Form>
       </DialogContent>
     </Dialog>

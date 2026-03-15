@@ -3,15 +3,9 @@
 import type { archestraApiTypes } from "@shared";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
+import { FormDialog } from "@/components/form-dialog";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { DialogForm, DialogStickyFooter } from "@/components/ui/dialog";
 import {
   Form,
   FormControl,
@@ -84,59 +78,61 @@ export function EditKnowledgeBaseDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
-        <DialogHeader>
-          <DialogTitle>Edit Knowledge Base</DialogTitle>
-          <DialogDescription>
-            Update the knowledge base settings.
-          </DialogDescription>
-        </DialogHeader>
+    <FormDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Edit Knowledge Base"
+      description="Update the knowledge base settings."
+      size="medium"
+      className="max-w-lg"
+    >
         <Form {...form}>
-          <form
+          <DialogForm
             onSubmit={form.handleSubmit(handleSubmit)}
-            className="space-y-4"
+            className="flex min-h-0 flex-1 flex-col"
           >
-            <FormField
-              control={form.control}
-              name="name"
-              rules={{ required: "Name is required" }}
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Name</FormLabel>
-                  <FormControl>
-                    <Input placeholder="My Knowledge Base" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto py-4 pr-2 -mr-2">
+              <FormField
+                control={form.control}
+                name="name"
+                rules={{ required: "Name is required" }}
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Name</FormLabel>
+                    <FormControl>
+                      <Input placeholder="My Knowledge Base" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-            <FormField
-              control={form.control}
-              name="description"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Description (optional)</FormLabel>
-                  <FormControl>
-                    <Input
-                      placeholder="A short description of this knowledge base"
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+              <FormField
+                control={form.control}
+                name="description"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Description (optional)</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="A short description of this knowledge base"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-            <VisibilitySelector
-              visibility={visibility}
-              onVisibilityChange={setVisibility}
-              teamIds={teamIds}
-              onTeamIdsChange={setTeamIds}
-            />
+              <VisibilitySelector
+                visibility={visibility}
+                onVisibilityChange={setVisibility}
+                teamIds={teamIds}
+                onTeamIdsChange={setTeamIds}
+              />
+            </div>
 
-            <DialogFooter>
+            <DialogStickyFooter>
               <Button
                 type="button"
                 variant="outline"
@@ -147,10 +143,9 @@ export function EditKnowledgeBaseDialog({
               <Button type="submit" disabled={updateKnowledgeBase.isPending}>
                 {updateKnowledgeBase.isPending ? "Saving..." : "Save Changes"}
               </Button>
-            </DialogFooter>
-          </form>
+            </DialogStickyFooter>
+          </DialogForm>
         </Form>
-      </DialogContent>
-    </Dialog>
+    </FormDialog>
   );
 }

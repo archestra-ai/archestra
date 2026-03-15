@@ -5,14 +5,9 @@ import { getDocsUrl } from "@shared";
 import type { LucideIcon } from "lucide-react";
 import { ArrowRight, Bot, ExternalLink, Network, Route } from "lucide-react";
 import type { ReactNode } from "react";
+import { FormDialog } from "@/components/form-dialog";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogStickyFooter,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { DialogStickyFooter } from "@/components/ui/dialog";
 
 const AGENT_TYPE_CONFIG: Record<
   string,
@@ -46,27 +41,24 @@ export function ConnectDialog({
   const Icon = config.icon;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-5xl h-[90vh] p-0 flex flex-col overflow-hidden border-0">
-        <div className="relative bg-gradient-to-br from-primary/10 via-primary/5 to-background px-6 pt-6 pb-5 shrink-0">
-          <div className="absolute inset-0 bg-grid-white/[0.02] pointer-events-none" />
-          <div className="relative">
-            <DialogHeader>
-              <div className="flex items-center gap-2 mb-1">
-                <div className="p-1.5 rounded-full bg-primary/10">
-                  <Icon className="h-4 w-4 text-primary" />
-                </div>
-                <DialogTitle className="text-xl font-semibold">
-                  {config.titlePrefix} "{agent.name}"
-                </DialogTitle>
-              </div>
-            </DialogHeader>
+    <FormDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title={
+        <div className="flex items-center gap-2">
+          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10">
+            <Icon className="h-4 w-4 text-primary" />
           </div>
+          <span>
+            {config.titlePrefix} "{agent.name}"
+          </span>
         </div>
-
+      }
+      size="large"
+    >
         <div className="flex-1 overflow-y-auto px-6 py-5">{children}</div>
 
-        <DialogStickyFooter className="justify-between bg-muted/30">
+        <DialogStickyFooter className="justify-between">
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <ExternalLink className="h-3.5 w-3.5 shrink-0" />
             <span>
@@ -91,7 +83,6 @@ export function ConnectDialog({
             <ArrowRight className="ml-2 h-4 w-4" />
           </Button>
         </DialogStickyFooter>
-      </DialogContent>
-    </Dialog>
+    </FormDialog>
   );
 }

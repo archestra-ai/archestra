@@ -18,6 +18,7 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogForm,
   DialogHeader,
   DialogStickyFooter,
   DialogTitle,
@@ -170,7 +171,7 @@ export function CreateConnectorDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col overflow-y-auto">
+      <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col overflow-hidden">
         {step === "select" ? (
           <>
             <DialogHeader>
@@ -179,7 +180,8 @@ export function CreateConnectorDialog({
                 Select a connector type to get started.
               </DialogDescription>
             </DialogHeader>
-            <div className="grid grid-cols-2 gap-3 py-2">
+            <div className="min-h-0 flex-1 overflow-y-auto py-2 pr-2 -mr-2">
+              <div className="grid grid-cols-2 gap-3">
               {CONNECTOR_OPTIONS.map((option) => (
                 <button
                   key={option.type}
@@ -198,11 +200,14 @@ export function CreateConnectorDialog({
                   </div>
                 </button>
               ))}
+              </div>
             </div>
-          </>
         ) : (
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(handleSubmit)}>
+            <DialogForm
+              onSubmit={form.handleSubmit(handleSubmit)}
+              className="flex min-h-0 flex-1 flex-col"
+            >
               <DialogHeader>
                 <DialogTitle className="flex items-center gap-2">
                   <Button
@@ -230,7 +235,7 @@ export function CreateConnectorDialog({
                 </DialogDescription>
               </DialogHeader>
 
-              <div className="space-y-4 py-4">
+              <div className="min-h-0 flex-1 space-y-4 overflow-y-auto py-4 pr-2 -mr-2">
                 <FormField
                   control={form.control}
                   name="name"
@@ -483,7 +488,7 @@ export function CreateConnectorDialog({
                     : "Create Connector"}
                 </Button>
               </DialogStickyFooter>
-            </form>
+            </DialogForm>
           </Form>
         )}
       </DialogContent>

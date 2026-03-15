@@ -13,17 +13,9 @@ import { ConnectorTypeIcon } from "@/app/knowledge/knowledge-bases/_parts/connec
 import { ConnectorStatusBadge } from "@/app/knowledge/knowledge-bases/_parts/connector-status-badge";
 import { CreateConnectorDialog } from "@/app/knowledge/knowledge-bases/_parts/create-connector-dialog";
 import { EditConnectorDialog } from "@/app/knowledge/knowledge-bases/_parts/edit-connector-dialog";
+import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogForm,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { SearchInput } from "@/components/search-input";
 import { TableRowActions } from "@/components/table-row-actions";
 import {
@@ -366,34 +358,15 @@ function DeleteConnectorDialog({
   }, [connectorId, deleteConnector, onOpenChange]);
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>Delete Connector</DialogTitle>
-          <DialogDescription>
-            Are you sure you want to delete this connector? All sync history
-            will be permanently removed. This action cannot be undone.
-          </DialogDescription>
-        </DialogHeader>
-        <DialogForm onSubmit={handleDelete}>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              variant="destructive"
-              disabled={deleteConnector.isPending}
-            >
-              {deleteConnector.isPending ? "Deleting..." : "Delete Connector"}
-            </Button>
-          </DialogFooter>
-        </DialogForm>
-      </DialogContent>
-    </Dialog>
+    <DeleteConfirmDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Delete Connector"
+      description="Are you sure you want to delete this connector? All sync history will be permanently removed. This action cannot be undone."
+      isPending={deleteConnector.isPending}
+      onConfirm={handleDelete}
+      confirmLabel="Delete Connector"
+      pendingLabel="Deleting..."
+    />
   );
 }

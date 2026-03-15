@@ -28,8 +28,9 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
+  DialogForm,
   DialogHeader,
+  DialogStickyFooter,
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
@@ -403,7 +404,7 @@ function EditModelDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-lg max-h-[85vh] flex flex-col overflow-hidden">
         <DialogHeader>
           <DialogTitle>Edit Model</DialogTitle>
           <DialogDescription>
@@ -411,10 +412,11 @@ function EditModelDialog({
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
-          <form
+          <DialogForm
             onSubmit={form.handleSubmit(handleSubmit)}
-            className="space-y-4"
+            className="flex min-h-0 flex-1 flex-col"
           >
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto py-4 pr-2 -mr-2">
             {/* Read-only: Provider */}
             <div className="space-y-1">
               <span className="text-sm font-medium">Provider</span>
@@ -553,10 +555,11 @@ function EditModelDialog({
                   </FormControl>
                   <FormMessage />
                 </FormItem>
-              )}
-            />
+                )}
+              />
 
-            <DialogFooter>
+            </div>
+            <DialogStickyFooter>
               <Button
                 type="button"
                 variant="outline"
@@ -567,8 +570,8 @@ function EditModelDialog({
               <Button type="submit" disabled={updateModel.isPending}>
                 {updateModel.isPending ? "Saving..." : "Save Changes"}
               </Button>
-            </DialogFooter>
-          </form>
+            </DialogStickyFooter>
+          </DialogForm>
         </Form>
       </DialogContent>
     </Dialog>

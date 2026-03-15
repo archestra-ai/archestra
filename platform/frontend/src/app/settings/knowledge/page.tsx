@@ -486,7 +486,8 @@ function DropEmbeddingConfigDialog({
 
 function KnowledgeSettingsContent() {
   const { data: organization, isPending } = useOrganization();
-  const { data: apiKeys } = useAvailableChatApiKeys();
+  const { data: apiKeys, isPending: areApiKeysPending } =
+    useAvailableChatApiKeys();
   const updateKnowledgeSettings = useUpdateKnowledgeSettings(
     "Knowledge settings updated",
     "Failed to update knowledge settings",
@@ -549,17 +550,18 @@ function KnowledgeSettingsContent() {
     [apiKeys],
   );
   const hasAnyKeys = useMemo(() => (apiKeys ?? []).length > 0, [apiKeys]);
+  const isInitialLoading = isPending || areApiKeysPending;
 
   const embeddingSetupStep = useSetupStep({
     selectedKeyId: embeddingChatApiKeyId,
     selectedModel: embeddingModel,
-    hasSelectableKeys: hasEmbeddingKeys,
+    hasSelectableKeys: isInitialLoading ? true : hasEmbeddingKeys,
   });
 
   const rerankerSetupStep = useSetupStep({
     selectedKeyId: rerankerChatApiKeyId,
     selectedModel: rerankerModel,
-    hasSelectableKeys: hasAnyKeys,
+    hasSelectableKeys: isInitialLoading ? true : hasAnyKeys,
   });
 
   const isFullyConfigured = !embeddingSetupStep && !rerankerSetupStep;
@@ -592,9 +594,12 @@ function KnowledgeSettingsContent() {
   };
 
   return (
-    <LoadingWrapper isPending={isPending} loadingFallback={<LoadingSpinner />}>
+    <LoadingWrapper
+      isPending={isInitialLoading}
+      loadingFallback={<LoadingSpinner />}
+    >
       <div className="space-y-8">
-        {!isFullyConfigured && (
+        {!isInitialLoading && !isFullyConfigured && (
           <Alert variant="warning">
             <AlertTriangle className="h-4 w-4" />
             <AlertDescription>

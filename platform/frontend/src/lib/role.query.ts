@@ -2,6 +2,7 @@ import { archestraApiSdk, type archestraApiTypes } from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useIsAuthenticated } from "./auth.hook";
 import { useHasPermissions } from "./auth.query";
+import { DEFAULT_TABLE_LIMIT } from "./utils";
 import { handleApiError } from "./utils";
 
 const { getRoles, createRole, getRole, updateRole, deleteRole } =
@@ -27,8 +28,10 @@ export function useRoles(params?: {
   return useQuery({
     queryKey: roleKeys.lists(),
     queryFn: async () => {
-      const { data } = await getRoles({ query: { limit: 100, offset: 0 } });
-      return data?.data ?? [];
+      const response = await getRoles({
+        query: { limit: DEFAULT_TABLE_LIMIT, offset: 0 },
+      });
+      return response.data?.data ?? [];
     },
     initialData: params?.initialData,
   });
@@ -42,9 +45,9 @@ export function useRolesPaginated(params: {
   return useQuery({
     queryKey: [...roleKeys.lists(), "paginated", params],
     queryFn: async () => {
-      const { data } = await getRoles({ query: params });
+      const response = await getRoles({ query: params });
       return (
-        data ?? {
+        response.data ?? {
           data: [],
           pagination: {
             currentPage: 1,
@@ -160,12 +163,12 @@ export function useCustomRoles() {
     queryKey: roleKeys.custom(),
     queryFn: async () => {
       const { data } = await archestraApiSdk.getRoles({
-        query: { limit: 100, offset: 0 },
+        query: { limit: DEFAULT_TABLE_LIMIT, offset: 0 },
       });
-      if (!data?.data) return [];
+      const roles = data?.data ?? [];
 
       // Filter to only custom roles (non-predefined)
-      return data.data.filter((role) => !role.predefined);
+      return roles.filter((role) => !role.predefined);
     },
     enabled: userIsAuthenticated && !!canReadRoles,
     retry: false,

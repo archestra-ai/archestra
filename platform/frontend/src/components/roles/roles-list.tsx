@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  type archestraApiTypes,
   type Permissions,
   type PredefinedRoleName,
   type Resource,
@@ -10,8 +11,9 @@ import {
 } from "@shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Eye, Shield } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { EnterpriseLicenseRequired } from "@/components/enterprise-license-required";
+import { SearchInput } from "@/components/search-input";
 import {
   type TableRowAction,
   TableRowActions,
@@ -25,17 +27,33 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { useRoles } from "@/lib/role.query";
+import { useRolesPaginated } from "@/lib/role.query";
+import { useDataTableQueryParams } from "@/lib/use-data-table-query-params";
+import { useSetSettingsAction } from "@/app/settings/layout";
 
-type Role = NonNullable<ReturnType<typeof useRoles>["data"]>[number];
+type Role = archestraApiTypes.GetRoleResponses["200"];
 
 export function RolesList() {
-  const { data: roles, isLoading } = useRoles();
+  const setActionButton = useSetSettingsAction();
+  const { pageIndex, pageSize, offset, searchParams, setPagination } =
+    useDataTableQueryParams();
+  const nameFilter = searchParams.get("name") || undefined;
+  const { data: rolesResponse, isLoading } = useRolesPaginated({
+    limit: pageSize,
+    offset,
+    name: nameFilter,
+  });
   const [viewPermissionsRole, setViewPermissionsRole] = useState<Role | null>(
     null,
   );
 
-  const allRoles = roles ?? [];
+  useEffect(() => {
+    setActionButton(null);
+    return () => setActionButton(null);
+  }, [setActionButton]);
+
+  const allRoles = rolesResponse?.data ?? [];
+  const total = rolesResponse?.pagination.total ?? 0;
 
   const columns: ColumnDef<Role>[] = [
     {
@@ -59,12 +77,13 @@ export function RolesList() {
         const predefinedDescription = role.predefined
           ? roleDescriptions[role.name as PredefinedRoleName]
           : null;
+        const description = role.description || predefinedDescription;
         return (
           <div>
             <div className="font-medium capitalize">{role.name}</div>
-            {predefinedDescription && (
+            {description && (
               <div className="text-xs text-muted-foreground">
-                {predefinedDescription}
+                {description}
               </div>
             )}
           </div>
@@ -102,10 +121,25 @@ export function RolesList() {
 
   return (
     <>
+      <div className="mb-6 flex items-center gap-4">
+        <SearchInput
+          placeholder="Search roles by name..."
+          paramName="name"
+          className="relative max-w-sm flex-1"
+        />
+      </div>
+
       <DataTable
         columns={columns}
         data={allRoles}
         isLoading={isLoading}
+        manualPagination
+        pagination={{
+          pageIndex,
+          pageSize,
+          total,
+        }}
+        onPaginationChange={setPagination}
         emptyMessage="No roles found"
         hideSelectedCount
       />

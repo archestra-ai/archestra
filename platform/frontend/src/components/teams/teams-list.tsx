@@ -1,10 +1,11 @@
 "use client";
+import { useSetSettingsAction } from "@/app/settings/layout";
 import { archestraApiSdk, type archestraApiTypes, E2eTestId } from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
 
 import { Key, Link2, Plus, Trash2, Users, Vault, X } from "lucide-react";
-import { lazy, useState } from "react";
+import { lazy, useEffect, useState } from "react";
 import { toast } from "sonner";
 import {
   type TableRowAction,
@@ -48,6 +49,7 @@ const { TeamExternalGroupsDialog } = config.enterpriseFeatures.core
     };
 
 export function TeamsList() {
+  const setActionButton = useSetSettingsAction();
   const queryClient = useQueryClient();
   const byosEnabled = useFeature("byosEnabled");
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
@@ -143,6 +145,20 @@ export function TeamsList() {
     if (!search) return true;
     return team.name.toLowerCase().includes(search.toLowerCase());
   });
+
+  useEffect(() => {
+    setActionButton(
+      <PermissionButton
+        permissions={{ team: ["create"] }}
+        onClick={() => setCreateDialogOpen(true)}
+      >
+        <Plus className="mr-2 h-4 w-4" />
+        Create Team
+      </PermissionButton>,
+    );
+
+    return () => setActionButton(null);
+  }, [setActionButton]);
 
   const columns: ColumnDef<Team>[] = [
     {
@@ -291,14 +307,6 @@ export function TeamsList() {
               </Button>
             )}
           </div>
-          <PermissionButton
-            permissions={{ team: ["create"] }}
-            onClick={() => setCreateDialogOpen(true)}
-            className="shrink-0"
-          >
-            <Plus className="mr-2 h-4 w-4" />
-            Create Team
-          </PermissionButton>
         </div>
 
         <DataTable

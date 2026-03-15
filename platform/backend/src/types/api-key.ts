@@ -1,40 +1,48 @@
-import { createSelectSchema } from "drizzle-zod";
+import {
+  createInsertSchema,
+  createSelectSchema,
+  createUpdateSchema,
+} from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
 
 export const SelectApiKeySchema = createSelectSchema(schema.apikeysTable);
+export const InsertApiKeySchema = createInsertSchema(schema.apikeysTable);
+export const UpdateApiKeySchema = createUpdateSchema(schema.apikeysTable);
 
 export const ApiKeyPermissionsSchema = z.record(z.string(), z.array(z.string()));
 export const ApiKeyMetadataSchema = z.record(z.string(), z.unknown());
 
-export const ApiKeyResponseSchema = z.object({
-  id: z.string(),
-  name: z.string().nullable(),
-  start: z.string().nullable(),
-  prefix: z.string().nullable(),
-  userId: z.string(),
-  enabled: z.boolean().nullable(),
-  lastRequest: z.date().nullable(),
-  expiresAt: z.date().nullable(),
-  createdAt: z.date(),
-  updatedAt: z.date(),
+export const ApiKeyResponseSchema = SelectApiKeySchema.omit({
+  key: true,
+  permissions: true,
+  metadata: true,
+}).extend({
   metadata: ApiKeyMetadataSchema.nullable(),
   permissions: ApiKeyPermissionsSchema.nullable(),
 });
 
-export const ApiKeyWithValueResponseSchema = ApiKeyResponseSchema.extend({
-  key: z.string(),
+export const ApiKeyWithValueResponseSchema = SelectApiKeySchema.omit({
+  permissions: true,
+  metadata: true,
+}).extend({
+  metadata: ApiKeyMetadataSchema.nullable(),
+  permissions: ApiKeyPermissionsSchema.nullable(),
 });
 
-export const CreateApiKeyBodySchema = z.object({
-  name: z.string().trim().min(1).max(255).optional(),
-  expiresIn: z.number().int().positive().nullable().optional(),
-});
+export const CreateApiKeyBodySchema = InsertApiKeySchema.pick({
+  name: true,
+})
+  .extend({
+    expiresIn: z.number().int().positive().nullable().optional(),
+  })
+  .strict();
 
-export const UpdateApiKeyBodySchema = z
-  .object({
-    name: z.string().trim().min(1).max(255).optional(),
-    enabled: z.boolean().optional(),
+export const UpdateApiKeyBodySchema = UpdateApiKeySchema.pick({
+  name: true,
+  enabled: true,
+})
+  .extend({
     expiresIn: z.number().int().positive().nullable().optional(),
   })
   .refine((value) => Object.keys(value).length > 0, {

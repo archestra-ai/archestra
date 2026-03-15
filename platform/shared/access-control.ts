@@ -164,7 +164,7 @@ export const memberPermissions: Record<Resource, Action[]> = {
   // Administration
   team: ["read"],
   secret: [],
-  apiKey: [],
+  apiKey: ["read", "create", "update", "delete"],
   organizationSettings: [],
 
   // UI behavior

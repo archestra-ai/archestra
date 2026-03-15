@@ -11,8 +11,10 @@ import {
 import { allAvailableActions } from "@shared/access-control";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Eye, Pencil, Plus, Shield, Trash2 } from "lucide-react";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
+import { useSetSettingsAction } from "@/app/settings/layout";
+import { SearchInput } from "@/components/search-input";
 import {
   type TableRowAction,
   TableRowActions,
@@ -32,12 +34,14 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PermissionButton } from "@/components/ui/permission-button";
+import { Textarea } from "@/components/ui/textarea";
 import {
   useCreateRole,
   useDeleteRole,
-  useRoles,
+  useRolesPaginated,
   useUpdateRole,
 } from "@/lib/role.query";
+import { useDataTableQueryParams } from "@/lib/use-data-table-query-params";
 import { RolePermissionBuilder } from "./role-permission-builder.ee";
 
 type Role = archestraApiTypes.GetRoleResponses["200"];
@@ -47,7 +51,15 @@ type Role = archestraApiTypes.GetRoleResponses["200"];
  * Shows both predefined roles (read-only) and custom roles (CRUD).
  */
 export function RolesList() {
-  const { data: roles, isLoading } = useRoles();
+  const setActionButton = useSetSettingsAction();
+  const { pageIndex, pageSize, offset, searchParams, setPagination } =
+    useDataTableQueryParams();
+  const nameFilter = searchParams.get("name") || undefined;
+  const { data: rolesResponse, isLoading } = useRolesPaginated({
+    limit: pageSize,
+    offset,
+    name: nameFilter,
+  });
   const createMutation = useCreateRole();
   const updateMutation = useUpdateRole();
   const deleteMutation = useDeleteRole();
@@ -65,7 +77,22 @@ export function RolesList() {
   const [roleToDelete, setRoleToDelete] = useState<Role | null>(null);
 
   const [roleName, setRoleName] = useState("");
+  const [roleDescription, setRoleDescription] = useState("");
   const [permission, setPermission] = useState<Permissions>({});
+
+  useEffect(() => {
+    setActionButton(
+      <PermissionButton
+        permissions={{ ac: ["create"] }}
+        onClick={() => setCreateDialogOpen(true)}
+      >
+        <Plus className="mr-2 h-4 w-4" />
+        Create Custom Role
+      </PermissionButton>,
+    );
+
+    return () => setActionButton(null);
+  }, [setActionButton]);
 
   const handleCreateRole = useCallback(() => {
     if (!roleName.trim()) {
@@ -80,13 +107,16 @@ export function RolesList() {
 
     createMutation.mutate(
       // Cast needed: shared Permissions type includes "team-admin" before API types are regenerated
-      { name: roleName, permission } as Parameters<
-        typeof createMutation.mutate
-      >[0],
+      {
+        name: roleName,
+        description: roleDescription || undefined,
+        permission,
+      } as Parameters<typeof createMutation.mutate>[0],
       {
         onSuccess: () => {
           setCreateDialogOpen(false);
           setRoleName("");
+          setRoleDescription("");
           setPermission({});
           toast.success("Role created successfully");
         },
@@ -95,7 +125,7 @@ export function RolesList() {
         },
       },
     );
-  }, [roleName, permission, createMutation]);
+  }, [roleDescription, roleName, permission, createMutation]);
 
   const handleEditRole = useCallback(() => {
     if (!selectedRole) return;
@@ -114,13 +144,18 @@ export function RolesList() {
       // Cast needed: shared Permissions type includes "team-admin" before API types are regenerated
       {
         roleId: selectedRole.id,
-        data: { name: roleName, permission },
+        data: {
+          name: roleName,
+          description: roleDescription || undefined,
+          permission,
+        },
       } as Parameters<typeof updateMutation.mutate>[0],
       {
         onSuccess: () => {
           setEditDialogOpen(false);
           setSelectedRole(null);
           setRoleName("");
+          setRoleDescription("");
           setPermission({});
           toast.success("Role updated successfully");
         },
@@ -129,7 +164,7 @@ export function RolesList() {
         },
       },
     );
-  }, [selectedRole, roleName, permission, updateMutation]);
+  }, [selectedRole, roleDescription, roleName, permission, updateMutation]);
 
   const handleDeleteRole = useCallback(() => {
     if (roleToDelete) {
@@ -149,16 +184,18 @@ export function RolesList() {
   const openEditDialog = useCallback((role: Role) => {
     setSelectedRole(role);
     setRoleName(role.name);
+    setRoleDescription(role.description ?? "");
     setPermission(role.permission);
     setEditDialogOpen(true);
   }, []);
 
   // Sort: predefined first, then custom
-  const allRoles = [...(roles ?? [])].sort((a, b) => {
+  const allRoles = [...(rolesResponse?.data ?? [])].sort((a, b) => {
     if (a.predefined && !b.predefined) return -1;
     if (!a.predefined && b.predefined) return 1;
     return 0;
   });
+  const total = rolesResponse?.pagination.total ?? 0;
 
   const columns: ColumnDef<Role>[] = [
     {
@@ -184,13 +221,12 @@ export function RolesList() {
         const predefinedDescription = role.predefined
           ? roleDescriptions[role.name as PredefinedRoleName]
           : null;
+        const description = role.description || predefinedDescription;
         return (
           <div>
             <div className="font-medium capitalize">{role.name}</div>
-            {predefinedDescription && (
-              <div className="text-xs text-muted-foreground">
-                {predefinedDescription}
-              </div>
+            {description && (
+              <div className="text-xs text-muted-foreground">{description}</div>
             )}
           </div>
         );
@@ -254,31 +290,23 @@ export function RolesList() {
   return (
     <>
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <p className="text-sm text-muted-foreground">
-            Manage roles and their permissions.{" "}
-            <a
-              href={getDocsUrl(DocsPage.PlatformAccessControl)}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-blue-500 hover:underline"
-            >
-              Documentation
-            </a>
-          </p>
-          <PermissionButton
-            permissions={{ ac: ["create"] }}
-            onClick={() => setCreateDialogOpen(true)}
-          >
-            <Plus className="mr-2 h-4 w-4" />
-            Create Custom Role
-          </PermissionButton>
-        </div>
+        <SearchInput
+          placeholder="Search roles by name..."
+          paramName="name"
+          className="relative max-w-sm"
+        />
 
         <DataTable
           columns={columns}
           data={allRoles}
           isLoading={isLoading}
+          manualPagination
+          pagination={{
+            pageIndex,
+            pageSize,
+            total,
+          }}
+          onPaginationChange={setPagination}
           emptyMessage="No roles found"
           hideSelectedCount
         />
@@ -307,6 +335,15 @@ export function RolesList() {
                 />
               </div>
               <div className="space-y-2">
+                <Label htmlFor="description">Description</Label>
+                <Textarea
+                  id="description"
+                  placeholder="What this role is used for"
+                  value={roleDescription}
+                  onChange={(e) => setRoleDescription(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
                 <Label>Permissions *</Label>
                 <RolePermissionBuilder
                   permission={permission}
@@ -322,6 +359,7 @@ export function RolesList() {
                 onClick={() => {
                   setCreateDialogOpen(false);
                   setRoleName("");
+                  setRoleDescription("");
                   setPermission({});
                 }}
               >
@@ -357,6 +395,15 @@ export function RolesList() {
                 />
               </div>
               <div className="space-y-2">
+                <Label htmlFor="edit-description">Description</Label>
+                <Textarea
+                  id="edit-description"
+                  placeholder="What this role is used for"
+                  value={roleDescription}
+                  onChange={(e) => setRoleDescription(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
                 <Label>Permissions *</Label>
                 <RolePermissionBuilder
                   permission={permission}
@@ -373,6 +420,7 @@ export function RolesList() {
                   setEditDialogOpen(false);
                   setSelectedRole(null);
                   setRoleName("");
+                  setRoleDescription("");
                   setPermission({});
                 }}
               >
@@ -407,6 +455,20 @@ export function RolesList() {
                   value={viewPermissionsRole.name}
                   readOnly
                   className="capitalize"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="view-description">Description</Label>
+                <Textarea
+                  id="view-description"
+                  value={
+                    viewPermissionsRole.description ||
+                    roleDescriptions[
+                      viewPermissionsRole.name as PredefinedRoleName
+                    ] ||
+                    ""
+                  }
+                  readOnly
                 />
               </div>
               <div className="space-y-2">

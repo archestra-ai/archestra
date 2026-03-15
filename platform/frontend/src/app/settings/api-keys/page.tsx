@@ -3,28 +3,24 @@
 import type { ColumnDef } from "@tanstack/react-table";
 import { formatDistanceToNowStrict } from "date-fns";
 import { KeyRound, Plus, Trash2 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { CopyButton } from "@/components/copy-button";
+import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { FormDialog } from "@/components/form-dialog";
+import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DataTable } from "@/components/ui/data-table";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
   DialogForm,
-  DialogHeader,
-  DialogTitle,
+  DialogStickyFooter,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PermissionButton } from "@/components/ui/permission-button";
-import { Skeleton } from "@/components/ui/skeleton";
 import { useHasPermissions } from "@/lib/auth.query";
 import {
   useApiKeys,
@@ -33,6 +29,7 @@ import {
   type UserApiKey,
 } from "@/lib/api-key.query";
 import { formatDate } from "@/lib/utils";
+import { useSetSettingsAction } from "../layout";
 
 type CreateApiKeyFormValues = {
   name: string;
@@ -45,6 +42,7 @@ const DEFAULT_FORM_VALUES: CreateApiKeyFormValues = {
 };
 
 export default function ApiKeysSettingsPage() {
+  const setActionButton = useSetSettingsAction();
   const { data: apiKeys = [], isPending } = useApiKeys();
   const { data: canDeleteApiKeys } = useHasPermissions({ apiKey: ["delete"] });
   const createApiKeyMutation = useCreateApiKey();
@@ -57,6 +55,20 @@ export default function ApiKeysSettingsPage() {
   const form = useForm<CreateApiKeyFormValues>({
     defaultValues: DEFAULT_FORM_VALUES,
   });
+
+  useEffect(() => {
+    setActionButton(
+      <PermissionButton
+        permissions={{ apiKey: ["create"] }}
+        onClick={() => setIsCreateDialogOpen(true)}
+      >
+        <Plus className="mr-2 h-4 w-4" />
+        Create API Key
+      </PermissionButton>,
+    );
+
+    return () => setActionButton(null);
+  }, [setActionButton]);
 
   const columns: ColumnDef<UserApiKey>[] = useMemo(() => {
     const baseColumns: ColumnDef<UserApiKey>[] = [
@@ -182,112 +194,67 @@ export default function ApiKeysSettingsPage() {
         </Alert>
       )}
 
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between gap-4">
-          <div className="space-y-1">
-            <CardTitle>Archestra API Keys</CardTitle>
-            <p className="text-sm text-muted-foreground">
-              Manage personal API keys for MCP Gateway, A2A Gateway, and Archestra API access.
-            </p>
-          </div>
-          <PermissionButton
-            permissions={{ apiKey: ["create"] }}
-            onClick={() => setIsCreateDialogOpen(true)}
-          >
-            <Plus className="mr-2 h-4 w-4" />
-            Create API Key
-          </PermissionButton>
-        </CardHeader>
-        <CardContent>
-          {isPending ? (
-            <div className="space-y-3">
-              <Skeleton className="h-10 w-full" />
-              <Skeleton className="h-10 w-full" />
-              <Skeleton className="h-10 w-full" />
-            </div>
-          ) : (
-            <DataTable
-              columns={columns}
-              data={apiKeys}
-              emptyMessage="No API keys yet"
-            />
-          )}
-        </CardContent>
-      </Card>
-
-      <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Create API key</DialogTitle>
-            <DialogDescription>
-              Create a new personal API key for programmatic access.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogForm onSubmit={handleCreate}>
-            <div className="space-y-4 py-2">
-              <div className="space-y-2">
-                <Label htmlFor="name">Name</Label>
-                <Input id="name" placeholder="CI token" {...form.register("name")} />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="expiresInDays">Expiration in days</Label>
-                <Input
-                  id="expiresInDays"
-                  type="number"
-                  min="1"
-                  placeholder="Leave blank for no expiration"
-                  {...form.register("expiresInDays")}
-                />
-              </div>
-            </div>
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setIsCreateDialogOpen(false)}
-                disabled={createApiKeyMutation.isPending}
-              >
-                Cancel
-              </Button>
-              <Button type="submit" disabled={createApiKeyMutation.isPending}>
-                Create
-              </Button>
-            </DialogFooter>
-          </DialogForm>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog
-        open={!!apiKeyToDelete}
-        onOpenChange={(open) => !open && setApiKeyToDelete(null)}
+      <LoadingWrapper
+        isPending={isPending}
+        loadingFallback={<LoadingSpinner />}
       >
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Delete API key</DialogTitle>
-            <DialogDescription>
-              This will immediately revoke access for anything using this key.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
+        <DataTable
+          columns={columns}
+          data={apiKeys}
+          emptyMessage="No API keys yet"
+        />
+      </LoadingWrapper>
+
+      <FormDialog
+        open={isCreateDialogOpen}
+        onOpenChange={setIsCreateDialogOpen}
+        title="Create API key"
+        description="Create a new personal API key for programmatic access."
+        size="medium"
+      >
+        <DialogForm onSubmit={handleCreate}>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label htmlFor="name">Name</Label>
+              <Input id="name" placeholder="CI token" {...form.register("name")} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="expiresInDays">Expiration in days</Label>
+              <Input
+                id="expiresInDays"
+                type="number"
+                min="1"
+                placeholder="Leave blank for no expiration"
+                {...form.register("expiresInDays")}
+              />
+            </div>
+          </div>
+          <DialogStickyFooter>
             <Button
               type="button"
               variant="outline"
-              onClick={() => setApiKeyToDelete(null)}
-              disabled={deleteApiKeyMutation.isPending}
+              onClick={() => setIsCreateDialogOpen(false)}
+              disabled={createApiKeyMutation.isPending}
             >
               Cancel
             </Button>
-            <Button
-              type="button"
-              variant="destructive"
-              onClick={handleDelete}
-              disabled={deleteApiKeyMutation.isPending}
-            >
-              Delete
+            <Button type="submit" disabled={createApiKeyMutation.isPending}>
+              Create
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </DialogStickyFooter>
+        </DialogForm>
+      </FormDialog>
+
+      <DeleteConfirmDialog
+        open={!!apiKeyToDelete}
+        onOpenChange={(open) => !open && setApiKeyToDelete(null)}
+        title="Delete API Key"
+        description="This will immediately revoke access for anything using this key."
+        isPending={deleteApiKeyMutation.isPending}
+        onConfirm={handleDelete}
+        confirmLabel="Delete"
+        pendingLabel="Deleting..."
+      />
     </div>
   );
 }

@@ -40,6 +40,7 @@ import {
 import { useActiveOrganization } from "@/lib/organization.query";
 import { useRoles } from "@/lib/role.query";
 import { cn } from "@/lib/utils";
+import { useSetSettingsAction } from "../layout";
 import {
   useDeletePendingSignupMember,
   useMemberSignupStatus,
@@ -56,6 +57,7 @@ export default function UsersPageClient() {
 }
 
 function UsersPageContent() {
+  const setActionButton = useSetSettingsAction();
   const { data: activeOrg, isPending: isOrgPending } = useActiveOrganization();
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -74,6 +76,14 @@ function UsersPageContent() {
     },
     [searchParams, router, pathname],
   );
+
+  useEffect(() => {
+    setActionButton(
+      activeOrg ? <InviteUserButton organizationId={activeOrg.id} /> : null,
+    );
+
+    return () => setActionButton(null);
+  }, [activeOrg, setActionButton]);
 
   return (
     <LoadingWrapper
@@ -314,7 +324,6 @@ function MembersTab({
         <RoleFilterDropdown />
         <div className="ml-auto flex items-center gap-2">
           <TabButtons activeTab={activeTab} onTabChange={onTabChange} />
-          <InviteUserButton organizationId={organizationId} />
         </div>
       </div>
 
@@ -663,7 +672,6 @@ function InvitationsTab({
         <div className="ml-auto">
           <TabButtons activeTab={activeTab} onTabChange={onTabChange} />
         </div>
-        <InviteUserButton organizationId={organizationId} />
       </div>
 
       <LoadingWrapper

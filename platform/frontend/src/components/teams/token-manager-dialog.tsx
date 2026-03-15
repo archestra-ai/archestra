@@ -106,66 +106,66 @@ export function TokenManagerDialog({
       className="max-w-xl"
     >
       <div className="min-h-0 flex-1 overflow-y-auto py-4 pr-2 -mr-2 space-y-4">
-          <div className="space-y-2">
-            <Label>Token Preview</Label>
-            <div className="flex gap-2">
-              <Input
-                readOnly
-                value={
-                  showValue && displayedValue
-                    ? displayedValue
-                    : `${displayedValue ? displayedValue.substring(0, 14) : token.tokenStart}...`
-                }
-                className="font-mono"
-              />
+        <div className="space-y-2">
+          <Label>Token Preview</Label>
+          <div className="flex gap-2">
+            <Input
+              readOnly
+              value={
+                showValue && displayedValue
+                  ? displayedValue
+                  : `${displayedValue ? displayedValue.substring(0, 14) : token.tokenStart}...`
+              }
+              className="font-mono"
+            />
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={handleShowToken}
+              title={showValue ? "Hide token" : "Show token"}
+            >
+              <Key className="h-4 w-4" />
+            </Button>
+            {showValue && displayedValue && (
               <Button
                 variant="outline"
                 size="icon"
-                onClick={handleShowToken}
-                title={showValue ? "Hide token" : "Show token"}
+                onClick={handleCopy}
+                title="Copy token"
               >
-                <Key className="h-4 w-4" />
+                {copied ? (
+                  <Check className="h-4 w-4 text-green-500" />
+                ) : (
+                  <Copy className="h-4 w-4" />
+                )}
               </Button>
-              {showValue && displayedValue && (
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={handleCopy}
-                  title="Copy token"
-                >
-                  {copied ? (
-                    <Check className="h-4 w-4 text-green-500" />
-                  ) : (
-                    <Copy className="h-4 w-4" />
-                  )}
-                </Button>
-              )}
-            </div>
-          </div>
-
-          <div className="space-y-1 text-sm text-muted-foreground">
-            <p>
-              <strong>Created:</strong>{" "}
-              {new Date(token.createdAt).toLocaleDateString()}
-            </p>
-            {token.lastUsedAt && (
-              <p>
-                <strong>Last used:</strong>{" "}
-                {new Date(token.lastUsedAt).toLocaleDateString()}
-              </p>
             )}
           </div>
+        </div>
 
-          {confirmRotate && (
-            <Alert variant="destructive">
-              <AlertDescription>
-                Rotating this token will invalidate the current value. Any
-                applications using this token will need to be updated. Click
-                Rotate again to confirm.
-              </AlertDescription>
-            </Alert>
+        <div className="space-y-1 text-sm text-muted-foreground">
+          <p>
+            <strong>Created:</strong>{" "}
+            {new Date(token.createdAt).toLocaleDateString()}
+          </p>
+          {token.lastUsedAt && (
+            <p>
+              <strong>Last used:</strong>{" "}
+              {new Date(token.lastUsedAt).toLocaleDateString()}
+            </p>
           )}
         </div>
+
+        {confirmRotate && (
+          <Alert variant="destructive">
+            <AlertDescription>
+              Rotating this token will invalidate the current value. Any
+              applications using this token will need to be updated. Click
+              Rotate again to confirm.
+            </AlertDescription>
+          </Alert>
+        )}
+      </div>
 
       <DialogStickyFooter className="justify-between sm:justify-between">
         <Button

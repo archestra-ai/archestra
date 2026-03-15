@@ -22,8 +22,7 @@ const TABS = [
 const PAGE_CONFIG: Record<string, { title: string; description: string }> = {
   "/llm/providers/api-keys": {
     title: "API Keys",
-    description:
-      "Manage API keys for LLM providers used in Chat and LLM Proxy",
+    description: "Manage API keys for LLM providers used in Chat and LLM Proxy",
   },
   "/llm/providers/virtual-keys": {
     title: "Virtual Keys",
@@ -62,10 +61,7 @@ export default function ProviderSettingsLayout({
     description: "",
   };
 
-  const contextValue = useMemo(
-    () => ({ setActionButton }),
-    [setActionButton],
-  );
+  const contextValue = useMemo(() => ({ setActionButton }), []);
 
   return (
     <ProviderLayoutContext.Provider value={contextValue}>

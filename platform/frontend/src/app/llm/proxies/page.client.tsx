@@ -51,11 +51,8 @@ import {
 import { useDeleteProfile, useProfilesPaginated } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
-import {
-  DEFAULT_SORT_BY,
-  DEFAULT_SORT_DIRECTION,
-} from "@/lib/utils";
 import { useDataTableQueryParams } from "@/lib/use-data-table-query-params";
+import { DEFAULT_SORT_BY, DEFAULT_SORT_DIRECTION } from "@/lib/utils";
 import { LlmProxyActions } from "./llm-proxy-actions";
 
 type LlmProxiesInitialData = {

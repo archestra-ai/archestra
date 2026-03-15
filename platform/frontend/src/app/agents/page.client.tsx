@@ -4,9 +4,7 @@ import {
   type AgentType,
   archestraApiSdk,
   type archestraApiTypes,
-  DocsPage,
   E2eTestId,
-  getDocsUrl,
 } from "@shared";
 import { useQuery } from "@tanstack/react-query";
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
@@ -24,6 +22,7 @@ import {
   AgentScopeFilter,
 } from "@/components/agent-scope-filter";
 import { ConnectDialog } from "@/components/connect-dialog";
+import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { LabelTags } from "@/components/label-tags";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
@@ -31,7 +30,6 @@ import { SearchInput } from "@/components/search-input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
-import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { PermissionButton } from "@/components/ui/permission-button";
 import {
   Tooltip,

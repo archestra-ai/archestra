@@ -14443,7 +14443,7 @@ export type GetApiKeysResponse = GetApiKeysResponses[keyof GetApiKeysResponses];
 
 export type CreateApiKeyData = {
     body?: {
-        name?: string;
+        name?: string | null;
         expiresIn?: number | null;
     };
     path?: never;
@@ -14709,104 +14709,6 @@ export type GetApiKeyResponses = {
 };
 
 export type GetApiKeyResponse = GetApiKeyResponses[keyof GetApiKeyResponses];
-
-export type UpdateApiKeyData = {
-    body?: {
-        name?: string;
-        enabled?: boolean;
-        expiresIn?: number | null;
-    };
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/api-keys/{id}';
-};
-
-export type UpdateApiKeyErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type UpdateApiKeyError = UpdateApiKeyErrors[keyof UpdateApiKeyErrors];
-
-export type UpdateApiKeyResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        name: string | null;
-        start: string | null;
-        prefix: string | null;
-        userId: string;
-        enabled: boolean | null;
-        lastRequest: string | null;
-        expiresAt: string | null;
-        createdAt: string;
-        updatedAt: string;
-        metadata: {
-            [key: string]: unknown;
-        } | null;
-        permissions: {
-            [key: string]: Array<string>;
-        } | null;
-    };
-};
-
-export type UpdateApiKeyResponse = UpdateApiKeyResponses[keyof UpdateApiKeyResponses];
 
 export type GetDefaultCredentialsStatusData = {
     body?: never;
@@ -27299,6 +27201,7 @@ export type GetKnowledgeBasesData = {
     query?: {
         limit?: number;
         offset?: number;
+        search?: string;
     };
     url: '/api/knowledge-bases';
 };
@@ -33932,7 +33835,7 @@ export type GetRolesResponses = {
     200: {
         data: Array<{
             id: string;
-            organizationId?: string;
+            organizationId: string;
             role: string;
             name: string;
             description: string | null;
@@ -34034,7 +33937,7 @@ export type CreateRoleResponses = {
      */
     200: {
         id: string;
-        organizationId?: string;
+        organizationId: string;
         role: string;
         name: string;
         description: string | null;
@@ -34208,7 +34111,7 @@ export type GetRoleResponses = {
      */
     200: {
         id: string;
-        organizationId?: string;
+        organizationId: string;
         role: string;
         name: string;
         description: string | null;
@@ -34306,7 +34209,7 @@ export type UpdateRoleResponses = {
      */
     200: {
         id: string;
-        organizationId?: string;
+        organizationId: string;
         role: string;
         name: string;
         description: string | null;

@@ -56,33 +56,33 @@ export function ConnectDialog({
       }
       size="large"
     >
-        <div className="flex-1 overflow-y-auto px-6 py-5">{children}</div>
+      <div className="flex-1 overflow-y-auto px-6 py-5">{children}</div>
 
-        <DialogStickyFooter className="justify-between">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <ExternalLink className="h-3.5 w-3.5 shrink-0" />
-            <span>
-              Need help? Check our{" "}
-              <a
-                href={getDocsUrl(docsPage)}
-                target="_blank"
-                className="text-primary hover:underline font-medium"
-                rel="noopener"
-              >
-                documentation
-              </a>
-            </span>
-          </div>
-          <Button
-            type="button"
-            onClick={() => onOpenChange(false)}
-            size="default"
-            className="min-w-[100px]"
-          >
-            Done
-            <ArrowRight className="ml-2 h-4 w-4" />
-          </Button>
-        </DialogStickyFooter>
+      <DialogStickyFooter className="justify-between">
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+          <span>
+            Need help? Check our{" "}
+            <a
+              href={getDocsUrl(docsPage)}
+              target="_blank"
+              className="text-primary hover:underline font-medium"
+              rel="noopener"
+            >
+              documentation
+            </a>
+          </span>
+        </div>
+        <Button
+          type="button"
+          onClick={() => onOpenChange(false)}
+          size="default"
+          className="min-w-[100px]"
+        >
+          Done
+          <ArrowRight className="ml-2 h-4 w-4" />
+        </Button>
+      </DialogStickyFooter>
     </FormDialog>
   );
 }

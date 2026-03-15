@@ -11,11 +11,11 @@ import { Suspense, useEffect, useRef, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { LightDarkToggle } from "@/app/settings/account/_components/light-dark-toggle";
 import { LoadingSpinner } from "@/components/loading";
-import { RolePermissionsCard } from "@/components/settings/role-permissions-card";
 import { PersonalTokenCard } from "@/components/settings/personal-token-card";
-import { useOrgTheme } from "@/lib/theme.hook";
+import { RolePermissionsCard } from "@/components/settings/role-permissions-card";
 import config from "@/lib/config";
 import { useOrganization } from "@/lib/organization.query";
+import { useOrgTheme } from "@/lib/theme.hook";
 import { cn } from "@/lib/utils";
 
 function AccountSettingsContent() {

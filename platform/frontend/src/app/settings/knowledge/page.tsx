@@ -34,7 +34,15 @@ import {
 } from "@/components/settings/settings-block";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { DialogForm } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogForm,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   Select,

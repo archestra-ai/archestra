@@ -14,16 +14,9 @@ import { ConnectorStatusBadge } from "@/app/knowledge/knowledge-bases/_parts/con
 import { CreateConnectorDialog } from "@/app/knowledge/knowledge-bases/_parts/create-connector-dialog";
 import { EditConnectorDialog } from "@/app/knowledge/knowledge-bases/_parts/edit-connector-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
-import { Button } from "@/components/ui/button";
-import { DataTable } from "@/components/ui/data-table";
 import { SearchInput } from "@/components/search-input";
 import { TableRowActions } from "@/components/table-row-actions";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { DataTable } from "@/components/ui/data-table";
 import {
   Select,
   SelectContent,
@@ -31,6 +24,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import {
   useConnectorsPaginated,
   useDeleteConnector,
@@ -74,18 +73,21 @@ function ConnectorsList() {
   const pageSize = Number(pageSizeFromUrl || DEFAULT_TABLE_LIMIT);
   const offset = pageIndex * pageSize;
 
-  const { data: connectors, isPending, isFetching } =
-    useConnectorsPaginated({
-      limit: pageSize,
-      offset,
-      search: search || undefined,
-      connectorType:
-        connectorTypeFilter === "all"
-          ? undefined
-          : (connectorTypeFilter as NonNullable<
-              archestraApiTypes.GetConnectorsData["query"]
-            >["connectorType"]),
-    });
+  const {
+    data: connectors,
+    isPending,
+    isFetching,
+  } = useConnectorsPaginated({
+    limit: pageSize,
+    offset,
+    search: search || undefined,
+    connectorType:
+      connectorTypeFilter === "all"
+        ? undefined
+        : (connectorTypeFilter as NonNullable<
+            archestraApiTypes.GetConnectorsData["query"]
+          >["connectorType"]),
+  });
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [editingConnector, setEditingConnector] =
     useState<ConnectorItem | null>(null);
@@ -266,9 +268,7 @@ function ConnectorsList() {
           data={items}
           getRowId={(row) => row.id}
           emptyMessage="No connectors found"
-          hasActiveFilters={
-            !!search || connectorTypeFilter !== "all"
-          }
+          hasActiveFilters={!!search || connectorTypeFilter !== "all"}
           onClearFilters={clearFilters}
           filteredEmptyMessage="No connectors match your filters. Try adjusting your search."
           hideSelectedCount

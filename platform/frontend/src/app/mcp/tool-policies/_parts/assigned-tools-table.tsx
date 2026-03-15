@@ -6,13 +6,7 @@ import type {
   RowSelectionState,
   SortingState,
 } from "@tanstack/react-table";
-import {
-  ChevronDown,
-  ChevronUp,
-  Loader2,
-  Pencil,
-  Wand2,
-} from "lucide-react";
+import { ChevronDown, ChevronUp, Loader2, Pencil, Wand2 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { LoadingSpinner } from "@/components/loading";
@@ -62,12 +56,12 @@ import {
   useToolsWithAssignments,
 } from "@/lib/tool.query";
 import { isMcpToolByProperties } from "@/lib/tool.utils";
+import { useDataTableQueryParams } from "@/lib/use-data-table-query-params";
 import {
   DEFAULT_FILTER_ALL,
   DEFAULT_SORT_BY,
   DEFAULT_TABLE_LIMIT,
 } from "@/lib/utils";
-import { useDataTableQueryParams } from "@/lib/use-data-table-query-params";
 import type { ToolsInitialData } from "../page";
 import { CallPolicyToggle } from "./call-policy-toggle";
 
@@ -119,8 +113,13 @@ export function AssignedToolsTable({
     initialData: initialData?.internalMcpCatalog,
   });
 
-  const { searchParams, pageIndex, pageSize, updateQueryParams, setPagination } =
-    useDataTableQueryParams();
+  const {
+    searchParams,
+    pageIndex,
+    pageSize,
+    updateQueryParams,
+    setPagination,
+  } = useDataTableQueryParams();
 
   // Get URL params
   const searchFromUrl = searchParams.get("search");

@@ -27,9 +27,7 @@ type MembersQuery = NonNullable<archestraApiTypes.GetMembersData["query"]>;
 type MembersResponse = archestraApiTypes.GetMembersResponses["200"];
 export type Member = MembersResponse["data"][number];
 
-type InvitationsQuery = NonNullable<
-  { limit: number; offset: number }
->;
+type InvitationsQuery = NonNullable<{ limit: number; offset: number }>;
 export type Invitation = {
   id: string;
   email: string;

@@ -195,7 +195,9 @@ export function EditIdentityProviderDialog({
                     permissions={{ identityProvider: ["update"] }}
                     disabled={updateIdentityProvider.isPending}
                   >
-                    {updateIdentityProvider.isPending ? "Updating..." : "Update Provider"}
+                    {updateIdentityProvider.isPending
+                      ? "Updating..."
+                      : "Update Provider"}
                   </PermissionButton>
                 </div>
               </div>

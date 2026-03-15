@@ -38,14 +38,14 @@ import {
   useRemoveMember,
   useUpdateMemberRole,
 } from "@/lib/member.query";
-import { useActiveOrganization } from "@/lib/organization.query";
-import { useRoles } from "@/lib/role.query";
-import { cn } from "@/lib/utils";
-import { useSetSettingsAction } from "../layout";
 import {
+  useActiveOrganization,
   useDeletePendingSignupMember,
   useMemberSignupStatus,
 } from "@/lib/organization.query";
+import { useRoles } from "@/lib/role.query";
+import { cn } from "@/lib/utils";
+import { useSetSettingsAction } from "../layout";
 
 const DEFAULT_PAGE_SIZE = 10;
 
@@ -94,17 +94,9 @@ function UsersPageContent() {
       {activeOrg ? (
         <div className="space-y-6">
           {activeTab === "users" ? (
-            <MembersTab
-              activeTab={activeTab}
-              onTabChange={setActiveTab}
-              organizationId={activeOrg.id}
-            />
+            <MembersTab activeTab={activeTab} onTabChange={setActiveTab} />
           ) : (
-            <InvitationsTab
-              activeTab={activeTab}
-              onTabChange={setActiveTab}
-              organizationId={activeOrg.id}
-            />
+            <InvitationsTab activeTab={activeTab} onTabChange={setActiveTab} />
           )}
         </div>
       ) : (
@@ -183,11 +175,9 @@ function InviteUserButton({ organizationId }: { organizationId: string }) {
 function MembersTab({
   activeTab,
   onTabChange,
-  organizationId,
 }: {
   activeTab: string;
   onTabChange: (tab: string) => void;
-  organizationId: string;
 }) {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -605,11 +595,9 @@ function ChangeRoleDialog({
 function InvitationsTab({
   activeTab,
   onTabChange,
-  organizationId,
 }: {
   activeTab: string;
   onTabChange: (tab: string) => void;
-  organizationId: string;
 }) {
   const searchParams = useSearchParams();
   const router = useRouter();

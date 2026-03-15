@@ -408,7 +408,9 @@ function SessionsTable({
         cell: ({ row }) => (
           <div className="flex flex-col gap-0.5 font-mono text-xs">
             {row.original.lastRequestTime && (
-              <span>{formatDate({ date: String(row.original.lastRequestTime) })}</span>
+              <span>
+                {formatDate({ date: String(row.original.lastRequestTime) })}
+              </span>
             )}
             {row.original.requestCount > 1 &&
               row.original.firstRequestTime &&
@@ -525,7 +527,6 @@ function SessionsTable({
           onApply={dateTimePicker.handleApplyDateRange}
           idPrefix="llm-proxy-"
         />
-
       </div>
 
       <DataTable
@@ -549,7 +550,9 @@ function SessionsTable({
           if (isSingleInteraction) {
             router.push(`/llm/logs/${session.interactionId}`);
           } else if (session.sessionId) {
-            router.push(`/llm/logs/session/${encodeURIComponent(session.sessionId)}`);
+            router.push(
+              `/llm/logs/session/${encodeURIComponent(session.sessionId)}`,
+            );
           }
         }}
       />

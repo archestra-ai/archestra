@@ -432,7 +432,9 @@ class OrganizationRoleModel {
     const customFilters = [
       eq(schema.organizationRolesTable.organizationId, organizationId),
       ...(normalizedSearch
-        ? [sql`LOWER(${schema.organizationRolesTable.name}) LIKE ${`%${normalizedSearch}%`}`]
+        ? [
+            sql`LOWER(${schema.organizationRolesTable.name}) LIKE ${`%${normalizedSearch}%`}`,
+          ]
         : []),
     ];
 
@@ -447,7 +449,9 @@ class OrganizationRoleModel {
     const total = predefinedCount + customTotal;
 
     const takeFromPredefined =
-      offset < predefinedCount ? predefinedRoles.slice(offset, offset + limit) : [];
+      offset < predefinedCount
+        ? predefinedRoles.slice(offset, offset + limit)
+        : [];
     const remainingLimit = Math.max(0, limit - takeFromPredefined.length);
     const customOffset =
       offset < predefinedCount ? 0 : Math.max(0, offset - predefinedCount);

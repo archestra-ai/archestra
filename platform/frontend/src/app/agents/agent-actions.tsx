@@ -1,6 +1,9 @@
 import { E2eTestId } from "@shared";
 import { MessageSquare, Pencil, Plug, Trash2 } from "lucide-react";
-import { TableRowActions, type TableRowAction } from "@/components/table-row-actions";
+import {
+  type TableRowAction,
+  TableRowActions,
+} from "@/components/table-row-actions";
 import type { useProfilesPaginated } from "@/lib/agent.query";
 
 type Agent = NonNullable<

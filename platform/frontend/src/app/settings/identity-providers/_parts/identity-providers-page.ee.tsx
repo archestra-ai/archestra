@@ -314,9 +314,7 @@ export function IdentityProvidersSettingsContent() {
 
   // Show message if SSO feature is disabled (check before loading since query is disabled)
   if (!config.enterpriseFeatures.core) {
-    return (
-      <EnterpriseLicenseRequired featureName="Identity Providers" />
-    );
+    return <EnterpriseLicenseRequired featureName="Identity Providers" />;
   }
 
   if (isLoading) return <LoadingSpinner />;

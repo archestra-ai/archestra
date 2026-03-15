@@ -6,9 +6,7 @@ import { DEFAULT_TABLE_LIMIT } from "./utils";
 
 type QueryParamUpdates = Record<string, string | null | undefined>;
 
-export function useDataTableQueryParams(params?: {
-  defaultPageSize?: number;
-}) {
+export function useDataTableQueryParams(params?: { defaultPageSize?: number }) {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();

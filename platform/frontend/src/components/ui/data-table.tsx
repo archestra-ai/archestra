@@ -258,10 +258,7 @@ export function DataTable<TData, TValue>({
               ))
             ) : (
               <TableRow>
-                <TableCell
-                  colSpan={columns.length}
-                  className="py-0"
-                >
+                <TableCell colSpan={columns.length} className="py-0">
                   <div className="flex flex-col items-center justify-center py-12 text-center">
                     {isLoading ? (
                       <Loader2 className="mb-3 h-10 w-10 animate-spin text-muted-foreground" />
@@ -270,7 +267,7 @@ export function DataTable<TData, TValue>({
                         {hasActiveFilters ? (
                           <Search className="h-10 w-10" />
                         ) : (
-                          emptyIcon ?? <Inbox className="h-10 w-10" />
+                          (emptyIcon ?? <Inbox className="h-10 w-10" />)
                         )}
                       </div>
                     )}

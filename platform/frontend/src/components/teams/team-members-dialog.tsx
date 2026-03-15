@@ -111,72 +111,72 @@ export function TeamMembersDialog({
       size="medium"
     >
       <div className="min-h-0 flex-1 overflow-y-auto py-4 pr-2 -mr-2 space-y-4">
-          {availableMembers.length > 0 && (
+        {availableMembers.length > 0 && (
+          <div className="space-y-2">
+            <Label>Add Member</Label>
+            <div className="flex gap-2">
+              <Select value={selectedUserId} onValueChange={handleAddMember}>
+                <SelectTrigger className="flex-1">
+                  <SelectValue placeholder="Select a member" />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableMembers.map((member) => (
+                    <SelectItem
+                      key={member.id}
+                      value={member.userId}
+                      className="cursor-pointer"
+                    >
+                      {member.user.email || member.userId}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        )}
+
+        <div className="space-y-2">
+          <Label>Current Members ({teamMembers?.length || 0})</Label>
+          {!teamMembers || teamMembers.length === 0 ? (
+            <div className="rounded-lg border border-dashed p-4 text-center">
+              <p className="text-sm text-muted-foreground">
+                No members in this team yet
+              </p>
+            </div>
+          ) : (
             <div className="space-y-2">
-              <Label>Add Member</Label>
-              <div className="flex gap-2">
-                <Select value={selectedUserId} onValueChange={handleAddMember}>
-                  <SelectTrigger className="flex-1">
-                    <SelectValue placeholder="Select a member" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {availableMembers.map((member) => (
-                      <SelectItem
-                        key={member.id}
-                        value={member.userId}
-                        className="cursor-pointer"
-                      >
-                        {member.user.email || member.userId}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              {teamMembers.map((member) => {
+                const orgMember = orgMembers.find(
+                  (m) => m.userId === member.userId,
+                );
+                return (
+                  <div
+                    key={member.id}
+                    className="flex items-center justify-between rounded-lg border p-3"
+                  >
+                    <div>
+                      <p className="text-sm font-medium">
+                        {orgMember?.user.email || member.userId}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Role: {member.role}
+                      </p>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => removeMutation.mutate(member.userId)}
+                      disabled={removeMutation.isPending}
+                    >
+                      <Trash2 className="h-4 w-4 text-destructive" />
+                    </Button>
+                  </div>
+                );
+              })}
             </div>
           )}
-
-          <div className="space-y-2">
-            <Label>Current Members ({teamMembers?.length || 0})</Label>
-            {!teamMembers || teamMembers.length === 0 ? (
-              <div className="rounded-lg border border-dashed p-4 text-center">
-                <p className="text-sm text-muted-foreground">
-                  No members in this team yet
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {teamMembers.map((member) => {
-                  const orgMember = orgMembers.find(
-                    (m) => m.userId === member.userId,
-                  );
-                  return (
-                    <div
-                      key={member.id}
-                      className="flex items-center justify-between rounded-lg border p-3"
-                    >
-                      <div>
-                        <p className="text-sm font-medium">
-                          {orgMember?.user.email || member.userId}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          Role: {member.role}
-                        </p>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => removeMutation.mutate(member.userId)}
-                        disabled={removeMutation.isPending}
-                      >
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                      </Button>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
         </div>
+      </div>
 
       <DialogStickyFooter>
         <Button variant="outline" onClick={() => onOpenChange(false)}>

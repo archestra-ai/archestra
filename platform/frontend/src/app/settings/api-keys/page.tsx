@@ -14,20 +14,17 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
-import {
-  DialogForm,
-  DialogStickyFooter,
-} from "@/components/ui/dialog";
+import { DialogForm, DialogStickyFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PermissionButton } from "@/components/ui/permission-button";
-import { useHasPermissions } from "@/lib/auth.query";
 import {
+  type UserApiKey,
   useApiKeys,
   useCreateApiKey,
   useDeleteApiKey,
-  type UserApiKey,
 } from "@/lib/api-key.query";
+import { useHasPermissions } from "@/lib/auth.query";
 import {
   formatRelativeTime,
   formatRelativeTimeFromNow,
@@ -56,7 +53,9 @@ export default function ApiKeysSettingsPage() {
 
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [apiKeyToDelete, setApiKeyToDelete] = useState<UserApiKey | null>(null);
-  const [createdApiKeyValue, setCreatedApiKeyValue] = useState<string | null>(null);
+  const [createdApiKeyValue, setCreatedApiKeyValue] = useState<string | null>(
+    null,
+  );
 
   const form = useForm<CreateApiKeyFormValues>({
     defaultValues: DEFAULT_FORM_VALUES,
@@ -105,8 +104,7 @@ export default function ApiKeysSettingsPage() {
       {
         accessorKey: "lastRequest",
         header: "Last used",
-        cell: ({ row }) =>
-          formatRelativeTimeFromNow(row.original.lastRequest),
+        cell: ({ row }) => formatRelativeTimeFromNow(row.original.lastRequest),
       },
       {
         accessorKey: "expiresAt",
@@ -177,16 +175,16 @@ export default function ApiKeysSettingsPage() {
           </AlertDescription>
         </Alert>
       ) : (
-      <LoadingWrapper
-        isPending={isPending}
-        loadingFallback={<LoadingSpinner />}
-      >
-        <DataTable
-          columns={columns}
-          data={apiKeys}
-          emptyMessage="No API keys yet"
-        />
-      </LoadingWrapper>
+        <LoadingWrapper
+          isPending={isPending}
+          loadingFallback={<LoadingSpinner />}
+        >
+          <DataTable
+            columns={columns}
+            data={apiKeys}
+            emptyMessage="No API keys yet"
+          />
+        </LoadingWrapper>
       )}
 
       <FormDialog
@@ -207,7 +205,10 @@ export default function ApiKeysSettingsPage() {
         size={createdApiKeyValue ? "small" : "medium"}
         className={createdApiKeyValue ? undefined : "sm:max-w-lg"}
       >
-        <DialogForm className="flex min-h-0 flex-1 flex-col" onSubmit={handleCreate}>
+        <DialogForm
+          className="flex min-h-0 flex-1 flex-col"
+          onSubmit={handleCreate}
+        >
           <div className="min-h-0 flex-1 overflow-y-auto py-4 pr-2 -mr-2 space-y-4">
             {createdApiKeyValue ? (
               <>

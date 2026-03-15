@@ -162,13 +162,12 @@ describe("KnowledgeBaseConnectorModel", () => {
       });
       await makeKnowledgeBaseConnector(kb.id, org.id, { name: "Third" });
 
-      const result = await KnowledgeBaseConnectorModel.findByOrganizationPaginated(
-        {
+      const result =
+        await KnowledgeBaseConnectorModel.findByOrganizationPaginated({
           organizationId: org.id,
           limit: 1,
           offset: 1,
-        },
-      );
+        });
 
       expect(result.total).toBe(3);
       expect(result.data).toHaveLength(1);
@@ -202,14 +201,13 @@ describe("KnowledgeBaseConnectorModel", () => {
           offset: 0,
           search: "backlog",
         });
-      const byType = await KnowledgeBaseConnectorModel.findByOrganizationPaginated(
-        {
+      const byType =
+        await KnowledgeBaseConnectorModel.findByOrganizationPaginated({
           organizationId: org.id,
           limit: 10,
           offset: 0,
           connectorType: "github",
-        },
-      );
+        });
 
       expect(byDescription.total).toBe(1);
       expect(byDescription.data[0]?.name).toBe("Jira Backlog");

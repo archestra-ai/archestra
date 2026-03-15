@@ -21,7 +21,10 @@ class ApiKeyModel {
       .select()
       .from(schema.apikeysTable)
       .where(
-        and(eq(schema.apikeysTable.id, id), eq(schema.apikeysTable.userId, userId)),
+        and(
+          eq(schema.apikeysTable.id, id),
+          eq(schema.apikeysTable.userId, userId),
+        ),
       )
       .limit(1);
 
@@ -50,7 +53,9 @@ function normalizeApiKey(apiKey: SelectApiKey): ApiKeyResponse {
   };
 }
 
-function parsePermissions(value: string | null): Record<string, string[]> | null {
+function parsePermissions(
+  value: string | null,
+): Record<string, string[]> | null {
   const parsed = parseJsonRecord(value);
   if (!parsed) return null;
 
@@ -58,7 +63,9 @@ function parsePermissions(value: string | null): Record<string, string[]> | null
     Object.entries(parsed).map(([key, actions]) => [
       key,
       Array.isArray(actions)
-        ? actions.filter((action): action is string => typeof action === "string")
+        ? actions.filter(
+            (action): action is string => typeof action === "string",
+          )
         : [],
     ]),
   );

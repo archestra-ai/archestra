@@ -182,26 +182,30 @@ export function CreateConnectorDialog({
             </DialogHeader>
             <div className="min-h-0 flex-1 overflow-y-auto py-2 pr-2 -mr-2">
               <div className="grid grid-cols-2 gap-3">
-              {CONNECTOR_OPTIONS.map((option) => (
-                <button
-                  key={option.type}
-                  type="button"
-                  onClick={() => handleSelectType(option.type)}
-                  className="flex flex-col items-center gap-3 rounded-lg border p-5 text-center transition-colors hover:bg-muted/50 cursor-pointer"
-                >
-                  <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-muted">
-                    <ConnectorTypeIcon type={option.type} className="h-7 w-7" />
-                  </div>
-                  <div>
-                    <div className="font-medium">{option.label}</div>
-                    <div className="text-xs text-muted-foreground mt-1">
-                      {option.description}
+                {CONNECTOR_OPTIONS.map((option) => (
+                  <button
+                    key={option.type}
+                    type="button"
+                    onClick={() => handleSelectType(option.type)}
+                    className="flex cursor-pointer flex-col items-center gap-3 rounded-lg border p-5 text-center transition-colors hover:bg-muted/50"
+                  >
+                    <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-muted">
+                      <ConnectorTypeIcon
+                        type={option.type}
+                        className="h-7 w-7"
+                      />
                     </div>
-                  </div>
-                </button>
-              ))}
+                    <div>
+                      <div className="font-medium">{option.label}</div>
+                      <div className="mt-1 text-xs text-muted-foreground">
+                        {option.description}
+                      </div>
+                    </div>
+                  </button>
+                ))}
               </div>
             </div>
+          </>
         ) : (
           <Form {...form}>
             <DialogForm

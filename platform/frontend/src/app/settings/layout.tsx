@@ -88,7 +88,7 @@ export default function SettingsLayout({
     description: "Configure your platform, teams, and integrations.",
   };
 
-  const contextValue = useMemo(() => ({ setActionButton }), [setActionButton]);
+  const contextValue = useMemo(() => ({ setActionButton }), []);
 
   return (
     <SettingsLayoutContext.Provider value={contextValue}>

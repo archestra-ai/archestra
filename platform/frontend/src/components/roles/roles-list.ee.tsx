@@ -2,8 +2,6 @@
 
 import {
   type archestraApiTypes,
-  DocsPage,
-  getDocsUrl,
   type Permissions,
   type PredefinedRoleName,
   roleDescriptions,
@@ -15,13 +13,13 @@ import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useSetSettingsAction } from "@/app/settings/layout";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { FormDialog } from "@/components/form-dialog";
 import { RoleTypeIcon } from "@/components/role-type-icon";
 import { SearchInput } from "@/components/search-input";
 import {
   type TableRowAction,
   TableRowActions,
 } from "@/components/table-row-actions";
-import { FormDialog } from "@/components/form-dialog";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { DialogForm, DialogStickyFooter } from "@/components/ui/dialog";
@@ -315,34 +313,37 @@ export function RolesList() {
         description="Create a new custom role with specific permissions. Users with this role will only have access to the selected resources and actions."
         size="large"
       >
-        <DialogForm className="flex min-h-0 flex-1 flex-col" onSubmit={handleCreateRole}>
+        <DialogForm
+          className="flex min-h-0 flex-1 flex-col"
+          onSubmit={handleCreateRole}
+        >
           <div className="min-h-0 flex-1 overflow-y-auto py-4 pr-2 -mr-2 space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="name">Role Name *</Label>
-                <Input
-                  id="name"
-                  placeholder="e.g., Developer, Viewer, Editor"
-                  value={roleName}
-                  onChange={(e) => setRoleName(e.target.value)}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="description">Description</Label>
-                <Textarea
-                  id="description"
-                  placeholder="What this role is used for"
-                  value={roleDescription}
-                  onChange={(e) => setRoleDescription(e.target.value)}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Permissions *</Label>
-                <RolePermissionBuilder
-                  permission={permission}
-                  onChange={setPermission}
-                  userPermissions={allAvailableActions}
-                />
-              </div>
+            <div className="space-y-2">
+              <Label htmlFor="name">Role Name *</Label>
+              <Input
+                id="name"
+                placeholder="e.g., Developer, Viewer, Editor"
+                value={roleName}
+                onChange={(e) => setRoleName(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="description">Description</Label>
+              <Textarea
+                id="description"
+                placeholder="What this role is used for"
+                value={roleDescription}
+                onChange={(e) => setRoleDescription(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Permissions *</Label>
+              <RolePermissionBuilder
+                permission={permission}
+                onChange={setPermission}
+                userPermissions={allAvailableActions}
+              />
+            </div>
           </div>
           <DialogStickyFooter>
             <Button
@@ -372,34 +373,37 @@ export function RolesList() {
         description="Modify the role name and permissions. Changes will affect all users with this role."
         size="large"
       >
-        <DialogForm className="flex min-h-0 flex-1 flex-col" onSubmit={handleEditRole}>
+        <DialogForm
+          className="flex min-h-0 flex-1 flex-col"
+          onSubmit={handleEditRole}
+        >
           <div className="min-h-0 flex-1 overflow-y-auto py-4 pr-2 -mr-2 space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="edit-name">Role Name *</Label>
-                <Input
-                  id="edit-name"
-                  placeholder="e.g., Developer, Viewer, Editor"
-                  value={roleName}
-                  onChange={(e) => setRoleName(e.target.value)}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="edit-description">Description</Label>
-                <Textarea
-                  id="edit-description"
-                  placeholder="What this role is used for"
-                  value={roleDescription}
-                  onChange={(e) => setRoleDescription(e.target.value)}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Permissions *</Label>
-                <RolePermissionBuilder
-                  permission={permission}
-                  onChange={setPermission}
-                  userPermissions={allAvailableActions}
-                />
-              </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-name">Role Name *</Label>
+              <Input
+                id="edit-name"
+                placeholder="e.g., Developer, Viewer, Editor"
+                value={roleName}
+                onChange={(e) => setRoleName(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-description">Description</Label>
+              <Textarea
+                id="edit-description"
+                placeholder="What this role is used for"
+                value={roleDescription}
+                onChange={(e) => setRoleDescription(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Permissions *</Label>
+              <RolePermissionBuilder
+                permission={permission}
+                onChange={setPermission}
+                userPermissions={allAvailableActions}
+              />
+            </div>
           </div>
           <DialogStickyFooter>
             <Button
@@ -451,7 +455,9 @@ export function RolesList() {
                 id="view-description"
                 value={
                   viewPermissionsRole.description ||
-                  roleDescriptions[viewPermissionsRole.name as PredefinedRoleName] ||
+                  roleDescriptions[
+                    viewPermissionsRole.name as PredefinedRoleName
+                  ] ||
                   ""
                 }
                 readOnly

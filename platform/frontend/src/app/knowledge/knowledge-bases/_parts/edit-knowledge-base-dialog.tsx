@@ -86,66 +86,66 @@ export function EditKnowledgeBaseDialog({
       size="medium"
       className="max-w-lg"
     >
-        <Form {...form}>
-          <DialogForm
-            onSubmit={form.handleSubmit(handleSubmit)}
-            className="flex min-h-0 flex-1 flex-col"
-          >
-            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto py-4 pr-2 -mr-2">
-              <FormField
-                control={form.control}
-                name="name"
-                rules={{ required: "Name is required" }}
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Name</FormLabel>
-                    <FormControl>
-                      <Input placeholder="My Knowledge Base" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+      <Form {...form}>
+        <DialogForm
+          onSubmit={form.handleSubmit(handleSubmit)}
+          className="flex min-h-0 flex-1 flex-col"
+        >
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto py-4 pr-2 -mr-2">
+            <FormField
+              control={form.control}
+              name="name"
+              rules={{ required: "Name is required" }}
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Name</FormLabel>
+                  <FormControl>
+                    <Input placeholder="My Knowledge Base" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
-              <FormField
-                control={form.control}
-                name="description"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Description (optional)</FormLabel>
-                    <FormControl>
-                      <Input
-                        placeholder="A short description of this knowledge base"
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+            <FormField
+              control={form.control}
+              name="description"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Description (optional)</FormLabel>
+                  <FormControl>
+                    <Input
+                      placeholder="A short description of this knowledge base"
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
-              <VisibilitySelector
-                visibility={visibility}
-                onVisibilityChange={setVisibility}
-                teamIds={teamIds}
-                onTeamIdsChange={setTeamIds}
-              />
-            </div>
+            <VisibilitySelector
+              visibility={visibility}
+              onVisibilityChange={setVisibility}
+              teamIds={teamIds}
+              onTeamIdsChange={setTeamIds}
+            />
+          </div>
 
-            <DialogStickyFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => onOpenChange(false)}
-              >
-                Cancel
-              </Button>
-              <Button type="submit" disabled={updateKnowledgeBase.isPending}>
-                {updateKnowledgeBase.isPending ? "Saving..." : "Save Changes"}
-              </Button>
-            </DialogStickyFooter>
-          </DialogForm>
-        </Form>
+          <DialogStickyFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" disabled={updateKnowledgeBase.isPending}>
+              {updateKnowledgeBase.isPending ? "Saving..." : "Save Changes"}
+            </Button>
+          </DialogStickyFooter>
+        </DialogForm>
+      </Form>
     </FormDialog>
   );
 }

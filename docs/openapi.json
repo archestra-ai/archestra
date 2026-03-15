@@ -46646,9 +46646,8 @@
                 "type": "object",
                 "properties": {
                   "name": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 255
+                    "nullable": true,
+                    "type": "string"
                   },
                   "expiresIn": {
                     "nullable": true,
@@ -46656,7 +46655,8 @@
                     "exclusiveMinimum": true,
                     "maximum": 9007199254740991
                   }
-                }
+                },
+                "additionalProperties": false
               }
             }
           }
@@ -46968,342 +46968,6 @@
           "API Keys"
         ],
         "description": "Get one authenticated user's Archestra API key",
-        "parameters": [
-          {
-            "schema": {
-              "type": "string"
-            },
-            "in": "path",
-            "name": "id",
-            "required": true
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "id": {
-                      "type": "string"
-                    },
-                    "name": {
-                      "nullable": true,
-                      "type": "string"
-                    },
-                    "start": {
-                      "nullable": true,
-                      "type": "string"
-                    },
-                    "prefix": {
-                      "nullable": true,
-                      "type": "string"
-                    },
-                    "userId": {
-                      "type": "string"
-                    },
-                    "enabled": {
-                      "nullable": true,
-                      "type": "boolean"
-                    },
-                    "lastRequest": {
-                      "nullable": true,
-                      "type": "string",
-                      "format": "date-time"
-                    },
-                    "expiresAt": {
-                      "nullable": true,
-                      "type": "string",
-                      "format": "date-time"
-                    },
-                    "createdAt": {
-                      "type": "string",
-                      "format": "date-time"
-                    },
-                    "updatedAt": {
-                      "type": "string",
-                      "format": "date-time"
-                    },
-                    "metadata": {
-                      "nullable": true,
-                      "type": "object",
-                      "additionalProperties": {}
-                    },
-                    "permissions": {
-                      "nullable": true,
-                      "type": "object",
-                      "additionalProperties": {
-                        "type": "array",
-                        "items": {
-                          "type": "string"
-                        }
-                      }
-                    }
-                  },
-                  "required": [
-                    "id",
-                    "name",
-                    "start",
-                    "prefix",
-                    "userId",
-                    "enabled",
-                    "lastRequest",
-                    "expiresAt",
-                    "createdAt",
-                    "updatedAt",
-                    "metadata",
-                    "permissions"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_validation_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authentication_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authorization_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_not_found_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_conflict_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_internal_server_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          }
-        }
-      },
-      "patch": {
-        "operationId": "updateApiKey",
-        "tags": [
-          "API Keys"
-        ],
-        "description": "Update an Archestra API key for the authenticated user",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "name": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 255
-                  },
-                  "enabled": {
-                    "type": "boolean"
-                  },
-                  "expiresIn": {
-                    "nullable": true,
-                    "type": "integer",
-                    "exclusiveMinimum": true,
-                    "maximum": 9007199254740991
-                  }
-                }
-              }
-            }
-          }
-        },
         "parameters": [
           {
             "schema": {
@@ -95566,6 +95230,14 @@
             "in": "query",
             "name": "offset",
             "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "search",
+            "required": false
           }
         ],
         "responses": {
@@ -119844,6 +119516,7 @@
                         },
                         "required": [
                           "id",
+                          "organizationId",
                           "role",
                           "name",
                           "description",
@@ -120225,6 +119898,7 @@
                   },
                   "required": [
                     "id",
+                    "organizationId",
                     "role",
                     "name",
                     "description",
@@ -120541,6 +120215,7 @@
                   },
                   "required": [
                     "id",
+                    "organizationId",
                     "role",
                     "name",
                     "description",
@@ -120894,6 +120569,7 @@
                   },
                   "required": [
                     "id",
+                    "organizationId",
                     "role",
                     "name",
                     "description",

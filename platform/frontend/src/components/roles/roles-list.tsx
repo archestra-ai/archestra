@@ -12,6 +12,7 @@ import {
 import type { ColumnDef } from "@tanstack/react-table";
 import { Eye } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useSetSettingsAction } from "@/app/settings/layout";
 import { EnterpriseLicenseRequired } from "@/components/enterprise-license-required";
 import { FormDialog } from "@/components/form-dialog";
 import { RoleTypeIcon } from "@/components/role-type-icon";
@@ -20,13 +21,12 @@ import {
   type TableRowAction,
   TableRowActions,
 } from "@/components/table-row-actions";
-import { DataTable } from "@/components/ui/data-table";
 import { Badge } from "@/components/ui/badge";
-import { DialogStickyFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { DataTable } from "@/components/ui/data-table";
+import { DialogStickyFooter } from "@/components/ui/dialog";
 import { useRolesPaginated } from "@/lib/role.query";
 import { useDataTableQueryParams } from "@/lib/use-data-table-query-params";
-import { useSetSettingsAction } from "@/app/settings/layout";
 
 type Role = archestraApiTypes.GetRoleResponses["200"];
 
@@ -39,8 +39,7 @@ export function RolesList() {
     searchParams,
     setPagination,
     updateQueryParams,
-  } =
-    useDataTableQueryParams();
+  } = useDataTableQueryParams();
   const nameFilter = searchParams.get("name") || undefined;
   const { data: rolesResponse, isLoading } = useRolesPaginated({
     limit: pageSize,
@@ -87,9 +86,7 @@ export function RolesList() {
           <div>
             <div className="font-medium capitalize">{role.name}</div>
             {description && (
-              <div className="text-xs text-muted-foreground">
-                {description}
-              </div>
+              <div className="text-xs text-muted-foreground">{description}</div>
             )}
           </div>
         );
@@ -190,7 +187,11 @@ function ViewPermissionsDialog({
         <ReadOnlyPermissions permission={role.permission} />
       </div>
       <DialogStickyFooter>
-        <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => onOpenChange(false)}
+        >
           Close
         </Button>
       </DialogStickyFooter>

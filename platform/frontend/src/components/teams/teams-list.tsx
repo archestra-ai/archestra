@@ -1,12 +1,11 @@
 "use client";
-import { useSetSettingsAction } from "@/app/settings/layout";
 import { archestraApiSdk, type archestraApiTypes, E2eTestId } from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
-
 import { Key, Link2, Plus, Trash2, Users, Vault } from "lucide-react";
-import { Suspense, lazy, useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { toast } from "sonner";
+import { useSetSettingsAction } from "@/app/settings/layout";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { FormDialog } from "@/components/form-dialog";
 import {
@@ -312,7 +311,10 @@ export function TeamsList() {
         description="Create a team to organize access to profiles and MCP servers"
         size="medium"
       >
-        <DialogForm className="flex min-h-0 flex-1 flex-col" onSubmit={handleCreateTeam}>
+        <DialogForm
+          className="flex min-h-0 flex-1 flex-col"
+          onSubmit={handleCreateTeam}
+        >
           <div className="min-h-0 flex-1 overflow-y-auto py-4 pr-2 -mr-2 space-y-4">
             <div className="space-y-2">
               <Label htmlFor="name">Team Name *</Label>

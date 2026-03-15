@@ -45,16 +45,12 @@ export function FormDialog({
       <DialogContent
         className={cn(sizeClasses[size], className)}
         onInteractOutside={
-          preventCloseOnInteractOutside
-            ? (e) => e.preventDefault()
-            : undefined
+          preventCloseOnInteractOutside ? (e) => e.preventDefault() : undefined
         }
       >
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
-          {description && (
-            <DialogDescription>{description}</DialogDescription>
-          )}
+          {description && <DialogDescription>{description}</DialogDescription>}
         </DialogHeader>
         {children}
       </DialogContent>

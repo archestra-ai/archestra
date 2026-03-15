@@ -102,7 +102,9 @@ export function CreateIdentityProviderDialog({
     <FormDialog
       open={open}
       onOpenChange={handleClose}
-      title={providerName ? `Configure ${providerName}` : "Add Identity Provider"}
+      title={
+        providerName ? `Configure ${providerName}` : "Add Identity Provider"
+      }
       description={
         providerName
           ? `Configure ${providerName} Single Sign-On for your organization.`
@@ -137,7 +139,9 @@ export function CreateIdentityProviderDialog({
               permissions={{ identityProvider: ["create"] }}
               disabled={createIdentityProvider.isPending}
             >
-              {createIdentityProvider.isPending ? "Creating..." : "Create & Test"}
+              {createIdentityProvider.isPending
+                ? "Creating..."
+                : "Create & Test"}
             </PermissionButton>
           </DialogStickyFooter>
         </DialogForm>

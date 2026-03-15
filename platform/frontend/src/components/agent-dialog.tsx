@@ -1055,9 +1055,7 @@ export function AgentDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        className="max-w-5xl h-[90vh] flex flex-col overflow-hidden"
-      >
+      <DialogContent className="max-w-5xl h-[90vh] flex flex-col overflow-hidden">
         <DialogHeader>
           <div className="flex items-center justify-between pr-6">
             <DialogTitle className="flex items-center gap-2">
@@ -1099,7 +1097,10 @@ export function AgentDialog({
           )}
         </DialogHeader>
 
-        <DialogForm className="flex min-h-0 flex-1 flex-col" onSubmit={handleSave}>
+        <DialogForm
+          className="flex min-h-0 flex-1 flex-col"
+          onSubmit={handleSave}
+        >
           <div className="min-h-0 flex-1 overflow-y-auto py-4 pr-2 -mr-2 space-y-4">
             {agentType === "profile" && (
               <Alert variant="warning">
@@ -1423,8 +1424,9 @@ export function AgentDialog({
                                   );
                                   const connectorTypes = [
                                     ...new Set<string>(
-                                      kb.connectors?.map((c) => c.connectorType) ??
-                                        [],
+                                      kb.connectors?.map(
+                                        (c) => c.connectorType,
+                                      ) ?? [],
                                     ),
                                   ];
                                   return (

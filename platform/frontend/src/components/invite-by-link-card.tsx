@@ -111,37 +111,34 @@ function InviteByLinkCardContent({
             </div>
           </>
         ) : (
-          <>
-            <div className="space-y-2">
-              <Label>Invitation Link</Label>
-              <div className="flex items-center gap-2">
-                <Input
-                  value={invitationLink}
-                  readOnly
-                  className="flex-1"
-                  data-testid={E2eTestId.InvitationLinkInput}
-                />
-                <Button
-                  type="button"
-                  size="icon"
-                  variant="outline"
-                  onClick={handleCopyLink}
-                  data-testid={E2eTestId.InvitationLinkCopyButton}
-                >
-                  {isCopied ? (
-                    <Check className="h-4 w-4 text-green-600" />
-                  ) : (
-                    <Copy className="h-4 w-4" />
-                  )}
-                </Button>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Share this link with{" "}
-                <span className="font-medium">{email}</span> to invite them as a{" "}
-                <span className="font-medium">{role}</span>
-              </p>
+          <div className="space-y-2">
+            <Label>Invitation Link</Label>
+            <div className="flex items-center gap-2">
+              <Input
+                value={invitationLink}
+                readOnly
+                className="flex-1"
+                data-testid={E2eTestId.InvitationLinkInput}
+              />
+              <Button
+                type="button"
+                size="icon"
+                variant="outline"
+                onClick={handleCopyLink}
+                data-testid={E2eTestId.InvitationLinkCopyButton}
+              >
+                {isCopied ? (
+                  <Check className="h-4 w-4 text-green-600" />
+                ) : (
+                  <Copy className="h-4 w-4" />
+                )}
+              </Button>
             </div>
-          </>
+            <p className="text-xs text-muted-foreground">
+              Share this link with <span className="font-medium">{email}</span>{" "}
+              to invite them as a <span className="font-medium">{role}</span>
+            </p>
+          </div>
         )}
       </div>
       <DialogStickyFooter>

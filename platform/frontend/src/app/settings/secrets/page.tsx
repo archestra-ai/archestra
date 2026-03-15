@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect } from "react";
 import { RefreshCw, Server } from "lucide-react";
+import { useCallback, useEffect } from "react";
 import { useSetSettingsAction } from "@/app/settings/layout";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -16,9 +16,9 @@ export default function SecretsSettingsPage() {
   const { data: secretsType, isLoading } = useSecretsType();
   const checkConnectivityMutation = useCheckSecretsConnectivity();
 
-  const handleCheckConnectivity = async () => {
+  const handleCheckConnectivity = useCallback(async () => {
     await checkConnectivityMutation.mutateAsync();
-  };
+  }, [checkConnectivityMutation]);
 
   useEffect(() => {
     if (secretsType?.type !== "Vault") {
@@ -44,6 +44,7 @@ export default function SecretsSettingsPage() {
     checkConnectivityMutation.isPending,
     secretsType?.type,
     setActionButton,
+    handleCheckConnectivity,
   ]);
 
   if (isLoading) {

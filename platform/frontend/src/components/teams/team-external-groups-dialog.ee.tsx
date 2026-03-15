@@ -124,110 +124,108 @@ export function TeamExternalGroupsDialog({
       className="sm:max-w-[600px]"
     >
       <div className="min-h-0 flex-1 overflow-y-auto py-4 pr-2 -mr-2 space-y-6">
-          {/* Add new group mapping */}
-          <div className="space-y-2">
-            <Label>Add External Group Mapping</Label>
-            <div className="flex gap-2">
-              <Input
-                placeholder="e.g., archestra-admins, cn=engineering,ou=groups,dc=example,dc=com"
-                value={newGroupIdentifier}
-                onChange={(e) => setNewGroupIdentifier(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    handleAddGroup();
-                  }
-                }}
-              />
-              <Button
-                onClick={handleAddGroup}
-                disabled={addMutation.isPending || !newGroupIdentifier.trim()}
-              >
-                <Plus className="mr-2 h-4 w-4" />
-                Add
-              </Button>
+        {/* Add new group mapping */}
+        <div className="space-y-2">
+          <Label>Add External Group Mapping</Label>
+          <div className="flex gap-2">
+            <Input
+              placeholder="e.g., archestra-admins, cn=engineering,ou=groups,dc=example,dc=com"
+              value={newGroupIdentifier}
+              onChange={(e) => setNewGroupIdentifier(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  handleAddGroup();
+                }
+              }}
+            />
+            <Button
+              onClick={handleAddGroup}
+              disabled={addMutation.isPending || !newGroupIdentifier.trim()}
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              Add
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Enter the group identifier exactly as it appears in your identity
+            provider. This is typically found in the "groups" claim of the SSO
+            token.
+          </p>
+        </div>
+
+        {/* Current mappings */}
+        <div className="space-y-2">
+          <Label>Linked External Groups ({externalGroups?.length || 0})</Label>
+          {isLoading ? (
+            <div className="py-4 text-center text-sm text-muted-foreground">
+              Loading...
             </div>
-            <p className="text-xs text-muted-foreground">
-              Enter the group identifier exactly as it appears in your identity
-              provider. This is typically found in the "groups" claim of the SSO
-              token.
-            </p>
-          </div>
-
-          {/* Current mappings */}
-          <div className="space-y-2">
-            <Label>
-              Linked External Groups ({externalGroups?.length || 0})
-            </Label>
-            {isLoading ? (
-              <div className="py-4 text-center text-sm text-muted-foreground">
-                Loading...
-              </div>
-            ) : !externalGroups || externalGroups.length === 0 ? (
-              <div className="rounded-lg border border-dashed p-4 text-center">
-                <Link2 className="mx-auto mb-2 h-8 w-8 text-muted-foreground" />
-                <p className="text-sm text-muted-foreground">
-                  No external groups linked yet. Add a group identifier above to
-                  enable automatic team sync.
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {externalGroups.map((group: ExternalGroup) => (
-                  <div
-                    key={group.id}
-                    className="flex items-center justify-between rounded-lg border p-3"
-                  >
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-mono truncate">
-                        {group.groupIdentifier}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        Added {new Date(group.createdAt).toLocaleDateString()}
-                      </p>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => removeMutation.mutate(group.id)}
-                      disabled={removeMutation.isPending}
-                    >
-                      <Trash2 className="h-4 w-4 text-destructive" />
-                    </Button>
+          ) : !externalGroups || externalGroups.length === 0 ? (
+            <div className="rounded-lg border border-dashed p-4 text-center">
+              <Link2 className="mx-auto mb-2 h-8 w-8 text-muted-foreground" />
+              <p className="text-sm text-muted-foreground">
+                No external groups linked yet. Add a group identifier above to
+                enable automatic team sync.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {externalGroups.map((group: ExternalGroup) => (
+                <div
+                  key={group.id}
+                  className="flex items-center justify-between rounded-lg border p-3"
+                >
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-mono truncate">
+                      {group.groupIdentifier}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Added {new Date(group.createdAt).toLocaleDateString()}
+                    </p>
                   </div>
-                ))}
-              </div>
-            )}
-          </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => removeMutation.mutate(group.id)}
+                    disabled={removeMutation.isPending}
+                  >
+                    <Trash2 className="h-4 w-4 text-destructive" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
 
-          {/* How it works */}
-          <Alert>
-            <AlertCircle className="h-4 w-4" />
-            <AlertTitle>How Team Sync Works</AlertTitle>
-            <AlertDescription className="space-y-2 text-sm">
-              <p>
-                When a user logs in via SSO, their group memberships are checked
-                against the external groups linked to each team:
-              </p>
-              <ul className="list-disc list-inside space-y-1 text-muted-foreground">
-                <li>
-                  <strong>Added:</strong> Users in a linked group are
-                  automatically added to the team
-                </li>
-                <li>
-                  <strong>Removed:</strong> Users no longer in any linked group
-                  are automatically removed (if they were added via sync)
-                </li>
-                <li>
-                  <strong>Manual members preserved:</strong> Members added
-                  manually are never removed by sync
-                </li>
-              </ul>
-              <p className="text-muted-foreground">
-                Group matching is case-insensitive.
-              </p>
-            </AlertDescription>
-          </Alert>
+        {/* How it works */}
+        <Alert>
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>How Team Sync Works</AlertTitle>
+          <AlertDescription className="space-y-2 text-sm">
+            <p>
+              When a user logs in via SSO, their group memberships are checked
+              against the external groups linked to each team:
+            </p>
+            <ul className="list-disc list-inside space-y-1 text-muted-foreground">
+              <li>
+                <strong>Added:</strong> Users in a linked group are
+                automatically added to the team
+              </li>
+              <li>
+                <strong>Removed:</strong> Users no longer in any linked group
+                are automatically removed (if they were added via sync)
+              </li>
+              <li>
+                <strong>Manual members preserved:</strong> Members added
+                manually are never removed by sync
+              </li>
+            </ul>
+            <p className="text-muted-foreground">
+              Group matching is case-insensitive.
+            </p>
+          </AlertDescription>
+        </Alert>
       </div>
 
       <DialogStickyFooter>

@@ -257,7 +257,9 @@ export default function AgentSettingsPage() {
             {({ hasPermission }) => (
               <Select
                 value={toolPolicy}
-                onValueChange={(value: GlobalToolPolicy) => setToolPolicy(value)}
+                onValueChange={(value: GlobalToolPolicy) =>
+                  setToolPolicy(value)
+                }
                 disabled={isSaving || !hasPermission}
               >
                 <SelectTrigger className="w-[140px]">
@@ -274,11 +276,18 @@ export default function AgentSettingsPage() {
         notice={
           isRestrictive ? (
             <span className="text-green-600 dark:text-green-400">
-              Policies apply to agents' tools. <Link href="/mcp/tool-policies" className="text-primary hover:underline">Configure policies</Link>
+              Policies apply to agents' tools.{" "}
+              <Link
+                href="/mcp/tool-policies"
+                className="text-primary hover:underline"
+              >
+                Configure policies
+              </Link>
             </span>
           ) : (
             <span className="text-red-600 dark:text-red-400">
-              Agents can perform any action. Tool calls are allowed and results are trusted.
+              Agents can perform any action. Tool calls are allowed and results
+              are trusted.
             </span>
           )
         }
@@ -294,7 +303,9 @@ export default function AgentSettingsPage() {
             {({ hasPermission }) => (
               <Select
                 value={fileUploads}
-                onValueChange={(value: FileUploadsEnabled) => setFileUploads(value)}
+                onValueChange={(value: FileUploadsEnabled) =>
+                  setFileUploads(value)
+                }
                 disabled={isSaving || !hasPermission}
               >
                 <SelectTrigger className="w-[140px]">
@@ -310,7 +321,8 @@ export default function AgentSettingsPage() {
         }
         notice={
           <span className="text-red-600 dark:text-red-400">
-            Security policies only apply to text content. File uploads (images, PDFs) bypass policy checks. File-based policies coming soon.
+            Security policies only apply to text content. File uploads (images,
+            PDFs) bypass policy checks. File-based policies coming soon.
           </span>
         }
       />

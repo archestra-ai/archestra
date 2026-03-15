@@ -41,7 +41,6 @@ Full access to core resources and settings, but cannot manage users, roles, or i
 | LLM Proxies | `read`, `create`, `update`, `delete`, `team-admin` |
 | LLM Providers | `read`, `create`, `update`, `delete` |
 | LLM Limits | `read`, `create`, `update`, `delete` |
-| LLM Settings | `read`, `update` |
 | LLM Costs | `read` |
 | MCP Gateways | `read`, `create`, `update`, `delete`, `team-admin` |
 | Tools & Policies | `read`, `create`, `update`, `delete` |
@@ -49,14 +48,19 @@ Full access to core resources and settings, but cannot manage users, roles, or i
 | MCP Server Installations | `read`, `create`, `update`, `delete` |
 | MCP Server Installation Requests | `read`, `create`, `update`, `delete` |
 | Knowledge Bases | `read`, `create`, `update`, `delete` |
-| Knowledge Settings | `read`, `update` |
 | Dual LLM Configs | `read` |
 | Dual LLM Results | `read` |
 | Chats | `read`, `create`, `update`, `delete` |
 | Logs | `read` |
+| API Keys | `read`, `create`, `delete` |
+| LLM Settings | `read`, `update` |
+| Knowledge Settings | `read`, `update` |
+| Users | `read` |
+| Invitations | `read` |
+| Roles | `read` |
 | Teams | `read` |
+| Identity Providers | `read` |
 | Secrets | `read` |
-| API Keys | `read`, `create`, `update`, `delete` |
 | Organization Settings | `read`, `update` |
 | Chat Agent Picker | `enable` |
 | Chat Provider Settings | `enable` |
@@ -79,6 +83,7 @@ Can manage agents, tools, and chat, with read-only access to most other resource
 | Knowledge Bases | `read` |
 | Dual LLM Results | `read` |
 | Chats | `read`, `create`, `update`, `delete` |
+| API Keys | `read`, `create`, `delete` |
 | Teams | `read` |
 | Simple View | `enable` |
 | Chat Expand Tool Calls | `enable` |

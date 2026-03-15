@@ -22,20 +22,19 @@ import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { KnowledgePageLayout } from "@/app/knowledge/_parts/knowledge-page-layout";
 import { ConnectorStatusDot } from "@/app/knowledge/knowledge-bases/_parts/connector-enabled-dot";
 import { ConnectorStatusBadge } from "@/app/knowledge/knowledge-bases/_parts/connector-status-badge";
+import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { SearchInput } from "@/components/search-input";
 import {
   type TableRowAction,
   TableRowActions,
 } from "@/components/table-row-actions";
-import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { SearchInput } from "@/components/search-input";
 import { DataTable } from "@/components/ui/data-table";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogForm,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -88,12 +87,15 @@ function KnowledgeBasesList() {
   const pageSize = Number(pageSizeFromUrl || DEFAULT_TABLE_LIMIT);
   const offset = pageIndex * pageSize;
 
-  const { data: knowledgeBases, isPending, isFetching } =
-    useKnowledgeBasesPaginated({
-      limit: pageSize,
-      offset,
-      search: search || undefined,
-    });
+  const {
+    data: knowledgeBases,
+    isPending,
+    isFetching,
+  } = useKnowledgeBasesPaginated({
+    limit: pageSize,
+    offset,
+    search: search || undefined,
+  });
   const { data: teams } = useTeams();
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -206,11 +208,7 @@ function KnowledgeBasesList() {
         return (
           <Badge variant="outline" className="gap-1.5">
             <VisibilityIcon className="h-3.5 w-3.5" />
-            {isAutoSync
-              ? "Auto Sync"
-              : isOrgWide
-                ? "Org-wide"
-                : "Team-scoped"}
+            {isAutoSync ? "Auto Sync" : isOrgWide ? "Org-wide" : "Team-scoped"}
           </Badge>
         );
       },
@@ -422,9 +420,7 @@ function ExpandedConnectors({ knowledgeBaseId }: { knowledgeBaseId: string }) {
           isLoading={isPending}
           emptyMessage="No connectors configured"
           onRowClick={(row) =>
-            router.push(
-              `/knowledge/connectors/${row.id}?from=knowledge-bases`,
-            )
+            router.push(`/knowledge/connectors/${row.id}?from=knowledge-bases`)
           }
           manualPagination
         />

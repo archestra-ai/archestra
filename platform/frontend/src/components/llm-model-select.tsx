@@ -132,6 +132,7 @@ export function LlmModelSearchableSelect({
       searchPlaceholder="Search models..."
       disabled={disabled}
       className={cn("w-full", className)}
+      multiline={showPricing}
       items={[
         ...(includeAllOption
           ? [{ value: "all", label: allLabel, searchText: allLabel }]

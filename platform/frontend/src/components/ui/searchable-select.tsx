@@ -30,6 +30,7 @@ interface SearchableSelectProps {
   hint?: string;
   onSearchQueryChange?: (value: string) => void;
   emptyMessage?: string;
+  multiline?: boolean;
 }
 
 export function SearchableSelect({
@@ -45,6 +46,7 @@ export function SearchableSelect({
   hint,
   onSearchQueryChange,
   emptyMessage = "No results found.",
+  multiline = false,
 }: SearchableSelectProps) {
   const [open, setOpen] = React.useState(false);
   const [searchQuery, setSearchQuery] = React.useState("");
@@ -80,7 +82,9 @@ export function SearchableSelect({
           aria-expanded={open}
           disabled={disabled}
           className={cn(
-            "h-auto min-h-9 w-[200px] justify-between py-2 font-normal",
+            multiline
+              ? "h-auto min-h-9 w-[200px] justify-between py-2 font-normal"
+              : "h-9 w-[200px] justify-between font-normal",
             !value && "text-muted-foreground",
             className,
           )}
@@ -152,7 +156,7 @@ export function SearchableSelect({
                   value === item.value && "bg-accent text-accent-foreground",
                 )}
               >
-                <span className="truncate min-w-0">
+                <span className="min-w-0 flex-1">
                   {item.content ?? item.label}
                   {item.description && (
                     <span className="block text-xs text-muted-foreground truncate">

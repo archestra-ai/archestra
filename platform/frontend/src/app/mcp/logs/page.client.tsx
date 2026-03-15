@@ -5,6 +5,7 @@ import type { ColumnDef, SortingState } from "@tanstack/react-table";
 import { ChevronDown, ChevronUp, User } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { ProfileFilterOption } from "@/components/log-filter-option";
 import { SearchInput } from "@/components/search-input";
 import { TruncatedText } from "@/components/truncated-text";
 import { Badge } from "@/components/ui/badge";
@@ -415,7 +416,7 @@ function McpToolCallsTable({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap gap-4">
+      <div className="flex flex-wrap gap-3">
         {searchInputComponent}
         <SearchableSelect
           value={profileFilter}
@@ -426,6 +427,8 @@ function McpToolCallsTable({
             ...(agents?.map((agent) => ({
               value: agent.id,
               label: agent.name,
+              content: <ProfileFilterOption profile={agent} />,
+              selectedContent: <ProfileFilterOption profile={agent} />,
             })) || []),
           ]}
           className="w-[200px]"

@@ -198,7 +198,7 @@ export default function VirtualKeysPage() {
 
   return (
     <>
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+      <div className="mb-4 flex flex-wrap gap-4">
         <SearchInput
           objectNamePlural="virtual keys"
           searchFields={["name"]}

@@ -12,6 +12,11 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
 import { Savings } from "@/components/savings";
 import { SearchInput } from "@/components/search-input";
+import {
+  ProfileFilterOption,
+  SourceFilterOption,
+  UserFilterOption,
+} from "@/components/log-filter-option";
 import { SourceBadge } from "@/components/source-badge";
 import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/ui/data-table";
@@ -471,7 +476,7 @@ function SessionsTable({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap gap-4">
+      <div className="flex flex-wrap gap-3">
         <SearchInput
           objectNamePlural="logs"
           searchFields={["session ID", "model", "message"]}
@@ -487,6 +492,8 @@ function SessionsTable({
             ...(agents?.map((agent) => ({
               value: agent.id,
               label: agent.name,
+              content: <ProfileFilterOption profile={agent} />,
+              selectedContent: <ProfileFilterOption profile={agent} />,
             })) || []),
           ]}
           className="w-[200px]"
@@ -501,6 +508,8 @@ function SessionsTable({
             ...(uniqueUsers?.map((user: UniqueUser) => ({
               value: user.id,
               label: user.name || user.id,
+              content: <UserFilterOption name={user.name || user.id} />,
+              selectedContent: <UserFilterOption name={user.name || user.id} />,
             })) || []),
           ]}
           className="w-[200px]"
@@ -513,7 +522,16 @@ function SessionsTable({
           items={[
             { value: "all", label: "All Sources" },
             ...Object.entries(INTERACTION_SOURCE_DISPLAY).map(
-              ([value, { label }]) => ({ value, label }),
+              ([value, { label }]) => ({
+                value,
+                label,
+                content: (
+                  <SourceFilterOption source={value as InteractionSource} />
+                ),
+                selectedContent: (
+                  <SourceFilterOption source={value as InteractionSource} />
+                ),
+              }),
             ),
           ]}
           className="w-[200px]"

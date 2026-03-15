@@ -256,7 +256,7 @@ export default function ModelsPage() {
     <>
       <div className="space-y-4">
         {models.length > 0 && (
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap gap-4">
             <SearchInput
               objectNamePlural="models"
               searchFields={["model ID"]}

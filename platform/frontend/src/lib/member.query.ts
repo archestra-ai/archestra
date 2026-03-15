@@ -2,8 +2,9 @@ import { archestraApiSdk, type archestraApiTypes } from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { authClient } from "@/lib/clients/auth/auth-client";
+import { useActiveOrganization } from "./organization.query";
 
-const { getMembers, getInvitations } = archestraApiSdk;
+const { getMembers } = archestraApiSdk;
 
 /**
  * Query keys for member/invitation queries
@@ -27,10 +28,26 @@ type MembersResponse = archestraApiTypes.GetMembersResponses["200"];
 export type Member = MembersResponse["data"][number];
 
 type InvitationsQuery = NonNullable<
-  archestraApiTypes.GetInvitationsData["query"]
+  { limit: number; offset: number }
 >;
-type InvitationsResponse = archestraApiTypes.GetInvitationsResponses["200"];
-export type Invitation = InvitationsResponse["data"][number];
+export type Invitation = {
+  id: string;
+  email: string;
+  role: string | null;
+  expiresAt: string;
+  status: string;
+};
+type PaginatedInvitationsResponse = {
+  data: Invitation[];
+  pagination: {
+    currentPage: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+    hasNext: boolean;
+    hasPrev: boolean;
+  };
+};
 
 /**
  * Paginated members hook with search and role filter support
@@ -66,24 +83,51 @@ export function useMembersPaginated(
 export function useInvitationsPaginated(
   query: Required<Pick<InvitationsQuery, "limit" | "offset">>,
 ) {
-  return useQuery({
-    queryKey: invitationKeys.paginated(query),
+  const { data: activeOrganization } = useActiveOrganization();
+
+  return useQuery<PaginatedInvitationsResponse>({
+    queryKey: invitationKeys.paginated({
+      ...query,
+      organizationId: activeOrganization?.id,
+    }),
     queryFn: async () => {
-      const response = await getInvitations({ query });
-      return (
-        response.data ?? {
-          data: [] as Invitation[],
-          pagination: {
-            currentPage: 1,
-            limit: query.limit,
-            total: 0,
-            totalPages: 0,
-            hasNext: false,
-            hasPrev: false,
-          },
-        }
+      if (!activeOrganization?.id) {
+        return buildEmptyPaginatedInvitations(query);
+      }
+
+      const response = await authClient.organization.listInvitations({
+        query: { organizationId: activeOrganization.id },
+      });
+      const allInvitations: Invitation[] =
+        response.data
+          ?.filter((invitation) => invitation.status === "pending")
+          .map((invitation) => ({
+            id: invitation.id,
+            email: invitation.email,
+            role: invitation.role ?? null,
+            expiresAt:
+              invitation.expiresAt?.toISOString() ?? new Date().toISOString(),
+            status: invitation.status,
+          })) ?? [];
+
+      const paginatedInvitations = allInvitations.slice(
+        query.offset,
+        query.offset + query.limit,
       );
+
+      return {
+        data: paginatedInvitations,
+        pagination: {
+          currentPage: Math.floor(query.offset / query.limit) + 1,
+          limit: query.limit,
+          total: allInvitations.length,
+          totalPages: Math.ceil(allInvitations.length / query.limit),
+          hasNext: query.offset + query.limit < allInvitations.length,
+          hasPrev: query.offset > 0,
+        },
+      };
     },
+    enabled: !!activeOrganization?.id,
   });
 }
 
@@ -171,4 +215,18 @@ export function useCancelInvitationMutation() {
       });
     },
   });
+}
+
+function buildEmptyPaginatedInvitations(query: InvitationsQuery) {
+  return {
+    data: [] as Invitation[],
+    pagination: {
+      currentPage: 1,
+      limit: query.limit,
+      total: 0,
+      totalPages: 0,
+      hasNext: false,
+      hasPrev: false,
+    },
+  };
 }

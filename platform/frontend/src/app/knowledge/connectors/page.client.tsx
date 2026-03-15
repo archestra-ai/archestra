@@ -88,7 +88,11 @@ function ConnectorsList() {
       offset,
       search: search || undefined,
       connectorType:
-        connectorTypeFilter === "all" ? undefined : connectorTypeFilter,
+        connectorTypeFilter === "all"
+          ? undefined
+          : (connectorTypeFilter as NonNullable<
+              archestraApiTypes.GetConnectorsData["query"]
+            >["connectorType"]),
     });
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [editingConnector, setEditingConnector] =

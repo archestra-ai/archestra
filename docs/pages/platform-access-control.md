@@ -3,7 +3,7 @@ title: "Access Control"
 category: Administration
 description: "Role-based access control (RBAC) system for managing user permissions in Archestra"
 order: 1
-lastUpdated: 2026-03-13
+lastUpdated: 2026-03-15
 ---
 <!--
 Check ../docs_writer_prompt.md before changing this file.
@@ -56,9 +56,8 @@ Full access to core resources and settings, but cannot manage users, roles, or i
 | Logs | `read` |
 | Teams | `read` |
 | Secrets | `read` |
-| API Keys | `read`, `delete` |
+| API Keys | `read`, `create`, `update`, `delete` |
 | Organization Settings | `read`, `update` |
-| Security Settings | `read`, `update` |
 | Chat Agent Picker | `enable` |
 | Chat Provider Settings | `enable` |
 | Chat Expand Tool Calls | `enable` |
@@ -105,13 +104,14 @@ The following table lists all available permissions that can be assigned to cust
 | `agent:delete` | Delete agents |
 | `agent:team-admin` | Manage team assignments for agents |
 | `agent:admin` | Full administrative control over all agents, bypassing team restrictions |
-| `agentSettings:read` | View agent settings (default model, default agent) |
-| `agentSettings:update` | Modify agent settings |
+| `agentSettings:read` | View agent settings (default model, default agent, security engine, file uploads) |
+| `agentSettings:update` | Modify agent settings (default model, default agent, security engine, file uploads) |
 | `agentTrigger:read` | View agent trigger configurations (Slack, MS Teams, email) |
 | `agentTrigger:create` | Set up new agent triggers |
 | `agentTrigger:update` | Modify agent trigger configurations |
 | `agentTrigger:delete` | Remove agent triggers |
 | `apiKey:read` | View API keys |
+| `apiKey:create` | Create API keys |
 | `apiKey:delete` | Delete API keys |
 | `chat:read` | View and access chat conversations |
 | `chat:create` | Start new chat conversations |
@@ -186,8 +186,6 @@ The following table lists all available permissions that can be assigned to cust
 | `organizationSettings:update` | Customize organization appearance, authentication, etc |
 | `secret:read` | View secrets manager configuration |
 | `secret:update` | Modify secrets manager settings and test connectivity |
-| `securitySettings:read` | View security settings (tool policy, file uploads) |
-| `securitySettings:update` | Modify security settings |
 | `simpleView:enable` | Sidebar is collapsed by default on page load |
 | `team:read` | View teams and their members |
 | `team:create` | Create new teams |

@@ -67,6 +67,7 @@ function KnowledgeBaseDetail({ id }: { id: string }) {
   } = useKnowledgeBaseHealth(id);
   const { data: connectors, isPending: isConnectorsPending } =
     useConnectors(id);
+  const connectorItems = connectors ?? [];
   const updateConnector = useUpdateConnector();
   const [isAddConnectorOpen, setIsAddConnectorOpen] = useState(false);
   const [deletingConnectorId, setDeletingConnectorId] = useState<string | null>(
@@ -278,14 +279,14 @@ function KnowledgeBaseDetail({ id }: { id: string }) {
           isPending={isConnectorsPending}
           loadingFallback={<LoadingSpinner />}
         >
-          {(connectors?.data ?? []).length === 0 ? (
+          {connectorItems.length === 0 ? (
             <div className="text-muted-foreground">
               No connectors yet. Add one to start syncing data.
             </div>
           ) : (
             <DataTable
               columns={columns}
-              data={connectors?.data ?? []}
+              data={connectorItems}
               onRowClick={handleRowClick}
             />
           )}
@@ -293,9 +294,7 @@ function KnowledgeBaseDetail({ id }: { id: string }) {
 
         <AddConnectorDialog
           knowledgeBaseId={id}
-          assignedConnectorIds={
-            new Set((connectors?.data ?? []).map((c) => c.id))
-          }
+          assignedConnectorIds={new Set(connectorItems.map((c) => c.id))}
           open={isAddConnectorOpen}
           onOpenChange={setIsAddConnectorOpen}
         />
@@ -328,7 +327,7 @@ function AddConnectorDialog({
   const assignMutation = useAssignConnectorToKnowledgeBases();
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
-  const availableConnectors = (allConnectors?.data ?? []).filter(
+  const availableConnectors = (allConnectors ?? []).filter(
     (c) => !assignedConnectorIds.has(c.id),
   );
 

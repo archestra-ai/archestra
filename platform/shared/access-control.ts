@@ -62,9 +62,8 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   invitation: ["create", "cancel"],
   identityProvider: ["read", "create", "update", "delete"],
   secret: ["read", "update"],
-  apiKey: ["read", "create", "delete"],
+  apiKey: ["read", "create", "update", "delete"],
   organizationSettings: ["read", "update"],
-  securitySettings: ["read", "update"],
 
   // UI behavior resources
   simpleView: ["enable"],
@@ -111,9 +110,8 @@ export const editorPermissions: Record<Resource, Action[]> = {
   // Administration
   team: ["read"],
   secret: ["read"],
-  apiKey: ["read", "create", "delete"],
+  apiKey: ["read", "create", "update", "delete"],
   organizationSettings: ["read", "update"],
-  securitySettings: ["read", "update"],
 
   /*
    * Empty arrays below are required for Record<Resource, Action[]> type compatibility.
@@ -168,7 +166,6 @@ export const memberPermissions: Record<Resource, Action[]> = {
   secret: [],
   apiKey: [],
   organizationSettings: [],
-  securitySettings: [],
 
   // UI behavior
   simpleView: ["enable"],
@@ -272,8 +269,10 @@ export const permissionDescriptions: Record<string, string> = {
   "llmLimit:delete": "Remove usage limits",
   "llmSettings:read": "View LLM settings (compression, cleanup interval)",
   "llmSettings:update": "Modify LLM settings",
-  "agentSettings:read": "View agent settings (default model, default agent)",
-  "agentSettings:update": "Modify agent settings",
+  "agentSettings:read":
+    "View agent settings (default model, default agent, security engine, file uploads)",
+  "agentSettings:update":
+    "Modify agent settings (default model, default agent, security engine, file uploads)",
   "llmCost:read": "View LLM usage cost statistics and analytics",
 
   // Other
@@ -315,13 +314,12 @@ export const permissionDescriptions: Record<string, string> = {
   "secret:update": "Modify secrets manager settings and test connectivity",
   "apiKey:read": "View API keys",
   "apiKey:create": "Create API keys",
+  "apiKey:update": "Modify API keys",
   "apiKey:delete": "Delete API keys",
   "organizationSettings:read":
     "View organization settings (appearance, authentication, etc)",
   "organizationSettings:update":
     "Customize organization appearance, authentication, etc",
-  "securitySettings:read": "View security settings (tool policy, file uploads)",
-  "securitySettings:update": "Modify security settings",
   "knowledgeBase:read": "View knowledge bases and connectors",
   "knowledgeBase:create": "Create knowledge bases and connectors",
   "knowledgeBase:update": "Modify knowledge bases and connectors",
@@ -744,6 +742,21 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.DeleteChatApiKey]: {
     llmProvider: ["delete"],
   },
+  [RouteId.GetApiKeys]: {
+    apiKey: ["read"],
+  },
+  [RouteId.GetApiKey]: {
+    apiKey: ["read"],
+  },
+  [RouteId.CreateApiKey]: {
+    apiKey: ["create"],
+  },
+  [RouteId.UpdateApiKey]: {
+    apiKey: ["update"],
+  },
+  [RouteId.DeleteApiKey]: {
+    apiKey: ["delete"],
+  },
   [RouteId.GetVirtualApiKeys]: {
     llmProvider: ["read"],
   },
@@ -783,7 +796,7 @@ export const requiredEndpointPermissionsMap: Partial<
     organizationSettings: ["update"],
   },
   [RouteId.UpdateSecuritySettings]: {
-    securitySettings: ["update"],
+    agentSettings: ["update"],
   },
   [RouteId.UpdateLlmSettings]: {
     llmSettings: ["update"],
@@ -836,6 +849,7 @@ export const requiredEndpointPermissionsMap: Partial<
 
   [RouteId.GetOnboardingStatus]: {}, // Onboarding status route - available to all authenticated users (no specific permissions required)
   [RouteId.GetMemberSignupStatus]: {}, // Member signup status - available to all authenticated users
+  [RouteId.GetMembers]: { member: ["read"] }, // List organization members (paginated)
   [RouteId.GetOrganizationMembers]: { member: ["read"] }, // List organization members
   [RouteId.GetOrganizationMember]: { member: ["read"] }, // Get organization member by ID or email
   [RouteId.DeletePendingSignupMember]: { member: ["delete"] }, // Delete auto-provisioned member who hasn't signed up
@@ -1008,8 +1022,8 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   // Settings
   "/settings/account": {},
   "/settings/auth": {},
+  "/settings/api-keys": { apiKey: ["read"] },
   "/settings/dual-llm": { dualLlmConfig: ["read"] },
-  "/settings/security": { securitySettings: ["read"] },
   "/settings/llm": { llmSettings: ["read"] },
   "/settings/agents": { agentSettings: ["read"] },
   "/settings/knowledge": { knowledgeSettings: ["read"] },

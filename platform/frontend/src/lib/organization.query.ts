@@ -578,6 +578,10 @@ export function useOrganizationMembers(enabled = true) {
 
 export type PendingSignupMember = {
   userId: string;
+  name: string | null;
+  email: string;
+  image: string | null;
+  role: string;
   provider: string | null;
   invitationId: string | null;
 };

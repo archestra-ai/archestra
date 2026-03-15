@@ -15,7 +15,7 @@ export function PermissivePolicyOverlay({
 }: PermissivePolicyOverlayProps) {
   const globalToolPolicy = useFeature("globalToolPolicy");
   const { data: userCanUpdateOrganization } = useHasPermissions({
-    securitySettings: ["update"],
+    agentSettings: ["update"],
   });
 
   const isPermissive = globalToolPolicy === "permissive";

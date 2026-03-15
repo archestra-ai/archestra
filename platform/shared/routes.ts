@@ -78,6 +78,7 @@ export const RouteId = {
   SubmitOAuthConsent: "submitOAuthConsent",
 
   // Team Routes
+  GetMembers: "getMembers",
   GetTeams: "getTeams",
   CreateTeam: "createTeam",
   GetTeam: "getTeam",
@@ -255,6 +256,13 @@ export const RouteId = {
   GetChatApiKey: "getChatApiKey",
   UpdateChatApiKey: "updateChatApiKey",
   DeleteChatApiKey: "deleteChatApiKey",
+
+  // User API Key Routes
+  GetApiKeys: "getApiKeys",
+  GetApiKey: "getApiKey",
+  CreateApiKey: "createApiKey",
+  UpdateApiKey: "updateApiKey",
+  DeleteApiKey: "deleteApiKey",
 
   // Virtual API Key Routes
   GetVirtualApiKeys: "getVirtualApiKeys",

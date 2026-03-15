@@ -247,7 +247,7 @@ describe("ArchestraPromptInput", () => {
     });
 
     it("should show settings link in tooltip for admins when file uploads disabled", () => {
-      // Mock admin user with securitySettings update permission
+      // Mock admin user with agentSettings update permission
       mockUseHasPermissions.mockReturnValue({
         data: true,
         isPending: false,
@@ -268,16 +268,16 @@ describe("ArchestraPromptInput", () => {
       expect(tooltip).toHaveTextContent("Enable in settings");
       expect(screen.getByRole("link")).toHaveAttribute(
         "href",
-        "/settings/security",
+        "/settings/agents",
       );
       expect(screen.getByRole("link")).toHaveAttribute(
         "aria-label",
-        "Enable file uploads in security settings",
+        "Enable file uploads in agent settings",
       );
     });
 
     it("should show admin message in tooltip for non-admins when file uploads disabled", () => {
-      // Mock non-admin user without securitySettings update permission
+      // Mock non-admin user without agentSettings update permission
       mockUseHasPermissions.mockReturnValue({
         data: false,
         isPending: false,

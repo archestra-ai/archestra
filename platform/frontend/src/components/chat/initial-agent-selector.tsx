@@ -202,8 +202,8 @@ export function InitialAgentSelector({
     enabled: !!canReadKnowledgeBase,
   });
 
-  const allKnowledgeBases = knowledgeBasesData?.data ?? [];
-  const allConnectors = connectorsData?.data ?? [];
+  const allKnowledgeBases = knowledgeBasesData ?? [];
+  const allConnectors = connectorsData ?? [];
   const knowledgeBaseIds = currentAgent?.knowledgeBaseIds ?? [];
   const connectorIds = currentAgent?.connectorIds ?? [];
 

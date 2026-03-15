@@ -322,7 +322,7 @@ function ExpandedConnectors({ knowledgeBaseId }: { knowledgeBaseId: string }) {
     null,
   );
 
-  const items = connectors?.data ?? [];
+  const items = connectors ?? [];
 
   const columns: ColumnDef<ConnectorItem>[] = [
     {
@@ -448,7 +448,7 @@ function AddConnectorDialog({
   const assignMutation = useAssignConnectorToKnowledgeBases();
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
-  const availableConnectors = (allConnectors?.data ?? []).filter(
+  const availableConnectors = (allConnectors ?? []).filter(
     (c) => !assignedConnectorIds.has(c.id),
   );
 

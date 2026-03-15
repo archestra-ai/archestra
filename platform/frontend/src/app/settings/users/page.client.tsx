@@ -236,7 +236,10 @@ function MembersTab({
           <div className="flex items-center gap-3">
             <Avatar className="h-8 w-8">
               {member.image && (
-                <AvatarImage src={member.image} alt={member.name} />
+                <AvatarImage
+                  src={member.image}
+                  alt={member.name ?? undefined}
+                />
               )}
               <AvatarFallback className="text-xs">{initials}</AvatarFallback>
             </Avatar>
@@ -332,7 +335,10 @@ function MembersTab({
                     <div className="flex items-center gap-3">
                       <Avatar className="h-8 w-8">
                         {member.image && (
-                          <AvatarImage src={member.image} alt={member.name} />
+                          <AvatarImage
+                            src={member.image}
+                            alt={member.name ?? undefined}
+                          />
                         )}
                         <AvatarFallback className="text-xs">
                           {initials}

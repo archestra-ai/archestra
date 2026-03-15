@@ -19,6 +19,7 @@ export { default as browserStreamRoutes } from "@/features/browser-stream/routes
 export { default as a2aRoutes } from "./a2a";
 export { default as agentRoutes } from "./agent";
 export { default as agentToolRoutes } from "./agent-tool";
+export { default as apiKeyRoutes } from "./api-key";
 export { default as authRoutes } from "./auth";
 export { default as autonomyPolicyRoutes } from "./autonomy-policies";
 export { default as chatApiKeysRoutes } from "./chat/routes.api-keys";
@@ -41,6 +42,7 @@ export { mcpGatewayRoutes } from "./mcp-gateway";
 export { default as mcpServerRoutes } from "./mcp-server";
 export { default as mcpServerInstallationRequestRoutes } from "./mcp-server-installation-requests";
 export { default as mcpToolCallRoutes } from "./mcp-tool-call";
+export { default as memberRoutes } from "./member";
 export { default as oauthRoutes } from "./oauth";
 export { default as oauthServerRoutes } from "./oauth-server";
 export { default as optimizationRuleRoutes } from "./optimization-rule";

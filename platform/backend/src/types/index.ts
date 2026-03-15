@@ -4,6 +4,7 @@ export * from "./agent-connector-assignment";
 export * from "./agent-knowledge-base";
 export * from "./agent-suggested-prompt";
 export * from "./agent-tool";
+export * from "./api-key";
 export * from "./api";
 export * from "./autonomy-policies";
 export * from "./chat-api-key";

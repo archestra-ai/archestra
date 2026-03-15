@@ -580,9 +580,9 @@ export function AgentDialog({
   const incomingEmail = useFeature("incomingEmail");
   const { data: identityProviders = [] } = useIdentityProviders();
   const { data: knowledgeBasesData } = useKnowledgeBases();
-  const knowledgeBases = knowledgeBasesData?.data ?? [];
+  const knowledgeBases = knowledgeBasesData ?? [];
   const { data: connectorsData } = useConnectors();
-  const connectors = connectorsData?.data ?? [];
+  const connectors = connectorsData ?? [];
   const agentLlmApiKeyId = agent?.llmApiKeyId;
   const { data: availableApiKeys = [] } = useAvailableChatApiKeys({
     includeKeyId: agentLlmApiKeyId,
@@ -594,8 +594,10 @@ export function AgentDialog({
   const { data: teams } = useQuery({
     queryKey: ["teams"],
     queryFn: async () => {
-      const response = await archestraApiSdk.getTeams();
-      return response.data || [];
+      const response = await archestraApiSdk.getTeams({
+        query: { limit: 100, offset: 0 },
+      });
+      return response.data?.data ?? [];
     },
   });
   const resource = getResourceForAgentType(agentType);
@@ -1421,11 +1423,9 @@ export function AgentDialog({
                                     kb.id,
                                   );
                                   const connectorTypes = [
-                                    ...new Set(
-                                      kb.connectors?.map(
-                                        (c: { connectorType: string }) =>
-                                          c.connectorType,
-                                      ) ?? [],
+                                    ...new Set<string>(
+                                      kb.connectors?.map((c) => c.connectorType) ??
+                                        [],
                                     ),
                                   ];
                                   return (

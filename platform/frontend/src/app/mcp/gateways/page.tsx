@@ -19,7 +19,7 @@ export const dynamic = "force-dynamic";
 export default async function McpGatewaysPageServer() {
   let initialData: {
     agents: archestraApiTypes.GetAgentsResponses["200"] | null;
-    teams: archestraApiTypes.GetTeamsResponses["200"];
+    teams: archestraApiTypes.GetTeamsResponses["200"]["data"];
   } = {
     agents: null,
     teams: [],
@@ -50,7 +50,7 @@ export default async function McpGatewaysPageServer() {
     }
     initialData = {
       agents: agentsResponse.data || null,
-      teams: teamsResponse.data?.data || [],
+      teams: teamsResponse.data?.data ?? [],
     };
   } catch (error) {
     return <ServerErrorFallback error={error as ErrorExtended} />;

@@ -212,7 +212,7 @@ describe("SidebarWarnings", () => {
   });
 
   describe("permission gating", () => {
-    it("hides default credentials warning when user lacks securitySettings:update permission", () => {
+    it("hides default credentials warning when user lacks agentSettings:update permission", () => {
       mockUseSession.mockReturnValue({
         data: { user: { email: "admin@example.com" } },
       });
@@ -229,7 +229,7 @@ describe("SidebarWarnings", () => {
       expect(container.firstChild).toBeNull();
     });
 
-    it("hides security engine warning when user lacks securitySettings:update permission", () => {
+    it("hides security engine warning when user lacks agentSettings:update permission", () => {
       mockUseSession.mockReturnValue({
         data: { user: { email: "other@example.com" } },
       });
@@ -241,7 +241,7 @@ describe("SidebarWarnings", () => {
       expect(container.firstChild).toBeNull();
     });
 
-    it("hides both warnings when user lacks securitySettings:update permission", () => {
+    it("hides both warnings when user lacks agentSettings:update permission", () => {
       mockUseSession.mockReturnValue({
         data: { user: { email: "admin@example.com" } },
       });

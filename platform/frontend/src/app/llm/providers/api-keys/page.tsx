@@ -254,7 +254,7 @@ export default function ApiKeysPage() {
   useEffect(() => {
     setProviderAction(
       <PermissionButton
-        permissions={{ llmProvider: ["create"], apiKey: ["create"] }}
+        permissions={{ llmProvider: ["create"] }}
         onClick={() => setIsCreateDialogOpen(true)}
         data-testid={E2eTestId.AddChatApiKeyButton}
       >

@@ -5,7 +5,10 @@ import type {
   KnowledgeBaseConnector,
   UpdateKnowledgeBaseConnector,
 } from "@/types";
-import type { ConnectorSyncStatus } from "@/types/knowledge-connector";
+import type {
+  ConnectorSyncStatus,
+  ConnectorType,
+} from "@/types/knowledge-connector";
 
 class KnowledgeBaseConnectorModel {
   static async findByOrganization(params: {
@@ -51,7 +54,7 @@ class KnowledgeBaseConnectorModel {
     limit: number;
     offset: number;
     search?: string;
-    connectorType?: string;
+    connectorType?: ConnectorType;
   }): Promise<{ data: KnowledgeBaseConnector[]; total: number }> {
     const { organizationId, limit, offset, search, connectorType } = params;
     const searchPattern = search ? `%${search}%` : null;

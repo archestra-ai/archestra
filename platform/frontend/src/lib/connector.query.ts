@@ -67,7 +67,11 @@ export function useConnectorsPaginated(params: {
   limit: number;
   offset: number;
   search?: string;
-  connectorType?: string;
+  connectorType?: archestraApiTypes.GetConnectorsData["query"] extends infer T
+    ? T extends { connectorType?: infer ConnectorType }
+      ? ConnectorType
+      : never
+    : never;
 }) {
   return useQuery({
     queryKey: ["connectors", "paginated", params],

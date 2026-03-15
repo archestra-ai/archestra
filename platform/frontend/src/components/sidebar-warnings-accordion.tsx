@@ -24,7 +24,7 @@ export function SidebarWarningsAccordion() {
     useDefaultCredentialsEnabled();
   const globalToolPolicy = useFeature("globalToolPolicy");
   const { data: canUpdateOrg } = useHasPermissions({
-    securitySettings: ["update"],
+    agentSettings: ["update"],
   });
 
   const isPermissive = globalToolPolicy === "permissive";
@@ -52,7 +52,7 @@ export function SidebarWarningsAccordion() {
                 tooltip="Change default credentials"
                 className="text-destructive hover:text-destructive"
               >
-                <Link href="/settings/auth?highlight=change-password">
+                <Link href="/settings/account?highlight=change-password">
                   <AlertTriangle className="shrink-0" />
                   <span>Change default credentials</span>
                 </Link>

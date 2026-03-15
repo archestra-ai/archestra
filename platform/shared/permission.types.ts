@@ -40,7 +40,6 @@ export const resources = [
   "llmProvider",
   "secret",
   "organizationSettings",
-  "securitySettings",
   "llmSettings",
   "agentSettings",
   "agentTrigger",
@@ -96,7 +95,6 @@ export const resourceLabels: Record<Resource, string> = {
   secret: "Secrets",
   apiKey: "API Keys",
   organizationSettings: "Organization Settings",
-  securitySettings: "Security Settings",
   llmSettings: "LLM Settings",
   agentSettings: "Agent Settings",
   agentTrigger: "Agent Triggers",
@@ -117,7 +115,8 @@ export const resourceDescriptions: Record<Resource, string> = {
   llmProvider: "LLM provider API keys, virtual keys, and models",
   llmLimit: "LLM usage limits",
   llmSettings: "LLM settings (compression, cleanup interval)",
-  agentSettings: "Agent settings (default model, default agent)",
+  agentSettings:
+    "Agent settings (default model, default agent, security engine, chat file uploads)",
   llmCost: "LLM usage and cost analytics",
   mcpRegistry: "MCP server registry management",
   mcpServerInstallation: "Installed MCP servers and their runtime",
@@ -133,7 +132,6 @@ export const resourceDescriptions: Record<Resource, string> = {
   apiKey: "User API keys for programmatic access",
   organizationSettings:
     "Organization settings (appearance, authentication, etc)",
-  securitySettings: "Security settings (tool policy, chat file uploads)",
   knowledgeBase:
     "Knowledge bases and connectors for RAG-based document retrieval",
   knowledgeSettings:
@@ -187,7 +185,6 @@ export const resourceCategories: Record<string, Resource[]> = {
     "secret",
     "apiKey",
     "organizationSettings",
-    "securitySettings",
   ],
 };
 

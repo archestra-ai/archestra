@@ -38,7 +38,7 @@ const TeamVaultFolderDialog = lazy(
     import("./team-vault-folder-dialog.ee"),
 );
 
-type Team = archestraApiTypes.GetTeamsResponses["200"][number];
+type Team = archestraApiTypes.GetTeamsResponses["200"]["data"][number];
 
 const { TeamExternalGroupsDialog } = config.enterpriseFeatures.core
   ? // biome-ignore lint/style/noRestrictedImports: conditional EE component with SSO / external teams
@@ -77,8 +77,10 @@ export function TeamsList() {
   const { data: teams, isLoading } = useQuery({
     queryKey: ["teams"],
     queryFn: async () => {
-      const { data } = await archestraApiSdk.getTeams();
-      return data;
+      const { data } = await archestraApiSdk.getTeams({
+        query: { limit: 100, offset: 0 },
+      });
+      return data?.data ?? [];
     },
   });
 

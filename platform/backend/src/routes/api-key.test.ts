@@ -1,13 +1,9 @@
-import Fastify, { type FastifyInstance } from "fastify";
-import {
-  serializerCompiler,
-  validatorCompiler,
-  type ZodTypeProvider,
-} from "fastify-type-provider-zod";
+import { vi } from "vitest";
 import db, { schema } from "@/database";
-import { afterEach, beforeEach, describe, expect, test, vi } from "@/test";
+import type { FastifyInstanceWithZod } from "@/server";
+import { createFastifyInstance } from "@/server";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
-import apiKeyRoutes from "./api-key";
 
 const { createApiKeyMock, deleteApiKeyMock } = vi.hoisted(() => ({
   createApiKeyMock: vi.fn(),
@@ -24,7 +20,7 @@ vi.mock("@/auth/better-auth", () => ({
 }));
 
 describe("api key routes", () => {
-  let app: FastifyInstance;
+  let app: FastifyInstanceWithZod;
   let userId: string;
   let user: User;
 
@@ -33,14 +29,12 @@ describe("api key routes", () => {
     user = await makeUser();
     userId = user.id;
 
-    app = Fastify().withTypeProvider<ZodTypeProvider>();
-    app.setValidatorCompiler(validatorCompiler);
-    app.setSerializerCompiler(serializerCompiler);
-
+    app = createFastifyInstance();
     app.addHook("onRequest", async (request) => {
       (request as typeof request & { user: unknown }).user = user;
     });
 
+    const { default: apiKeyRoutes } = await import("./api-key");
     await app.register(apiKeyRoutes);
   });
 

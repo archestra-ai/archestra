@@ -865,7 +865,6 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetUserPermissions]: {}, // User permissions route - available to all authenticated users (no specific permissions required)
 
   // Member default agent routes - available to all authenticated users (manages their own default agent)
-  [RouteId.UpdateMemberDefaultAgent]: {},
   [RouteId.GetMemberDefaultAgent]: {},
 
   // User token routes - available to all authenticated users (manages their own personal token)

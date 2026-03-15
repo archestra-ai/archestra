@@ -467,6 +467,7 @@ export function AssignedToolsTable({
         id: "origin",
         accessorFn: (row) =>
           isMcpToolByProperties(row) ? "1-mcp" : "2-intercepted",
+        size: 180,
         header: ({ column }) => (
           <Button
             variant="ghost"
@@ -485,26 +486,30 @@ export function AssignedToolsTable({
 
           if (catalogItem) {
             return (
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Badge
-                      variant="default"
-                      className="bg-indigo-500 max-w-[180px] gap-1.5"
-                    >
-                      <McpCatalogIcon
-                        icon={catalogItem.icon}
-                        catalogId={catalogItem.id}
-                        size={14}
-                      />
-                      <span className="truncate">{catalogItem.name}</span>
-                    </Badge>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>{catalogItem.name}</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
+              <div className="min-w-0 max-w-full">
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Badge
+                        variant="default"
+                        className="bg-indigo-500 inline-flex max-w-full gap-1.5 overflow-hidden align-middle"
+                      >
+                        <McpCatalogIcon
+                          icon={catalogItem.icon}
+                          catalogId={catalogItem.id}
+                          size={14}
+                        />
+                        <span className="min-w-0 truncate">
+                          {catalogItem.name}
+                        </span>
+                      </Badge>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>{catalogItem.name}</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
             );
           }
 
@@ -530,6 +535,7 @@ export function AssignedToolsTable({
       {
         id: "assignmentCount",
         header: "Assignments",
+        size: 140,
         cell: ({ row }) => {
           const count = row.original.assignmentCount;
           return (

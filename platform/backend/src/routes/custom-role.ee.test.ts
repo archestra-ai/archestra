@@ -1,12 +1,8 @@
-import Fastify, { type FastifyInstance } from "fastify";
-import {
-  serializerCompiler,
-  validatorCompiler,
-  type ZodTypeProvider,
-} from "fastify-type-provider-zod";
-import { afterEach, beforeEach, describe, expect, test, vi } from "@/test";
+import { vi } from "vitest";
+import type { FastifyInstanceWithZod } from "@/server";
+import { createFastifyInstance } from "@/server";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
-import customRoleRoutes from "./custom-role.ee";
 
 const { createOrgRoleMock } = vi.hoisted(() => ({
   createOrgRoleMock: vi.fn(),
@@ -21,7 +17,7 @@ vi.mock("@/auth", () => ({
 }));
 
 describe("custom role routes", () => {
-  let app: FastifyInstance;
+  let app: FastifyInstanceWithZod;
   let user: User;
   let organizationId: string;
 
@@ -32,10 +28,7 @@ describe("custom role routes", () => {
     organizationId = organization.id;
     await makeMember(user.id, organizationId, { role: "admin" });
 
-    app = Fastify().withTypeProvider<ZodTypeProvider>();
-    app.setValidatorCompiler(validatorCompiler);
-    app.setSerializerCompiler(serializerCompiler);
-
+    app = createFastifyInstance();
     app.addHook("onRequest", async (request) => {
       (
         request as typeof request & {
@@ -51,6 +44,7 @@ describe("custom role routes", () => {
       ).organizationId = organizationId;
     });
 
+    const { default: customRoleRoutes } = await import("./custom-role.ee");
     await app.register(customRoleRoutes);
   });
 

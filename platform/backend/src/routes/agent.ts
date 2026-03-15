@@ -779,27 +779,6 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       return reply.send({ defaultAgentId });
     },
   );
-
-  fastify.put(
-    "/api/members/default-agent",
-    {
-      schema: {
-        operationId: RouteId.UpdateMemberDefaultAgent,
-        description: "Update the current user's default agent",
-        tags: ["Members"],
-        body: z.object({ agentId: z.string().uuid() }),
-        response: constructResponseSchema(z.object({ success: z.boolean() })),
-      },
-    },
-    async ({ body, user, organizationId }, reply) => {
-      const agent = await AgentModel.findById(body.agentId, user.id, true);
-      if (!agent) {
-        throw new ApiError(404, "Agent not found");
-      }
-      await MemberModel.setDefaultAgent(user.id, organizationId, body.agentId);
-      return reply.send({ success: true });
-    },
-  );
 };
 
 export default agentRoutes;

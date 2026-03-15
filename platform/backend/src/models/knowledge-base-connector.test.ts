@@ -154,13 +154,32 @@ describe("KnowledgeBaseConnectorModel", () => {
       makeKnowledgeBase,
       makeKnowledgeBaseConnector,
     }) => {
+      const { default: db, schema } = await import("@/database");
+      const { eq } = await import("drizzle-orm");
       const org = await makeOrganization();
       const kb = await makeKnowledgeBase(org.id);
-      await makeKnowledgeBaseConnector(kb.id, org.id, { name: "First" });
+      const first = await makeKnowledgeBaseConnector(kb.id, org.id, {
+        name: "First",
+      });
       const second = await makeKnowledgeBaseConnector(kb.id, org.id, {
         name: "Second",
       });
-      await makeKnowledgeBaseConnector(kb.id, org.id, { name: "Third" });
+      const third = await makeKnowledgeBaseConnector(kb.id, org.id, {
+        name: "Third",
+      });
+
+      await db
+        .update(schema.knowledgeBaseConnectorsTable)
+        .set({ createdAt: new Date("2026-01-01T00:00:00.000Z") })
+        .where(eq(schema.knowledgeBaseConnectorsTable.id, first.id));
+      await db
+        .update(schema.knowledgeBaseConnectorsTable)
+        .set({ createdAt: new Date("2026-01-02T00:00:00.000Z") })
+        .where(eq(schema.knowledgeBaseConnectorsTable.id, second.id));
+      await db
+        .update(schema.knowledgeBaseConnectorsTable)
+        .set({ createdAt: new Date("2026-01-03T00:00:00.000Z") })
+        .where(eq(schema.knowledgeBaseConnectorsTable.id, third.id));
 
       const result =
         await KnowledgeBaseConnectorModel.findByOrganizationPaginated({

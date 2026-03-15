@@ -682,7 +682,7 @@ export class McpServerRuntimeManager {
    * Get all available tools from all running MCP servers
    */
   get allAvailableTools(): AvailableTool[] {
-    return [];
+    return Array.from(this.mcpServerIdToDeploymentMap.values()).filter(d => d.status === 'running').flatMap(d => d.getAvailableTools());
   }
 
   /**

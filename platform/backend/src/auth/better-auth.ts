@@ -29,7 +29,8 @@ import { and, eq, ne } from "drizzle-orm";
 import { z } from "zod";
 import config from "@/config";
 import db, { schema } from "@/database";
-import logger, { LOG_LEVEL } from "@/logging";
+import logger from "@/logging";
+import { LOG_LEVEL } from "@/logging/log-level";
 // Import directly from files to avoid circular dependency through barrel export
 import AgentModel from "@/models/agent";
 import InvitationModel from "@/models/invitation";

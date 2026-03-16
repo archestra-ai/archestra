@@ -11,6 +11,7 @@ import {
 } from "@opentelemetry/api-logs";
 import pino from "pino";
 import pretty from "pino-pretty";
+import { LOG_LEVEL } from "@/logging/log-level";
 import { getActiveSessionId } from "@/observability/request-context";
 
 /**
@@ -38,9 +39,6 @@ import { getActiveSessionId } from "@/observability/request-context";
  * `otelLogger.emit()` is called, so logs are linked to traces without needing
  * to pass context explicitly.
  */
-
-export const LOG_LEVEL =
-  process.env.ARCHESTRA_LOGGING_LEVEL?.toLowerCase() || "info";
 
 let _instance: pino.Logger | null = null;
 

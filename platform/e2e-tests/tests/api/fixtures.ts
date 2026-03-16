@@ -107,6 +107,23 @@ const makeApiRequest = async ({
   return response;
 };
 
+function extractPaginatedArray<T>(data: unknown): T[] {
+  if (Array.isArray(data)) {
+    return data as T[];
+  }
+
+  if (
+    data &&
+    typeof data === "object" &&
+    "data" in data &&
+    Array.isArray(data.data)
+  ) {
+    return data.data as T[];
+  }
+
+  return [];
+}
+
 /**
  * Create an agent
  * (authnz is handled by the authenticated session)
@@ -594,7 +611,9 @@ export const getTeamByName = async (
     method: "get",
     urlSuffix: "/api/teams",
   });
-  const teams = await teamsResponse.json();
+  const teams = extractPaginatedArray<{ id: string; name: string }>(
+    await teamsResponse.json(),
+  );
   const team = teams.find((t: { name: string }) => t.name === teamName);
   if (!team) {
     throw new Error(`Team '${teamName}' not found`);

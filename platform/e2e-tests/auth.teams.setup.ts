@@ -97,6 +97,23 @@ interface Team {
   description: string | null;
 }
 
+function extractTeamsFromResponse(data: unknown): Team[] {
+  if (Array.isArray(data)) {
+    return data as Team[];
+  }
+
+  if (
+    data &&
+    typeof data === "object" &&
+    "data" in data &&
+    Array.isArray(data.data)
+  ) {
+    return data.data as Team[];
+  }
+
+  return [];
+}
+
 /**
  * Get all teams in the organization
  */
@@ -109,7 +126,7 @@ async function getTeams(request: APIRequestContext): Promise<Team[]> {
     return [];
   }
 
-  return response.json();
+  return extractTeamsFromResponse(await response.json());
 }
 
 /**

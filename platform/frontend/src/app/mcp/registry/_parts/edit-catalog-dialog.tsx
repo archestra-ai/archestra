@@ -19,7 +19,7 @@ interface EditCatalogDialogProps {
 export function EditCatalogDialog({ item, onClose }: EditCatalogDialogProps) {
   return (
     <Dialog open={!!item} onOpenChange={onClose}>
-      <DialogContent className="max-w-5xl h-[85vh] overflow-y-auto overflow-x-hidden">
+      <DialogContent className="max-w-5xl h-[85vh] flex flex-col overflow-hidden">
         {item && <EditCatalogContent item={item} onClose={onClose} />}
       </DialogContent>
     </Dialog>
@@ -64,6 +64,7 @@ export function EditCatalogContent({
       mode="edit"
       initialValues={item}
       onSubmit={onSubmit}
+      embedded={keepOpenOnSave}
       nameDisabled={isPlaywrightCatalogItem(item.id)}
       onDirtyChange={onDirtyChange}
       submitRef={submitRef}
@@ -71,7 +72,7 @@ export function EditCatalogContent({
         if (keepOpenOnSave && !isDirty) return null;
         const Footer = keepOpenOnSave ? DialogStickyFooter : DialogFooter;
         return (
-          <Footer>
+          <Footer className={keepOpenOnSave ? "mt-0" : undefined}>
             {keepOpenOnSave ? (
               <Button variant="outline" onClick={onReset} type="button">
                 Discard changes

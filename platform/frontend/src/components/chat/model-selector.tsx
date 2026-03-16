@@ -551,7 +551,7 @@ export function ModelSelector({
     isPending: isLoading,
     isPlaceholderData,
   } = useModelsByProvider({
-    apiKeyId,
+    apiKeyId: apiKeyId ?? undefined,
   });
   const syncMutation = useSyncChatModels();
   const [open, setOpen] = useState(false);

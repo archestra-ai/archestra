@@ -1,6 +1,11 @@
 "use client";
 
-import { DocsPage, getDocsUrl, SLACK_REQUIRED_BOT_SCOPES } from "@shared";
+import {
+  type archestraApiTypes,
+  DocsPage,
+  getDocsUrl,
+  SLACK_REQUIRED_BOT_SCOPES,
+} from "@shared";
 import { ExternalLink } from "lucide-react";
 import * as React from "react";
 import { useState } from "react";
@@ -12,8 +17,14 @@ import { Label } from "@/components/ui/label";
 import { useChatOpsStatus } from "@/lib/chatops.query";
 import { useUpdateSlackChatOpsConfig } from "@/lib/chatops-config.query";
 import { usePublicBaseUrl } from "@/lib/config.query";
+import { useOrganization } from "@/lib/organization.query";
+import { useAppName } from "@/lib/use-app-name";
 
-type ConnectionMode = "webhook" | "socket";
+type ConnectionMode = NonNullable<
+  NonNullable<
+    archestraApiTypes.UpdateSlackChatOpsConfigData["body"]
+  >["connectionMode"]
+>;
 
 interface SlackSetupDialogProps {
   open: boolean;
@@ -26,12 +37,13 @@ export function SlackSetupDialog({
   onOpenChange,
   connectionMode,
 }: SlackSetupDialogProps) {
+  const configuredAppName = useAppName();
   const publicBaseUrl = usePublicBaseUrl();
 
   const mutation = useUpdateSlackChatOpsConfig();
   const { data: chatOpsProviders } = useChatOpsStatus();
   const slack = chatOpsProviders?.find((p) => p.id === "slack");
-  const creds = slack?.credentials as Record<string, string> | undefined;
+  const creds = slack?.credentials;
 
   const [saving, setSaving] = useState(false);
 
@@ -131,27 +143,18 @@ export function SlackSetupDialog({
     onClick: async () => {
       setSaving(true);
       try {
-        const body: Record<string, unknown> = {
+        const body: NonNullable<
+          archestraApiTypes.UpdateSlackChatOpsConfigData["body"]
+        > = {
           enabled: true,
           connectionMode,
+          ...(sharedBotToken && { botToken: sharedBotToken }),
+          ...(sharedAppId && { appId: sharedAppId }),
+          ...(isSocket
+            ? sharedAppLevelToken && { appLevelToken: sharedAppLevelToken }
+            : sharedSigningSecret && { signingSecret: sharedSigningSecret }),
         };
-        if (sharedBotToken) body.botToken = sharedBotToken;
-        if (sharedAppId) body.appId = sharedAppId;
-        if (isSocket) {
-          if (sharedAppLevelToken) body.appLevelToken = sharedAppLevelToken;
-        } else {
-          if (sharedSigningSecret) body.signingSecret = sharedSigningSecret;
-        }
-        const updateResult = await mutation.mutateAsync(
-          body as {
-            enabled?: boolean;
-            botToken?: string;
-            signingSecret?: string;
-            appId?: string;
-            connectionMode?: "webhook" | "socket";
-            appLevelToken?: string;
-          },
-        );
+        const updateResult = await mutation.mutateAsync(body);
         if (updateResult?.success) {
           handleOpenChange(false);
         }
@@ -168,8 +171,8 @@ export function SlackSetupDialog({
       title="Setup Slack"
       description={
         <>
-          Follow these steps to connect your Archestra agents to Slack. Find out
-          more in our{" "}
+          Follow these steps to connect your {configuredAppName} agents to
+          Slack. Find out more in our{" "}
           <a
             href={getDocsUrl(DocsPage.PlatformSlack)}
             target="_blank"
@@ -188,14 +191,17 @@ export function SlackSetupDialog({
 }
 
 function StepAppearanceAndConnect({ stepNumber }: { stepNumber: number }) {
+  const configuredAppName = useAppName();
+  const { data: organization } = useOrganization();
+  const logoUrl = organization?.iconLogo ?? "/logo-slack.png";
   return (
     <div
-      className="grid flex-1 gap-6"
+      className="grid flex-1 gap-4"
       style={{ gridTemplateColumns: "1fr 1fr" }}
     >
       <StepCard
         stepNumber={stepNumber}
-        title="Customize App Appearance and connect Archestra"
+        title={`Customize App Appearance and connect ${configuredAppName}`}
       >
         <ol className="space-y-3">
           <li className="flex gap-3 text-sm leading-relaxed">
@@ -214,11 +220,11 @@ function StepAppearanceAndConnect({ stepNumber }: { stepNumber: number }) {
             <span className="pt-0.5">
               Upload an app icon (
               <a
-                href="/logo-slack.png"
-                download="archestra-logo.png"
+                href={logoUrl}
+                download={`${configuredAppName.toLowerCase()}-logo.png`}
                 className="text-primary underline hover:no-underline"
               >
-                download Archestra logo
+                download {configuredAppName} logo
               </a>
               )
             </span>
@@ -265,7 +271,7 @@ function StepInstall({
 }) {
   return (
     <div
-      className="grid flex-1 gap-6"
+      className="grid flex-1 gap-4"
       style={{ gridTemplateColumns: "1fr 1fr" }}
     >
       <StepCard stepNumber={stepNumber} title="Install App to Workspace">
@@ -333,9 +339,10 @@ function StepAppLevelToken({
   appLevelToken: string;
   onAppLevelTokenChange: (v: string) => void;
 }) {
+  const configuredAppName = useAppName();
   return (
     <div
-      className="grid flex-1 gap-6"
+      className="grid flex-1 gap-4"
       style={{ gridTemplateColumns: "1fr 1fr" }}
     >
       <StepCard stepNumber={stepNumber} title="Generate App-Level Token">
@@ -362,7 +369,8 @@ function StepAppLevelToken({
               3
             </span>
             <span className="pt-0.5">
-              Name it (e.g., &ldquo;archestra-socket&rdquo;) and add the{" "}
+              Name it (e.g., &ldquo;{configuredAppName.toLowerCase()}
+              -socket&rdquo;) and add the{" "}
               <code className="bg-muted px-1 py-0.5 rounded text-xs">
                 connections:write
               </code>{" "}
@@ -423,7 +431,7 @@ function buildSlackManifest(params: {
   const manifest: any = {
     display_information: {
       name: appName,
-      description: "Archestra AI Agent",
+      description: `${appName} AI Agent`,
     },
     features: {
       app_home: {
@@ -435,36 +443,36 @@ function buildSlackManifest(params: {
         always_online: true,
       },
       assistant_view: {
-        assistant_description: "Your AI-powered Archestra assistant",
+        assistant_description: `Your AI-powered ${appName} assistant`,
       },
       slash_commands: isSocket
         ? [
             {
-              command: "/archestra-select-agent",
+              command: `/${appName.toLowerCase()}-select-agent`,
               description: "Change which agent handles this channel",
             },
             {
-              command: "/archestra-status",
+              command: `/${appName.toLowerCase()}-status`,
               description: "Show current agent for this channel",
             },
             {
-              command: "/archestra-help",
+              command: `/${appName.toLowerCase()}-help`,
               description: "Show available commands",
             },
           ]
         : [
             {
-              command: "/archestra-select-agent",
+              command: `/${appName.toLowerCase()}-select-agent`,
               description: "Change which agent handles this channel",
               url: slashCommandUrl,
             },
             {
-              command: "/archestra-status",
+              command: `/${appName.toLowerCase()}-status`,
               description: "Show current agent for this channel",
               url: slashCommandUrl,
             },
             {
-              command: "/archestra-help",
+              command: `/${appName.toLowerCase()}-help`,
               description: "Show available commands",
               url: slashCommandUrl,
             },
@@ -528,7 +536,8 @@ function StepManifestWebhook({
   onAppIdChange: (v: string) => void;
   onSigningSecretChange: (v: string) => void;
 }) {
-  const [appName, setAppName] = useState("Archestra");
+  const configuredAppName = useAppName();
+  const [appName, setAppName] = useState(configuredAppName);
 
   const manifest = buildSlackManifest({
     appName,
@@ -540,7 +549,7 @@ function StepManifestWebhook({
 
   return (
     <div
-      className="grid min-h-0 flex-1 gap-6"
+      className="grid min-h-0 flex-1 gap-4"
       style={{ gridTemplateColumns: "1fr 1fr" }}
     >
       <StepCard stepNumber={stepNumber} title="Create Slack App">
@@ -550,7 +559,7 @@ function StepManifestWebhook({
             id="manifest-app-name"
             value={appName}
             onChange={(e) => setAppName(e.target.value)}
-            placeholder="Archestra"
+            placeholder={configuredAppName}
           />
           <p className="text-xs text-muted-foreground">
             The name will be injected into the manifest automatically.
@@ -645,7 +654,8 @@ function StepManifestSocket({
   appId: string;
   onAppIdChange: (v: string) => void;
 }) {
-  const [appName, setAppName] = useState("Archestra");
+  const configuredAppName = useAppName();
+  const [appName, setAppName] = useState(configuredAppName);
 
   const manifest = buildSlackManifest({
     appName,
@@ -657,7 +667,7 @@ function StepManifestSocket({
 
   return (
     <div
-      className="grid min-h-0 flex-1 gap-6"
+      className="grid min-h-0 flex-1 gap-4"
       style={{ gridTemplateColumns: "1fr 1fr" }}
     >
       <StepCard stepNumber={stepNumber} title="Create Slack App">
@@ -667,7 +677,7 @@ function StepManifestSocket({
             id="manifest-app-name-socket"
             value={appName}
             onChange={(e) => setAppName(e.target.value)}
-            placeholder="Archestra"
+            placeholder={configuredAppName}
           />
           <p className="text-xs text-muted-foreground">
             The name will be injected into the manifest automatically.

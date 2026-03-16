@@ -26,13 +26,13 @@ import {
 } from "@/models";
 import { refreshOAuthToken } from "@/routes/oauth";
 import { secretManager } from "@/secrets-manager";
-import { applyResponseModifierTemplate } from "@/templating";
 import type {
   CommonMcpToolDefinition,
   CommonToolCall,
   CommonToolResult,
   InternalMcpCatalog,
   MCPGatewayAuthMethod,
+  McpToolAssignment,
 } from "@/types";
 import { deriveAuthMethod } from "@/utils/auth-method";
 import { previewToolResultContent } from "@/utils/tool-result-preview";
@@ -48,19 +48,6 @@ class StaleSessionError extends Error {
     this.name = "StaleSessionError";
   }
 }
-
-/**
- * Type for MCP tool with server metadata returned from database
- */
-type McpToolWithServerMetadata = {
-  toolName: string;
-  responseModifierTemplate: string | null;
-  credentialSourceMcpServerId: string | null;
-  executionSourceMcpServerId: string | null;
-  useDynamicTeamCredential: boolean;
-  catalogId: string | null;
-  catalogName: string | null;
-};
 
 /**
  * Token authentication context for dynamic credential resolution
@@ -323,7 +310,6 @@ class McpClient {
           mcpServerName,
           result.content,
           !!result.isError,
-          tool.responseModifierTemplate,
           authInfo,
         );
       } catch (error) {
@@ -686,7 +672,7 @@ class McpClient {
     toolCall: CommonToolCall,
     agentId: string,
   ): Promise<
-    | { tool: McpToolWithServerMetadata; catalogItem: InternalMcpCatalog }
+    | { tool: McpToolAssignment; catalogItem: InternalMcpCatalog }
     | { error: CommonToolResult }
   > {
     // Get MCP tool from agent-assigned tools
@@ -815,7 +801,7 @@ class McpClient {
     agentId,
     catalogItem,
   }: {
-    tool: McpToolWithServerMetadata;
+    tool: McpToolAssignment;
     toolCall: CommonToolCall;
     agentId: string;
     tokenAuth?: TokenAuthContext;
@@ -1256,29 +1242,6 @@ class McpClient {
   }
 
   /**
-   * Apply response modifier template with fallback
-   */
-  private applyTemplate(
-    content: unknown,
-    template: string | null,
-    toolName: string,
-  ): unknown {
-    if (!template) {
-      return content;
-    }
-
-    try {
-      return applyResponseModifierTemplate(template, content);
-    } catch (error) {
-      logger.error(
-        { err: error },
-        `Error applying response modifier template for tool ${toolName}`,
-      );
-      return content; // Fallback to original
-    }
-  }
-
-  /**
    * Create and persist an error result
    */
   private async createErrorResult(
@@ -1318,22 +1281,15 @@ class McpClient {
     mcpServerName: string,
     content: unknown,
     isError: boolean,
-    template: string | null,
     authInfo?: {
       userId?: string;
       authMethod?: MCPGatewayAuthMethod;
     },
   ): Promise<CommonToolResult> {
-    const modifiedContent = this.applyTemplate(
-      content,
-      template,
-      toolCall.name,
-    );
-
     const toolResult: CommonToolResult = {
       id: toolCall.id,
       name: toolCall.name,
-      content: modifiedContent,
+      content,
       isError,
     };
 

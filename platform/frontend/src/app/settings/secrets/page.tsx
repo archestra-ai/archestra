@@ -1,6 +1,8 @@
 "use client";
 
 import { RefreshCw, Server } from "lucide-react";
+import { useCallback, useEffect } from "react";
+import { useSetSettingsAction } from "@/app/settings/layout";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PermissionButton } from "@/components/ui/permission-button";
@@ -10,12 +12,40 @@ import {
 } from "@/lib/secrets.query";
 
 export default function SecretsSettingsPage() {
+  const setActionButton = useSetSettingsAction();
   const { data: secretsType, isLoading } = useSecretsType();
   const checkConnectivityMutation = useCheckSecretsConnectivity();
 
-  const handleCheckConnectivity = async () => {
+  const handleCheckConnectivity = useCallback(async () => {
     await checkConnectivityMutation.mutateAsync();
-  };
+  }, [checkConnectivityMutation]);
+
+  useEffect(() => {
+    if (secretsType?.type !== "Vault") {
+      setActionButton(null);
+      return;
+    }
+
+    setActionButton(
+      <PermissionButton
+        permissions={{ secret: ["update"] }}
+        onClick={handleCheckConnectivity}
+        disabled={checkConnectivityMutation.isPending}
+      >
+        {checkConnectivityMutation.isPending && (
+          <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+        )}
+        Check Vault Connectivity
+      </PermissionButton>,
+    );
+
+    return () => setActionButton(null);
+  }, [
+    checkConnectivityMutation.isPending,
+    secretsType?.type,
+    setActionButton,
+    handleCheckConnectivity,
+  ]);
 
   if (isLoading) {
     return (
@@ -46,19 +76,6 @@ export default function SecretsSettingsPage() {
                 <span className="text-muted-foreground">{key}:</span> {value}
               </p>
             ))}
-          </div>
-
-          <div className="flex items-center gap-4">
-            <PermissionButton
-              permissions={{ secret: ["update"] }}
-              onClick={handleCheckConnectivity}
-              disabled={checkConnectivityMutation.isPending}
-            >
-              {checkConnectivityMutation.isPending && (
-                <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-              )}
-              Check Vault Connectivity
-            </PermissionButton>
           </div>
 
           {checkConnectivityMutation.isError && (

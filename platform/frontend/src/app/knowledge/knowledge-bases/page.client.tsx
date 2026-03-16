@@ -1,45 +1,45 @@
 "use client";
 
 import type { archestraApiTypes } from "@shared";
+import type { ColumnDef } from "@tanstack/react-table";
 import { formatDistanceToNow } from "date-fns";
 import {
   ArrowLeft,
   Check,
+  ChevronDown,
+  ChevronRight,
   Globe,
   Link2,
   Pencil,
   Plus,
   RefreshCw,
   Trash2,
-  Unlink,
   Users,
 } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useState } from "react";
+import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { KnowledgePageLayout } from "@/app/knowledge/_parts/knowledge-page-layout";
-import { ConnectorStatusDot } from "@/app/knowledge/knowledge-bases/_parts/connector-enabled-dot";
 import { ConnectorStatusBadge } from "@/app/knowledge/knowledge-bases/_parts/connector-status-badge";
-import { LoadingSpinner } from "@/components/loading";
+import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { SearchInput } from "@/components/search-input";
+import {
+  type TableRowAction,
+  TableRowActions,
+} from "@/components/table-row-actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { DataTable } from "@/components/ui/data-table";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
-  DialogFooter,
-  DialogForm,
   DialogHeader,
+  DialogStickyFooter,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import {
   Tooltip,
   TooltipContent,
@@ -54,24 +54,15 @@ import {
 } from "@/lib/connector.query";
 import {
   useDeleteKnowledgeBase,
-  useKnowledgeBases,
+  useKnowledgeBasesPaginated,
 } from "@/lib/knowledge-base.query";
 import { useTeams } from "@/lib/team.query";
-import { cn, formatDate } from "@/lib/utils";
+import { cn, DEFAULT_TABLE_LIMIT, formatDate } from "@/lib/utils";
 import { ConnectorTypeIcon } from "./_parts/connector-icons";
 import { CreateConnectorDialog } from "./_parts/create-connector-dialog";
 import { CreateKnowledgeBaseDialog } from "./_parts/create-knowledge-base-dialog";
 import { EditConnectorDialog } from "./_parts/edit-connector-dialog";
 import { EditKnowledgeBaseDialog } from "./_parts/edit-knowledge-base-dialog";
-
-const AGENT_TYPE_LABELS: Record<string, string> = {
-  agent: "Agent",
-  mcp_gateway: "MCP Gateway",
-};
-
-function formatAgentType(agentType: string): string {
-  return AGENT_TYPE_LABELS[agentType] ?? agentType;
-}
 
 type KnowledgeBaseItem =
   archestraApiTypes.GetKnowledgeBasesResponses["200"]["data"][number];
@@ -87,14 +78,170 @@ export default function KnowledgeBasesPage() {
 }
 
 function KnowledgeBasesList() {
-  const { data: knowledgeBases, isPending } = useKnowledgeBases();
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+
+  const pageFromUrl = searchParams.get("page");
+  const pageSizeFromUrl = searchParams.get("pageSize");
+  const search = searchParams.get("search") || "";
+  const pageIndex = Number(pageFromUrl || "1") - 1;
+  const pageSize = Number(pageSizeFromUrl || DEFAULT_TABLE_LIMIT);
+  const offset = pageIndex * pageSize;
+
+  const {
+    data: knowledgeBases,
+    isPending,
+    isFetching,
+  } = useKnowledgeBasesPaginated({
+    limit: pageSize,
+    offset,
+    search: search || undefined,
+  });
+  const { data: teams } = useTeams();
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [editingItem, setEditingItem] = useState<KnowledgeBaseItem | null>(
     null,
   );
+  const [addConnectorKbId, setAddConnectorKbId] = useState<string | null>(null);
 
   const items = knowledgeBases?.data ?? [];
+  const pagination = knowledgeBases?.pagination;
+  const clearFilters = useCallback(() => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("search");
+    params.set("page", "1");
+    router.push(`${pathname}?${params.toString()}`, { scroll: false });
+  }, [pathname, router, searchParams]);
+
+  const columns: ColumnDef<KnowledgeBaseItem>[] = [
+    {
+      id: "expand",
+      size: 40,
+      header: () => null,
+      cell: ({ row }) => (
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7"
+          onClick={(e) => {
+            e.stopPropagation();
+            row.toggleExpanded();
+          }}
+        >
+          {row.getIsExpanded() ? (
+            <ChevronDown className="h-4 w-4" />
+          ) : (
+            <ChevronRight className="h-4 w-4" />
+          )}
+        </Button>
+      ),
+    },
+    {
+      id: "name",
+      accessorKey: "name",
+      header: "Name",
+      cell: ({ row }) => {
+        const kb = row.original;
+        return (
+          <div>
+            <div className="font-medium">{kb.name}</div>
+            {kb.description && (
+              <div className="text-xs text-muted-foreground truncate max-w-md">
+                {kb.description}
+              </div>
+            )}
+          </div>
+        );
+      },
+    },
+    {
+      id: "connectors",
+      header: "Connectors",
+      cell: ({ row }) => <div>{row.original.connectors.length}</div>,
+    },
+    {
+      id: "docsIndexed",
+      header: "Docs Indexed",
+      cell: ({ row }) => <div>{row.original.totalDocsIndexed}</div>,
+    },
+    {
+      id: "visibility",
+      header: "Visibility",
+      cell: ({ row }) => {
+        const kb = row.original;
+        const isOrgWide = kb.visibility === "org-wide";
+        const isTeamScoped = kb.visibility === "team-scoped";
+        const isAutoSync = kb.visibility === "auto-sync-permissions";
+        const VisibilityIcon = isAutoSync
+          ? RefreshCw
+          : isOrgWide
+            ? Globe
+            : Users;
+        const matchedTeams = isTeamScoped
+          ? (teams ?? []).filter((t) => kb.teamIds.includes(t.id))
+          : [];
+
+        if (isTeamScoped && matchedTeams.length > 0) {
+          return (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Badge variant="outline" className="gap-1.5 cursor-default">
+                    <VisibilityIcon className="h-3.5 w-3.5" />
+                    Team-scoped
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">
+                  <div className="space-y-0.5">
+                    {matchedTeams.map((team) => (
+                      <div key={team.id} className="text-xs">
+                        {team.name}
+                      </div>
+                    ))}
+                  </div>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          );
+        }
+
+        return (
+          <Badge variant="outline" className="gap-1.5">
+            <VisibilityIcon className="h-3.5 w-3.5" />
+            {isAutoSync ? "Auto Sync" : isOrgWide ? "Org-wide" : "Team-scoped"}
+          </Badge>
+        );
+      },
+    },
+    {
+      id: "actions",
+      header: "Actions",
+      cell: ({ row }) => {
+        const kb = row.original;
+        const actions: TableRowAction[] = [
+          {
+            icon: <Plus className="h-4 w-4" />,
+            label: "Add connector",
+            onClick: () => setAddConnectorKbId(kb.id),
+          },
+          {
+            icon: <Pencil className="h-4 w-4" />,
+            label: "Edit",
+            onClick: () => setEditingItem(kb),
+          },
+          {
+            icon: <Trash2 className="h-4 w-4" />,
+            label: "Delete",
+            variant: "destructive",
+            onClick: () => setDeletingId(kb.id),
+          },
+        ];
+        return <TableRowActions actions={actions} />;
+      },
+    },
+  ];
 
   return (
     <KnowledgePageLayout
@@ -102,25 +249,44 @@ function KnowledgeBasesList() {
       description="Manage knowledge bases and their data connectors."
       createLabel="Create Knowledge Base"
       onCreateClick={() => setIsCreateDialogOpen(true)}
-      isPending={isPending}
+      isPending={isPending && !knowledgeBases}
     >
       <div>
-        {items.length === 0 ? (
-          <div className="text-muted-foreground">
-            No knowledge bases found. Create one to get started.
+        <div className="mb-6 flex flex-col gap-2">
+          <div className="flex items-center gap-4">
+            <SearchInput
+              objectNamePlural="knowledge bases"
+              searchFields={["name", "description"]}
+              paramName="search"
+            />
           </div>
-        ) : (
-          <div className="space-y-3">
-            {items.map((kb) => (
-              <KnowledgeBaseCard
-                key={kb.id}
-                kb={kb}
-                onEdit={() => setEditingItem(kb)}
-                onDelete={() => setDeletingId(kb.id)}
-              />
-            ))}
-          </div>
-        )}
+        </div>
+
+        <DataTable
+          columns={columns}
+          data={items}
+          renderSubComponent={({ row }) => (
+            <ExpandedConnectors knowledgeBaseId={row.original.id} />
+          )}
+          emptyMessage="No knowledge bases found"
+          hasActiveFilters={!!search}
+          filteredEmptyMessage="No knowledge bases match your filters. Try adjusting your search."
+          onClearFilters={clearFilters}
+          hideSelectedCount
+          manualPagination
+          pagination={{
+            pageIndex,
+            pageSize,
+            total: pagination?.total ?? 0,
+          }}
+          onPaginationChange={(newPagination) => {
+            const params = new URLSearchParams(searchParams.toString());
+            params.set("page", String(newPagination.pageIndex + 1));
+            params.set("pageSize", String(newPagination.pageSize));
+            router.push(`${pathname}?${params.toString()}`, { scroll: false });
+          }}
+          isLoading={isFetching}
+        />
 
         <CreateKnowledgeBaseDialog
           open={isCreateDialogOpen}
@@ -142,195 +308,29 @@ function KnowledgeBasesList() {
             onOpenChange={(open) => !open && setDeletingId(null)}
           />
         )}
+
+        {addConnectorKbId && (
+          <AddConnectorDialog
+            knowledgeBaseId={addConnectorKbId}
+            assignedConnectorIds={
+              new Set(
+                items
+                  .find((kb) => kb.id === addConnectorKbId)
+                  ?.connectors.map((c) => c.id) ?? [],
+              )
+            }
+            open={!!addConnectorKbId}
+            onOpenChange={(open) => !open && setAddConnectorKbId(null)}
+          />
+        )}
       </div>
     </KnowledgePageLayout>
   );
 }
 
-function KnowledgeBaseCard({
-  kb,
-  onEdit,
-  onDelete,
-}: {
-  kb: KnowledgeBaseItem;
-  onEdit: () => void;
-  onDelete: () => void;
-}) {
-  const [isAddConnectorOpen, setIsAddConnectorOpen] = useState(false);
-  const { data: teams } = useTeams();
-  const isOrgWide = kb.visibility === "org-wide";
-  const isTeamScoped = kb.visibility === "team-scoped";
-  const isAutoSync = kb.visibility === "auto-sync-permissions";
-  const VisibilityIcon = isAutoSync ? RefreshCw : isOrgWide ? Globe : Users;
-  const totalConnectors = kb.connectors.length;
-  const matchedTeams = isTeamScoped
-    ? (teams ?? []).filter((t) => kb.teamIds.includes(t.id))
-    : [];
-
-  return (
-    <div className="rounded-lg border">
-      {/* Card header */}
-      <div className="flex w-full flex-wrap items-center gap-x-4 gap-y-3 px-5 py-4 text-left">
-        <div className="flex flex-col gap-0.5 min-w-0 flex-1">
-          <span className="text-xl font-semibold">{kb.name}</span>
-          {kb.description && (
-            <span className="text-sm text-muted-foreground truncate">
-              {kb.description}
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-x-6 shrink-0 order-last lg:order-none w-full lg:w-auto pl-9 lg:pl-0">
-          <StatItem label="Connectors" value={String(totalConnectors)} />
-          <StatItem label="Docs Indexed" value={String(kb.totalDocsIndexed)} />
-          <StatItem
-            label="Visibility"
-            value={
-              isTeamScoped && matchedTeams.length > 0 ? (
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Badge
-                        variant="outline"
-                        className="gap-1.5 cursor-default"
-                      >
-                        <VisibilityIcon className="h-3.5 w-3.5" />
-                        Team-scoped
-                      </Badge>
-                    </TooltipTrigger>
-                    <TooltipContent side="bottom">
-                      <div className="space-y-0.5">
-                        {matchedTeams.map((team) => (
-                          <div key={team.id} className="text-xs">
-                            {team.name}
-                          </div>
-                        ))}
-                      </div>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              ) : (
-                <Badge variant="outline" className="gap-1.5">
-                  <VisibilityIcon className="h-3.5 w-3.5" />
-                  {isAutoSync
-                    ? "Auto Sync"
-                    : isOrgWide
-                      ? "Org-wide"
-                      : "Team-scoped"}
-                </Badge>
-              )
-            }
-          />
-          <StatItem
-            label="Assigned To"
-            value={
-              kb.assignedAgents.length > 0 ? (
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span className="cursor-default">
-                        {String(kb.assignedAgents.length)}
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent side="bottom">
-                      <div className="space-y-2">
-                        {Object.entries(
-                          kb.assignedAgents.reduce<
-                            Record<string, typeof kb.assignedAgents>
-                          >((groups, agent) => {
-                            const label = formatAgentType(agent.agentType);
-                            if (!groups[label]) groups[label] = [];
-                            groups[label].push(agent);
-                            return groups;
-                          }, {}),
-                        ).map(([type, agents]) => (
-                          <div key={type}>
-                            <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-0.5">
-                              {type}
-                            </div>
-                            {agents.map((agent) => (
-                              <div key={agent.id} className="text-xs pl-1">
-                                {agent.name}
-                              </div>
-                            ))}
-                          </div>
-                        ))}
-                      </div>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              ) : (
-                "0"
-              )
-            }
-          />
-        </div>
-        <div className="flex items-center gap-1 shrink-0">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={(e) => {
-              e.stopPropagation();
-              setIsAddConnectorOpen(true);
-            }}
-          >
-            <Plus className="h-4 w-4 text-muted-foreground" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={(e) => {
-              e.stopPropagation();
-              onEdit();
-            }}
-          >
-            <Pencil className="h-4 w-4 text-muted-foreground" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={(e) => {
-              e.stopPropagation();
-              onDelete();
-            }}
-          >
-            <Trash2 className="h-4 w-4 text-muted-foreground" />
-          </Button>
-        </div>
-      </div>
-
-      {/* Connectors panel */}
-      <div className="border-t">
-        <ExpandedConnectors knowledgeBaseId={kb.id} />
-      </div>
-
-      <AddConnectorDialog
-        knowledgeBaseId={kb.id}
-        assignedConnectorIds={new Set(kb.connectors.map((c) => c.id))}
-        open={isAddConnectorOpen}
-        onOpenChange={setIsAddConnectorOpen}
-      />
-    </div>
-  );
-}
-
-function StatItem({
-  label,
-  value,
-  className,
-}: {
-  label: string;
-  value: React.ReactNode;
-  className?: string;
-}) {
-  return (
-    <div className={cn("flex flex-col gap-0.5", className)}>
-      <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-        {label}
-      </span>
-      <span className="text-base font-semibold">{value}</span>
-    </div>
-  );
-}
+// ===
+// Expanded connectors sub-row
+// ===
 
 type ConnectorItem =
   archestraApiTypes.GetConnectorsResponses["200"]["data"][number];
@@ -344,126 +344,89 @@ function ExpandedConnectors({ knowledgeBaseId }: { knowledgeBaseId: string }) {
     null,
   );
 
-  if (isPending) {
-    return (
-      <div className="flex items-center justify-center py-6">
-        <LoadingSpinner />
-      </div>
-    );
-  }
+  const items = connectors ?? [];
 
-  const items = connectors?.data ?? [];
-
-  if (items.length === 0) {
-    return (
-      <div className="px-6 py-4 text-sm text-muted-foreground">
-        No connectors configured.
-      </div>
-    );
-  }
+  const columns: ColumnDef<ConnectorItem>[] = [
+    {
+      id: "name",
+      header: "Connector",
+      cell: ({ row }) => (
+        <div className="flex items-center gap-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-muted">
+            <ConnectorTypeIcon
+              type={row.original.connectorType}
+              className="h-5 w-5"
+            />
+          </div>
+          <div className="min-w-0">
+            <div className="font-medium truncate">{row.original.name}</div>
+            <div className="text-xs text-muted-foreground truncate">
+              {row.original.description || row.original.connectorType}
+            </div>
+          </div>
+        </div>
+      ),
+    },
+    {
+      id: "status",
+      header: "Status",
+      cell: ({ row }) =>
+        row.original.lastSyncAt ? (
+          <div className="flex items-center gap-2">
+            <ConnectorStatusBadge status={row.original.lastSyncStatus} />
+            <span
+              className="text-xs text-muted-foreground"
+              title={formatDate({ date: row.original.lastSyncAt })}
+            >
+              {formatDistanceToNow(new Date(row.original.lastSyncAt), {
+                addSuffix: true,
+              })}
+            </span>
+          </div>
+        ) : (
+          <span className="text-xs text-muted-foreground">Never synced</span>
+        ),
+    },
+    {
+      id: "actions",
+      header: "Actions",
+      cell: ({ row }) => (
+        <TableRowActions
+          actions={[
+            {
+              icon: <Pencil className="h-4 w-4" />,
+              label: "Edit connector",
+              onClick: () => setEditingConnector(row.original),
+            },
+            {
+              icon: <Trash2 className="h-4 w-4" />,
+              label: "Remove from knowledge base",
+              variant: "destructive",
+              onClick: () => setRemovingConnectorId(row.original.id),
+            },
+          ]}
+          size="sm"
+        />
+      ),
+    },
+  ];
 
   return (
     <>
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead className="uppercase text-xs tracking-wider bg-muted">
-              Connectors
-            </TableHead>
-            <TableHead className="uppercase text-xs tracking-wider text-right bg-muted">
-              Status
-            </TableHead>
-            <TableHead className="uppercase text-xs tracking-wider text-center w-[100px] bg-muted">
-              Actions
-            </TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {items.map((connector) => (
-            <TableRow
-              key={connector.id}
-              className="hover:bg-muted/50 cursor-pointer"
-              onClick={() =>
-                router.push(
-                  `/knowledge/connectors/${connector.id}?from=knowledge-bases`,
-                )
-              }
-            >
-              <TableCell>
-                <div className="flex items-center gap-3">
-                  <ConnectorStatusDot
-                    enabled={connector.enabled}
-                    lastSyncStatus={connector.lastSyncStatus}
-                  />
-                  <Badge variant="secondary" className="gap-1.5 capitalize">
-                    <ConnectorTypeIcon
-                      type={connector.connectorType}
-                      className="h-3.5 w-3.5"
-                    />
-                    {connector.connectorType}
-                  </Badge>
-                  <span className="font-medium">{connector.name}</span>
-                </div>
-              </TableCell>
-              <TableCell className="text-right">
-                <div className="flex items-center justify-end gap-2">
-                  {connector.lastSyncAt ? (
-                    <>
-                      <ConnectorStatusBadge status={connector.lastSyncStatus} />
-                      <span
-                        className="text-xs text-muted-foreground"
-                        title={formatDate({ date: connector.lastSyncAt })}
-                      >
-                        {formatDistanceToNow(new Date(connector.lastSyncAt), {
-                          addSuffix: true,
-                        })}
-                      </span>
-                    </>
-                  ) : (
-                    <span className="text-xs text-muted-foreground">
-                      Never synced
-                    </span>
-                  )}
-                </div>
-              </TableCell>
-              <TableCell>
-                {/* biome-ignore lint/a11y/useKeyWithClickEvents: stopPropagation wrapper for action buttons inside clickable row */}
-                {/* biome-ignore lint/a11y/noStaticElementInteractions: wrapper only prevents row click propagation */}
-                <div
-                  className="flex items-center justify-center gap-1"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7"
-                    onClick={() => setEditingConnector(connector)}
-                  >
-                    <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
-                  </Button>
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7"
-                          onClick={() => setRemovingConnectorId(connector.id)}
-                        >
-                          <Unlink className="h-3.5 w-3.5 text-muted-foreground" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        Remove from knowledge base
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                </div>
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+      <div className="p-4">
+        <DataTable
+          columns={columns}
+          data={items}
+          getRowId={(row) => row.id}
+          hideSelectedCount
+          isLoading={isPending}
+          emptyMessage="No connectors associated with this knowledge base"
+          onRowClick={(row) =>
+            router.push(`/knowledge/connectors/${row.id}?from=knowledge-bases`)
+          }
+          manualPagination
+        />
+      </div>
 
       {editingConnector && (
         <EditConnectorDialog
@@ -485,6 +448,10 @@ function ExpandedConnectors({ knowledgeBaseId }: { knowledgeBaseId: string }) {
   );
 }
 
+// ===
+// Dialogs
+// ===
+
 function AddConnectorDialog({
   knowledgeBaseId,
   assignedConnectorIds,
@@ -501,7 +468,7 @@ function AddConnectorDialog({
   const assignMutation = useAssignConnectorToKnowledgeBases();
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
-  const availableConnectors = (allConnectors?.data ?? []).filter(
+  const availableConnectors = (allConnectors ?? []).filter(
     (c) => !assignedConnectorIds.has(c.id),
   );
 
@@ -519,12 +486,27 @@ function AddConnectorDialog({
 
   const handleAssign = useCallback(async () => {
     if (selectedIds.size === 0) return;
-    for (const connectorId of selectedIds) {
-      await assignMutation.mutateAsync({
-        connectorId,
-        knowledgeBaseIds: [knowledgeBaseId],
-      });
+    const results = await Promise.allSettled(
+      [...selectedIds].map((connectorId) =>
+        assignMutation.mutateAsync({
+          connectorId,
+          knowledgeBaseIds: [knowledgeBaseId],
+        }),
+      ),
+    );
+
+    const failedCount = results.filter(
+      (result) => result.status === "rejected",
+    ).length;
+
+    if (failedCount > 0) {
+      toast.error(
+        failedCount === selectedIds.size
+          ? "Failed to assign connectors"
+          : `${failedCount} connector assignment${failedCount === 1 ? "" : "s"} failed`,
+      );
     }
+
     setSelectedIds(new Set());
     setStep("choose");
     onOpenChange(false);
@@ -550,41 +532,43 @@ function AddConnectorDialog({
                   Reuse an existing connector or create a new one.
                 </DialogDescription>
               </DialogHeader>
-              <div className="grid grid-cols-2 gap-3 py-2">
-                <button
-                  type="button"
-                  onClick={() => setStep("reuse")}
-                  disabled={availableConnectors.length === 0}
-                  className="flex flex-col items-center gap-3 rounded-lg border p-5 text-center transition-colors hover:bg-muted/50 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-muted">
-                    <Link2 className="h-7 w-7 text-muted-foreground" />
-                  </div>
-                  <div>
-                    <div className="font-medium">Reuse Existing</div>
-                    <div className="text-xs text-muted-foreground mt-1">
-                      {availableConnectors.length === 0
-                        ? "No unassigned connectors"
-                        : `${availableConnectors.length} available`}
+              <DialogBody className="pt-4">
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setStep("reuse")}
+                    disabled={availableConnectors.length === 0}
+                    className="flex flex-col items-center gap-3 rounded-lg border p-5 text-center transition-colors hover:bg-muted/50 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-muted">
+                      <Link2 className="h-7 w-7 text-muted-foreground" />
                     </div>
-                  </div>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setStep("create")}
-                  className="flex flex-col items-center gap-3 rounded-lg border p-5 text-center transition-colors hover:bg-muted/50 cursor-pointer"
-                >
-                  <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-muted">
-                    <Plus className="h-7 w-7 text-muted-foreground" />
-                  </div>
-                  <div>
-                    <div className="font-medium">Create New</div>
-                    <div className="text-xs text-muted-foreground mt-1">
-                      Set up a new connector
+                    <div>
+                      <div className="font-medium">Reuse Existing</div>
+                      <div className="text-xs text-muted-foreground mt-1">
+                        {availableConnectors.length === 0
+                          ? "No unassigned connectors"
+                          : `${availableConnectors.length} available`}
+                      </div>
                     </div>
-                  </div>
-                </button>
-              </div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setStep("create")}
+                    className="flex flex-col items-center gap-3 rounded-lg border p-5 text-center transition-colors hover:bg-muted/50 cursor-pointer"
+                  >
+                    <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-muted">
+                      <Plus className="h-7 w-7 text-muted-foreground" />
+                    </div>
+                    <div>
+                      <div className="font-medium">Create New</div>
+                      <div className="text-xs text-muted-foreground mt-1">
+                        Set up a new connector
+                      </div>
+                    </div>
+                  </button>
+                </div>
+              </DialogBody>
             </>
           )}
 
@@ -609,43 +593,45 @@ function AddConnectorDialog({
                   Choose connectors to assign to this knowledge base.
                 </DialogDescription>
               </DialogHeader>
-              <div className="grid grid-cols-2 gap-3 py-2 max-h-[50vh] overflow-y-auto">
-                {availableConnectors.map((connector) => {
-                  const isSelected = selectedIds.has(connector.id);
-                  return (
-                    <button
-                      key={connector.id}
-                      type="button"
-                      onClick={() => toggleSelected(connector.id)}
-                      className={cn(
-                        "relative flex items-center gap-3 rounded-lg border p-3 text-left transition-colors cursor-pointer hover:bg-muted/50",
-                        isSelected && "border-primary bg-primary/5",
-                      )}
-                    >
-                      {isSelected && (
-                        <div className="absolute top-2 right-2">
-                          <Check className="h-4 w-4 text-primary" />
+              <DialogBody className="pt-4">
+                <div className="grid max-h-[50vh] grid-cols-2 gap-3 overflow-y-auto">
+                  {availableConnectors.map((connector) => {
+                    const isSelected = selectedIds.has(connector.id);
+                    return (
+                      <button
+                        key={connector.id}
+                        type="button"
+                        onClick={() => toggleSelected(connector.id)}
+                        className={cn(
+                          "relative flex items-center gap-3 rounded-lg border p-3 text-left transition-colors cursor-pointer hover:bg-muted/50",
+                          isSelected && "border-primary bg-primary/5",
+                        )}
+                      >
+                        {isSelected && (
+                          <div className="absolute top-2 right-2">
+                            <Check className="h-4 w-4 text-primary" />
+                          </div>
+                        )}
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-muted">
+                          <ConnectorTypeIcon
+                            type={connector.connectorType}
+                            className="h-5 w-5"
+                          />
                         </div>
-                      )}
-                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-muted">
-                        <ConnectorTypeIcon
-                          type={connector.connectorType}
-                          className="h-5 w-5"
-                        />
-                      </div>
-                      <div className="min-w-0">
-                        <div className="font-medium text-sm truncate">
-                          {connector.name}
+                        <div className="min-w-0">
+                          <div className="font-medium text-sm truncate">
+                            {connector.name}
+                          </div>
+                          <div className="text-xs text-muted-foreground capitalize">
+                            {connector.connectorType}
+                          </div>
                         </div>
-                        <div className="text-xs text-muted-foreground capitalize">
-                          {connector.connectorType}
-                        </div>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-              <DialogFooter>
+                      </button>
+                    );
+                  })}
+                </div>
+              </DialogBody>
+              <DialogStickyFooter className="mt-0">
                 <Button
                   variant="outline"
                   onClick={() => {
@@ -663,7 +649,7 @@ function AddConnectorDialog({
                     ? "Assigning..."
                     : `Assign ${selectedIds.size > 0 ? `(${selectedIds.size})` : ""}`}
                 </Button>
-              </DialogFooter>
+              </DialogStickyFooter>
             </>
           )}
         </DialogContent>
@@ -672,6 +658,7 @@ function AddConnectorDialog({
       <CreateConnectorDialog
         knowledgeBaseId={knowledgeBaseId}
         open={open && step === "create"}
+        onBack={() => setStep("choose")}
         onOpenChange={(isOpen) => {
           if (!isOpen) {
             setStep("choose");
@@ -707,36 +694,16 @@ function RemoveConnectorDialog({
   }, [connectorId, knowledgeBaseId, unassignMutation, onOpenChange]);
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>Remove Connector</DialogTitle>
-          <DialogDescription>
-            Are you sure you want to remove this connector from the knowledge
-            base? The connector itself will not be deleted and can be re-added
-            later.
-          </DialogDescription>
-        </DialogHeader>
-        <DialogForm onSubmit={handleRemove}>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              variant="destructive"
-              disabled={unassignMutation.isPending}
-            >
-              {unassignMutation.isPending ? "Removing..." : "Remove Connector"}
-            </Button>
-          </DialogFooter>
-        </DialogForm>
-      </DialogContent>
-    </Dialog>
+    <DeleteConfirmDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Remove Connector"
+      description="Are you sure you want to remove this connector from the knowledge base? The connector itself will not be deleted and can be re-added later."
+      isPending={unassignMutation.isPending}
+      onConfirm={handleRemove}
+      confirmLabel="Remove Connector"
+      pendingLabel="Removing..."
+    />
   );
 }
 
@@ -759,37 +726,15 @@ function DeleteKnowledgeBaseDialog({
   }, [knowledgeBaseId, deleteKnowledgeBase, onOpenChange]);
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>Delete Knowledge Base</DialogTitle>
-          <DialogDescription>
-            Are you sure you want to delete this knowledge base? Connectors will
-            not be deleted but will be unlinked from this knowledge base. This
-            action cannot be undone.
-          </DialogDescription>
-        </DialogHeader>
-        <DialogForm onSubmit={handleDelete}>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              variant="destructive"
-              disabled={deleteKnowledgeBase.isPending}
-            >
-              {deleteKnowledgeBase.isPending
-                ? "Deleting..."
-                : "Delete Knowledge Base"}
-            </Button>
-          </DialogFooter>
-        </DialogForm>
-      </DialogContent>
-    </Dialog>
+    <DeleteConfirmDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Delete Knowledge Base"
+      description="Are you sure you want to delete this knowledge base? Connectors will not be deleted but will be unlinked from this knowledge base. This action cannot be undone."
+      isPending={deleteKnowledgeBase.isPending}
+      onConfirm={handleDelete}
+      confirmLabel="Delete Knowledge Base"
+      pendingLabel="Deleting..."
+    />
   );
 }

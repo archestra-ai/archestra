@@ -446,6 +446,43 @@ describe("ChatApiKeyModel", () => {
       expect(visible.map((k) => k.name)).toContain("Org Wide Key");
       expect(visible.map((k) => k.name)).not.toContain("User Personal Key");
     });
+
+    test("supports filtering visible keys by search and provider", async ({
+      makeOrganization,
+      makeUser,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+
+      await ChatApiKeyModel.create({
+        organizationId: org.id,
+        name: "Primary Anthropic Key",
+        provider: "anthropic",
+        scope: "personal",
+        userId: user.id,
+      });
+      await ChatApiKeyModel.create({
+        organizationId: org.id,
+        name: "OpenAI Backup",
+        provider: "openai",
+        scope: "personal",
+        userId: user.id,
+      });
+
+      const visible = await ChatApiKeyModel.getVisibleKeys(
+        org.id,
+        user.id,
+        [],
+        false,
+        {
+          search: "primary",
+          provider: "anthropic",
+        },
+      );
+
+      expect(visible).toHaveLength(1);
+      expect(visible[0].name).toBe("Primary Anthropic Key");
+    });
   });
 
   describe("resolveApiKey", () => {

@@ -10,6 +10,7 @@ import { MsTeamsSetupDialog } from "@/components/ms-teams-setup-dialog";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogHeader,
@@ -20,6 +21,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useChatOpsStatus } from "@/lib/chatops.query";
 import config from "@/lib/config";
 import { useConfig, usePublicBaseUrl } from "@/lib/config.query";
+import { useAppName } from "@/lib/use-app-name";
 import { ChannelsSection } from "../_components/channels-section";
 import { CollapsibleSetupSection } from "../_components/collapsible-setup-section";
 import { CredentialField } from "../_components/credential-field";
@@ -53,6 +55,7 @@ const msTeamsProviderConfig: ProviderConfig = {
 };
 
 export default function MsTeamsPage() {
+  const configuredAppName = useAppName();
   const publicBaseUrl = usePublicBaseUrl();
   const [msTeamsSetupOpen, setMsTeamsSetupOpen] = useState(false);
   const [ngrokDialogOpen, setNgrokDialogOpen] = useState(false);
@@ -79,8 +82,8 @@ export default function MsTeamsPage() {
       >
         {isLocalDev ? (
           <SetupStep
-            title="Make Archestra reachable from the Internet"
-            description="The MS Teams bot needs to connect to an Archestra webhook — your instance must be publicly accessible"
+            title={`Make ${configuredAppName} reachable from the Internet`}
+            description={`The MS Teams bot needs to connect to an ${configuredAppName} webhook — your instance must be publicly accessible`}
             done={!!ngrokDomain}
             ctaLabel="Configure ngrok"
             onAction={() => setNgrokDialogOpen(true)}
@@ -95,7 +98,7 @@ export default function MsTeamsPage() {
               </>
             ) : (
               <>
-                Archestra's webhook{" "}
+                {configuredAppName}'s webhook{" "}
                 <code className="bg-muted px-1 py-0.5 rounded text-xs">
                   POST {`${publicBaseUrl}/api/webhooks/chatops/ms-teams`}
                 </code>{" "}
@@ -109,7 +112,8 @@ export default function MsTeamsPage() {
             <Info className="h-5 w-5 text-blue-500 shrink-0 mt-0.5" />
             <div className="flex flex-col gap-1">
               <span className="font-medium text-sm">
-                Archestra's webhook must be reachable from the Internet
+                {configuredAppName}'s webhook must be reachable from the
+                Internet
               </span>
               <span className="text-muted-foreground text-xs">
                 The webhook endpoint{" "}
@@ -117,7 +121,7 @@ export default function MsTeamsPage() {
                   POST {`${publicBaseUrl}/api/webhooks/chatops/ms-teams`}
                 </code>{" "}
                 must be publicly accessible so MS Teams can deliver messages to
-                Archestra
+                {configuredAppName}
               </span>
             </div>
           </div>
@@ -125,7 +129,7 @@ export default function MsTeamsPage() {
         <LlmKeySetupStep />
         <SetupStep
           title="Setup MS Teams"
-          description="Register a Teams bot application and connect it to Archestra"
+          description={`Register a Teams bot application and connect it to ${configuredAppName}`}
           done={!!msTeams?.configured}
           ctaLabel="Setup MS Teams"
           onAction={() => setMsTeamsSetupOpen(true)}
@@ -176,6 +180,7 @@ function NgrokSetupDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  const configuredAppName = useAppName();
   const [step, setStep] = useState<1 | 2>(1);
   const [authToken, setAuthToken] = useState("");
 
@@ -228,7 +233,7 @@ function NgrokSetupDialog({
                 </Link>
               </DialogDescription>
             </DialogHeader>
-            <div className="space-y-4 pt-2">
+            <DialogBody className="space-y-4 p-3">
               <Input
                 placeholder="ngrok auth token"
                 value={authToken}
@@ -241,100 +246,106 @@ function NgrokSetupDialog({
               >
                 Continue
               </Button>
-            </div>
+            </DialogBody>
           </>
         ) : (
           <>
             <DialogHeader>
-              <DialogTitle>Run Archestra with ngrok</DialogTitle>
+              <DialogTitle>Run {configuredAppName} with ngrok</DialogTitle>
               <DialogDescription>
-                Choose how you want to set up ngrok with Archestra.
+                Choose how you want to set up ngrok with {configuredAppName}.
               </DialogDescription>
             </DialogHeader>
-            <Tabs defaultValue="docker">
-              <TabsList className="w-full">
-                <TabsTrigger value="docker">Docker</TabsTrigger>
-                <TabsTrigger value="local">Local Development</TabsTrigger>
-              </TabsList>
-              <TabsContent value="docker" className="space-y-3 pt-2">
-                <p className="text-xs text-muted-foreground">
-                  Restart Archestra using the following command to enable ngrok:
-                </p>
-                <Tabs defaultValue="unix">
-                  <TabsList className="h-7 p-0.5">
-                    <TabsTrigger value="unix" className="text-xs h-6 px-2">
-                      Mac / Linux
-                    </TabsTrigger>
-                    <TabsTrigger value="windows" className="text-xs h-6 px-2">
-                      Windows
-                    </TabsTrigger>
-                  </TabsList>
-                  <TabsContent value="unix" className="mt-2">
+            <DialogBody className="space-y-3 p-3">
+              <Tabs defaultValue="docker">
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="docker">Docker</TabsTrigger>
+                  <TabsTrigger value="local">Local Development</TabsTrigger>
+                </TabsList>
+                <TabsContent value="docker" className="space-y-3 pt-1">
+                  <p className="text-xs text-muted-foreground">
+                    Restart {configuredAppName} using the following command to
+                    enable ngrok:
+                  </p>
+                  <Tabs defaultValue="unix">
+                    <TabsList className="h-7 p-0.5">
+                      <TabsTrigger value="unix" className="text-xs h-6 px-2">
+                        Mac / Linux
+                      </TabsTrigger>
+                      <TabsTrigger value="windows" className="text-xs h-6 px-2">
+                        Windows
+                      </TabsTrigger>
+                    </TabsList>
+                    <TabsContent value="unix" className="mt-2">
+                      <div className="relative">
+                        <pre className="bg-muted rounded-md p-4 text-xs whitespace-pre-wrap break-all">
+                          {dockerCommandUnix}
+                        </pre>
+                        <div className="absolute top-2 right-2">
+                          <CopyButton text={dockerCommandUnix} />
+                        </div>
+                      </div>
+                    </TabsContent>
+                    <TabsContent value="windows" className="mt-2">
+                      <div className="relative">
+                        <pre className="bg-muted rounded-md p-4 text-xs whitespace-pre-wrap break-all">
+                          {dockerCommandWindows}
+                        </pre>
+                        <div className="absolute top-2 right-2">
+                          <CopyButton text={dockerCommandWindows} />
+                        </div>
+                      </div>
+                    </TabsContent>
+                  </Tabs>
+                  <p className="text-xs text-muted-foreground">
+                    Then open{" "}
+                    <code className="bg-muted px-1 py-0.5 rounded">
+                      localhost:3000
+                    </code>
+                  </p>
+                </TabsContent>
+                <TabsContent value="local" className="space-y-3 pt-1">
+                  <div className="space-y-2 text-sm">
+                    <p>
+                      1. Start an ngrok tunnel pointing to your local{" "}
+                      {configuredAppName}
+                      instance:
+                    </p>
                     <div className="relative">
                       <pre className="bg-muted rounded-md p-4 text-xs whitespace-pre-wrap break-all">
-                        {dockerCommandUnix}
+                        {ngrokCommand}
                       </pre>
-                      <div className="absolute top-2 right-2">
-                        <CopyButton text={dockerCommandUnix} />
+                      <div className="absolute top-0 right-0">
+                        <CopyButton text={ngrokCommand} />
                       </div>
                     </div>
-                  </TabsContent>
-                  <TabsContent value="windows" className="mt-2">
+                  </div>
+                  <div className="space-y-2 text-sm">
+                    <p>
+                      2. Set the ngrok domain in your{" "}
+                      <code className="bg-muted px-1 py-0.5 rounded text-xs">
+                        .env
+                      </code>{" "}
+                      file:
+                    </p>
                     <div className="relative">
                       <pre className="bg-muted rounded-md p-4 text-xs whitespace-pre-wrap break-all">
-                        {dockerCommandWindows}
+                        {envCommand}
                       </pre>
-                      <div className="absolute top-2 right-2">
-                        <CopyButton text={dockerCommandWindows} />
+                      <div className="absolute top-0 right-0">
+                        <CopyButton text={envCommand} />
                       </div>
                     </div>
-                  </TabsContent>
-                </Tabs>
-                <p className="text-xs text-muted-foreground">
-                  Then open{" "}
-                  <code className="bg-muted px-1 py-0.5 rounded">
-                    localhost:3000
-                  </code>
-                </p>
-              </TabsContent>
-              <TabsContent value="local" className="space-y-3 pt-2">
-                <div className="space-y-2 text-sm">
-                  <p>
-                    1. Start an ngrok tunnel pointing to your local Archestra
-                    instance:
-                  </p>
-                  <div className="relative">
-                    <pre className="bg-muted rounded-md p-4 text-xs whitespace-pre-wrap break-all">
-                      {ngrokCommand}
-                    </pre>
-                    <div className="absolute top-0 right-0">
-                      <CopyButton text={ngrokCommand} />
-                    </div>
                   </div>
-                </div>
-                <div className="space-y-2 text-sm">
-                  <p>
-                    2. Set the ngrok domain in your{" "}
-                    <code className="bg-muted px-1 py-0.5 rounded text-xs">
-                      .env
-                    </code>{" "}
-                    file:
+                  <p className="text-xs text-muted-foreground">
+                    Then restart {configuredAppName} with{" "}
+                    <code className="bg-muted px-1 py-0.5 rounded">
+                      tilt up
+                    </code>
                   </p>
-                  <div className="relative">
-                    <pre className="bg-muted rounded-md p-4 text-xs whitespace-pre-wrap break-all">
-                      {envCommand}
-                    </pre>
-                    <div className="absolute top-0 right-0">
-                      <CopyButton text={envCommand} />
-                    </div>
-                  </div>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Then restart Archestra with{" "}
-                  <code className="bg-muted px-1 py-0.5 rounded">tilt up</code>
-                </p>
-              </TabsContent>
-            </Tabs>
+                </TabsContent>
+              </Tabs>
+            </DialogBody>
           </>
         )}
       </DialogContent>

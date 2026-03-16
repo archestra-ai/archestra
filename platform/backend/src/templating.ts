@@ -1,7 +1,5 @@
-import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import Handlebars from "handlebars";
 import logger from "@/logging";
-import type { CommonToolResult } from "@/types";
 
 /**
  * Register custom Handlebars helpers for template rendering
@@ -176,66 +174,29 @@ export function promptNeedsRendering(
 }
 
 /**
- * Build rendered system and user prompt parts from an agent's prompts.
- * Skips template rendering (and avoids requiring a context) when the prompts
- * don't contain Handlebars syntax.
- */
-export function buildRenderedPrompts(params: {
-  systemPrompt: string | null;
-  userPrompt: string | null;
-  context: SystemPromptContext | null;
-}): { systemPromptParts: string[]; userPromptParts: string[] } {
-  const systemPromptParts: string[] = [];
-  const userPromptParts: string[] = [];
-
-  if (!params.systemPrompt && !params.userPrompt) {
-    return { systemPromptParts, userPromptParts };
-  }
-
-  const needsRendering =
-    params.context != null &&
-    promptNeedsRendering(params.systemPrompt, params.userPrompt);
-
-  if (params.systemPrompt) {
-    systemPromptParts.push(
-      needsRendering && params.context
-        ? renderSystemPrompt(params.systemPrompt, params.context)
-        : params.systemPrompt,
-    );
-  }
-  if (params.userPrompt) {
-    userPromptParts.push(
-      needsRendering && params.context
-        ? renderSystemPrompt(params.userPrompt, params.context)
-        : params.userPrompt,
-    );
-  }
-
-  return { systemPromptParts, userPromptParts };
-}
-
-/**
- * Render a system prompt template with user context variables.
- * If the template fails to compile or render, returns the original string unchanged
- * so the agent still works without variable substitution.
- *
- * @param templateString - Handlebars template string (or plain text)
- * @param context - User context with name, email, and teams
- * @returns Rendered string, or original templateString on error
+ * Render an agent's system prompt, applying Handlebars template variables
+ * (e.g. {{user.name}}) when present. Returns null if no system prompt is set.
+ * If the template fails to compile or render, returns the original string unchanged.
  */
 export function renderSystemPrompt(
-  templateString: string,
-  context: SystemPromptContext,
-): string {
+  systemPrompt: string | null,
+  context?: SystemPromptContext | null,
+): string | null {
+  if (!systemPrompt) {
+    return null;
+  } else if (!context) {
+    return systemPrompt;
+  }
+
   try {
-    const template = Handlebars.compile(templateString);
+    const template = Handlebars.compile(systemPrompt, { noEscape: true });
     return template(context);
   } catch (error) {
     logger.warn(
       { err: error },
       "Failed to render system prompt template, using raw template string",
     );
-    return templateString;
+    return systemPrompt;
   }
 }
 
@@ -252,7 +213,7 @@ export function evaluateRoleMappingTemplate(
   context: Record<string, unknown>,
 ): boolean {
   try {
-    const template = Handlebars.compile(templateString);
+    const template = Handlebars.compile(templateString, { noEscape: true });
     const result = template(context).trim();
     // Consider any non-empty string as truthy
     return result.length > 0 && result !== "false" && result !== "0";
@@ -275,7 +236,7 @@ export function extractGroupsWithTemplate(
   context: Record<string, unknown>,
 ): string[] {
   // Compile template - let this throw on syntax errors so caller can fall back
-  const template = Handlebars.compile(templateString);
+  const template = Handlebars.compile(templateString, { noEscape: true });
 
   try {
     const result = template(context).trim();
@@ -302,40 +263,5 @@ export function extractGroupsWithTemplate(
   } catch {
     // Runtime error during template execution
     return [];
-  }
-}
-
-/**
- * Apply a handlebars template to transform a tool response
- *
- * The content from MCP tools will look like:
- * https://modelcontextprotocol.io/specification/2025-06-18/server/tools#calling-tools
- *
- * @param templateString - Handlebars template string
- * @param toolCallResponseResultContent - The content returned from an MCP tool call
- * @returns Transformed content (parsed JSON or original content on failure)
- */
-export function applyResponseModifierTemplate(
-  templateString: string,
-  toolCallResponseResultContent: Awaited<
-    ReturnType<typeof Client.prototype.callTool>
-  >["content"],
-): CommonToolResult["content"] {
-  try {
-    const template = Handlebars.compile(templateString);
-
-    // Render the template with the response as context
-    const rendered = template({ response: toolCallResponseResultContent });
-
-    // Try to parse as JSON if possible, otherwise return as text
-    try {
-      return JSON.parse(rendered);
-    } catch {
-      // If it's not valid JSON, return as a text content block
-      return [{ type: "text", text: rendered }];
-    }
-  } catch {
-    // If template compilation or rendering fails, return original content
-    return toolCallResponseResultContent;
   }
 }

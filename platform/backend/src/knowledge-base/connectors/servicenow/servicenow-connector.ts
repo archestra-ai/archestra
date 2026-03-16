@@ -4,8 +4,8 @@ import type {
   ConnectorSyncBatch,
   ServiceNowCheckpoint,
   ServiceNowConfig,
-} from "@/types/knowledge-connector";
-import { ServiceNowConfigSchema } from "@/types/knowledge-connector";
+} from "@/types";
+import { ServiceNowConfigSchema } from "@/types";
 import {
   BaseConnector,
   buildCheckpoint,

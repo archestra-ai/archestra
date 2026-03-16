@@ -2,14 +2,60 @@ import {
   type AnyRoleName,
   archestraApiSdk,
   type archestraApiTypes,
+  DEFAULT_THEME_ID,
+  type OrganizationTheme,
 } from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Invitation } from "better-auth/plugins/organization";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { appearanceKeys } from "@/lib/appearance.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import { handleApiError } from "./utils";
+
+type AppearanceSettings = archestraApiTypes.GetAppearanceSettingsResponse;
+
+const DEFAULT_APPEARANCE: AppearanceSettings = {
+  theme: DEFAULT_THEME_ID as OrganizationTheme,
+  customFont: "lato",
+  logo: null,
+  logoDark: null,
+  favicon: null,
+  iconLogo: null,
+  appName: null,
+  ogDescription: null,
+  footerText: null,
+};
+
+export const appearanceKeys = {
+  all: ["appearance"] as const,
+  public: () => [...appearanceKeys.all, "public"] as const,
+};
+
+/**
+ * Hook to fetch public appearance settings.
+ * Used on login/auth pages where the user is not yet authenticated.
+ * Returns theme, customFont, and logo without requiring authentication.
+ * On API failure, returns undefined (treated as not loaded) to preserve localStorage values.
+ */
+export function useAppearanceSettings(enabled = true) {
+  return useQuery({
+    queryKey: appearanceKeys.public(),
+    queryFn: async () => {
+      const { data, error } = await archestraApiSdk.getAppearanceSettings();
+
+      if (error || !data) {
+        return undefined;
+      }
+
+      return data;
+    },
+    enabled,
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+    throwOnError: false,
+    placeholderData: DEFAULT_APPEARANCE,
+  });
+}
 
 /**
  * Query key factory for organization-related queries
@@ -265,19 +311,19 @@ export function useOrganizationOnboardingStatus(enabled: boolean) {
 }
 
 /**
- * Update appearance settings (theme, logo, fonts)
+ * Update appearance settings
  */
-export function useUpdateAppearance(
+export function useUpdateAppearanceSettings(
   onSuccessMessage: string,
   onErrorMessage: string,
 ) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (
-      data: archestraApiTypes.UpdateAppearanceData["body"],
+      data: archestraApiTypes.UpdateAppearanceSettingsData["body"],
     ) => {
       const { data: updatedOrganization, error } =
-        await archestraApiSdk.updateAppearance({ body: data });
+        await archestraApiSdk.updateAppearanceSettings({ body: data });
 
       if (error) {
         toast.error(onErrorMessage);
@@ -456,10 +502,11 @@ export function useDropEmbeddingConfig() {
  */
 export function useTestEmbeddingConnection() {
   return useMutation({
-    mutationFn: async (params: {
-      embeddingChatApiKeyId: string;
-      embeddingModel: string;
-    }) => {
+    mutationFn: async (
+      params: NonNullable<
+        archestraApiTypes.TestEmbeddingConnectionData["body"]
+      >,
+    ) => {
       const { data, error } = await archestraApiSdk.testEmbeddingConnection({
         body: params,
       });
@@ -531,6 +578,10 @@ export function useOrganizationMembers(enabled = true) {
 
 export type PendingSignupMember = {
   userId: string;
+  name: string | null;
+  email: string;
+  image: string | null;
+  role: string;
   provider: string | null;
   invitationId: string | null;
 };

@@ -1,5 +1,22 @@
 import { expect, test } from "./fixtures";
 
+function extractRoles(payload: unknown) {
+  if (Array.isArray(payload)) {
+    return payload;
+  }
+
+  if (
+    payload &&
+    typeof payload === "object" &&
+    "data" in payload &&
+    Array.isArray(payload.data)
+  ) {
+    return payload.data;
+  }
+
+  return [];
+}
+
 test.describe("Organization Roles API - Custom Role CRUD Operations", () => {
   test("should create a new custom role", async ({ request, createRole }) => {
     const roleData = {
@@ -304,7 +321,7 @@ test.describe("Organization Roles API - Role Lifecycle", () => {
       method: "get",
       urlSuffix: "/api/roles",
     });
-    const roles = await listResponse.json();
+    const roles = extractRoles(await listResponse.json());
     const foundRole = roles.find(
       (r: { id: string }) => r.id === createdRole.id,
     );

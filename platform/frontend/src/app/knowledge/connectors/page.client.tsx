@@ -1,39 +1,40 @@
 "use client";
 
 import type { archestraApiTypes } from "@shared";
+import type { ColumnDef } from "@tanstack/react-table";
 import { formatDistanceToNow } from "date-fns";
 import { Database, Pencil, Trash2, Users } from "lucide-react";
-import Link from "next/link";
-import type React from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { KnowledgePageLayout } from "@/app/knowledge/_parts/knowledge-page-layout";
-import { ConnectorStatusDot } from "@/app/knowledge/knowledge-bases/_parts/connector-enabled-dot";
 import { ConnectorTypeIcon } from "@/app/knowledge/knowledge-bases/_parts/connector-icons";
 import { ConnectorStatusBadge } from "@/app/knowledge/knowledge-bases/_parts/connector-status-badge";
 import { CreateConnectorDialog } from "@/app/knowledge/knowledge-bases/_parts/create-connector-dialog";
 import { EditConnectorDialog } from "@/app/knowledge/knowledge-bases/_parts/edit-connector-dialog";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { SearchInput } from "@/components/search-input";
+import { TableRowActions } from "@/components/table-row-actions";
+import { DataTable } from "@/components/ui/data-table";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogForm,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useConnectors, useDeleteConnector } from "@/lib/connector.query";
+import {
+  useConnectorsPaginated,
+  useDeleteConnector,
+} from "@/lib/connector.query";
 import { formatCronSchedule } from "@/lib/format-cron";
-import { formatDate } from "@/lib/utils";
+import { DEFAULT_TABLE_LIMIT, formatDate } from "@/lib/utils";
 
 type ConnectorItem =
   archestraApiTypes.GetConnectorsResponses["200"]["data"][number];
@@ -42,6 +43,14 @@ const AGENT_TYPE_LABELS: Record<string, string> = {
   agent: "Agent",
   mcp_gateway: "MCP Gateway",
 };
+
+const CONNECTOR_TYPE_OPTIONS = [
+  "jira",
+  "confluence",
+  "github",
+  "gitlab",
+  "servicenow",
+] as const;
 
 function formatAgentType(agentType: string): string {
   return AGENT_TYPE_LABELS[agentType] ?? agentType;
@@ -58,7 +67,34 @@ export default function ConnectorsPage() {
 }
 
 function ConnectorsList() {
-  const { data: connectors, isPending } = useConnectors();
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+
+  const pageFromUrl = searchParams.get("page");
+  const pageSizeFromUrl = searchParams.get("pageSize");
+  const search = searchParams.get("search") || "";
+  const connectorTypeFilter = searchParams.get("connectorType") || "all";
+
+  const pageIndex = Number(pageFromUrl || "1") - 1;
+  const pageSize = Number(pageSizeFromUrl || DEFAULT_TABLE_LIMIT);
+  const offset = pageIndex * pageSize;
+
+  const {
+    data: connectors,
+    isPending,
+    isFetching,
+  } = useConnectorsPaginated({
+    limit: pageSize,
+    offset,
+    search: search || undefined,
+    connectorType:
+      connectorTypeFilter === "all"
+        ? undefined
+        : (connectorTypeFilter as NonNullable<
+            archestraApiTypes.GetConnectorsData["query"]
+          >["connectorType"]),
+  });
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [editingConnector, setEditingConnector] =
     useState<ConnectorItem | null>(null);
@@ -67,6 +103,125 @@ function ConnectorsList() {
   );
 
   const items = connectors?.data ?? [];
+  const pagination = connectors?.pagination;
+
+  const handlePaginationChange = useCallback(
+    (newPagination: { pageIndex: number; pageSize: number }) => {
+      const params = new URLSearchParams(searchParams.toString());
+      params.set("page", String(newPagination.pageIndex + 1));
+      params.set("pageSize", String(newPagination.pageSize));
+      router.push(`${pathname}?${params.toString()}`, { scroll: false });
+    },
+    [searchParams, router, pathname],
+  );
+
+  const handleConnectorTypeChange = useCallback(
+    (value: string) => {
+      const params = new URLSearchParams(searchParams.toString());
+      if (value === "all") {
+        params.delete("connectorType");
+      } else {
+        params.set("connectorType", value);
+      }
+      params.set("page", "1");
+      router.push(`${pathname}?${params.toString()}`, { scroll: false });
+    },
+    [searchParams, router, pathname],
+  );
+
+  const clearFilters = useCallback(() => {
+    router.push(pathname, { scroll: false });
+  }, [router, pathname]);
+
+  const columns: ColumnDef<ConnectorItem>[] = [
+    {
+      id: "icon",
+      size: 40,
+      header: "",
+      cell: ({ row }) => (
+        <div className="flex items-center justify-center">
+          <ConnectorTypeIcon
+            type={row.original.connectorType}
+            className="h-5 w-5"
+          />
+        </div>
+      ),
+    },
+    {
+      id: "name",
+      accessorKey: "name",
+      header: "Connector",
+      cell: ({ row }) => (
+        <div className="min-w-0">
+          <div className="font-medium truncate">{row.original.name}</div>
+          {row.original.description && (
+            <div className="text-xs text-muted-foreground truncate">
+              {row.original.description}
+            </div>
+          )}
+        </div>
+      ),
+    },
+    {
+      id: "status",
+      header: "Status",
+      cell: ({ row }) => (
+        <div className="flex items-center gap-2">
+          {row.original.lastSyncAt ? (
+            <>
+              <ConnectorStatusBadge status={row.original.lastSyncStatus} />
+              <span
+                className="text-xs text-muted-foreground"
+                title={formatDate({ date: row.original.lastSyncAt })}
+              >
+                {formatDistanceToNow(new Date(row.original.lastSyncAt), {
+                  addSuffix: true,
+                })}
+              </span>
+            </>
+          ) : (
+            <span className="text-xs text-muted-foreground">Never synced</span>
+          )}
+        </div>
+      ),
+    },
+    {
+      id: "schedule",
+      header: "Schedule",
+      cell: ({ row }) => (
+        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <Database className="h-3.5 w-3.5" />
+          <span>{formatCronSchedule(row.original.schedule)}</span>
+        </div>
+      ),
+    },
+    {
+      id: "assigned",
+      header: "Assigned",
+      cell: ({ row }) => <AssignedAgentsTooltip connector={row.original} />,
+    },
+    {
+      id: "actions",
+      header: "Actions",
+      cell: ({ row }) => (
+        <TableRowActions
+          actions={[
+            {
+              icon: <Pencil className="h-4 w-4" />,
+              label: "Edit connector",
+              onClick: () => setEditingConnector(row.original),
+            },
+            {
+              icon: <Trash2 className="h-4 w-4" />,
+              label: "Delete connector",
+              variant: "destructive",
+              onClick: () => setDeletingConnectorId(row.original.id),
+            },
+          ]}
+        />
+      ),
+    },
+  ];
 
   return (
     <KnowledgePageLayout
@@ -74,26 +229,57 @@ function ConnectorsList() {
       description="Manage data connectors that feed into your knowledge bases."
       createLabel="Create Connector"
       onCreateClick={() => setIsCreateDialogOpen(true)}
-      isPending={isPending}
+      isPending={isPending && !connectors}
     >
       <div>
-        {items.length === 0 ? (
-          <div className="text-muted-foreground">
-            No connectors found. Create one to start syncing data into knowledge
-            bases.
+        <div className="mb-6 flex flex-col gap-2">
+          <div className="flex items-center gap-4">
+            <SearchInput
+              objectNamePlural="connectors"
+              searchFields={["name", "description"]}
+              paramName="search"
+            />
+            <Select
+              value={connectorTypeFilter}
+              onValueChange={handleConnectorTypeChange}
+            >
+              <SelectTrigger className="w-[220px]">
+                <SelectValue placeholder="Filter by connector type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All connector types</SelectItem>
+                {CONNECTOR_TYPE_OPTIONS.map((type) => (
+                  <SelectItem key={type} value={type}>
+                    <div className="flex items-center gap-2 capitalize">
+                      <ConnectorTypeIcon type={type} className="h-4 w-4" />
+                      {type}
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {items.map((connector) => (
-              <ConnectorCard
-                key={connector.id}
-                connector={connector}
-                onEdit={() => setEditingConnector(connector)}
-                onDelete={() => setDeletingConnectorId(connector.id)}
-              />
-            ))}
-          </div>
-        )}
+        </div>
+
+        <DataTable
+          columns={columns}
+          data={items}
+          getRowId={(row) => row.id}
+          emptyMessage="No connectors found"
+          hasActiveFilters={!!search || connectorTypeFilter !== "all"}
+          onClearFilters={clearFilters}
+          filteredEmptyMessage="No connectors match your filters. Try adjusting your search."
+          hideSelectedCount
+          manualPagination
+          pagination={{
+            pageIndex,
+            pageSize,
+            total: pagination?.total ?? 0,
+          }}
+          onPaginationChange={handlePaginationChange}
+          isLoading={isFetching || isPending}
+          onRowClick={(row) => router.push(`/knowledge/connectors/${row.id}`)}
+        />
 
         <CreateConnectorDialog
           open={isCreateDialogOpen}
@@ -120,106 +306,12 @@ function ConnectorsList() {
   );
 }
 
-function ConnectorCard({
-  connector,
-  onEdit,
-  onDelete,
-}: {
-  connector: ConnectorItem;
-  onEdit: () => void;
-  onDelete: () => void;
-}) {
-  const stopPropagation = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-  };
-
-  return (
-    <Link href={`/knowledge/connectors/${connector.id}`} className="group">
-      <Card className="h-full flex flex-col cursor-pointer transition-all hover:border-foreground/30 hover:shadow-md group-hover:bg-accent/30">
-        <CardHeader className="pb-3">
-          <div className="flex items-start justify-between">
-            <div className="flex items-center gap-2.5">
-              <ConnectorStatusDot
-                enabled={connector.enabled}
-                lastSyncStatus={connector.lastSyncStatus}
-              />
-              <div>
-                <CardTitle className="text-base">{connector.name}</CardTitle>
-                <Badge variant="secondary" className="gap-1.5 capitalize mt-1">
-                  <ConnectorTypeIcon
-                    type={connector.connectorType}
-                    className="h-3.5 w-3.5"
-                  />
-                  {connector.connectorType}
-                </Badge>
-                {connector.description && (
-                  <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
-                    {connector.description}
-                  </p>
-                )}
-              </div>
-            </div>
-            {/* biome-ignore lint/a11y/useKeyWithClickEvents: stopPropagation only prevents link navigation */}
-            {/* biome-ignore lint/a11y/noStaticElementInteractions: stopPropagation only prevents link navigation */}
-            <div className="flex items-center gap-1" onClick={stopPropagation}>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7"
-                onClick={onEdit}
-              >
-                <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7"
-                onClick={onDelete}
-              >
-                <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
-              </Button>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-3 mt-auto">
-          <div className="flex items-center gap-2">
-            {connector.lastSyncAt ? (
-              <>
-                <ConnectorStatusBadge status={connector.lastSyncStatus} />
-                <span
-                  className="text-xs text-muted-foreground"
-                  title={formatDate({ date: connector.lastSyncAt })}
-                >
-                  {formatDistanceToNow(new Date(connector.lastSyncAt), {
-                    addSuffix: true,
-                  })}
-                </span>
-              </>
-            ) : (
-              <span className="text-xs text-muted-foreground">
-                Never synced
-              </span>
-            )}
-          </div>
-
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <Database className="h-3.5 w-3.5" />
-              <span>{formatCronSchedule(connector.schedule)}</span>
-            </div>
-            <AssignedAgentsTooltip connector={connector} />
-          </div>
-        </CardContent>
-      </Card>
-    </Link>
-  );
-}
-
 function AssignedAgentsTooltip({ connector }: { connector: ConnectorItem }) {
   const { assignedAgents } = connector;
 
-  if (!assignedAgents || assignedAgents.length === 0) return null;
+  if (!assignedAgents || assignedAgents.length === 0) {
+    return <span className="text-xs text-muted-foreground">Not assigned</span>;
+  }
 
   return (
     <TooltipProvider>
@@ -266,34 +358,15 @@ function DeleteConnectorDialog({
   }, [connectorId, deleteConnector, onOpenChange]);
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>Delete Connector</DialogTitle>
-          <DialogDescription>
-            Are you sure you want to delete this connector? All sync history
-            will be permanently removed. This action cannot be undone.
-          </DialogDescription>
-        </DialogHeader>
-        <DialogForm onSubmit={handleDelete}>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              variant="destructive"
-              disabled={deleteConnector.isPending}
-            >
-              {deleteConnector.isPending ? "Deleting..." : "Delete Connector"}
-            </Button>
-          </DialogFooter>
-        </DialogForm>
-      </DialogContent>
-    </Dialog>
+    <DeleteConfirmDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Delete Connector"
+      description="Are you sure you want to delete this connector? All sync history will be permanently removed. This action cannot be undone."
+      isPending={deleteConnector.isPending}
+      onConfirm={handleDelete}
+      confirmLabel="Delete Connector"
+      pendingLabel="Deleting..."
+    />
   );
 }

@@ -1,7 +1,7 @@
 import { SLACK_DEFAULT_CONNECTION_MODE } from "@/agents/chatops/constants";
 import logger from "@/logging";
 import { secretManager } from "@/secrets-manager";
-import type { SecretValue } from "@/types";
+import type { MsTeamsDbConfig, SecretValue, SlackDbConfig } from "@/types";
 import SecretModel from "./secret";
 
 /**
@@ -14,32 +14,13 @@ const FORCE_DB = true;
 const MS_TEAMS_SECRET_NAME = "chatops-ms-teams";
 const SLACK_SECRET_NAME = "chatops-slack";
 
-export interface MsTeamsConfig {
-  enabled: boolean;
-  appId: string;
-  appSecret: string;
-  tenantId: string;
-  graphTenantId: string;
-  graphClientId: string;
-  graphClientSecret: string;
-}
-
-export interface SlackConfig {
-  enabled: boolean;
-  botToken: string;
-  signingSecret: string;
-  appId: string;
-  connectionMode?: "webhook" | "socket";
-  appLevelToken?: string;
-}
-
 class ChatOpsConfigModel {
-  async getMsTeamsConfig(): Promise<MsTeamsConfig | null> {
-    return this.getConfig<MsTeamsConfig>(MS_TEAMS_SECRET_NAME);
+  async getMsTeamsConfig(): Promise<MsTeamsDbConfig | null> {
+    return this.getConfig<MsTeamsDbConfig>(MS_TEAMS_SECRET_NAME);
   }
 
-  async getSlackConfig(): Promise<SlackConfig | null> {
-    const raw = await this.getConfig<SlackConfig>(SLACK_SECRET_NAME);
+  async getSlackConfig(): Promise<SlackDbConfig | null> {
+    const raw = await this.getConfig<SlackDbConfig>(SLACK_SECRET_NAME);
     if (!raw) return null;
     // Backward compatibility — precedence:
     // 1. Explicit connectionMode from DB (already set by user)
@@ -58,7 +39,7 @@ class ChatOpsConfigModel {
     };
   }
 
-  async saveMsTeamsConfig(value: MsTeamsConfig): Promise<void> {
+  async saveMsTeamsConfig(value: MsTeamsDbConfig): Promise<void> {
     await this.saveConfig(
       MS_TEAMS_SECRET_NAME,
       value as unknown as SecretValue,
@@ -66,7 +47,7 @@ class ChatOpsConfigModel {
     logger.info("ChatOpsConfigModel: saved MS Teams config to DB");
   }
 
-  async saveSlackConfig(value: SlackConfig): Promise<void> {
+  async saveSlackConfig(value: SlackDbConfig): Promise<void> {
     await this.saveConfig(SLACK_SECRET_NAME, value as unknown as SecretValue);
     logger.info("ChatOpsConfigModel: saved Slack config to DB");
   }

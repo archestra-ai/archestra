@@ -23,8 +23,8 @@ import {
 } from "@/models";
 import { mapProviderError, ProviderError } from "@/routes/chat/errors";
 import {
-  buildRenderedPrompts,
   promptNeedsRendering,
+  renderSystemPrompt,
   type SystemPromptContext,
 } from "@/templating";
 
@@ -134,12 +134,12 @@ export async function executeA2AMessage(
     organizationId,
   });
 
-  // Build system prompt from agent's systemPrompt and userPrompt fields
+  // Build system prompt from agent's systemPrompt field
   let systemPrompt: string | undefined;
 
   // Build template context only when prompts use Handlebars syntax
   let promptContext: SystemPromptContext | null = null;
-  if (promptNeedsRendering(agent.systemPrompt, agent.userPrompt)) {
+  if (promptNeedsRendering(agent.systemPrompt)) {
     const [userDetails, userTeams] = await Promise.all([
       UserModel.getById(userId),
       TeamModel.getUserTeams(userId),
@@ -153,15 +153,10 @@ export async function executeA2AMessage(
     };
   }
 
-  const { systemPromptParts, userPromptParts } = buildRenderedPrompts({
-    systemPrompt: agent.systemPrompt,
-    userPrompt: agent.userPrompt,
-    context: promptContext,
-  });
+  const renderedPrompt = renderSystemPrompt(agent.systemPrompt, promptContext);
 
-  if (systemPromptParts.length > 0 || userPromptParts.length > 0) {
-    const allParts = [...systemPromptParts, ...userPromptParts];
-    systemPrompt = allParts.join("\n\n");
+  if (renderedPrompt) {
+    systemPrompt = renderedPrompt;
   }
 
   // Track subagent execution so the browser preview can skip screenshots

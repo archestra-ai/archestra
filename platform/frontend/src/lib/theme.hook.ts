@@ -1,8 +1,10 @@
 import { DEFAULT_THEME_ID, type OrganizationTheme } from "@shared";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import { usePublicAppearance } from "./appearance.query";
-import { useUpdateAppearance } from "./organization.query";
+import {
+  useAppearanceSettings,
+  useUpdateAppearanceSettings,
+} from "./organization.query";
 
 const THEME_STORAGE_KEY = "archestra-theme";
 const DEFAULT_THEME: OrganizationTheme = DEFAULT_THEME_ID as OrganizationTheme;
@@ -16,11 +18,11 @@ export function useOrgTheme() {
   // Always use public appearance endpoint - it returns the same data for all pages
   // and works without authentication
   const { data: appearance, isLoading: isLoadingAppearance } =
-    usePublicAppearance();
+    useAppearanceSettings();
 
   const { theme: themeFromBackend, logo, logoDark } = appearance ?? {};
 
-  const updateThemeMutation = useUpdateAppearance(
+  const updateThemeMutation = useUpdateAppearanceSettings(
     "Appearance settings updated",
     "Failed to update appearance settings",
   );

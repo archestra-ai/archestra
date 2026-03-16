@@ -1,4 +1,4 @@
-import { ARCHESTRA_MCP_CATALOG_ID } from "@shared";
+import { ARCHESTRA_MCP_CATALOG_ID, DEFAULT_APP_NAME } from "@shared";
 import { describe, expect, test } from "@/test";
 import { SelectInternalMcpCatalogSchema } from "@/types";
 import InternalMcpCatalogModel from "./internal-mcp-catalog";
@@ -590,7 +590,7 @@ describe("InternalMcpCatalogModel", () => {
       );
 
       expect(archestraCatalog).toBeDefined();
-      expect(archestraCatalog?.name).toBe("Archestra");
+      expect(archestraCatalog?.name).toBe(DEFAULT_APP_NAME);
       expect(archestraCatalog?.serverType).toBe("builtin");
     });
   });

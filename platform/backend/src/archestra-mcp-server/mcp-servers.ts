@@ -14,6 +14,7 @@ import {
   ToolModel,
 } from "@/models";
 import {
+  type AgentScope,
   InsertInternalMcpCatalogSchema,
   type InternalMcpCatalog,
   UpdateInternalMcpCatalogSchema,
@@ -1003,8 +1004,7 @@ export async function handleTool(
       const labels = rawLabels ? deduplicateLabels(rawLabels) : undefined;
 
       const scope =
-        (args?.scope as "personal" | "team" | "org") ??
-        (teams.length > 0 ? "team" : "personal");
+        (args?.scope as AgentScope) ?? (teams.length > 0 ? "team" : "personal");
 
       // Non-admins can only create personal servers
       const isAdmin = await userHasPermission(

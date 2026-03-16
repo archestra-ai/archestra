@@ -2,7 +2,7 @@ import { DEFAULT_THEME_ID } from "@shared";
 import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
-import { UpdateAppearanceSchema } from "@/types";
+import { UpdateAppearanceSettingsSchema } from "@/types";
 import OrganizationModel from "./organization";
 
 // Minimal valid 1x1 transparent PNG (Base64-encoded)
@@ -10,10 +10,10 @@ const VALID_PNG_BASE64 =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/58BAwAI/AL+hc2rNAAAAABJRU5ErkJggg==";
 
 describe("OrganizationModel", () => {
-  describe("getPublicAppearance", () => {
+  describe("getAppearanceSettings", () => {
     test("should return default appearance when no organization exists", async () => {
       // Ensure no organizations exist (test setup clears DB)
-      const appearance = await OrganizationModel.getPublicAppearance();
+      const appearance = await OrganizationModel.getAppearanceSettings();
 
       expect(appearance).toEqual({
         theme: DEFAULT_THEME_ID,
@@ -33,7 +33,7 @@ describe("OrganizationModel", () => {
     }) => {
       await makeOrganization();
 
-      const appearance = await OrganizationModel.getPublicAppearance();
+      const appearance = await OrganizationModel.getAppearanceSettings();
 
       expect(appearance).toEqual({
         theme: "cosmic-night",
@@ -59,7 +59,7 @@ describe("OrganizationModel", () => {
         .set({ theme: "twitter" })
         .where(eq(schema.organizationsTable.id, org.id));
 
-      const appearance = await OrganizationModel.getPublicAppearance();
+      const appearance = await OrganizationModel.getAppearanceSettings();
 
       expect(appearance.theme).toBe("twitter");
     });
@@ -73,7 +73,7 @@ describe("OrganizationModel", () => {
         .set({ customFont: "inter" })
         .where(eq(schema.organizationsTable.id, org.id));
 
-      const appearance = await OrganizationModel.getPublicAppearance();
+      const appearance = await OrganizationModel.getAppearanceSettings();
 
       expect(appearance.customFont).toBe("inter");
     });
@@ -87,7 +87,7 @@ describe("OrganizationModel", () => {
         .set({ logo: VALID_PNG_BASE64 })
         .where(eq(schema.organizationsTable.id, org.id));
 
-      const appearance = await OrganizationModel.getPublicAppearance();
+      const appearance = await OrganizationModel.getAppearanceSettings();
 
       expect(appearance.logo).toBe(VALID_PNG_BASE64);
     });
@@ -100,7 +100,7 @@ describe("OrganizationModel", () => {
         .set({ logoDark: VALID_PNG_BASE64 })
         .where(eq(schema.organizationsTable.id, org.id));
 
-      const appearance = await OrganizationModel.getPublicAppearance();
+      const appearance = await OrganizationModel.getAppearanceSettings();
 
       expect(appearance.logoDark).toBe(VALID_PNG_BASE64);
     });
@@ -118,7 +118,7 @@ describe("OrganizationModel", () => {
       // Create second organization with different settings
       await makeOrganization();
 
-      const appearance = await OrganizationModel.getPublicAppearance();
+      const appearance = await OrganizationModel.getAppearanceSettings();
 
       // Should return first organization's appearance
       expect(appearance.theme).toBe("claude");
@@ -130,7 +130,7 @@ describe("OrganizationModel", () => {
     }) => {
       await makeOrganization();
 
-      const appearance = await OrganizationModel.getPublicAppearance();
+      const appearance = await OrganizationModel.getAppearanceSettings();
 
       // Verify only expected fields are returned
       expect(Object.keys(appearance).sort()).toEqual([
@@ -328,9 +328,9 @@ describe("OrganizationModel", () => {
     });
   });
 
-  describe("patch logoDark validation (via UpdateAppearanceSchema)", () => {
+  describe("patch logoDark validation (via UpdateAppearanceSettingsSchema)", () => {
     const parseLogoDarkField = (logoDark: string | null) =>
-      UpdateAppearanceSchema.shape.logoDark.safeParse(logoDark);
+      UpdateAppearanceSettingsSchema.shape.logoDark.safeParse(logoDark);
 
     test("should accept null", () => {
       const result = parseLogoDarkField(null);
@@ -350,9 +350,9 @@ describe("OrganizationModel", () => {
     });
   });
 
-  describe("patch logo validation (via UpdateAppearanceSchema)", () => {
+  describe("patch logo validation (via UpdateAppearanceSettingsSchema)", () => {
     const parseLogoField = (logo: string | null) =>
-      UpdateAppearanceSchema.shape.logo.safeParse(logo);
+      UpdateAppearanceSettingsSchema.shape.logo.safeParse(logo);
 
     describe("MIME type validation", () => {
       test("should reject non-PNG data URI prefix", () => {

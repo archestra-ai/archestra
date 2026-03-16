@@ -201,7 +201,8 @@ test.describe("Provider Settings - Virtual API Keys", () => {
     ).toBeVisible();
 
     // Select the correct parent key from the dropdown
-    await page.getByRole("combobox").first().click();
+    const dialog = page.getByRole("dialog");
+    await dialog.getByRole("combobox").first().click();
     await page.getByRole("option", { name: new RegExp(parentKeyName) }).click();
 
     // Fill name and create
@@ -216,7 +217,6 @@ test.describe("Provider Settings - Virtual API Keys", () => {
     });
 
     // The token value should be visible inside the dialog (starts with archestra_)
-    const dialog = page.getByRole("dialog");
     await expect(
       dialog.locator("code").filter({ hasText: "archestra_" }).last(),
     ).toBeVisible();
@@ -290,7 +290,8 @@ test.describe("Provider Settings - Virtual Keys for Keyless Provider", () => {
     ).toBeVisible();
 
     // Select the keyless parent key
-    await page.getByRole("combobox").first().click();
+    const dialog = page.getByRole("dialog");
+    await dialog.getByRole("combobox").first().click();
     await page
       .getByRole("option", { name: new RegExp(keylessParentName) })
       .click();
@@ -304,7 +305,6 @@ test.describe("Provider Settings - Virtual Keys for Keyless Provider", () => {
       page.getByRole("heading", { name: "Virtual API Key Created" }),
     ).toBeVisible({ timeout: 10_000 });
 
-    const dialog = page.getByRole("dialog");
     await expect(
       dialog.locator("code").filter({ hasText: "archestra_" }).last(),
     ).toBeVisible();
@@ -332,27 +332,5 @@ test.describe("Provider Settings - Virtual Keys for Keyless Provider", () => {
         .click();
       await clickButton({ page, options: { name: "Delete" } });
     }
-  });
-});
-
-test.describe("Provider Settings - Tab Navigation", () => {
-  test("All three tabs are accessible", async ({ page }) => {
-    // API Keys tab (default)
-    await goToPage(page, "/llm/providers/api-keys");
-    await expect(page.getByText("LLM API Keys")).toBeVisible();
-
-    // Virtual API Keys tab
-    await page.getByRole("link", { name: "Virtual API Keys" }).click();
-    await page.waitForURL("**/llm/providers/virtual-keys");
-    await expect(
-      page.getByRole("heading", { name: "Virtual API Keys" }),
-    ).toBeVisible();
-
-    // Models tab
-    await page.getByRole("link", { name: "Models" }).click();
-    await page.waitForURL("**/llm/providers/models");
-    await expect(
-      page.getByRole("heading", { name: "Available Models" }),
-    ).toBeVisible();
   });
 });

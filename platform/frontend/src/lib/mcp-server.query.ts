@@ -23,12 +23,16 @@ const {
   reinstallMcpServer,
 } = archestraApiSdk;
 
-export function useMcpServers(params?: {
+type McpServersQuery = Partial<
+  NonNullable<archestraApiTypes.GetMcpServersData["query"]>
+>;
+type McpServersParams = McpServersQuery & {
   initialData?: archestraApiTypes.GetMcpServersResponses["200"];
   hasInstallingServers?: boolean;
-  catalogId?: string;
   enabled?: boolean;
-}) {
+};
+
+export function useMcpServers(params?: McpServersParams) {
   return useQuery({
     // Include catalogId in queryKey only when provided to maintain cache separation
     queryKey: params?.catalogId
@@ -52,7 +56,7 @@ export function useMcpServers(params?: {
  *
  * @param catalogId - Optional catalog ID to filter. If provided, only returns servers for that catalog.
  */
-export function useMcpServersGroupedByCatalog(params?: { catalogId?: string }) {
+export function useMcpServersGroupedByCatalog(params?: McpServersQuery) {
   const { data: servers } = useMcpServers({ catalogId: params?.catalogId });
   const { data: session } = authClient.useSession();
   const currentUserId = session?.user?.id;
@@ -219,15 +223,11 @@ export function useMcpServerInstallationStatus(
 export function useReauthenticateMcpServer() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (data: {
-      id: string;
-      name: string;
-      secretId?: string;
-      accessToken?: string;
-      userConfigValues?: Record<string, string>;
-      environmentValues?: Record<string, string>;
-      isByosVault?: boolean;
-    }) => {
+    mutationFn: async (
+      data: { id: string; name: string } & NonNullable<
+        archestraApiTypes.ReauthenticateMcpServerData["body"]
+      >,
+    ) => {
       const { id, name, ...body } = data;
       const response = await reauthenticateMcpServer({
         path: { id },
@@ -258,13 +258,11 @@ export function useReauthenticateMcpServer() {
 export function useReinstallMcpServer() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (data: {
-      id: string;
-      name: string;
-      environmentValues?: Record<string, string>;
-      isByosVault?: boolean;
-      serviceAccount?: string;
-    }) => {
+    mutationFn: async (
+      data: { id: string; name: string } & NonNullable<
+        archestraApiTypes.ReinstallMcpServerData["body"]
+      >,
+    ) => {
       const { id, name, ...body } = data;
       const response = await reinstallMcpServer({
         path: { id },

@@ -352,9 +352,7 @@ function KnowledgeBasesMetadataItem({ connectorId }: { connectorId: string }) {
   const [selectedKbId, setSelectedKbId] = useState<string>("");
 
   const assignedIds = new Set((assignedKbs?.data ?? []).map((kb) => kb.id));
-  const availableKbs = (allKbs?.data ?? []).filter(
-    (kb) => !assignedIds.has(kb.id),
-  );
+  const availableKbs = (allKbs ?? []).filter((kb) => !assignedIds.has(kb.id));
 
   const handleAssign = useCallback(async () => {
     if (!selectedKbId) return;

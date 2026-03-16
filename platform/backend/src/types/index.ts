@@ -2,11 +2,14 @@ export * from "./account";
 export * from "./agent";
 export * from "./agent-connector-assignment";
 export * from "./agent-knowledge-base";
+export * from "./agent-suggested-prompt";
 export * from "./agent-tool";
 export * from "./api";
+export * from "./api-key";
 export * from "./autonomy-policies";
 export * from "./chat-api-key";
 export * from "./chatops";
+// chatops-channel-binding uses @/database (drizzle-zod) — import directly to avoid circular deps
 export * from "./common-llm-format";
 export * from "./conversation";
 export * from "./conversation-share";

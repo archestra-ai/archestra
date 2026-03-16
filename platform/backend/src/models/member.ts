@@ -1,6 +1,7 @@
 import type { AnyRoleName } from "@shared";
-import { and, count, eq, or } from "drizzle-orm";
+import { and, count, eq, ilike, or } from "drizzle-orm";
 import db, { schema } from "@/database";
+import { createPaginatedResult } from "@/database/utils/pagination";
 import logger from "@/logging";
 
 class MemberModel {
@@ -186,6 +187,65 @@ class MemberModel {
       "MemberModel.findAllByOrganization: completed",
     );
     return results;
+  }
+
+  /**
+   * Get paginated members of an organization with optional filters
+   */
+  static async findAllPaginated(params: {
+    organizationId: string;
+    pagination: { limit: number; offset: number };
+    name?: string;
+    role?: string;
+  }) {
+    const { organizationId, pagination, name, role } = params;
+    const searchPattern = name ? `%${name}%` : null;
+
+    const filters = [
+      eq(schema.membersTable.organizationId, organizationId),
+      ...(role ? [eq(schema.membersTable.role, role)] : []),
+      ...(searchPattern
+        ? [
+            or(
+              ilike(schema.usersTable.name, searchPattern),
+              ilike(schema.usersTable.email, searchPattern),
+            ),
+          ]
+        : []),
+    ];
+
+    const [data, totalResult] = await Promise.all([
+      db
+        .select({
+          id: schema.membersTable.id,
+          userId: schema.membersTable.userId,
+          role: schema.membersTable.role,
+          createdAt: schema.membersTable.createdAt,
+          name: schema.usersTable.name,
+          email: schema.usersTable.email,
+          image: schema.usersTable.image,
+        })
+        .from(schema.membersTable)
+        .innerJoin(
+          schema.usersTable,
+          eq(schema.membersTable.userId, schema.usersTable.id),
+        )
+        .where(and(...filters))
+        .orderBy(schema.usersTable.name)
+        .limit(pagination.limit)
+        .offset(pagination.offset),
+      db
+        .select({ count: count() })
+        .from(schema.membersTable)
+        .innerJoin(
+          schema.usersTable,
+          eq(schema.membersTable.userId, schema.usersTable.id),
+        )
+        .where(and(...filters)),
+    ]);
+
+    const total = totalResult[0]?.count ?? 0;
+    return createPaginatedResult(data, total, pagination);
   }
 
   /**

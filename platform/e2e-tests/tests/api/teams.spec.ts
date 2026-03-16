@@ -1,6 +1,23 @@
 import { ENGINEERING_TEAM_NAME, MARKETING_TEAM_NAME } from "../../consts";
 import { expect, test } from "./fixtures";
 
+function extractTeams(data: unknown): Array<{ id: string; name: string }> {
+  if (Array.isArray(data)) {
+    return data as Array<{ id: string; name: string }>;
+  }
+
+  if (
+    data &&
+    typeof data === "object" &&
+    "data" in data &&
+    Array.isArray(data.data)
+  ) {
+    return data.data as Array<{ id: string; name: string }>;
+  }
+
+  return [];
+}
+
 test.describe("Teams API", () => {
   test.describe("Permission-based Team Visibility", () => {
     test("Admin sees all teams in the organization", async ({
@@ -15,8 +32,7 @@ test.describe("Teams API", () => {
       });
       expect(response.status()).toBe(200);
 
-      const teams = await response.json();
-      expect(Array.isArray(teams)).toBe(true);
+      const teams = extractTeams(await response.json());
 
       // Admin should see both Engineering and Marketing teams (created in auth setup)
       const teamNames = teams.map((t: { name: string }) => t.name);
@@ -36,8 +52,7 @@ test.describe("Teams API", () => {
       });
       expect(response.status()).toBe(200);
 
-      const teams = await response.json();
-      expect(Array.isArray(teams)).toBe(true);
+      const teams = extractTeams(await response.json());
 
       // Member is only in Marketing Team (per auth setup)
       const teamNames = teams.map((t: { name: string }) => t.name);
@@ -58,8 +73,7 @@ test.describe("Teams API", () => {
       });
       expect(response.status()).toBe(200);
 
-      const teams = await response.json();
-      expect(Array.isArray(teams)).toBe(true);
+      const teams = extractTeams(await response.json());
 
       // Editor is in both Engineering and Marketing Teams (per auth setup)
       const teamNames = teams.map((t: { name: string }) => t.name);
@@ -146,8 +160,7 @@ test.describe("Teams API", () => {
         urlSuffix: "/api/teams",
       });
       expect(listResponse.status()).toBe(200);
-      const teams = await listResponse.json();
-      expect(Array.isArray(teams)).toBe(true);
+      const teams = extractTeams(await listResponse.json());
       expect(teams.some((t: { id: string }) => t.id === team.id)).toBe(true);
 
       // Cleanup

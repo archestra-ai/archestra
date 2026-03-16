@@ -1,4 +1,5 @@
 import {
+  type AgentScope,
   type archestraApiTypes,
   type archestraCatalogTypes,
   type ImagePullSecretConfig,
@@ -333,7 +334,7 @@ export function transformCatalogItemToFormValues(
     // Labels
     labels: item.labels ?? [],
     // Scope
-    scope: (item.scope as "personal" | "team" | "org") ?? "org",
+    scope: (item.scope as AgentScope) ?? "org",
     // Teams
     teams: item.teams?.map((t) => t.id) ?? [],
   } as McpCatalogFormValues;

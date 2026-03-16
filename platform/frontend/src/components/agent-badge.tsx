@@ -1,3 +1,4 @@
+import type { AgentScope } from "@shared";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
@@ -21,7 +22,7 @@ function AgentBadge({
   type,
   className,
 }: {
-  type: "personal" | "team" | "org" | "builtIn";
+  type: AgentScope | "builtIn";
   className?: string;
 }) {
   const style = styles[type];

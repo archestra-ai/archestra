@@ -16,8 +16,10 @@ import {
 } from "@/components/ui/collapsible";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
+  DialogForm,
   DialogHeader,
   DialogStickyFooter,
   DialogTitle,
@@ -43,7 +45,8 @@ import { SchedulePicker } from "./schedule-picker";
 import { ServiceNowConfigFields } from "./servicenow-config-fields";
 import { transformConfigArrayFields } from "./transform-config-array-fields";
 
-type ConnectorType = "jira" | "confluence" | "github" | "gitlab" | "servicenow";
+type ConnectorType =
+  archestraApiTypes.CreateConnectorData["body"]["connectorType"];
 
 const CONNECTOR_OPTIONS: {
   type: ConnectorType;
@@ -91,10 +94,12 @@ export function CreateConnectorDialog({
   knowledgeBaseId,
   open,
   onOpenChange,
+  onBack,
 }: {
   knowledgeBaseId?: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onBack?: () => void;
 }) {
   const createConnector = useCreateConnector();
   const [step, setStep] = useState<"select" | "configure">("select");
@@ -130,6 +135,13 @@ export function CreateConnectorDialog({
 
   const handleBack = () => {
     setStep("select");
+  };
+
+  const handleBackToChooser = () => {
+    form.reset();
+    setStep("select");
+    setSelectedType(null);
+    onBack?.();
   };
 
   const handleSubmit = async (values: CreateConnectorFormValues) => {
@@ -170,39 +182,59 @@ export function CreateConnectorDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col overflow-y-auto">
+      <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col overflow-hidden">
         {step === "select" ? (
           <>
             <DialogHeader>
-              <DialogTitle>Add Connector</DialogTitle>
+              <DialogTitle className="flex items-center gap-2">
+                {onBack && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    onClick={handleBackToChooser}
+                  >
+                    <ArrowLeft className="h-4 w-4" />
+                  </Button>
+                )}
+                Add Connector
+              </DialogTitle>
               <DialogDescription>
                 Select a connector type to get started.
               </DialogDescription>
             </DialogHeader>
-            <div className="grid grid-cols-2 gap-3 py-2">
-              {CONNECTOR_OPTIONS.map((option) => (
-                <button
-                  key={option.type}
-                  type="button"
-                  onClick={() => handleSelectType(option.type)}
-                  className="flex flex-col items-center gap-3 rounded-lg border p-5 text-center transition-colors hover:bg-muted/50 cursor-pointer"
-                >
-                  <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-muted">
-                    <ConnectorTypeIcon type={option.type} className="h-7 w-7" />
-                  </div>
-                  <div>
-                    <div className="font-medium">{option.label}</div>
-                    <div className="text-xs text-muted-foreground mt-1">
-                      {option.description}
+            <DialogBody className="pt-4">
+              <div className="grid grid-cols-2 gap-3">
+                {CONNECTOR_OPTIONS.map((option) => (
+                  <button
+                    key={option.type}
+                    type="button"
+                    onClick={() => handleSelectType(option.type)}
+                    className="flex cursor-pointer flex-col items-center gap-3 rounded-lg border p-5 text-center transition-colors hover:bg-muted/50"
+                  >
+                    <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-muted">
+                      <ConnectorTypeIcon
+                        type={option.type}
+                        className="h-7 w-7"
+                      />
                     </div>
-                  </div>
-                </button>
-              ))}
-            </div>
+                    <div>
+                      <div className="font-medium">{option.label}</div>
+                      <div className="mt-1 text-xs text-muted-foreground">
+                        {option.description}
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </DialogBody>
           </>
         ) : (
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(handleSubmit)}>
+            <DialogForm
+              onSubmit={form.handleSubmit(handleSubmit)}
+              className="flex min-h-0 flex-1 flex-col"
+            >
               <DialogHeader>
                 <DialogTitle className="flex items-center gap-2">
                   <Button
@@ -230,7 +262,7 @@ export function CreateConnectorDialog({
                 </DialogDescription>
               </DialogHeader>
 
-              <div className="space-y-4 py-4">
+              <DialogBody className="space-y-4">
                 <FormField
                   control={form.control}
                   name="name"
@@ -471,9 +503,9 @@ export function CreateConnectorDialog({
                     )}
                   </CollapsibleContent>
                 </Collapsible>
-              </div>
+              </DialogBody>
 
-              <DialogStickyFooter>
+              <DialogStickyFooter className="mt-0">
                 <Button type="button" variant="outline" onClick={handleBack}>
                   Back
                 </Button>
@@ -483,7 +515,7 @@ export function CreateConnectorDialog({
                     : "Create Connector"}
                 </Button>
               </DialogStickyFooter>
-            </form>
+            </DialogForm>
           </Form>
         )}
       </DialogContent>

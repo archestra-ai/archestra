@@ -2,18 +2,23 @@
 
 import {
   type ColumnDef,
+  type ExpandedState,
   flexRender,
   getCoreRowModel,
+  getExpandedRowModel,
   getFilteredRowModel,
   getPaginationRowModel,
   getSortedRowModel,
+  type Row,
   type RowSelectionState,
   type SortingState,
   useReactTable,
   type VisibilityState,
 } from "@tanstack/react-table";
-import { useState } from "react";
+import { Inbox, Loader2, Search } from "lucide-react";
+import React, { useState } from "react";
 
+import { Button } from "@/components/ui/button";
 import {
   Table,
   TableBody,
@@ -23,6 +28,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { DataTablePagination } from "./data-table-pagination";
+
+const COMPACT_ICON_COLUMN_IDS = new Set(["icon", "avatar"]);
 
 interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[];
@@ -47,6 +54,20 @@ interface DataTableProps<TData, TValue> {
   hideSelectedCount?: boolean;
   /** Function to get a stable unique ID for each row. When provided, row selection will use these IDs instead of indices. */
   getRowId?: (row: TData, index: number) => string;
+  /** Render a sub-component below a row when it is expanded. */
+  renderSubComponent?: (props: { row: Row<TData> }) => React.ReactNode;
+  /** Show a loading spinner instead of "No results" when data is being fetched */
+  isLoading?: boolean;
+  /** Custom empty state message (defaults to "No results") */
+  emptyMessage?: string;
+  /** Icon to show in the empty state (defaults to Inbox) */
+  emptyIcon?: React.ReactNode;
+  /** Whether filters/search are currently active */
+  hasActiveFilters?: boolean;
+  /** Message to show when filters/search produce no results */
+  filteredEmptyMessage?: string;
+  /** Called when the user clears active filters from the empty state */
+  onClearFilters?: () => void;
 }
 
 export function DataTable<TData, TValue>({
@@ -63,8 +84,16 @@ export function DataTable<TData, TValue>({
   onRowSelectionChange,
   hideSelectedCount,
   getRowId,
+  renderSubComponent,
+  isLoading = false,
+  emptyMessage = "No results",
+  emptyIcon,
+  hasActiveFilters = false,
+  filteredEmptyMessage = "No results match your filters. Try adjusting your search.",
+  onClearFilters,
 }: DataTableProps<TData, TValue>) {
   const [internalSorting, setInternalSorting] = useState<SortingState>([]);
+  const [expanded, setExpanded] = useState<ExpandedState>({});
   const [internalPagination, setInternalPagination] = useState({
     pageIndex: 0,
     pageSize: 10,
@@ -105,6 +134,12 @@ export function DataTable<TData, TValue>({
     // Only use client-side sorting when not using manual sorting
     ...(manualSorting ? {} : { getSortedRowModel: getSortedRowModel() }),
     getFilteredRowModel: getFilteredRowModel(),
+    ...(renderSubComponent
+      ? {
+          getExpandedRowModel: getExpandedRowModel(),
+          onExpandedChange: setExpanded,
+        }
+      : {}),
     onColumnVisibilityChange: setColumnVisibility,
     manualPagination,
     manualSorting,
@@ -115,6 +150,7 @@ export function DataTable<TData, TValue>({
       sorting,
       columnVisibility,
       rowSelection: rowSelection || {},
+      ...(renderSubComponent ? { expanded } : {}),
       pagination: pagination
         ? {
             pageIndex: pagination.pageIndex,
@@ -151,9 +187,17 @@ export function DataTable<TData, TValue>({
                   return (
                     <TableHead
                       key={header.id}
-                      style={{
-                        width: header.getSize(),
-                      }}
+                      data-column-id={header.column.id}
+                      className={
+                        COMPACT_ICON_COLUMN_IDS.has(header.column.id)
+                          ? "w-0 px-2 md:px-2"
+                          : undefined
+                      }
+                      style={
+                        header.column.columnDef.size
+                          ? { width: header.getSize() }
+                          : undefined
+                      }
                     >
                       {header.isPlaceholder
                         ? null
@@ -170,37 +214,81 @@ export function DataTable<TData, TValue>({
           <TableBody>
             {table.getRowModel().rows?.length ? (
               table.getRowModel().rows.map((row) => (
-                <TableRow
-                  key={row.id}
-                  data-state={row.getIsSelected() && "selected"}
-                  className={
-                    onRowClick ? "cursor-pointer hover:bg-muted/50" : ""
-                  }
-                  onClick={(e) => onRowClick?.(row.original, e)}
-                >
-                  {row.getVisibleCells().map((cell) => (
-                    <TableCell
-                      key={cell.id}
-                      data-column-id={cell.column.id}
-                      style={{
-                        width: cell.column.getSize(),
-                      }}
-                    >
-                      {flexRender(
-                        cell.column.columnDef.cell,
-                        cell.getContext(),
-                      )}
-                    </TableCell>
-                  ))}
-                </TableRow>
+                <React.Fragment key={row.id}>
+                  <TableRow
+                    data-state={row.getIsSelected() && "selected"}
+                    className={
+                      onRowClick ? "cursor-pointer hover:bg-muted/50" : ""
+                    }
+                    onClick={(e) => onRowClick?.(row.original, e)}
+                  >
+                    {row.getVisibleCells().map((cell) => (
+                      <TableCell
+                        key={cell.id}
+                        data-column-id={cell.column.id}
+                        className={
+                          COMPACT_ICON_COLUMN_IDS.has(cell.column.id)
+                            ? "px-2 md:px-2"
+                            : undefined
+                        }
+                        style={
+                          cell.column.columnDef.size
+                            ? { width: cell.column.getSize() }
+                            : undefined
+                        }
+                      >
+                        {flexRender(
+                          cell.column.columnDef.cell,
+                          cell.getContext(),
+                        )}
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                  {renderSubComponent && row.getIsExpanded() && (
+                    <TableRow>
+                      <TableCell
+                        colSpan={row.getVisibleCells().length}
+                        className="p-0"
+                      >
+                        {renderSubComponent({ row })}
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </React.Fragment>
               ))
             ) : (
               <TableRow>
-                <TableCell
-                  colSpan={columns.length}
-                  className="h-24 text-center"
-                >
-                  No results
+                <TableCell colSpan={columns.length} className="py-0">
+                  <div className="flex flex-col items-center justify-center py-12 text-center">
+                    {isLoading ? (
+                      <Loader2 className="mb-3 h-10 w-10 animate-spin text-muted-foreground" />
+                    ) : (
+                      <div className="mb-3 text-muted-foreground">
+                        {hasActiveFilters ? (
+                          <Search className="h-10 w-10" />
+                        ) : (
+                          (emptyIcon ?? <Inbox className="h-10 w-10" />)
+                        )}
+                      </div>
+                    )}
+                    <p className="text-sm text-muted-foreground">
+                      {isLoading
+                        ? "Loading..."
+                        : hasActiveFilters
+                          ? filteredEmptyMessage
+                          : emptyMessage}
+                    </p>
+                    {!isLoading && hasActiveFilters && onClearFilters && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="mt-4"
+                        onClick={onClearFilters}
+                      >
+                        Clear filters
+                      </Button>
+                    )}
+                  </div>
                 </TableCell>
               </TableRow>
             )}

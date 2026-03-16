@@ -1,6 +1,7 @@
 "use client";
 
 import { Loader2 } from "lucide-react";
+import { RoleOptionLabel } from "@/components/role-type-icon";
 import {
   Select,
   SelectContent,
@@ -64,7 +65,10 @@ export function RoleSelect({
       <SelectContent>
         {roles.map((role) => (
           <SelectItem key={role.id} value={role.role}>
-            {toTitleCase(role.name)}
+            <RoleOptionLabel
+              predefined={role.predefined}
+              label={toTitleCase(role.name)}
+            />
           </SelectItem>
         ))}
       </SelectContent>
@@ -87,7 +91,10 @@ export function RoleSelectContent() {
       ) : (
         roles.map((role) => (
           <SelectItem key={role.id} value={role.role}>
-            {toTitleCase(role.name)}
+            <RoleOptionLabel
+              predefined={role.predefined}
+              label={toTitleCase(role.name)}
+            />
           </SelectItem>
         ))
       )}

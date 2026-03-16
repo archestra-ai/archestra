@@ -1,10 +1,21 @@
 "use client";
 
 import { EmojiPicker } from "@ferrucc-io/emoji-picker";
-import { Bot, ImageIcon, Layers, SmileIcon, Upload, X } from "lucide-react";
+import {
+  Bot,
+  ImageIcon,
+  Layers,
+  Network,
+  Route,
+  Server,
+  SmileIcon,
+  Upload,
+  X,
+} from "lucide-react";
 import Image from "next/image";
 import { useCallback, useRef, useState } from "react";
 import { toast } from "sonner";
+import type { AgentIconVariant } from "@/components/agent-icon";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -23,6 +34,7 @@ interface AgentIconPickerProps {
   className?: string;
   /** Show a "Logos" tab with pre-built service brand logos */
   showLogos?: boolean;
+  fallbackType?: AgentIconVariant | "server";
 }
 
 export function AgentIconPicker({
@@ -30,6 +42,7 @@ export function AgentIconPicker({
   onChange,
   className,
   showLogos = false,
+  fallbackType = "agent",
 }: AgentIconPickerProps) {
   const [open, setOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -90,6 +103,14 @@ export function AgentIconPicker({
   );
 
   const defaultTab = showLogos ? "logos" : "emoji";
+  const FallbackIcon =
+    fallbackType === "llm_proxy"
+      ? Network
+      : fallbackType === "mcp_gateway"
+        ? Route
+        : fallbackType === "server"
+          ? Server
+          : Bot;
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -115,7 +136,7 @@ export function AgentIconPicker({
               <span className="text-2xl leading-none">{value}</span>
             )
           ) : (
-            <Bot className="h-5 w-5 text-muted-foreground" />
+            <FallbackIcon className="h-5 w-5 text-muted-foreground" />
           )}
           {value && (
             // biome-ignore lint/a11y/useSemanticElements: can't use <button> here as it's nested inside PopoverTrigger's <button>

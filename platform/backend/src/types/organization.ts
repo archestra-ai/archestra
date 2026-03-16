@@ -63,10 +63,10 @@ const Base64PngSchema = z
   });
 
 /**
- * Public appearance schema - used for unauthenticated access to branding settings.
+ * Appearance settings schema - used for unauthenticated access to branding settings.
  * Only exposes theme, logo, and font - no sensitive organization data.
  */
-export const PublicAppearanceSchema = z.object({
+export const AppearanceSettingsSchema = z.object({
   theme: OrganizationThemeSchema,
   customFont: OrganizationCustomFontSchema,
   logo: z.string().nullable(),
@@ -117,7 +117,7 @@ export const InsertOrganizationSchema = createInsertSchema(
   schema.organizationsTable,
   extendedFields,
 );
-export const UpdateAppearanceSchema = z.object({
+export const UpdateAppearanceSettingsSchema = z.object({
   theme: OrganizationThemeSchema.optional(),
   customFont: OrganizationCustomFontSchema.optional(),
   logo: Base64PngSchema.optional(),
@@ -170,4 +170,4 @@ export type OrganizationCompressionScope = z.infer<
 export type GlobalToolPolicy = z.infer<typeof GlobalToolPolicySchema>;
 export type Organization = z.infer<typeof SelectOrganizationSchema>;
 export type InsertOrganization = z.infer<typeof InsertOrganizationSchema>;
-export type PublicAppearance = z.infer<typeof PublicAppearanceSchema>;
+export type AppearanceSettings = z.infer<typeof AppearanceSettingsSchema>;

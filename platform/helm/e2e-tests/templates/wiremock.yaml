@@ -53,6 +53,19 @@ spec:
           ports:
             - containerPort: {{ .Values.wiremock.service.port }}
               name: http
+          startupProbe:
+            httpGet:
+              path: /__admin/health
+              port: http
+            initialDelaySeconds: 2
+            periodSeconds: 2
+            failureThreshold: 30
+          readinessProbe:
+            httpGet:
+              path: /__admin/health
+              port: http
+            periodSeconds: 5
+            failureThreshold: 3
           volumeMounts:
             - name: mappings
               mountPath: /home/wiremock/mappings

@@ -76,7 +76,7 @@ function getTabLabels(tabs: Array<{ label: string }>) {
 }
 
 describe("useSettingsTabs", () => {
-  it("always shows Your Account and Authentication tabs", async () => {
+  it("always shows Your Account tab", async () => {
     const { result } = renderHook(() => useSettingsTabs(), {
       wrapper: createWrapper(),
     });
@@ -84,7 +84,7 @@ describe("useSettingsTabs", () => {
     await waitFor(() => {
       const labels = getTabLabels(result.current);
       expect(labels).toContain("Your Account");
-      expect(labels).toContain("Authentication");
+      expect(labels).not.toContain("API Keys");
     });
   });
 
@@ -95,7 +95,7 @@ describe("useSettingsTabs", () => {
       team: ["read"],
       ac: ["read"],
       organizationSettings: ["read"],
-      securitySettings: ["read"],
+      apiKey: ["read"],
       llmSettings: ["read"],
       agentSettings: ["read"],
     };
@@ -107,7 +107,7 @@ describe("useSettingsTabs", () => {
     await waitFor(() => {
       const labels = getTabLabels(result.current);
       expect(labels).toContain("Dual LLM");
-      expect(labels).toContain("Security");
+      expect(labels).toContain("API Keys");
       expect(labels).toContain("Agents");
       expect(labels).toContain("LLM");
       expect(labels).toContain("Users");
@@ -257,7 +257,7 @@ describe("useSettingsTabs", () => {
       identityProvider: ["read"],
       secret: ["read"],
       organizationSettings: ["read"],
-      securitySettings: ["read"],
+      apiKey: ["read"],
       llmSettings: ["read"],
       agentSettings: ["read"],
     };
@@ -270,8 +270,7 @@ describe("useSettingsTabs", () => {
       const labels = getTabLabels(result.current);
       expect(labels).toEqual([
         "Your Account",
-        "Authentication",
-        "Security",
+        "API Keys",
         "Agents",
         "LLM",
         "Users",

@@ -1,4 +1,4 @@
-import { count, desc, eq, inArray } from "drizzle-orm";
+import { and, count, desc, eq, ilike, inArray, or } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type {
   InsertKnowledgeBase,
@@ -11,13 +11,28 @@ class KnowledgeBaseModel {
     organizationId: string;
     limit?: number;
     offset?: number;
+    search?: string;
   }): Promise<KnowledgeBase[]> {
+    const normalizedSearch = params.search?.trim();
+    const filters = [
+      eq(schema.knowledgeBasesTable.organizationId, params.organizationId),
+      ...(normalizedSearch
+        ? [
+            or(
+              ilike(schema.knowledgeBasesTable.name, `%${normalizedSearch}%`),
+              ilike(
+                schema.knowledgeBasesTable.description,
+                `%${normalizedSearch}%`,
+              ),
+            ),
+          ]
+        : []),
+    ];
+
     let query = db
       .select()
       .from(schema.knowledgeBasesTable)
-      .where(
-        eq(schema.knowledgeBasesTable.organizationId, params.organizationId),
-      )
+      .where(and(...filters))
       .orderBy(desc(schema.knowledgeBasesTable.createdAt))
       .$dynamic();
 
@@ -78,11 +93,30 @@ class KnowledgeBaseModel {
     return result.rowCount !== null && result.rowCount > 0;
   }
 
-  static async countByOrganization(organizationId: string): Promise<number> {
+  static async countByOrganization(params: {
+    organizationId: string;
+    search?: string;
+  }): Promise<number> {
+    const normalizedSearch = params.search?.trim();
+    const filters = [
+      eq(schema.knowledgeBasesTable.organizationId, params.organizationId),
+      ...(normalizedSearch
+        ? [
+            or(
+              ilike(schema.knowledgeBasesTable.name, `%${normalizedSearch}%`),
+              ilike(
+                schema.knowledgeBasesTable.description,
+                `%${normalizedSearch}%`,
+              ),
+            ),
+          ]
+        : []),
+    ];
+
     const [result] = await db
       .select({ count: count() })
       .from(schema.knowledgeBasesTable)
-      .where(eq(schema.knowledgeBasesTable.organizationId, organizationId));
+      .where(and(...filters));
 
     return result?.count ?? 0;
   }

@@ -13,6 +13,18 @@ const {
   deleteKnowledgeBase,
 } = archestraApiSdk;
 
+type KnowledgeBasesQuery = NonNullable<
+  archestraApiTypes.GetKnowledgeBasesData["query"]
+>;
+type KnowledgeBasesListParams = {
+  enabled?: boolean;
+  query?: Partial<Pick<KnowledgeBasesQuery, "limit" | "offset" | "search">>;
+};
+type KnowledgeBasesPaginatedParams = Pick<
+  KnowledgeBasesQuery,
+  "limit" | "offset" | "search"
+>;
+
 /**
  * Check if knowledge base prerequisites are configured.
  * Returns a boolean (all configured) and details about which parts are ready.
@@ -33,18 +45,41 @@ export function useKnowledgeBaseConfigStatus() {
 
 // ===== Query hooks =====
 
-export function useKnowledgeBases(params?: { enabled?: boolean }) {
+export function useKnowledgeBases(params?: KnowledgeBasesListParams) {
   return useQuery({
-    queryKey: ["knowledge-bases"],
+    queryKey: ["knowledge-bases", "all", params?.query],
     queryFn: async () => {
-      const { data, error } = await getKnowledgeBases();
+      const { data, error } = await getKnowledgeBases({
+        query: {
+          limit: params?.query?.limit ?? 100,
+          offset: params?.query?.offset ?? 0,
+          search: params?.query?.search,
+        },
+      });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data?.data ?? [];
+    },
+    enabled: params?.enabled,
+  });
+}
+
+export function useKnowledgeBasesPaginated(
+  params: KnowledgeBasesPaginatedParams,
+) {
+  return useQuery({
+    queryKey: ["knowledge-bases", "paginated", params],
+    placeholderData: (previousData) => previousData,
+    queryFn: async () => {
+      const { data, error } = await getKnowledgeBases({ query: params });
       if (error) {
         handleApiError(error);
         return null;
       }
       return data;
     },
-    enabled: params?.enabled,
   });
 }
 
@@ -94,7 +129,7 @@ export function useCreateKnowledgeBase() {
     onSuccess: (data) => {
       if (!data) return;
       queryClient.invalidateQueries({ queryKey: ["knowledge-bases"] });
-      toast.success("Knowledge graph created successfully");
+      toast.success("Knowledge base created successfully");
     },
   });
 }
@@ -125,7 +160,7 @@ export function useUpdateKnowledgeBase() {
       queryClient.invalidateQueries({
         queryKey: ["knowledge-bases", variables.id],
       });
-      toast.success("Knowledge graph updated successfully");
+      toast.success("Knowledge base updated successfully");
     },
   });
 }
@@ -144,7 +179,7 @@ export function useDeleteKnowledgeBase() {
     onSuccess: (data) => {
       if (!data) return;
       queryClient.invalidateQueries({ queryKey: ["knowledge-bases"] });
-      toast.success("Knowledge graph deleted successfully");
+      toast.success("Knowledge base deleted successfully");
     },
   });
 }

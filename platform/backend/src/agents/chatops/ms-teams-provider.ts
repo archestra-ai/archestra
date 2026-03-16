@@ -25,7 +25,7 @@ import { PasswordServiceClientCredentialFactory } from "botframework-connector";
 
 import { LRUCacheManager } from "@/cache-manager";
 import logger from "@/logging";
-import { ChatOpsChannelBindingModel, type MsTeamsConfig } from "@/models";
+import { ChatOpsChannelBindingModel } from "@/models";
 import type {
   ChatOpsProvider,
   ChatOpsProviderType,
@@ -34,8 +34,9 @@ import type {
   ChatThreadMessageFile,
   DiscoveredChannel,
   IncomingChatMessage,
+  MsTeamsDbConfig,
   ThreadHistoryParams,
-} from "@/types/chatops";
+} from "@/types";
 import { detectImageType } from "@/utils/detect-image-type";
 import {
   CHATOPS_ATTACHMENT_LIMITS,
@@ -57,9 +58,9 @@ class MSTeamsProvider implements ChatOpsProvider {
 
   private adapter: CloudAdapter | null = null;
   private graphClient: GraphServiceClient | null = null;
-  private config: MsTeamsConfig;
+  private config: MsTeamsDbConfig;
 
-  constructor(msTeamsConfig: MsTeamsConfig) {
+  constructor(msTeamsConfig: MsTeamsDbConfig) {
     this.config = msTeamsConfig;
   }
 

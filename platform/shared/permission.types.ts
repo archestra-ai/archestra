@@ -37,10 +37,10 @@ export const resources = [
   "chat",
   "llmCost",
   "llmLimit",
+  "optimizationRule",
   "llmProvider",
   "secret",
   "organizationSettings",
-  "securitySettings",
   "llmSettings",
   "agentSettings",
   "agentTrigger",
@@ -92,11 +92,11 @@ export const resourceLabels: Record<Resource, string> = {
   chat: "Chats",
   llmCost: "LLM Costs",
   llmLimit: "LLM Limits",
+  optimizationRule: "Optimization Rules",
   llmProvider: "LLM Providers",
   secret: "Secrets",
   apiKey: "API Keys",
   organizationSettings: "Organization Settings",
-  securitySettings: "Security Settings",
   llmSettings: "LLM Settings",
   agentSettings: "Agent Settings",
   agentTrigger: "Agent Triggers",
@@ -117,11 +117,13 @@ export const resourceDescriptions: Record<Resource, string> = {
   llmProvider: "LLM provider API keys, virtual keys, and models",
   llmLimit: "LLM usage limits",
   llmSettings: "LLM settings (compression, cleanup interval)",
-  agentSettings: "Agent settings (default model, default agent)",
+  agentSettings:
+    "Agent settings (default model, default agent, security engine, chat file uploads)",
   llmCost: "LLM usage and cost analytics",
   mcpRegistry: "MCP server registry management",
   mcpServerInstallation: "Installed MCP servers and their runtime",
   mcpServerInstallationRequest: "Requests for new MCP server installations",
+  optimizationRule: "LLM optimization rules for routing to cheaper models",
   dualLlmConfig: "Dual LLM security configurations",
   dualLlmResult: "Dual LLM security validation results",
   member: "Users and role assignments",
@@ -133,7 +135,6 @@ export const resourceDescriptions: Record<Resource, string> = {
   apiKey: "User API keys for programmatic access",
   organizationSettings:
     "Organization settings (appearance, authentication, etc)",
-  securitySettings: "Security settings (tool policy, chat file uploads)",
   knowledgeBase:
     "Knowledge bases and connectors for RAG-based document retrieval",
   knowledgeSettings:
@@ -166,7 +167,14 @@ export const resourceCategories: Record<string, Resource[]> = {
     "mcpServerInstallation",
     "mcpServerInstallationRequest",
   ],
-  LLM: ["llmProxy", "llmProvider", "llmLimit", "llmSettings", "llmCost"],
+  LLM: [
+    "llmProxy",
+    "llmProvider",
+    "llmLimit",
+    "optimizationRule",
+    "llmSettings",
+    "llmCost",
+  ],
   Knowledge: ["knowledgeBase", "knowledgeSettings"],
   Other: [
     "chat",
@@ -187,7 +195,6 @@ export const resourceCategories: Record<string, Resource[]> = {
     "secret",
     "apiKey",
     "organizationSettings",
-    "securitySettings",
   ],
 };
 
@@ -203,6 +210,9 @@ export const PermissionsSchema = z.partialRecord(
 
 /** Database-level agent type discriminator values */
 export type AgentType = "profile" | "mcp_gateway" | "llm_proxy" | "agent";
+
+/** Database-level agent scope values */
+export type AgentScope = "personal" | "team" | "org";
 
 /**
  * Maps an agent's `agentType` to the corresponding RBAC resource.

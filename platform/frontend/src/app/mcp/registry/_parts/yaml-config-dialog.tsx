@@ -35,7 +35,7 @@ interface YamlConfigDialogProps {
 export function YamlConfigDialog({ item, onClose }: YamlConfigDialogProps) {
   return (
     <Dialog open={!!item} onOpenChange={onClose}>
-      <DialogContent className="max-w-5xl h-[85vh] flex flex-col overflow-y-auto">
+      <DialogContent className="max-w-5xl h-[85vh] flex flex-col overflow-hidden">
         {item && <YamlConfigContent item={item} onClose={onClose} />}
       </DialogContent>
     </Dialog>
@@ -106,14 +106,20 @@ export function YamlConfigContent({
   const isLocalServer = item?.serverType === "local";
 
   return (
-    <>
+    <div
+      className={
+        hideHeader
+          ? "flex min-h-0 flex-1 flex-col px-4 py-4"
+          : "flex min-h-0 flex-1 flex-col"
+      }
+    >
       {!hideHeader && (
         <DialogHeader>
           <DialogTitle>K8s Deployment YAML</DialogTitle>
         </DialogHeader>
       )}
 
-      <div className="space-y-2 text-sm text-muted-foreground">
+      <div className="shrink-0 space-y-2 text-sm text-muted-foreground">
         <p>
           Customize the deployment to mount external secrets, volumes, or add
           custom labels and annotations. Environment variables configured in the
@@ -197,11 +203,14 @@ export function YamlConfigContent({
         </Collapsible>
       </div>
 
-      <DialogForm onSubmit={handleSave}>
+      <DialogForm
+        onSubmit={handleSave}
+        className="flex min-h-0 flex-1 flex-col"
+      >
         {item &&
           isLocalServer &&
           (isLoadingYaml ? (
-            <div className="flex items-center justify-center h-[60vh] w-full text-muted-foreground">
+            <div className="flex min-h-0 flex-1 items-center justify-center w-full text-muted-foreground">
               Loading YAML...
             </div>
           ) : (
@@ -231,6 +240,6 @@ export function YamlConfigContent({
             );
           })()}
       </DialogForm>
-    </>
+    </div>
   );
 }

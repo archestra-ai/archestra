@@ -253,6 +253,7 @@ test.describe("Identity Provider Team Sync E2E", () => {
     }
 
     // STEP 1: Authenticate and create OIDC provider
+    await ensureAdminAuthenticated(page);
     await goToPage(page, "/settings/identity-providers");
     await page.waitForLoadState("domcontentloaded");
     await deleteExistingProviderIfExists(page, "Generic OIDC");
@@ -295,7 +296,10 @@ test.describe("Identity Provider Team Sync E2E", () => {
     const teamResponse = await page.request.get(
       `http://localhost:9000/api/teams`,
     );
-    const teams = await teamResponse.json();
+    const teamsResponse = await teamResponse.json();
+    const teams = Array.isArray(teamsResponse)
+      ? teamsResponse
+      : (teamsResponse.data ?? []);
     const createdTeam = teams.find(
       (t: { name: string }) => t.name === teamName,
     );

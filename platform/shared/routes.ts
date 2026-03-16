@@ -8,8 +8,6 @@ export const RouteId = {
   GetDefaultLlmProxy: "getDefaultLlmProxy",
   UpdateAgent: "updateAgent",
   DeleteAgent: "deleteAgent",
-  GetAgentVersions: "getAgentVersions",
-  RollbackAgent: "rollbackAgent",
   GetLabelKeys: "getLabelKeys",
   GetLabelValues: "getLabelValues",
 
@@ -80,6 +78,7 @@ export const RouteId = {
   SubmitOAuthConsent: "submitOAuthConsent",
 
   // Team Routes
+  GetMembers: "getMembers",
   GetTeams: "getTeams",
   CreateTeam: "createTeam",
   GetTeam: "getTeam",
@@ -258,6 +257,12 @@ export const RouteId = {
   UpdateChatApiKey: "updateChatApiKey",
   DeleteChatApiKey: "deleteChatApiKey",
 
+  // User API Key Routes
+  GetApiKeys: "getApiKeys",
+  GetApiKey: "getApiKey",
+  CreateApiKey: "createApiKey",
+  DeleteApiKey: "deleteApiKey",
+
   // Virtual API Key Routes
   GetVirtualApiKeys: "getVirtualApiKeys",
   GetAllVirtualApiKeys: "getAllVirtualApiKeys",
@@ -284,9 +289,9 @@ export const RouteId = {
   DeletePendingSignupMember: "deletePendingSignupMember",
   CompleteOnboarding: "completeOnboarding",
 
-  // Appearance Routes
-  GetPublicAppearance: "getPublicAppearance",
-  UpdateAppearance: "updateAppearance",
+  // Appearance Settings Routes
+  GetAppearanceSettings: "getAppearanceSettings",
+  UpdateAppearanceSettings: "updateAppearanceSettings",
 
   // Security Settings Routes
   UpdateSecuritySettings: "updateSecuritySettings",
@@ -312,7 +317,6 @@ export const RouteId = {
   GetIdentityProviderIdpLogoutUrl: "getIdentityProviderIdpLogoutUrl",
 
   // Member Routes
-  UpdateMemberDefaultAgent: "updateMemberDefaultAgent",
   GetMemberDefaultAgent: "getMemberDefaultAgent",
 
   // User Routes

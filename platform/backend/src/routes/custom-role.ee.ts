@@ -15,6 +15,12 @@ const CreateUpdateRoleNameSchema = z
   .string()
   .min(1, "Role name is required")
   .max(50, "Role name must be less than 50 characters");
+const RoleDescriptionSchema = z
+  .string()
+  .max(200)
+  .transform((value) => value.trim())
+  .optional()
+  .transform((value) => (value ? value : undefined));
 
 const CustomRoleIdSchema = z
   .string()
@@ -48,13 +54,14 @@ const customRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["Roles"],
         body: z.object({
           name: CreateUpdateRoleNameSchema,
+          description: RoleDescriptionSchema,
           permission: PermissionsSchema,
         }),
         response: constructResponseSchema(SelectOrganizationRoleSchema),
       },
     },
     async (request, reply) => {
-      const { name, permission } = request.body;
+      const { name, description, permission } = request.body;
       const { organizationId, user } = request;
 
       // Get user's permissions to validate they can grant these permissions
@@ -95,6 +102,7 @@ const customRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
             permission,
             additionalFields: {
               name,
+              description,
             },
             organizationId,
           },
@@ -105,11 +113,7 @@ const customRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
 
         logger.info({ role: result.roleData }, "Role created successfully");
-        return reply.send({
-          ...result.roleData,
-          updatedAt: result.roleData.updatedAt || result.roleData.createdAt,
-          predefined: false,
-        });
+        return reply.send(normalizeRoleResponse(result.roleData));
       } catch (error) {
         const err = error as {
           status?: string;
@@ -138,6 +142,7 @@ const customRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }),
         body: z.object({
           name: CreateUpdateRoleNameSchema.optional(),
+          description: RoleDescriptionSchema,
           permission: PermissionsSchema.optional(),
         }),
         response: constructResponseSchema(SelectOrganizationRoleSchema),
@@ -146,7 +151,7 @@ const customRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async (
       {
         params: { roleId },
-        body: { name, permission },
+        body: { name, description, permission },
         user,
         organizationId,
         headers,
@@ -191,6 +196,7 @@ const customRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Build update data
       const updateData: Record<string, unknown> = {};
       if (name) updateData.name = name;
+      if (description !== undefined) updateData.description = description;
       if (permission) updateData.permission = permission;
 
       const result = await betterAuth.api.updateOrgRole({
@@ -206,11 +212,7 @@ const customRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(500, "Role updated but data not returned");
       }
 
-      return reply.send({
-        ...result.roleData,
-        updatedAt: result.roleData.updatedAt || new Date(),
-        predefined: false,
-      });
+      return reply.send(normalizeRoleResponse(result.roleData));
     },
   );
 
@@ -258,3 +260,48 @@ const customRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
 };
 
 export default customRoleRoutes;
+
+// === Internal helpers
+
+function normalizeRoleResponse(roleData: {
+  id: string;
+  organizationId: string;
+  role: string;
+  name: string;
+  description?: string | null;
+  permission: unknown;
+  createdAt: Date | string;
+  updatedAt?: Date | string | null;
+}) {
+  return {
+    id: roleData.id,
+    organizationId: roleData.organizationId,
+    role: roleData.role,
+    name: roleData.name,
+    description: roleData.description ?? null,
+    permission: parsePermissions(roleData.permission),
+    createdAt: toDate(roleData.createdAt),
+    updatedAt: roleData.updatedAt ? toDate(roleData.updatedAt) : null,
+    predefined: false,
+  };
+}
+
+function parsePermissions(value: unknown) {
+  if (typeof value === "string") {
+    try {
+      return JSON.parse(value);
+    } catch (error) {
+      logger.warn(
+        { error, permission: value },
+        "Failed to parse custom role permissions JSON",
+      );
+      return {};
+    }
+  }
+
+  return value;
+}
+
+function toDate(value: Date | string): Date {
+  return value instanceof Date ? value : new Date(value);
+}

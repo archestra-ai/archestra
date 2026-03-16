@@ -40,7 +40,9 @@ export function useInteractions({
   sortBy?: NonNullable<
     archestraApiTypes.GetInteractionsData["query"]
   >["sortBy"];
-  sortDirection?: "asc" | "desc";
+  sortDirection?: NonNullable<
+    archestraApiTypes.GetInteractionsData["query"]
+  >["sortDirection"];
   initialData?: archestraApiTypes.GetInteractionsResponses["200"];
 } = {}) {
   return useQuery({

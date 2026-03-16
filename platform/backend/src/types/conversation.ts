@@ -27,7 +27,6 @@ export const SelectConversationSchema = createSelectSchema(
       id: z.string(),
       name: z.string(),
       systemPrompt: z.string().nullable(),
-      userPrompt: z.string().nullable(),
       agentType: z.enum(["profile", "mcp_gateway", "llm_proxy", "agent"]),
       llmApiKeyId: z.string().nullable(),
     })

@@ -16,11 +16,11 @@ import {
   UserModel,
 } from "@/models";
 import {
+  type AclEntry,
   InsertKnowledgeBaseConnectorSchema,
   InsertKnowledgeBaseSchema,
   UpdateKnowledgeBaseConnectorSchema,
 } from "@/types";
-import type { AclEntry } from "@/types/kb-document";
 import { catchError, errorResult, successResult } from "./helpers";
 import type { ArchestraContext } from "./types";
 

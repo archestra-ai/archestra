@@ -1,6 +1,18 @@
 import { z } from "zod";
 import type { SupportedProvider } from "./model-constants";
 
+/** Default app name used as fallback when organization.appName is not configured */
+export const DEFAULT_APP_NAME = "Archestra";
+
+/** Maximum number of suggested prompts per agent */
+export const MAX_SUGGESTED_PROMPTS = 10;
+
+/** Maximum character length for a suggested prompt's summary title (button label) */
+export const MAX_SUGGESTED_PROMPT_TITLE_LENGTH = 50;
+
+/** Maximum character length for a suggested prompt's full prompt text */
+export const MAX_SUGGESTED_PROMPT_TEXT_LENGTH = 5000;
+
 /** Prefix for all Archestra-generated tokens (team tokens, user tokens, virtual API keys, API keys) */
 export const ARCHESTRA_TOKEN_PREFIX = "archestra_";
 

@@ -44,7 +44,6 @@ async function createTestInternalAgent(
       organizationId,
       name: `Test Internal Agent ${crypto.randomUUID().substring(0, 8)}`,
       agentType: "agent",
-      userPrompt: null,
       systemPrompt: "You are a helpful assistant",
       scope: options?.scope ?? "org",
       incomingEmailEnabled: options?.incomingEmailEnabled ?? false,

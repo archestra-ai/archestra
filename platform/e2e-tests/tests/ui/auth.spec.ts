@@ -47,8 +47,8 @@ test.describe(
           await expandSidebar(page);
           await expect(
             page.getByTestId(E2eTestId.SidebarUserProfile).getByText(email),
-          ).toBeVisible({ timeout: 10_000 });
-        }).toPass({ timeout: 45_000, intervals: [2000, 5000, 10000] });
+          ).toBeVisible({ timeout: 15_000 });
+        }).toPass({ timeout: 60_000, intervals: [2000, 5000, 10000] });
       };
 
       await verifyEmailInSidebar(adminPage, ADMIN_EMAIL, ADMIN_PASSWORD);

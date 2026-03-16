@@ -156,9 +156,9 @@ const PromptInputContent = ({
   // Check if agent has a knowledge base
   const { data: agentData } = useProfile(agentId);
 
-  // Check if user can update organization settings (to show settings link in tooltip)
-  const { data: canUpdateOrganization } = useHasPermissions({
-    securitySettings: ["update"],
+  // Check if user can update agent settings (to show settings link in tooltip)
+  const { data: canUpdateAgentSettings } = useHasPermissions({
+    agentSettings: ["update"],
   });
 
   // Chat placeholders from organization settings
@@ -418,13 +418,13 @@ const PromptInputContent = ({
               </TooltipTrigger>
               <TooltipContent side="top" sideOffset={4}>
                 {!allowFileUploads ? (
-                  canUpdateOrganization ? (
+                  canUpdateAgentSettings ? (
                     <span>
                       File uploads are disabled.{" "}
                       <a
-                        href="/settings/security"
+                        href="/settings/agents"
                         className="underline hover:no-underline"
-                        aria-label="Enable file uploads in security settings"
+                        aria-label="Enable file uploads in agent settings"
                       >
                         Enable in settings
                       </a>

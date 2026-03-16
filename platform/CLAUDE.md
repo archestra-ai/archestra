@@ -114,9 +114,6 @@ ARCHESTRA_OPENAI_BASE_URL=http://localhost:9092/v1
 ARCHESTRA_ANTHROPIC_BASE_URL=http://localhost:9092
 ARCHESTRA_GEMINI_BASE_URL=http://localhost:9092
 
-# Orlando WireMock (project-specific)
-tilt trigger orlando-wiremock
-
 ARCHESTRA_OPENAI_BASE_URL=http://localhost:9091/v1
 ARCHESTRA_ANTHROPIC_BASE_URL=http://localhost:9091
 ARCHESTRA_GEMINI_BASE_URL=http://localhost:9091
@@ -144,88 +141,6 @@ docker compose -f dev/docker-compose.observability.yml up -d  # Alternative: Sta
 1. **Consume in `backend/src/config.ts`** - Parse and validate the env var here. If a custom parse/validation function is needed, export it and add tests in `backend/src/config.test.ts`
 2. **Document in `../docs/pages/platform-deployment.md`** - All new env vars MUST be documented in the Environment Variables section. Use best judgement on whether it warrants a new subsection
 3. **Frontend access via `/api/config`** - If the frontend needs to reference an env var value, expose it through `backend/src/routes/config.ts` response and consume via the `useFeature()` hook
-
-```bash
-# Database Configuration
-# ARCHESTRA_DATABASE_URL takes precedence over DATABASE_URL
-# When using external database, internal postgres container will not start
-ARCHESTRA_DATABASE_URL="postgresql://archestra:archestra_dev_password@localhost:5432/archestra_dev?schema=public"
-
-# Provider API Keys
-OPENAI_API_KEY=your-api-key-here
-GEMINI_API_KEY=your-api-key-here
-ANTHROPIC_API_KEY=your-api-key-here
-
-# Provider Base URLs (optional - for testing)
-ARCHESTRA_OPENAI_BASE_URL=https://api.openai.com/v1
-ARCHESTRA_ANTHROPIC_BASE_URL=https://api.anthropic.com
-
-# Analytics (optional - disabled for local dev and e2e tests)
-ARCHESTRA_ANALYTICS=disabled  # Set to "disabled" to disable PostHog analytics
-
-# Authentication Secret (REQUIRED, must be at least 32 characters)
-# Generate with: openssl rand -base64 32
-# In Helm: Auto-generated on first install and persisted
-# In Docker: Auto-generated and saved to /app/data/.auth_secret
-# For local dev: Must be set manually in .env file
-ARCHESTRA_AUTH_SECRET=auth-secret-must-be-at-least-32-chars-long
-
-# Disable Basic Authentication (username/password login form)
-ARCHESTRA_AUTH_DISABLE_BASIC_AUTH=false  # Set to true to hide login form and require SSO
-ARCHESTRA_AUTH_DISABLE_INVITATIONS=false  # Set to true to disable user invitations
-
-# Chat Feature Configuration (n8n automation expert)
-ARCHESTRA_CHAT_ANTHROPIC_API_KEY=your-api-key-here  # Required for chat (direct Anthropic API)
-ARCHESTRA_CHAT_DEFAULT_MODEL=claude-opus-4-1-20250805  # Optional, defaults to claude-opus-4-1-20250805
-ARCHESTRA_CHAT_DEFAULT_PROVIDER=anthropic  # Optional, defaults to anthropic. Options: anthropic, openai, gemini
-
-# Kubernetes (for MCP server runtime)
-# Local MCP servers require EITHER ARCHESTRA_ORCHESTRATOR_KUBECONFIG OR ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER
-ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE=default
-ARCHESTRA_ORCHESTRATOR_KUBECONFIG=/path/to/kubeconfig  # Path to kubeconfig file
-ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER=false  # Set to true when running inside K8s cluster
-ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE=europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:0.0.3  # Default image when custom Docker image not specified
-NEXT_PUBLIC_ARCHESTRA_MCP_SERVER_BASE_IMAGE=europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:0.0.3  # Frontend display of base image
-
-# OpenTelemetry Authentication
-ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_USERNAME=  # Username for OTLP basic auth (requires password)
-ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_PASSWORD=  # Password for OTLP basic auth (requires username)
-ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_BEARER=    # Bearer token for OTLP auth (takes precedence over basic auth)
-
-# OpenTelemetry Tracing
-ARCHESTRA_OTEL_VERBOSE_TRACING=false  # Set to true to include Fastify/HTTP/fetch infrastructure spans (default: false, only GenAI spans)
-ARCHESTRA_OTEL_CONTENT_MAX_LENGTH=10000  # Max characters for captured content in span events (default: 10000)
-
-# Logging
-ARCHESTRA_LOGGING_LEVEL=info  # Options: trace, debug, info, warn, error, fatal
-
-# Secrets Manager Configuration
-ARCHESTRA_SECRETS_MANAGER=DB  # Options: DB (default), Vault, READONLY_VAULT
-ARCHESTRA_HASHICORP_VAULT_ADDR=http://localhost:8200  # Required when ARCHESTRA_SECRETS_MANAGER=Vault or READONLY_VAULT
-ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD=TOKEN  # Options: "TOKEN" (default), "K8S", or "AWS"
-ARCHESTRA_HASHICORP_VAULT_KV_VERSION=2  # Options: "1" or "2" (default: "2") - KV secrets engine version
-
-# Vault Token Authentication (ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD=TOKEN or not set)
-ARCHESTRA_HASHICORP_VAULT_TOKEN=dev-root-token  # Required for TOKEN auth
-
-# Vault Kubernetes Authentication (ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD=K8S)
-ARCHESTRA_HASHICORP_VAULT_K8S_ROLE=  # Required for K8S auth: Vault role bound to K8s service account
-ARCHESTRA_HASHICORP_VAULT_K8S_TOKEN_PATH=  # Optional: Path to SA token (default: /var/run/secrets/kubernetes.io/serviceaccount/token)
-ARCHESTRA_HASHICORP_VAULT_K8S_MOUNT_POINT=  # Optional: Vault K8S auth mount point (default: kubernetes)
-ARCHESTRA_HASHICORP_VAULT_SECRET_PATH=  # Optional: Path prefix for secrets (default: "secret/data/archestra" for v2, "secret/archestra" for v1)
-ARCHESTRA_HASHICORP_VAULT_SECRET_METADATA_PATH=  # Optional: Path prefix for secret metadata in Vault KV v2 (default: secretPath with /data/ replaced by /metadata/)
-
-# Vault AWS IAM Authentication (ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD=AWS)
-ARCHESTRA_HASHICORP_VAULT_AWS_ROLE=  # Required for AWS auth: Vault role bound to AWS IAM principal
-ARCHESTRA_HASHICORP_VAULT_AWS_MOUNT_POINT=  # Optional: Vault AWS auth mount point (default: aws)
-ARCHESTRA_HASHICORP_VAULT_AWS_REGION=  # Optional: AWS region for STS signing (default: us-east-1)
-ARCHESTRA_HASHICORP_VAULT_AWS_STS_ENDPOINT=  # Optional: STS endpoint URL (default: https://sts.amazonaws.com, matches Vault's default)
-ARCHESTRA_HASHICORP_VAULT_AWS_IAM_SERVER_ID=  # Optional: Value for X-Vault-AWS-IAM-Server-ID header (additional security)
-
-# Sentry Error Tracking (optional - leave empty to disable)
-ARCHESTRA_SENTRY_BACKEND_DSN=  # Backend error tracking DSN
-ARCHESTRA_SENTRY_FRONTEND_DSN=  # Frontend error tracking DSN
-```
 
 ## Architecture
 
@@ -405,6 +320,7 @@ pnpm rebuild <package-name>  # Enable scripts for specific package
 - Colocate test files with source (`.test.ts`)
 - Flat file structure, avoid barrel files
 - **Route permissions (IMPORTANT)**: When adding new API endpoints, you MUST add the route to `requiredEndpointPermissionsMap` in `shared/access-control.ee.ts` or requests will return 403 Forbidden. Match permissions with similar existing routes (e.g., interaction endpoints use `interaction: ["read"]`).
+- **MCP Tool Impact (IMPORTANT)**: When updating an API endpoint's request/response schema, also check if there is an associated Archestra MCP tool in `backend/src/archestra-mcp-server/` that exposes the same functionality. If so, update the MCP tool's `inputSchema` and handler to match the new API schema. Ask the user if you're unsure whether an MCP tool is affected.
 - Only export public APIs
 - **Module Code Order (CRITICAL)**: Always place exports at TOP of file, internal helpers at BOTTOM. Use section comments (`// ===`) to separate. Function declarations are hoisted, so helpers can be called before defined.
 - Use the `logger` instance from `@/logging` for all logging (replaces console.log/error/warn/info)
@@ -502,70 +418,31 @@ pnpm rebuild <package-name>  # Enable scripts for specific package
 - HTTP servers get automatic K8s Service creation with ClusterIP DNS name
 - For streamable-http servers: K8s Service uses NodePort in local dev, ClusterIP in production
 
-**Helm Chart**:
-
-- RBAC: ServiceAccount with configurable name/annotations for pod identity
-- RBAC: Role with permissions: pods (all verbs), pods/exec, pods/log, pods/attach
-- RBAC: Configure via `serviceAccount.create`, `rbac.create` in values.yaml
-- Service annotations via `archestra.service.annotations` (e.g., GKE BackendConfig)
-- Service type: Configurable via `archestra.service.type`, NodePort support with fixed ports
-- Health probes: Startup (5min), liveness, readiness probes on frontend port
-- Optional Ingress: Enable with `archestra.ingress.enabled`, supports custom hosts, paths, TLS, annotations, or full spec override
-- Secret-based env vars via `archestra.envFromSecrets` for sensitive data injection (e.g., API keys from K8s Secrets)
-- Bulk env var import via `archestra.envFrom` for importing all keys from Secrets/ConfigMaps at once
-
-**White-labeling**:
-
-- Custom logos: PNG only, max 2MB, stored as base64
-- 5 fonts: Lato, Inter, Open Sans, Roboto, Source Sans Pro
-- Real-time theme and font preview in settings
-- Custom logos display with "Powered by Archestra" attribution
-- Database columns: theme, customFont, logo
 
 **TOON Format Conversion**:
 
-- Profiles support optional TOON (Token-Oriented Object Notation) conversion for tool results
+- Agents support optional TOON (Token-Oriented Object Notation) conversion for tool results
 - Reduces token usage by 30-60% for uniform arrays of objects
-- Enabled via `convert_tool_results_to_toon` boolean field on profiles
+- Enabled via `convert_tool_results_to_toon` boolean field on agents
 - Automatically converts JSON tool results to TOON format before sending to LLM
-- Particularly useful for profiles dealing with structured data from database or API tools
+- Particularly useful for agents dealing with structured data from database or API tools
 
 **Chat Feature**:
 
-- Profile-based conversations: Each conversation is tied to a specific profile
-- Profile selection via dropdown: Users select a profile when creating a new conversation
-- All profiles enabled for chat: All profiles are available in chat by default (the `use_in_chat` field is deprecated)
-- MCP tool integration: Chat automatically uses the profile's assigned MCP tools via MCP Gateway
-- LLM Proxy integration: Chat routes through LLM Proxy (`/v1/anthropic/${agentId}`) for security policies, dual LLM, and observability
-- Profile authentication: Connects to internal MCP Gateway using `Authorization: Bearer ${archestraToken}` with profile ID in URL path
-- Database schema: Conversations table includes `agentId` foreign key to agents table
-- UI components: `AgentSelector` dropdown, `ChatSidebarSection` for conversation navigation in main sidebar
-- Conversation navigation: Recent chats shown as sub-items under "Chat" menu in main sidebar (ChatSidebarSection component)
-- Hide tool calls toggle: Located in chat messages header, persisted in localStorage
+- Agent-based conversations: Each conversation is tied to a specific agent
+- MCP tool integration: Chat automatically uses the agent's assigned MCP tools via MCP Gateway
+- LLM Proxy integration: Chat routes through LLM Proxy for security policies + observability
+- Agent authentication: Connects to internal MCP Gateway using `Authorization: Bearer ${archestraToken}` with agent ID in URL path
 - Conversation management: Select, edit (inline rename), delete conversations directly in sidebar sub-navigation
-- Smart visibility: Shows first 10 conversations by default with "Show N more" toggle for better UX when many conversations exist
-- Full-width chat interface: Chat page uses entire width without separate conversation sidebar
 - Tool execution: Routes through MCP Gateway, includes response modifiers and logging
 - Required env var: `ARCHESTRA_CHAT_ANTHROPIC_API_KEY` (used by LLM Proxy for Anthropic calls)
 
 **Archestra MCP Server**:
 
-- Built-in MCP server visible in the MCP catalog UI like other MCP servers
-- Tools must be explicitly assigned to profiles (not auto-injected)
+- Tools must be explicitly assigned to Agents (not auto-injected)
 - Tools prefixed with `archestra__` to avoid conflicts
-- Available tools:
-  - Identity: `whoami`
-  - Agents: `create_agent`, `get_agent`
-  - LLM Proxies: `create_llm_proxy`, `get_llm_proxy`
-  - MCP Gateways: `create_mcp_gateway`, `get_mcp_gateway`
-  - Limits: `create_limit`, `get_limits`, `update_limit`, `delete_limit`, `get_agent_token_usage`, `get_llm_proxy_token_usage`
-  - Policies: `get/create/update/delete_tool_invocation_policy`, `get/create/update/delete_trusted_data_policy`
-  - MCP servers: `search_private_mcp_registry`, `get_mcp_servers`, `get_mcp_server_tools`
-  - Tool assignment: `bulk_assign_tools_to_agents`, `bulk_assign_tools_to_mcp_gateways`
-  - Operators: `get_autonomy_policy_operators`
 - Implementation: `backend/src/archestra-mcp-server/` (modular directory with one file per tool group)
 - Catalog entry: Created automatically on startup with fixed ID `ARCHESTRA_MCP_CATALOG_ID`
-- Note: `create_mcp_server_installation_request` temporarily disabled pending user context support
 - Security:
   - **Trusted (policy bypass)**: Archestra tools bypass tool invocation policies and trusted data policies — they are always allowed to execute without policy evaluation
   - **RBAC (user permissions) still enforced**: Every tool is mapped to a `{ resource, action }` permission in `TOOL_PERMISSIONS` (`archestra-mcp-server/rbac.ts`). The `tools/list` endpoint dynamically filters tools so users only see tools they have permission to use. `executeArchestraTool` performs a centralized RBAC check before executing any tool. When adding new tools, add the corresponding entry to `TOOL_PERMISSIONS` (the `Record<ArchestraToolShortName, ...>` type will cause a compile error if a tool is missing).

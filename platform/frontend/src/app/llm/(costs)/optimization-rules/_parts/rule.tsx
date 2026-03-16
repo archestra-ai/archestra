@@ -9,9 +9,12 @@ import { AlertCircle, Plus } from "lucide-react";
 import Link from "next/link";
 import React, { useEffect, useState } from "react";
 import { Condition } from "@/app/llm/(costs)/optimization-rules/_parts/condition";
+import { LlmModelSearchableSelect } from "@/components/llm-model-select";
+import { LlmProviderSelectItems } from "@/components/llm-provider-options";
 import { WithPermissions } from "@/components/roles/with-permissions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -84,17 +87,17 @@ export function ProviderSelect({
 
   return (
     <Select value={provider} onValueChange={onChange}>
-      <SelectTrigger size="sm" className="!h-7">
+      <SelectTrigger className="w-full">
         <SelectValue />
       </SelectTrigger>
       <SelectContent>
-        {providers.map((providerItem) => {
-          return (
-            <SelectItem key={providerItem} value={providerItem}>
-              {providerDisplayNames[providerItem]}
-            </SelectItem>
-          );
-        })}
+        <LlmProviderSelectItems
+          options={providers.map((providerItem) => ({
+            value: providerItem,
+            icon: `https://models.dev/logos/${providerItem}.svg`,
+            name: providerDisplayNames[providerItem],
+          }))}
+        />
       </SelectContent>
     </Select>
   );
@@ -103,13 +106,11 @@ export function ProviderSelect({
 // Model Selector Component
 function ModelSelect({
   model,
-  provider,
   models,
   onChange,
   editable,
 }: {
   model: string;
-  provider: SupportedProvider;
   models: TokenPrices;
   onChange: (model: string) => void;
   editable?: boolean;
@@ -129,7 +130,7 @@ function ModelSelect({
     return (
       <div className="px-2 text-sm">
         <span className="text-muted-foreground">
-          No pricing configured for {providerDisplayNames[provider]} models.
+          No pricing configured for models.
         </span>{" "}
         <Link
           href="/llm/providers/models"
@@ -146,6 +147,7 @@ function ModelSelect({
     !isAvailable && model
       ? [
           {
+            provider: "openai",
             model,
             pricePerMillionInput: "0",
             pricePerMillionOutput: "0",
@@ -198,33 +200,20 @@ function ModelSelect({
   }
 
   return (
-    <Select value={model || undefined} onValueChange={onChange}>
-      <SelectTrigger
-        size="sm"
-        className="max-w-36 bg-green-100 border-green-200 !h-7"
-      >
-        <SelectValue placeholder="Select target model" />
-      </SelectTrigger>
-      <SelectContent>
-        {modelsWithCurrent.map((price) => {
-          const hasPricing =
-            price.pricePerMillionInput !== "0" ||
-            price.pricePerMillionOutput !== "0";
-          return (
-            <SelectItem
-              key={price.model}
-              value={price.model}
-              className={!hasPricing ? "text-muted-foreground" : ""}
-            >
-              {price.model}
-              {hasPricing
-                ? ` ($${price.pricePerMillionInput} / $${price.pricePerMillionOutput})`
-                : " (no pricing)"}
-            </SelectItem>
-          );
-        })}
-      </SelectContent>
-    </Select>
+    <LlmModelSearchableSelect
+      value={model}
+      onValueChange={onChange}
+      options={modelsWithCurrent.map((price) => ({
+        value: price.model,
+        model: price.model,
+        provider: price.provider as SupportedProvider,
+        pricePerMillionInput: price.pricePerMillionInput,
+        pricePerMillionOutput: price.pricePerMillionOutput,
+      }))}
+      placeholder="Select target model..."
+      className="w-full"
+      showPricing
+    />
   );
 }
 
@@ -251,7 +240,7 @@ function EntitySelect({
   }
 
   return (
-    <div className="flex flex-row gap-2 whitespace-nowrap">
+    <div className="flex flex-col gap-2 sm:flex-row sm:whitespace-nowrap">
       <Select
         value={entityType}
         onValueChange={(value) => {
@@ -260,12 +249,12 @@ function EntitySelect({
           }
         }}
       >
-        <SelectTrigger size="sm" className="!h-7">
+        <SelectTrigger className="w-full sm:flex-1">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="organization">organization</SelectItem>
-          <SelectItem value="team">team</SelectItem>
+          <SelectItem value="organization">Organization</SelectItem>
+          <SelectItem value="team">Team</SelectItem>
         </SelectContent>
       </Select>
       {entityType === "team" && (
@@ -273,7 +262,7 @@ function EntitySelect({
           value={entityId || undefined}
           onValueChange={(value) => onChange(entityType, value)}
         >
-          <SelectTrigger size="sm" className="!h-7">
+          <SelectTrigger className="w-full sm:flex-1">
             <SelectValue placeholder="Select team" />
           </SelectTrigger>
           <SelectContent>
@@ -289,36 +278,6 @@ function EntitySelect({
   );
 }
 
-function AddCondition({
-  disabled,
-  onClick,
-}: {
-  disabled: boolean;
-  onClick: (e: React.MouseEvent) => void;
-}) {
-  return (
-    <TooltipProvider>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            onClick={onClick}
-            disabled={disabled}
-            className="text-primary hover:text-primary h-9 w-10"
-          >
-            <Plus className="h-4 w-4" />
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent>
-          <p>Add condition</p>
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
-  );
-}
-
 type RuleProps = Omit<OptimizationRule, "createdAt" | "updatedAt"> & {
   tokenPrices: TokenPrices;
   teams?: Team[];
@@ -330,6 +289,176 @@ type RuleProps = Omit<OptimizationRule, "createdAt" | "updatedAt"> & {
   switchDisabled?: boolean;
   className?: string;
 };
+
+type OptimizationRuleFormProps = Pick<
+  OptimizationRule,
+  | "enabled"
+  | "entityType"
+  | "entityId"
+  | "conditions"
+  | "provider"
+  | "targetModel"
+> & {
+  tokenPrices: TokenPrices;
+  teams?: Team[];
+  onChange?: (
+    data: Omit<OptimizationRule, "id" | "createdAt" | "updatedAt">,
+  ) => void;
+  onToggle?: (enabled: boolean) => void;
+};
+
+export function OptimizationRuleForm({
+  enabled,
+  entityType,
+  entityId,
+  conditions,
+  provider,
+  targetModel,
+  tokenPrices,
+  teams = [],
+  onChange,
+  onToggle,
+}: OptimizationRuleFormProps) {
+  const [formData, setFormData] = useState({
+    enabled,
+    entityType,
+    entityId,
+    conditions,
+    provider,
+    targetModel,
+  });
+
+  useEffect(() => {
+    setFormData({
+      enabled,
+      entityType,
+      entityId,
+      conditions,
+      provider,
+      targetModel,
+    });
+  }, [enabled, entityType, entityId, conditions, provider, targetModel]);
+
+  const updateFormData = (newData: Partial<typeof formData>) => {
+    const updated = { ...formData, ...newData };
+    setFormData(updated);
+    onChange?.(updated);
+  };
+
+  const models = sortModelsByPrice(tokenPrices);
+
+  const addCondition = () => {
+    const hasContentLength = formData.conditions.some((c) => "maxLength" in c);
+    const hasToolPresence = formData.conditions.some((c) => "hasTools" in c);
+
+    if (!hasContentLength) {
+      updateFormData({
+        conditions: [...formData.conditions, { maxLength: 1000 }],
+      });
+      return;
+    }
+
+    if (!hasToolPresence) {
+      updateFormData({
+        conditions: [...formData.conditions, { hasTools: false }],
+      });
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between rounded-md border px-4 py-3">
+        <div>
+          <div className="text-sm font-medium">Rule status</div>
+          <div className="text-sm text-muted-foreground">
+            Enable or disable this optimization rule.
+          </div>
+        </div>
+        <Switch checked={formData.enabled} onCheckedChange={onToggle} />
+      </div>
+
+      <div className="space-y-4">
+        <div className="space-y-2">
+          <Label>Apply to</Label>
+          <EntitySelect
+            entityType={formData.entityType}
+            entityId={formData.entityId}
+            teams={teams}
+            onChange={(nextEntityType, nextEntityId) =>
+              updateFormData({
+                entityType: nextEntityType,
+                entityId: nextEntityId || "",
+              })
+            }
+            editable
+          />
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <Label>Target model</Label>
+        <ModelSelect
+          model={formData.targetModel}
+          models={models}
+          onChange={(value) => {
+            const selectedModel = models.find(
+              (modelOption) => modelOption.model === value,
+            );
+            updateFormData({
+              targetModel: value,
+              provider:
+                (selectedModel?.provider as SupportedProvider) ??
+                formData.provider,
+            });
+          }}
+          editable
+        />
+      </div>
+
+      <div className="space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <Label>Conditions</Label>
+            <div className="text-sm text-muted-foreground">
+              Add up to two conditions that control when the rule applies.
+            </div>
+          </div>
+          {formData.conditions.length < 2 && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={addCondition}
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              Add condition
+            </Button>
+          )}
+        </div>
+        <div className="space-y-2">
+          {formData.conditions.map((condition, index, allConditions) => (
+            <Condition
+              key={`${index}-${"maxLength" in condition ? "length" : "tools"}`}
+              condition={condition}
+              editable
+              removable={allConditions.length > 1}
+              onChange={(updatedCondition) => {
+                const nextConditions = [...formData.conditions];
+                nextConditions[index] = updatedCondition;
+                updateFormData({ conditions: nextConditions });
+              }}
+              onRemove={() =>
+                updateFormData({
+                  conditions: formData.conditions.filter((_, i) => i !== index),
+                })
+              }
+            />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export function Rule({
   enabled,
@@ -425,32 +554,6 @@ export function Rule({
     });
   };
 
-  const onAddCondition = (e: React.MouseEvent) => {
-    e.preventDefault();
-
-    // Check what condition types already exist
-    const hasContentLength = formData.conditions.some((c) => "maxLength" in c);
-    const hasToolPresence = formData.conditions.some((c) => "hasTools" in c);
-
-    // Determine which type to add based on what's missing
-    let newCondition: Conditions[number];
-    if (!hasContentLength) {
-      newCondition = { maxLength: 1000 };
-    } else if (!hasToolPresence) {
-      newCondition = { hasTools: false };
-    } else {
-      // Both types already exist, don't add anything
-      return;
-    }
-
-    updateFormData({
-      conditions: [...formData.conditions, newCondition],
-    });
-  };
-
-  // Check if we can add more conditions (max 2: one of each type)
-  const canAddCondition = formData.conditions.length < 2;
-
   const models = sortModelsByPrice(
     tokenPrices.filter((price) => price.provider === formData.provider),
   );
@@ -458,7 +561,7 @@ export function Rule({
   return (
     <div className={cn(className, "flex flex-row gap-2 items-center text-sm")}>
       <WithPermissions
-        permissions={{ llmLimit: ["update"] }}
+        permissions={{ optimizationRule: ["update"] }}
         noPermissionHandle="tooltip"
       >
         {({ hasPermission }) => (
@@ -489,7 +592,6 @@ export function Rule({
       <ModelSelect
         model={formData.targetModel}
         models={models}
-        provider={formData.provider}
         onChange={onModelChange}
         editable={editable}
       />
@@ -512,9 +614,6 @@ export function Rule({
             {index < conditions.length - 1 && <span>and</span>}
           </React.Fragment>
         ))}
-        {editable && formData.conditions.length < 2 && (
-          <AddCondition disabled={!canAddCondition} onClick={onAddCondition} />
-        )}
       </div>
     </div>
   );

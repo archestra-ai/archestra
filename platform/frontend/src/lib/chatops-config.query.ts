@@ -45,14 +45,9 @@ export function useUpdateSlackChatOpsConfig() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (body: {
-      enabled?: boolean;
-      botToken?: string;
-      signingSecret?: string;
-      appId?: string;
-      connectionMode?: "webhook" | "socket";
-      appLevelToken?: string;
-    }) => {
+    mutationFn: async (
+      body: NonNullable<archestraApiTypes.UpdateSlackChatOpsConfigData["body"]>,
+    ) => {
       const { data, error } = await archestraApiSdk.updateSlackChatOpsConfig({
         body,
       });

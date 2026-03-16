@@ -2,10 +2,13 @@ import { archestraApiSdk, type archestraApiTypes } from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useIsAuthenticated } from "./auth.hook";
 import { useHasPermissions } from "./auth.query";
-import { handleApiError } from "./utils";
+import { DEFAULT_TABLE_LIMIT, handleApiError } from "./utils";
 
 const { getRoles, createRole, getRole, updateRole, deleteRole } =
   archestraApiSdk;
+
+type RolesQuery = NonNullable<archestraApiTypes.GetRolesData["query"]>;
+type RolesPaginatedParams = Pick<RolesQuery, "limit" | "offset" | "name">;
 
 /**
  * Query keys for role-related queries
@@ -22,12 +25,39 @@ export const roleKeys = {
  * Hook to fetch all roles for the organization
  */
 export function useRoles(params?: {
-  initialData?: archestraApiTypes.GetRolesResponses["200"];
+  initialData?: archestraApiTypes.GetRolesResponses["200"]["data"];
 }) {
   return useQuery({
     queryKey: roleKeys.lists(),
-    queryFn: async () => (await getRoles()).data ?? [],
+    queryFn: async () => {
+      const response = await getRoles({
+        query: { limit: DEFAULT_TABLE_LIMIT, offset: 0 },
+      });
+      return response.data?.data ?? [];
+    },
     initialData: params?.initialData,
+  });
+}
+
+export function useRolesPaginated(params: RolesPaginatedParams) {
+  return useQuery({
+    queryKey: [...roleKeys.lists(), "paginated", params],
+    queryFn: async () => {
+      const response = await getRoles({ query: params });
+      return (
+        response.data ?? {
+          data: [],
+          pagination: {
+            currentPage: 1,
+            limit: params.limit,
+            total: 0,
+            totalPages: 0,
+            hasNext: false,
+            hasPrev: false,
+          },
+        }
+      );
+    },
   });
 }
 
@@ -130,11 +160,13 @@ export function useCustomRoles() {
   return useQuery({
     queryKey: roleKeys.custom(),
     queryFn: async () => {
-      const { data } = await archestraApiSdk.getRoles();
-      if (!data) return [];
+      const { data } = await archestraApiSdk.getRoles({
+        query: { limit: DEFAULT_TABLE_LIMIT, offset: 0 },
+      });
+      const roles = data?.data ?? [];
 
       // Filter to only custom roles (non-predefined)
-      return data.filter((role) => !role.predefined);
+      return roles.filter((role) => !role.predefined);
     },
     enabled: userIsAuthenticated && !!canReadRoles,
     retry: false,

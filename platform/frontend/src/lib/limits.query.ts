@@ -5,11 +5,13 @@ import { toast } from "sonner";
 const { getLimits, createLimit, getLimit, updateLimit, deleteLimit } =
   archestraApiSdk;
 
-export function useLimits(params?: {
-  entityType?: "team" | "organization" | "agent";
-  entityId?: string;
-  limitType?: "token_cost" | "mcp_server_calls" | "tool_calls";
-}) {
+type LimitsQuery = NonNullable<archestraApiTypes.GetLimitsData["query"]>;
+type LimitsParams = Partial<LimitsQuery>;
+type UpdateLimitParams = archestraApiTypes.UpdateLimitData["path"] &
+  Partial<archestraApiTypes.UpdateLimitData["body"]>;
+type DeleteLimitParams = archestraApiTypes.DeleteLimitData["path"];
+
+export function useLimits(params?: LimitsParams) {
   return useQuery({
     queryKey: ["limits", params],
     queryFn: async () => {
@@ -63,10 +65,7 @@ export function useCreateLimit() {
 export function useUpdateLimit() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({
-      id,
-      ...data
-    }: { id: string } & Partial<archestraApiTypes.UpdateLimitData["body"]>) => {
+    mutationFn: async ({ id, ...data }: UpdateLimitParams) => {
       const response = await updateLimit({
         path: { id },
         body: data,
@@ -90,7 +89,7 @@ export function useUpdateLimit() {
 export function useDeleteLimit() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id }: { id: string }) => {
+    mutationFn: async ({ id }: DeleteLimitParams) => {
       const response = await deleteLimit({ path: { id } });
       return response.data;
     },

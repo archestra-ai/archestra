@@ -315,7 +315,7 @@ export function ManageUsersContent({
         </DialogHeader>
       )}
 
-      <div className="py-4 space-y-6">
+      <div className={hideHeader ? "space-y-6 px-4 py-4" : "space-y-6 pb-4"}>
         {allServers?.length === 0 &&
         !onAddPersonalConnection &&
         !onAddSharedConnection ? (

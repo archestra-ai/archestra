@@ -24,7 +24,7 @@ type ChangeHandler = (condition: Condition) => void;
 
 function ConditionBlock({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex flex-row gap-2 whitespace-nowrap items-center rounded-md bg-muted h-9 px-4">
+    <div className="flex h-9 flex-row items-center gap-2 whitespace-nowrap rounded-md bg-muted px-4 text-sm">
       {children}
     </div>
   );

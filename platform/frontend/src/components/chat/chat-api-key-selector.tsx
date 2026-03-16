@@ -88,7 +88,7 @@ export function ChatApiKeySelector({
   // Include agent's configured key even if user doesn't have direct access
   const { data: availableKeys = [], isLoading: isLoadingKeys } =
     useAvailableChatApiKeys({
-      includeKeyId: agentLlmApiKeyId,
+      includeKeyId: agentLlmApiKeyId ?? undefined,
     });
 
   // Combined loading state - wait for both API keys and models
@@ -108,10 +108,7 @@ export function ChatApiKeySelector({
 
   // Group keys by provider for display
   const keysByProvider = useMemo(() => {
-    const grouped: Record<SupportedProvider, ChatApiKey[]> = {} as Record<
-      SupportedProvider,
-      ChatApiKey[]
-    >;
+    const grouped = {} as Record<SupportedProvider, ChatApiKey[]>;
 
     for (const key of availableKeys) {
       if (!grouped[key.provider]) {

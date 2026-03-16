@@ -1,5 +1,6 @@
 import {
   BUILT_IN_AGENT_IDS,
+  type PaginationQuery,
   TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
 } from "@shared";
 import {
@@ -27,9 +28,8 @@ import type {
   AgentTool,
   AgentToolFilters,
   AgentToolSortBy,
-  AgentToolSortDirection,
   InsertAgentTool,
-  PaginationQuery,
+  SortDirection,
   UpdateAgentTool,
 } from "@/types";
 import AgentTeamModel from "./agent-team";
@@ -270,11 +270,10 @@ class AgentToolModel {
     options?: Partial<
       Pick<
         InsertAgentTool,
-        | "responseModifierTemplate"
-        | "credentialSourceMcpServerId"
-        | "executionSourceMcpServerId"
+        "credentialSourceMcpServerId" | "executionSourceMcpServerId"
       >
     >,
+    organizationId?: string,
   ) {
     const [agentTool] = await db
       .insert(schema.agentToolsTable)
@@ -289,54 +288,154 @@ class AgentToolModel {
     // This is intentionally best-effort: the agent-tool is returned immediately
     // while the policy configuration runs asynchronously. If the background
     // operation fails, the error is logged but does not affect the caller.
-    // Import at top of method to avoid circular dependency
-    const { policyConfigurationService } = await import(
-      "@/agents/subagents/policy-configuration"
+    AgentToolModel.triggerAutoConfigureIfEnabled(
+      agentTool.id,
+      agentId,
+      toolId,
+      organizationId,
     );
-    const { default: AgentModel } = await import("./agent");
 
-    // Check the built-in Policy Configuration Subagent for auto-configure setting
-    // and trigger auto-configure in background.
-    // Look up organizationId from the agents table directly (not via teams)
-    // to handle org-scoped and personal agents that may have no team assignments.
-    db.select({ organizationId: schema.agentsTable.organizationId })
-      .from(schema.agentsTable)
-      .where(eq(schema.agentsTable.id, agentId))
-      .limit(1)
-      .then(async (rows) => {
-        if (rows.length === 0) return;
+    return agentTool;
+  }
 
-        const organizationId = rows[0].organizationId;
+  /**
+   * Bulk insert multiple agent-tool assignments in a single query.
+   * Checks auto-configure setting once (not per-row) to avoid N+1 queries.
+   */
+  static async bulkCreate(
+    values: Array<{
+      agentId: string;
+      toolId: string;
+      credentialSourceMcpServerId?: string | null;
+      executionSourceMcpServerId?: string | null;
+      useDynamicTeamCredential?: boolean;
+    }>,
+    organizationId?: string,
+  ) {
+    if (values.length === 0) return [];
 
-        // Read auto-configure setting from the built-in Policy Config agent
+    const rows = await db
+      .insert(schema.agentToolsTable)
+      .values(values)
+      .returning();
+
+    // Fire auto-configure in background, checking the setting only once for all rows
+    AgentToolModel.triggerBulkAutoConfigureIfEnabled(rows, organizationId);
+
+    return rows;
+  }
+
+  /**
+   * Check auto-configure setting once, then trigger for each tool.
+   * Avoids N+1 getBuiltInAgent queries when bulk-creating assignments.
+   */
+  private static triggerBulkAutoConfigureIfEnabled(
+    rows: Array<{ id: string; agentId: string; toolId: string }>,
+    knownOrganizationId?: string,
+  ) {
+    if (rows.length === 0) return;
+
+    const resolveOrgId = knownOrganizationId
+      ? Promise.resolve(knownOrganizationId)
+      : db
+          .select({ organizationId: schema.agentsTable.organizationId })
+          .from(schema.agentsTable)
+          .where(eq(schema.agentsTable.id, rows[0].agentId))
+          .limit(1)
+          .then((r) => (r.length > 0 ? r[0].organizationId : null));
+
+    resolveOrgId
+      .then(async (orgId) => {
+        if (!orgId) return;
+
+        const { policyConfigurationService } = await import(
+          "@/agents/subagents/policy-configuration"
+        );
+        const { default: AgentModel } = await import("./agent");
+
+        // Check auto-configure setting ONCE for all rows
         const builtInAgent = await AgentModel.getBuiltInAgent(
           BUILT_IN_AGENT_IDS.POLICY_CONFIG,
-          organizationId,
+          orgId,
         );
         const config = builtInAgent?.builtInAgentConfig;
         if (
-          config?.name === BUILT_IN_AGENT_IDS.POLICY_CONFIG &&
-          config.autoConfigureOnToolAssignment
+          config?.name !== BUILT_IN_AGENT_IDS.POLICY_CONFIG ||
+          !config.autoConfigureOnToolAssignment
         ) {
-          // Use the unified method with timeout and loading state management
+          return;
+        }
+
+        // Trigger per-tool (these are the actual policy configuration calls)
+        for (const row of rows) {
           await policyConfigurationService.configurePoliciesForToolWithTimeout({
-            toolId,
-            organizationId,
+            toolId: row.toolId,
+            organizationId: orgId,
           });
         }
       })
       .catch((error) => {
         logger.error(
           {
-            agentToolId: agentTool.id,
+            rowCount: rows.length,
+            error: error instanceof Error ? error.message : String(error),
+          },
+          "Failed to trigger bulk auto-configure for new agent-tools",
+        );
+      });
+  }
+
+  private static triggerAutoConfigureIfEnabled(
+    agentToolId: string,
+    agentId: string,
+    toolId: string,
+    knownOrganizationId?: string,
+  ) {
+    const resolveOrgId = knownOrganizationId
+      ? Promise.resolve(knownOrganizationId)
+      : db
+          .select({ organizationId: schema.agentsTable.organizationId })
+          .from(schema.agentsTable)
+          .where(eq(schema.agentsTable.id, agentId))
+          .limit(1)
+          .then((rows) => (rows.length > 0 ? rows[0].organizationId : null));
+
+    resolveOrgId
+      .then(async (orgId) => {
+        if (!orgId) return;
+
+        // Import at call site to avoid circular dependency
+        const { policyConfigurationService } = await import(
+          "@/agents/subagents/policy-configuration"
+        );
+        const { default: AgentModel } = await import("./agent");
+
+        // Read auto-configure setting from the built-in Policy Config agent
+        const builtInAgent = await AgentModel.getBuiltInAgent(
+          BUILT_IN_AGENT_IDS.POLICY_CONFIG,
+          orgId,
+        );
+        const config = builtInAgent?.builtInAgentConfig;
+        if (
+          config?.name === BUILT_IN_AGENT_IDS.POLICY_CONFIG &&
+          config.autoConfigureOnToolAssignment
+        ) {
+          await policyConfigurationService.configurePoliciesForToolWithTimeout({
+            toolId,
+            organizationId: orgId,
+          });
+        }
+      })
+      .catch((error) => {
+        logger.error(
+          {
+            agentToolId,
             agentId,
             error: error instanceof Error ? error.message : String(error),
           },
           "Failed to trigger auto-configure for new agent-tool",
         );
       });
-
-    return agentTool;
   }
 
   static async delete(agentId: string, toolId: string): Promise<boolean> {
@@ -399,9 +498,7 @@ class AgentToolModel {
       const options: Partial<
         Pick<
           InsertAgentTool,
-          | "responseModifierTemplate"
-          | "credentialSourceMcpServerId"
-          | "executionSourceMcpServerId"
+          "credentialSourceMcpServerId" | "executionSourceMcpServerId"
         >
       > = {};
 
@@ -466,9 +563,7 @@ class AgentToolModel {
     options?: Partial<
       Pick<
         InsertAgentTool,
-        | "responseModifierTemplate"
-        | "credentialSourceMcpServerId"
-        | "executionSourceMcpServerId"
+        "credentialSourceMcpServerId" | "executionSourceMcpServerId"
       >
     >,
   ): Promise<void> {
@@ -478,7 +573,6 @@ class AgentToolModel {
     const assignments: Array<{
       agentId: string;
       toolId: string;
-      responseModifierTemplate?: string | null;
       credentialSourceMcpServerId?: string | null;
       executionSourceMcpServerId?: string | null;
     }> = [];
@@ -552,7 +646,6 @@ class AgentToolModel {
       const options: Partial<
         Pick<
           InsertAgentTool,
-          | "responseModifierTemplate"
           | "credentialSourceMcpServerId"
           | "executionSourceMcpServerId"
           | "useDynamicTeamCredential"
@@ -612,12 +705,145 @@ class AgentToolModel {
     return { status: "unchanged" };
   }
 
+  /**
+   * Bulk create-or-update agent-tool assignments.
+   * Fetches all existing assignments in a single query, then batch-inserts new ones
+   * and individually updates those that need credential changes.
+   */
+  static async bulkCreateOrUpdateCredentials(
+    assignments: Array<{
+      agentId: string;
+      toolId: string;
+      credentialSourceMcpServerId?: string | null;
+      executionSourceMcpServerId?: string | null;
+      useDynamicTeamCredential?: boolean;
+    }>,
+    organizationId?: string,
+  ): Promise<
+    Array<{
+      agentId: string;
+      toolId: string;
+      status: "created" | "updated" | "unchanged";
+    }>
+  > {
+    if (assignments.length === 0) return [];
+
+    // Build OR conditions for all (agentId, toolId) pairs
+    const pairConditions = assignments.map((a) =>
+      and(
+        eq(schema.agentToolsTable.agentId, a.agentId),
+        eq(schema.agentToolsTable.toolId, a.toolId),
+      ),
+    );
+
+    // Batch fetch all existing assignments in one query
+    const existing = await db
+      .select()
+      .from(schema.agentToolsTable)
+      .where(or(...pairConditions));
+
+    const existingMap = new Map(
+      existing.map((e) => [`${e.agentId}:${e.toolId}`, e]),
+    );
+
+    const toCreate: Array<{
+      agentId: string;
+      toolId: string;
+      credentialSourceMcpServerId?: string | null;
+      executionSourceMcpServerId?: string | null;
+      useDynamicTeamCredential?: boolean;
+    }> = [];
+    const results: Array<{
+      agentId: string;
+      toolId: string;
+      status: "created" | "updated" | "unchanged";
+    }> = [];
+
+    for (const assignment of assignments) {
+      const key = `${assignment.agentId}:${assignment.toolId}`;
+      const existingRow = existingMap.get(key);
+
+      if (!existingRow) {
+        // New assignment - collect for batch insert
+        toCreate.push(assignment);
+        results.push({
+          agentId: assignment.agentId,
+          toolId: assignment.toolId,
+          status: "created",
+        });
+      } else {
+        // Check if credentials need updating
+        const needsUpdate =
+          existingRow.credentialSourceMcpServerId !==
+            (assignment.credentialSourceMcpServerId ?? null) ||
+          existingRow.executionSourceMcpServerId !==
+            (assignment.executionSourceMcpServerId ?? null) ||
+          (assignment.useDynamicTeamCredential !== undefined &&
+            existingRow.useDynamicTeamCredential !==
+              assignment.useDynamicTeamCredential);
+
+        if (needsUpdate) {
+          const updateData: Partial<
+            Pick<
+              UpdateAgentTool,
+              | "credentialSourceMcpServerId"
+              | "executionSourceMcpServerId"
+              | "useDynamicTeamCredential"
+            >
+          > = {
+            credentialSourceMcpServerId:
+              assignment.credentialSourceMcpServerId ?? null,
+            executionSourceMcpServerId:
+              assignment.executionSourceMcpServerId ?? null,
+          };
+          if (assignment.useDynamicTeamCredential !== undefined) {
+            updateData.useDynamicTeamCredential =
+              assignment.useDynamicTeamCredential;
+          }
+          await AgentToolModel.update(existingRow.id, updateData);
+          results.push({
+            agentId: assignment.agentId,
+            toolId: assignment.toolId,
+            status: "updated",
+          });
+        } else {
+          results.push({
+            agentId: assignment.agentId,
+            toolId: assignment.toolId,
+            status: "unchanged",
+          });
+        }
+      }
+    }
+
+    // Batch insert all new assignments in a single query
+    if (toCreate.length > 0) {
+      await AgentToolModel.bulkCreate(
+        toCreate.map((a) => ({
+          agentId: a.agentId,
+          toolId: a.toolId,
+          ...(a.credentialSourceMcpServerId
+            ? { credentialSourceMcpServerId: a.credentialSourceMcpServerId }
+            : {}),
+          ...(a.executionSourceMcpServerId
+            ? { executionSourceMcpServerId: a.executionSourceMcpServerId }
+            : {}),
+          ...(a.useDynamicTeamCredential !== undefined
+            ? { useDynamicTeamCredential: a.useDynamicTeamCredential }
+            : {}),
+        })),
+        organizationId,
+      );
+    }
+
+    return results;
+  }
+
   static async update(
     id: string,
     data: Partial<
       Pick<
         UpdateAgentTool,
-        | "responseModifierTemplate"
         | "credentialSourceMcpServerId"
         | "executionSourceMcpServerId"
         | "useDynamicTeamCredential"
@@ -678,7 +904,7 @@ class AgentToolModel {
     pagination?: PaginationQuery;
     sorting?: {
       sortBy?: AgentToolSortBy;
-      sortDirection?: AgentToolSortDirection;
+      sortDirection?: SortDirection;
     };
     filters?: AgentToolFilters;
     userId?: string;

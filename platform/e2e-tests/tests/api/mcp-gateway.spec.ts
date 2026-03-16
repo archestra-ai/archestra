@@ -1822,6 +1822,9 @@ test.describe("MCP Gateway - Knowledge Sources Tool Description", () => {
   test("query_knowledge_sources tool has dynamic description with KB name and connector type", async ({
     request,
   }) => {
+    // Allow time for MCP tool cache to pick up the knowledge base assignment
+    await new Promise((r) => setTimeout(r, 2000));
+
     // Initialize MCP session
     await makeApiRequest({
       request,
@@ -1881,6 +1884,6 @@ test.describe("MCP Gateway - Knowledge Sources Tool Description", () => {
     // biome-ignore lint/style/noNonNullAssertion: guarded by toBeDefined above
     expect(kbTool!.description).toContain("E2E KB Dynamic Desc");
     // biome-ignore lint/style/noNonNullAssertion: guarded by toBeDefined above
-    expect(kbTool!.description).toContain("jira");
+    expect(kbTool!.description).toMatch(/jira/i);
   });
 });

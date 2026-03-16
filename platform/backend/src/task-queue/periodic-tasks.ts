@@ -1,4 +1,4 @@
-import type { TaskType } from "@/types/task";
+import type { TaskType } from "@/types";
 
 type PeriodicTaskDefinition = {
   taskType: TaskType;

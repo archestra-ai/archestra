@@ -5,6 +5,7 @@ import {
   TOOL_ARTIFACT_WRITE_FULL_NAME,
   TOOL_TODO_WRITE_FULL_NAME,
 } from "@shared";
+import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
 import AgentModel from "./agent";
 import MemberModel from "./member";
@@ -937,6 +938,85 @@ describe("AgentModel", () => {
         true,
       );
       expect(resultByTeam.data).toHaveLength(4);
+    });
+
+    test("sortBy knowledgeSourcesCount orders by combined knowledge base and connector count", async ({
+      makeAdmin,
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const admin = await makeAdmin();
+      const org = await makeOrganization();
+
+      // Create 3 agents with varying knowledge sources
+      await AgentModel.create({
+        name: "No Sources",
+        teams: [],
+        scope: "org",
+      });
+      const agentSome = await AgentModel.create({
+        name: "Some Sources",
+        teams: [],
+        scope: "org",
+      });
+      const agentMany = await AgentModel.create({
+        name: "Many Sources",
+        teams: [],
+        scope: "org",
+      });
+
+      // agentSome: 1 knowledge base + 1 connector = 2 sources
+      const kb1 = await makeKnowledgeBase(org.id);
+      const connector1 = await makeKnowledgeBaseConnector(kb1.id, org.id);
+      await db.insert(schema.agentKnowledgeBasesTable).values({
+        agentId: agentSome.id,
+        knowledgeBaseId: kb1.id,
+      });
+      await db.insert(schema.agentConnectorAssignmentsTable).values({
+        agentId: agentSome.id,
+        connectorId: connector1.id,
+      });
+
+      // agentMany: 2 knowledge bases + 2 connectors = 4 sources
+      const kb2 = await makeKnowledgeBase(org.id);
+      const kb3 = await makeKnowledgeBase(org.id);
+      const connector2 = await makeKnowledgeBaseConnector(kb2.id, org.id);
+      const connector3 = await makeKnowledgeBaseConnector(kb3.id, org.id);
+      await db.insert(schema.agentKnowledgeBasesTable).values([
+        { agentId: agentMany.id, knowledgeBaseId: kb2.id },
+        { agentId: agentMany.id, knowledgeBaseId: kb3.id },
+      ]);
+      await db.insert(schema.agentConnectorAssignmentsTable).values([
+        { agentId: agentMany.id, connectorId: connector2.id },
+        { agentId: agentMany.id, connectorId: connector3.id },
+      ]);
+
+      // Sort descending - Many Sources (4) > Some Sources (2) > No Sources (0)
+      const resultDesc = await AgentModel.findAllPaginated(
+        { limit: 10, offset: 0 },
+        { sortBy: "knowledgeSourcesCount", sortDirection: "desc" },
+        {},
+        admin.id,
+        true,
+      );
+      expect(resultDesc.data).toHaveLength(3);
+      expect(resultDesc.data[0].name).toBe("Many Sources");
+      expect(resultDesc.data[1].name).toBe("Some Sources");
+      expect(resultDesc.data[2].name).toBe("No Sources");
+
+      // Sort ascending - No Sources (0) > Some Sources (2) > Many Sources (4)
+      const resultAsc = await AgentModel.findAllPaginated(
+        { limit: 10, offset: 0 },
+        { sortBy: "knowledgeSourcesCount", sortDirection: "asc" },
+        {},
+        admin.id,
+        true,
+      );
+      expect(resultAsc.data).toHaveLength(3);
+      expect(resultAsc.data[0].name).toBe("No Sources");
+      expect(resultAsc.data[1].name).toBe("Some Sources");
+      expect(resultAsc.data[2].name).toBe("Many Sources");
     });
 
     test("pagination offset works correctly with many tools", async ({
@@ -2191,6 +2271,125 @@ describe("AgentModel", () => {
       expect(await MemberModel.isAgentDefault(originalDefault)).toBe(false);
       // New agent is now default
       expect(await MemberModel.isAgentDefault(otherAgent.id)).toBe(true);
+    });
+  });
+
+  describe("findByIdsForPermissionCheck", () => {
+    test("returns agentType, scope, authorId, and teamIds for each agent", async ({
+      makeAgent,
+      makeOrganization,
+      makeUser,
+      makeTeam,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      const team = await makeTeam(org.id, user.id, { name: "Eng" });
+
+      const agent = await makeAgent({
+        name: "Perm Check Agent",
+        agentType: "profile",
+        scope: "org",
+        organizationId: org.id,
+        authorId: user.id,
+        teams: [team.id],
+      });
+
+      const result = await AgentModel.findByIdsForPermissionCheck([agent.id]);
+
+      expect(result.size).toBe(1);
+      const entry = result.get(agent.id);
+      expect(entry).toBeDefined();
+      expect(entry?.agentType).toBe("profile");
+      expect(entry?.scope).toBe("org");
+      expect(entry?.authorId).toBe(user.id);
+      expect(entry?.teamIds).toEqual([team.id]);
+    });
+
+    test("returns multiple agents in a single batch", async ({ makeAgent }) => {
+      const agent1 = await makeAgent({ name: "Agent A", agentType: "agent" });
+      const agent2 = await makeAgent({
+        name: "Agent B",
+        agentType: "llm_proxy",
+      });
+      const agent3 = await makeAgent({
+        name: "Agent C",
+        agentType: "mcp_gateway",
+      });
+
+      const result = await AgentModel.findByIdsForPermissionCheck([
+        agent1.id,
+        agent2.id,
+        agent3.id,
+      ]);
+
+      expect(result.size).toBe(3);
+      expect(result.get(agent1.id)?.agentType).toBe("agent");
+      expect(result.get(agent2.id)?.agentType).toBe("llm_proxy");
+      expect(result.get(agent3.id)?.agentType).toBe("mcp_gateway");
+    });
+
+    test("returns empty map for empty input", async () => {
+      const result = await AgentModel.findByIdsForPermissionCheck([]);
+      expect(result.size).toBe(0);
+    });
+
+    test("omits non-existent agent IDs from result", async ({ makeAgent }) => {
+      const agent = await makeAgent({ name: "Exists" });
+
+      const result = await AgentModel.findByIdsForPermissionCheck([
+        agent.id,
+        "00000000-0000-0000-0000-000000000000",
+      ]);
+
+      expect(result.size).toBe(1);
+      expect(result.has(agent.id)).toBe(true);
+      expect(result.has("00000000-0000-0000-0000-000000000000")).toBe(false);
+    });
+
+    test("returns multiple team IDs when agent has multiple teams", async ({
+      makeAgent,
+      makeOrganization,
+      makeUser,
+      makeTeam,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      const team1 = await makeTeam(org.id, user.id, { name: "Frontend" });
+      const team2 = await makeTeam(org.id, user.id, { name: "Backend" });
+
+      const agent = await makeAgent({
+        name: "Multi-Team Agent",
+        organizationId: org.id,
+        teams: [team1.id, team2.id],
+      });
+
+      const result = await AgentModel.findByIdsForPermissionCheck([agent.id]);
+
+      const entry = result.get(agent.id);
+      expect(entry).toBeDefined();
+      expect(entry?.teamIds).toHaveLength(2);
+      expect(entry?.teamIds).toContain(team1.id);
+      expect(entry?.teamIds).toContain(team2.id);
+    });
+
+    test("returns empty teamIds for agent with no teams", async ({
+      makeAgent,
+    }) => {
+      const agent = await makeAgent({ name: "No Teams Agent" });
+
+      const result = await AgentModel.findByIdsForPermissionCheck([agent.id]);
+
+      expect(result.get(agent.id)?.teamIds).toEqual([]);
+    });
+
+    test("returns null authorId for agent without an author", async ({
+      makeAgent,
+    }) => {
+      const agent = await makeAgent({ name: "No Author", scope: "org" });
+
+      const result = await AgentModel.findByIdsForPermissionCheck([agent.id]);
+
+      expect(result.get(agent.id)?.authorId).toBeNull();
     });
   });
 });

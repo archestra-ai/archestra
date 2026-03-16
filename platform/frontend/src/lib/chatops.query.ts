@@ -1,4 +1,4 @@
-import { archestraApiSdk } from "@shared";
+import { archestraApiSdk, type archestraApiTypes } from "@shared";
 import {
   keepPreviousData,
   useMutation,
@@ -22,16 +22,9 @@ export function useChatOpsStatus() {
   });
 }
 
-export function useChatOpsBindings(params: {
-  provider?: "ms-teams" | "slack";
-  limit?: number;
-  offset?: number;
-  sortBy?: "channelName" | "createdAt";
-  sortDirection?: "asc" | "desc";
-  search?: string;
-  workspaceId?: string;
-  status?: "configured" | "unassigned";
-}) {
+export function useChatOpsBindings(
+  params: NonNullable<archestraApiTypes.ListChatOpsBindingsData["query"]>,
+) {
   return useQuery({
     queryKey: ["chatops", "bindings", params],
     placeholderData: keepPreviousData,

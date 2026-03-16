@@ -15,11 +15,11 @@ import {
   ATTR_GENAI_USAGE_OUTPUT_TOKENS,
 } from "@/observability/tracing/attributes";
 import { startActiveLlmSpan } from "@/observability/tracing/llm";
-import type { GenAiOperationName } from "@/types";
 import type {
+  GenAiOperationName,
   InteractionRequest,
   InteractionResponse,
-} from "@/types/interaction";
+} from "@/types";
 
 /**
  * Maps a SupportedProvider to its default chat completion interaction type.

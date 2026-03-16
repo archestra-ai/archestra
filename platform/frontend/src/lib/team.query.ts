@@ -3,16 +3,44 @@ import { useQueries, useQuery } from "@tanstack/react-query";
 
 const { getTeams, getTeamVaultFolder } = archestraApiSdk;
 
-type Teams = archestraApiTypes.GetTeamsResponses["200"];
-export type Team = Teams[number];
+type TeamsResponse = archestraApiTypes.GetTeamsResponses["200"];
+export type Team = TeamsResponse["data"][number];
+type Teams = Team[];
 export type TeamWithVaultPath = Team & { vaultPath?: string | null };
+type TeamsQuery = NonNullable<archestraApiTypes.GetTeamsData["query"]>;
+type TeamsPaginatedParams = Pick<TeamsQuery, "limit" | "offset" | "name">;
 
 export function useTeams(params?: { initialData?: Teams; enabled?: boolean }) {
   return useQuery({
     queryKey: ["teams"],
-    queryFn: async () => (await getTeams()).data ?? [],
-    initialData: params?.initialData,
+    queryFn: async () => {
+      const { data } = await getTeams({ query: { limit: 100, offset: 0 } });
+      return data?.data ?? [];
+    },
+    initialData: params?.initialData as Team[] | undefined,
     enabled: params?.enabled,
+  });
+}
+
+export function useTeamsPaginated(params: TeamsPaginatedParams) {
+  return useQuery({
+    queryKey: ["teams", "paginated", params],
+    queryFn: async () => {
+      const { data } = await getTeams({ query: params });
+      return (
+        data ?? {
+          data: [] as Team[],
+          pagination: {
+            currentPage: 1,
+            limit: params.limit,
+            total: 0,
+            totalPages: 0,
+            hasNext: false,
+            hasPrev: false,
+          },
+        }
+      );
+    },
   });
 }
 

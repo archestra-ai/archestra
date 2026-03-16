@@ -1,16 +1,13 @@
 "use client";
 
-import {
-  DocsPage,
-  getDocsUrl,
-  type StatisticsTimeFrame,
-  StatisticsTimeFrameSchema,
-} from "@shared";
+import { type StatisticsTimeFrame, StatisticsTimeFrameSchema } from "@shared";
 import { format } from "date-fns";
-import { Calendar as CalendarIcon, Clock, Info } from "lucide-react";
+import { Calendar as CalendarIcon, Clock } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts";
+import { useSetCostsAction } from "@/app/llm/(costs)/layout";
+import { FormDialog } from "@/components/form-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -23,13 +20,9 @@ import {
 } from "@/components/ui/chart";
 import { DateTimePicker } from "@/components/ui/date-time-picker";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
+  DialogBody,
   DialogForm,
-  DialogHeader,
-  DialogTitle,
+  DialogStickyFooter,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import {
@@ -105,6 +98,7 @@ const TIMEFRAME_STORAGE_KEY = "cost-statistics-timeframe";
 
 export default function StatisticsPage() {
   const router = useRouter();
+  const setActionButton = useSetCostsAction();
   const searchParams = useSearchParams();
 
   const [timeframe, setTimeframe] = useState<StatisticsTimeFrame>("1h");
@@ -452,131 +446,112 @@ export default function StatisticsPage() {
     [modelStatistics],
   );
 
+  useEffect(() => {
+    setActionButton(
+      <div className="flex gap-2">
+        <Select
+          value={timeframe.startsWith("custom:") ? "custom" : timeframe}
+          onValueChange={(value) => {
+            if (value === "custom") {
+              setIsCustomDialogOpen(true);
+            } else {
+              handleTimeframeChange(value as StatisticsTimeFrame);
+            }
+          }}
+        >
+          <SelectTrigger className="w-[320px]">
+            <CalendarIcon className="mr-2 h-4 w-4" />
+            <SelectValue>
+              {timeframe.startsWith("custom:")
+                ? `Custom: ${getTimeframeDisplay(timeframe)}`
+                : timeframe === "all"
+                  ? "All time"
+                  : `Last ${getTimeframeDisplay(timeframe)}`}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="5m">5 Minutes</SelectItem>
+            <SelectItem value="15m">15 Minutes</SelectItem>
+            <SelectItem value="30m">30 Minutes</SelectItem>
+            <SelectItem value="1h">Last hour</SelectItem>
+            <SelectItem value="24h">Last 24 hours</SelectItem>
+            <SelectItem value="7d">Last 7 days</SelectItem>
+            <SelectItem value="30d">Last 30 days</SelectItem>
+            <SelectItem value="90d">Last 90 days</SelectItem>
+            <SelectItem value="12m">Last 12 months</SelectItem>
+            <SelectItem value="all">All time</SelectItem>
+            <SelectItem value="custom">
+              <Clock className="mr-2 h-4 w-4 inline" />
+              Custom timeframe...
+            </SelectItem>
+          </SelectContent>
+        </Select>
+
+        {timeframe.startsWith("custom:") && (
+          <Button
+            variant="outline"
+            onClick={() => setIsCustomDialogOpen(true)}
+            className="h-9 flex items-center gap-1 px-3"
+          >
+            <Clock className="h-4 w-4" />
+            Edit
+          </Button>
+        )}
+      </div>,
+    );
+
+    return () => setActionButton(null);
+  }, [getTimeframeDisplay, handleTimeframeChange, setActionButton, timeframe]);
+
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <div className="flex flex-col gap-1">
-          <p className="text-sm text-muted-foreground">
-            View and edit model token prices{" "}
-            <a
-              href="/llm/providers/models"
-              className="underline hover:text-foreground transition-colors"
-            >
-              on Provider Settings
-            </a>
-          </p>
-          <a
-            href={getDocsUrl(DocsPage.PlatformObservability)}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <Info className="h-3 w-3" />
-            <span>
-              Check Prometheus metrics capabilities to get cost-related insights
-              at scale
-            </span>
-          </a>
-        </div>
-        <div className="flex gap-2">
-          <Select
-            value={timeframe.startsWith("custom:") ? "custom" : timeframe}
-            onValueChange={(value) => {
-              if (value === "custom") {
-                setIsCustomDialogOpen(true);
-              } else {
-                handleTimeframeChange(value as StatisticsTimeFrame);
-              }
-            }}
-          >
-            <SelectTrigger className="w-[320px]">
-              <CalendarIcon className="mr-2 h-4 w-4" />
-              <SelectValue>
-                {timeframe.startsWith("custom:")
-                  ? `Custom: ${getTimeframeDisplay(timeframe)}`
-                  : timeframe === "all"
-                    ? "All time"
-                    : `Last ${getTimeframeDisplay(timeframe)}`}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="5m">5 Minutes</SelectItem>
-              <SelectItem value="15m">15 Minutes</SelectItem>
-              <SelectItem value="30m">30 Minutes</SelectItem>
-              <SelectItem value="1h">Last hour</SelectItem>
-              <SelectItem value="24h">Last 24 hours</SelectItem>
-              <SelectItem value="7d">Last 7 days</SelectItem>
-              <SelectItem value="30d">Last 30 days</SelectItem>
-              <SelectItem value="90d">Last 90 days</SelectItem>
-              <SelectItem value="12m">Last 12 months</SelectItem>
-              <SelectItem value="all">All time</SelectItem>
-              <SelectItem value="custom">
-                <Clock className="mr-2 h-4 w-4 inline" />
-                Custom timeframe...
-              </SelectItem>
-            </SelectContent>
-          </Select>
-
-          {timeframe.startsWith("custom:") && (
+      <FormDialog
+        open={isCustomDialogOpen}
+        onOpenChange={setIsCustomDialogOpen}
+        title="Custom timeframe"
+        description="Set a custom time period for the statistics view."
+        size="small"
+      >
+        <DialogForm
+          className="flex min-h-0 flex-1 flex-col"
+          onSubmit={handleCustomTimeframe}
+        >
+          <DialogBody>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">From</Label>
+                <DateTimePicker
+                  value={customFrom}
+                  onChange={(date) => setCustomFrom(date)}
+                  placeholder="Start date & time"
+                  className="w-full"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">To</Label>
+                <DateTimePicker
+                  value={customTo}
+                  onChange={(date) => setCustomTo(date)}
+                  placeholder="End date & time"
+                  className="w-full"
+                />
+              </div>
+            </div>
+          </DialogBody>
+          <DialogStickyFooter className="mt-0">
             <Button
+              type="button"
               variant="outline"
-              onClick={() => setIsCustomDialogOpen(true)}
-              className="h-9 flex items-center gap-1 px-3"
+              onClick={() => setIsCustomDialogOpen(false)}
             >
-              <Clock className="h-4 w-4" />
-              Edit
+              Cancel
             </Button>
-          )}
-
-          <Dialog
-            open={isCustomDialogOpen}
-            onOpenChange={setIsCustomDialogOpen}
-          >
-            <DialogContent className="sm:max-w-md">
-              <DialogHeader>
-                <DialogTitle>Custom Timeframe</DialogTitle>
-                <DialogDescription>
-                  Set a custom time period for the statistics view.
-                </DialogDescription>
-              </DialogHeader>
-              <DialogForm onSubmit={handleCustomTimeframe}>
-                <div className="grid grid-cols-2 gap-4 py-4">
-                  <div className="space-y-2">
-                    <Label className="text-sm font-medium">From</Label>
-                    <DateTimePicker
-                      value={customFrom}
-                      onChange={(date) => setCustomFrom(date)}
-                      placeholder="Start date & time"
-                      className="w-full"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-sm font-medium">To</Label>
-                    <DateTimePicker
-                      value={customTo}
-                      onChange={(date) => setCustomTo(date)}
-                      placeholder="End date & time"
-                      className="w-full"
-                    />
-                  </div>
-                </div>
-                <DialogFooter className="gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => setIsCustomDialogOpen(false)}
-                  >
-                    Cancel
-                  </Button>
-                  <Button type="submit" disabled={!customFrom || !customTo}>
-                    Apply
-                  </Button>
-                </DialogFooter>
-              </DialogForm>
-            </DialogContent>
-          </Dialog>
-        </div>
-      </div>
+            <Button type="submit" disabled={!customFrom || !customTo}>
+              Apply
+            </Button>
+          </DialogStickyFooter>
+        </DialogForm>
+      </FormDialog>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card>

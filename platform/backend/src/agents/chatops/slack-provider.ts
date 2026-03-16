@@ -5,13 +5,9 @@ import { WebClient } from "@slack/web-api";
 import { slackifyMarkdown } from "slackify-markdown";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
 import logger from "@/logging";
-import {
-  AgentModel,
-  ChatOpsChannelBindingModel,
-  type SlackConfig,
-  UserModel,
-} from "@/models";
+import { AgentModel, ChatOpsChannelBindingModel, UserModel } from "@/models";
 import type {
+  ChatOpsConnectionMode,
   ChatOpsEventHandler,
   ChatOpsProvider,
   ChatOpsProviderType,
@@ -20,8 +16,9 @@ import type {
   ChatThreadMessageFile,
   DiscoveredChannel,
   IncomingChatMessage,
+  SlackDbConfig,
   ThreadHistoryParams,
-} from "@/types/chatops";
+} from "@/types";
 import {
   autoProvisionUser,
   buildWelcomeMessage,
@@ -50,13 +47,13 @@ class SlackProvider implements ChatOpsProvider {
   private botUserId: string | null = null;
   private teamId: string | null = null;
   private teamName: string | null = null;
-  private config: SlackConfig;
+  private config: SlackDbConfig;
   private socketModeClient: SocketModeClient | null = null;
   private eventHandler: ChatOpsEventHandler | null = null;
   private socketDedup = new EventDedupMap();
   private missingScopes: string[] = [];
 
-  constructor(slackConfig: SlackConfig) {
+  constructor(slackConfig: SlackDbConfig) {
     this.config = slackConfig;
   }
 
@@ -72,7 +69,7 @@ class SlackProvider implements ChatOpsProvider {
     return this.config.connectionMode === "socket";
   }
 
-  getConnectionMode(): "webhook" | "socket" {
+  getConnectionMode(): ChatOpsConnectionMode {
     return this.config.connectionMode === "webhook"
       ? "webhook"
       : SLACK_DEFAULT_CONNECTION_MODE;

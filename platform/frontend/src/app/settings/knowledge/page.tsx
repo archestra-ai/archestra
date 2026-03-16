@@ -25,6 +25,7 @@ import {
   type ChatApiKeyFormValues,
   PLACEHOLDER_KEY,
 } from "@/components/chat-api-key-form";
+import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { WithPermissions } from "@/components/roles/with-permissions";
 import {
@@ -434,24 +435,23 @@ function DropEmbeddingConfigDialog({
 }) {
   const dropMutation = useDropEmbeddingConfig();
 
-  const handleDrop = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleDrop = async () => {
     await dropMutation.mutateAsync();
     onOpenChange(false);
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>Drop Embedding Configuration</DialogTitle>
-          <DialogDescription>
+    <DeleteConfirmDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Drop Embedding Configuration"
+      description={
+        <div className="space-y-3">
+          <p>
             This will delete all embedded documents and reset connector
             checkpoints. Connectors and knowledge bases are preserved — the next
             sync will re-ingest everything with the new embedding model.
-          </DialogDescription>
-        </DialogHeader>
-        <DialogForm onSubmit={handleDrop}>
+          </p>
           <Alert variant="destructive" className="py-2">
             <AlertTriangle className="h-4 w-4" />
             <AlertDescription className="text-xs">
@@ -459,34 +459,20 @@ function DropEmbeddingConfigDialog({
               knowledge bases will not be affected.
             </AlertDescription>
           </Alert>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              variant="destructive"
-              disabled={dropMutation.isPending}
-            >
-              {dropMutation.isPending && (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              )}
-              Drop Embedding Config
-            </Button>
-          </DialogFooter>
-        </DialogForm>
-      </DialogContent>
-    </Dialog>
+        </div>
+      }
+      isPending={dropMutation.isPending}
+      onConfirm={handleDrop}
+      confirmLabel="Drop Embedding Config"
+      pendingLabel="Dropping..."
+    />
   );
 }
 
 function KnowledgeSettingsContent() {
   const { data: organization, isPending } = useOrganization();
-  const { data: apiKeys } = useAvailableChatApiKeys();
+  const { data: apiKeys, isPending: areApiKeysPending } =
+    useAvailableChatApiKeys();
   const updateKnowledgeSettings = useUpdateKnowledgeSettings(
     "Knowledge settings updated",
     "Failed to update knowledge settings",
@@ -549,17 +535,18 @@ function KnowledgeSettingsContent() {
     [apiKeys],
   );
   const hasAnyKeys = useMemo(() => (apiKeys ?? []).length > 0, [apiKeys]);
+  const isInitialLoading = isPending || areApiKeysPending;
 
   const embeddingSetupStep = useSetupStep({
     selectedKeyId: embeddingChatApiKeyId,
     selectedModel: embeddingModel,
-    hasSelectableKeys: hasEmbeddingKeys,
+    hasSelectableKeys: isInitialLoading ? true : hasEmbeddingKeys,
   });
 
   const rerankerSetupStep = useSetupStep({
     selectedKeyId: rerankerChatApiKeyId,
     selectedModel: rerankerModel,
-    hasSelectableKeys: hasAnyKeys,
+    hasSelectableKeys: isInitialLoading ? true : hasAnyKeys,
   });
 
   const isFullyConfigured = !embeddingSetupStep && !rerankerSetupStep;
@@ -592,9 +579,12 @@ function KnowledgeSettingsContent() {
   };
 
   return (
-    <LoadingWrapper isPending={isPending} loadingFallback={<LoadingSpinner />}>
+    <LoadingWrapper
+      isPending={isInitialLoading}
+      loadingFallback={<LoadingSpinner />}
+    >
       <div className="space-y-8">
-        {!isFullyConfigured && (
+        {!isInitialLoading && !isFullyConfigured && (
           <Alert variant="warning">
             <AlertTriangle className="h-4 w-4" />
             <AlertDescription>

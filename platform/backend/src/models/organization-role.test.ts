@@ -51,6 +51,11 @@ describe("OrganizationRoleModel", () => {
         OrganizationRoleModel.getPredefinedRolePermissions(MEMBER_ROLE_NAME);
       expect(permissions).toEqual(predefinedPermissionsMap[MEMBER_ROLE_NAME]);
     });
+
+    test("should include apiKey:create for editor role", () => {
+      const permissions = predefinedPermissionsMap[EDITOR_ROLE_NAME];
+      expect(permissions.apiKey).toContain("create");
+    });
   });
 
   describe("getById", () => {
@@ -329,6 +334,131 @@ describe("OrganizationRoleModel", () => {
         canDelete: false,
         reason: "Cannot delete role that is currently assigned to members",
       });
+    });
+  });
+
+  describe("getAllPaginated", () => {
+    test("returns predefined roles for non-admin users", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+
+      const result = await OrganizationRoleModel.getAllPaginated({
+        organizationId: org.id,
+        limit: 10,
+        offset: 0,
+        isAdmin: false,
+      });
+
+      expect(result.data.length).toBeGreaterThan(0);
+      expect(result.data.every((r) => r.predefined)).toBe(true);
+    });
+
+    test("returns predefined + custom roles for admin users", async ({
+      makeOrganization,
+      makeCustomRole,
+    }) => {
+      const org = await makeOrganization();
+      await makeCustomRole(org.id, { name: "Custom Role" });
+
+      const result = await OrganizationRoleModel.getAllPaginated({
+        organizationId: org.id,
+        limit: 20,
+        offset: 0,
+        isAdmin: true,
+      });
+
+      const predefined = result.data.filter((r) => r.predefined);
+      const custom = result.data.filter((r) => !r.predefined);
+
+      expect(predefined.length).toBeGreaterThan(0);
+      expect(custom).toHaveLength(1);
+      expect(custom[0].name).toBe("Custom Role");
+    });
+
+    test("predefined roles come first", async ({
+      makeOrganization,
+      makeCustomRole,
+    }) => {
+      const org = await makeOrganization();
+      await makeCustomRole(org.id, { name: "AAA Custom" });
+
+      const result = await OrganizationRoleModel.getAllPaginated({
+        organizationId: org.id,
+        limit: 20,
+        offset: 0,
+        isAdmin: true,
+      });
+
+      // Find the first non-predefined role index
+      const firstCustomIdx = result.data.findIndex((r) => !r.predefined);
+      const lastPredefinedIdx = result.data.findLastIndex((r) => r.predefined);
+
+      // All predefined should come before custom
+      if (firstCustomIdx >= 0 && lastPredefinedIdx >= 0) {
+        expect(lastPredefinedIdx).toBeLessThan(firstCustomIdx);
+      }
+    });
+
+    test("filters by name (case-insensitive)", async ({
+      makeOrganization,
+      makeCustomRole,
+    }) => {
+      const org = await makeOrganization();
+      await makeCustomRole(org.id, { name: "Engineering Lead" });
+      await makeCustomRole(org.id, { name: "Marketing Viewer" });
+
+      const result = await OrganizationRoleModel.getAllPaginated({
+        organizationId: org.id,
+        limit: 20,
+        offset: 0,
+        name: "engineer",
+        isAdmin: true,
+      });
+
+      // Should match "Engineering Lead" (and possibly predefined roles with "engineer" in the name)
+      const customMatches = result.data.filter((r) => !r.predefined);
+      expect(customMatches).toHaveLength(1);
+      expect(customMatches[0].name).toBe("Engineering Lead");
+    });
+
+    test("supports pagination", async ({
+      makeOrganization,
+      makeCustomRole,
+    }) => {
+      const org = await makeOrganization();
+      for (let i = 0; i < 5; i++) {
+        await makeCustomRole(org.id, { name: `Role ${i}` });
+      }
+
+      const page1 = await OrganizationRoleModel.getAllPaginated({
+        organizationId: org.id,
+        limit: 2,
+        offset: 0,
+        isAdmin: true,
+      });
+
+      expect(page1.data).toHaveLength(2);
+      // Total should include predefined + 5 custom
+      expect(page1.total).toBeGreaterThanOrEqual(5);
+    });
+
+    test("does not include custom roles for non-admin", async ({
+      makeOrganization,
+      makeCustomRole,
+    }) => {
+      const org = await makeOrganization();
+      await makeCustomRole(org.id, { name: "Secret Role" });
+
+      const result = await OrganizationRoleModel.getAllPaginated({
+        organizationId: org.id,
+        limit: 20,
+        offset: 0,
+        isAdmin: false,
+      });
+
+      expect(result.data.every((r) => r.predefined)).toBe(true);
+      expect(result.data.some((r) => r.name === "Secret Role")).toBe(false);
     });
   });
 });

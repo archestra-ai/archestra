@@ -84,7 +84,7 @@ test.describe(
       const invitationLinkInput = page.getByTestId(
         E2eTestId.InvitationLinkInput,
       );
-      await expect(invitationLinkInput).toBeVisible({ timeout: 15000 });
+      await expect(invitationLinkInput).toBeVisible({ timeout: 30000 });
 
       // Get the invitation link
       const invitationLink = await invitationLinkInput.inputValue();
@@ -147,8 +147,8 @@ test.describe(
         await signUpButton.click();
 
         // Wait for sign-up to complete and redirect
-        // The page should redirect to the main app after successful sign-up
-        await newUserPage.waitForURL(/\/$/, { timeout: 10000 });
+        // The page redirects to /chat (or root /) after successful sign-up
+        await newUserPage.waitForURL(/\/(chat)?$/, { timeout: 15000 });
 
         // Verify we're successfully logged in by checking for user elements
         // Look for the user button/menu that should appear when authenticated

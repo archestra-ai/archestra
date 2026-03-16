@@ -52,8 +52,9 @@ const COMPRESSION_MODE_LABELS: Record<CompressionMode, string> = {
 };
 
 export default function LlmSettingsPage() {
-  const { data: organization } = useOrganization();
-  const { data: teams } = useTeams();
+  const { data: organization, isPending: isOrganizationPending } =
+    useOrganization();
+  const { data: teams, isPending: areTeamsPending } = useTeams();
   const queryClient = useQueryClient();
 
   const [compressionMode, setCompressionMode] =
@@ -115,7 +116,9 @@ export default function LlmSettingsPage() {
 
   const hasCleanupChanges = cleanupInterval !== serverCleanupInterval;
 
-  const hasChanges = hasCompressionChanges || hasCleanupChanges;
+  const isInitialLoading = isOrganizationPending || areTeamsPending;
+  const hasChanges =
+    !isInitialLoading && (hasCompressionChanges || hasCleanupChanges);
 
   const handleSave = async () => {
     const mutations: Promise<unknown>[] = [];

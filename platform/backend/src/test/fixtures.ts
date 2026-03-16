@@ -2,7 +2,11 @@
  * biome-ignore-all lint/correctness/noEmptyPattern: oddly enough in extend below this is required
  * see https://vitest.dev/guide/test-context.html#extend-test-context
  */
-import { ARCHESTRA_MCP_CATALOG_ID, MEMBER_ROLE_NAME } from "@shared";
+import {
+  ARCHESTRA_MCP_CATALOG_ID,
+  DEFAULT_APP_NAME,
+  MEMBER_ROLE_NAME,
+} from "@shared";
 import { beforeEach as baseBeforeEach, test as baseTest } from "vitest";
 import db, { schema } from "@/database";
 import {
@@ -228,7 +232,6 @@ async function makeInternalAgent(
   return await makeAgent({
     agentType: "agent",
     systemPrompt: "You are a test agent",
-    userPrompt: "{{message}}",
     ...overrides,
   });
 }
@@ -936,9 +939,8 @@ async function seedAndAssignArchestraTools(agentId: string): Promise<void> {
   if (!existing) {
     await db.insert(schema.internalMcpCatalogTable).values({
       id: ARCHESTRA_MCP_CATALOG_ID,
-      name: "Archestra",
-      description:
-        "Built-in Archestra tools for managing profiles, limits, policies, and MCP servers.",
+      name: DEFAULT_APP_NAME,
+      description: `Built-in ${DEFAULT_APP_NAME} tools for managing profiles, limits, policies, and MCP servers.`,
       serverType: "builtin",
     });
   }

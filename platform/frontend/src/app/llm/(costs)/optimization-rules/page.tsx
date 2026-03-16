@@ -1,29 +1,33 @@
 "use client";
 
-import { Edit, Plus, Save, Trash2, X } from "lucide-react";
-import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Rule } from "@/app/llm/(costs)/optimization-rules/_parts/rule";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
+import { providerDisplayNames } from "@shared";
+import type { ColumnDef } from "@tanstack/react-table";
+import { Edit, Plus, Power, Trash2 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSetCostsAction } from "@/app/llm/(costs)/layout";
+import { OptimizationRuleForm } from "@/app/llm/(costs)/optimization-rules/_parts/rule";
+import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { FormDialog } from "@/components/form-dialog";
+import { LlmModelSearchableSelect } from "@/components/llm-model-select";
+import { LlmProviderOptionLabel } from "@/components/llm-provider-options";
+import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
+import { TableRowActions } from "@/components/table-row-actions";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { DataTable } from "@/components/ui/data-table";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+  DialogBody,
+  DialogForm,
+  DialogStickyFooter,
+} from "@/components/ui/dialog";
 import { PermissionButton } from "@/components/ui/permission-button";
-import { Separator } from "@/components/ui/separator";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useModelsWithApiKeys } from "@/lib/chat-models.query";
 import type { OptimizationRule } from "@/lib/optimization-rule.query";
 import {
@@ -34,440 +38,396 @@ import {
 } from "@/lib/optimization-rule.query";
 import { useOrganization } from "@/lib/organization.query";
 import { useTeams } from "@/lib/team.query";
-import { cn } from "@/lib/utils";
+import { useDataTableQueryParams } from "@/lib/use-data-table-query-params";
 
-// Form data type for inline editing
-type RuleFormData = Omit<OptimizationRule, "id" | "createdAt" | "updatedAt"> & {
-  id?: string;
-};
+const DEFAULT_RULE = {
+  entityType: "organization",
+  entityId: "",
+  conditions: [{ maxLength: 1000 }],
+  provider: "openai",
+  targetModel: "",
+  enabled: true,
+} satisfies Omit<OptimizationRule, "id" | "createdAt" | "updatedAt">;
 
-function LoadingSkeleton({ count, prefix }: { count: number; prefix: string }) {
-  const skeletons = Array.from(
-    { length: count },
-    (_, i) => `${prefix}-skeleton-${i}`,
-  );
+type RuleDraft = Omit<OptimizationRule, "id" | "createdAt" | "updatedAt">;
 
-  return (
-    <div className="space-y-3">
-      {skeletons.map((key) => (
-        <div key={key} className="h-16 bg-muted animate-pulse rounded" />
-      ))}
-    </div>
-  );
-}
+function getProviderLogoName(provider: keyof typeof providerDisplayNames) {
+  const logoNames = {
+    openai: "openai",
+    anthropic: "anthropic",
+    gemini: "google",
+    bedrock: "amazon-bedrock",
+    cerebras: "cerebras",
+    cohere: "cohere",
+    mistral: "mistral",
+    perplexity: "perplexity",
+    groq: "groq",
+    xai: "xai",
+    openrouter: "openrouter",
+    vllm: "vllm",
+    ollama: "ollama-cloud",
+    zhipuai: "zhipuai",
+    deepseek: "deepseek",
+    minimax: "minimax",
+  } as const;
 
-// Helper to check if a rule has valid pricing
-function hasValidPricing(
-  rule: OptimizationRule,
-  tokenPrices: Array<{
-    model: string;
-    pricePerMillionInput: string;
-    pricePerMillionOutput: string;
-  }>,
-): boolean {
-  const modelPricing = tokenPrices.find((m) => m.model === rule.targetModel);
-  return (
-    !!modelPricing &&
-    (modelPricing.pricePerMillionInput !== "0" ||
-      modelPricing.pricePerMillionOutput !== "0")
-  );
-}
-
-// Delete confirmation modal component
-function DeleteRuleConfirmation({
-  ruleId,
-  onDelete,
-  disabled,
-}: {
-  ruleId: string;
-  onDelete: (id: string) => void;
-  disabled: boolean;
-}) {
-  return (
-    <AlertDialog>
-      <AlertDialogTrigger asChild>
-        <PermissionButton
-          permissions={{ llmLimit: ["delete"] }}
-          variant="ghost"
-          size="sm"
-          className="text-destructive hover:text-destructive"
-          disabled={disabled}
-        >
-          <Trash2 className="h-4 w-4" />
-        </PermissionButton>
-      </AlertDialogTrigger>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>Delete Optimization Rule</AlertDialogTitle>
-          <AlertDialogDescription>
-            Are you sure you want to delete this optimization rule? This action
-            cannot be undone.
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
-          <AlertDialogAction
-            onClick={() => onDelete(ruleId)}
-            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-          >
-            Delete
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
-  );
+  return logoNames[provider];
 }
 
 export default function OptimizationRulesPage() {
-  const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
-  const [editedRuleData, setEditedRuleData] =
-    useState<Partial<RuleFormData> | null>(null);
-  const [newRuleData, setNewRuleData] = useState<RuleFormData | null>(null);
-  const [ruleOrder, setRuleOrder] = useState<string[]>([]);
-  const hasInitialized = useRef(false);
-  const editedRuleDataRef = useRef<Partial<RuleFormData> | null>(null);
-
-  const { data: allRules = [], isLoading: rulesLoading } =
-    useOptimizationRules();
+  const setActionButton = useSetCostsAction();
+  const { data: rules = [], isPending } = useOptimizationRules();
   const { data: modelsWithApiKeys = [] } = useModelsWithApiKeys();
-  const tokenPrices = modelsWithApiKeys.map((m) => ({
-    model: m.modelId,
-    provider: m.provider,
-    pricePerMillionInput: m.capabilities?.pricePerMillionInput ?? "0",
-    pricePerMillionOutput: m.capabilities?.pricePerMillionOutput ?? "0",
-  }));
   const { data: teams = [] } = useTeams();
   const { data: organization } = useOrganization();
-
   const createRule = useCreateOptimizationRule();
   const updateRule = useUpdateOptimizationRule();
   const deleteRule = useDeleteOptimizationRule();
+  const { searchParams, updateQueryParams } = useDataTableQueryParams();
+  const appliedToFilter = searchParams.get("appliedTo") || "all";
+  const providerFilter = searchParams.get("provider") || "all";
+  const targetModelFilter = searchParams.get("targetModel") || "all";
 
-  // Initialize order on first load, then maintain it
+  const [draft, setDraft] = useState<RuleDraft>(DEFAULT_RULE);
+  const [editingRule, setEditingRule] = useState<OptimizationRule | null>(null);
+  const [ruleToDelete, setRuleToDelete] = useState<OptimizationRule | null>(
+    null,
+  );
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+
+  const tokenPrices = useMemo(
+    () =>
+      modelsWithApiKeys.map((model) => ({
+        model: model.modelId,
+        provider: model.provider,
+        pricePerMillionInput: model.capabilities?.pricePerMillionInput ?? "0",
+        pricePerMillionOutput: model.capabilities?.pricePerMillionOutput ?? "0",
+      })),
+    [modelsWithApiKeys],
+  );
+
+  const modelOptions = useMemo(
+    () =>
+      tokenPrices.map((model) => ({
+        value: model.model,
+        model: model.model,
+        provider: model.provider,
+        pricePerMillionInput: model.pricePerMillionInput,
+        pricePerMillionOutput: model.pricePerMillionOutput,
+      })),
+    [tokenPrices],
+  );
+
+  const handleCreateOpen = useCallback(() => {
+    setEditingRule(null);
+    setDraft(DEFAULT_RULE);
+    setIsDialogOpen(true);
+  }, []);
+
   useEffect(() => {
-    if (!hasInitialized.current && allRules.length > 0) {
-      // Initialize with current order from backend
-      setRuleOrder(allRules.map((rule) => rule.id));
-      hasInitialized.current = true;
-    } else if (hasInitialized.current) {
-      setRuleOrder((ruleOrder) => {
-        const newRules = allRules.filter(
-          (rule) => !ruleOrder.includes(rule.id),
-        );
-        if (newRules.length === 0) return ruleOrder;
+    setActionButton(
+      <PermissionButton
+        permissions={{ optimizationRule: ["create"] }}
+        onClick={handleCreateOpen}
+      >
+        <Plus className="mr-2 h-4 w-4" />
+        Add Rule
+      </PermissionButton>,
+    );
 
-        // Add new rules to the end, preserving existing order
-        return [...ruleOrder, ...newRules.map((rule) => rule.id)];
-      });
+    return () => setActionButton(null);
+  }, [handleCreateOpen, setActionButton]);
+
+  const columns = useMemo<ColumnDef<OptimizationRule>[]>(
+    () => [
+      {
+        accessorKey: "enabled",
+        header: "Status",
+        cell: ({ row }) => (
+          <Badge variant={row.original.enabled ? "secondary" : "outline"}>
+            {row.original.enabled ? "Enabled" : "Disabled"}
+          </Badge>
+        ),
+      },
+      {
+        accessorKey: "entityId",
+        header: "Applied to",
+        cell: ({ row }) => {
+          if (row.original.entityType === "organization") {
+            return "Organization";
+          }
+          const team = teams.find(
+            (candidate) => candidate.id === row.original.entityId,
+          );
+          return team?.name ?? "Unknown team";
+        },
+      },
+      {
+        accessorKey: "provider",
+        header: "Provider",
+        cell: ({ row }) => (
+          <LlmProviderOptionLabel
+            icon={`https://models.dev/logos/${getProviderLogoName(row.original.provider)}.svg`}
+            name={providerDisplayNames[row.original.provider]}
+          />
+        ),
+      },
+      {
+        accessorKey: "targetModel",
+        header: "Target model",
+        cell: ({ row }) => row.original.targetModel,
+      },
+      {
+        id: "conditions",
+        header: "Conditions",
+        cell: ({ row }) => (
+          <div className="max-w-xl text-sm text-muted-foreground">
+            {row.original.conditions
+              .map((condition) =>
+                "maxLength" in condition
+                  ? `Max length ${condition.maxLength}`
+                  : condition.hasTools
+                    ? "Has tools"
+                    : "No tools",
+              )
+              .join(" and ")}
+          </div>
+        ),
+      },
+      {
+        id: "actions",
+        header: "Actions",
+        cell: ({ row }) => (
+          <TableRowActions
+            actions={[
+              {
+                icon: <Power className="h-4 w-4" />,
+                label: row.original.enabled ? "Disable rule" : "Enable rule",
+                permissions: { optimizationRule: ["update"] },
+                onClick: async () => {
+                  await updateRule.mutateAsync({
+                    id: row.original.id,
+                    enabled: !row.original.enabled,
+                  });
+                },
+              },
+              {
+                icon: <Edit className="h-4 w-4" />,
+                label: "Edit rule",
+                permissions: { optimizationRule: ["update"] },
+                onClick: () => {
+                  setEditingRule(row.original);
+                  setDraft({
+                    entityType: row.original.entityType,
+                    entityId: row.original.entityId,
+                    conditions: row.original.conditions,
+                    provider: row.original.provider,
+                    targetModel: row.original.targetModel,
+                    enabled: row.original.enabled,
+                  });
+                  setIsDialogOpen(true);
+                },
+              },
+              {
+                icon: <Trash2 className="h-4 w-4" />,
+                label: "Delete rule",
+                permissions: { optimizationRule: ["delete"] },
+                variant: "destructive",
+                onClick: () => setRuleToDelete(row.original),
+              },
+            ]}
+          />
+        ),
+      },
+    ],
+    [teams, updateRule],
+  );
+
+  async function handleSubmit() {
+    if (draft.entityType === "organization" && !organization?.id) {
+      return;
     }
-  }, [allRules]);
-
-  // Derive ordered rules from rule order and actual data
-  const orderedRules = ruleOrder
-    .map((id) => allRules.find((rule) => rule.id === id))
-    .filter((rule): rule is OptimizationRule => rule !== undefined);
-
-  // Create a pending rule when adding a new rule
-  const pendingRule: OptimizationRule | null = newRuleData
-    ? { ...newRuleData, id: "", createdAt: "", updatedAt: "" }
-    : null;
-
-  // Combine existing rules with pending rule
-  const allDisplayRules = pendingRule
-    ? [...orderedRules, pendingRule]
-    : orderedRules;
-
-  const handleCreateRule = useCallback(
-    async (data: RuleFormData) => {
-      const entityId =
-        data.entityType === "organization"
-          ? (organization?.id ?? "")
-          : data.entityId;
-      const result = await createRule.mutateAsync({ ...data, entityId });
-      if (result) {
-        setNewRuleData(null);
-      }
-    },
-    [createRule, organization?.id],
-  );
-
-  const handleDeleteRule = useCallback(
-    async (id: string) => {
-      await deleteRule.mutateAsync(id);
-    },
-    [deleteRule],
-  );
-
-  const handleToggleEnabled = useCallback(
-    async (id: string, enabled: boolean) => {
-      await updateRule.mutateAsync({ id, enabled });
-    },
-    [updateRule],
-  );
-
-  // Keep ref in sync with state
-  useEffect(() => {
-    editedRuleDataRef.current = editedRuleData;
-  }, [editedRuleData]);
-
-  const handleSaveEdit = useCallback(async () => {
-    // Use ref to get the latest data, avoiding stale state from batched updates
-    const dataToSave = editedRuleDataRef.current;
-    if (!editingRuleId || !dataToSave) return;
 
     const entityId =
-      dataToSave.entityType === "organization"
+      draft.entityType === "organization"
         ? (organization?.id ?? "")
-        : dataToSave.entityId;
-    const result = await updateRule.mutateAsync({
-      ...dataToSave,
-      id: editingRuleId,
+        : draft.entityId;
+
+    if (editingRule) {
+      const result = await updateRule.mutateAsync({
+        id: editingRule.id,
+        ...draft,
+        entityId,
+      });
+      if (result) {
+        setIsDialogOpen(false);
+        setEditingRule(null);
+      }
+      return;
+    }
+
+    const result = await createRule.mutateAsync({
+      ...draft,
       entityId,
     });
     if (result) {
-      setEditingRuleId(null);
-      setEditedRuleData(null);
-      editedRuleDataRef.current = null;
+      setIsDialogOpen(false);
     }
-  }, [editingRuleId, updateRule, organization?.id]);
+  }
 
-  const handleCancelEdit = useCallback(() => {
-    setEditingRuleId(null);
-    setEditedRuleData(null);
-    editedRuleDataRef.current = null;
-  }, []);
+  async function handleDelete() {
+    if (!ruleToDelete) return;
+    await deleteRule.mutateAsync(ruleToDelete.id);
+    setRuleToDelete(null);
+  }
+
+  const filteredRules = useMemo(() => {
+    return rules.filter((rule) => {
+      const matchesAppliedTo =
+        appliedToFilter === "all" || rule.entityType === appliedToFilter;
+      const matchesProvider =
+        providerFilter === "all" || rule.provider === providerFilter;
+      const matchesTargetModel =
+        targetModelFilter === "all" || rule.targetModel === targetModelFilter;
+      return matchesAppliedTo && matchesProvider && matchesTargetModel;
+    });
+  }, [appliedToFilter, providerFilter, rules, targetModelFilter]);
+
+  const hasActiveFilters =
+    appliedToFilter !== "all" ||
+    providerFilter !== "all" ||
+    targetModelFilter !== "all";
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center justify-between">
-          <div>
-            <CardTitle>Optimization Rules</CardTitle>
-            <CardDescription>
-              Add rules to select a cheaper model if content is short or there
-              are no tools
-            </CardDescription>
-          </div>
-          <div className="flex items-center gap-2">
-            <PermissionButton
-              permissions={{ llmLimit: ["create"] }}
-              onClick={() => {
-                if (editingRuleId !== null) {
-                  setEditingRuleId(null);
-                }
-                setNewRuleData({
-                  entityType: "organization",
-                  entityId: "",
-                  conditions: [{ maxLength: 1000 }],
-                  provider: "openai",
-                  targetModel: "",
-                  enabled: true,
-                });
-              }}
-              size="sm"
-              variant={newRuleData !== null ? "secondary" : "default"}
-              disabled={editingRuleId !== null || newRuleData !== null}
+    <div className="space-y-4">
+      <div className="flex flex-wrap gap-3">
+        <Select
+          value={appliedToFilter}
+          onValueChange={(value) =>
+            updateQueryParams({ appliedTo: value === "all" ? null : value })
+          }
+        >
+          <SelectTrigger className="w-full sm:w-[220px]">
+            <SelectValue placeholder="All applied to" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All applied to</SelectItem>
+            <SelectItem value="organization">Organization</SelectItem>
+            <SelectItem value="team">Team</SelectItem>
+          </SelectContent>
+        </Select>
+
+        <Select
+          value={providerFilter}
+          onValueChange={(value) =>
+            updateQueryParams({ provider: value === "all" ? null : value })
+          }
+        >
+          <SelectTrigger className="w-full sm:w-[220px]">
+            <SelectValue placeholder="All providers" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All providers</SelectItem>
+            {Object.entries(providerDisplayNames).map(([provider, name]) => (
+              <SelectItem key={provider} value={provider}>
+                {name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <LlmModelSearchableSelect
+          value={targetModelFilter}
+          onValueChange={(value) =>
+            updateQueryParams({ targetModel: value === "all" ? null : value })
+          }
+          options={modelOptions}
+          placeholder="All target models"
+          className="sm:max-w-[320px]"
+          includeAllOption
+          allLabel="All target models"
+        />
+      </div>
+
+      <LoadingWrapper
+        isPending={isPending}
+        loadingFallback={<LoadingSpinner />}
+      >
+        <DataTable
+          columns={columns}
+          data={filteredRules}
+          emptyMessage="No optimization rules configured yet"
+          hasActiveFilters={hasActiveFilters}
+          filteredEmptyMessage="No optimization rules match your filters. Try adjusting your search."
+          onClearFilters={() =>
+            updateQueryParams({
+              appliedTo: null,
+              provider: null,
+              targetModel: null,
+            })
+          }
+        />
+      </LoadingWrapper>
+
+      <FormDialog
+        open={isDialogOpen}
+        onOpenChange={setIsDialogOpen}
+        title={
+          editingRule ? "Edit optimization rule" : "Create optimization rule"
+        }
+        description="Configure when requests should route to a cheaper target model."
+        size="small"
+      >
+        <DialogForm
+          className="flex min-h-0 flex-1 flex-col"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void handleSubmit();
+          }}
+        >
+          <DialogBody>
+            <OptimizationRuleForm
+              {...draft}
+              tokenPrices={tokenPrices}
+              teams={teams}
+              onChange={setDraft}
+              onToggle={(enabled) =>
+                setDraft((current) => ({ ...current, enabled }))
+              }
+            />
+          </DialogBody>
+          <DialogStickyFooter className="mt-0">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setIsDialogOpen(false)}
             >
-              <Plus className="h-4 w-4 mr-1" />
-              Add Rule
-            </PermissionButton>
-          </div>
-        </div>
-      </CardHeader>
-      <CardContent>
-        {rulesLoading ? (
-          <LoadingSkeleton count={3} prefix="optimization-rules" />
-        ) : (
-          <div className="space-y-4">
-            {allDisplayRules.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">
-                No optimization rules configured for this organization
-              </div>
-            ) : (
-              allDisplayRules.map((rule, index, rules) => {
-                const isPending = rule.id === "";
-                const isEditing = !isPending && editingRuleId === rule.id;
-                const isOtherEditing =
-                  (editingRuleId !== null && !isEditing) ||
-                  (newRuleData !== null && !isPending);
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              disabled={
+                !draft.targetModel ||
+                createRule.isPending ||
+                updateRule.isPending
+              }
+            >
+              {editingRule ? "Save changes" : "Create rule"}
+            </Button>
+          </DialogStickyFooter>
+        </DialogForm>
+      </FormDialog>
 
-                const handleSubmit = async (e: React.FormEvent) => {
-                  e.preventDefault();
-                  if (isPending && newRuleData) {
-                    await handleCreateRule(newRuleData);
-                  } else if (isEditing) {
-                    await handleSaveEdit();
-                  }
-                };
-
-                const handleKeyDown = (e: React.KeyboardEvent) => {
-                  if (e.key === "Escape") {
-                    e.preventDefault();
-                    if (isPending) {
-                      setNewRuleData(null);
-                    } else if (isEditing) {
-                      handleCancelEdit();
-                    }
-                  } else if (e.key === "Enter") {
-                    const target = e.target as HTMLElement;
-                    // If Enter is pressed on a button (like SelectTrigger), submit the form
-                    // unless it's the submit button itself (which will trigger naturally)
-                    if (
-                      target.getAttribute("role") === "combobox" ||
-                      target.tagName === "BUTTON"
-                    ) {
-                      const canSubmit = isPending
-                        ? newRuleData?.targetModel
-                        : editedRuleData?.targetModel;
-                      const isSubmitButton =
-                        target instanceof HTMLButtonElement &&
-                        target.type === "submit";
-                      if (canSubmit && !isSubmitButton) {
-                        e.preventDefault();
-                        // Trigger form submission programmatically
-                        const form = e.currentTarget as HTMLFormElement;
-                        form.requestSubmit();
-                      }
-                    }
-                  }
-                };
-
-                const content = (
-                  <>
-                    <Rule
-                      {...rule}
-                      tokenPrices={tokenPrices}
-                      teams={teams}
-                      editable={isPending || isEditing}
-                      onChange={(data) =>
-                        isPending
-                          ? setNewRuleData(data)
-                          : setEditedRuleData(data)
-                      }
-                      onToggle={(enabled) =>
-                        isPending && newRuleData
-                          ? setNewRuleData({ ...newRuleData, enabled })
-                          : handleToggleEnabled(rule.id, enabled)
-                      }
-                      switchDisabled={isOtherEditing}
-                      className="flex-1"
-                    />
-                    <div className="flex items-center gap-2">
-                      {isPending ? (
-                        <>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            disabled={!newRuleData?.targetModel}
-                            onClick={(e) => {
-                              e.preventDefault();
-                              handleSubmit(e as unknown as React.FormEvent);
-                            }}
-                            className="text-primary hover:text-primary"
-                          >
-                            <Save className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setNewRuleData(null)}
-                          >
-                            <X className="h-4 w-4" />
-                          </Button>
-                        </>
-                      ) : isEditing ? (
-                        <>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={(e) => {
-                              e.preventDefault();
-                              handleSubmit(e as unknown as React.FormEvent);
-                            }}
-                            className="text-primary hover:text-primary"
-                          >
-                            <Save className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={handleCancelEdit}
-                          >
-                            <X className="h-4 w-4" />
-                          </Button>
-                        </>
-                      ) : (
-                        <>
-                          <PermissionButton
-                            permissions={{ llmLimit: ["update"] }}
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => {
-                              setEditingRuleId(rule.id);
-                              setEditedRuleData({
-                                entityType: rule.entityType,
-                                entityId: rule.entityId,
-                                conditions: rule.conditions,
-                                provider: rule.provider,
-                                targetModel: rule.targetModel,
-                                enabled: rule.enabled,
-                              });
-                            }}
-                            disabled={isOtherEditing}
-                          >
-                            <Edit className="h-4 w-4" />
-                          </PermissionButton>
-                          <DeleteRuleConfirmation
-                            ruleId={rule.id}
-                            onDelete={handleDeleteRule}
-                            disabled={isOtherEditing}
-                          />
-                        </>
-                      )}
-                    </div>
-                  </>
-                );
-
-                const ruleHasValidPricing = hasValidPricing(rule, tokenPrices);
-
-                return (
-                  <React.Fragment key={rule.id}>
-                    {isPending || isEditing ? (
-                      <form
-                        onSubmit={handleSubmit}
-                        onKeyDown={handleKeyDown}
-                        className={cn(
-                          "flex items-center gap-2",
-                          isOtherEditing && "opacity-40",
-                        )}
-                      >
-                        {content}
-                      </form>
-                    ) : (
-                      <div
-                        className={cn(
-                          "flex items-center gap-2",
-                          isOtherEditing && "opacity-40",
-                          !ruleHasValidPricing && "opacity-60",
-                        )}
-                      >
-                        {content}
-                      </div>
-                    )}
-                    {index !== rules.length - 1 ? (
-                      <Separator className="my-4" />
-                    ) : (
-                      ""
-                    )}
-                  </React.Fragment>
-                );
-              })
-            )}
-          </div>
-        )}
-      </CardContent>
-    </Card>
+      <DeleteConfirmDialog
+        open={!!ruleToDelete}
+        onOpenChange={(open) => !open && setRuleToDelete(null)}
+        title="Delete optimization rule"
+        description="This action cannot be undone."
+        isPending={deleteRule.isPending}
+        onConfirm={handleDelete}
+        confirmLabel="Delete"
+        pendingLabel="Deleting..."
+      />
+    </div>
   );
 }

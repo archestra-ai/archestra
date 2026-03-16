@@ -216,7 +216,7 @@ describe("Authnz", () => {
     });
 
     test("should skip auth for GET requests to public appearance endpoint", async () => {
-      const publicAppearanceUrl = "/api/organization/appearance";
+      const publicAppearanceUrl = "/api/organization/appearance-settings";
 
       const mockRequest = {
         url: publicAppearanceUrl,
@@ -240,7 +240,7 @@ describe("Authnz", () => {
 
       for (const method of nonGetMethods) {
         const mockRequest = {
-          url: "/api/organization/appearance",
+          url: "/api/organization/appearance-settings",
           method,
           headers: {},
           routeOptions: {

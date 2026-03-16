@@ -15,12 +15,22 @@ interface SearchableSelectProps {
   onValueChange: (value: string) => void;
   placeholder?: string;
   searchPlaceholder?: string;
-  items: Array<{ value: string; label: string; description?: string }>;
+  items: Array<{
+    value: string;
+    label: string;
+    description?: string;
+    searchText?: string;
+    content?: React.ReactNode;
+    selectedContent?: React.ReactNode;
+  }>;
   className?: string;
   disabled?: boolean;
   allowCustom?: boolean;
   showSearchIcon?: boolean;
   hint?: string;
+  onSearchQueryChange?: (value: string) => void;
+  emptyMessage?: string;
+  multiline?: boolean;
 }
 
 export function SearchableSelect({
@@ -34,6 +44,9 @@ export function SearchableSelect({
   allowCustom = false,
   showSearchIcon = true,
   hint,
+  onSearchQueryChange,
+  emptyMessage = "No results found.",
+  multiline = false,
 }: SearchableSelectProps) {
   const [open, setOpen] = React.useState(false);
   const [searchQuery, setSearchQuery] = React.useState("");
@@ -44,7 +57,7 @@ export function SearchableSelect({
     const query = searchQuery.toLowerCase();
     return items.filter(
       (item) =>
-        item.label.toLowerCase().includes(query) ||
+        (item.searchText ?? item.label).toLowerCase().includes(query) ||
         item.description?.toLowerCase().includes(query),
     );
   }, [items, searchQuery]);
@@ -69,13 +82,19 @@ export function SearchableSelect({
           aria-expanded={open}
           disabled={disabled}
           className={cn(
-            "w-[200px] justify-between font-normal",
+            multiline
+              ? "h-auto min-h-9 w-[200px] justify-between py-2 font-normal"
+              : "h-9 w-[200px] justify-between font-normal",
             !value && "text-muted-foreground",
             className,
           )}
         >
-          <span className="truncate">
-            {selectedItem ? selectedItem.label : value || placeholder}
+          <span className="min-w-0 flex-1 truncate text-left">
+            {selectedItem
+              ? (selectedItem.selectedContent ??
+                selectedItem.content ??
+                selectedItem.label)
+              : value || placeholder}
           </span>
           <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
@@ -91,7 +110,10 @@ export function SearchableSelect({
           <input
             placeholder={searchPlaceholder}
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              onSearchQueryChange?.(e.target.value);
+            }}
             onKeyDown={handleKeyDown}
             className="flex w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
           />
@@ -101,7 +123,10 @@ export function SearchableSelect({
             {hint}
           </div>
         )}
-        <div className="max-h-[300px] overflow-y-auto p-1">
+        <div
+          className="max-h-[300px] overflow-y-auto p-1"
+          onWheelCapture={(event) => event.stopPropagation()}
+        >
           {filteredItems.length === 0 ? (
             <div className="px-4 py-6 text-center text-sm text-muted-foreground">
               {allowCustom && searchQuery ? (
@@ -113,7 +138,7 @@ export function SearchableSelect({
                   to use &quot;{searchQuery}&quot;
                 </>
               ) : (
-                "No results found."
+                emptyMessage
               )}
             </div>
           ) : (
@@ -131,8 +156,8 @@ export function SearchableSelect({
                   value === item.value && "bg-accent text-accent-foreground",
                 )}
               >
-                <span className="truncate min-w-0">
-                  {item.label}
+                <span className="min-w-0 flex-1">
+                  {item.content ?? item.label}
                   {item.description && (
                     <span className="block text-xs text-muted-foreground truncate">
                       {item.description}

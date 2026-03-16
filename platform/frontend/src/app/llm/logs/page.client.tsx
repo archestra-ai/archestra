@@ -5,27 +5,24 @@ import {
   INTERACTION_SOURCE_DISPLAY,
   type InteractionSource,
 } from "@shared";
+import type { ColumnDef } from "@tanstack/react-table";
 import { Database, Layers, MessageSquare, User } from "lucide-react";
 import Link from "next/link";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useMemo, useState } from "react";
-import { LogsEmptyState } from "@/components/logs-empty-state";
+import { useRouter } from "next/navigation";
+import { useCallback, useMemo } from "react";
+import {
+  ProfileFilterOption,
+  SourceFilterOption,
+  UserFilterOption,
+} from "@/components/log-filter-option";
 import { Savings } from "@/components/savings";
 import { SearchInput } from "@/components/search-input";
 import { SourceBadge } from "@/components/source-badge";
+import { TableFilters } from "@/components/table-filters";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { DataTable } from "@/components/ui/data-table";
 import { DateTimeRangePicker } from "@/components/ui/date-time-range-picker";
 import { SearchableSelect } from "@/components/ui/searchable-select";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { TablePagination } from "@/components/ui/table-pagination";
 import {
   Tooltip,
   TooltipContent,
@@ -38,8 +35,9 @@ import {
   useUniqueUserIds,
 } from "@/lib/interaction.query";
 import { DynamicInteraction } from "@/lib/interaction.utils";
+import { useDataTableQueryParams } from "@/lib/use-data-table-query-params";
 import { useDateTimeRangePicker } from "@/lib/use-date-time-range-picker";
-import { DEFAULT_TABLE_LIMIT, formatDate } from "@/lib/utils";
+import { formatDate } from "@/lib/utils";
 import { ErrorBoundary } from "../../_parts/error-boundary";
 
 function formatDuration(start: Date | string, end: Date | string): string {
@@ -79,27 +77,19 @@ function formatDuration(start: Date | string, end: Date | string): string {
 
 type SessionData =
   archestraApiTypes.GetInteractionSessionsResponses["200"]["data"][number];
+type UniqueUser = archestraApiTypes.GetUniqueUserIdsResponses["200"][number];
 
-function SessionRow({
-  session,
-  agents,
-}: {
-  session: SessionData;
-  agents: archestraApiTypes.GetAllAgentsResponses["200"] | undefined;
-}) {
-  const router = useRouter();
-
-  const agent = agents?.find((a) => a.id === session.profileId);
+function getSessionDisplayData(session: SessionData) {
   const isSingleInteraction =
     session.sessionId === null && session.interactionId;
+  const conversationTitle = session.conversationTitle;
+  const isArchestraChat = conversationTitle && session.sessionId;
+  const claudeCodeTitle = session.claudeCodeTitle;
+  const isClaudeCodeSession = session.sessionSource === "claude_code";
 
-  // Extract last user message from the last interaction's request
-  const lastUserMessage = useMemo(() => {
-    if (!session.lastInteractionRequest || !session.lastInteractionType) {
-      return "";
-    }
+  let lastUserMessage = "";
+  if (session.lastInteractionRequest && session.lastInteractionType) {
     try {
-      // Create a mock interaction object for DynamicInteraction
       const mockInteraction = {
         request: session.lastInteractionRequest,
         response: {},
@@ -108,180 +98,22 @@ function SessionRow({
       const interaction = new DynamicInteraction(
         mockInteraction as archestraApiTypes.GetInteractionResponses["200"],
       );
-      return interaction.getLastUserMessage();
+      lastUserMessage = interaction.getLastUserMessage();
     } catch {
-      return "";
+      lastUserMessage = "";
     }
-  }, [session.lastInteractionRequest, session.lastInteractionType]);
+  }
 
-  // For single interactions (no session), navigate directly to interaction detail page
-  // For sessions, navigate to session detail page
-  const handleRowClick = () => {
-    if (isSingleInteraction) {
-      router.push(`/llm/logs/${session.interactionId}`);
-    } else if (session.sessionId) {
-      router.push(`/llm/logs/session/${encodeURIComponent(session.sessionId)}`);
-    }
-  };
-
-  // Check if this is an Archestra Chat session (has conversation title)
-  const conversationTitle = session.conversationTitle;
-  const isArchestraChat = conversationTitle && session.sessionId;
-
-  // Check if this is a Claude Code session
-  const claudeCodeTitle = session.claudeCodeTitle;
-  const isClaudeCodeSession = session.sessionSource === "claude_code";
-
-  // Get display text: prefer title, fallback to last user message
   const displayText = claudeCodeTitle || lastUserMessage;
 
-  return (
-    <TableRow className="cursor-pointer" onClick={handleRowClick}>
-      <TableCell className="py-3 text-xs">
-        <div className="flex items-center gap-1">
-          {isArchestraChat ? (
-            <>
-              <span className="truncate">
-                {conversationTitle.length > 60
-                  ? `${conversationTitle.slice(0, 60)}...`
-                  : conversationTitle}
-              </span>
-              <Link
-                href={`/chat?conversation=${session.sessionId}`}
-                onClick={(e) => e.stopPropagation()}
-                className="shrink-0"
-              >
-                <Badge
-                  variant="outline"
-                  className="text-xs hover:bg-accent cursor-pointer"
-                >
-                  <MessageSquare className="h-3 w-3 mr-1" />
-                  Chat
-                </Badge>
-              </Link>
-            </>
-          ) : isClaudeCodeSession ? (
-            <>
-              <span className="truncate">
-                {displayText
-                  ? displayText.length > 80
-                    ? `${displayText.slice(0, 80)}...`
-                    : displayText
-                  : "Claude Code session"}
-              </span>
-              <Badge
-                variant="secondary"
-                className="text-xs bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300 shrink-0"
-              >
-                Claude Code
-              </Badge>
-            </>
-          ) : lastUserMessage ? (
-            <span>
-              {lastUserMessage.length > 80
-                ? `${lastUserMessage.slice(0, 80)}...`
-                : lastUserMessage}
-            </span>
-          ) : session.source?.startsWith("knowledge:") ? (
-            <span className="text-muted-foreground">
-              {INTERACTION_SOURCE_DISPLAY[session.source]?.label ??
-                session.source}
-            </span>
-          ) : (
-            <span className="text-muted-foreground">No message</span>
-          )}
-        </div>
-      </TableCell>
-      <TableCell className="font-mono text-xs py-3">
-        {session.requestCount.toLocaleString()}
-      </TableCell>
-      <TableCell className="py-3 max-w-[200px]">
-        <TooltipProvider>
-          <div className="flex flex-wrap gap-1">
-            {session.models.map((model) => (
-              <Tooltip key={model}>
-                <TooltipTrigger asChild>
-                  <Badge
-                    variant="secondary"
-                    className="text-xs max-w-[180px] cursor-default"
-                  >
-                    <span className="truncate">{model}</span>
-                  </Badge>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p className="font-mono text-xs">{model}</p>
-                </TooltipContent>
-              </Tooltip>
-            ))}
-          </div>
-        </TooltipProvider>
-      </TableCell>
-      <TableCell className="font-mono text-xs py-3">
-        {session.totalCost && (
-          <TooltipProvider>
-            <Savings
-              cost={session.totalCost}
-              baselineCost={session.totalBaselineCost || session.totalCost}
-              toonCostSavings={session.totalToonCostSavings}
-              format="percent"
-              tooltip="hover"
-              variant="session"
-            />
-          </TooltipProvider>
-        )}
-      </TableCell>
-      <TableCell className="py-3">
-        <SourceBadge source={session.source} />
-      </TableCell>
-      <TableCell className="font-mono text-xs py-3">
-        <div className="flex flex-col gap-0.5">
-          {session.lastRequestTime && (
-            <span>{formatDate({ date: String(session.lastRequestTime) })}</span>
-          )}
-          {session.requestCount > 1 &&
-            session.firstRequestTime &&
-            session.lastRequestTime && (
-              <span className="text-muted-foreground">
-                {formatDuration(
-                  session.firstRequestTime,
-                  session.lastRequestTime,
-                )}
-              </span>
-            )}
-        </div>
-      </TableCell>
-      <TableCell className="py-3">
-        <div className="flex flex-wrap gap-1">
-          <Badge variant="secondary" className="text-xs max-w-[200px]">
-            {session.source?.startsWith("knowledge:") ? (
-              <Database className="h-3 w-3 mr-1 shrink-0" />
-            ) : (
-              <Layers className="h-3 w-3 mr-1 shrink-0" />
-            )}
-            <span className="truncate">
-              {agent?.name ??
-                session.profileName ??
-                (session.source?.startsWith("knowledge:")
-                  ? "Knowledge Base"
-                  : session.profileId === null
-                    ? "Deleted LLM Proxy"
-                    : "Unknown")}
-            </span>
-          </Badge>
-          {session.userNames.map((userName) => (
-            <Badge
-              key={userName}
-              variant="outline"
-              className="text-xs max-w-[150px]"
-            >
-              <User className="h-3 w-3 mr-1 shrink-0" />
-              <span className="truncate">{userName}</span>
-            </Badge>
-          ))}
-        </div>
-      </TableCell>
-    </TableRow>
-  );
+  return {
+    isSingleInteraction,
+    conversationTitle,
+    isArchestraChat,
+    isClaudeCodeSession,
+    lastUserMessage,
+    displayText,
+  };
 }
 
 export default function LlmProxyLogsPage({
@@ -310,41 +142,19 @@ function SessionsTable({
   };
 }) {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const pathname = usePathname();
+  const { searchParams, pageIndex, pageSize, offset, updateQueryParams } =
+    useDataTableQueryParams();
 
   // Get URL params
-  const pageFromUrl = searchParams.get("page");
-  const pageSizeFromUrl = searchParams.get("pageSize");
   const profileIdFromUrl = searchParams.get("profileId");
   const userIdFromUrl = searchParams.get("userId");
   const sourceFromUrl = searchParams.get("source");
   const startDateFromUrl = searchParams.get("startDate");
   const endDateFromUrl = searchParams.get("endDate");
   const searchFromUrl = searchParams.get("search");
-
-  const pageIndex = Number(pageFromUrl || "1") - 1;
-  const pageSize = Number(pageSizeFromUrl || DEFAULT_TABLE_LIMIT);
-
-  const [profileFilter, setProfileFilter] = useState(profileIdFromUrl || "all");
-  const [userFilter, setUserFilter] = useState(userIdFromUrl || "all");
-  const [sourceFilter, setSourceFilter] = useState(sourceFromUrl || "all");
-
-  // Helper to update URL params
-  const updateUrlParams = useCallback(
-    (updates: Record<string, string | null>) => {
-      const params = new URLSearchParams(searchParams.toString());
-      Object.entries(updates).forEach(([key, value]) => {
-        if (value === null || value === "" || value === "all") {
-          params.delete(key);
-        } else {
-          params.set(key, value);
-        }
-      });
-      router.push(`${pathname}?${params.toString()}`, { scroll: false });
-    },
-    [searchParams, router, pathname],
-  );
+  const profileFilter = profileIdFromUrl || "all";
+  const userFilter = userIdFromUrl || "all";
+  const sourceFilter = sourceFromUrl || "all";
 
   // Date time range picker hook
   const dateTimePicker = useDateTimeRangePicker({
@@ -352,62 +162,59 @@ function SessionsTable({
     endDateFromUrl,
     onDateRangeChange: useCallback(
       ({ startDate, endDate }) => {
-        updateUrlParams({
+        updateQueryParams({
           startDate,
           endDate,
           page: "1", // Reset to first page
         });
       },
-      [updateUrlParams],
+      [updateQueryParams],
     ),
   });
 
   const handlePaginationChange = useCallback(
     (newPagination: { pageIndex: number; pageSize: number }) => {
-      updateUrlParams({
+      updateQueryParams({
         page: String(newPagination.pageIndex + 1),
         pageSize: String(newPagination.pageSize),
       });
     },
-    [updateUrlParams],
+    [updateQueryParams],
   );
 
   const handleProfileFilterChange = useCallback(
     (value: string) => {
-      setProfileFilter(value);
-      updateUrlParams({
+      updateQueryParams({
         profileId: value === "all" ? null : value,
         page: "1", // Reset to first page
       });
     },
-    [updateUrlParams],
+    [updateQueryParams],
   );
 
   const handleUserFilterChange = useCallback(
     (value: string) => {
-      setUserFilter(value);
-      updateUrlParams({
+      updateQueryParams({
         userId: value === "all" ? null : value,
         page: "1", // Reset to first page
       });
     },
-    [updateUrlParams],
+    [updateQueryParams],
   );
 
   const handleSourceFilterChange = useCallback(
     (value: string) => {
-      setSourceFilter(value);
-      updateUrlParams({
+      updateQueryParams({
         source: value === "all" ? null : value,
         page: "1", // Reset to first page
       });
     },
-    [updateUrlParams],
+    [updateQueryParams],
   );
 
   const { data: sessionsResponse, isFetching } = useInteractionSessions({
     limit: pageSize,
-    offset: pageIndex * pageSize,
+    offset,
     profileId: profileFilter !== "all" ? profileFilter : undefined,
     userId: userFilter !== "all" ? userFilter : undefined,
     source:
@@ -433,10 +240,222 @@ function SessionsTable({
     dateTimePicker.dateRange !== undefined ||
     !!searchFromUrl;
 
+  const clearFilters = useCallback(() => {
+    dateTimePicker.clearDateRange();
+    updateQueryParams({
+      profileId: null,
+      userId: null,
+      source: null,
+      startDate: null,
+      endDate: null,
+      search: null,
+      page: "1",
+    });
+  }, [dateTimePicker, updateQueryParams]);
+
+  const columns: ColumnDef<SessionData>[] = useMemo(
+    () => [
+      {
+        id: "session",
+        header: "Session",
+        cell: ({ row }) => {
+          const session = row.original;
+          const {
+            conversationTitle,
+            displayText,
+            isArchestraChat,
+            isClaudeCodeSession,
+            lastUserMessage,
+          } = getSessionDisplayData(session);
+
+          return (
+            <div className="flex items-center gap-1 text-xs">
+              {isArchestraChat ? (
+                <>
+                  <span className="truncate">
+                    {(conversationTitle ?? "").length > 60
+                      ? `${(conversationTitle ?? "").slice(0, 60)}...`
+                      : conversationTitle}
+                  </span>
+                  <Link
+                    href={`/chat?conversation=${session.sessionId}`}
+                    onClick={(e) => e.stopPropagation()}
+                    className="shrink-0"
+                  >
+                    <Badge
+                      variant="outline"
+                      className="text-xs hover:bg-accent cursor-pointer"
+                    >
+                      <MessageSquare className="h-3 w-3 mr-1" />
+                      Chat
+                    </Badge>
+                  </Link>
+                </>
+              ) : isClaudeCodeSession ? (
+                <>
+                  <span className="truncate">
+                    {displayText
+                      ? displayText.length > 80
+                        ? `${displayText.slice(0, 80)}...`
+                        : displayText
+                      : "Claude Code session"}
+                  </span>
+                  <Badge
+                    variant="secondary"
+                    className="text-xs bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300 shrink-0"
+                  >
+                    Claude Code
+                  </Badge>
+                </>
+              ) : lastUserMessage ? (
+                <span>
+                  {lastUserMessage.length > 80
+                    ? `${lastUserMessage.slice(0, 80)}...`
+                    : lastUserMessage}
+                </span>
+              ) : session.source?.startsWith("knowledge:") ? (
+                <span className="text-muted-foreground">
+                  {INTERACTION_SOURCE_DISPLAY[
+                    session.source as keyof typeof INTERACTION_SOURCE_DISPLAY
+                  ]?.label ?? session.source}
+                </span>
+              ) : (
+                <span className="text-muted-foreground">No message</span>
+              )}
+            </div>
+          );
+        },
+      },
+      {
+        id: "requests",
+        header: "Requests",
+        cell: ({ row }) => (
+          <span className="font-mono text-xs">
+            {row.original.requestCount.toLocaleString()}
+          </span>
+        ),
+      },
+      {
+        id: "models",
+        header: "Models",
+        cell: ({ row }) => (
+          <TooltipProvider>
+            <div className="flex flex-wrap gap-1">
+              {row.original.models.map((model) => (
+                <Tooltip key={model}>
+                  <TooltipTrigger asChild>
+                    <Badge
+                      variant="secondary"
+                      className="text-xs max-w-[180px] cursor-default"
+                    >
+                      <span className="truncate">{model}</span>
+                    </Badge>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p className="font-mono text-xs">{model}</p>
+                  </TooltipContent>
+                </Tooltip>
+              ))}
+            </div>
+          </TooltipProvider>
+        ),
+      },
+      {
+        id: "cost",
+        header: "Cost",
+        cell: ({ row }) =>
+          row.original.totalCost ? (
+            <TooltipProvider>
+              <Savings
+                cost={row.original.totalCost}
+                baselineCost={
+                  row.original.totalBaselineCost || row.original.totalCost
+                }
+                toonCostSavings={row.original.totalToonCostSavings}
+                format="percent"
+                tooltip="hover"
+                variant="session"
+              />
+            </TooltipProvider>
+          ) : null,
+      },
+      {
+        id: "source",
+        header: "Source",
+        cell: ({ row }) => <SourceBadge source={row.original.source} />,
+      },
+      {
+        id: "time",
+        header: "Time",
+        cell: ({ row }) => (
+          <div className="flex flex-col gap-0.5 font-mono text-xs">
+            {row.original.lastRequestTime && (
+              <span>
+                {formatDate({ date: String(row.original.lastRequestTime) })}
+              </span>
+            )}
+            {row.original.requestCount > 1 &&
+              row.original.firstRequestTime &&
+              row.original.lastRequestTime && (
+                <span className="text-muted-foreground">
+                  {formatDuration(
+                    row.original.firstRequestTime,
+                    row.original.lastRequestTime,
+                  )}
+                </span>
+              )}
+          </div>
+        ),
+      },
+      {
+        id: "details",
+        header: "Details",
+        cell: ({ row }) => {
+          const agent = agents?.find((a) => a.id === row.original.profileId);
+          return (
+            <div className="flex flex-wrap gap-1">
+              <Badge variant="secondary" className="text-xs max-w-[200px]">
+                {row.original.source?.startsWith("knowledge:") ? (
+                  <Database className="h-3 w-3 mr-1 shrink-0" />
+                ) : (
+                  <Layers className="h-3 w-3 mr-1 shrink-0" />
+                )}
+                <span className="truncate">
+                  {agent?.name ??
+                    row.original.profileName ??
+                    (row.original.source?.startsWith("knowledge:")
+                      ? "Knowledge Base"
+                      : row.original.profileId === null
+                        ? "Deleted LLM Proxy"
+                        : "Unknown")}
+                </span>
+              </Badge>
+              {row.original.userNames.map((userName) => (
+                <Badge
+                  key={userName}
+                  variant="outline"
+                  className="text-xs max-w-[150px]"
+                >
+                  <User className="h-3 w-3 mr-1 shrink-0" />
+                  <span className="truncate">{userName}</span>
+                </Badge>
+              ))}
+            </div>
+          );
+        },
+      },
+    ],
+    [agents],
+  );
+
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap gap-4">
-        <SearchInput placeholder="Search sessions..." paramName="search" />
+      <TableFilters>
+        <SearchInput
+          objectNamePlural="logs"
+          searchFields={["session ID", "model", "message"]}
+          paramName="search"
+        />
 
         <SearchableSelect
           value={profileFilter}
@@ -447,6 +466,8 @@ function SessionsTable({
             ...(agents?.map((agent) => ({
               value: agent.id,
               label: agent.name,
+              content: <ProfileFilterOption profile={agent} />,
+              selectedContent: <ProfileFilterOption profile={agent} />,
             })) || []),
           ]}
           className="w-[200px]"
@@ -458,9 +479,11 @@ function SessionsTable({
           placeholder="Filter by User"
           items={[
             { value: "all", label: "All Users" },
-            ...(uniqueUsers?.map((user) => ({
+            ...(uniqueUsers?.map((user: UniqueUser) => ({
               value: user.id,
               label: user.name || user.id,
+              content: <UserFilterOption name={user.name || user.id} />,
+              selectedContent: <UserFilterOption name={user.name || user.id} />,
             })) || []),
           ]}
           className="w-[200px]"
@@ -473,7 +496,16 @@ function SessionsTable({
           items={[
             { value: "all", label: "All Sources" },
             ...Object.entries(INTERACTION_SOURCE_DISPLAY).map(
-              ([value, { label }]) => ({ value, label }),
+              ([value, { label }]) => ({
+                value,
+                label,
+                content: (
+                  <SourceFilterOption source={value as InteractionSource} />
+                ),
+                selectedContent: (
+                  <SourceFilterOption source={value as InteractionSource} />
+                ),
+              }),
             ),
           ]}
           className="w-[200px]"
@@ -494,70 +526,35 @@ function SessionsTable({
           onApply={dateTimePicker.handleApplyDateRange}
           idPrefix="llm-proxy-"
         />
+      </TableFilters>
 
-        {hasFilters && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              handleProfileFilterChange("all");
-              handleUserFilterChange("all");
-              handleSourceFilterChange("all");
-              dateTimePicker.clearDateRange();
-              updateUrlParams({ search: null, page: "1" });
-            }}
-          >
-            Clear all filters
-          </Button>
-        )}
-      </div>
-
-      {!sessions || sessions.length === 0 ? (
-        <LogsEmptyState
-          isLoading={isFetching}
-          hasFilters={hasFilters}
-          emptyMessage="No LLM proxy logs found. Logs will appear here when agents start making requests."
-        />
-      ) : (
-        <div className="w-full space-y-4">
-          <div className="overflow-hidden rounded-md border">
-            <Table className="table-auto min-w-[900px]">
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="min-w-[200px]">Session</TableHead>
-                  <TableHead className="w-[100px] whitespace-nowrap">
-                    Requests
-                  </TableHead>
-                  <TableHead className="w-[200px]">Models</TableHead>
-                  <TableHead className="w-[140px] whitespace-nowrap">
-                    Cost
-                  </TableHead>
-                  <TableHead className="w-[100px]">Source</TableHead>
-                  <TableHead className="w-[160px]">Time</TableHead>
-                  <TableHead className="min-w-[100px]">Details</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {sessions.map((session, index) => (
-                  <SessionRow
-                    key={`${session.sessionId ?? "single"}-${session.profileId}-${index}`}
-                    session={session}
-                    agents={agents}
-                  />
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-          {paginationMeta && (
-            <TablePagination
-              pageIndex={pageIndex}
-              pageSize={pageSize}
-              total={paginationMeta.total}
-              onPaginationChange={handlePaginationChange}
-            />
-          )}
-        </div>
-      )}
+      <DataTable
+        columns={columns}
+        data={sessions}
+        hideSelectedCount
+        manualPagination
+        pagination={{
+          pageIndex,
+          pageSize,
+          total: paginationMeta?.total ?? 0,
+        }}
+        onPaginationChange={handlePaginationChange}
+        isLoading={isFetching}
+        hasActiveFilters={hasFilters}
+        emptyMessage="No LLM proxy logs found. Logs will appear here when agents start making requests."
+        filteredEmptyMessage="No LLM logs match your filters. Try adjusting your search."
+        onClearFilters={clearFilters}
+        onRowClick={(session) => {
+          const { isSingleInteraction } = getSessionDisplayData(session);
+          if (isSingleInteraction) {
+            router.push(`/llm/logs/${session.interactionId}`);
+          } else if (session.sessionId) {
+            router.push(
+              `/llm/logs/session/${encodeURIComponent(session.sessionId)}`,
+            );
+          }
+        }}
+      />
     </div>
   );
 }

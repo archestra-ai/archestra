@@ -44,7 +44,9 @@ export function useMcpToolCalls({
   sortBy?: NonNullable<
     archestraApiTypes.GetMcpToolCallsData["query"]
   >["sortBy"];
-  sortDirection?: "asc" | "desc";
+  sortDirection?: NonNullable<
+    archestraApiTypes.GetMcpToolCallsData["query"]
+  >["sortDirection"];
   initialData?: archestraApiTypes.GetMcpToolCallsResponses["200"];
 } = {}) {
   return useQuery({
@@ -104,6 +106,7 @@ export function useMcpToolCalls({
     initialData:
       offset === 0 &&
       limit === DEFAULT_TABLE_LIMIT &&
+      !agentId &&
       sortBy === "createdAt" &&
       sortDirection === "desc" &&
       !startDate &&

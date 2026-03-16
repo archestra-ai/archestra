@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  type AgentType,
   archestraApiSdk,
   type archestraApiTypes,
   DocsPage,
@@ -21,17 +22,18 @@ import {
   User,
   Users,
 } from "lucide-react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { AgentBadge } from "@/components/agent-badge";
 import { AgentDialog } from "@/components/agent-dialog";
+import { AgentIcon } from "@/components/agent-icon";
 import {
   ActiveFilterBadges,
   AgentScopeFilter,
 } from "@/components/agent-scope-filter";
 import { ConnectDialog } from "@/components/connect-dialog";
+import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { LabelTags } from "@/components/label-tags";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
@@ -40,15 +42,6 @@ import { SearchInput } from "@/components/search-input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogForm,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { PermissionButton } from "@/components/ui/permission-button";
 import {
   Tooltip,
@@ -59,17 +52,13 @@ import {
 import { useDeleteProfile, useProfilesPaginated } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
-import {
-  DEFAULT_AGENTS_PAGE_SIZE,
-  DEFAULT_SORT_BY,
-  DEFAULT_SORT_DIRECTION,
-  formatDate,
-} from "@/lib/utils";
+import { useDataTableQueryParams } from "@/lib/use-data-table-query-params";
+import { DEFAULT_SORT_BY, DEFAULT_SORT_DIRECTION } from "@/lib/utils";
 import { LlmProxyActions } from "./llm-proxy-actions";
 
 type LlmProxiesInitialData = {
   agents: archestraApiTypes.GetAgentsResponses["200"] | null;
-  teams: archestraApiTypes.GetTeamsResponses["200"];
+  teams: archestraApiTypes.GetTeamsResponses["200"]["data"];
 };
 
 export default function LlmProxiesPage({
@@ -86,7 +75,13 @@ export default function LlmProxiesPage({
   );
 }
 
-function SortIcon({ isSorted }: { isSorted: false | "asc" | "desc" }) {
+function SortIcon({
+  isSorted,
+}: {
+  isSorted:
+    | NonNullable<archestraApiTypes.GetAgentsData["query"]>["sortDirection"]
+    | false;
+}) {
   const upArrow = <ChevronUp className="h-3 w-3" />;
   const downArrow = <ChevronDown className="h-3 w-3" />;
   if (isSorted === "asc") {
@@ -185,13 +180,15 @@ function VisibilityBadge({
 }
 
 function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
-  const searchParams = useSearchParams();
-  const router = useRouter();
-  const pathname = usePathname();
+  const {
+    searchParams,
+    pageIndex,
+    pageSize,
+    offset,
+    updateQueryParams,
+    setPagination,
+  } = useDataTableQueryParams();
 
-  // Get pagination/filter params from URL
-  const pageFromUrl = searchParams.get("page");
-  const pageSizeFromUrl = searchParams.get("pageSize");
   const nameFilter = searchParams.get("name") || "";
   const sortByFromUrl = searchParams.get("sortBy") as
     | "name"
@@ -214,11 +211,6 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
   const excludeAuthorIdsFromUrl = searchParams.get("excludeAuthorIds");
   const labelsFromUrl = searchParams.get("labels");
 
-  const pageIndex = Number(pageFromUrl || "1") - 1;
-  const pageSize = Number(pageSizeFromUrl || DEFAULT_AGENTS_PAGE_SIZE);
-  const offset = pageIndex * pageSize;
-
-  // Default sorting
   const sortBy = sortByFromUrl || DEFAULT_SORT_BY;
   const sortDirection = sortDirectionFromUrl || DEFAULT_SORT_DIRECTION;
 
@@ -242,8 +234,10 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
   const { data: userTeams } = useQuery({
     queryKey: ["teams"],
     queryFn: async () => {
-      const { data } = await archestraApiSdk.getTeams();
-      return data || [];
+      const { data } = await archestraApiSdk.getTeams({
+        query: { limit: 100, offset: 0 },
+      });
+      return data?.data || [];
     },
     initialData: initialData?.teams,
   });
@@ -260,7 +254,6 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
     { id: sortBy, desc: sortDirection === "desc" },
   ]);
 
-  // Sync sorting state with URL params
   useEffect(() => {
     setSorting([{ id: sortBy, desc: sortDirection === "desc" }]);
   }, [sortBy, sortDirection]);
@@ -271,53 +264,65 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
   const [connectingProxy, setConnectingProxy] = useState<{
     id: string;
     name: string;
-    agentType: "profile" | "mcp_gateway" | "llm_proxy" | "agent";
+    agentType: AgentType;
   } | null>(null);
   const [editingProxy, setEditingProxy] = useState<ProxyData | null>(null);
   const [deletingProxyId, setDeletingProxyId] = useState<string | null>(null);
 
-  // Update URL when sorting changes
   const handleSortingChange = useCallback(
     (updater: SortingState | ((old: SortingState) => SortingState)) => {
       const newSorting =
         typeof updater === "function" ? updater(sorting) : updater;
       setSorting(newSorting);
 
-      const params = new URLSearchParams(searchParams.toString());
       if (newSorting.length > 0) {
-        params.set("sortBy", newSorting[0].id);
-        params.set("sortDirection", newSorting[0].desc ? "desc" : "asc");
+        updateQueryParams({
+          page: "1",
+          sortBy: newSorting[0].id,
+          sortDirection: newSorting[0].desc ? "desc" : "asc",
+        });
       } else {
-        params.delete("sortBy");
-        params.delete("sortDirection");
+        updateQueryParams({
+          page: "1",
+          sortBy: null,
+          sortDirection: null,
+        });
       }
-      params.set("page", "1"); // Reset to first page when sorting changes
-      router.push(`${pathname}?${params.toString()}`, { scroll: false });
     },
-    [sorting, searchParams, router, pathname],
+    [sorting, updateQueryParams],
   );
 
-  // Update URL when pagination changes
   const handlePaginationChange = useCallback(
     (newPagination: { pageIndex: number; pageSize: number }) => {
-      const params = new URLSearchParams(searchParams.toString());
-      params.set("page", String(newPagination.pageIndex + 1));
-      params.set("pageSize", String(newPagination.pageSize));
-      router.push(`${pathname}?${params.toString()}`, { scroll: false });
+      setPagination(newPagination);
     },
-    [searchParams, router, pathname],
+    [setPagination],
   );
 
   const agents = agentsResponse?.data || [];
   const pagination = agentsResponse?.pagination;
   const showLoading = isPending && !initialData?.agents;
 
-  // LLM Proxies table columns - no Tools or Subagents
   const columns: ColumnDef<ProxyData>[] = [
+    {
+      id: "icon",
+      size: 40,
+      enableSorting: false,
+      header: "",
+      cell: ({ row }) => (
+        <div className="flex items-center justify-center">
+          <AgentIcon
+            icon={row.original.icon}
+            size={20}
+            fallbackType="llm_proxy"
+          />
+        </div>
+      ),
+    },
     {
       id: "name",
       accessorKey: "name",
-      size: 300,
+      size: 240,
       header: ({ column }) => (
         <Button
           variant="ghost"
@@ -362,25 +367,6 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
         );
       },
     },
-    {
-      id: "createdAt",
-      accessorKey: "createdAt",
-      header: ({ column }) => (
-        <Button
-          variant="ghost"
-          className="h-auto !p-0 font-medium hover:bg-transparent"
-          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-        >
-          Created
-          <SortIcon isSorted={column.getIsSorted()} />
-        </Button>
-      ),
-      cell: ({ row }) => (
-        <div className="font-mono text-xs">
-          {formatDate({ date: row.original.createdAt })}
-        </div>
-      ),
-    },
     ...(isAdmin
       ? [
           {
@@ -389,24 +375,10 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
             enableSorting: false,
             cell: ({ row }: { row: { original: ProxyData } }) => (
               <VisibilityBadge
-                scope={
-                  (row.original as unknown as Record<string, unknown>)
-                    .scope as string
-                }
-                teams={
-                  row.original.teams as unknown as Array<{
-                    id: string;
-                    name: string;
-                  }>
-                }
-                authorId={
-                  (row.original as unknown as Record<string, unknown>)
-                    .authorId as string | null
-                }
-                authorName={
-                  (row.original as unknown as Record<string, unknown>)
-                    .authorName as string | null
-                }
+                scope={row.original.scope}
+                teams={row.original.teams}
+                authorId={row.original.authorId}
+                authorName={row.original.authorName}
                 currentUserId={currentUserId}
               />
             ),
@@ -416,18 +388,12 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
     {
       id: "actions",
       header: "Actions",
-      size: 176,
       enableHiding: false,
       cell: ({ row }) => {
         const agent = row.original;
-        const scope = (agent as unknown as Record<string, unknown>).scope as
-          | string
-          | undefined;
-        const authorId = (agent as unknown as Record<string, unknown>)
-          .authorId as string | null | undefined;
-        const agentTeams = (
-          agent as unknown as { teams?: Array<{ id: string }> }
-        ).teams;
+        const scope = agent.scope;
+        const authorId = agent.authorId;
+        const agentTeams = agent.teams;
         const isPersonal = scope === "personal";
         const isTeamScoped = scope === "team";
         const isOwner = !!currentUserId && authorId === currentUserId;
@@ -490,44 +456,57 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
             <div className="mb-6 flex flex-col gap-2">
               <div className="flex items-center gap-4">
                 <SearchInput
-                  placeholder="Search proxies by name..."
+                  objectNamePlural="proxies"
+                  searchFields={["name"]}
                   paramName="name"
-                  className="relative max-w-md flex-1"
                 />
                 <AgentScopeFilter />
               </div>
               <ActiveFilterBadges />
             </div>
 
-            {!agents || agents.length === 0 ? (
-              <div className="text-muted-foreground">
-                {nameFilter || scopeFromUrl || labelsFromUrl
-                  ? "No LLM proxies found matching your filters"
-                  : "No LLM proxies found"}
-              </div>
-            ) : (
-              <div data-testid={E2eTestId.AgentsTable}>
-                <DataTable
-                  columns={columns}
-                  data={agents}
-                  sorting={sorting}
-                  onSortingChange={handleSortingChange}
-                  manualSorting={true}
-                  manualPagination={true}
-                  pagination={{
-                    pageIndex,
-                    pageSize,
-                    total: pagination?.total || 0,
-                  }}
-                  onPaginationChange={handlePaginationChange}
-                />
-              </div>
-            )}
+            <div data-testid={E2eTestId.AgentsTable}>
+              <DataTable
+                columns={columns}
+                data={agents}
+                sorting={sorting}
+                onSortingChange={handleSortingChange}
+                manualSorting={true}
+                manualPagination={true}
+                pagination={{
+                  pageIndex,
+                  pageSize,
+                  total: pagination?.total ?? 0,
+                }}
+                onPaginationChange={handlePaginationChange}
+                hasActiveFilters={Boolean(
+                  nameFilter ||
+                    scopeFromUrl ||
+                    teamIdsFromUrl ||
+                    authorIdsFromUrl ||
+                    excludeAuthorIdsFromUrl ||
+                    labelsFromUrl,
+                )}
+                onClearFilters={() =>
+                  updateQueryParams({
+                    name: null,
+                    scope: null,
+                    teamIds: null,
+                    authorIds: null,
+                    excludeAuthorIds: null,
+                    labels: null,
+                    page: "1",
+                  })
+                }
+                emptyMessage="No LLM proxies found"
+              />
+            </div>
 
             <AgentDialog
               open={isCreateDialogOpen}
               onOpenChange={setIsCreateDialogOpen}
               agentType="llm_proxy"
+              defaultIconType="llm_proxy"
               onCreated={(proxy) => {
                 setIsCreateDialogOpen(false);
                 setConnectingProxy({ ...proxy, agentType: "llm_proxy" });
@@ -547,6 +526,7 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
               onOpenChange={(open) => !open && setEditingProxy(null)}
               agent={editingProxy}
               agentType={editingProxy?.agentType || "llm_proxy"}
+              defaultIconType="llm_proxy"
             />
 
             {deletingProxyId && (
@@ -566,7 +546,6 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
 function ProxyConnectionColumns({ agentId }: { agentId: string }) {
   return (
     <div className="space-y-6">
-      {/* Single tab for LLM Proxy */}
       <div className="flex gap-3">
         <div className="flex-1 flex flex-col gap-2 p-3 rounded-lg bg-blue-500/5 border-2 border-blue-500/30">
           <div className="flex items-center gap-2">
@@ -590,7 +569,6 @@ function ProxyConnectionColumns({ agentId }: { agentId: string }) {
         </div>
       </div>
 
-      {/* Content */}
       <div className="p-4 rounded-lg border bg-card">
         <ProxyConnectionInstructions agentId={agentId} />
       </div>
@@ -606,7 +584,7 @@ function ConnectProxyDialog({
   agent: {
     id: string;
     name: string;
-    agentType: "profile" | "mcp_gateway" | "llm_proxy" | "agent";
+    agentType: AgentType;
   };
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -643,34 +621,15 @@ function DeleteProxyDialog({
   }, [agentId, deleteProxy, onOpenChange]);
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>Delete LLM Proxy</DialogTitle>
-          <DialogDescription>
-            Are you sure you want to delete this LLM Proxy? This action cannot
-            be undone.
-          </DialogDescription>
-        </DialogHeader>
-        <DialogForm onSubmit={handleDelete}>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              variant="destructive"
-              disabled={deleteProxy.isPending}
-            >
-              {deleteProxy.isPending ? "Deleting..." : "Delete LLM Proxy"}
-            </Button>
-          </DialogFooter>
-        </DialogForm>
-      </DialogContent>
-    </Dialog>
+    <DeleteConfirmDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Delete LLM Proxy"
+      description="Are you sure you want to delete this LLM Proxy? This action cannot be undone."
+      isPending={deleteProxy.isPending}
+      onConfirm={handleDelete}
+      confirmLabel="Delete LLM Proxy"
+      pendingLabel="Deleting..."
+    />
   );
 }

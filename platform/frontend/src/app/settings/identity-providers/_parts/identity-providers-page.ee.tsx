@@ -314,29 +314,13 @@ export function IdentityProvidersSettingsContent() {
 
   // Show message if SSO feature is disabled (check before loading since query is disabled)
   if (!config.enterpriseFeatures.core) {
-    return (
-      <div>
-        <div className="mb-8">
-          <h2 className="text-lg font-semibold">Identity Providers</h2>
-          <EnterpriseLicenseRequired featureName="Identity Providers" />
-        </div>
-      </div>
-    );
+    return <EnterpriseLicenseRequired featureName="Identity Providers" />;
   }
 
   if (isLoading) return <LoadingSpinner />;
 
   return (
     <div>
-      <div className="mb-8">
-        <h2 className="text-lg font-semibold">Identity Providers</h2>
-        <p className="text-sm text-muted-foreground">
-          Manage Identity Providers (IdPs) for your organization. IdPs can be
-          used for Single Sign-On (SSO) and for validating external JWT tokens
-          on MCP Gateway requests (via JWKS).
-        </p>
-      </div>
-
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {IDP_CONFIGS.map((config) => {
           const existingProvider = getProviderStatus(config);

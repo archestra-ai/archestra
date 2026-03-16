@@ -4724,3 +4724,101 @@ describe("K8sDeployment.collectImagePullSecretNames", () => {
     ]);
   });
 });
+
+describe("K8sDeployment.ensureHttpServerConfigured cluster domain", () => {
+  function createDeploymentForClusterDomainTest(
+    clusterDomain: string,
+  ): K8sDeployment {
+    const mcpServer = {
+      id: "http-server-id",
+      name: "http-server",
+      catalogId: "catalog-http",
+      secretId: null,
+      ownerId: null,
+      reinstallRequired: false,
+      localInstallationStatus: "idle",
+      localInstallationError: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    } as McpServer;
+
+    const mockReadService = vi.fn().mockRejectedValue({ statusCode: 404 });
+    const mockCreateService = vi.fn().mockResolvedValue({});
+
+    const mockK8sApi = {
+      readNamespacedService: mockReadService,
+      createNamespacedService: mockCreateService,
+    } as unknown as k8s.CoreV1Api;
+
+    const deployment = new K8sDeployment({
+      mcpServer: mcpServer,
+      k8sApi: mockK8sApi,
+      k8sAppsApi: {} as k8s.AppsV1Api,
+      k8sAttach: {} as Attach,
+      k8sLog: {} as k8s.Log,
+      k8sExec: {} as Exec,
+      namespace: "default",
+      catalogItem: null,
+    });
+
+    // biome-ignore lint/suspicious/noExplicitAny: Accessing private property for testing
+    (deployment as any).catalogItem = {
+      id: "catalog-http",
+      localConfig: {
+        command: "node",
+        arguments: ["server.js"],
+        transportType: "streamable-http",
+        httpPort: 8080,
+        httpPath: "/mcp",
+      },
+    };
+
+    config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster = true;
+    config.orchestrator.kubernetes.clusterDomain = clusterDomain;
+
+    return deployment;
+  }
+
+  test("uses cluster.local by default", async () => {
+    const originalLoadFromCluster =
+      config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster;
+    const originalClusterDomain = config.orchestrator.kubernetes.clusterDomain;
+
+    try {
+      const deployment = createDeploymentForClusterDomainTest("cluster.local");
+
+      // biome-ignore lint/suspicious/noExplicitAny: Accessing private method for testing
+      await (deployment as any).ensureHttpServerConfigured();
+
+      expect(deployment.httpEndpointUrl).toBe(
+        "http://mcp-http-server-service.default.svc.cluster.local:8080/mcp",
+      );
+    } finally {
+      config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster =
+        originalLoadFromCluster;
+      config.orchestrator.kubernetes.clusterDomain = originalClusterDomain;
+    }
+  });
+
+  test("uses custom cluster domain when ARCHESTRA_ORCHESTRATOR_K8S_CLUSTER_DOMAIN is set", async () => {
+    const originalLoadFromCluster =
+      config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster;
+    const originalClusterDomain = config.orchestrator.kubernetes.clusterDomain;
+
+    try {
+      const deployment =
+        createDeploymentForClusterDomainTest("my-custom.domain");
+
+      // biome-ignore lint/suspicious/noExplicitAny: Accessing private method for testing
+      await (deployment as any).ensureHttpServerConfigured();
+
+      expect(deployment.httpEndpointUrl).toBe(
+        "http://mcp-http-server-service.default.svc.my-custom.domain:8080/mcp",
+      );
+    } finally {
+      config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster =
+        originalLoadFromCluster;
+      config.orchestrator.kubernetes.clusterDomain = originalClusterDomain;
+    }
+  });
+});

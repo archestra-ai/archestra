@@ -4,13 +4,8 @@ import { Upload, X } from "lucide-react";
 import Image from "next/image";
 import { useCallback, useRef, useState } from "react";
 import { toast } from "sonner";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { SettingsCardHeader } from "@/components/settings/settings-block";
+import { Card, CardContent } from "@/components/ui/card";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { useUpdateAppearanceSettings } from "@/lib/organization.query";
 
@@ -96,10 +91,7 @@ export function ImageUpload({
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>{title}</CardTitle>
-        <CardDescription>{description}</CardDescription>
-      </CardHeader>
+      <SettingsCardHeader title={title} description={description} />
       <CardContent className="space-y-4">
         <div className="flex items-center gap-4">
           <div className="relative h-10 w-10 rounded-md border border-border bg-muted flex items-center justify-center overflow-hidden shrink-0">

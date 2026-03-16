@@ -2,15 +2,11 @@
 
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useState } from "react";
-import { SettingsSaveBar } from "@/components/settings/settings-block";
-import { Button } from "@/components/ui/button";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+  SettingsCardHeader,
+  SettingsSaveBar,
+} from "@/components/settings/settings-block";
+import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -160,13 +156,10 @@ export default function OrganizationSettingsPage() {
           />
 
           <Card>
-            <CardHeader>
-              <CardTitle>Branding</CardTitle>
-              <CardDescription>
-                Customize your organization&apos;s browser tab title, OpenGraph
-                description, footer text, and chat placeholders.
-              </CardDescription>
-            </CardHeader>
+            <SettingsCardHeader
+              title="Branding"
+              description="Customize your organization's browser tab title, OpenGraph description, footer text, and chat placeholders."
+            />
             <CardContent className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="appName">App Name</Label>
@@ -242,24 +235,17 @@ export default function OrganizationSettingsPage() {
         <h3 className="text-lg font-medium mb-4">Authentication</h3>
         <div className="space-y-6">
           <Card>
-            <div className="flex items-center justify-between gap-4 px-6 py-4">
-              <div>
-                <Label
-                  htmlFor="showTwoFactor"
-                  className="text-base font-semibold"
-                >
-                  Two-Factor Authentication
-                </Label>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Show 2FA setup to members in their authentication settings.
-                </p>
-              </div>
-              <Switch
-                id="showTwoFactor"
-                checked={effectiveShowTwoFactor}
-                onCheckedChange={(checked) => setShowTwoFactor(checked)}
-              />
-            </div>
+            <SettingsCardHeader
+              title="Two-Factor Authentication"
+              description="Show 2FA setup to members in their authentication settings."
+              action={
+                <Switch
+                  id="showTwoFactor"
+                  checked={effectiveShowTwoFactor}
+                  onCheckedChange={(checked) => setShowTwoFactor(checked)}
+                />
+              }
+            />
           </Card>
 
           <OrganizationTokenSection />

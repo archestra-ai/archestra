@@ -4,13 +4,8 @@ import { Upload, X } from "lucide-react";
 import Image from "next/image";
 import { useCallback, useRef, useState } from "react";
 import { toast } from "sonner";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { SettingsCardHeader } from "@/components/settings/settings-block";
+import { Card, CardContent } from "@/components/ui/card";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { useUpdateAppearanceSettings } from "@/lib/organization.query";
 
@@ -27,14 +22,10 @@ export function LogoUpload({
 }: LogoUploadProps) {
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>Organization Logo</CardTitle>
-        <CardDescription>
-          Upload custom logos for your organization. The dark mode logo is used
-          when dark mode is active and falls back to the default logo if not
-          set.
-        </CardDescription>
-      </CardHeader>
+      <SettingsCardHeader
+        title="Organization Logo"
+        description="Upload custom logos for your organization. The dark mode logo is used when dark mode is active and falls back to the default logo if not set."
+      />
       <CardContent className="space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <LogoSlot

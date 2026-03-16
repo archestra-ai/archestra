@@ -45,8 +45,8 @@ export interface TokensListResponse {
  * When profileId is provided, team tokens are filtered to only include
  * tokens for teams that the profile is also assigned to.
  */
-export function useTokens(params?: { profileId?: string }) {
-  const { profileId } = params ?? {};
+export function useTokens(params?: { profileId?: string; enabled?: boolean }) {
+  const { profileId, enabled } = params ?? {};
   return useQuery({
     queryKey: ["tokens", { profileId }],
     queryFn: async () => {
@@ -63,6 +63,7 @@ export function useTokens(params?: { profileId?: string }) {
         },
       };
     },
+    enabled,
   });
 }
 

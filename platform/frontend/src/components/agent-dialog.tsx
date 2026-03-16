@@ -805,6 +805,12 @@ export function AgentDialog({
     const validSuggestedPrompts = suggestedPrompts.filter(
       (sp) => sp.summaryTitle.trim() && sp.prompt.trim(),
     );
+    const normalizedDescription = shouldShowDescriptionField({
+      agentType,
+      isBuiltIn,
+    })
+      ? description.trim() || null
+      : undefined;
 
     try {
       let savedAgentId: string;
@@ -853,8 +859,10 @@ export function AgentDialog({
             name: trimmedName,
             icon: icon || null,
             agentType: agentType,
+            ...(normalizedDescription !== undefined && {
+              description: normalizedDescription,
+            }),
             ...(isInternalAgent && {
-              description: description.trim() || null,
               systemPrompt: trimmedSystemPrompt || null,
               llmApiKeyId: llmApiKeyId || null,
               llmModel: llmModel || null,
@@ -884,8 +892,10 @@ export function AgentDialog({
           name: trimmedName,
           icon: icon || null,
           agentType: agentType,
+          ...(normalizedDescription !== undefined && {
+            description: normalizedDescription,
+          }),
           ...(isInternalAgent && {
-            description: description.trim() || null,
             systemPrompt: trimmedSystemPrompt || null,
             llmApiKeyId: llmApiKeyId || null,
             llmModel: llmModel || null,

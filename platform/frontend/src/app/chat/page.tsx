@@ -36,6 +36,7 @@ import { Suggestion } from "@/components/ai-elements/suggestion";
 import { AppLogo } from "@/components/app-logo";
 import { ButtonWithTooltip } from "@/components/button-with-tooltip";
 import { BrowserPanel } from "@/components/chat/browser-panel";
+import { ChatHelpLink } from "@/components/chat/chat-help-link";
 import { ChatMessages } from "@/components/chat/chat-messages";
 import { ConversationArtifactPanel } from "@/components/chat/conversation-artifact";
 import {
@@ -1639,6 +1640,11 @@ export default function ChatPage() {
                   />
                 )}
                 <div className="flex-1 flex flex-col items-center justify-center p-4 gap-8">
+                  {organization?.helpCenterUrl && (
+                    <div className="w-full max-w-4xl flex justify-end">
+                      <ChatHelpLink url={organization.helpCenterUrl} />
+                    </div>
+                  )}
                   <div className="scale-150">
                     <AppLogo />
                   </div>

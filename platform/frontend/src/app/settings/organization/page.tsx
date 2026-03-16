@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { isValidHelpCenterUrl } from "@/lib/help-center-url";
 import { useOnUnmount } from "@/lib/lifecycle.hook";
 import {
   organizationKeys,
@@ -66,6 +67,7 @@ export default function OrganizationSettingsPage() {
   const [appName, setAppName] = useState<string | null>(null);
   const [ogDescription, setOgDescription] = useState<string | null>(null);
   const [footerText, setFooterText] = useState<string | null>(null);
+  const [helpCenterUrl, setHelpCenterUrl] = useState<string | null>(null);
   const [chatPlaceholders, setChatPlaceholders] = useState<string[] | null>(
     null,
   );
@@ -79,17 +81,26 @@ export default function OrganizationSettingsPage() {
   const effectiveOgDescription =
     ogDescription ?? organization?.ogDescription ?? "";
   const effectiveFooterText = footerText ?? organization?.footerText ?? "";
+  const effectiveHelpCenterUrl =
+    helpCenterUrl ?? organization?.helpCenterUrl ?? "";
   const effectiveChatPlaceholders =
     chatPlaceholders ?? organization?.chatPlaceholders ?? [];
   const effectiveAnimateChatPlaceholders =
     animateChatPlaceholders ?? organization?.animateChatPlaceholders ?? true;
   const effectiveShowTwoFactor =
     showTwoFactor ?? organization?.showTwoFactor ?? false;
+  const trimmedHelpCenterUrl = effectiveHelpCenterUrl.trim();
+  const helpCenterUrlError =
+    trimmedHelpCenterUrl.length > 0 &&
+    !isValidHelpCenterUrl(trimmedHelpCenterUrl)
+      ? "Enter a valid HTTP or HTTPS URL."
+      : null;
 
   const hasFieldChanges =
     appName !== null ||
     ogDescription !== null ||
     footerText !== null ||
+    helpCenterUrl !== null ||
     chatPlaceholders !== null ||
     animateChatPlaceholders !== null ||
     showTwoFactor !== null;
@@ -99,6 +110,9 @@ export default function OrganizationSettingsPage() {
     if (appName !== null) data.appName = appName || null;
     if (ogDescription !== null) data.ogDescription = ogDescription || null;
     if (footerText !== null) data.footerText = footerText || null;
+    if (helpCenterUrl !== null) {
+      data.helpCenterUrl = helpCenterUrl.trim() || null;
+    }
     if (chatPlaceholders !== null)
       data.chatPlaceholders =
         chatPlaceholders.length > 0 ? chatPlaceholders : null;
@@ -116,6 +130,7 @@ export default function OrganizationSettingsPage() {
     setAppName(null);
     setOgDescription(null);
     setFooterText(null);
+    setHelpCenterUrl(null);
     setChatPlaceholders(null);
     setAnimateChatPlaceholders(null);
     setShowTwoFactor(null);
@@ -203,6 +218,28 @@ export default function OrganizationSettingsPage() {
                   Custom text shown in the footer alongside the version number.
                 </p>
               </div>
+              <div className="space-y-2">
+                <Label htmlFor="helpCenterUrl">Help Center URL</Label>
+                <Input
+                  id="helpCenterUrl"
+                  type="url"
+                  placeholder="https://support.example.com/help"
+                  value={effectiveHelpCenterUrl}
+                  onChange={(e) => setHelpCenterUrl(e.target.value)}
+                  maxLength={2000}
+                  aria-invalid={!!helpCenterUrlError}
+                />
+                <p
+                  className={
+                    helpCenterUrlError
+                      ? "text-xs text-destructive"
+                      : "text-xs text-muted-foreground"
+                  }
+                >
+                  {helpCenterUrlError ??
+                    "Optional external link shown on the new chat page for help or documentation."}
+                </p>
+              </div>
               <div className="flex items-start justify-between gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="animateChatPlaceholders">
@@ -263,7 +300,7 @@ export default function OrganizationSettingsPage() {
             await saveAppearance?.(currentUITheme || DEFAULT_THEME);
             setHasThemeChanges(false);
           }
-          if (hasFieldChanges) {
+          if (hasFieldChanges && !helpCenterUrlError) {
             await handleSaveFields();
           }
         }}
@@ -275,10 +312,12 @@ export default function OrganizationSettingsPage() {
           setAppName(null);
           setOgDescription(null);
           setFooterText(null);
+          setHelpCenterUrl(null);
           setChatPlaceholders(null);
           setAnimateChatPlaceholders(null);
           setShowTwoFactor(null);
         }}
+        disabledSave={!!helpCenterUrlError}
       />
     </SettingsSectionStack>
   );

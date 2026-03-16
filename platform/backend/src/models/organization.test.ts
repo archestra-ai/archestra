@@ -25,6 +25,7 @@ describe("OrganizationModel", () => {
         appName: null,
         ogDescription: null,
         footerText: null,
+        helpCenterUrl: null,
         animateChatPlaceholders: true,
       });
     });
@@ -46,6 +47,7 @@ describe("OrganizationModel", () => {
         appName: null,
         ogDescription: null,
         footerText: null,
+        helpCenterUrl: null,
         animateChatPlaceholders: true,
       });
     });
@@ -141,6 +143,7 @@ describe("OrganizationModel", () => {
         "customFont",
         "favicon",
         "footerText",
+        "helpCenterUrl",
         "iconLogo",
         "logo",
         "logoDark",
@@ -289,6 +292,16 @@ describe("OrganizationModel", () => {
       });
 
       expect(updated?.animateChatPlaceholders).toBe(false);
+    });
+
+    test("should update helpCenterUrl", async ({ makeOrganization }) => {
+      const org = await makeOrganization();
+
+      const updated = await OrganizationModel.patch(org.id, {
+        helpCenterUrl: "https://support.example.com/help",
+      });
+
+      expect(updated?.helpCenterUrl).toBe("https://support.example.com/help");
     });
 
     test("should set default LLM model and provider", async ({
@@ -484,6 +497,49 @@ describe("OrganizationModel", () => {
           expect(result.data).toBe(VALID_PNG_BASE64);
         }
       });
+    });
+  });
+
+  describe("helpCenterUrl validation (via UpdateAppearanceSettingsSchema)", () => {
+    const parseHelpCenterUrlField = (helpCenterUrl: string | null) =>
+      UpdateAppearanceSettingsSchema.shape.helpCenterUrl.safeParse(
+        helpCenterUrl,
+      );
+
+    test("should accept null", () => {
+      const result = parseHelpCenterUrlField(null);
+
+      expect(result.success).toBe(true);
+    });
+
+    test("should accept valid https URL", () => {
+      const result = parseHelpCenterUrlField(
+        "https://teams.microsoft.com/l/channel/123",
+      );
+
+      expect(result.success).toBe(true);
+    });
+
+    test("should reject invalid URL", () => {
+      const result = parseHelpCenterUrlField("not-a-url");
+
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.issues[0]?.message).toContain(
+          "valid HTTP or HTTPS URL",
+        );
+      }
+    });
+
+    test("should reject non-http protocol", () => {
+      const result = parseHelpCenterUrlField("ftp://example.com/help");
+
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.issues[0]?.message).toContain(
+          "valid HTTP or HTTPS URL",
+        );
+      }
     });
   });
 

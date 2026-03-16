@@ -15,19 +15,14 @@ Archestra includes a built-in Chat interface that allows users to interact with 
 
 ![Agent Platform Swarm](/docs/platform-chat.png)
 
+Organizations can also customize the new chat experience from Settings -> Organization -> Branding. This includes browser branding, footer text, placeholder prompts, and an optional Help Center URL that adds a top-right link to external documentation or support resources.
+
 ### API Keys
 Chat will use LLM API Keys configured in Settings -> LLM API Keys. When a chat request is made, the system determines which API key to use in this order:
 
 1. **Profile-specific key** - If the profile has an API key assigned for the provider, use it
 2. **Organization default** - Fall back to the organization's default key for that provider
 3. **Environment variable** - Final fallback to `ARCHESTRA_CHAT_<PROVIDER>_API_KEY`
-
-### Branding
-Chat inherits organization branding from Settings -> Organization -> Branding.
-
-- `Chat Placeholders` controls the prompts shown in the new-chat input
-- `Animate Chat Placeholders` enables or disables the typing animation for placeholder rotation
-- If only one placeholder is configured, Chat always renders it as static text
 
 ### Supported Providers
 

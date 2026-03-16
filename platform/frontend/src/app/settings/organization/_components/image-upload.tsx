@@ -26,14 +26,16 @@ export function ImageUpload({
 }: ImageUploadProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [preview, setPreview] = useState<string | null>(currentImage || null);
-  const uploadMutation = useUpdateAppearanceSettings(
-    `${title} uploaded successfully`,
-    `Failed to upload ${title.toLowerCase()}`,
-  );
-  const removeMutation = useUpdateAppearanceSettings(
-    `${title} removed successfully`,
-    `Failed to remove ${title.toLowerCase()}`,
-  );
+  const { mutateAsync: uploadImage, isPending: isUploadPending } =
+    useUpdateAppearanceSettings(
+      `${title} uploaded successfully`,
+      `Failed to upload ${title.toLowerCase()}`,
+    );
+  const { mutateAsync: removeImage, isPending: isRemovePending } =
+    useUpdateAppearanceSettings(
+      `${title} removed successfully`,
+      `Failed to remove ${title.toLowerCase()}`,
+    );
 
   const handleFileSelect = useCallback(
     async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -56,7 +58,7 @@ export function ImageUpload({
         setPreview(base64);
 
         try {
-          const result = await uploadMutation.mutateAsync({
+          const result = await uploadImage({
             [fieldName]: base64,
           });
           if (!result) throw new Error("Upload failed");
@@ -67,25 +69,19 @@ export function ImageUpload({
       };
       reader.readAsDataURL(file);
     },
-    [
-      currentImage,
-      onImageChange,
-      uploadMutation.mutateAsync,
-      fieldName,
-      uploadMutation,
-    ],
+    [currentImage, onImageChange, uploadImage, fieldName],
   );
 
   const handleRemove = useCallback(async () => {
     try {
-      const result = await removeMutation.mutateAsync({ [fieldName]: null });
+      const result = await removeImage({ [fieldName]: null });
       if (!result) throw new Error("Removal failed");
       setPreview(null);
       onImageChange?.();
     } catch {
       // error handled by mutation
     }
-  }, [onImageChange, removeMutation.mutateAsync, fieldName, removeMutation]);
+  }, [onImageChange, removeImage, fieldName]);
 
   const hasPreview = preview || currentImage;
 
@@ -112,7 +108,7 @@ export function ImageUpload({
               variant="outline"
               size="sm"
               onClick={() => fileInputRef.current?.click()}
-              disabled={uploadMutation.isPending}
+              disabled={isUploadPending}
             >
               <Upload className="h-4 w-4 mr-2" />
               {hasPreview ? "Change" : "Upload"}
@@ -123,7 +119,7 @@ export function ImageUpload({
                 variant="outline"
                 size="sm"
                 onClick={handleRemove}
-                disabled={removeMutation.isPending}
+                disabled={isRemovePending}
               >
                 <X className="h-4 w-4 mr-2" />
                 Remove

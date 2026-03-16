@@ -107,6 +107,9 @@ const organizationsTable = pgTable("organization", {
   /** Custom footer text (replaces version display) */
   footerText: text("footer_text"),
 
+  /** Optional help/documentation URL shown on the new chat page */
+  helpCenterUrl: text("help_center_url"),
+
   /** Chat input placeholder texts (cycles with typing animation) */
   chatPlaceholders: text("chat_placeholders").array(),
 

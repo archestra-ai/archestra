@@ -34247,6 +34247,7 @@ export type GetOrganizationResponses = {
         appName: string | null;
         ogDescription: string | null;
         footerText: string | null;
+        helpCenterUrl: string | null;
         chatPlaceholders: Array<string> | null;
         animateChatPlaceholders: boolean;
         iconLogo: string | null;
@@ -34336,6 +34337,7 @@ export type GetAppearanceSettingsResponses = {
         appName: string | null;
         ogDescription: string | null;
         footerText: string | null;
+        helpCenterUrl: string | null;
         animateChatPlaceholders: boolean;
     };
 };
@@ -34353,6 +34355,7 @@ export type UpdateAppearanceSettingsData = {
         appName?: string | null;
         ogDescription?: string | null;
         footerText?: string | null;
+        helpCenterUrl?: string | null;
         chatPlaceholders?: Array<string> | null;
         animateChatPlaceholders?: boolean;
         showTwoFactor?: boolean;
@@ -34454,6 +34457,7 @@ export type UpdateAppearanceSettingsResponses = {
         appName: string | null;
         ogDescription: string | null;
         footerText: string | null;
+        helpCenterUrl: string | null;
         chatPlaceholders: Array<string> | null;
         animateChatPlaceholders: boolean;
         iconLogo: string | null;
@@ -34565,6 +34569,7 @@ export type UpdateSecuritySettingsResponses = {
         appName: string | null;
         ogDescription: string | null;
         footerText: string | null;
+        helpCenterUrl: string | null;
         chatPlaceholders: Array<string> | null;
         animateChatPlaceholders: boolean;
         iconLogo: string | null;
@@ -34677,6 +34682,7 @@ export type UpdateLlmSettingsResponses = {
         appName: string | null;
         ogDescription: string | null;
         footerText: string | null;
+        helpCenterUrl: string | null;
         chatPlaceholders: Array<string> | null;
         animateChatPlaceholders: boolean;
         iconLogo: string | null;
@@ -34790,6 +34796,7 @@ export type UpdateAgentSettingsResponses = {
         appName: string | null;
         ogDescription: string | null;
         footerText: string | null;
+        helpCenterUrl: string | null;
         chatPlaceholders: Array<string> | null;
         animateChatPlaceholders: boolean;
         iconLogo: string | null;
@@ -34904,6 +34911,7 @@ export type UpdateKnowledgeSettingsResponses = {
         appName: string | null;
         ogDescription: string | null;
         footerText: string | null;
+        helpCenterUrl: string | null;
         chatPlaceholders: Array<string> | null;
         animateChatPlaceholders: boolean;
         iconLogo: string | null;
@@ -35012,6 +35020,7 @@ export type DropEmbeddingConfigResponses = {
         appName: string | null;
         ogDescription: string | null;
         footerText: string | null;
+        helpCenterUrl: string | null;
         chatPlaceholders: Array<string> | null;
         animateChatPlaceholders: boolean;
         iconLogo: string | null;
@@ -35203,6 +35212,7 @@ export type CompleteOnboardingResponses = {
         appName: string | null;
         ogDescription: string | null;
         footerText: string | null;
+        helpCenterUrl: string | null;
         chatPlaceholders: Array<string> | null;
         animateChatPlaceholders: boolean;
         iconLogo: string | null;

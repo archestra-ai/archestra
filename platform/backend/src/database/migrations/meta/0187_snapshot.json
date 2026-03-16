@@ -1,5 +1,5 @@
 {
-  "id": "ed32df57-c5bb-4593-8844-68d0f4571628",
+  "id": "3426c9f2-6f4f-4049-b9c4-7557b6ecd86f",
   "prevId": "ccb27671-6310-4be9-bb0d-a8c3e03484d6",
   "version": "7",
   "dialect": "postgresql",
@@ -6072,6 +6072,12 @@
         },
         "footer_text": {
           "name": "footer_text",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "help_center_url": {
+          "name": "help_center_url",
           "type": "text",
           "primaryKey": false,
           "notNull": false

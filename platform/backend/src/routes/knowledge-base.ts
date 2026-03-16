@@ -611,6 +611,58 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.post(
+    "/api/connectors/:id/force-resync",
+    {
+      schema: {
+        operationId: RouteId.ForceResyncConnector,
+        description:
+          "Force a full re-sync: deletes all documents, chunks, run history, and resets the checkpoint",
+        tags: ["Connectors"],
+        params: z.object({ id: z.string() }),
+        response: constructResponseSchema(
+          z.object({
+            taskId: z.string(),
+            status: z.string(),
+          }),
+        ),
+      },
+    },
+    async ({ params: { id }, organizationId }, reply) => {
+      await findConnectorOrThrow(id, organizationId);
+
+      const hasPendingOrProcessing = await TaskModel.hasPendingOrProcessing(
+        "connector_sync",
+        id,
+      );
+      if (hasPendingOrProcessing) {
+        throw new ApiError(
+          409,
+          "A sync is already in progress for this connector",
+        );
+      }
+
+      // Delete all documents (chunks cascade via FK) and run history
+      await KbDocumentModel.deleteByConnector(id);
+      await ConnectorRunModel.deleteByConnector(id);
+
+      // Reset connector checkpoint and sync status
+      await KnowledgeBaseConnectorModel.update(id, {
+        checkpoint: null,
+        lastSyncStatus: "running",
+        lastSyncAt: null,
+      });
+
+      // Enqueue a fresh sync task
+      const taskId = await taskQueueService.enqueue({
+        taskType: "connector_sync",
+        payload: { connectorId: id },
+      });
+
+      return reply.send({ taskId, status: "enqueued" });
+    },
+  );
+
+  fastify.post(
     "/api/connectors/:id/test",
     {
       schema: {

@@ -169,6 +169,14 @@ class ConnectorRunModel {
     return results.length;
   }
 
+  static async deleteByConnector(connectorId: string): Promise<number> {
+    const result = await db
+      .delete(schema.connectorRunsTable)
+      .where(eq(schema.connectorRunsTable.connectorId, connectorId));
+
+    return result.rowCount ?? 0;
+  }
+
   static async hasActiveRun(connectorId: string): Promise<boolean> {
     const [result] = await db
       .select({ count: count() })

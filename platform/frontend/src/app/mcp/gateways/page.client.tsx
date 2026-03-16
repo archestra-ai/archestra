@@ -354,6 +354,7 @@ function McpGateways({
           <AgentNameCell
             name={agent.name}
             scope={agent.scope}
+            description={agent.description}
             extraBadges={
               agent.agentType === "profile" ? (
                 <TooltipProvider>

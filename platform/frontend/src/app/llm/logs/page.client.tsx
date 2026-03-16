@@ -10,14 +10,15 @@ import { Database, Layers, MessageSquare, User } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
-import { Savings } from "@/components/savings";
-import { SearchInput } from "@/components/search-input";
 import {
   ProfileFilterOption,
   SourceFilterOption,
   UserFilterOption,
 } from "@/components/log-filter-option";
+import { Savings } from "@/components/savings";
+import { SearchInput } from "@/components/search-input";
 import { SourceBadge } from "@/components/source-badge";
+import { TableFilters } from "@/components/table-filters";
 import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/ui/data-table";
 import { DateTimeRangePicker } from "@/components/ui/date-time-range-picker";
@@ -476,7 +477,7 @@ function SessionsTable({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap gap-3">
+      <TableFilters>
         <SearchInput
           objectNamePlural="logs"
           searchFields={["session ID", "model", "message"]}
@@ -552,7 +553,7 @@ function SessionsTable({
           onApply={dateTimePicker.handleApplyDateRange}
           idPrefix="llm-proxy-"
         />
-      </div>
+      </TableFilters>
 
       <DataTable
         columns={columns}

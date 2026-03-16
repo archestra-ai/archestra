@@ -13,6 +13,7 @@ import { InviteByLinkCard } from "@/components/invite-by-link-card";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { RoleOptionLabel } from "@/components/role-type-icon";
 import { SearchInput } from "@/components/search-input";
+import { TableFilters } from "@/components/table-filters";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -50,27 +51,6 @@ import { cn } from "@/lib/utils";
 import { useSetSettingsAction } from "../layout";
 
 const DEFAULT_PAGE_SIZE = 10;
-
-const DEV_MOCK_PENDING_SIGNUP_MEMBERS: PendingSignupMember[] = [
-  {
-    userId: "dev-mock-pending-user-1",
-    name: "Taylor Admin",
-    email: "taylor.admin@example.com",
-    image: null,
-    role: "admin",
-    provider: "google",
-    invitationId: "dev-mock-invitation-1",
-  },
-  {
-    userId: "dev-mock-pending-user-2",
-    name: "Jordan Member",
-    email: "jordan.member@example.com",
-    image: null,
-    role: "member",
-    provider: "okta",
-    invitationId: "dev-mock-invitation-2",
-  },
-];
 
 export default function UsersPageClient() {
   return (
@@ -227,11 +207,7 @@ function MembersTab({
   const updateMemberRole = useUpdateMemberRole();
   const removeMember = useRemoveMember();
   const { data: signupStatus } = useMemberSignupStatus();
-  const pendingSignupMembers = signupStatus?.pendingSignupMembers.length
-    ? signupStatus.pendingSignupMembers
-    : process.env.NODE_ENV === "development"
-      ? DEV_MOCK_PENDING_SIGNUP_MEMBERS
-      : [];
+  const pendingSignupMembers = signupStatus?.pendingSignupMembers ?? [];
   const deletePendingSignupMember = useDeletePendingSignupMember();
 
   const [changingRole, setChangingRole] = useState<{
@@ -392,7 +368,7 @@ function MembersTab({
 
   return (
     <>
-      <div className="flex items-center gap-4 mb-4">
+      <TableFilters>
         <SearchInput
           objectNamePlural="users"
           searchFields={["name", "email"]}
@@ -402,7 +378,7 @@ function MembersTab({
         <div className="ml-auto flex items-center gap-2">
           <TabButtons activeTab={activeTab} onTabChange={onTabChange} />
         </div>
-      </div>
+      </TableFilters>
 
       <LoadingWrapper
         isPending={isPending}

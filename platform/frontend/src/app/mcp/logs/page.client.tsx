@@ -7,6 +7,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ProfileFilterOption } from "@/components/log-filter-option";
 import { SearchInput } from "@/components/search-input";
+import { TableFilters } from "@/components/table-filters";
 import { TruncatedText } from "@/components/truncated-text";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -416,7 +417,7 @@ function McpToolCallsTable({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap gap-3">
+      <TableFilters>
         {searchInputComponent}
         <SearchableSelect
           value={profileFilter}
@@ -434,7 +435,7 @@ function McpToolCallsTable({
           className="w-[200px]"
         />
         {datePickerComponent}
-      </div>
+      </TableFilters>
 
       <DataTable
         columns={columns}

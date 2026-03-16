@@ -26,11 +26,7 @@ export function ProfileFilterOption({
   );
 }
 
-export function SourceFilterOption({
-  source,
-}: {
-  source: InteractionSource;
-}) {
+export function SourceFilterOption({ source }: { source: InteractionSource }) {
   return (
     <span className="flex items-center min-w-0">
       <SourceLabel source={source} className="flex items-center min-w-0" />
@@ -38,11 +34,7 @@ export function SourceFilterOption({
   );
 }
 
-export function UserFilterOption({
-  name,
-}: {
-  name: string;
-}) {
+export function UserFilterOption({ name }: { name: string }) {
   return (
     <span className="flex items-center gap-2 min-w-0">
       <Avatar className="h-5 w-5">

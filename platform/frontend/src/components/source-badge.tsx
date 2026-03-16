@@ -58,7 +58,7 @@ export function SourceLabel({
   if (!source) return null;
 
   const display = INTERACTION_SOURCE_DISPLAY[source];
-  const icon = SOURCE_ICON[source];
+  const _icon = SOURCE_ICON[source];
 
   return (
     <span className={cn("flex min-w-0 items-center gap-1.5", className)}>
@@ -75,8 +75,8 @@ export function SourceBadge({
 }) {
   if (!source) return null;
 
-  const display = INTERACTION_SOURCE_DISPLAY[source];
-  const icon = SOURCE_ICON[source];
+  const _display = INTERACTION_SOURCE_DISPLAY[source];
+  const _icon = SOURCE_ICON[source];
 
   return (
     <Badge variant="outline" className="text-xs">

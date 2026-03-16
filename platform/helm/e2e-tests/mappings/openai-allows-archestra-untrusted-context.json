@@ -3,56 +3,36 @@
     "method": "POST",
     "urlPath": "/openai/v1/chat/completions",
     "headers": {
-      "Authorization": {
-        "contains": "openai-allows-archestra-untrusted-context"
+      "X-Archestra-Context": {
+        "equalTo": "untrusted"
       }
     }
   },
   "response": {
     "status": 200,
-    "headers": {
-      "Content-Type": "application/json"
-    },
     "jsonBody": {
-      "id": "chatcmpl-archestra-mixed-123",
+      "id": "chatcmpl-archestra-untrusted",
       "object": "chat.completion",
-      "created": 1234567890,
-      "model": "gpt-4",
+      "created": 1700000000,
+      "model": "gpt-3.5-turbo",
       "choices": [
         {
           "index": 0,
           "message": {
             "role": "assistant",
-            "content": null,
-            "refusal": null,
-            "tool_calls": [
-              {
-                "id": "call_read_file_123",
-                "type": "function",
-                "function": {
-                  "name": "read_file",
-                  "arguments": "{\"file_path\":\"/etc/passwd\"}"
-                }
-              },
-              {
-                "id": "call_archestra_whoami_123",
-                "type": "function",
-                "function": {
-                  "name": "archestra__whoami",
-                  "arguments": "{}"
-                }
-              }
-            ]
+            "content": "Archestra schedule trigger processed."
           },
-          "finish_reason": "tool_calls",
-          "logprobs": null
+          "finish_reason": "stop"
         }
       ],
       "usage": {
-        "prompt_tokens": 150,
-        "completion_tokens": 30,
-        "total_tokens": 180
+        "prompt_tokens": 10,
+        "completion_tokens": 10,
+        "total_tokens": 20
       }
+    },
+    "headers": {
+      "Content-Type": "application/json"
     }
   }
 }

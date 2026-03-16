@@ -430,10 +430,17 @@ export function ChatMessages({
                           }
 
                           const isLastTextPart = i === lastTextPartIndex;
+                          // Only show streaming animation if this text part is
+                          // actually the last part in the message. When tool
+                          // parts follow the text, the text is already complete
+                          // even though status is still "streaming".
+                          const isLastPartInMessage =
+                            i === message.parts.length - 1;
                           const isStreamingThisPart =
                             status === "streaming" &&
                             idx === messages.length - 1 &&
-                            isLastTextPart;
+                            isLastTextPart &&
+                            isLastPartInMessage;
                           const showActions =
                             isLastAssistantInSequence &&
                             isLastTextPart &&

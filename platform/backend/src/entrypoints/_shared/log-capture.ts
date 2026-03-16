@@ -1,7 +1,7 @@
 import { Writable } from "node:stream";
 import pino from "pino";
 import pretty from "pino-pretty";
-import { LOG_LEVEL } from "@/logging";
+import { LOG_LEVEL } from "@/logging/log-level";
 
 const MAX_LOG_SIZE = 1024 * 1024; // 1 MB
 

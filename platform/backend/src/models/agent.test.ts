@@ -19,6 +19,78 @@ describe("AgentModel", () => {
     expect(await AgentModel.findAll()).toHaveLength(2);
   });
 
+  describe("findBasicByOrganizationIdAndIds", () => {
+    test("returns only agents from the requested organization", async ({
+      makeOrganization,
+    }) => {
+      const organization = await makeOrganization();
+      const otherOrganization = await makeOrganization();
+
+      const includedAgent = await AgentModel.create({
+        name: "Included Agent",
+        organizationId: organization.id,
+        teams: [],
+        scope: "org",
+      });
+      const excludedAgent = await AgentModel.create({
+        name: "Excluded Agent",
+        organizationId: otherOrganization.id,
+        teams: [],
+        scope: "org",
+      });
+
+      const result = await AgentModel.findBasicByOrganizationIdAndIds({
+        organizationId: organization.id,
+        agentIds: [includedAgent.id, excludedAgent.id],
+      });
+
+      expect(result).toEqual([
+        {
+          id: includedAgent.id,
+          name: "Included Agent",
+          agentType: includedAgent.agentType,
+        },
+      ]);
+    });
+
+    test("returns basic agent fields ordered by newest first", async ({
+      makeOrganization,
+    }) => {
+      const organization = await makeOrganization();
+
+      const olderAgent = await AgentModel.create({
+        name: "Older Agent",
+        organizationId: organization.id,
+        teams: [],
+        scope: "org",
+      });
+      const newerAgent = await AgentModel.create({
+        name: "Newer Agent",
+        organizationId: organization.id,
+        teams: [],
+        scope: "org",
+      });
+
+      const result = await AgentModel.findBasicByOrganizationIdAndIds({
+        organizationId: organization.id,
+        agentIds: [olderAgent.id, newerAgent.id],
+      });
+
+      expect(result).toEqual([
+        {
+          id: newerAgent.id,
+          name: "Newer Agent",
+          agentType: newerAgent.agentType,
+        },
+        {
+          id: olderAgent.id,
+          name: "Older Agent",
+          agentType: olderAgent.agentType,
+        },
+      ]);
+    });
+  });
+
   describe("exists", () => {
     test("returns true for an existing agent", async () => {
       const agent = await AgentModel.create({

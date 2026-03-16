@@ -10,6 +10,8 @@ function makeAgent(
     scope: "personal" | "team" | "org";
     authorId: string | null;
     description: string | null;
+    icon: string | null;
+    systemPrompt: string | null;
   }> = {},
 ) {
   return {
@@ -18,6 +20,8 @@ function makeAgent(
     scope: overrides.scope ?? "org",
     authorId: overrides.authorId ?? null,
     description: overrides.description ?? null,
+    icon: overrides.icon ?? null,
+    systemPrompt: overrides.systemPrompt ?? null,
   };
 }
 

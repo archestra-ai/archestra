@@ -2,8 +2,13 @@ import type { archestraApiTypes } from "@shared";
 
 type InternalAgent = archestraApiTypes.GetAllAgentsResponses["200"][number];
 
+type InitialAgentListItem = Pick<
+  InternalAgent,
+  "id" | "name" | "scope" | "authorId" | "description" | "icon" | "systemPrompt"
+>;
+
 export function filterAndSortInitialAgents(params: {
-  allAgents: InternalAgent[];
+  allAgents: InitialAgentListItem[];
   currentAgentId: string | null;
   search: string;
   userId?: string;
@@ -45,7 +50,7 @@ export function filterAndSortInitialAgents(params: {
   });
 }
 
-function getScopeOrder(scope: InternalAgent["scope"]) {
+function getScopeOrder(scope: InitialAgentListItem["scope"]) {
   switch (scope) {
     case "personal":
       return 0;

@@ -397,7 +397,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
           <AgentNameCell
             name={agent.name}
             scope={agent.scope}
-            builtIn={agent.builtIn}
+            builtIn={agent.builtIn ?? undefined}
             description={agent.description}
             labels={agent.labels}
           />

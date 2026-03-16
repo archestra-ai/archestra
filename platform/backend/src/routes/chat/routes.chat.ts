@@ -361,6 +361,24 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 }
               },
               execute: async ({ writer }) => {
+                // ⚠️ TEMPORARY: Error injection for testing retries. Remove after testing.
+                const lastMsg = (
+                  messages as { parts?: { type: string; text?: string }[] }[]
+                ).at(-1);
+                const lastText =
+                  lastMsg?.parts?.find((p) => p.type === "text")?.text ?? "";
+                if (lastText.includes("__test_500")) {
+                  throw new Error("Simulated server error (500)");
+                }
+                if (lastText.includes("__test_network")) {
+                  throw new TypeError("Failed to fetch");
+                }
+                if (lastText.includes("__test_no_output")) {
+                  throw new Error(
+                    "No output generated. Check the stream for errors.",
+                  );
+                }
+
                 // Stream tokens to the client in real-time while also
                 // handling context-length errors from vLLM/LiteLLM.
                 //

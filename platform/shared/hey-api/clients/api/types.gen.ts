@@ -23335,7 +23335,7 @@ export type GetInteractionsResponses = {
             userId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker';
+            source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             request: XaiChatCompletionRequest;
             processedRequest?: XaiChatCompletionRequest | null;
             response: OpenAiChatCompletionResponse;
@@ -23361,7 +23361,7 @@ export type GetInteractionsResponses = {
             userId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker';
+            source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             request: {
                 model: string;
                 input: string | Array<string>;
@@ -23407,7 +23407,7 @@ export type GetInteractionsResponses = {
             userId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker';
+            source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             request: GeminiGenerateContentRequest;
             processedRequest?: GeminiGenerateContentRequest | null;
             response: GeminiGenerateContentResponse;
@@ -23433,7 +23433,7 @@ export type GetInteractionsResponses = {
             userId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker';
+            source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             request: AnthropicMessagesRequest;
             processedRequest?: AnthropicMessagesRequest | null;
             response: AnthropicMessagesResponse;
@@ -23459,7 +23459,7 @@ export type GetInteractionsResponses = {
             userId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker';
+            source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             request: {
                 modelId: string;
                 messages?: Array<{
@@ -23853,7 +23853,7 @@ export type GetInteractionsResponses = {
             userId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker';
+            source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             request: XaiChatCompletionRequest;
             processedRequest?: XaiChatCompletionRequest | null;
             response: CerebrasChatCompletionResponse;
@@ -23879,7 +23879,7 @@ export type GetInteractionsResponses = {
             userId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker';
+            source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             request: XaiChatCompletionRequest;
             processedRequest?: XaiChatCompletionRequest | null;
             response: MistralChatCompletionResponse;
@@ -23905,7 +23905,7 @@ export type GetInteractionsResponses = {
             userId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker';
+            source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             request: XaiChatCompletionRequest;
             processedRequest?: XaiChatCompletionRequest | null;
             response: PerplexityChatCompletionResponse;
@@ -23931,7 +23931,7 @@ export type GetInteractionsResponses = {
             userId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker';
+            source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             request: XaiChatCompletionRequest;
             processedRequest?: XaiChatCompletionRequest | null;
             response: GroqChatCompletionResponse;
@@ -23957,7 +23957,7 @@ export type GetInteractionsResponses = {
             userId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker';
+            source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             request: XaiChatCompletionRequest;
             processedRequest?: XaiChatCompletionRequest | null;
             response: XaiChatCompletionResponse;
@@ -23983,7 +23983,7 @@ export type GetInteractionsResponses = {
             userId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker';
+            source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             request: XaiChatCompletionRequest;
             processedRequest?: XaiChatCompletionRequest | null;
             response: OpenrouterChatCompletionResponse;
@@ -24009,7 +24009,7 @@ export type GetInteractionsResponses = {
             userId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker';
+            source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             request: VllmChatCompletionRequest;
             processedRequest?: VllmChatCompletionRequest | null;
             response: VllmChatCompletionResponse;
@@ -24033,7 +24033,7 @@ export type GetInteractionsResponses = {
             userId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker';
+            source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             request: OllamaChatCompletionRequest;
             processedRequest?: OllamaChatCompletionRequest | null;
             response: OllamaChatCompletionResponse;
@@ -24057,7 +24057,7 @@ export type GetInteractionsResponses = {
             userId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker';
+            source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             request: CohereChatRequest;
             processedRequest?: CohereChatRequest | null;
             response: CohereChatResponse;
@@ -24083,7 +24083,7 @@ export type GetInteractionsResponses = {
             userId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker';
+            source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             request: ZhipuaiChatCompletionRequest;
             processedRequest?: ZhipuaiChatCompletionRequest | null;
             response: ZhipuaiChatCompletionResponse;
@@ -24109,7 +24109,7 @@ export type GetInteractionsResponses = {
             userId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker';
+            source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             request: DeepSeekChatCompletionRequest;
             processedRequest?: DeepSeekChatCompletionRequest | null;
             response: DeepSeekChatCompletionResponse;
@@ -24135,7 +24135,7 @@ export type GetInteractionsResponses = {
             userId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker';
+            source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             request: MinimaxChatCompletionRequest;
             processedRequest?: MinimaxChatCompletionRequest | null;
             response: MinimaxChatCompletionResponse;
@@ -24182,7 +24182,7 @@ export type GetInteractionSessionsData = {
         /**
          * Filter by interaction source
          */
-        source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker';
+        source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         /**
          * Filter by session ID
          */
@@ -24272,7 +24272,7 @@ export type GetInteractionSessionsResponses = {
         data: Array<{
             sessionId: string | null;
             sessionSource: string | null;
-            source: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker';
+            source: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             interactionId: string | null;
             requestCount: number;
             totalInputTokens: number;
@@ -24548,7 +24548,7 @@ export type GetInteractionResponses = {
         userId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker';
+        source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         request: XaiChatCompletionRequest;
         processedRequest?: XaiChatCompletionRequest | null;
         response: OpenAiChatCompletionResponse;
@@ -24574,7 +24574,7 @@ export type GetInteractionResponses = {
         userId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker';
+        source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         request: {
             model: string;
             input: string | Array<string>;
@@ -24620,7 +24620,7 @@ export type GetInteractionResponses = {
         userId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker';
+        source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         request: GeminiGenerateContentRequest;
         processedRequest?: GeminiGenerateContentRequest | null;
         response: GeminiGenerateContentResponse;
@@ -24646,7 +24646,7 @@ export type GetInteractionResponses = {
         userId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker';
+        source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         request: AnthropicMessagesRequest;
         processedRequest?: AnthropicMessagesRequest | null;
         response: AnthropicMessagesResponse;
@@ -24672,7 +24672,7 @@ export type GetInteractionResponses = {
         userId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker';
+        source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         request: {
             modelId: string;
             messages?: Array<{
@@ -25066,7 +25066,7 @@ export type GetInteractionResponses = {
         userId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker';
+        source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         request: XaiChatCompletionRequest;
         processedRequest?: XaiChatCompletionRequest | null;
         response: CerebrasChatCompletionResponse;
@@ -25092,7 +25092,7 @@ export type GetInteractionResponses = {
         userId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker';
+        source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         request: XaiChatCompletionRequest;
         processedRequest?: XaiChatCompletionRequest | null;
         response: MistralChatCompletionResponse;
@@ -25118,7 +25118,7 @@ export type GetInteractionResponses = {
         userId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker';
+        source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         request: XaiChatCompletionRequest;
         processedRequest?: XaiChatCompletionRequest | null;
         response: PerplexityChatCompletionResponse;
@@ -25144,7 +25144,7 @@ export type GetInteractionResponses = {
         userId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker';
+        source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         request: XaiChatCompletionRequest;
         processedRequest?: XaiChatCompletionRequest | null;
         response: GroqChatCompletionResponse;
@@ -25170,7 +25170,7 @@ export type GetInteractionResponses = {
         userId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker';
+        source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         request: XaiChatCompletionRequest;
         processedRequest?: XaiChatCompletionRequest | null;
         response: XaiChatCompletionResponse;
@@ -25196,7 +25196,7 @@ export type GetInteractionResponses = {
         userId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker';
+        source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         request: XaiChatCompletionRequest;
         processedRequest?: XaiChatCompletionRequest | null;
         response: OpenrouterChatCompletionResponse;
@@ -25222,7 +25222,7 @@ export type GetInteractionResponses = {
         userId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker';
+        source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         request: VllmChatCompletionRequest;
         processedRequest?: VllmChatCompletionRequest | null;
         response: VllmChatCompletionResponse;
@@ -25246,7 +25246,7 @@ export type GetInteractionResponses = {
         userId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker';
+        source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         request: OllamaChatCompletionRequest;
         processedRequest?: OllamaChatCompletionRequest | null;
         response: OllamaChatCompletionResponse;
@@ -25270,7 +25270,7 @@ export type GetInteractionResponses = {
         userId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker';
+        source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         request: CohereChatRequest;
         processedRequest?: CohereChatRequest | null;
         response: CohereChatResponse;
@@ -25296,7 +25296,7 @@ export type GetInteractionResponses = {
         userId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker';
+        source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         request: ZhipuaiChatCompletionRequest;
         processedRequest?: ZhipuaiChatCompletionRequest | null;
         response: ZhipuaiChatCompletionResponse;
@@ -25322,7 +25322,7 @@ export type GetInteractionResponses = {
         userId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker';
+        source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         request: DeepSeekChatCompletionRequest;
         processedRequest?: DeepSeekChatCompletionRequest | null;
         response: DeepSeekChatCompletionResponse;
@@ -25348,7 +25348,7 @@ export type GetInteractionResponses = {
         userId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker';
+        source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         request: MinimaxChatCompletionRequest;
         processedRequest?: MinimaxChatCompletionRequest | null;
         response: MinimaxChatCompletionResponse;
@@ -28517,6 +28517,86 @@ export type SyncConnectorResponses = {
 };
 
 export type SyncConnectorResponse = SyncConnectorResponses[keyof SyncConnectorResponses];
+
+export type ForceResyncConnectorData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/connectors/{id}/force-resync';
+};
+
+export type ForceResyncConnectorErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type ForceResyncConnectorError = ForceResyncConnectorErrors[keyof ForceResyncConnectorErrors];
+
+export type ForceResyncConnectorResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        taskId: string;
+        status: string;
+    };
+};
+
+export type ForceResyncConnectorResponse = ForceResyncConnectorResponses[keyof ForceResyncConnectorResponses];
 
 export type TestConnectorConnectionData = {
     body?: never;
@@ -34247,7 +34327,10 @@ export type GetOrganizationResponses = {
         appName: string | null;
         ogDescription: string | null;
         footerText: string | null;
+        helpCenterUrl: string | null;
+        helpCenterLabel: string | null;
         chatPlaceholders: Array<string> | null;
+        animateChatPlaceholders: boolean;
         iconLogo: string | null;
         showTwoFactor: boolean;
     };
@@ -34335,6 +34418,9 @@ export type GetAppearanceSettingsResponses = {
         appName: string | null;
         ogDescription: string | null;
         footerText: string | null;
+        helpCenterUrl: string | null;
+        helpCenterLabel: string | null;
+        animateChatPlaceholders: boolean;
     };
 };
 
@@ -34351,7 +34437,10 @@ export type UpdateAppearanceSettingsData = {
         appName?: string | null;
         ogDescription?: string | null;
         footerText?: string | null;
+        helpCenterUrl?: string | null;
+        helpCenterLabel?: string | null;
         chatPlaceholders?: Array<string> | null;
+        animateChatPlaceholders?: boolean;
         showTwoFactor?: boolean;
     };
     path?: never;
@@ -34451,7 +34540,10 @@ export type UpdateAppearanceSettingsResponses = {
         appName: string | null;
         ogDescription: string | null;
         footerText: string | null;
+        helpCenterUrl: string | null;
+        helpCenterLabel: string | null;
         chatPlaceholders: Array<string> | null;
+        animateChatPlaceholders: boolean;
         iconLogo: string | null;
         showTwoFactor: boolean;
     };
@@ -34561,7 +34653,10 @@ export type UpdateSecuritySettingsResponses = {
         appName: string | null;
         ogDescription: string | null;
         footerText: string | null;
+        helpCenterUrl: string | null;
+        helpCenterLabel: string | null;
         chatPlaceholders: Array<string> | null;
+        animateChatPlaceholders: boolean;
         iconLogo: string | null;
         showTwoFactor: boolean;
     };
@@ -34672,7 +34767,10 @@ export type UpdateLlmSettingsResponses = {
         appName: string | null;
         ogDescription: string | null;
         footerText: string | null;
+        helpCenterUrl: string | null;
+        helpCenterLabel: string | null;
         chatPlaceholders: Array<string> | null;
+        animateChatPlaceholders: boolean;
         iconLogo: string | null;
         showTwoFactor: boolean;
     };
@@ -34784,7 +34882,10 @@ export type UpdateAgentSettingsResponses = {
         appName: string | null;
         ogDescription: string | null;
         footerText: string | null;
+        helpCenterUrl: string | null;
+        helpCenterLabel: string | null;
         chatPlaceholders: Array<string> | null;
+        animateChatPlaceholders: boolean;
         iconLogo: string | null;
         showTwoFactor: boolean;
     };
@@ -34897,7 +34998,10 @@ export type UpdateKnowledgeSettingsResponses = {
         appName: string | null;
         ogDescription: string | null;
         footerText: string | null;
+        helpCenterUrl: string | null;
+        helpCenterLabel: string | null;
         chatPlaceholders: Array<string> | null;
+        animateChatPlaceholders: boolean;
         iconLogo: string | null;
         showTwoFactor: boolean;
     };
@@ -35004,7 +35108,10 @@ export type DropEmbeddingConfigResponses = {
         appName: string | null;
         ogDescription: string | null;
         footerText: string | null;
+        helpCenterUrl: string | null;
+        helpCenterLabel: string | null;
         chatPlaceholders: Array<string> | null;
+        animateChatPlaceholders: boolean;
         iconLogo: string | null;
         showTwoFactor: boolean;
     };
@@ -35194,7 +35301,10 @@ export type CompleteOnboardingResponses = {
         appName: string | null;
         ogDescription: string | null;
         footerText: string | null;
+        helpCenterUrl: string | null;
+        helpCenterLabel: string | null;
         chatPlaceholders: Array<string> | null;
+        animateChatPlaceholders: boolean;
         iconLogo: string | null;
         showTwoFactor: boolean;
     };

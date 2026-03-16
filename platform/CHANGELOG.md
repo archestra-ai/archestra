@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.1.24](https://github.com/archestra-ai/archestra/compare/platform-v1.1.23...platform-v1.1.24) (2026-03-16)
+
+
+### Features
+
+* improve chat branding, placeholder behavior, settings consistency, and help center UX ([#3379](https://github.com/archestra-ai/archestra/issues/3379)) ([a00d1b8](https://github.com/archestra-ai/archestra/commit/a00d1b8a31fd21fdf729cab8aa53c6612f574c3c))
+
+
+### Bug Fixes
+
+* prevent duplicate and missing messages on chat stream errors ([#3385](https://github.com/archestra-ai/archestra/issues/3385)) ([4f8a58e](https://github.com/archestra-ai/archestra/commit/4f8a58edc4bfb905e9d8f74a036d2cc750cea91e))
+
+
+### Miscellaneous Chores
+
+* add force re-sync ([#3386](https://github.com/archestra-ai/archestra/issues/3386)) ([b50d8a3](https://github.com/archestra-ai/archestra/commit/b50d8a3ced3cc63012ec390240d93ad48a7d581c))
+* improve keyword retrieval accuracy ([#3382](https://github.com/archestra-ai/archestra/issues/3382)) ([1db7878](https://github.com/archestra-ai/archestra/commit/1db7878ed15ff184519e61a6d16cd06ef7b02395))
+
 ## [1.1.23](https://github.com/archestra-ai/archestra/compare/platform-v1.1.22...platform-v1.1.23) (2026-03-16)
 
 

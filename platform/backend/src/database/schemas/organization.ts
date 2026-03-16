@@ -107,8 +107,19 @@ const organizationsTable = pgTable("organization", {
   /** Custom footer text (replaces version display) */
   footerText: text("footer_text"),
 
+  /** Optional help/documentation URL shown on the new chat page */
+  helpCenterUrl: text("help_center_url"),
+
+  /** Optional custom label for the new chat help/documentation link */
+  helpCenterLabel: text("help_center_label"),
+
   /** Chat input placeholder texts (cycles with typing animation) */
   chatPlaceholders: text("chat_placeholders").array(),
+
+  /** Whether chat placeholders should use the typing animation */
+  animateChatPlaceholders: boolean("animate_chat_placeholders")
+    .notNull()
+    .default(true),
 
   /** Square icon logo (28x28px recommended) for collapsed sidebar and chat loading indicator */
   iconLogo: text("icon_logo"),

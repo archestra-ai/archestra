@@ -1310,6 +1310,13 @@
       "when": 1773612758010,
       "tag": "0186_split_optimization_rule_rbac_resource",
       "breakpoints": true
+    },
+    {
+      "idx": 187,
+      "version": "7",
+      "when": 1773689443901,
+      "tag": "0187_soft_gargoyle",
+      "breakpoints": true
     }
   ]
 }

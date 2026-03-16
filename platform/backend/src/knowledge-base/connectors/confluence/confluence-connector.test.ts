@@ -763,5 +763,32 @@ describe("ConfluenceConnector", () => {
       const result = stripHtmlTags(html);
       expect(result).not.toMatch(/\n{3,}/);
     });
+
+    test("strips decorative colour parameter from status lozenges", () => {
+      const html = `<ac:structured-macro ac:name="status"><ac:parameter ac:name="colour">Red</ac:parameter><ac:parameter ac:name="title">INC50780112</ac:parameter></ac:structured-macro>`;
+      const result = stripHtmlTags(html);
+      expect(result).toContain("INC50780112");
+      expect(result).not.toContain("Red");
+    });
+
+    test("strips multiple decorative parameters (colour, subtle, icon)", () => {
+      const html = `<ac:structured-macro ac:name="status"><ac:parameter ac:name="colour">Green</ac:parameter><ac:parameter ac:name="subtle">true</ac:parameter><ac:parameter ac:name="title">Resolved</ac:parameter></ac:structured-macro>`;
+      const result = stripHtmlTags(html);
+      expect(result).toBe("Resolved");
+    });
+
+    test("separates table cells with tabs and rows with newlines", () => {
+      const html = `<table><tr><td>Incident Number</td><td>INC50780112</td></tr><tr><td>Status</td><td>Open</td></tr></table>`;
+      const result = stripHtmlTags(html);
+      expect(result).toContain("Incident Number\tINC50780112");
+      expect(result).toContain("Status\tOpen");
+    });
+
+    test("handles status lozenge inside a table cell", () => {
+      const html = `<table><tr><td>Incident</td><td><ac:structured-macro ac:name="status"><ac:parameter ac:name="colour">Red</ac:parameter><ac:parameter ac:name="title">INC40298173</ac:parameter></ac:structured-macro></td></tr></table>`;
+      const result = stripHtmlTags(html);
+      expect(result).toContain("INC40298173");
+      expect(result).not.toContain("Red");
+    });
   });
 });

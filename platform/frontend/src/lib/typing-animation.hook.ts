@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type AnimationPhase = "TYPING" | "PAUSED" | "DELETING" | "PICKING_NEXT";
 
@@ -17,6 +17,14 @@ export function useTypingAnimation(texts: string[] | null | undefined): {
   const currentTextRef = useRef("");
   const charIndexRef = useRef(0);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const validTextsKey = useMemo(
+    () => JSON.stringify(texts?.filter((text) => text.length > 0) ?? []),
+    [texts],
+  );
+  const validTexts = useMemo(
+    () => JSON.parse(validTextsKey) as string[],
+    [validTextsKey],
+  );
 
   const clearTimer = useCallback(() => {
     if (timerRef.current !== null) {
@@ -45,10 +53,16 @@ export function useTypingAnimation(texts: string[] | null | undefined): {
   }, []);
 
   useEffect(() => {
-    const validTexts = texts?.filter((t) => t.length > 0);
-    if (!validTexts || validTexts.length === 0) {
+    if (validTexts.length === 0) {
       clearTimer();
       setDisplayText("");
+      setIsAnimating(false);
+      return;
+    }
+
+    if (validTexts.length === 1) {
+      clearTimer();
+      setDisplayText(validTexts[0]);
       setIsAnimating(false);
       return;
     }
@@ -100,7 +114,7 @@ export function useTypingAnimation(texts: string[] | null | undefined): {
     return () => {
       clearTimer();
     };
-  }, [texts, clearTimer, pickNext]);
+  }, [validTexts, clearTimer, pickNext]);
 
   return { text: displayText, isAnimating };
 }

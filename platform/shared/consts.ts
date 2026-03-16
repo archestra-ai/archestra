@@ -28,6 +28,7 @@ export const InteractionSourceSchema = z.enum([
   "email",
   "knowledge:embedding",
   "knowledge:reranker",
+  "knowledge:query-expansion",
 ]);
 
 export type InteractionSource = z.infer<typeof InteractionSourceSchema>;
@@ -48,6 +49,7 @@ export const INTERACTION_SOURCE_DISPLAY: Record<
   email: { label: "Email" },
   "knowledge:embedding": { label: "Knowledge - Embedding" },
   "knowledge:reranker": { label: "Knowledge - Reranker" },
+  "knowledge:query-expansion": { label: "Knowledge - Query Expansion" },
 };
 
 export const E2eTestId = {

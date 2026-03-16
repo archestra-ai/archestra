@@ -8,6 +8,7 @@ import { WithPermissions } from "@/components/roles/with-permissions";
 import {
   SettingsBlock,
   SettingsSaveBar,
+  SettingsSectionStack,
 } from "@/components/settings/settings-block";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
@@ -169,7 +170,7 @@ export default function AgentSettingsPage() {
     updateAgentMutation.isPending || updateSecurityMutation.isPending;
 
   return (
-    <div className="space-y-6">
+    <SettingsSectionStack>
       <SettingsBlock
         title="Default model for agents and new chats"
         description="Select the LLM provider API key and model that will be used by default when creating new agents and starting new chat conversations."
@@ -334,6 +335,6 @@ export default function AgentSettingsPage() {
         onSave={handleSave}
         onCancel={handleCancel}
       />
-    </div>
+    </SettingsSectionStack>
   );
 }

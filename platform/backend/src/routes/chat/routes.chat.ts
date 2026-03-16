@@ -401,6 +401,23 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                       messages: trimmed,
                     });
                   } else {
+                    // Save messages before throwing — this error path runs before
+                    // writer.merge(), so onError/onFinish callbacks won't fire.
+                    if (!messagesPersisted && conversationId) {
+                      messagesPersisted = true;
+                      try {
+                        await persistNewMessages(
+                          conversationId,
+                          messages,
+                          "onExecuteError",
+                        );
+                      } catch (persistError) {
+                        logger.error(
+                          { persistError, conversationId },
+                          "Failed to persist messages during execute error",
+                        );
+                      }
+                    }
                     throw error;
                   }
                 }
@@ -410,7 +427,14 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   result.toUIMessageStream({
                     originalMessages: messages as UIMessage[],
                     onError: (error) => {
-                      // Use an async IIFE to handle async operations within the sync onError handler
+                      // Claim persistence before the async work below starts,
+                      // otherwise onFinish can race and also persist (duplicates).
+                      const shouldPersist =
+                        !messagesPersisted && !!conversationId;
+                      if (shouldPersist) {
+                        messagesPersisted = true;
+                      }
+
                       (async () => {
                         logger.error(
                           {
@@ -422,15 +446,13 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                         );
 
                         // Persist messages despite error so they have a valid ID for editing
-                        // Only persist if not already persisted by onFinish
-                        if (!messagesPersisted && conversationId) {
+                        if (shouldPersist) {
                           try {
                             await persistNewMessages(
                               conversationId,
                               messages,
                               "onError",
                             );
-                            messagesPersisted = true;
                           } catch (persistError) {
                             // Log persistence error but don't prevent the error response
                             logger.error(

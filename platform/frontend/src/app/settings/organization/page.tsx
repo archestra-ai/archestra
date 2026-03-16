@@ -110,7 +110,11 @@ export default function OrganizationSettingsPage() {
     }
     if (showTwoFactor !== null) data.showTwoFactor = showTwoFactor;
 
-    await updateMutation.mutateAsync(data);
+    const updatedOrganization = await updateMutation.mutateAsync(data);
+    if (!updatedOrganization) {
+      return;
+    }
+
     // Reset local state after save
     setAppName(null);
     setOgDescription(null);

@@ -244,6 +244,10 @@ export default function OptimizationRulesPage() {
   );
 
   async function handleSubmit() {
+    if (draft.entityType === "organization" && !organization?.id) {
+      return;
+    }
+
     const entityId =
       draft.entityType === "organization"
         ? (organization?.id ?? "")

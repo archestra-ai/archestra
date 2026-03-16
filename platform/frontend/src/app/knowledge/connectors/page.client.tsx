@@ -271,7 +271,7 @@ function ConnectorsList() {
           pagination={{
             pageIndex,
             pageSize,
-            total: pagination?.total || 0,
+            total: pagination?.total ?? 0,
           }}
           onPaginationChange={handlePaginationChange}
           isLoading={isFetching || isPending}

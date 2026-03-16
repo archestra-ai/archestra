@@ -1,6 +1,7 @@
 import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { calculatePaginationMeta } from "@/database/utils/pagination";
 import { getConnector } from "@/knowledge-base/connectors/registry";
 import logger from "@/logging";
 import {
@@ -132,19 +133,9 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           ),
       }));
 
-      const currentPage = Math.floor(offset / limit) + 1;
-      const totalPages = Math.ceil(total / limit);
-
       return reply.send({
         data,
-        pagination: {
-          currentPage,
-          limit,
-          total,
-          totalPages,
-          hasNext: currentPage < totalPages,
-          hasPrev: currentPage > 1,
-        },
+        pagination: calculatePaginationMeta(total, { limit, offset }),
       });
     },
   );

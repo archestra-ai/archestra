@@ -550,7 +550,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                 pagination={{
                   pageIndex,
                   pageSize,
-                  total: pagination?.total || 0,
+                  total: pagination?.total ?? 0,
                 }}
                 onPaginationChange={handlePaginationChange}
                 emptyMessage="No agents found"

@@ -507,6 +507,6 @@ function formatExpiration(date: Date | string | null): string {
 }
 
 function computeDefaultExpiresAt(defaultSeconds: number | null): Date | null {
-  if (!defaultSeconds) return null;
+  if (defaultSeconds === null) return null;
   return new Date(Date.now() + defaultSeconds * 1000);
 }

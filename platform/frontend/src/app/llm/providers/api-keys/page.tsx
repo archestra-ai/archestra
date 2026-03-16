@@ -288,6 +288,8 @@ export default function ApiKeysPage() {
   const apiKeys = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase();
 
+    // Keep a client-side filter pass as a safety net so the table stays
+    // consistent with the current filter state even during refetch/cache churn.
     return queriedApiKeys.filter((apiKey) => {
       const matchesSearch =
         !normalizedSearch ||

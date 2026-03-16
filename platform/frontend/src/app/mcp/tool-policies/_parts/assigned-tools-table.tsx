@@ -279,20 +279,23 @@ export function AssignedToolsTable({
       if (toolIds.length === 0) {
         return;
       }
-      setIsBulkUpdating(true);
+      try {
+        setIsBulkUpdating(true);
 
-      if (field === "callPolicy") {
-        bulkCallPolicyMutation.mutate({
-          toolIds,
-          action: value as CallPolicyAction,
-        });
-      } else {
-        bulkResultPolicyMutation.mutate({
-          toolIds,
-          action: value as ResultPolicyAction,
-        });
+        if (field === "callPolicy") {
+          await bulkCallPolicyMutation.mutateAsync({
+            toolIds,
+            action: value as CallPolicyAction,
+          });
+        } else {
+          await bulkResultPolicyMutation.mutateAsync({
+            toolIds,
+            action: value as ResultPolicyAction,
+          });
+        }
+      } finally {
+        setIsBulkUpdating(false);
       }
-      setIsBulkUpdating(false);
     },
     [
       selectedTools,

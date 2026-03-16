@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useState } from "react";
+import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { KnowledgePageLayout } from "@/app/knowledge/_parts/knowledge-page-layout";
 import { ConnectorStatusBadge } from "@/app/knowledge/knowledge-bases/_parts/connector-status-badge";
@@ -484,12 +485,27 @@ function AddConnectorDialog({
 
   const handleAssign = useCallback(async () => {
     if (selectedIds.size === 0) return;
-    for (const connectorId of selectedIds) {
-      await assignMutation.mutateAsync({
-        connectorId,
-        knowledgeBaseIds: [knowledgeBaseId],
-      });
+    const results = await Promise.allSettled(
+      [...selectedIds].map((connectorId) =>
+        assignMutation.mutateAsync({
+          connectorId,
+          knowledgeBaseIds: [knowledgeBaseId],
+        }),
+      ),
+    );
+
+    const failedCount = results.filter(
+      (result) => result.status === "rejected",
+    ).length;
+
+    if (failedCount > 0) {
+      toast.error(
+        failedCount === selectedIds.size
+          ? "Failed to assign connectors"
+          : `${failedCount} connector assignment${failedCount === 1 ? "" : "s"} failed`,
+      );
     }
+
     setSelectedIds(new Set());
     setStep("choose");
     onOpenChange(false);

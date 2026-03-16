@@ -1,6 +1,7 @@
 import type { AnyRoleName } from "@shared";
 import { and, count, eq, ilike, or } from "drizzle-orm";
 import db, { schema } from "@/database";
+import { createPaginatedResult } from "@/database/utils/pagination";
 import logger from "@/logging";
 
 class MemberModel {
@@ -244,20 +245,7 @@ class MemberModel {
     ]);
 
     const total = totalResult[0]?.count ?? 0;
-    const currentPage = Math.floor(pagination.offset / pagination.limit) + 1;
-    const totalPages = Math.ceil(total / pagination.limit);
-
-    return {
-      data,
-      pagination: {
-        currentPage,
-        limit: pagination.limit,
-        total,
-        totalPages,
-        hasNext: currentPage < totalPages,
-        hasPrev: currentPage > 1,
-      },
-    };
+    return createPaginatedResult(data, total, pagination);
   }
 
   /**

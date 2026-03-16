@@ -583,6 +583,39 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.get(
+    "/api/organization/members/:idOrEmail",
+    {
+      schema: {
+        operationId: RouteId.GetOrganizationMember,
+        description:
+          "Get a member of the organization by user ID or email address",
+        tags: ["Organization"],
+        params: z.object({
+          idOrEmail: z.string().min(1).describe("User ID or email address"),
+        }),
+        response: constructResponseSchema(
+          z.object({
+            id: z.string(),
+            name: z.string(),
+            email: z.string(),
+            role: z.string(),
+          }),
+        ),
+      },
+    },
+    async ({ organizationId, params: { idOrEmail } }, reply) => {
+      const member = await MemberModel.findByIdOrEmail(
+        idOrEmail,
+        organizationId,
+      );
+      if (!member) {
+        throw new ApiError(404, "Member not found");
+      }
+      return reply.send(member);
+    },
+  );
+
+  fastify.get(
     "/api/organization/appearance",
     {
       schema: {

@@ -1,5 +1,5 @@
 import type { AnyRoleName } from "@shared";
-import { and, count, eq } from "drizzle-orm";
+import { and, count, eq, or } from "drizzle-orm";
 import db, { schema } from "@/database";
 import logger from "@/logging";
 
@@ -186,6 +186,43 @@ class MemberModel {
       "MemberModel.findAllByOrganization: completed",
     );
     return results;
+  }
+
+  /**
+   * Find a member by user ID or email within an organization
+   */
+  static async findByIdOrEmail(idOrEmail: string, organizationId: string) {
+    logger.debug(
+      { idOrEmail, organizationId },
+      "MemberModel.findByIdOrEmail: fetching member",
+    );
+    const [result] = await db
+      .select({
+        id: schema.usersTable.id,
+        name: schema.usersTable.name,
+        email: schema.usersTable.email,
+        role: schema.membersTable.role,
+      })
+      .from(schema.membersTable)
+      .innerJoin(
+        schema.usersTable,
+        eq(schema.membersTable.userId, schema.usersTable.id),
+      )
+      .where(
+        and(
+          eq(schema.membersTable.organizationId, organizationId),
+          or(
+            eq(schema.usersTable.id, idOrEmail),
+            eq(schema.usersTable.email, idOrEmail),
+          ),
+        ),
+      )
+      .limit(1);
+    logger.debug(
+      { idOrEmail, organizationId, found: !!result },
+      "MemberModel.findByIdOrEmail: completed",
+    );
+    return result;
   }
 
   /**

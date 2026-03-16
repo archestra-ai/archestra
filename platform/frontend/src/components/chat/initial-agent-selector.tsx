@@ -87,6 +87,7 @@ import {
 } from "@/lib/mcp-server.query";
 import { useAppName } from "@/lib/use-app-name";
 import { cn } from "@/lib/utils";
+import { filterAndSortInitialAgents } from "./initial-agent-selector.utils";
 
 type CatalogItem =
   archestraApiTypes.GetInternalMcpCatalogResponses["200"][number];
@@ -124,37 +125,11 @@ export function InitialAgentSelector({
   const installer = useMcpInstallOrchestrator();
 
   const filteredAgents = useMemo(() => {
-    let result = allAgents.filter((a) => {
-      if (a.scope === "personal") {
-        return a.authorId === userId;
-      }
-      return true;
-    });
-    if (search) {
-      const lower = search.toLowerCase();
-      result = result.filter(
-        (a) =>
-          a.name.toLowerCase().includes(lower) ||
-          a.description?.toLowerCase().includes(lower),
-      );
-    }
-    const scopeOrder: Record<string, number> = { personal: 0, team: 1, org: 2 };
-    return [...result].sort((a, b) => {
-      const aIsMyPersonalAgent =
-        a.scope === "personal" && a.authorId === userId ? 1 : 0;
-      const bIsMyPersonalAgent =
-        b.scope === "personal" && b.authorId === userId ? 1 : 0;
-
-      if (aIsMyPersonalAgent !== bIsMyPersonalAgent) {
-        return bIsMyPersonalAgent - aIsMyPersonalAgent;
-      }
-      if (a.id === currentAgentId) return -1;
-      if (b.id === currentAgentId) return 1;
-      if ((scopeOrder[a.scope] ?? 3) !== (scopeOrder[b.scope] ?? 3)) {
-        return (scopeOrder[a.scope] ?? 3) - (scopeOrder[b.scope] ?? 3);
-      }
-
-      return a.name.localeCompare(b.name);
+    return filterAndSortInitialAgents({
+      allAgents,
+      currentAgentId,
+      search,
+      userId,
     });
   }, [allAgents, search, currentAgentId, userId]);
 

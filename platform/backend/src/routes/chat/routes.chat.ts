@@ -349,6 +349,35 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             },
             stream: createUIMessageStream({
               onError: (error) => {
+                // Persist messages on stream-level errors (e.g. errors thrown
+                // in execute before writer.merge() is reached). Without this,
+                // user messages are lost on refresh after an error.
+                const shouldPersist = !messagesPersisted && !!conversationId;
+                if (shouldPersist) {
+                  messagesPersisted = true;
+                }
+                (async () => {
+                  if (shouldPersist) {
+                    try {
+                      await persistNewMessages(
+                        conversationId,
+                        messages,
+                        "onStreamError",
+                      );
+                    } catch (persistError) {
+                      logger.error(
+                        { persistError, conversationId },
+                        "Failed to persist messages during stream error",
+                      );
+                    }
+                  }
+                })().catch((err) => {
+                  logger.error(
+                    { err },
+                    "Unexpected error in onError async persist handler",
+                  );
+                });
+
                 const mapped = mapProviderError(error, provider);
                 try {
                   return JSON.stringify(mapped);

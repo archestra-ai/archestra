@@ -1,9 +1,6 @@
 "use client";
 
-import {
-  additionalPagesToHideWhenSimpleViewEnabled,
-  requiredPagePermissionsMap,
-} from "@shared/access-control";
+import { requiredPagePermissionsMap } from "@shared/access-control";
 import { usePathname } from "next/navigation";
 import type React from "react";
 import { ForbiddenPage } from "@/app/_parts/forbidden-page";
@@ -19,9 +16,6 @@ export const WithPagePermissions: React.FC<React.PropsWithChildren> = ({
   const { data: hasRequiredPermissions, isPending } = useHasPermissions(
     requiredPermissions || {},
   );
-  const { data: hasSimpleViewEnabled } = useHasPermissions({
-    simpleView: ["enable"],
-  });
 
   // Show loading while checking permissions
   if (isPending && requiredPermissions) {
@@ -30,13 +24,6 @@ export const WithPagePermissions: React.FC<React.PropsWithChildren> = ({
 
   // Show forbidden page if user doesn't have required permissions
   if (requiredPermissions && !hasRequiredPermissions) {
-    return <ForbiddenPage />;
-  }
-
-  if (
-    hasSimpleViewEnabled &&
-    additionalPagesToHideWhenSimpleViewEnabled.includes(pathname)
-  ) {
     return <ForbiddenPage />;
   }
 

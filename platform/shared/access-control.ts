@@ -1024,8 +1024,3 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/settings/secrets": { secret: ["read"] },
   "/settings/organization": { organizationSettings: ["read"] },
 };
-
-// Pages to additionally hide when simple view is enabled
-export const additionalPagesToHideWhenSimpleViewEnabled: string[] = [
-  "/mcp/tool-policies",
-];

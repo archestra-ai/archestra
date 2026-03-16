@@ -408,32 +408,16 @@ export function AppSidebar() {
   const { data: canReadMcpGateway } = useHasPermissions({
     mcpGateway: ["read"],
   });
-  const { data: hasSimpleViewEnabled } = useHasPermissions({
-    simpleView: ["enable"],
-  });
   const showConnect = canReadAgent || canReadLlmProxy || canReadMcpGateway;
 
   // Filter nav groups based on enterprise features
   const filteredNavGroups = React.useMemo(() => {
+    if (knowledgeBaseEnabled) return contentNavGroups;
     return contentNavGroups.map((group) => ({
       ...group,
-      items: group.items
-        .filter((item) => {
-          if (item.title === "Knowledge") return knowledgeBaseEnabled;
-          return true;
-        })
-        .map((item) =>
-          item.subItems && hasSimpleViewEnabled
-            ? {
-                ...item,
-                subItems: item.subItems.filter(
-                  (sub) => sub.title !== "Guardrails",
-                ),
-              }
-            : item,
-        ),
+      items: group.items.filter((item) => item.title !== "Knowledge"),
     }));
-  }, [knowledgeBaseEnabled, hasSimpleViewEnabled]);
+  }, [knowledgeBaseEnabled]);
 
   // Build additional links for UserButton popout menu
   const userMenuLinks = React.useMemo(() => {

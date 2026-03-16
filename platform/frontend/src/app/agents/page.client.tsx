@@ -105,6 +105,7 @@ function VisibilityBadge({
   currentUserId: string | undefined;
 }) {
   const MAX_TEAMS_TO_SHOW = 3;
+  const MAX_BADGE_TEXT_LENGTH = 15;
 
   if (scope === "org") {
     return (
@@ -120,9 +121,14 @@ function VisibilityBadge({
       currentUserId && authorId === currentUserId ? "Me" : authorName;
     if (!displayName) return <span className="text-muted-foreground">-</span>;
     return (
-      <Badge variant="secondary" className="text-xs gap-1">
-        <User className="h-3 w-3" />
-        {displayName}
+      <Badge
+        variant="secondary"
+        className="inline-flex max-w-[180px] items-center gap-1 overflow-hidden text-xs"
+      >
+        <User className="h-3 w-3 shrink-0" />
+        <span className="min-w-0 flex-1 truncate">
+          {truncateBadgeText(displayName, MAX_BADGE_TEXT_LENGTH)}
+        </span>
       </Badge>
     );
   }
@@ -138,11 +144,17 @@ function VisibilityBadge({
   const remainingTeams = teams.slice(MAX_TEAMS_TO_SHOW);
 
   return (
-    <div className="flex items-center gap-1 flex-wrap">
+    <div className="flex min-w-0 flex-wrap items-center gap-1">
       {visibleTeams.map((team) => (
-        <Badge key={team.id} variant="secondary" className="text-xs gap-1">
-          <Users className="h-3 w-3" />
-          {team.name}
+        <Badge
+          key={team.id}
+          variant="secondary"
+          className="inline-flex max-w-[180px] items-center gap-1 overflow-hidden text-xs"
+        >
+          <Users className="h-3 w-3 shrink-0" />
+          <span className="min-w-0 flex-1 truncate">
+            {truncateBadgeText(team.name, MAX_BADGE_TEXT_LENGTH)}
+          </span>
         </Badge>
       ))}
       {remainingTeams.length > 0 && (
@@ -167,6 +179,13 @@ function VisibilityBadge({
       )}
     </div>
   );
+  function truncateBadgeText(text: string, maxLength: number) {
+    if (text.length <= maxLength) {
+      return text;
+    }
+
+    return `${text.slice(0, maxLength)}...`;
+  }
 }
 
 function Agents({ initialData }: { initialData?: AgentsInitialData }) {

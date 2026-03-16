@@ -45,7 +45,8 @@ import { SchedulePicker } from "./schedule-picker";
 import { ServiceNowConfigFields } from "./servicenow-config-fields";
 import { transformConfigArrayFields } from "./transform-config-array-fields";
 
-type ConnectorType = "jira" | "confluence" | "github" | "gitlab" | "servicenow";
+type ConnectorType =
+  archestraApiTypes.CreateConnectorData["body"]["connectorType"];
 
 const CONNECTOR_OPTIONS: {
   type: ConnectorType;

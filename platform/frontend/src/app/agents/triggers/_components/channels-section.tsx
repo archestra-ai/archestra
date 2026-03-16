@@ -8,6 +8,7 @@ import {
   ChevronUp,
   Hash,
   Plus,
+  Search,
   X,
 } from "lucide-react";
 import Image from "next/image";
@@ -53,7 +54,7 @@ import {
   useUpdateChatOpsBinding,
 } from "@/lib/chatops.query";
 import { useAppName } from "@/lib/use-app-name";
-import { cn } from "@/lib/utils";
+import { cn, DEFAULT_TABLE_LIMIT } from "@/lib/utils";
 import { ChannelsEmptyState } from "./channels-empty-state";
 import type { ProviderConfig } from "./types";
 
@@ -65,8 +66,6 @@ interface Agent {
 }
 
 const VIRTUAL_DM_ID = "__virtual-dm__";
-const DEFAULT_PAGE_SIZE = 20;
-
 type BindingsQuery = NonNullable<
   archestraApiTypes.ListChatOpsBindingsData["query"]
 >;
@@ -96,7 +95,7 @@ export function ChannelsSection({
   const workspaceIdFromUrl = searchParams.get("workspaceId") || "";
 
   const pageIndex = Number(pageFromUrl || "1") - 1;
-  const pageSize = Number(pageSizeFromUrl || DEFAULT_PAGE_SIZE);
+  const pageSize = Number(pageSizeFromUrl || DEFAULT_TABLE_LIMIT);
   const offset = pageIndex * pageSize;
 
   // Data queries
@@ -301,6 +300,8 @@ export function ChannelsSection({
   const hasActiveFilters =
     !!searchFromUrl || statusFromUrl !== "all" || !!workspaceIdFromUrl;
   const hasAnyChannels = totalCount > 0 || showVirtualDmRow || hasActiveFilters;
+  const showFilteredEmptyState =
+    hasActiveFilters && bindings.length === 0 && !showVirtualDmRow;
 
   // Selectable IDs on current page
   const selectableIds = useMemo(() => {
@@ -313,6 +314,16 @@ export function ChannelsSection({
     selectableIds.every((id) => selectedIds.has(id));
   const someChecked =
     !allChecked && selectableIds.some((id) => selectedIds.has(id));
+
+  const clearFilters = useCallback(() => {
+    clearSelection();
+    updateUrlParams({
+      search: null,
+      status: null,
+      workspaceId: null,
+      page: "1",
+    });
+  }, [clearSelection, updateUrlParams]);
 
   return (
     <section className="flex flex-col gap-4">
@@ -478,23 +489,52 @@ export function ChannelsSection({
                   <TableHead className="w-[80px]">Actions</TableHead>
                 </TableRow>
               </TableHeader>
-              <TableBody>
-                <ChannelRows
-                  bindings={bindings}
-                  channelAgentList={channelAgentList}
-                  dmAgentList={dmAgentList}
-                  providerConfig={providerConfig}
-                  providerStatus={providerStatus}
-                  onAssignAgent={handleAssignAgent}
-                  isUpdating={updateMutation.isPending}
-                  selectedIds={selectedIds}
-                  onToggleSelected={toggleSelected}
-                  showVirtualDmRow={showVirtualDmRow}
-                  dmDeepLink={dmDeepLink}
-                  onDmAssignAgent={handleDmAssignAgent}
-                  isDmUpdating={dmMutation.isPending}
-                />
-              </TableBody>
+              {showFilteredEmptyState ? (
+                <TableBody>
+                  <TableRow>
+                    <TableCell colSpan={5} className="h-48">
+                      <div className="flex flex-col items-center justify-center gap-4 text-center">
+                        <div className="bg-muted flex h-12 w-12 items-center justify-center rounded-full">
+                          <Search className="text-muted-foreground h-5 w-5" />
+                        </div>
+                        <div className="space-y-1">
+                          <p className="font-medium">
+                            No channels match your filters.
+                          </p>
+                          <p className="text-muted-foreground text-sm">
+                            Try adjusting your search.
+                          </p>
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={clearFilters}
+                        >
+                          Clear filters
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                </TableBody>
+              ) : (
+                <TableBody>
+                  <ChannelRows
+                    bindings={bindings}
+                    channelAgentList={channelAgentList}
+                    dmAgentList={dmAgentList}
+                    providerConfig={providerConfig}
+                    providerStatus={providerStatus}
+                    onAssignAgent={handleAssignAgent}
+                    isUpdating={updateMutation.isPending}
+                    selectedIds={selectedIds}
+                    onToggleSelected={toggleSelected}
+                    showVirtualDmRow={showVirtualDmRow}
+                    dmDeepLink={dmDeepLink}
+                    onDmAssignAgent={handleDmAssignAgent}
+                    isDmUpdating={dmMutation.isPending}
+                  />
+                </TableBody>
+              )}
             </Table>
           </div>
 

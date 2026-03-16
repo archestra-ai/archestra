@@ -47,10 +47,8 @@ import {
   useMemberSignupStatus,
 } from "@/lib/organization.query";
 import { useRoles } from "@/lib/role.query";
-import { cn } from "@/lib/utils";
+import { cn, DEFAULT_TABLE_LIMIT } from "@/lib/utils";
 import { useSetSettingsAction } from "../layout";
-
-const DEFAULT_PAGE_SIZE = 10;
 
 export default function UsersPageClient() {
   return (
@@ -190,7 +188,7 @@ function MembersTab({
   const roleFilter = searchParams.get("role") || "";
 
   const pageIndex = Number(pageFromUrl || "1") - 1;
-  const pageSize = DEFAULT_PAGE_SIZE;
+  const pageSize = DEFAULT_TABLE_LIMIT;
   const offset = pageIndex * pageSize;
 
   const {
@@ -569,7 +567,7 @@ function InvitationsTab({
 
   const pageFromUrl = searchParams.get("page");
   const pageIndex = Number(pageFromUrl || "1") - 1;
-  const pageSize = DEFAULT_PAGE_SIZE;
+  const pageSize = DEFAULT_TABLE_LIMIT;
   const offset = pageIndex * pageSize;
 
   const { data: invitationsResponse, isPending } = useInvitationsPaginated({

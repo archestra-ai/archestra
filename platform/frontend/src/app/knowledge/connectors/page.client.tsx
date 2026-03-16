@@ -5,7 +5,7 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { formatDistanceToNow } from "date-fns";
 import { Database, Pencil, Trash2, Users } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { KnowledgePageLayout } from "@/app/knowledge/_parts/knowledge-page-layout";
 import { ConnectorTypeIcon } from "@/app/knowledge/knowledge-bases/_parts/connector-icons";
@@ -43,6 +43,14 @@ const AGENT_TYPE_LABELS: Record<string, string> = {
   agent: "Agent",
   mcp_gateway: "MCP Gateway",
 };
+
+const CONNECTOR_TYPE_OPTIONS = [
+  "jira",
+  "confluence",
+  "github",
+  "gitlab",
+  "servicenow",
+] as const;
 
 function formatAgentType(agentType: string): string {
   return AGENT_TYPE_LABELS[agentType] ?? agentType;
@@ -96,11 +104,6 @@ function ConnectorsList() {
 
   const items = connectors?.data ?? [];
   const pagination = connectors?.pagination;
-
-  const connectorTypeOptions = useMemo(
-    () => ["jira", "confluence", "github", "gitlab", "servicenow"],
-    [],
-  );
 
   const handlePaginationChange = useCallback(
     (newPagination: { pageIndex: number; pageSize: number }) => {
@@ -245,7 +248,7 @@ function ConnectorsList() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All connector types</SelectItem>
-                {connectorTypeOptions.map((type) => (
+                {CONNECTOR_TYPE_OPTIONS.map((type) => (
                   <SelectItem key={type} value={type}>
                     <div className="flex items-center gap-2 capitalize">
                       <ConnectorTypeIcon type={type} className="h-4 w-4" />

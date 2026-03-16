@@ -25,6 +25,7 @@ import {
   ConnectorConfigSchema,
   type ConnectorCredentials,
   ConnectorCredentialsSchema,
+  type ConnectorType,
   ConnectorTypeSchema,
   constructResponseSchema,
   DeleteObjectResponseSchema,
@@ -111,14 +112,14 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       const connectorsByKbId = new Map<
         string,
-        { id: string; name: string; connectorType: "jira" | "confluence" }[]
+        { id: string; name: string; connectorType: ConnectorType }[]
       >();
       for (const connector of allConnectors) {
         const list = connectorsByKbId.get(connector.knowledgeBaseId) ?? [];
         list.push({
           id: connector.id,
           name: connector.name,
-          connectorType: connector.connectorType as "jira" | "confluence",
+          connectorType: connector.connectorType,
         });
         connectorsByKbId.set(connector.knowledgeBaseId, list);
       }

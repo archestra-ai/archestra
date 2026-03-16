@@ -8,8 +8,8 @@ import {
 import type { ColumnDef } from "@tanstack/react-table";
 import { Database, Layers, MessageSquare, User } from "lucide-react";
 import Link from "next/link";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useCallback, useMemo } from "react";
 import {
   ProfileFilterOption,
   SourceFilterOption,
@@ -35,8 +35,9 @@ import {
   useUniqueUserIds,
 } from "@/lib/interaction.query";
 import { DynamicInteraction } from "@/lib/interaction.utils";
+import { useDataTableQueryParams } from "@/lib/use-data-table-query-params";
 import { useDateTimeRangePicker } from "@/lib/use-date-time-range-picker";
-import { DEFAULT_TABLE_LIMIT, formatDate } from "@/lib/utils";
+import { formatDate } from "@/lib/utils";
 import { ErrorBoundary } from "../../_parts/error-boundary";
 
 function formatDuration(start: Date | string, end: Date | string): string {
@@ -141,41 +142,19 @@ function SessionsTable({
   };
 }) {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const pathname = usePathname();
+  const { searchParams, pageIndex, pageSize, offset, updateQueryParams } =
+    useDataTableQueryParams();
 
   // Get URL params
-  const pageFromUrl = searchParams.get("page");
-  const pageSizeFromUrl = searchParams.get("pageSize");
   const profileIdFromUrl = searchParams.get("profileId");
   const userIdFromUrl = searchParams.get("userId");
   const sourceFromUrl = searchParams.get("source");
   const startDateFromUrl = searchParams.get("startDate");
   const endDateFromUrl = searchParams.get("endDate");
   const searchFromUrl = searchParams.get("search");
-
-  const pageIndex = Number(pageFromUrl || "1") - 1;
-  const pageSize = Number(pageSizeFromUrl || DEFAULT_TABLE_LIMIT);
-
-  const [profileFilter, setProfileFilter] = useState(profileIdFromUrl || "all");
-  const [userFilter, setUserFilter] = useState(userIdFromUrl || "all");
-  const [sourceFilter, setSourceFilter] = useState(sourceFromUrl || "all");
-
-  // Helper to update URL params
-  const updateUrlParams = useCallback(
-    (updates: Record<string, string | null>) => {
-      const params = new URLSearchParams(searchParams.toString());
-      Object.entries(updates).forEach(([key, value]) => {
-        if (value === null || value === "" || value === "all") {
-          params.delete(key);
-        } else {
-          params.set(key, value);
-        }
-      });
-      router.push(`${pathname}?${params.toString()}`, { scroll: false });
-    },
-    [searchParams, router, pathname],
-  );
+  const profileFilter = profileIdFromUrl || "all";
+  const userFilter = userIdFromUrl || "all";
+  const sourceFilter = sourceFromUrl || "all";
 
   // Date time range picker hook
   const dateTimePicker = useDateTimeRangePicker({
@@ -183,62 +162,59 @@ function SessionsTable({
     endDateFromUrl,
     onDateRangeChange: useCallback(
       ({ startDate, endDate }) => {
-        updateUrlParams({
+        updateQueryParams({
           startDate,
           endDate,
           page: "1", // Reset to first page
         });
       },
-      [updateUrlParams],
+      [updateQueryParams],
     ),
   });
 
   const handlePaginationChange = useCallback(
     (newPagination: { pageIndex: number; pageSize: number }) => {
-      updateUrlParams({
+      updateQueryParams({
         page: String(newPagination.pageIndex + 1),
         pageSize: String(newPagination.pageSize),
       });
     },
-    [updateUrlParams],
+    [updateQueryParams],
   );
 
   const handleProfileFilterChange = useCallback(
     (value: string) => {
-      setProfileFilter(value);
-      updateUrlParams({
+      updateQueryParams({
         profileId: value === "all" ? null : value,
         page: "1", // Reset to first page
       });
     },
-    [updateUrlParams],
+    [updateQueryParams],
   );
 
   const handleUserFilterChange = useCallback(
     (value: string) => {
-      setUserFilter(value);
-      updateUrlParams({
+      updateQueryParams({
         userId: value === "all" ? null : value,
         page: "1", // Reset to first page
       });
     },
-    [updateUrlParams],
+    [updateQueryParams],
   );
 
   const handleSourceFilterChange = useCallback(
     (value: string) => {
-      setSourceFilter(value);
-      updateUrlParams({
+      updateQueryParams({
         source: value === "all" ? null : value,
         page: "1", // Reset to first page
       });
     },
-    [updateUrlParams],
+    [updateQueryParams],
   );
 
   const { data: sessionsResponse, isFetching } = useInteractionSessions({
     limit: pageSize,
-    offset: pageIndex * pageSize,
+    offset,
     profileId: profileFilter !== "all" ? profileFilter : undefined,
     userId: userFilter !== "all" ? userFilter : undefined,
     source:
@@ -265,11 +241,8 @@ function SessionsTable({
     !!searchFromUrl;
 
   const clearFilters = useCallback(() => {
-    setProfileFilter("all");
-    setUserFilter("all");
-    setSourceFilter("all");
     dateTimePicker.clearDateRange();
-    updateUrlParams({
+    updateQueryParams({
       profileId: null,
       userId: null,
       source: null,
@@ -278,7 +251,7 @@ function SessionsTable({
       search: null,
       page: "1",
     });
-  }, [dateTimePicker, updateUrlParams]);
+  }, [dateTimePicker, updateQueryParams]);
 
   const columns: ColumnDef<SessionData>[] = useMemo(
     () => [

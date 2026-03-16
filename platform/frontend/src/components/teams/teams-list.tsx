@@ -3,7 +3,7 @@ import { archestraApiSdk, type archestraApiTypes, E2eTestId } from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Key, Link2, Plus, Trash2, Users, Vault } from "lucide-react";
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useSetSettingsAction } from "@/app/settings/layout";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
@@ -24,6 +24,7 @@ import config from "@/lib/config";
 import { useFeature } from "@/lib/config.query";
 import { formatRelativeTimeFromNow } from "@/lib/format-relative-time";
 import { type TeamToken, useTokens } from "@/lib/team-token.query";
+import { useDataTableQueryParams } from "@/lib/use-data-table-query-params";
 import { TeamMembersDialog } from "./team-members-dialog";
 import { TokenManagerDialog } from "./token-manager-dialog";
 
@@ -43,6 +44,7 @@ const { TeamExternalGroupsDialog } = config.enterpriseFeatures.core
     };
 
 export function TeamsList() {
+  const { searchParams, updateQueryParams } = useDataTableQueryParams();
   const setActionButton = useSetSettingsAction();
   const queryClient = useQueryClient();
   const byosEnabled = useFeature("byosEnabled");
@@ -63,8 +65,7 @@ export function TeamsList() {
   const [teamName, setTeamName] = useState("");
   const [teamDescription, setTeamDescription] = useState("");
 
-  // Search
-  const [search, setSearch] = useState("");
+  const search = searchParams.get("search") || "";
 
   // Tokens query
   const { data: tokensData, isLoading: tokensLoading } = useTokens();
@@ -135,10 +136,14 @@ export function TeamsList() {
     }
   };
 
-  const filteredTeams = (teams ?? []).filter((team) => {
-    if (!search) return true;
-    return team.name.toLowerCase().includes(search.toLowerCase());
-  });
+  const filteredTeams = useMemo(
+    () =>
+      (teams ?? []).filter((team) => {
+        if (!search) return true;
+        return team.name.toLowerCase().includes(search.toLowerCase());
+      }),
+    [teams, search],
+  );
 
   useEffect(() => {
     setActionButton(
@@ -284,13 +289,7 @@ export function TeamsList() {
     <>
       <div className="space-y-6">
         <div className="flex items-center justify-between gap-4">
-          <SearchInput
-            objectNamePlural="teams"
-            searchFields={["name"]}
-            value={search}
-            onSearchChange={setSearch}
-            syncQueryParams={false}
-          />
+          <SearchInput objectNamePlural="teams" searchFields={["name"]} />
         </div>
 
         <DataTable
@@ -298,7 +297,7 @@ export function TeamsList() {
           data={filteredTeams}
           isLoading={isLoading}
           hasActiveFilters={Boolean(search)}
-          onClearFilters={() => setSearch("")}
+          onClearFilters={() => updateQueryParams({ search: null, page: "1" })}
           emptyIcon={<Users className="h-10 w-10" />}
           emptyMessage="No teams found"
           hideSelectedCount

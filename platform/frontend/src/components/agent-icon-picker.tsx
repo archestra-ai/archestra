@@ -2,10 +2,10 @@
 
 import { EmojiPicker } from "@ferrucc-io/emoji-picker";
 import {
-  ArrowLeftRight,
   Bot,
   ImageIcon,
   Layers,
+  Network,
   Route,
   Server,
   SmileIcon,
@@ -105,7 +105,7 @@ export function AgentIconPicker({
   const defaultTab = showLogos ? "logos" : "emoji";
   const FallbackIcon =
     fallbackType === "llm_proxy"
-      ? ArrowLeftRight
+      ? Network
       : fallbackType === "mcp_gateway"
         ? Route
         : fallbackType === "server"

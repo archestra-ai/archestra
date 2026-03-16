@@ -30,6 +30,7 @@ import {
   formatRelativeTime,
   formatRelativeTimeFromNow,
 } from "@/lib/format-relative-time";
+import { useDataTableQueryParams } from "@/lib/use-data-table-query-params";
 import { formatDate } from "@/lib/utils";
 import { useSetSettingsAction } from "../layout";
 
@@ -44,6 +45,7 @@ const DEFAULT_FORM_VALUES: CreateApiKeyFormValues = {
 };
 
 export default function ApiKeysSettingsPage() {
+  const { searchParams, updateQueryParams } = useDataTableQueryParams();
   const setActionButton = useSetSettingsAction();
   const { data: canReadApiKeys, isPending: isCheckingPermissions } =
     useHasPermissions({ apiKey: ["read"] });
@@ -53,11 +55,11 @@ export default function ApiKeysSettingsPage() {
   const deleteApiKeyMutation = useDeleteApiKey();
 
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
-  const [search, setSearch] = useState("");
   const [apiKeyToDelete, setApiKeyToDelete] = useState<UserApiKey | null>(null);
   const [createdApiKeyValue, setCreatedApiKeyValue] = useState<string | null>(
     null,
   );
+  const search = searchParams.get("search") || "";
 
   const form = useForm<CreateApiKeyFormValues>({
     defaultValues: DEFAULT_FORM_VALUES,
@@ -199,9 +201,6 @@ export default function ApiKeysSettingsPage() {
         >
           <div className="space-y-4">
             <SearchInput
-              value={search}
-              onSearchChange={setSearch}
-              syncQueryParams={false}
               objectNamePlural="API keys"
               searchFields={["key name"]}
             />
@@ -211,7 +210,9 @@ export default function ApiKeysSettingsPage() {
               emptyMessage="No API keys yet"
               hasActiveFilters={search.trim().length > 0}
               filteredEmptyMessage="No API keys match your search. Try adjusting your search."
-              onClearFilters={() => setSearch("")}
+              onClearFilters={() =>
+                updateQueryParams({ search: null, page: "1" })
+              }
             />
           </div>
         </LoadingWrapper>

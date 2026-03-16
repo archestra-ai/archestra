@@ -1,7 +1,7 @@
 "use client";
 
 import type { archestraApiTypes } from "@shared";
-import { ArrowLeftRight, Bot, Route } from "lucide-react";
+import { Bot, Network, Route } from "lucide-react";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
 
@@ -26,7 +26,7 @@ export function AgentIcon({
   if (!icon) {
     const FallbackIcon =
       fallbackType === "llm_proxy"
-        ? ArrowLeftRight
+        ? Network
         : fallbackType === "mcp_gateway"
           ? Route
           : Bot;

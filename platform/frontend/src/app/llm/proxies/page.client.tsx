@@ -25,16 +25,15 @@ import {
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
-import { AgentBadge } from "@/components/agent-badge";
 import { AgentDialog } from "@/components/agent-dialog";
 import { AgentIcon } from "@/components/agent-icon";
+import { AgentNameCell } from "@/components/agent-name-cell";
 import {
   ActiveFilterBadges,
   AgentScopeFilter,
 } from "@/components/agent-scope-filter";
 import { ConnectDialog } from "@/components/connect-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
-import { LabelTags } from "@/components/label-tags";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
 import { ProxyConnectionInstructions } from "@/components/proxy-connection-instructions";
@@ -335,13 +334,13 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
       ),
       cell: ({ row }) => {
         const agent = row.original;
-        const scope = agent.scope;
         return (
-          <div className="font-medium">
-            <div className="flex items-center gap-2">
-              {agent.name}
-              <AgentBadge type={scope} />
-              {agent.agentType === "profile" && (
+          <AgentNameCell
+            name={agent.name}
+            scope={agent.scope}
+            description={agent.description}
+            extraBadges={
+              agent.agentType === "profile" ? (
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>
@@ -358,12 +357,10 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
-              )}
-              {agent.labels && agent.labels.length > 0 && (
-                <LabelTags labels={agent.labels} />
-              )}
-            </div>
-          </div>
+              ) : null
+            }
+            labels={agent.labels}
+          />
         );
       },
     },

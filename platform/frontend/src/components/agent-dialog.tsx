@@ -125,6 +125,11 @@ import { useConnectors } from "@/lib/connector.query";
 import { useKnowledgeBases } from "@/lib/knowledge-base.query";
 import { useAppName } from "@/lib/use-app-name";
 import { cn } from "@/lib/utils";
+import {
+  getDescriptionPlaceholder,
+  getNamePlaceholder,
+  shouldShowDescriptionField,
+} from "./agent-dialog.utils";
 
 const { useIdentityProviders } = config.enterpriseFeatures.core
   ? // biome-ignore lint/style/noRestrictedImports: conditional EE query import for IdP selector
@@ -333,16 +338,6 @@ function getSuccessMessage(agentType: AgentType, isUpdate: boolean): string {
     },
   };
   return isUpdate ? messages[agentType].update : messages[agentType].create;
-}
-
-function getNamePlaceholder(agentType: AgentType): string {
-  const placeholders: Record<string, string> = {
-    mcp_gateway: "Enter MCP Gateway name",
-    llm_proxy: "Enter LLM Proxy name",
-    agent: "Enter agent name",
-    profile: "Enter profile name",
-  };
-  return placeholders[agentType];
 }
 
 const agentTypeDisplayName: Record<string, string> = {
@@ -1070,15 +1065,15 @@ export function AgentDialog({
                 </div>
               )}
 
-              {/* Description (Agent only, hidden for built-in agents) */}
-              {isInternalAgent && !isBuiltIn && (
+              {/* Description (hidden for built-in agents) */}
+              {shouldShowDescriptionField({ agentType, isBuiltIn }) && (
                 <div className="space-y-2">
                   <Label htmlFor="agentDescription">Description</Label>
                   <Textarea
                     id="agentDescription"
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
-                    placeholder="Describe what this agent does"
+                    placeholder={getDescriptionPlaceholder(agentType)}
                     className="min-h-[60px]"
                   />
                 </div>

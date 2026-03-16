@@ -92,17 +92,14 @@ export const ToolFilterSchema = z.object({
     .describe("Hide built-in Archestra tools"),
 });
 
-// Sort options for tools
-export const ToolSortBySchema = z.enum([
+export const ToolSortBy = [
   "name",
   "origin",
   "createdAt",
   "assignmentCount",
-]);
-export const ToolSortDirectionSchema = z.enum(["asc", "desc"]);
+] as const;
+export type ToolSortBy = (typeof ToolSortBy)[number];
 
 export type ToolAssignment = z.infer<typeof ToolAssignmentSchema>;
 export type ToolWithAssignments = z.infer<typeof ToolWithAssignmentsSchema>;
 export type ToolFilters = z.infer<typeof ToolFilterSchema>;
-export type ToolSortBy = z.infer<typeof ToolSortBySchema>;
-export type ToolSortDirection = z.infer<typeof ToolSortDirectionSchema>;

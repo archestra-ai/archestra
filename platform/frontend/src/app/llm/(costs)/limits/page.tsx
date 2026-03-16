@@ -136,7 +136,7 @@ export default function LimitsPage() {
       entityType: limit.entityType as LimitEntityType,
       entityId: limit.entityType === "organization" ? "" : limit.entityId,
       limitValue: String(limit.limitValue),
-      model: Array.isArray(limit.model) ? (limit.model as string[]) : [],
+      model: getLimitModels(limit),
     });
     setModelToAdd("");
     setIsDialogOpen(true);
@@ -229,7 +229,7 @@ export default function LimitsPage() {
         header: "Models",
         cell: ({ row }) => (
           <div className="flex flex-wrap gap-1">
-            {(row.original.model as string[]).map((model) => (
+            {getLimitModels(row.original).map((model) => (
               <Badge key={model} variant="outline" className="text-xs">
                 {model}
               </Badge>
@@ -403,7 +403,7 @@ export default function LimitsPage() {
         onOpenChange={setIsDialogOpen}
         title={editingLimit ? "Edit limit" : "Create limit"}
         description="Configure scoped LLM token-cost limits for the organization or a team."
-        size="medium"
+        size="small"
       >
         <DialogForm
           className="flex min-h-0 flex-1 flex-col"
@@ -549,4 +549,10 @@ export default function LimitsPage() {
       />
     </div>
   );
+}
+
+function getLimitModels(limit: LimitData): string[] {
+  return Array.isArray(limit.model)
+    ? limit.model.filter((model): model is string => typeof model === "string")
+    : [];
 }

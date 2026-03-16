@@ -1,6 +1,8 @@
 import {
+  createPaginatedResponseSchema,
   LABELS_ENTRY_DELIMITER,
   LABELS_VALUE_DELIMITER,
+  PaginationQuerySchema,
   RouteId,
 } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
@@ -25,11 +27,9 @@ import {
   ApiError,
   BuiltInAgentConfigSchema,
   constructResponseSchema,
-  createPaginatedResponseSchema,
   createSortingQuerySchema,
   DeleteObjectResponseSchema,
   InsertAgentSchema,
-  PaginationQuerySchema,
   SelectAgentSchema,
   UpdateAgentSchemaBase,
   UuidIdSchema,

@@ -32,6 +32,7 @@ import {
   PROVIDER_CONFIG,
 } from "@/components/chat-api-key-form";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { FormDialog } from "@/components/form-dialog";
 import { LlmProviderSelectItems } from "@/components/llm-provider-options";
 import { SearchInput } from "@/components/search-input";
 import { TableRowActions } from "@/components/table-row-actions";
@@ -40,13 +41,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
+  DialogBody,
   DialogForm,
-  DialogHeader,
   DialogStickyFooter,
-  DialogTitle,
 } from "@/components/ui/dialog";
 import { InlineTag } from "@/components/ui/inline-tag";
 import { PermissionButton } from "@/components/ui/permission-button";
@@ -285,21 +282,7 @@ export default function ApiKeysPage() {
     return () => setProviderAction(null);
   }, [setProviderAction]);
 
-  const apiKeys = useMemo(() => {
-    const normalizedSearch = search.trim().toLowerCase();
-
-    // Keep a client-side filter pass as a safety net so the table stays
-    // consistent with the current filter state even during refetch/cache churn.
-    return queriedApiKeys.filter((apiKey) => {
-      const matchesSearch =
-        !normalizedSearch ||
-        apiKey.name.toLowerCase().includes(normalizedSearch);
-      const matchesProvider =
-        providerFilter === "all" || apiKey.provider === providerFilter;
-
-      return matchesSearch && matchesProvider;
-    });
-  }, [queriedApiKeys, providerFilter, search]);
+  const apiKeys = queriedApiKeys;
 
   const providerOptions = useMemo(() => {
     const seen = new Set<string>();
@@ -538,96 +521,92 @@ export default function ApiKeysPage() {
       </div>
 
       {/* Create Dialog */}
-      <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-        <DialogContent className="sm:max-w-lg max-h-[90vh] flex flex-col overflow-hidden">
-          <DialogHeader>
-            <DialogTitle>Add API Key</DialogTitle>
-            <DialogDescription>
-              Add a new LLM provider API key for use in Chat and LLM Proxy
-            </DialogDescription>
-          </DialogHeader>
-          <DialogForm
-            onSubmit={handleCreate}
-            className="flex min-h-0 flex-1 flex-col"
-          >
-            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+      <FormDialog
+        open={isCreateDialogOpen}
+        onOpenChange={setIsCreateDialogOpen}
+        title="Add API Key"
+        description="Add a new LLM provider API key for use in Chat and LLM Proxy"
+        size="small"
+      >
+        <DialogForm
+          onSubmit={handleCreate}
+          className="flex min-h-0 flex-1 flex-col"
+        >
+          <DialogBody>
+            <ChatApiKeyForm
+              mode="full"
+              showConsoleLink={false}
+              form={createForm}
+              existingKeys={apiKeys}
+              isPending={createMutation.isPending}
+              geminiVertexAiEnabled={geminiVertexAiEnabled}
+            />
+          </DialogBody>
+          <DialogStickyFooter className="mt-0">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setIsCreateDialogOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              disabled={!isCreateValid || createMutation.isPending}
+            >
+              {createMutation.isPending && (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              )}
+              Test & Create
+            </Button>
+          </DialogStickyFooter>
+        </DialogForm>
+      </FormDialog>
+
+      {/* Edit Dialog */}
+      <FormDialog
+        open={isEditDialogOpen}
+        onOpenChange={setIsEditDialogOpen}
+        title="Edit API Key"
+        description="Update the name, API key value, or scope"
+        size="small"
+      >
+        <DialogForm
+          onSubmit={handleEdit}
+          className="flex min-h-0 flex-1 flex-col"
+        >
+          <DialogBody>
+            {selectedApiKey && (
               <ChatApiKeyForm
                 mode="full"
                 showConsoleLink={false}
-                form={createForm}
+                existingKey={selectedApiKey}
                 existingKeys={apiKeys}
-                isPending={createMutation.isPending}
-                geminiVertexAiEnabled={geminiVertexAiEnabled}
+                form={editForm}
+                isPending={updateMutation.isPending}
               />
-            </div>
-            <DialogStickyFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setIsCreateDialogOpen(false)}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                disabled={!isCreateValid || createMutation.isPending}
-              >
-                {createMutation.isPending && (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                )}
-                Test & Create
-              </Button>
-            </DialogStickyFooter>
-          </DialogForm>
-        </DialogContent>
-      </Dialog>
-
-      {/* Edit Dialog */}
-      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="sm:max-w-lg max-h-[90vh] flex flex-col overflow-hidden">
-          <DialogHeader>
-            <DialogTitle>Edit API Key</DialogTitle>
-            <DialogDescription>
-              Update the name, API key value, or scope
-            </DialogDescription>
-          </DialogHeader>
-          <DialogForm
-            onSubmit={handleEdit}
-            className="flex min-h-0 flex-1 flex-col"
-          >
-            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
-              {selectedApiKey && (
-                <ChatApiKeyForm
-                  mode="full"
-                  showConsoleLink={false}
-                  existingKey={selectedApiKey}
-                  existingKeys={apiKeys}
-                  form={editForm}
-                  isPending={updateMutation.isPending}
-                />
+            )}
+          </DialogBody>
+          <DialogStickyFooter className="mt-0">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setIsEditDialogOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              disabled={!isEditValid || updateMutation.isPending}
+            >
+              {updateMutation.isPending && (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
               )}
-            </div>
-            <DialogStickyFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setIsEditDialogOpen(false)}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                disabled={!isEditValid || updateMutation.isPending}
-              >
-                {updateMutation.isPending && (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                )}
-                Test & Save
-              </Button>
-            </DialogStickyFooter>
-          </DialogForm>
-        </DialogContent>
-      </Dialog>
+              Test & Save
+            </Button>
+          </DialogStickyFooter>
+        </DialogForm>
+      </FormDialog>
 
       {/* Delete Confirmation Dialog */}
       <DeleteConfirmDialog

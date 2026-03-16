@@ -72,6 +72,7 @@ type BindingsQuery = NonNullable<
 >;
 type StatusFilter = "all" | NonNullable<BindingsQuery["status"]>;
 type SortByColumn = NonNullable<BindingsQuery["sortBy"]>;
+type SortDirection = NonNullable<BindingsQuery["sortDirection"]>;
 
 export function ChannelsSection({
   providerConfig,
@@ -91,7 +92,7 @@ export function ChannelsSection({
   const sortByFromUrl =
     (searchParams.get("sortBy") as SortByColumn) || "channelName";
   const sortDirectionFromUrl =
-    (searchParams.get("sortDirection") as "asc" | "desc") || "asc";
+    (searchParams.get("sortDirection") as SortDirection) || "asc";
   const workspaceIdFromUrl = searchParams.get("workspaceId") || "";
 
   const pageIndex = Number(pageFromUrl || "1") - 1;

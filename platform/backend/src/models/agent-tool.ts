@@ -1,5 +1,6 @@
 import {
   BUILT_IN_AGENT_IDS,
+  type PaginationQuery,
   TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
 } from "@shared";
 import {
@@ -27,9 +28,8 @@ import type {
   AgentTool,
   AgentToolFilters,
   AgentToolSortBy,
-  AgentToolSortDirection,
   InsertAgentTool,
-  PaginationQuery,
+  SortDirection,
   UpdateAgentTool,
 } from "@/types";
 import AgentTeamModel from "./agent-team";
@@ -904,7 +904,7 @@ class AgentToolModel {
     pagination?: PaginationQuery;
     sorting?: {
       sortBy?: AgentToolSortBy;
-      sortDirection?: AgentToolSortDirection;
+      sortDirection?: SortDirection;
     };
     filters?: AgentToolFilters;
     userId?: string;

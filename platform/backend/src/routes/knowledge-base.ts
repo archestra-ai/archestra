@@ -1,7 +1,11 @@
-import { RouteId } from "@shared";
+import {
+  calculatePaginationMeta,
+  createPaginatedResponseSchema,
+  PaginationQuerySchema,
+  RouteId,
+} from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { calculatePaginationMeta } from "@/database/utils/pagination";
 import { getConnector } from "@/knowledge-base/connectors/registry";
 import logger from "@/logging";
 import {
@@ -23,10 +27,8 @@ import {
   ConnectorCredentialsSchema,
   ConnectorTypeSchema,
   constructResponseSchema,
-  createPaginatedResponseSchema,
   DeleteObjectResponseSchema,
   KnowledgeBaseVisibilitySchema,
-  PaginationQuerySchema,
   SelectConnectorRunListSchema,
   SelectConnectorRunSchema,
   SelectKnowledgeBaseConnectorSchema,
@@ -210,7 +212,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       const updated = await KnowledgeBaseModel.update(id, body);
       if (!updated) {
-        throw new ApiError(404, "Knowledge graph not found");
+        throw new ApiError(404, "Knowledge base not found");
       }
 
       return reply.send(updated);
@@ -233,7 +235,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       const success = await KnowledgeBaseModel.delete(id);
       if (!success) {
-        throw new ApiError(404, "Knowledge graph not found");
+        throw new ApiError(404, "Knowledge base not found");
       }
 
       return reply.send({ success: true });
@@ -806,7 +808,7 @@ export default knowledgeBaseRoutes;
 async function findKnowledgeBaseOrThrow(id: string, organizationId: string) {
   const kg = await KnowledgeBaseModel.findById(id);
   if (!kg || kg.organizationId !== organizationId) {
-    throw new ApiError(404, "Knowledge graph not found");
+    throw new ApiError(404, "Knowledge base not found");
   }
   return kg;
 }

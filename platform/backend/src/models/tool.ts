@@ -35,10 +35,10 @@ import type {
   ExtendedTool,
   InsertTool,
   McpToolAssignment,
+  SortDirection,
   Tool,
   ToolFilters,
   ToolSortBy,
-  ToolSortDirection,
   ToolWithAssignments,
   UpdateTool,
 } from "@/types";
@@ -1540,7 +1540,7 @@ class ToolModel {
     pagination?: { limit?: number; offset?: number };
     sorting?: {
       sortBy?: ToolSortBy;
-      sortDirection?: ToolSortDirection;
+      sortDirection?: SortDirection;
     };
     filters?: ToolFilters;
     userId?: string;

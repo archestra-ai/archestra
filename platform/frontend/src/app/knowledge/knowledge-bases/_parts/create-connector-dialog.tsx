@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/collapsible";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogForm,
@@ -92,10 +93,12 @@ export function CreateConnectorDialog({
   knowledgeBaseId,
   open,
   onOpenChange,
+  onBack,
 }: {
   knowledgeBaseId?: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onBack?: () => void;
 }) {
   const createConnector = useCreateConnector();
   const [step, setStep] = useState<"select" | "configure">("select");
@@ -131,6 +134,13 @@ export function CreateConnectorDialog({
 
   const handleBack = () => {
     setStep("select");
+  };
+
+  const handleBackToChooser = () => {
+    form.reset();
+    setStep("select");
+    setSelectedType(null);
+    onBack?.();
   };
 
   const handleSubmit = async (values: CreateConnectorFormValues) => {
@@ -175,12 +185,24 @@ export function CreateConnectorDialog({
         {step === "select" ? (
           <>
             <DialogHeader>
-              <DialogTitle>Add Connector</DialogTitle>
+              <DialogTitle className="flex items-center gap-2">
+                {onBack && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    onClick={handleBackToChooser}
+                  >
+                    <ArrowLeft className="h-4 w-4" />
+                  </Button>
+                )}
+                Add Connector
+              </DialogTitle>
               <DialogDescription>
                 Select a connector type to get started.
               </DialogDescription>
             </DialogHeader>
-            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-2">
+            <DialogBody className="pt-4">
               <div className="grid grid-cols-2 gap-3">
                 {CONNECTOR_OPTIONS.map((option) => (
                   <button
@@ -204,7 +226,7 @@ export function CreateConnectorDialog({
                   </button>
                 ))}
               </div>
-            </div>
+            </DialogBody>
           </>
         ) : (
           <Form {...form}>
@@ -239,7 +261,7 @@ export function CreateConnectorDialog({
                 </DialogDescription>
               </DialogHeader>
 
-              <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4">
+              <DialogBody className="space-y-4">
                 <FormField
                   control={form.control}
                   name="name"
@@ -480,9 +502,9 @@ export function CreateConnectorDialog({
                     )}
                   </CollapsibleContent>
                 </Collapsible>
-              </div>
+              </DialogBody>
 
-              <DialogStickyFooter>
+              <DialogStickyFooter className="mt-0">
                 <Button type="button" variant="outline" onClick={handleBack}>
                   Back
                 </Button>

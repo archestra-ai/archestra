@@ -337,7 +337,7 @@ export function McpCatalogForm({
         className="flex min-h-0 flex-1 flex-col"
       >
         <div
-          className={`min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 ${embedded ? "space-y-4 pt-4 pb-0" : "space-y-6 py-4"}`}
+          className={`min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 ${embedded ? "space-y-4 pt-4 pb-0" : "space-y-4 py-4"}`}
         >
           {mode === "edit" && (
             <Alert variant="info">

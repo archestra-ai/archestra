@@ -10,6 +10,7 @@ import { SlackSetupDialog } from "@/components/slack-setup-dialog";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogHeader,
@@ -305,7 +306,7 @@ function NgrokSetupDialog({
                 </Link>
               </DialogDescription>
             </DialogHeader>
-            <div className="space-y-4 pt-2">
+            <DialogBody className="space-y-4 p-3">
               <Input
                 placeholder="ngrok auth token"
                 value={authToken}
@@ -318,7 +319,7 @@ function NgrokSetupDialog({
               >
                 Continue
               </Button>
-            </div>
+            </DialogBody>
           </>
         ) : (
           <>
@@ -328,7 +329,7 @@ function NgrokSetupDialog({
                 Start an ngrok tunnel to make {appName} reachable from Slack.
               </DialogDescription>
             </DialogHeader>
-            <div className="space-y-4 pt-2">
+            <DialogBody className="space-y-4 p-3">
               <div className="space-y-2 text-sm">
                 <p>1. Start an ngrok tunnel:</p>
                 <div className="relative">
@@ -361,7 +362,7 @@ function NgrokSetupDialog({
                 Then restart {appName} with{" "}
                 <code className="bg-muted px-1 py-0.5 rounded">tilt up</code>
               </p>
-            </div>
+            </DialogBody>
           </>
         )}
       </DialogContent>

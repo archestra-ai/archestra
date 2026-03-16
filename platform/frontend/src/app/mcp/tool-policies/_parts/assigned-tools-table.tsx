@@ -81,7 +81,11 @@ interface AssignedToolsTableProps {
   initialData?: ToolsInitialData;
 }
 
-function SortIcon({ isSorted }: { isSorted: false | "asc" | "desc" }) {
+function SortIcon({
+  isSorted,
+}: {
+  isSorted: NonNullable<ToolsSortDirectionValues> | false;
+}) {
   if (isSorted === "asc") return <ChevronUp className="h-3 w-3" />;
   if (isSorted === "desc") return <ChevronDown className="h-3 w-3" />;
 

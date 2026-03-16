@@ -1,5 +1,22 @@
 import { expect, test } from "./fixtures";
 
+function extractRoles(payload: unknown) {
+  if (Array.isArray(payload)) {
+    return payload;
+  }
+
+  if (
+    payload &&
+    typeof payload === "object" &&
+    "data" in payload &&
+    Array.isArray(payload.data)
+  ) {
+    return payload.data;
+  }
+
+  return [];
+}
+
 test.describe("Organization Roles API - Read Operations", () => {
   test("should get all roles (including predefined)", async ({
     request,
@@ -11,7 +28,7 @@ test.describe("Organization Roles API - Read Operations", () => {
       urlSuffix: "/api/roles",
     });
 
-    const roles = await response.json();
+    const roles = extractRoles(await response.json());
     expect(Array.isArray(roles)).toBe(true);
     expect(roles.length).toBeGreaterThanOrEqual(2); // At least admin and member
 

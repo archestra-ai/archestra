@@ -10,7 +10,9 @@ import {
   PROVIDER_CONFIG,
 } from "@/components/chat-api-key-form";
 import { CopyableCode } from "@/components/copyable-code";
+import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ExpirationDateTimeField } from "@/components/expiration-date-time-field";
+import { FormDialog } from "@/components/form-dialog";
 import {
   LlmProviderApiKeyFilterSelect,
   LlmProviderApiKeySelectItems,
@@ -20,13 +22,9 @@ import { TableRowActions } from "@/components/table-row-actions";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
+  DialogBody,
   DialogForm,
-  DialogHeader,
-  DialogTitle,
+  DialogStickyFooter,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -330,110 +328,108 @@ function CreateVirtualKeyDialog({
   }, [newKeyName, selectedParentKeyId, expiresAt, createMutation]);
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>
-            {createdKeyValue
-              ? "Virtual API Key Created"
-              : "Create Virtual API Key"}
-          </DialogTitle>
-          {!createdKeyValue && (
-            <DialogDescription>
-              Create a virtual key linked to one of your provider API keys
-            </DialogDescription>
-          )}
-        </DialogHeader>
-        <DialogForm onSubmit={handleCreate}>
-          <div className="space-y-4 py-2">
-            {createdKeyValue ? (
-              <div className="space-y-3">
-                <div className="flex items-center gap-2 text-sm font-medium">
-                  <Key className="h-4 w-4" />
-                  Copy this key now. It won&apos;t be shown again.
-                </div>
-                <CopyableCode value={createdKeyValue} />
-                <div className="text-sm text-muted-foreground">
-                  <span className="font-medium text-foreground">Expires:</span>{" "}
-                  {formatExpiration(createdKeyExpiresAt)}
-                </div>
+    <FormDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title={
+        createdKeyValue ? "Virtual API Key Created" : "Create Virtual API Key"
+      }
+      description={
+        createdKeyValue
+          ? undefined
+          : "Create a virtual key linked to one of your provider API keys"
+      }
+      size="small"
+    >
+      <DialogForm onSubmit={handleCreate}>
+        <DialogBody className="space-y-4">
+          {createdKeyValue ? (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <Key className="h-4 w-4" />
+                Copy this key now. It won&apos;t be shown again.
               </div>
-            ) : (
-              <>
-                <div className="space-y-2">
-                  <Label>Provider API Key</Label>
-                  <Select
-                    value={selectedParentKeyId}
-                    onValueChange={setSelectedParentKeyId}
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Select an API key" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <LlmProviderApiKeySelectItems
-                        options={parentableKeys.map((key) => {
-                          const config = PROVIDER_CONFIG[key.provider];
-                          return {
-                            value: key.id,
-                            icon: config.icon,
-                            providerName: config.name,
-                            keyName: key.name,
-                            secondaryLabel: config.name,
-                          };
-                        })}
-                      />
-                    </SelectContent>
-                  </Select>
-                </div>
+              <CopyableCode value={createdKeyValue} />
+              <div className="text-sm text-muted-foreground">
+                <span className="font-medium text-foreground">Expires:</span>{" "}
+                {formatExpiration(createdKeyExpiresAt)}
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="space-y-2">
+                <Label>Provider API Key</Label>
+                <Select
+                  value={selectedParentKeyId}
+                  onValueChange={setSelectedParentKeyId}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Select an API key" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <LlmProviderApiKeySelectItems
+                      options={parentableKeys.map((key) => {
+                        const config = PROVIDER_CONFIG[key.provider];
+                        return {
+                          value: key.id,
+                          icon: config.icon,
+                          providerName: config.name,
+                          keyName: key.name,
+                          secondaryLabel: config.name,
+                        };
+                      })}
+                    />
+                  </SelectContent>
+                </Select>
+              </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="virtual-key-name">Name</Label>
-                  <Input
-                    id="virtual-key-name"
-                    value={newKeyName}
-                    onChange={(e) => setNewKeyName(e.target.value)}
-                    placeholder="My virtual key"
-                  />
-                </div>
+              <div className="space-y-2">
+                <Label htmlFor="virtual-key-name">Name</Label>
+                <Input
+                  id="virtual-key-name"
+                  value={newKeyName}
+                  onChange={(e) => setNewKeyName(e.target.value)}
+                  placeholder="My virtual key"
+                />
+              </div>
 
-                <div className="space-y-2">
-                  <ExpirationDateTimeField
-                    value={expiresAt}
-                    onChange={setExpiresAt}
-                    noExpirationText="Key will never expire"
-                    formatExpiration={formatExpiration}
-                  />
-                </div>
-              </>
-            )}
-          </div>
-          <DialogFooter>
+              <div className="space-y-2">
+                <ExpirationDateTimeField
+                  value={expiresAt}
+                  onChange={setExpiresAt}
+                  noExpirationText="Key will never expire"
+                  formatExpiration={formatExpiration}
+                />
+              </div>
+            </>
+          )}
+        </DialogBody>
+        <DialogStickyFooter className="mt-0">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+          >
+            {createdKeyValue ? "Close" : "Cancel"}
+          </Button>
+          {!createdKeyValue && (
             <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
+              type="submit"
+              disabled={
+                !newKeyName.trim() ||
+                !selectedParentKeyId ||
+                createMutation.isPending
+              }
             >
-              {createdKeyValue ? "Close" : "Cancel"}
+              {createMutation.isPending && (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              )}
+              Create
             </Button>
-            {!createdKeyValue && (
-              <Button
-                type="submit"
-                disabled={
-                  !newKeyName.trim() ||
-                  !selectedParentKeyId ||
-                  createMutation.isPending
-                }
-              >
-                {createMutation.isPending && (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                )}
-                Create
-              </Button>
-            )}
-          </DialogFooter>
-        </DialogForm>
-      </DialogContent>
-    </Dialog>
+          )}
+        </DialogStickyFooter>
+      </DialogForm>
+    </FormDialog>
   );
 }
 
@@ -449,54 +445,29 @@ function DeleteVirtualKeyDialog({
   const deleteMutation = useDeleteVirtualApiKey();
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>Delete Virtual Key</DialogTitle>
-          <DialogDescription>
-            Are you sure you want to delete &quot;{virtualKey?.name}&quot;? This
-            action cannot be undone.
-          </DialogDescription>
-        </DialogHeader>
-        <DialogForm
-          onSubmit={() => {
-            if (virtualKey) {
-              deleteMutation.mutate(
-                {
-                  chatApiKeyId: virtualKey.chatApiKeyId,
-                  id: virtualKey.id,
-                },
-                {
-                  onSuccess: () => {
-                    onOpenChange(false);
-                  },
-                },
-              );
-            }
-          }}
-        >
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              variant="destructive"
-              disabled={deleteMutation.isPending}
-            >
-              {deleteMutation.isPending && (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              )}
-              Delete
-            </Button>
-          </DialogFooter>
-        </DialogForm>
-      </DialogContent>
-    </Dialog>
+    <DeleteConfirmDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Delete Virtual Key"
+      description={`Are you sure you want to delete "${virtualKey?.name}"? This action cannot be undone.`}
+      confirmLabel="Delete"
+      isPending={deleteMutation.isPending}
+      onConfirm={() => {
+        if (!virtualKey) return;
+
+        deleteMutation.mutate(
+          {
+            chatApiKeyId: virtualKey.chatApiKeyId,
+            id: virtualKey.id,
+          },
+          {
+            onSuccess: () => {
+              onOpenChange(false);
+            },
+          },
+        );
+      }}
+    />
   );
 }
 

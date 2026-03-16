@@ -29,7 +29,15 @@ import { ErrorBoundary } from "../../_parts/error-boundary";
 type McpToolCallData =
   archestraApiTypes.GetMcpToolCallsResponses["200"]["data"][number];
 
-function SortIcon({ isSorted }: { isSorted: false | "asc" | "desc" }) {
+function SortIcon({
+  isSorted,
+}: {
+  isSorted:
+    | NonNullable<
+        archestraApiTypes.GetMcpToolCallsData["query"]
+      >["sortDirection"]
+    | false;
+}) {
   const upArrow = <ChevronUp className="h-3 w-3" />;
   const downArrow = <ChevronDown className="h-3 w-3" />;
   if (isSorted === "asc") {

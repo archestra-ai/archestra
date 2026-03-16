@@ -1,13 +1,12 @@
-import { RouteId } from "@shared";
+import {
+  createPaginatedResponseSchema,
+  PaginationQuerySchema,
+  RouteId,
+} from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { MemberModel } from "@/models";
-import {
-  constructResponseSchema,
-  createPaginatedResponseSchema,
-  MemberListItemSchema,
-  PaginationQuerySchema,
-} from "@/types";
+import { constructResponseSchema, MemberListItemSchema } from "@/types";
 
 const memberRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(

@@ -129,7 +129,7 @@ export function useCreateKnowledgeBase() {
     onSuccess: (data) => {
       if (!data) return;
       queryClient.invalidateQueries({ queryKey: ["knowledge-bases"] });
-      toast.success("Knowledge graph created successfully");
+      toast.success("Knowledge base created successfully");
     },
   });
 }
@@ -160,7 +160,7 @@ export function useUpdateKnowledgeBase() {
       queryClient.invalidateQueries({
         queryKey: ["knowledge-bases", variables.id],
       });
-      toast.success("Knowledge graph updated successfully");
+      toast.success("Knowledge base updated successfully");
     },
   });
 }
@@ -179,7 +179,7 @@ export function useDeleteKnowledgeBase() {
     onSuccess: (data) => {
       if (!data) return;
       queryClient.invalidateQueries({ queryKey: ["knowledge-bases"] });
-      toast.success("Knowledge graph deleted successfully");
+      toast.success("Knowledge base deleted successfully");
     },
   });
 }

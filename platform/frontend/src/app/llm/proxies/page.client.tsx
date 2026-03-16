@@ -75,7 +75,13 @@ export default function LlmProxiesPage({
   );
 }
 
-function SortIcon({ isSorted }: { isSorted: false | "asc" | "desc" }) {
+function SortIcon({
+  isSorted,
+}: {
+  isSorted:
+    | NonNullable<archestraApiTypes.GetAgentsData["query"]>["sortDirection"]
+    | false;
+}) {
   const upArrow = <ChevronUp className="h-3 w-3" />;
   const downArrow = <ChevronDown className="h-3 w-3" />;
   if (isSorted === "asc") {

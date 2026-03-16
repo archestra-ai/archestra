@@ -9,7 +9,7 @@ import {
   roleDescriptions,
 } from "@shared";
 import { predefinedPermissionsMap } from "@shared/access-control";
-import { and, eq, getTableColumns, sql } from "drizzle-orm";
+import { and, eq, getTableColumns, ilike, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import logger from "@/logging";
 import type { OrganizationRole } from "@/types";
@@ -254,7 +254,7 @@ class OrganizationRoleModel {
     );
     return {
       ...result,
-      permission: JSON.parse(result.permission),
+      permission: parseRolePermissions(result.permission),
     };
   }
 
@@ -301,7 +301,7 @@ class OrganizationRoleModel {
     logger.debug({ roleId }, "OrganizationRoleModel.getById: completed");
     return {
       ...result,
-      permission: JSON.parse(result.permission),
+      permission: parseRolePermissions(result.permission),
     };
   }
 
@@ -387,7 +387,7 @@ class OrganizationRoleModel {
         ...predefinedRoles,
         ...customRoles.map((role) => ({
           ...role,
-          permission: JSON.parse(role.permission),
+          permission: parseRolePermissions(role.permission),
         })),
       ];
     } catch (_error) {
@@ -432,9 +432,7 @@ class OrganizationRoleModel {
     const customFilters = [
       eq(schema.organizationRolesTable.organizationId, organizationId),
       ...(normalizedSearch
-        ? [
-            sql`LOWER(${schema.organizationRolesTable.name}) LIKE ${`%${normalizedSearch}%`}`,
-          ]
+        ? [ilike(schema.organizationRolesTable.name, `%${normalizedSearch}%`)]
         : []),
     ];
 
@@ -475,7 +473,7 @@ class OrganizationRoleModel {
         ...takeFromPredefined,
         ...customRoles.map((role) => ({
           ...role,
-          permission: JSON.parse(role.permission),
+          permission: parseRolePermissions(role.permission),
         })),
       ],
       total,
@@ -514,3 +512,15 @@ class OrganizationRoleModel {
 }
 
 export default OrganizationRoleModel;
+
+function parseRolePermissions(value: string): Permissions {
+  try {
+    return JSON.parse(value) as Permissions;
+  } catch (error) {
+    logger.warn(
+      { error, permission: value },
+      "Failed to parse organization role permissions JSON",
+    );
+    return {};
+  }
+}

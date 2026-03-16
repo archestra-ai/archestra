@@ -11,6 +11,7 @@ export * as archestraCatalogTypes from "./hey-api/clients/archestra-catalog/type
 export * from "./knowledge-base";
 export * from "./mcp-orchestrator";
 export * from "./model-constants";
+export * from "./pagination";
 export * from "./permission.types";
 export * from "./policy-conditions";
 export * from "./roles";

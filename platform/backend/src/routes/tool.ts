@@ -1,16 +1,18 @@
-import { RouteId } from "@shared";
+import {
+  createPaginatedResponseSchema,
+  PaginationQuerySchema,
+  RouteId,
+} from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { hasAnyAgentTypeAdminPermission } from "@/auth";
 import { ToolModel } from "@/models";
 import {
   constructResponseSchema,
-  createPaginatedResponseSchema,
+  createSortingQuerySchema,
   ExtendedSelectToolSchema,
-  PaginationQuerySchema,
   ToolFilterSchema,
-  ToolSortBySchema,
-  ToolSortDirectionSchema,
+  ToolSortBy,
   ToolWithAssignmentsSchema,
 } from "@/types";
 
@@ -43,10 +45,9 @@ const toolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description:
           "Get all tools with their profile assignments (one entry per tool)",
         tags: ["Tools"],
-        querystring: ToolFilterSchema.extend({
-          sortBy: ToolSortBySchema.optional(),
-          sortDirection: ToolSortDirectionSchema.optional(),
-        }).merge(PaginationQuerySchema),
+        querystring: createSortingQuerySchema(ToolSortBy)
+          .merge(ToolFilterSchema)
+          .merge(PaginationQuerySchema),
         response: constructResponseSchema(
           createPaginatedResponseSchema(ToolWithAssignmentsSchema),
         ),

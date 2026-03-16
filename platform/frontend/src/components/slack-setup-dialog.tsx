@@ -196,7 +196,7 @@ function StepAppearanceAndConnect({ stepNumber }: { stepNumber: number }) {
   const logoUrl = organization?.iconLogo ?? "/logo-slack.png";
   return (
     <div
-      className="grid flex-1 gap-6"
+      className="grid flex-1 gap-4"
       style={{ gridTemplateColumns: "1fr 1fr" }}
     >
       <StepCard
@@ -271,7 +271,7 @@ function StepInstall({
 }) {
   return (
     <div
-      className="grid flex-1 gap-6"
+      className="grid flex-1 gap-4"
       style={{ gridTemplateColumns: "1fr 1fr" }}
     >
       <StepCard stepNumber={stepNumber} title="Install App to Workspace">
@@ -342,7 +342,7 @@ function StepAppLevelToken({
   const configuredAppName = useAppName();
   return (
     <div
-      className="grid flex-1 gap-6"
+      className="grid flex-1 gap-4"
       style={{ gridTemplateColumns: "1fr 1fr" }}
     >
       <StepCard stepNumber={stepNumber} title="Generate App-Level Token">
@@ -549,7 +549,7 @@ function StepManifestWebhook({
 
   return (
     <div
-      className="grid min-h-0 flex-1 gap-6"
+      className="grid min-h-0 flex-1 gap-4"
       style={{ gridTemplateColumns: "1fr 1fr" }}
     >
       <StepCard stepNumber={stepNumber} title="Create Slack App">
@@ -667,7 +667,7 @@ function StepManifestSocket({
 
   return (
     <div
-      className="grid min-h-0 flex-1 gap-6"
+      className="grid min-h-0 flex-1 gap-4"
       style={{ gridTemplateColumns: "1fr 1fr" }}
     >
       <StepCard stepNumber={stepNumber} title="Create Slack App">

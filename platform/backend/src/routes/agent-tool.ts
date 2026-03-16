@@ -1,4 +1,8 @@
-import { RouteId } from "@shared";
+import {
+  createPaginatedResponseSchema,
+  PaginationQuerySchema,
+  RouteId,
+} from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { policyConfigurationService } from "@/agents/subagents/policy-configuration";
@@ -25,13 +29,11 @@ import {
 import type { InternalMcpCatalog, Tool } from "@/types";
 import {
   AgentToolFilterSchema,
-  AgentToolSortBySchema,
-  AgentToolSortDirectionSchema,
+  AgentToolSortBy,
   ApiError,
   constructResponseSchema,
-  createPaginatedResponseSchema,
+  createSortingQuerySchema,
   DeleteObjectResponseSchema,
-  PaginationQuerySchema,
   SelectAgentToolSchema,
   SelectToolSchema,
   UpdateAgentToolSchema,
@@ -47,11 +49,12 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description:
           "Get all agent-tool relationships with pagination, sorting, and filtering",
         tags: ["Agent Tools"],
-        querystring: AgentToolFilterSchema.extend({
-          sortBy: AgentToolSortBySchema.optional(),
-          sortDirection: AgentToolSortDirectionSchema.optional(),
-          skipPagination: z.coerce.boolean().optional(),
-        }).merge(PaginationQuerySchema),
+        querystring: createSortingQuerySchema(AgentToolSortBy)
+          .merge(AgentToolFilterSchema)
+          .merge(PaginationQuerySchema)
+          .extend({
+            skipPagination: z.coerce.boolean().optional(),
+          }),
         response: constructResponseSchema(
           createPaginatedResponseSchema(SelectAgentToolSchema),
         ),

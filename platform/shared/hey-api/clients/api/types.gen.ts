@@ -13074,6 +13074,8 @@ export type GetAllAgentToolsData = {
     body?: never;
     path?: never;
     query?: {
+        sortBy?: 'name' | 'agent' | 'origin' | 'createdAt';
+        sortDirection?: 'asc' | 'desc';
         search?: string;
         agentId?: string;
         /**
@@ -13088,11 +13090,9 @@ export type GetAllAgentToolsData = {
          * For test isolation
          */
         excludeArchestraTools?: boolean;
-        sortBy?: 'name' | 'agent' | 'origin' | 'createdAt';
-        sortDirection?: 'asc' | 'desc';
-        skipPagination?: boolean;
         limit?: number;
         offset?: number;
+        skipPagination?: boolean;
     };
     url: '/api/agent-tools';
 };
@@ -37814,6 +37814,8 @@ export type GetToolsWithAssignmentsData = {
     body?: never;
     path?: never;
     query?: {
+        sortBy?: 'name' | 'origin' | 'createdAt' | 'assignmentCount';
+        sortDirection?: 'asc' | 'desc';
         search?: string;
         /**
          * Can be 'llm-proxy' or a catalogId
@@ -37823,8 +37825,6 @@ export type GetToolsWithAssignmentsData = {
          * Hide built-in Archestra tools
          */
         excludeArchestraTools?: boolean;
-        sortBy?: 'name' | 'origin' | 'createdAt' | 'assignmentCount';
-        sortDirection?: 'asc' | 'desc';
         limit?: number;
         offset?: number;
     };

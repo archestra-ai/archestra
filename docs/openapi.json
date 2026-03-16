@@ -42030,6 +42030,33 @@
         "parameters": [
           {
             "schema": {
+              "type": "string",
+              "enum": [
+                "name",
+                "agent",
+                "origin",
+                "createdAt"
+              ]
+            },
+            "in": "query",
+            "name": "sortBy",
+            "required": false
+          },
+          {
+            "schema": {
+              "default": "desc",
+              "type": "string",
+              "enum": [
+                "asc",
+                "desc"
+              ]
+            },
+            "in": "query",
+            "name": "sortDirection",
+            "required": false
+          },
+          {
+            "schema": {
               "type": "string"
             },
             "in": "query",
@@ -42075,40 +42102,6 @@
           },
           {
             "schema": {
-              "type": "string",
-              "enum": [
-                "name",
-                "agent",
-                "origin",
-                "createdAt"
-              ]
-            },
-            "in": "query",
-            "name": "sortBy",
-            "required": false
-          },
-          {
-            "schema": {
-              "type": "string",
-              "enum": [
-                "asc",
-                "desc"
-              ]
-            },
-            "in": "query",
-            "name": "sortDirection",
-            "required": false
-          },
-          {
-            "schema": {
-              "type": "boolean"
-            },
-            "in": "query",
-            "name": "skipPagination",
-            "required": false
-          },
-          {
-            "schema": {
               "default": 20,
               "type": "integer",
               "minimum": 1,
@@ -42127,6 +42120,14 @@
             },
             "in": "query",
             "name": "offset",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "boolean"
+            },
+            "in": "query",
+            "name": "skipPagination",
             "required": false
           }
         ],
@@ -133814,6 +133815,33 @@
         "parameters": [
           {
             "schema": {
+              "type": "string",
+              "enum": [
+                "name",
+                "origin",
+                "createdAt",
+                "assignmentCount"
+              ]
+            },
+            "in": "query",
+            "name": "sortBy",
+            "required": false
+          },
+          {
+            "schema": {
+              "default": "desc",
+              "type": "string",
+              "enum": [
+                "asc",
+                "desc"
+              ]
+            },
+            "in": "query",
+            "name": "sortDirection",
+            "required": false
+          },
+          {
+            "schema": {
               "type": "string"
             },
             "in": "query",
@@ -133837,32 +133865,6 @@
             "name": "excludeArchestraTools",
             "required": false,
             "description": "Hide built-in Archestra tools"
-          },
-          {
-            "schema": {
-              "type": "string",
-              "enum": [
-                "name",
-                "origin",
-                "createdAt",
-                "assignmentCount"
-              ]
-            },
-            "in": "query",
-            "name": "sortBy",
-            "required": false
-          },
-          {
-            "schema": {
-              "type": "string",
-              "enum": [
-                "asc",
-                "desc"
-              ]
-            },
-            "in": "query",
-            "name": "sortDirection",
-            "required": false
           },
           {
             "schema": {

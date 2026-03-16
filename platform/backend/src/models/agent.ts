@@ -1,6 +1,7 @@
 import {
   DEFAULT_LLM_PROXY_NAME,
   DEFAULT_MCP_GATEWAY_NAME,
+  type PaginationQuery,
   PLAYWRIGHT_MCP_CATALOG_ID,
 } from "@shared";
 import {
@@ -32,7 +33,6 @@ import type {
   AgentScopeFilter,
   AgentType,
   InsertAgent,
-  PaginationQuery,
   SortingQuery,
   UpdateAgent,
 } from "@/types";

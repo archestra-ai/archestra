@@ -1,5 +1,10 @@
+import {
+  calculatePaginationMeta,
+  type PaginationMeta,
+  type PaginationQuery,
+} from "@shared";
+
 import type { PgSelect } from "drizzle-orm/pg-core";
-import type { PaginationMeta, PaginationQuery } from "@/types";
 
 /**
  * Pagination result containing data and metadata
@@ -28,36 +33,6 @@ export function applyPagination<T extends PgSelect>(
   params: PaginationQuery,
 ): T {
   return queryBuilder.limit(params.limit).offset(params.offset) as T;
-}
-
-/**
- * Calculate pagination metadata
- *
- * @param total - Total number of items in the dataset
- * @param params - Pagination parameters (limit and offset)
- * @returns Pagination metadata object
- *
- * @example
- * ```typescript
- * const meta = calculatePaginationMeta(100, { limit: 20, offset: 40 });
- * // Returns: { currentPage: 3, limit: 20, total: 100, totalPages: 5, hasNext: true, hasPrev: true }
- * ```
- */
-export function calculatePaginationMeta(
-  total: number,
-  params: PaginationQuery,
-): PaginationMeta {
-  const totalPages = Math.ceil(total / params.limit);
-  const currentPage = Math.floor(params.offset / params.limit) + 1;
-
-  return {
-    currentPage,
-    limit: params.limit,
-    total,
-    totalPages,
-    hasNext: currentPage < totalPages,
-    hasPrev: currentPage > 1,
-  };
 }
 
 /**

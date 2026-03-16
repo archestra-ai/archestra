@@ -1,3 +1,4 @@
+import type { PaginationQuery } from "@shared";
 import {
   and,
   asc,
@@ -22,7 +23,6 @@ import logger from "@/logging";
 import type {
   ChatOpsProviderType,
   ChatOpsStatus,
-  PaginationQuery,
   SortingQueryFor,
 } from "@/types";
 import type {

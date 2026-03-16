@@ -231,7 +231,7 @@ function StepSlide({
 
   return (
     <div
-      className="grid flex-1 gap-6"
+      className="grid flex-1 gap-4"
       style={{ gridTemplateColumns: "1fr 1fr" }}
     >
       <StepCard stepNumber={stepNumber} title={title}>
@@ -287,7 +287,7 @@ function StepBotSettings({
 }) {
   return (
     <div
-      className="grid flex-1 gap-6"
+      className="grid flex-1 gap-4"
       style={{ gridTemplateColumns: "1fr 1fr" }}
     >
       <StepCard stepNumber={stepNumber} title="Configure Bot Settings">
@@ -383,7 +383,7 @@ function StepInstallAndConnect({
   const configuredAppName = useAppName();
   return (
     <div
-      className="grid flex-1 gap-6"
+      className="grid flex-1 gap-4"
       style={{ gridTemplateColumns: "1fr 1fr" }}
     >
       <StepCard
@@ -564,7 +564,7 @@ function StepManifest({
 
   return (
     <div
-      className="grid min-h-0 flex-1 gap-6"
+      className="grid min-h-0 flex-1 gap-4"
       style={{ gridTemplateColumns: "1fr 1fr" }}
     >
       <StepCard stepNumber={stepNumber} title="Create App Manifest">

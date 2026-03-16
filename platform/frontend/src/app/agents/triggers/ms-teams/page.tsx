@@ -10,6 +10,7 @@ import { MsTeamsSetupDialog } from "@/components/ms-teams-setup-dialog";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogHeader,
@@ -232,7 +233,7 @@ function NgrokSetupDialog({
                 </Link>
               </DialogDescription>
             </DialogHeader>
-            <div className="space-y-4 pt-2">
+            <DialogBody className="space-y-4 p-3">
               <Input
                 placeholder="ngrok auth token"
                 value={authToken}
@@ -245,7 +246,7 @@ function NgrokSetupDialog({
               >
                 Continue
               </Button>
-            </div>
+            </DialogBody>
           </>
         ) : (
           <>
@@ -255,92 +256,96 @@ function NgrokSetupDialog({
                 Choose how you want to set up ngrok with {configuredAppName}.
               </DialogDescription>
             </DialogHeader>
-            <Tabs defaultValue="docker">
-              <TabsList className="w-full">
-                <TabsTrigger value="docker">Docker</TabsTrigger>
-                <TabsTrigger value="local">Local Development</TabsTrigger>
-              </TabsList>
-              <TabsContent value="docker" className="space-y-3 pt-2">
-                <p className="text-xs text-muted-foreground">
-                  Restart {configuredAppName} using the following command to
-                  enable ngrok:
-                </p>
-                <Tabs defaultValue="unix">
-                  <TabsList className="h-7 p-0.5">
-                    <TabsTrigger value="unix" className="text-xs h-6 px-2">
-                      Mac / Linux
-                    </TabsTrigger>
-                    <TabsTrigger value="windows" className="text-xs h-6 px-2">
-                      Windows
-                    </TabsTrigger>
-                  </TabsList>
-                  <TabsContent value="unix" className="mt-2">
+            <DialogBody className="space-y-3 p-3">
+              <Tabs defaultValue="docker">
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="docker">Docker</TabsTrigger>
+                  <TabsTrigger value="local">Local Development</TabsTrigger>
+                </TabsList>
+                <TabsContent value="docker" className="space-y-3 pt-1">
+                  <p className="text-xs text-muted-foreground">
+                    Restart {configuredAppName} using the following command to
+                    enable ngrok:
+                  </p>
+                  <Tabs defaultValue="unix">
+                    <TabsList className="h-7 p-0.5">
+                      <TabsTrigger value="unix" className="text-xs h-6 px-2">
+                        Mac / Linux
+                      </TabsTrigger>
+                      <TabsTrigger value="windows" className="text-xs h-6 px-2">
+                        Windows
+                      </TabsTrigger>
+                    </TabsList>
+                    <TabsContent value="unix" className="mt-2">
+                      <div className="relative">
+                        <pre className="bg-muted rounded-md p-4 text-xs whitespace-pre-wrap break-all">
+                          {dockerCommandUnix}
+                        </pre>
+                        <div className="absolute top-2 right-2">
+                          <CopyButton text={dockerCommandUnix} />
+                        </div>
+                      </div>
+                    </TabsContent>
+                    <TabsContent value="windows" className="mt-2">
+                      <div className="relative">
+                        <pre className="bg-muted rounded-md p-4 text-xs whitespace-pre-wrap break-all">
+                          {dockerCommandWindows}
+                        </pre>
+                        <div className="absolute top-2 right-2">
+                          <CopyButton text={dockerCommandWindows} />
+                        </div>
+                      </div>
+                    </TabsContent>
+                  </Tabs>
+                  <p className="text-xs text-muted-foreground">
+                    Then open{" "}
+                    <code className="bg-muted px-1 py-0.5 rounded">
+                      localhost:3000
+                    </code>
+                  </p>
+                </TabsContent>
+                <TabsContent value="local" className="space-y-3 pt-1">
+                  <div className="space-y-2 text-sm">
+                    <p>
+                      1. Start an ngrok tunnel pointing to your local{" "}
+                      {configuredAppName}
+                      instance:
+                    </p>
                     <div className="relative">
                       <pre className="bg-muted rounded-md p-4 text-xs whitespace-pre-wrap break-all">
-                        {dockerCommandUnix}
+                        {ngrokCommand}
                       </pre>
-                      <div className="absolute top-2 right-2">
-                        <CopyButton text={dockerCommandUnix} />
+                      <div className="absolute top-0 right-0">
+                        <CopyButton text={ngrokCommand} />
                       </div>
                     </div>
-                  </TabsContent>
-                  <TabsContent value="windows" className="mt-2">
+                  </div>
+                  <div className="space-y-2 text-sm">
+                    <p>
+                      2. Set the ngrok domain in your{" "}
+                      <code className="bg-muted px-1 py-0.5 rounded text-xs">
+                        .env
+                      </code>{" "}
+                      file:
+                    </p>
                     <div className="relative">
                       <pre className="bg-muted rounded-md p-4 text-xs whitespace-pre-wrap break-all">
-                        {dockerCommandWindows}
+                        {envCommand}
                       </pre>
-                      <div className="absolute top-2 right-2">
-                        <CopyButton text={dockerCommandWindows} />
+                      <div className="absolute top-0 right-0">
+                        <CopyButton text={envCommand} />
                       </div>
                     </div>
-                  </TabsContent>
-                </Tabs>
-                <p className="text-xs text-muted-foreground">
-                  Then open{" "}
-                  <code className="bg-muted px-1 py-0.5 rounded">
-                    localhost:3000
-                  </code>
-                </p>
-              </TabsContent>
-              <TabsContent value="local" className="space-y-3 pt-2">
-                <div className="space-y-2 text-sm">
-                  <p>
-                    1. Start an ngrok tunnel pointing to your local{" "}
-                    {configuredAppName}
-                    instance:
-                  </p>
-                  <div className="relative">
-                    <pre className="bg-muted rounded-md p-4 text-xs whitespace-pre-wrap break-all">
-                      {ngrokCommand}
-                    </pre>
-                    <div className="absolute top-0 right-0">
-                      <CopyButton text={ngrokCommand} />
-                    </div>
                   </div>
-                </div>
-                <div className="space-y-2 text-sm">
-                  <p>
-                    2. Set the ngrok domain in your{" "}
-                    <code className="bg-muted px-1 py-0.5 rounded text-xs">
-                      .env
-                    </code>{" "}
-                    file:
+                  <p className="text-xs text-muted-foreground">
+                    Then restart {configuredAppName} with{" "}
+                    <code className="bg-muted px-1 py-0.5 rounded">
+                      tilt up
+                    </code>
                   </p>
-                  <div className="relative">
-                    <pre className="bg-muted rounded-md p-4 text-xs whitespace-pre-wrap break-all">
-                      {envCommand}
-                    </pre>
-                    <div className="absolute top-0 right-0">
-                      <CopyButton text={envCommand} />
-                    </div>
-                  </div>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Then restart {configuredAppName} with{" "}
-                  <code className="bg-muted px-1 py-0.5 rounded">tilt up</code>
-                </p>
-              </TabsContent>
-            </Tabs>
+                </TabsContent>
+              </Tabs>
+            </DialogBody>
           </>
         )}
       </DialogContent>

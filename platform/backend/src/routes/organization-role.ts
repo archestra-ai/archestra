@@ -1,14 +1,17 @@
-import { PredefinedRoleNameSchema, RouteId } from "@shared";
+import {
+  calculatePaginationMeta,
+  createPaginatedResponseSchema,
+  PaginationQuerySchema,
+  PredefinedRoleNameSchema,
+  RouteId,
+} from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { hasPermission } from "@/auth";
-import { calculatePaginationMeta } from "@/database/utils/pagination";
 import { OrganizationRoleModel } from "@/models";
 import {
   ApiError,
   constructResponseSchema,
-  createPaginatedResponseSchema,
-  PaginationQuerySchema,
   SelectOrganizationRoleSchema,
 } from "@/types";
 

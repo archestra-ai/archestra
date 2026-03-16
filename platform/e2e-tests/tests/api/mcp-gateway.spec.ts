@@ -1884,6 +1884,6 @@ test.describe("MCP Gateway - Knowledge Sources Tool Description", () => {
     // biome-ignore lint/style/noNonNullAssertion: guarded by toBeDefined above
     expect(kbTool!.description).toContain("E2E KB Dynamic Desc");
     // biome-ignore lint/style/noNonNullAssertion: guarded by toBeDefined above
-    expect(kbTool!.description).toContain("jira");
+    expect(kbTool!.description).toMatch(/jira/i);
   });
 });

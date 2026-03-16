@@ -45,23 +45,20 @@ export const AgentToolFilterSchema = z.object({
     .optional()
     .describe("For test isolation"),
 });
-export const AgentToolSortBySchema = z.enum([
+
+export const AgentToolSortBy = [
   "name",
   "agent",
   "origin",
   "createdAt",
-]);
-export const AgentToolSortDirectionSchema = z.enum(["asc", "desc"]);
+] as const;
+export type AgentToolSortBy = (typeof AgentToolSortBy)[number];
 
 export type AgentTool = z.infer<typeof SelectAgentToolSchema>;
 export type InsertAgentTool = z.infer<typeof InsertAgentToolSchema>;
 export type UpdateAgentTool = z.infer<typeof UpdateAgentToolSchema>;
 
 export type AgentToolFilters = z.infer<typeof AgentToolFilterSchema>;
-export type AgentToolSortBy = z.infer<typeof AgentToolSortBySchema>;
-export type AgentToolSortDirection = z.infer<
-  typeof AgentToolSortDirectionSchema
->;
 
 export type McpToolAssignment = {
   toolName: string;

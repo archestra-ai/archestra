@@ -376,7 +376,7 @@ export default function OptimizationRulesPage() {
           editingRule ? "Edit optimization rule" : "Create optimization rule"
         }
         description="Configure when requests should route to a cheaper target model."
-        size="medium"
+        size="small"
       >
         <DialogForm
           className="flex min-h-0 flex-1 flex-col"

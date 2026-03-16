@@ -1,5 +1,6 @@
 import {
   type APIRequestContext,
+  type APIResponse,
   expect,
   test as setup,
 } from "@playwright/test";
@@ -30,34 +31,18 @@ async function signInUser(
   email: string,
   password: string,
 ): Promise<boolean> {
-  const maxRetries = 3;
-  let delay = 1000;
-
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    const response = await request.post(
-      `${UI_BASE_URL}/api/auth/sign-in/email`,
-      {
+  const response = await withRetries(
+    () =>
+      request.post(`${UI_BASE_URL}/api/auth/sign-in/email`, {
         data: { email, password },
         headers: {
           Origin: UI_BASE_URL,
         },
-      },
-    );
+      }),
+    { retryStatuses: [429] },
+  );
 
-    if (response.ok()) {
-      return true;
-    }
-
-    if (response.status() === 429 && attempt < maxRetries) {
-      await sleep(delay);
-      delay *= 2;
-      continue;
-    }
-
-    return false;
-  }
-
-  return false;
+  return response.ok();
 }
 
 interface OrgMember {
@@ -144,13 +129,17 @@ async function createTeamIfNotExists(
     return existing;
   }
 
-  const response = await request.post(`${UI_BASE_URL}/api/teams`, {
-    data: { name, description },
-    headers: {
-      "Content-Type": "application/json",
-      Origin: UI_BASE_URL,
-    },
-  });
+  const response = await withRetries(
+    () =>
+      request.post(`${UI_BASE_URL}/api/teams`, {
+        data: { name, description },
+        headers: {
+          "Content-Type": "application/json",
+          Origin: UI_BASE_URL,
+        },
+      }),
+    { retryStatuses: [429, 500, 502, 503, 504] },
+  );
 
   if (!response.ok()) {
     throw new Error(`Failed to create team ${name}: ${await response.text()}`);
@@ -200,15 +189,16 @@ async function addUserToTeamIfNotMember(
     return;
   }
 
-  const response = await request.post(
-    `${UI_BASE_URL}/api/teams/${teamId}/members`,
-    {
-      data: { userId, role },
-      headers: {
-        "Content-Type": "application/json",
-        Origin: UI_BASE_URL,
-      },
-    },
+  const response = await withRetries(
+    () =>
+      request.post(`${UI_BASE_URL}/api/teams/${teamId}/members`, {
+        data: { userId, role },
+        headers: {
+          "Content-Type": "application/json",
+          Origin: UI_BASE_URL,
+        },
+      }),
+    { retryStatuses: [429, 500, 502, 503, 504] },
   );
 
   if (!response.ok()) {
@@ -216,6 +206,38 @@ async function addUserToTeamIfNotMember(
       `Failed to add user ${userId} to team ${teamId}: ${await response.text()}`,
     );
   }
+}
+
+async function withRetries(
+  requestFactory: () => Promise<APIResponse>,
+  params: {
+    retryStatuses: number[];
+    maxRetries?: number;
+    initialDelayMs?: number;
+  },
+) {
+  const maxRetries = params.maxRetries ?? 3;
+  let delay = params.initialDelayMs ?? 1000;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const response = await requestFactory();
+    if (response.ok()) {
+      return response;
+    }
+
+    if (
+      attempt < maxRetries &&
+      params.retryStatuses.includes(response.status())
+    ) {
+      await sleep(delay);
+      delay *= 2;
+      continue;
+    }
+
+    return response;
+  }
+
+  throw new Error("Retry loop exited unexpectedly");
 }
 
 // Setup teams - runs after users are created

@@ -2,6 +2,7 @@
 
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useState } from "react";
+import { SettingsSaveBar } from "@/components/settings/settings-block";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -12,7 +13,6 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { PermissionButton } from "@/components/ui/permission-button";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { useOnUnmount } from "@/lib/lifecycle.hook";
@@ -263,43 +263,32 @@ export default function OrganizationSettingsPage() {
       </div>
 
       {/* Unified save bar for all changes (theme + fields) */}
-      {(hasThemeChanges || hasFieldChanges) && (
-        <div className="flex gap-3 sticky bottom-0 bg-background p-4 rounded-lg border border-border shadow-lg">
-          <PermissionButton
-            permissions={{ organizationSettings: ["update"] }}
-            onClick={async () => {
-              if (hasThemeChanges) {
-                await saveAppearance?.(currentUITheme || DEFAULT_THEME);
-                setHasThemeChanges(false);
-              }
-              if (hasFieldChanges) {
-                await handleSaveFields();
-              }
-            }}
-            disabled={updateMutation.isPending}
-          >
-            Save Changes
-          </PermissionButton>
-          <Button
-            variant="outline"
-            onClick={() => {
-              if (hasThemeChanges) {
-                setPreviewTheme?.(themeFromBackend || DEFAULT_THEME);
-                setHasThemeChanges(false);
-              }
-              setAppName(null);
-              setOgDescription(null);
-              setFooterText(null);
-              setChatPlaceholders(null);
-              setAnimateChatPlaceholders(null);
-              setShowTwoFactor(null);
-            }}
-            disabled={updateMutation.isPending}
-          >
-            Cancel
-          </Button>
-        </div>
-      )}
+      <SettingsSaveBar
+        hasChanges={hasThemeChanges || hasFieldChanges}
+        isSaving={updateMutation.isPending}
+        permissions={{ organizationSettings: ["update"] }}
+        onSave={async () => {
+          if (hasThemeChanges) {
+            await saveAppearance?.(currentUITheme || DEFAULT_THEME);
+            setHasThemeChanges(false);
+          }
+          if (hasFieldChanges) {
+            await handleSaveFields();
+          }
+        }}
+        onCancel={() => {
+          if (hasThemeChanges) {
+            setPreviewTheme?.(themeFromBackend || DEFAULT_THEME);
+            setHasThemeChanges(false);
+          }
+          setAppName(null);
+          setOgDescription(null);
+          setFooterText(null);
+          setChatPlaceholders(null);
+          setAnimateChatPlaceholders(null);
+          setShowTwoFactor(null);
+        }}
+      />
     </div>
   );
 }

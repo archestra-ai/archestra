@@ -4,6 +4,7 @@ import {
   MCP_SERVER_TOOL_NAME_SEPARATOR,
 } from "@shared";
 import { userHasPermission } from "@/auth/utils";
+import { UserModel } from "@/models";
 import type { ArchestraToolShortName } from ".";
 import { errorResult } from "./helpers";
 import type { ArchestraContext } from "./types";
@@ -182,30 +183,27 @@ export async function filterToolNamesByPermission(
     );
   }
 
+  const permissions = await UserModel.getUserPermissions(
+    userId,
+    organizationId,
+  );
+
   // Collect unique permissions we need to check
-  const permChecks = new Map<string, Permission>();
+  const permResults = new Map<string, boolean>();
   for (const name of toolNames) {
     const shortName = extractShortName(name);
     if (!shortName) continue;
     const perm = TOOL_PERMISSIONS[shortName as ArchestraToolShortName];
     if (perm) {
-      permChecks.set(`${perm.resource}:${perm.action}`, perm);
+      const key = `${perm.resource}:${perm.action}`;
+      if (!permResults.has(key)) {
+        permResults.set(
+          key,
+          permissions[perm.resource]?.includes(perm.action) ?? false,
+        );
+      }
     }
   }
-
-  // Batch check all unique permissions
-  const permResults = new Map<string, boolean>();
-  await Promise.all(
-    [...permChecks.entries()].map(async ([key, { resource, action }]) => {
-      const allowed = await userHasPermission(
-        userId,
-        organizationId,
-        resource,
-        action,
-      );
-      permResults.set(key, allowed);
-    }),
-  );
 
   // Filter tools
   const allowed = new Set<string>();

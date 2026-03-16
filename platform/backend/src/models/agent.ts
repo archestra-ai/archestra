@@ -45,6 +45,32 @@ import MemberModel from "./member";
 import ToolModel from "./tool";
 
 class AgentModel {
+  static async findBasicByOrganizationIdAndIds(params: {
+    organizationId: string;
+    agentIds: string[];
+  }): Promise<Array<Pick<Agent, "id" | "name" | "agentType">>> {
+    const { organizationId, agentIds } = params;
+
+    if (agentIds.length === 0) {
+      return [];
+    }
+
+    return await db
+      .select({
+        id: schema.agentsTable.id,
+        name: schema.agentsTable.name,
+        agentType: schema.agentsTable.agentType,
+      })
+      .from(schema.agentsTable)
+      .where(
+        and(
+          eq(schema.agentsTable.organizationId, organizationId),
+          inArray(schema.agentsTable.id, agentIds),
+        ),
+      )
+      .orderBy(desc(schema.agentsTable.createdAt));
+  }
+
   /**
    * Populate authorName on agents by looking up user names from the user table.
    */

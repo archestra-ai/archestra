@@ -49,6 +49,7 @@ const TRANSIENT_ERROR_PATTERNS = [
   "EPIPE",
   "ETIMEDOUT",
   "Connection terminated",
+  "timeout exceeded when trying to connect",
   "timeout expired",
 ];
 

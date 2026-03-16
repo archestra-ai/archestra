@@ -11,7 +11,7 @@ import {
 import type { ChatStatus } from "ai";
 import { MoreVerticalIcon, PaperclipIcon } from "lucide-react";
 import type { FormEvent } from "react";
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { ModelSelectorLogo } from "@/components/ai-elements/model-selector";
 import {
   PromptInput,
@@ -51,9 +51,9 @@ import {
 } from "@/components/ui/tooltip";
 import { useProfile } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth.query";
+import { useChatPlaceholder } from "@/lib/chat-placeholder.hook";
 import { conversationStorageKeys } from "@/lib/chat-utils";
 import { useOrganization } from "@/lib/organization.query";
-import { useTypingAnimation } from "@/lib/typing-animation.hook";
 import { useIsMobile } from "@/lib/use-mobile.hook";
 import { useModelSelectorDisplay } from "@/lib/use-model-selector-display.hook";
 
@@ -163,30 +163,10 @@ const PromptInputContent = ({
 
   // Chat placeholders from organization settings
   const { data: orgData } = useOrganization();
-  const chatPlaceholders = useMemo(() => {
-    return orgData?.chatPlaceholders?.filter(
-      (placeholder) => placeholder.length > 0,
-    );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [orgData?.chatPlaceholders]);
-  const staticPlaceholder = useMemo(() => {
-    if (!chatPlaceholders?.length) {
-      return null;
-    }
-
-    if (
-      chatPlaceholders.length === 1 ||
-      orgData?.animateChatPlaceholders === false
-    ) {
-      return chatPlaceholders[0];
-    }
-
-    return null;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chatPlaceholders, orgData?.animateChatPlaceholders]);
-  const { text: animatedPlaceholder, isAnimating } = useTypingAnimation(
-    staticPlaceholder ? null : chatPlaceholders,
-  );
+  const { placeholder: chatPlaceholder } = useChatPlaceholder({
+    animate: orgData?.animateChatPlaceholders ?? true,
+    placeholders: orgData?.chatPlaceholders,
+  });
 
   // RBAC: check if user can see agent picker and provider settings in chat
   const { data: canSeeAgentPicker } = useHasPermissions({
@@ -287,11 +267,7 @@ const PromptInputContent = ({
             placeholder={
               conversationId
                 ? "Ask a follow-up..."
-                : staticPlaceholder
-                  ? staticPlaceholder
-                  : isAnimating
-                    ? animatedPlaceholder
-                    : "What would you like to get done?"
+                : (chatPlaceholder ?? "What would you like to get done?")
             }
             ref={textareaRef}
             className="px-4"

@@ -512,11 +512,11 @@ export function AgentDialog({
   const { data: knowledgeBasesData } = useKnowledgeBases({
     enabled: !!canReadKnowledgeBase,
   });
-  const knowledgeBases = knowledgeBasesData?.data ?? [];
+  const knowledgeBases = knowledgeBasesData ?? [];
   const { data: connectorsData } = useConnectors({
     enabled: !!canReadKnowledgeBase,
   });
-  const connectors = connectorsData?.data ?? [];
+  const connectors = connectorsData ?? [];
   const agentLlmApiKeyId = agent?.llmApiKeyId;
   const { data: availableApiKeys = [] } = useAvailableChatApiKeys({
     includeKeyId: agentLlmApiKeyId ?? undefined,

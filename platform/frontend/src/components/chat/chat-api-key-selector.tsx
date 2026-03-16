@@ -295,16 +295,6 @@ export function ChatApiKeySelector({
     return null;
   }
 
-  const getKeyDisplayName = (key: ChatApiKey) => {
-    if (key.scope === "personal") {
-      return key.name;
-    }
-    if (key.scope === "team") {
-      return `${key.name} (${key.teamName || "Team"})`;
-    }
-    return key.name;
-  };
-
   return (
     <>
       <Popover open={open} onOpenChange={handleOpenChange}>

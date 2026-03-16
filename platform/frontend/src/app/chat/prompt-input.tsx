@@ -289,7 +289,9 @@ const PromptInputContent = ({
         <PromptInputTools className="gap-0.5">
           {/* Mobile: vertical three-dots menu for collapsed toolbar items */}
           {isMobile &&
-            (showDefaultLogo && logoProvider && (modelSource === "agent" || modelSource === "organization") ? (
+            (showDefaultLogo &&
+            logoProvider &&
+            (modelSource === "agent" || modelSource === "organization") ? (
               <Button
                 type="button"
                 variant="ghost"

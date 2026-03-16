@@ -1732,7 +1732,9 @@ export default function ChatPage() {
                         selectorAgentId={conversation?.agentId ?? null}
                         onAgentChange={handleConversationAgentChange}
                         modelSource={conversationModelSource}
-                        onResetModelOverride={handleConversationResetModelOverride}
+                        onResetModelOverride={
+                          handleConversationResetModelOverride
+                        }
                       />
                       <div className="text-center">
                         <Version inline />

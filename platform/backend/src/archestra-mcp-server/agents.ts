@@ -1,10 +1,9 @@
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import {
   ARCHESTRA_MCP_SERVER_NAME,
-  MAX_SUGGESTED_PROMPT_TEXT_LENGTH,
-  MAX_SUGGESTED_PROMPT_TITLE_LENGTH,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
 } from "@shared";
+import { z } from "zod";
 import {
   getAgentTypePermissionChecker,
   isAgentTypeAdmin,
@@ -15,9 +14,20 @@ import logger from "@/logging";
 import { AgentModel, KnowledgeBaseModel, TeamModel } from "@/models";
 import type { Agent, AgentScope } from "@/types";
 import {
+  AgentToolAssignmentInputSchema,
+  AgentLabelWithDetailsSchema,
+  AgentScopeSchema,
+  InsertAgentSchemaBase,
+  SuggestedPromptInputSchema,
+  UpdateAgentSchemaBase,
+  UuidIdSchema,
+} from "@/types";
+import {
   assignMcpServerTools,
+  assignToolAssignments,
   assignSubAgentDelegations,
   catchError,
+  createToolDefinition,
   deduplicateLabels,
   errorResult,
   formatAssignmentSummary,
@@ -56,359 +66,129 @@ export const toolShortNames = [
   "edit_agent",
 ] as const;
 
+const BaseCreateAgentToolArgsSchema = InsertAgentSchemaBase.pick({
+  labels: true,
+  name: true,
+  scope: true,
+  teams: true,
+});
+
+const AgentCreateToolArgsSchema = BaseCreateAgentToolArgsSchema.extend({
+  description: InsertAgentSchemaBase.shape.description.optional(),
+  icon: InsertAgentSchemaBase.shape.icon.optional(),
+  mcpServerIds: z.array(UuidIdSchema).optional(),
+  subAgentIds: z.array(UuidIdSchema).optional(),
+  suggestedPrompts: z.array(SuggestedPromptInputSchema).optional(),
+  systemPrompt: InsertAgentSchemaBase.shape.systemPrompt.optional(),
+  toolAssignments: z.array(AgentToolAssignmentInputSchema).optional(),
+});
+
+const NonAgentCreateToolArgsSchema = BaseCreateAgentToolArgsSchema;
+
+const GetAgentToolArgsSchema = z
+  .object({
+    id: UuidIdSchema.optional(),
+    name: z.string().trim().min(1).optional(),
+  })
+  .refine((data) => data.id || data.name, {
+    message: "either id or name parameter is required",
+  });
+
+const ListAgentsToolArgsSchema = z.object({
+  limit: z.number().int().positive().max(100).optional(),
+  name: z.string().trim().min(1).optional(),
+  scope: AgentScopeSchema.optional(),
+});
+
+const EditAgentToolArgsSchema = z
+  .object({
+    id: UuidIdSchema,
+    mcpServerIds: z.array(UuidIdSchema).optional(),
+    subAgentIds: z.array(UuidIdSchema).optional(),
+    toolAssignments: z.array(AgentToolAssignmentInputSchema).optional(),
+  })
+  .merge(
+    UpdateAgentSchemaBase.pick({
+      description: true,
+      icon: true,
+      labels: true,
+      name: true,
+      scope: true,
+      suggestedPrompts: true,
+      systemPrompt: true,
+      teams: true,
+    }).partial(),
+  );
+
+export const toolArgsSchemas = {
+  [TOOL_CREATE_AGENT_FULL_NAME]: AgentCreateToolArgsSchema,
+  [TOOL_CREATE_LLM_PROXY_FULL_NAME]: NonAgentCreateToolArgsSchema,
+  [TOOL_CREATE_MCP_GATEWAY_FULL_NAME]: NonAgentCreateToolArgsSchema,
+  [TOOL_GET_AGENT_FULL_NAME]: GetAgentToolArgsSchema,
+  [TOOL_GET_LLM_PROXY_FULL_NAME]: GetAgentToolArgsSchema,
+  [TOOL_GET_MCP_GATEWAY_FULL_NAME]: GetAgentToolArgsSchema,
+  [TOOL_LIST_AGENTS_FULL_NAME]: ListAgentsToolArgsSchema,
+  [TOOL_EDIT_AGENT_FULL_NAME]: EditAgentToolArgsSchema,
+} as const;
+
 // === Exports ===
 
 export const tools: Tool[] = [
-  {
+  createToolDefinition({
     name: TOOL_CREATE_AGENT_FULL_NAME,
     title: "Create Agent",
     description:
       "Create a new agent with the specified name, optional description, labels, prompts, icon emoji, MCP server tool assignments, and sub-agent delegations. Defaults to personal scope. IMPORTANT: When the user mentions MCP servers or sub-agents by name, you MUST first look up their IDs using get_mcp_servers / list_agents / get_agent, then pass the IDs via mcpServerIds / subAgentIds.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        name: {
-          type: "string",
-          description: "The name of the agent (required)",
-        },
-        scope: {
-          type: "string",
-          enum: ["team", "personal", "org"],
-          description:
-            "The scope of the agent: 'team' for team-scoped, 'personal' for personal, or 'org' for organization-wide (optional, defaults to 'personal')",
-        },
-        labels: {
-          type: "array",
-          items: {
-            type: "object",
-            properties: {
-              key: { type: "string", description: "The label key" },
-              value: {
-                type: "string",
-                description: "The value for the label",
-              },
-            },
-            required: ["key", "value"],
-          },
-          description: "Array of labels to assign to the agent (optional)",
-        },
-        systemPrompt: {
-          type: "string",
-          description: "System prompt for the agent (optional)",
-        },
-        description: {
-          type: "string",
-          description:
-            "A brief description of what this agent does. Helps other agents understand if this agent is relevant for their task (optional)",
-        },
-        icon: {
-          type: "string",
-          description: "An emoji character to use as the agent icon (optional)",
-        },
-        mcpServerIds: {
-          type: "array",
-          items: { type: "string" },
-          description:
-            "Array of MCP server IDs whose tools should be assigned to the agent. Use get_mcp_servers to look up IDs by name. When the user mentions MCP servers by name, always look up their IDs and pass them here.",
-        },
-        subAgentIds: {
-          type: "array",
-          items: { type: "string" },
-          description:
-            "Array of agent IDs to assign as sub-agents (delegations) to the agent. Use list_agents or get_agent to look up IDs by name. When the user mentions sub-agents by name, always look up their IDs and pass them here.",
-        },
-        suggestedPrompts: {
-          type: "array",
-          items: {
-            type: "object",
-            properties: {
-              summaryTitle: {
-                type: "string",
-                maxLength: MAX_SUGGESTED_PROMPT_TITLE_LENGTH,
-                description: `Short title shown on the suggestion button in chat (max ${MAX_SUGGESTED_PROMPT_TITLE_LENGTH} chars)`,
-              },
-              prompt: {
-                type: "string",
-                maxLength: MAX_SUGGESTED_PROMPT_TEXT_LENGTH,
-                description: `The full prompt text sent when the suggestion is clicked (max ${MAX_SUGGESTED_PROMPT_TEXT_LENGTH} chars)`,
-              },
-            },
-            required: ["summaryTitle", "prompt"],
-          },
-          description:
-            "Array of suggested prompts shown to users when starting a new chat with this agent (optional). Each prompt has a summaryTitle (button label) and prompt (full text).",
-        },
-      },
-      required: ["name"],
-    },
-    annotations: {},
-    _meta: {},
-  },
-  {
+    schema: AgentCreateToolArgsSchema,
+  }),
+  createToolDefinition({
     name: TOOL_CREATE_LLM_PROXY_FULL_NAME,
     title: "Create LLM Proxy",
     description:
       "Create a new LLM proxy with the specified name and optional labels.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        name: {
-          type: "string",
-          description: "The name of the LLM proxy (required)",
-        },
-        scope: {
-          type: "string",
-          enum: ["team", "personal", "org"],
-          description:
-            "The scope of the LLM proxy: 'team' for team-scoped, 'personal' for personal, or 'org' for organization-wide (optional, defaults based on teams)",
-        },
-        labels: {
-          type: "array",
-          items: {
-            type: "object",
-            properties: {
-              key: { type: "string", description: "The label key" },
-              value: {
-                type: "string",
-                description: "The value for the label",
-              },
-            },
-            required: ["key", "value"],
-          },
-          description: "Array of labels to assign to the LLM proxy (optional)",
-        },
-      },
-      required: ["name"],
-    },
-    annotations: {},
-    _meta: {},
-  },
-  {
+    schema: NonAgentCreateToolArgsSchema,
+  }),
+  createToolDefinition({
     name: TOOL_CREATE_MCP_GATEWAY_FULL_NAME,
     title: "Create MCP Gateway",
     description:
       "Create a new MCP gateway with the specified name and optional labels.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        name: {
-          type: "string",
-          description: "The name of the MCP gateway (required)",
-        },
-        scope: {
-          type: "string",
-          enum: ["team", "personal", "org"],
-          description:
-            "The scope of the MCP gateway: 'team' for team-scoped, 'personal' for personal, or 'org' for organization-wide (optional, defaults based on teams)",
-        },
-        labels: {
-          type: "array",
-          items: {
-            type: "object",
-            properties: {
-              key: { type: "string", description: "The label key" },
-              value: {
-                type: "string",
-                description: "The value for the label",
-              },
-            },
-            required: ["key", "value"],
-          },
-          description:
-            "Array of labels to assign to the MCP gateway (optional)",
-        },
-      },
-      required: ["name"],
-    },
-    annotations: {},
-    _meta: {},
-  },
-  {
+    schema: NonAgentCreateToolArgsSchema,
+  }),
+  createToolDefinition({
     name: TOOL_GET_AGENT_FULL_NAME,
     title: "Get Agent",
     description: "Get a specific agent by ID or name.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        id: {
-          type: "string",
-          description: "The ID of the agent to retrieve",
-        },
-        name: {
-          type: "string",
-          description: "Search by name (partial match).",
-        },
-      },
-    },
-    annotations: {},
-    _meta: {},
-  },
-  {
+    schema: GetAgentToolArgsSchema,
+  }),
+  createToolDefinition({
     name: TOOL_GET_LLM_PROXY_FULL_NAME,
     title: "Get LLM Proxy",
     description:
       "Get a specific LLM proxy by ID or name. When searching by name, only your personal proxies are matched.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        id: {
-          type: "string",
-          description: "The ID of the LLM proxy to retrieve",
-        },
-        name: {
-          type: "string",
-          description:
-            "Search by name (partial match). Only returns your personal proxies.",
-        },
-      },
-    },
-    annotations: {},
-    _meta: {},
-  },
-  {
+    schema: GetAgentToolArgsSchema,
+  }),
+  createToolDefinition({
     name: TOOL_GET_MCP_GATEWAY_FULL_NAME,
     title: "Get MCP Gateway",
     description:
       "Get a specific MCP gateway by ID or name. When searching by name, only your personal gateways are matched.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        id: {
-          type: "string",
-          description: "The ID of the MCP gateway to retrieve",
-        },
-        name: {
-          type: "string",
-          description:
-            "Search by name (partial match). Only returns your personal gateways.",
-        },
-      },
-    },
-    annotations: {},
-    _meta: {},
-  },
-  {
+    schema: GetAgentToolArgsSchema,
+  }),
+  createToolDefinition({
     name: TOOL_LIST_AGENTS_FULL_NAME,
     title: "List Agents",
     description:
       "List agents with optional filtering by name and scope. Returns each agent's assigned tools and knowledge sources for discoverability.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        name: {
-          type: "string",
-          description: "Filter by name (partial match, optional)",
-        },
-        scope: {
-          type: "string",
-          enum: ["personal", "team", "org"],
-          description: "Filter by scope (optional)",
-        },
-        limit: {
-          type: "number",
-          description:
-            "Maximum number of agents to return (optional, default 20, max 100)",
-        },
-      },
-      required: [],
-    },
-    annotations: {},
-    _meta: {},
-  },
-  {
+    schema: ListAgentsToolArgsSchema,
+  }),
+  createToolDefinition({
     name: TOOL_EDIT_AGENT_FULL_NAME,
     title: "Edit Agent",
     description:
       "Edit an existing agent. All fields are optional except id. Only provided fields are updated. MCP server and sub-agent assignments are additive. Respects the calling user's access level. IMPORTANT: When the user mentions MCP servers or sub-agents by name, you MUST first look up their IDs using get_mcp_servers / list_agents / get_agent, then pass the IDs via mcpServerIds / subAgentIds.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        id: {
-          type: "string",
-          description:
-            "The ID of the agent to edit (required). Use list_agents or get_agent to look up by name.",
-        },
-        name: {
-          type: "string",
-          description: "New name for the agent",
-        },
-        description: {
-          type: "string",
-          description: "New description for the agent",
-        },
-        systemPrompt: {
-          type: "string",
-          description: "New system prompt for the agent",
-        },
-        icon: {
-          type: "string",
-          description: "An emoji character to use as the agent icon",
-        },
-        scope: {
-          type: "string",
-          enum: ["team", "personal", "org"],
-          description: "New scope for the agent",
-        },
-        teams: {
-          type: "array",
-          items: { type: "string" },
-          description: "Array of team IDs to assign (replaces existing teams)",
-        },
-        labels: {
-          type: "array",
-          items: {
-            type: "object",
-            properties: {
-              key: { type: "string", description: "The label key" },
-              value: {
-                type: "string",
-                description: "The value for the label",
-              },
-            },
-            required: ["key", "value"],
-          },
-          description:
-            "Array of labels to set on the agent (replaces existing labels)",
-        },
-        mcpServerIds: {
-          type: "array",
-          items: { type: "string" },
-          description:
-            "Array of MCP server IDs whose tools should be assigned to the agent (additive). Use get_mcp_servers to look up IDs by name.",
-        },
-        subAgentIds: {
-          type: "array",
-          items: { type: "string" },
-          description:
-            "Array of agent IDs to assign as sub-agents (additive). Use list_agents or get_agent to look up IDs by name.",
-        },
-        suggestedPrompts: {
-          type: "array",
-          items: {
-            type: "object",
-            properties: {
-              summaryTitle: {
-                type: "string",
-                maxLength: MAX_SUGGESTED_PROMPT_TITLE_LENGTH,
-                description: `Short title shown on the suggestion button in chat (max ${MAX_SUGGESTED_PROMPT_TITLE_LENGTH} chars)`,
-              },
-              prompt: {
-                type: "string",
-                maxLength: MAX_SUGGESTED_PROMPT_TEXT_LENGTH,
-                description: `The full prompt text sent when the suggestion is clicked (max ${MAX_SUGGESTED_PROMPT_TEXT_LENGTH} chars)`,
-              },
-            },
-            required: ["summaryTitle", "prompt"],
-          },
-          description:
-            "Array of suggested prompts shown in chat (replaces existing). Each has summaryTitle (button label) and prompt (full text).",
-        },
-      },
-      required: ["id"],
-    },
-    annotations: {},
-    _meta: {},
-  },
+    schema: EditAgentToolArgsSchema,
+  }),
 ];
 
 export async function handleTool(
@@ -494,9 +274,21 @@ export async function handleTool(
       // Assign MCP server tools and sub-agents (agent-only)
       const mcpServerIds = (args?.mcpServerIds as string[]) ?? [];
       const subAgentIds = (args?.subAgentIds as string[]) ?? [];
+      const toolAssignments = (args?.toolAssignments as
+        | Array<{
+            toolId: string;
+            credentialSourceMcpServerId?: string | null;
+            executionSourceMcpServerId?: string | null;
+            useDynamicTeamCredential?: boolean;
+          }>
+        | undefined) ?? [];
       const mcpServerResults =
         targetAgentType === "agent" && mcpServerIds.length > 0
           ? await assignMcpServerTools(created.id, mcpServerIds)
+          : [];
+      const toolAssignmentResults =
+        targetAgentType === "agent" && toolAssignments.length > 0
+          ? await assignToolAssignments(created.id, toolAssignments)
           : [];
       const subAgentResults =
         targetAgentType === "agent" && subAgentIds.length > 0
@@ -514,7 +306,12 @@ export async function handleTool(
         `Teams: ${created.teams.length > 0 ? created.teams.map((t) => t.name).join(", ") : "None"}`,
         `Labels: ${created.labels.length > 0 ? created.labels.map((l) => `${l.key}: ${l.value}`).join(", ") : "None"}`,
       ];
-      formatAssignmentSummary(lines, mcpServerResults, subAgentResults);
+      formatAssignmentSummary(
+        lines,
+        mcpServerResults,
+        subAgentResults,
+        toolAssignmentResults,
+      );
 
       return successResult(lines.join("\n"));
     } catch (error) {
@@ -753,9 +550,21 @@ export async function handleTool(
       // Assign MCP server tools and sub-agents (additive)
       const mcpServerIds = (args?.mcpServerIds as string[]) ?? [];
       const subAgentIds = (args?.subAgentIds as string[]) ?? [];
+      const toolAssignments = (args?.toolAssignments as
+        | Array<{
+            toolId: string;
+            credentialSourceMcpServerId?: string | null;
+            executionSourceMcpServerId?: string | null;
+            useDynamicTeamCredential?: boolean;
+          }>
+        | undefined) ?? [];
       const mcpServerResults =
         mcpServerIds.length > 0
           ? await assignMcpServerTools(id, mcpServerIds)
+          : [];
+      const toolAssignmentResults =
+        toolAssignments.length > 0
+          ? await assignToolAssignments(id, toolAssignments)
           : [];
       const subAgentResults =
         subAgentIds.length > 0
@@ -773,7 +582,12 @@ export async function handleTool(
         `Teams: ${updated.teams.length > 0 ? updated.teams.map((t) => t.name).join(", ") : "None"}`,
         `Labels: ${updated.labels.length > 0 ? updated.labels.map((l) => `${l.key}: ${l.value}`).join(", ") : "None"}`,
       ];
-      formatAssignmentSummary(lines, mcpServerResults, subAgentResults);
+      formatAssignmentSummary(
+        lines,
+        mcpServerResults,
+        subAgentResults,
+        toolAssignmentResults,
+      );
 
       return successResult(lines.join("\n"));
     } catch (error) {

@@ -3,9 +3,21 @@ import {
   ARCHESTRA_MCP_SERVER_NAME,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
 } from "@shared";
+import { z } from "zod";
+import {
+  getAgentTypePermissionChecker,
+  requireAgentModifyPermission,
+} from "@/auth/agent-type-permissions";
 import logger from "@/logging";
+import { AgentModel, TeamModel } from "@/models";
 import { assignToolToAgent } from "@/routes/agent-tool";
-import { catchError, errorResult, successResult } from "./helpers";
+import { AgentToolAssignmentInputSchema, UuidIdSchema } from "@/types";
+import {
+  catchError,
+  createToolDefinition,
+  errorResult,
+  successResult,
+} from "./helpers";
 import type { ArchestraContext } from "./types";
 
 // === Constants ===
@@ -22,103 +34,40 @@ export const toolShortNames = [
   "bulk_assign_tools_to_mcp_gateways",
 ] as const;
 
+const AgentAssignmentSchema = AgentToolAssignmentInputSchema.extend({
+  agentId: UuidIdSchema,
+});
+
+const McpGatewayAssignmentSchema = AgentToolAssignmentInputSchema.extend({
+  mcpGatewayId: UuidIdSchema,
+});
+
+export const toolArgsSchemas = {
+  [TOOL_BULK_ASSIGN_TOOLS_TO_AGENTS_FULL_NAME]: z.object({
+    assignments: z.array(AgentAssignmentSchema),
+  }),
+  [TOOL_BULK_ASSIGN_TOOLS_TO_MCP_GATEWAYS_FULL_NAME]: z.object({
+    assignments: z.array(McpGatewayAssignmentSchema),
+  }),
+} as const;
+
 // === Exports ===
 
 export const tools: Tool[] = [
-  {
+  createToolDefinition({
     name: TOOL_BULK_ASSIGN_TOOLS_TO_AGENTS_FULL_NAME,
     title: "Bulk Assign Tools to Agents",
     description:
       "Assign multiple tools to multiple agents in bulk with validation and error handling",
-    inputSchema: {
-      type: "object",
-      properties: {
-        assignments: {
-          type: "array",
-          description: "Array of tool assignments to create",
-          items: {
-            type: "object",
-            properties: {
-              agentId: {
-                type: "string",
-                description: "The ID of the agent to assign the tool to",
-              },
-              toolId: {
-                type: "string",
-                description: "The ID of the tool to assign",
-              },
-              credentialSourceMcpServerId: {
-                type: "string",
-                description:
-                  "Optional ID of the MCP server to use as credential source",
-              },
-              executionSourceMcpServerId: {
-                type: "string",
-                description:
-                  "Optional ID of the MCP server to use as execution source",
-              },
-              useDynamicTeamCredential: {
-                type: "boolean",
-                description:
-                  "When true, credentials are resolved at call time based on the caller's identity instead of using a fixed credential source. Resolution order: (1) the calling user's own personal credential, (2) a credential owned by a team member on the same team. Use this as an alternative to credentialSourceMcpServerId or executionSourceMcpServerId.",
-              },
-            },
-            required: ["agentId", "toolId"],
-          },
-        },
-      },
-      required: ["assignments"],
-    },
-    annotations: {},
-    _meta: {},
-  },
-  {
+    schema: toolArgsSchemas[TOOL_BULK_ASSIGN_TOOLS_TO_AGENTS_FULL_NAME],
+  }),
+  createToolDefinition({
     name: TOOL_BULK_ASSIGN_TOOLS_TO_MCP_GATEWAYS_FULL_NAME,
     title: "Bulk Assign Tools to MCP Gateways",
     description:
       "Assign multiple tools to multiple MCP gateways in bulk with validation and error handling",
-    inputSchema: {
-      type: "object",
-      properties: {
-        assignments: {
-          type: "array",
-          description: "Array of tool assignments to create",
-          items: {
-            type: "object",
-            properties: {
-              mcpGatewayId: {
-                type: "string",
-                description: "The ID of the MCP gateway to assign the tool to",
-              },
-              toolId: {
-                type: "string",
-                description: "The ID of the tool to assign",
-              },
-              credentialSourceMcpServerId: {
-                type: "string",
-                description:
-                  "Optional ID of the MCP server to use as credential source",
-              },
-              executionSourceMcpServerId: {
-                type: "string",
-                description:
-                  "Optional ID of the MCP server to use as execution source",
-              },
-              useDynamicTeamCredential: {
-                type: "boolean",
-                description:
-                  "When true, credentials are resolved at call time based on the caller's identity instead of using a fixed credential source. Resolution order: (1) the calling user's own personal credential, (2) a credential owned by a team member on the same team. Use this as an alternative to credentialSourceMcpServerId or executionSourceMcpServerId.",
-              },
-            },
-            required: ["mcpGatewayId", "toolId"],
-          },
-        },
-      },
-      required: ["assignments"],
-    },
-    annotations: {},
-    _meta: {},
-  },
+    schema: toolArgsSchemas[TOOL_BULK_ASSIGN_TOOLS_TO_MCP_GATEWAYS_FULL_NAME],
+  }),
 ];
 
 export async function handleTool(
@@ -154,26 +103,51 @@ export async function handleTool(
   );
 
   try {
+    if (!context.userId || !context.organizationId) {
+      return errorResult("user/organization context not available.");
+    }
+
     // biome-ignore lint/suspicious/noExplicitAny: dynamic property access by idField
     const assignments = args?.assignments as Array<Record<string, any>>;
 
-    if (!assignments || !Array.isArray(assignments)) {
-      return errorResult(
-        "assignments parameter is required and must be an array",
-      );
-    }
+    const uniqueTargetIds = [...new Set(assignments.map((a) => a[idField]))];
+    const [targetAgents, checker] = await Promise.all([
+      AgentModel.findByIdsForPermissionCheck(uniqueTargetIds),
+      getAgentTypePermissionChecker({
+        userId: context.userId,
+        organizationId: context.organizationId,
+      }),
+    ]);
 
+    let userTeamIds: string[] | null = null;
     const results = await Promise.allSettled(
-      assignments.map((assignment) =>
-        assignToolToAgent(
+      assignments.map(async (assignment) => {
+        const target = targetAgents.get(assignment[idField]);
+        if (target) {
+          checker.require(target.agentType, "update");
+          if (!checker.isAdmin(target.agentType) && userTeamIds === null) {
+            userTeamIds = await TeamModel.getUserTeamIds(context.userId);
+          }
+          requireAgentModifyPermission({
+            checker,
+            agentType: target.agentType,
+            agentScope: target.scope,
+            agentAuthorId: target.authorId,
+            agentTeamIds: target.teamIds,
+            userTeamIds: userTeamIds ?? [],
+            userId: context.userId,
+          });
+        }
+
+        return assignToolToAgent(
           assignment[idField],
           assignment.toolId,
           assignment.credentialSourceMcpServerId,
           assignment.executionSourceMcpServerId,
           undefined,
           assignment.useDynamicTeamCredential,
-        ),
-      ),
+        );
+      }),
     );
 
     const succeeded: { [key: string]: string }[] = [];

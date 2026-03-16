@@ -1,5 +1,6 @@
 import type { CallToolResult, Tool } from "@modelcontextprotocol/sdk/types.js";
 import { AGENT_TOOL_PREFIX } from "@shared";
+import { z } from "zod";
 import { executeA2AMessage } from "@/agents/a2a-executor";
 import { userHasPermission } from "@/auth/utils";
 import logger from "@/logging";
@@ -12,6 +13,10 @@ import {
   successResult,
 } from "./helpers";
 import type { ArchestraContext } from "./types";
+
+export const delegationToolArgsSchema = z.object({
+  message: z.string().trim().min(1, "message is required."),
+});
 
 // === Exports ===
 

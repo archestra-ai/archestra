@@ -72,9 +72,7 @@ describe("tool assignment tool execution", () => {
   test("bulk_assign_tools_to_agents returns error when assignments is missing", async () => {
     const result = await executeArchestraTool(AGENTS_TOOL, {}, mockContext);
     expect(result.isError).toBe(true);
-    expect((result.content[0] as any).text).toContain(
-      "assignments parameter is required",
-    );
+    expect((result.content[0] as any).text).toContain("Validation error");
   });
 
   test("bulk_assign_tools_to_agents returns error when assignments is not an array", async () => {
@@ -84,17 +82,13 @@ describe("tool assignment tool execution", () => {
       mockContext,
     );
     expect(result.isError).toBe(true);
-    expect((result.content[0] as any).text).toContain(
-      "assignments parameter is required",
-    );
+    expect((result.content[0] as any).text).toContain("Validation error");
   });
 
   test("bulk_assign_tools_to_mcp_gateways returns error when assignments is missing", async () => {
     const result = await executeArchestraTool(GATEWAYS_TOOL, {}, mockContext);
     expect(result.isError).toBe(true);
-    expect((result.content[0] as any).text).toContain(
-      "assignments parameter is required",
-    );
+    expect((result.content[0] as any).text).toContain("Validation error");
   });
 
   test("bulk_assign_tools_to_agents handles empty assignments array", async () => {
@@ -160,6 +154,53 @@ describe("tool assignment tool execution", () => {
     const parsed = JSON.parse((result.content[0] as any).text);
     expect(parsed.duplicates.length).toBe(1);
     expect(parsed.succeeded.length).toBe(0);
+  });
+
+  test("bulk_assign_tools_to_agents enforces target agent modify permission", async ({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeTool,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const owner = await makeUser();
+    const member = await makeUser();
+    await makeMember(owner.id, org.id, { role: "admin" });
+    await makeMember(member.id, org.id, { role: "member" });
+
+    const protectedAgent = await makeAgent({
+      name: "Protected Personal Agent",
+      organizationId: org.id,
+      authorId: owner.id,
+      scope: "personal",
+    });
+    const tool = await makeTool({ name: "protected_assign_tool" });
+
+    const memberContext: ArchestraContext = {
+      agent: { id: protectedAgent.id, name: protectedAgent.name },
+      userId: member.id,
+      organizationId: org.id,
+    };
+
+    const result = await executeArchestraTool(
+      AGENTS_TOOL,
+      {
+        assignments: [{ agentId: protectedAgent.id, toolId: tool.id }],
+      },
+      memberContext,
+    );
+
+    expect(result.isError).toBe(false);
+    const parsed = JSON.parse((result.content[0] as any).text);
+    expect(parsed.failed).toEqual([
+      {
+        agentId: protectedAgent.id,
+        toolId: tool.id,
+        error: "You can only manage your own personal agents",
+      },
+    ]);
+    expect(parsed.succeeded).toEqual([]);
   });
 });
 

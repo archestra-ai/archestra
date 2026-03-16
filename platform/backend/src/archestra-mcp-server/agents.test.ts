@@ -3,6 +3,8 @@ import {
   ARCHESTRA_MCP_SERVER_NAME,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
 } from "@shared";
+import { and, eq } from "drizzle-orm";
+import db, { schema } from "@/database";
 import { AgentKnowledgeBaseModel } from "@/models";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { Agent } from "@/types";
@@ -84,6 +86,88 @@ describe("agent tool execution", () => {
       "Successfully created agent",
     );
     expect((result.content[0] as any).text).toContain("New Test Agent");
+  });
+
+  test("create_agent does not write invalid remote MCP tool assignments from mcpServerIds", async ({
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({ serverType: "remote" });
+    await makeTool({
+      name: "remote_catalog_tool",
+      catalogId: catalog.id,
+    });
+
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_agent`,
+      {
+        name: "Agent With Invalid Catalog Assignment",
+        mcpServerIds: [catalog.id],
+      },
+      mockContext,
+    );
+
+    expect(result.isError).toBe(false);
+    expect((result.content[0] as any).text).toContain("validation_failed");
+
+    const createdAgentId = ((result.content[0] as any).text as string)
+      .split("\n")
+      .find((line) => line.startsWith("ID: "))
+      ?.replace("ID: ", "");
+    expect(createdAgentId).toBeDefined();
+
+    const createdAssignments = await db
+      .select()
+      .from(schema.agentToolsTable)
+      .where(eq(schema.agentToolsTable.agentId, createdAgentId!));
+    expect(createdAssignments).toEqual([]);
+  });
+
+  test("create_agent supports validated toolAssignments with dynamic credentials", async ({
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({ serverType: "remote" });
+    const tool = await makeTool({
+      name: "remote_dynamic_assignment_tool",
+      catalogId: catalog.id,
+    });
+
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_agent`,
+      {
+        name: "Agent With Dynamic Tool Assignment",
+        toolAssignments: [
+          {
+            toolId: tool.id,
+            useDynamicTeamCredential: true,
+          },
+        ],
+      },
+      mockContext,
+    );
+
+    expect(result.isError).toBe(false);
+    expect((result.content[0] as any).text).toContain("Tool Assignments:");
+    expect((result.content[0] as any).text).toContain(`${tool.id}: success`);
+
+    const createdAgentId = ((result.content[0] as any).text as string)
+      .split("\n")
+      .find((line) => line.startsWith("ID: "))
+      ?.replace("ID: ", "");
+    expect(createdAgentId).toBeDefined();
+
+    const [assignment] = await db
+      .select()
+      .from(schema.agentToolsTable)
+      .where(
+        and(
+          eq(schema.agentToolsTable.agentId, createdAgentId!),
+          eq(schema.agentToolsTable.toolId, tool.id),
+        ),
+      );
+    expect(assignment).toBeDefined();
+    expect(assignment.useDynamicTeamCredential).toBe(true);
   });
 
   test("create_llm_proxy creates a proxy successfully", async () => {

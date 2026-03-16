@@ -61,6 +61,7 @@ import { ExpiredAuthTool } from "./expired-auth-tool";
 import { InlineChatError } from "./inline-chat-error";
 import { hasKnowledgeBaseToolCall } from "./knowledge-graph-citations";
 import { McpInstallDialogs } from "./mcp-install-dialogs";
+import { McpAppRenderer } from "./mcp-app-renderer";
 import { PolicyDeniedTool } from "./policy-denied-tool";
 import { TodoWriteTool } from "./todo-write-tool";
 import { ToolErrorLogsButton } from "./tool-error-logs-button";
@@ -165,6 +166,24 @@ export function ChatMessages({
     }
     return map;
   }, [agentTools, catalogItems]);
+
+  // Build tool name → MCP App UI metadata map for tools with interactive UIs
+  const mcpAppToolMap = useMemo(() => {
+    const map = new Map<
+      string,
+      { resourceUri: string }
+    >();
+    if (!agentTools) return map;
+    for (const tool of agentTools) {
+      const meta = tool.meta as Record<string, unknown> | null | undefined;
+      const _meta = meta?._meta as Record<string, unknown> | undefined;
+      const ui = _meta?.ui as Record<string, unknown> | undefined;
+      if (ui?.resourceUri && typeof ui.resourceUri === "string") {
+        map.set(tool.name, { resourceUri: ui.resourceUri });
+      }
+    }
+    return map;
+  }, [agentTools]);
 
   // Initialize mutation hook with conversationId (use empty string as fallback for hook rules)
   const updateChatMessageMutation = useUpdateChatMessage(conversationId || "");
@@ -750,6 +769,9 @@ export function ChatMessages({
                             onReauthMcp={
                               orchestrator.triggerReauthByCatalogIdAndServerId
                             }
+                            mcpAppInfo={mcpAppToolMap.get(toolName)}
+                          />
+                            }
                           />
                         );
                       }
@@ -791,6 +813,7 @@ export function ChatMessages({
                               onReauthMcp={
                                 orchestrator.triggerReauthByCatalogIdAndServerId
                               }
+                              mcpAppInfo={mcpAppToolMap.get(toolName)}
                             />
                           );
                         }
@@ -876,6 +899,7 @@ function MessageTool({
   onToolApprovalResponse,
   onInstallMcp,
   onReauthMcp,
+  mcpAppInfo,
 }: {
   part: ToolUIPart | DynamicToolUIPart;
   toolResultPart: ToolUIPart | DynamicToolUIPart | null;
@@ -890,6 +914,7 @@ function MessageTool({
   }) => void;
   onInstallMcp?: (catalogId: string) => void;
   onReauthMcp?: (catalogId: string, serverId: string) => void;
+  mcpAppInfo?: { resourceUri: string } | null;
 }) {
   const outputError = toolResultPart
     ? tryToExtractErrorFromOutput(toolResultPart.output)
@@ -1094,6 +1119,15 @@ function MessageTool({
           />
         )}
       </ToolContent>
+      {/* MCP App: Render interactive UI iframe when tool has _meta.ui */}
+      {mcpAppInfo && (toolResultPart?.output || part.output) && (
+        <McpAppIframe
+          toolName={toolName}
+          toolOutput={toolResultPart?.output ?? part.output}
+          resourceUri={mcpAppInfo.resourceUri}
+          agentId={agentId}
+        />
+      )}
     </Tool>
   );
 }
@@ -1367,4 +1401,71 @@ function SwapAgentDivider({ message }: { message: UIMessage }) {
   }
 
   return null;
+}
+
+/**
+ * McpAppIframe - Wrapper that renders the McpAppRenderer for tools with _meta.ui.
+ * Extracts HTML content from tool result's structuredContent or fetches it from the resource URI.
+ */
+function McpAppIframe({
+  toolName,
+  toolOutput,
+  resourceUri,
+  agentId,
+}: {
+  toolName: string;
+  toolOutput: unknown;
+  resourceUri: string;
+  agentId?: string;
+}) {
+  // Try to extract HTML content from the tool result's structuredContent
+  const htmlContent = useMemo(() => {
+    if (!toolOutput) return null;
+
+    // Check if the output contains structuredContent with HTML
+    try {
+      const output =
+        typeof toolOutput === "string" ? JSON.parse(toolOutput) : toolOutput;
+
+      // MCP Apps spec: tool result can contain _meta.structuredContent
+      if (output?._meta?.structuredContent) {
+        const sc = output._meta.structuredContent;
+        // structuredContent can be { type: "resource", resource: { uri, mimeType, text } }
+        if (sc.type === "resource" && sc.resource?.text) {
+          return sc.resource.text;
+        }
+        // Or it can contain inline HTML
+        if (typeof sc === "string") return sc;
+        if (sc.html && typeof sc.html === "string") return sc.html;
+      }
+
+      // Check if result content array has embedded resource
+      if (Array.isArray(output)) {
+        for (const item of output) {
+          if (item.type === "resource" && item.resource?.text) {
+            return item.resource.text;
+          }
+        }
+      }
+    } catch {
+      // Not JSON, ignore
+    }
+    return null;
+  }, [toolOutput]);
+
+  if (!htmlContent) {
+    // No inline HTML available - the tool doesn't embed structured content
+    // In the future, this could fetch from the resourceUri via the backend
+    return null;
+  }
+
+  return (
+    <div className="px-4 pb-4">
+      <McpAppRenderer
+        htmlContent={htmlContent}
+        toolName={toolName}
+        toolOutput={toolOutput}
+      />
+    </div>
+  );
 }

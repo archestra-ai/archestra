@@ -151,6 +151,7 @@ export async function autoReinstallServer(
     // Pass the raw tool name from MCP server for accurate matching
     // This handles cases where catalog name contains `__` (e.g., huggingface__remote-mcp)
     rawToolName: tool.name,
+    meta: tool.meta,
   }));
 
   const syncResult = await ToolModel.syncToolsForCatalog(toolsToSync);

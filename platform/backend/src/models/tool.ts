@@ -469,6 +469,7 @@ class ToolModel {
       description: string | null;
       parameters: Record<string, unknown>;
       catalogId: string;
+      meta?: Record<string, unknown> | null;
     }>,
   ): Promise<Tool[]> {
     if (tools.length === 0) {
@@ -520,6 +521,7 @@ class ToolModel {
           name: tool.name,
           description: tool.description,
           parameters: tool.parameters,
+          meta: tool.meta ?? null,
           catalogId: tool.catalogId,
           agentId: null,
         });
@@ -980,6 +982,8 @@ class ToolModel {
       catalogId: string;
       /** The original tool name from the MCP server (e.g., "generate_text") */
       rawToolName?: string;
+      /** MCP tool metadata (_meta, annotations) from the upstream server */
+      meta?: Record<string, unknown> | null;
     }>,
   ): Promise<{
     created: Tool[];
@@ -1105,8 +1109,10 @@ class ToolModel {
         const parametersChanged =
           JSON.stringify(existingTool.parameters) !==
           JSON.stringify(tool.parameters);
+        const metaChanged =
+          JSON.stringify(existingTool.meta) !== JSON.stringify(tool.meta);
 
-        if (nameChanged || descriptionChanged || parametersChanged) {
+        if (nameChanged || descriptionChanged || parametersChanged || metaChanged) {
           // Update existing tool (including rename if catalog name changed)
           const [updatedTool] = await db
             .update(schema.toolsTable)
@@ -1114,6 +1120,7 @@ class ToolModel {
               name: tool.name, // This handles renaming when catalog name changes
               description: tool.description,
               parameters: tool.parameters,
+              meta: tool.meta ?? null,
               updatedAt: new Date(),
             })
             .where(eq(schema.toolsTable.id, existingTool.id))
@@ -1131,6 +1138,7 @@ class ToolModel {
           name: tool.name,
           description: tool.description,
           parameters: tool.parameters,
+          meta: tool.meta ?? null,
           catalogId: tool.catalogId,
           agentId: null,
         });

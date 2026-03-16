@@ -2116,6 +2116,71 @@ describe("ToolModel", () => {
       expect(createdTool.id).toBeDefined();
       expect(createdTool.name).toBe("new-tool");
     });
+
+    test("persists meta field with _meta.ui for MCP Apps", async ({
+      makeInternalMcpCatalog,
+      makeMcpServer,
+    }) => {
+      const catalog = await makeInternalMcpCatalog();
+      await makeMcpServer({ catalogId: catalog.id });
+
+      const mcpAppMeta = {
+        _meta: { ui: { resourceUri: "ui://n8n-mcp/workflow-editor" } },
+        annotations: { title: "Workflow Editor" },
+      };
+
+      const toolsToSync = [
+        {
+          name: "n8n__create-workflow",
+          description: "Create an n8n workflow with interactive UI",
+          parameters: { type: "object", properties: {} },
+          catalogId: catalog.id,
+          meta: mcpAppMeta,
+        },
+      ];
+
+      const result = await ToolModel.syncToolsForCatalog(toolsToSync);
+
+      expect(result.created).toHaveLength(1);
+      expect(result.created[0].meta).toEqual(mcpAppMeta);
+    });
+
+    test("updates meta field when it changes", async ({
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeTool,
+    }) => {
+      const catalog = await makeInternalMcpCatalog();
+      await makeMcpServer({ catalogId: catalog.id });
+
+      await makeTool({
+        name: "tool-with-meta",
+        description: "Tool with meta",
+        parameters: { type: "object" },
+        catalogId: catalog.id,
+        meta: { _meta: { ui: { resourceUri: "ui://old/app" } } },
+      });
+
+      const newMeta = {
+        _meta: { ui: { resourceUri: "ui://new/app" } },
+        annotations: { readOnlyHint: true },
+      };
+
+      const toolsToSync = [
+        {
+          name: "tool-with-meta",
+          description: "Tool with meta",
+          parameters: { type: "object" },
+          catalogId: catalog.id,
+          meta: newMeta,
+        },
+      ];
+
+      const result = await ToolModel.syncToolsForCatalog(toolsToSync);
+
+      expect(result.updated).toHaveLength(1);
+      expect(result.updated[0].meta).toEqual(newMeta);
+    });
   });
 
   describe("findAllWithAssignments", () => {

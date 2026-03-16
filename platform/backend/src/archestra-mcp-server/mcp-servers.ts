@@ -1243,6 +1243,7 @@ export async function handleTool(
               description: tool.description,
               parameters: tool.inputSchema,
               catalogId: capturedCatalogId,
+              meta: tool.meta,
             }));
 
             if (toolsToCreate.length > 0) {
@@ -1290,6 +1291,7 @@ export async function handleTool(
               description: tool.description,
               parameters: tool.inputSchema,
               catalogId: catalogItem.id,
+              meta: tool.meta,
             }));
             const createdTools =
               await ToolModel.bulkCreateToolsIfNotExists(toolsToCreate);

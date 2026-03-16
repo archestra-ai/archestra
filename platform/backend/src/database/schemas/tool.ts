@@ -39,6 +39,9 @@ const toolsTable = pgTable(
       .notNull()
       .default({}),
     description: text("description"),
+    // Stores MCP tool metadata (_meta, annotations) from upstream MCP servers.
+    // Enables MCP Apps: tools declare interactive UIs via _meta.ui.resourceUri.
+    meta: jsonb("meta").$type<Record<string, unknown>>(),
     policiesAutoConfiguredAt: timestamp("policies_auto_configured_at", {
       mode: "date",
     }),

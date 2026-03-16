@@ -4,6 +4,7 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 
 import type { TokenAuthContext } from "@/clients/mcp-client";
+import mcpClient from "@/clients/mcp-client";
 import config from "@/config";
 import { McpToolCallModel } from "@/models";
 import { UuidIdSchema } from "@/types";
@@ -280,6 +281,105 @@ export const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
         profileId,
         tokenAuthContext,
       );
+    },
+  );
+
+  // REST endpoint for fetching MCP App resource content (ui:// resources).
+  // The frontend calls this to get HTML content for rendering in sandboxed iframes.
+  fastify.post(
+    `${endpoint}/:profileId/resources/read`,
+    {
+      schema: {
+        tags: ["mcp-gateway"],
+        params: z.object({
+          profileId: UuidIdSchema,
+        }),
+        body: z.object({
+          uri: z.string(),
+          toolName: z.string(),
+        }),
+        response: {
+          200: z.object({
+            contents: z.array(
+              z.object({
+                uri: z.string(),
+                mimeType: z.string().optional(),
+                text: z.string().optional(),
+              }),
+            ),
+          }),
+          401: z.object({
+            error: z.string(),
+            message: z.string(),
+          }),
+          500: z.object({
+            error: z.string(),
+            message: z.string(),
+          }),
+        },
+      },
+    },
+    async (request, reply) => {
+      const { profileId, token } =
+        extractProfileIdAndTokenFromRequest(request) ?? {};
+
+      if (!profileId || !token) {
+        setWWWAuthenticateHeader(request, reply);
+        reply.status(401);
+        return {
+          error: "Unauthorized",
+          message: "Missing or invalid Authorization header",
+        };
+      }
+
+      const tokenAuth = await validateMCPGatewayToken(profileId, token);
+      if (!tokenAuth) {
+        setWWWAuthenticateHeader(request, reply);
+        reply.status(401);
+        return {
+          error: "Unauthorized",
+          message: "Invalid token for this profile",
+        };
+      }
+
+      const { uri, toolName } = request.body as { uri: string; toolName: string };
+
+      // Only allow ui:// scheme
+      if (!uri.startsWith("ui://")) {
+        reply.status(400);
+        return {
+          error: "Bad Request",
+          message: "Only ui:// resource URIs are supported",
+        };
+      }
+
+      try {
+        const tokenAuthContext: TokenAuthContext = {
+          tokenId: tokenAuth.tokenId,
+          teamId: tokenAuth.teamId,
+          isOrganizationToken: tokenAuth.isOrganizationToken,
+          organizationId: tokenAuth.organizationId,
+          ...(tokenAuth.isUserToken && { isUserToken: true }),
+          ...(tokenAuth.userId && { userId: tokenAuth.userId }),
+        };
+
+        const result = await mcpClient.readResource(
+          uri,
+          profileId,
+          toolName,
+          tokenAuthContext,
+        );
+        return result;
+      } catch (error) {
+        reply.status(500);
+        return {
+          error: "Internal Server Error",
+          message:
+            error instanceof Error
+              ? error.message
+              : "Failed to read resource",
+        };
+      }
     },
   );
 };

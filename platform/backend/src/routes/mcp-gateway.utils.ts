@@ -3,7 +3,9 @@ import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import {
   CallToolRequestSchema,
+  ListResourcesRequestSchema,
   ListToolsRequestSchema,
+  ReadResourceRequestSchema,
   type Tool,
 } from "@modelcontextprotocol/sdk/types.js";
 import {
@@ -96,6 +98,7 @@ export async function createAgentServer(
     {
       capabilities: {
         tools: { listChanged: false },
+        resources: {},
       },
     },
   );
@@ -132,7 +135,7 @@ export async function createAgentServer(
     const kbToolDescription = await buildKnowledgeSourcesDescription(agentId);
 
     const toolsList = permittedTools.map(
-      ({ name, description, parameters }) => ({
+      ({ name, description, parameters, meta }) => ({
         name,
         title: archestraToolTitles.get(name) || name,
         description:
@@ -140,8 +143,9 @@ export async function createAgentServer(
             ? kbToolDescription
             : description,
         inputSchema: parameters,
-        annotations: {},
-        _meta: {},
+        annotations:
+          (meta as Record<string, unknown> | null)?.annotations ?? {},
+        _meta: (meta as Record<string, unknown> | null)?._meta ?? {},
       }),
     );
 
@@ -384,6 +388,88 @@ export async function createAgentServer(
         throw {
           code: -32603, // Internal error
           message: "Tool execution failed",
+          data: error instanceof Error ? error.message : "Unknown error",
+        };
+      }
+    },
+  );
+
+  // MCP Apps: Handle resources/list to expose ui:// resources from upstream MCP servers.
+  // Tools with _meta.ui.resourceUri reference these resources for interactive HTML UIs.
+  server.setRequestHandler(ListResourcesRequestSchema, async () => {
+    const mcpTools = await ToolModel.getMcpToolsByAgent(agentId);
+    const resources: Array<{
+      uri: string;
+      name: string;
+      mimeType?: string;
+    }> = [];
+
+    for (const tool of mcpTools) {
+      const meta = tool.meta as Record<string, unknown> | null;
+      const _meta = meta?._meta as Record<string, unknown> | undefined;
+      const ui = _meta?.ui as Record<string, unknown> | undefined;
+      if (ui?.resourceUri && typeof ui.resourceUri === "string") {
+        resources.push({
+          uri: ui.resourceUri,
+          name: `${tool.name} UI`,
+          mimeType: "text/html",
+        });
+      }
+    }
+
+    return { resources };
+  });
+
+  // MCP Apps: Handle resources/read to proxy ui:// resource content from upstream MCP servers.
+  // The frontend calls this to get the HTML content for rendering in a sandboxed iframe.
+  server.setRequestHandler(
+    ReadResourceRequestSchema,
+    async ({ params: { uri } }) => {
+      // Only allow ui:// scheme resources
+      if (!uri.startsWith("ui://")) {
+        throw {
+          code: -32602,
+          message: `Unsupported resource URI scheme: ${uri}`,
+        };
+      }
+
+      // Find the tool that owns this resource URI
+      const mcpTools = await ToolModel.getMcpToolsByAgent(agentId);
+      let ownerTool = null;
+      for (const tool of mcpTools) {
+        const meta = tool.meta as Record<string, unknown> | null;
+        const _meta = meta?._meta as Record<string, unknown> | undefined;
+        const ui = _meta?.ui as Record<string, unknown> | undefined;
+        if (ui?.resourceUri === uri) {
+          ownerTool = tool;
+          break;
+        }
+      }
+
+      if (!ownerTool) {
+        throw {
+          code: -32602,
+          message: `Resource not found: ${uri}`,
+        };
+      }
+
+      // Proxy the resource read to the upstream MCP server via mcpClient
+      try {
+        const result = await mcpClient.readResource(
+          uri,
+          agentId,
+          ownerTool.name,
+          tokenAuth,
+        );
+        return result;
+      } catch (error) {
+        logger.error(
+          { err: error, uri, agentId },
+          "Failed to read MCP App resource",
+        );
+        throw {
+          code: -32603,
+          message: `Failed to read resource: ${uri}`,
           data: error instanceof Error ? error.message : "Unknown error",
         };
       }

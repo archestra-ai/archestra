@@ -256,6 +256,62 @@ async function seedPlaywrightCatalog(): Promise<void> {
 }
 
 /**
+ * Seeds MCP App-compatible catalog entries (n8n-mcp, excalidraw-mcp).
+ * These are remote MCP servers that support the MCP Apps extension,
+ * providing interactive HTML UIs through _meta.ui.resourceUri.
+ */
+async function seedMcpAppCatalogEntries(): Promise<void> {
+  // n8n-mcp: Workflow automation with interactive UI
+  await db
+    .insert(schema.internalMcpCatalogTable)
+    .values({
+      id: "00000000-0000-4000-8000-000000000010",
+      name: "n8n-mcp",
+      description:
+        "n8n workflow automation MCP server with interactive UI for building and managing workflows",
+      serverType: "remote",
+      requiresAuth: true,
+      authDescription: "Requires n8n API key for authentication",
+      authFields: [
+        {
+          name: "N8N_API_KEY",
+          label: "n8n API Key",
+          type: "string",
+          required: true,
+          description: "Your n8n instance API key",
+        },
+        {
+          name: "N8N_BASE_URL",
+          label: "n8n Base URL",
+          type: "string",
+          required: true,
+          description: "URL of your n8n instance (e.g., https://your-n8n.example.com)",
+        },
+      ],
+      icon: "⚡",
+      scope: "org",
+    })
+    .onConflictDoNothing();
+
+  // excalidraw-mcp: Collaborative whiteboard with interactive UI
+  await db
+    .insert(schema.internalMcpCatalogTable)
+    .values({
+      id: "00000000-0000-4000-8000-000000000011",
+      name: "excalidraw-mcp",
+      description:
+        "Excalidraw whiteboard MCP server with interactive drawing UI for creating diagrams and sketches",
+      serverType: "remote",
+      requiresAuth: false,
+      icon: "🎨",
+      scope: "org",
+    })
+    .onConflictDoNothing();
+
+  logger.info("Seeded MCP App catalog entries (n8n-mcp, excalidraw-mcp)");
+}
+
+/**
  * Seeds test MCP server for development
  * This creates a simple MCP server in the catalog that has one tool: print_archestra_test
  */
@@ -583,6 +639,7 @@ export async function seedRequiredStartingData(): Promise<void> {
   await seedPolicyConfigAgent();
   await seedArchestraCatalogAndTools();
   await seedPlaywrightCatalog();
+  await seedMcpAppCatalogEntries();
   await migratePlaywrightToolsToDynamicCredential();
   await seedTestMcpServer();
   await seedTeamTokens();

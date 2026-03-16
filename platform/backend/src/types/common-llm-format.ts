@@ -11,6 +11,8 @@ export type CommonMcpToolDefinition = {
   name: string;
   description?: string;
   inputSchema: Record<string, unknown>;
+  /** MCP tool metadata (_meta, annotations) from the upstream server */
+  meta?: Record<string, unknown> | null;
 };
 
 export const CommonToolCallSchema = z

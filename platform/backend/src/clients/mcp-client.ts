@@ -1616,6 +1616,14 @@ class McpClient {
           name: tool.name,
           description: tool.description || `Tool: ${tool.name}`,
           inputSchema: tool.inputSchema as Record<string, unknown>,
+          // Preserve MCP Apps metadata (_meta.ui, annotations) from upstream servers
+          meta:
+            tool._meta || tool.annotations
+              ? {
+                  ...(tool._meta ? { _meta: tool._meta } : {}),
+                  ...(tool.annotations ? { annotations: tool.annotations } : {}),
+                }
+              : null,
         }));
       } catch (error) {
         lastError = error instanceof Error ? error : new Error("Unknown error");
@@ -1692,6 +1700,77 @@ class McpClient {
         }),
         this.createTimeout(60000, "Tool call timeout"),
       ]);
+    } finally {
+      await client.close().catch(() => {});
+    }
+  }
+
+  /**
+   * Read a resource from an upstream MCP server.
+   * Used by MCP Apps to fetch ui:// resource content (HTML) for interactive tool UIs.
+   */
+  async readResource(
+    uri: string,
+    agentId: string,
+    toolName: string,
+    tokenAuth?: TokenAuthContext,
+  ): Promise<{ contents: Array<{ uri: string; mimeType?: string; text?: string }> }> {
+    // Validate the tool and get its catalog info
+    const toolCall: CommonToolCall = {
+      id: `resource-read-${Date.now()}`,
+      name: toolName,
+      arguments: {},
+    };
+    const validationResult = await this.validateAndGetTool(toolCall, agentId);
+    if ("error" in validationResult) {
+      throw new Error(`Tool not found: ${toolName}`);
+    }
+    const { tool, catalogItem } = validationResult;
+
+    const targetMcpServerIdResult =
+      await this.determineTargetMcpServerIdForCatalogItem({
+        tool,
+        toolCall,
+        agentId,
+        tokenAuth,
+        catalogItem,
+      });
+    if ("error" in targetMcpServerIdResult) {
+      throw new Error(`Cannot determine MCP server for tool: ${toolName}`);
+    }
+    const { targetMcpServerId } = targetMcpServerIdResult;
+
+    const secretsResult = await this.getSecretsForMcpServer({
+      targetMcpServerId,
+      toolCall,
+      agentId,
+    });
+    const secrets = "error" in secretsResult ? {} : secretsResult.secrets;
+
+    // Connect to the upstream MCP server and read the resource
+    const transport = await this.getTransport(
+      catalogItem,
+      targetMcpServerId,
+      secrets,
+    );
+
+    const client = new Client(
+      { name: "archestra-resource-reader", version: "1.0.0" },
+      { capabilities: {} },
+    );
+
+    try {
+      await Promise.race([
+        client.connect(transport),
+        this.createTimeout(30000, "Connection timeout after 30 seconds"),
+      ]);
+
+      const result = await Promise.race([
+        client.readResource({ uri }),
+        this.createTimeout(30000, "Resource read timeout after 30 seconds"),
+      ]);
+
+      return result;
     } finally {
       await client.close().catch(() => {});
     }

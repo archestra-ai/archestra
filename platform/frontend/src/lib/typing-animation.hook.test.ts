@@ -54,6 +54,28 @@ describe("useTypingAnimation", () => {
     expect(result.current.text).toBe("Hi");
   });
 
+  it("does not reset when rerendered with the same text values", () => {
+    vi.spyOn(Math, "random").mockReturnValue(0);
+    const { result, rerender } = renderHook(
+      ({ texts }) => useTypingAnimation(texts),
+      {
+        initialProps: { texts: ["Hi", "There"] },
+      },
+    );
+
+    act(() => {
+      vi.advanceTimersByTime(50);
+    });
+    expect(result.current.text).toBe("H");
+
+    rerender({ texts: ["Hi", "There"] });
+
+    act(() => {
+      vi.advanceTimersByTime(50);
+    });
+    expect(result.current.text).toBe("Hi");
+  });
+
   it("pauses after typing completes then starts deleting for multi-string placeholders", () => {
     vi.spyOn(Math, "random").mockReturnValue(0);
     const texts = ["Ab", "Cd"];

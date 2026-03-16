@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "1.1.22"
+    "version": "1.1.23"
   },
   "components": {
     "schemas": {
@@ -77820,7 +77820,8 @@
                                   "chatops:ms-teams",
                                   "email",
                                   "knowledge:embedding",
-                                  "knowledge:reranker"
+                                  "knowledge:reranker",
+                                  "knowledge:query-expansion"
                                 ]
                               },
                               "request": {
@@ -77980,7 +77981,8 @@
                                   "chatops:ms-teams",
                                   "email",
                                   "knowledge:embedding",
-                                  "knowledge:reranker"
+                                  "knowledge:reranker",
+                                  "knowledge:query-expansion"
                                 ]
                               },
                               "request": {
@@ -78254,7 +78256,8 @@
                                   "chatops:ms-teams",
                                   "email",
                                   "knowledge:embedding",
-                                  "knowledge:reranker"
+                                  "knowledge:reranker",
+                                  "knowledge:query-expansion"
                                 ]
                               },
                               "request": {
@@ -78414,7 +78417,8 @@
                                   "chatops:ms-teams",
                                   "email",
                                   "knowledge:embedding",
-                                  "knowledge:reranker"
+                                  "knowledge:reranker",
+                                  "knowledge:query-expansion"
                                 ]
                               },
                               "request": {
@@ -78574,7 +78578,8 @@
                                   "chatops:ms-teams",
                                   "email",
                                   "knowledge:embedding",
-                                  "knowledge:reranker"
+                                  "knowledge:reranker",
+                                  "knowledge:query-expansion"
                                 ]
                               },
                               "request": {
@@ -80434,7 +80439,8 @@
                                   "chatops:ms-teams",
                                   "email",
                                   "knowledge:embedding",
-                                  "knowledge:reranker"
+                                  "knowledge:reranker",
+                                  "knowledge:query-expansion"
                                 ]
                               },
                               "request": {
@@ -80594,7 +80600,8 @@
                                   "chatops:ms-teams",
                                   "email",
                                   "knowledge:embedding",
-                                  "knowledge:reranker"
+                                  "knowledge:reranker",
+                                  "knowledge:query-expansion"
                                 ]
                               },
                               "request": {
@@ -80754,7 +80761,8 @@
                                   "chatops:ms-teams",
                                   "email",
                                   "knowledge:embedding",
-                                  "knowledge:reranker"
+                                  "knowledge:reranker",
+                                  "knowledge:query-expansion"
                                 ]
                               },
                               "request": {
@@ -80914,7 +80922,8 @@
                                   "chatops:ms-teams",
                                   "email",
                                   "knowledge:embedding",
-                                  "knowledge:reranker"
+                                  "knowledge:reranker",
+                                  "knowledge:query-expansion"
                                 ]
                               },
                               "request": {
@@ -81074,7 +81083,8 @@
                                   "chatops:ms-teams",
                                   "email",
                                   "knowledge:embedding",
-                                  "knowledge:reranker"
+                                  "knowledge:reranker",
+                                  "knowledge:query-expansion"
                                 ]
                               },
                               "request": {
@@ -81234,7 +81244,8 @@
                                   "chatops:ms-teams",
                                   "email",
                                   "knowledge:embedding",
-                                  "knowledge:reranker"
+                                  "knowledge:reranker",
+                                  "knowledge:query-expansion"
                                 ]
                               },
                               "request": {
@@ -81394,7 +81405,8 @@
                                   "chatops:ms-teams",
                                   "email",
                                   "knowledge:embedding",
-                                  "knowledge:reranker"
+                                  "knowledge:reranker",
+                                  "knowledge:query-expansion"
                                 ]
                               },
                               "request": {
@@ -81543,7 +81555,8 @@
                                   "chatops:ms-teams",
                                   "email",
                                   "knowledge:embedding",
-                                  "knowledge:reranker"
+                                  "knowledge:reranker",
+                                  "knowledge:query-expansion"
                                 ]
                               },
                               "request": {
@@ -81692,7 +81705,8 @@
                                   "chatops:ms-teams",
                                   "email",
                                   "knowledge:embedding",
-                                  "knowledge:reranker"
+                                  "knowledge:reranker",
+                                  "knowledge:query-expansion"
                                 ]
                               },
                               "request": {
@@ -81852,7 +81866,8 @@
                                   "chatops:ms-teams",
                                   "email",
                                   "knowledge:embedding",
-                                  "knowledge:reranker"
+                                  "knowledge:reranker",
+                                  "knowledge:query-expansion"
                                 ]
                               },
                               "request": {
@@ -82012,7 +82027,8 @@
                                   "chatops:ms-teams",
                                   "email",
                                   "knowledge:embedding",
-                                  "knowledge:reranker"
+                                  "knowledge:reranker",
+                                  "knowledge:query-expansion"
                                 ]
                               },
                               "request": {
@@ -82172,7 +82188,8 @@
                                   "chatops:ms-teams",
                                   "email",
                                   "knowledge:embedding",
-                                  "knowledge:reranker"
+                                  "knowledge:reranker",
+                                  "knowledge:query-expansion"
                                 ]
                               },
                               "request": {
@@ -82592,7 +82609,8 @@
                 "chatops:ms-teams",
                 "email",
                 "knowledge:embedding",
-                "knowledge:reranker"
+                "knowledge:reranker",
+                "knowledge:query-expansion"
               ]
             },
             "in": "query",
@@ -82694,7 +82712,8 @@
                               "chatops:ms-teams",
                               "email",
                               "knowledge:embedding",
-                              "knowledge:reranker"
+                              "knowledge:reranker",
+                              "knowledge:query-expansion"
                             ]
                           },
                           "interactionId": {
@@ -83658,7 +83677,8 @@
                             "chatops:ms-teams",
                             "email",
                             "knowledge:embedding",
-                            "knowledge:reranker"
+                            "knowledge:reranker",
+                            "knowledge:query-expansion"
                           ]
                         },
                         "request": {
@@ -83818,7 +83838,8 @@
                             "chatops:ms-teams",
                             "email",
                             "knowledge:embedding",
-                            "knowledge:reranker"
+                            "knowledge:reranker",
+                            "knowledge:query-expansion"
                           ]
                         },
                         "request": {
@@ -84092,7 +84113,8 @@
                             "chatops:ms-teams",
                             "email",
                             "knowledge:embedding",
-                            "knowledge:reranker"
+                            "knowledge:reranker",
+                            "knowledge:query-expansion"
                           ]
                         },
                         "request": {
@@ -84252,7 +84274,8 @@
                             "chatops:ms-teams",
                             "email",
                             "knowledge:embedding",
-                            "knowledge:reranker"
+                            "knowledge:reranker",
+                            "knowledge:query-expansion"
                           ]
                         },
                         "request": {
@@ -84412,7 +84435,8 @@
                             "chatops:ms-teams",
                             "email",
                             "knowledge:embedding",
-                            "knowledge:reranker"
+                            "knowledge:reranker",
+                            "knowledge:query-expansion"
                           ]
                         },
                         "request": {
@@ -86272,7 +86296,8 @@
                             "chatops:ms-teams",
                             "email",
                             "knowledge:embedding",
-                            "knowledge:reranker"
+                            "knowledge:reranker",
+                            "knowledge:query-expansion"
                           ]
                         },
                         "request": {
@@ -86432,7 +86457,8 @@
                             "chatops:ms-teams",
                             "email",
                             "knowledge:embedding",
-                            "knowledge:reranker"
+                            "knowledge:reranker",
+                            "knowledge:query-expansion"
                           ]
                         },
                         "request": {
@@ -86592,7 +86618,8 @@
                             "chatops:ms-teams",
                             "email",
                             "knowledge:embedding",
-                            "knowledge:reranker"
+                            "knowledge:reranker",
+                            "knowledge:query-expansion"
                           ]
                         },
                         "request": {
@@ -86752,7 +86779,8 @@
                             "chatops:ms-teams",
                             "email",
                             "knowledge:embedding",
-                            "knowledge:reranker"
+                            "knowledge:reranker",
+                            "knowledge:query-expansion"
                           ]
                         },
                         "request": {
@@ -86912,7 +86940,8 @@
                             "chatops:ms-teams",
                             "email",
                             "knowledge:embedding",
-                            "knowledge:reranker"
+                            "knowledge:reranker",
+                            "knowledge:query-expansion"
                           ]
                         },
                         "request": {
@@ -87072,7 +87101,8 @@
                             "chatops:ms-teams",
                             "email",
                             "knowledge:embedding",
-                            "knowledge:reranker"
+                            "knowledge:reranker",
+                            "knowledge:query-expansion"
                           ]
                         },
                         "request": {
@@ -87232,7 +87262,8 @@
                             "chatops:ms-teams",
                             "email",
                             "knowledge:embedding",
-                            "knowledge:reranker"
+                            "knowledge:reranker",
+                            "knowledge:query-expansion"
                           ]
                         },
                         "request": {
@@ -87381,7 +87412,8 @@
                             "chatops:ms-teams",
                             "email",
                             "knowledge:embedding",
-                            "knowledge:reranker"
+                            "knowledge:reranker",
+                            "knowledge:query-expansion"
                           ]
                         },
                         "request": {
@@ -87530,7 +87562,8 @@
                             "chatops:ms-teams",
                             "email",
                             "knowledge:embedding",
-                            "knowledge:reranker"
+                            "knowledge:reranker",
+                            "knowledge:query-expansion"
                           ]
                         },
                         "request": {
@@ -87690,7 +87723,8 @@
                             "chatops:ms-teams",
                             "email",
                             "knowledge:embedding",
-                            "knowledge:reranker"
+                            "knowledge:reranker",
+                            "knowledge:query-expansion"
                           ]
                         },
                         "request": {
@@ -87850,7 +87884,8 @@
                             "chatops:ms-teams",
                             "email",
                             "knowledge:embedding",
-                            "knowledge:reranker"
+                            "knowledge:reranker",
+                            "knowledge:query-expansion"
                           ]
                         },
                         "request": {
@@ -88010,7 +88045,8 @@
                             "chatops:ms-teams",
                             "email",
                             "knowledge:embedding",
-                            "knowledge:reranker"
+                            "knowledge:reranker",
+                            "knowledge:query-expansion"
                           ]
                         },
                         "request": {

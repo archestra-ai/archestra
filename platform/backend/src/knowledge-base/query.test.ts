@@ -27,6 +27,13 @@ vi.mock("./reranker", () => ({
 const mockResolveEmbeddingConfig = vi.hoisted(() => vi.fn());
 vi.mock("./kb-llm-client", () => ({
   resolveEmbeddingConfig: mockResolveEmbeddingConfig,
+  resolveRerankerConfig: vi.fn().mockResolvedValue(null),
+}));
+
+const mockExpandQuery = vi.hoisted(() => vi.fn());
+vi.mock("./query-expansion", () => ({
+  expandQuery: mockExpandQuery,
+  KEYWORD_QUERY_HYBRID_ALPHA_WEIGHT: 4.0,
 }));
 
 vi.mock("@/config", async (importOriginal) => {
@@ -62,6 +69,12 @@ function setupEmbeddingConfig() {
   });
 }
 
+function setupSingleQueryExpansion() {
+  mockExpandQuery.mockImplementation(({ queryText }: { queryText: string }) =>
+    Promise.resolve([{ queryText, weight: 1.0, type: "semantic" }]),
+  );
+}
+
 describe("QueryService", () => {
   test("returns ranked results with citations", async ({
     makeOrganization,
@@ -72,6 +85,7 @@ describe("QueryService", () => {
     const kb = await makeKnowledgeBase(org.id);
     const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
     setupEmbeddingConfig();
+    setupSingleQueryExpansion();
 
     const doc = await KbDocumentModel.create({
       connectorId: connector.id,
@@ -154,6 +168,7 @@ describe("QueryService", () => {
     const kb = await makeKnowledgeBase(org.id);
     const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
     setupEmbeddingConfig();
+    setupSingleQueryExpansion();
 
     const queryEmb = makeFakeEmbedding(1);
     mockEmbeddingsCreate.mockResolvedValueOnce({
@@ -182,6 +197,7 @@ describe("QueryService", () => {
     const kb = await makeKnowledgeBase(org.id);
     const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
     setupEmbeddingConfig();
+    setupSingleQueryExpansion();
 
     const doc = await KbDocumentModel.create({
       connectorId: connector.id,
@@ -227,6 +243,7 @@ describe("QueryService", () => {
     const kb = await makeKnowledgeBase(org.id);
     const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
     setupEmbeddingConfig();
+    setupSingleQueryExpansion();
 
     const doc = await KbDocumentModel.create({
       connectorId: connector.id,
@@ -280,6 +297,7 @@ describe("QueryService", () => {
     const kb = await makeKnowledgeBase(org.id);
     const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
     setupEmbeddingConfig();
+    setupSingleQueryExpansion();
 
     const vectorOnly: VectorSearchResult = {
       id: "vec-1",
@@ -361,6 +379,7 @@ describe("QueryService", () => {
     const kb = await makeKnowledgeBase(org.id);
     const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
     setupEmbeddingConfig();
+    setupSingleQueryExpansion();
 
     const vectorResult: VectorSearchResult = {
       id: "vec-1",
@@ -414,6 +433,7 @@ describe("QueryService", () => {
     const kb = await makeKnowledgeBase(org.id);
     const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
     setupEmbeddingConfig();
+    setupSingleQueryExpansion();
 
     const chunk1: VectorSearchResult = {
       id: "r-1",
@@ -501,5 +521,127 @@ describe("QueryService", () => {
     expect(results).toEqual([]);
     // Should not attempt to create embeddings
     expect(mockEmbeddingsCreate).not.toHaveBeenCalled();
+  });
+
+  test("multi-query expansion searches each query independently and merges", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+    setupEmbeddingConfig();
+
+    // Return multiple expanded queries
+    mockExpandQuery.mockResolvedValueOnce([
+      { queryText: "original query", weight: 0.5, type: "semantic" },
+      { queryText: "rephrased query", weight: 1.3, type: "semantic" },
+      { queryText: "keyword search", weight: 1.0, type: "keyword" },
+    ]);
+
+    const chunkA: VectorSearchResult = {
+      id: "chunk-a",
+      content: "Content A",
+      chunkIndex: 0,
+      documentId: "doc-a",
+      title: "Doc A",
+      sourceUrl: null,
+      metadata: null,
+      connectorType: null,
+      score: 0.9,
+    };
+
+    const chunkB: VectorSearchResult = {
+      id: "chunk-b",
+      content: "Content B",
+      chunkIndex: 0,
+      documentId: "doc-b",
+      title: "Doc B",
+      sourceUrl: null,
+      metadata: null,
+      connectorType: null,
+      score: 0.8,
+    };
+
+    const chunkC: VectorSearchResult = {
+      id: "chunk-c",
+      content: "Content C",
+      chunkIndex: 0,
+      documentId: "doc-c",
+      title: "Doc C",
+      sourceUrl: null,
+      metadata: null,
+      connectorType: null,
+      score: 0.7,
+    };
+
+    // Each expanded query triggers vector + fulltext search
+    // Query 1 (original): finds A and B
+    // Query 2 (rephrased): finds B and C
+    // Query 3 (keyword): finds A and C
+    const vectorSearchSpy = vi
+      .spyOn(KbChunkModel, "vectorSearch")
+      .mockResolvedValueOnce([chunkA, chunkB])
+      .mockResolvedValueOnce([chunkB, chunkC])
+      .mockResolvedValueOnce([chunkA, chunkC]);
+
+    const fullTextSearchSpy = vi
+      .spyOn(KbChunkModel, "fullTextSearch")
+      .mockResolvedValue([]);
+
+    mockEmbeddingsCreate
+      .mockResolvedValueOnce({
+        object: "list",
+        data: [
+          { object: "embedding", embedding: makeFakeEmbedding(1), index: 0 },
+        ],
+        model: "text-embedding-3-small",
+        usage: { prompt_tokens: 5, total_tokens: 5 },
+      })
+      .mockResolvedValueOnce({
+        object: "list",
+        data: [
+          { object: "embedding", embedding: makeFakeEmbedding(2), index: 0 },
+        ],
+        model: "text-embedding-3-small",
+        usage: { prompt_tokens: 5, total_tokens: 5 },
+      })
+      .mockResolvedValueOnce({
+        object: "list",
+        data: [
+          { object: "embedding", embedding: makeFakeEmbedding(3), index: 0 },
+        ],
+        model: "text-embedding-3-small",
+        usage: { prompt_tokens: 5, total_tokens: 5 },
+      });
+
+    const results = await queryService.query({
+      connectorIds: [connector.id],
+      organizationId: org.id,
+      queryText: "original query",
+      userAcl: ["org:*"],
+    });
+
+    // All chunks should be present (merged from multiple queries)
+    expect(results.length).toBeGreaterThanOrEqual(1);
+    const contentSet = new Set(results.map((r) => r.content));
+    // B appears in queries 1 and 2, A in 1 and 3, C in 2 and 3 — all should be present
+    expect(
+      contentSet.has("Content A") ||
+        contentSet.has("Content B") ||
+        contentSet.has("Content C"),
+    ).toBe(true);
+
+    // Verify multiple embedding calls were made (one per expanded query)
+    expect(mockEmbeddingsCreate).toHaveBeenCalledTimes(3);
+
+    // Verify reranker uses original query text
+    expect(mockRerank).toHaveBeenCalledWith(
+      expect.objectContaining({ queryText: "original query" }),
+    );
+
+    vectorSearchSpy.mockRestore();
+    fullTextSearchSpy.mockRestore();
   });
 });

@@ -904,7 +904,7 @@ describe("buildKnowledgeSourcesDescription", () => {
     expect(result).toContain(
       "Query the organization's knowledge sources to retrieve relevant information",
     );
-    expect(result).toContain("Formulate queries about the actual content");
+    expect(result).toContain("Pass the user's original query as-is");
   });
 
   test("omits 'Connected sources' when no connectors exist", async ({

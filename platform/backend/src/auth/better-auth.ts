@@ -70,12 +70,7 @@ export const auth: any = betterAuth({
   secret,
   logger: {
     disabled: LOG_LEVEL === "silent",
-    level:
-      LOG_LEVEL === "trace"
-        ? "debug"
-        : LOG_LEVEL === "fatal"
-          ? "error"
-          : LOG_LEVEL,
+    level: getBetterAuthLogLevel(LOG_LEVEL),
     log(level, message, ...args) {
       const formattedMessage = `[Better Auth] ${message}`;
       const payload = args.length > 0 ? { args } : {};
@@ -385,6 +380,29 @@ export const auth: any = betterAuth({
     after: createAuthMiddleware(async (ctx) => handleAfterHook(ctx)),
   },
 });
+
+function getBetterAuthLogLevel(
+  logLevel: string,
+): "debug" | "info" | "warn" | "error" | undefined {
+  if (logLevel === "trace") {
+    return "debug";
+  }
+
+  if (logLevel === "fatal") {
+    return "error";
+  }
+
+  if (
+    logLevel === "debug" ||
+    logLevel === "info" ||
+    logLevel === "warn" ||
+    logLevel === "error"
+  ) {
+    return logLevel;
+  }
+
+  return undefined;
+}
 
 export type BetterAuth = typeof auth;
 

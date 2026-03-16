@@ -7,7 +7,6 @@ process.env.NEXT_PUBLIC_ARCHESTRA_SENTRY_FRONTEND_DSN = "";
 
 const mockCanvasContext = new Proxy(
   {
-    canvas: null as HTMLCanvasElement | null,
     clearRect: vi.fn(),
     fillRect: vi.fn(),
     fillText: vi.fn(),
@@ -28,20 +27,23 @@ const mockCanvasContext = new Proxy(
   } as Record<string, unknown>,
   {
     get(target, prop) {
+      if (typeof prop !== "string") {
+        return undefined;
+      }
+
       if (prop in target) {
         return target[prop];
       }
 
       const stub = vi.fn();
-      target[prop as string] = stub;
+      target[prop] = stub;
       return stub;
     },
   },
 ) as unknown as CanvasRenderingContext2D;
 
 vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(
-  function getContext() {
-    mockCanvasContext.canvas = this;
-    return mockCanvasContext;
+  function getContext(this: HTMLCanvasElement) {
+    return Object.assign(Object.create(mockCanvasContext), { canvas: this });
   },
 );

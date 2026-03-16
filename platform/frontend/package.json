@@ -18,6 +18,7 @@
   },
   "dependencies": {
     "@ai-sdk/react": "^3.0.118",
+    "@better-auth/core": "1.4.19",
     "@better-auth/oauth-provider": "1.4.19",
     "@better-auth/sso": "1.4.19",
     "@daveyplate/better-auth-ui": "github:archestra-ai/better-auth-ui#516664e",

@@ -41,6 +41,10 @@
   },
   "pnpm": {
     "overrides": {
+      "better-auth": "1.4.19",
+      "@better-auth/core": "1.4.19",
+      "@better-auth/oauth-provider": "1.4.19",
+      "@better-auth/sso": "1.4.19",
       "@fastify/reply-from": "12.5.0",
       "body-parser": "2.2.1",
       "glob": "11.1.0",

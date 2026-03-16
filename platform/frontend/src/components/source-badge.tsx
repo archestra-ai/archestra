@@ -71,8 +71,12 @@ export function SourceLabel({
 
 export function SourceBadge({
   source,
+  className,
+  labelClassName,
 }: {
   source: InteractionSource | null | undefined;
+  className?: string;
+  labelClassName?: string;
 }) {
   if (!source) return null;
 
@@ -80,8 +84,11 @@ export function SourceBadge({
   const _icon = SOURCE_ICON[source];
 
   return (
-    <Badge variant="outline" className="text-xs">
-      <SourceLabel source={source} />
+    <Badge variant="outline" className={cn("max-w-full text-xs", className)}>
+      <SourceLabel
+        source={source}
+        className={cn("max-w-full", labelClassName)}
+      />
     </Badge>
   );
 }

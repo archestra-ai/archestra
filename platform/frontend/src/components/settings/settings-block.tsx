@@ -1,15 +1,49 @@
 import type { Permissions } from "@shared";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { PermissionButton } from "@/components/ui/permission-button";
+import { cn } from "@/lib/utils";
 
 interface SettingsBlockProps {
-  title: string;
-  description?: string;
+  title: ReactNode;
+  description?: ReactNode;
   control: ReactNode;
   notice?: ReactNode;
   children?: ReactNode;
+}
+
+interface SettingsCardHeaderProps {
+  title: ReactNode;
+  description?: ReactNode;
+  action?: ReactNode;
+  notice?: ReactNode;
+}
+
+export function SettingsCardHeader({
+  title,
+  description,
+  action,
+  notice,
+}: SettingsCardHeaderProps) {
+  return (
+    <CardHeader>
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0 flex-1">
+          <CardTitle>{title}</CardTitle>
+          {description && <CardDescription>{description}</CardDescription>}
+        </div>
+        {action && <div className="shrink-0">{action}</div>}
+      </div>
+      {notice && <div className="text-sm mt-2">{notice}</div>}
+    </CardHeader>
+  );
 }
 
 export function SettingsBlock({
@@ -21,22 +55,12 @@ export function SettingsBlock({
 }: SettingsBlockProps) {
   return (
     <Card>
-      <CardHeader>
-        <div className="flex items-center justify-between gap-4">
-          <div className="min-w-0 flex-1">
-            <h3 className="text-lg font-semibold leading-none tracking-tight">
-              {title}
-            </h3>
-            {description && (
-              <p className="text-sm text-muted-foreground mt-1.5">
-                {description}
-              </p>
-            )}
-          </div>
-          <div className="shrink-0">{control}</div>
-        </div>
-        {notice && <div className="text-sm mt-2">{notice}</div>}
-      </CardHeader>
+      <SettingsCardHeader
+        title={title}
+        description={description}
+        action={control}
+        notice={notice}
+      />
       {children && (
         <CardContent className="pt-6 border-t">{children}</CardContent>
       )}
@@ -77,4 +101,16 @@ export function SettingsSaveBar({
       </Button>
     </div>
   );
+}
+
+interface SettingsSectionStackProps {
+  children: ReactNode;
+  className?: string;
+}
+
+export function SettingsSectionStack({
+  children,
+  className,
+}: SettingsSectionStackProps) {
+  return <div className={cn("space-y-5", className)}>{children}</div>;
 }

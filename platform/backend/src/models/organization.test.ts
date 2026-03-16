@@ -25,6 +25,9 @@ describe("OrganizationModel", () => {
         appName: null,
         ogDescription: null,
         footerText: null,
+        helpCenterUrl: null,
+        helpCenterLabel: null,
+        animateChatPlaceholders: true,
       });
     });
 
@@ -45,6 +48,9 @@ describe("OrganizationModel", () => {
         appName: null,
         ogDescription: null,
         footerText: null,
+        helpCenterUrl: null,
+        helpCenterLabel: null,
+        animateChatPlaceholders: true,
       });
     });
 
@@ -134,16 +140,34 @@ describe("OrganizationModel", () => {
 
       // Verify only expected fields are returned
       expect(Object.keys(appearance).sort()).toEqual([
+        "animateChatPlaceholders",
         "appName",
         "customFont",
         "favicon",
         "footerText",
+        "helpCenterLabel",
+        "helpCenterUrl",
         "iconLogo",
         "logo",
         "logoDark",
         "ogDescription",
         "theme",
       ]);
+    });
+
+    test("should return animateChatPlaceholders when set", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+
+      await db
+        .update(schema.organizationsTable)
+        .set({ animateChatPlaceholders: false })
+        .where(eq(schema.organizationsTable.id, org.id));
+
+      const appearance = await OrganizationModel.getAppearanceSettings();
+
+      expect(appearance.animateChatPlaceholders).toBe(false);
     });
   });
 
@@ -259,6 +283,38 @@ describe("OrganizationModel", () => {
       const updated = await OrganizationModel.patch("non-existent-id", {});
 
       expect(updated).toBeNull();
+    });
+
+    test("should update animateChatPlaceholders", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+
+      const updated = await OrganizationModel.patch(org.id, {
+        animateChatPlaceholders: false,
+      });
+
+      expect(updated?.animateChatPlaceholders).toBe(false);
+    });
+
+    test("should update helpCenterUrl", async ({ makeOrganization }) => {
+      const org = await makeOrganization();
+
+      const updated = await OrganizationModel.patch(org.id, {
+        helpCenterUrl: "https://support.example.com/help",
+      });
+
+      expect(updated?.helpCenterUrl).toBe("https://support.example.com/help");
+    });
+
+    test("should update helpCenterLabel", async ({ makeOrganization }) => {
+      const org = await makeOrganization();
+
+      const updated = await OrganizationModel.patch(org.id, {
+        helpCenterLabel: "Docs & Support",
+      });
+
+      expect(updated?.helpCenterLabel).toBe("Docs & Support");
     });
 
     test("should set default LLM model and provider", async ({
@@ -454,6 +510,74 @@ describe("OrganizationModel", () => {
           expect(result.data).toBe(VALID_PNG_BASE64);
         }
       });
+    });
+  });
+
+  describe("helpCenterUrl validation (via UpdateAppearanceSettingsSchema)", () => {
+    const parseHelpCenterUrlField = (helpCenterUrl: string | null) =>
+      UpdateAppearanceSettingsSchema.shape.helpCenterUrl.safeParse(
+        helpCenterUrl,
+      );
+
+    test("should accept null", () => {
+      const result = parseHelpCenterUrlField(null);
+
+      expect(result.success).toBe(true);
+    });
+
+    test("should accept valid https URL", () => {
+      const result = parseHelpCenterUrlField(
+        "https://teams.microsoft.com/l/channel/123",
+      );
+
+      expect(result.success).toBe(true);
+    });
+
+    test("should reject invalid URL", () => {
+      const result = parseHelpCenterUrlField("not-a-url");
+
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.issues[0]?.message).toContain(
+          "valid HTTP or HTTPS URL",
+        );
+      }
+    });
+
+    test("should reject non-http protocol", () => {
+      const result = parseHelpCenterUrlField("ftp://example.com/help");
+
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.issues[0]?.message).toContain(
+          "valid HTTP or HTTPS URL",
+        );
+      }
+    });
+  });
+
+  describe("helpCenterLabel validation (via UpdateAppearanceSettingsSchema)", () => {
+    const parseHelpCenterLabelField = (helpCenterLabel: string | null) =>
+      UpdateAppearanceSettingsSchema.shape.helpCenterLabel.safeParse(
+        helpCenterLabel,
+      );
+
+    test("should accept null", () => {
+      const result = parseHelpCenterLabelField(null);
+
+      expect(result.success).toBe(true);
+    });
+
+    test("should accept a custom label", () => {
+      const result = parseHelpCenterLabelField("Docs & Support");
+
+      expect(result.success).toBe(true);
+    });
+
+    test("should reject labels longer than 80 characters", () => {
+      const result = parseHelpCenterLabelField("A".repeat(81));
+
+      expect(result.success).toBe(false);
     });
   });
 

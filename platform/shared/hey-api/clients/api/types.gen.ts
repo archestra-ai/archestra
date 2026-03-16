@@ -34327,7 +34327,10 @@ export type GetOrganizationResponses = {
         appName: string | null;
         ogDescription: string | null;
         footerText: string | null;
+        helpCenterUrl: string | null;
+        helpCenterLabel: string | null;
         chatPlaceholders: Array<string> | null;
+        animateChatPlaceholders: boolean;
         iconLogo: string | null;
         showTwoFactor: boolean;
     };
@@ -34415,6 +34418,9 @@ export type GetAppearanceSettingsResponses = {
         appName: string | null;
         ogDescription: string | null;
         footerText: string | null;
+        helpCenterUrl: string | null;
+        helpCenterLabel: string | null;
+        animateChatPlaceholders: boolean;
     };
 };
 
@@ -34431,7 +34437,10 @@ export type UpdateAppearanceSettingsData = {
         appName?: string | null;
         ogDescription?: string | null;
         footerText?: string | null;
+        helpCenterUrl?: string | null;
+        helpCenterLabel?: string | null;
         chatPlaceholders?: Array<string> | null;
+        animateChatPlaceholders?: boolean;
         showTwoFactor?: boolean;
     };
     path?: never;
@@ -34531,7 +34540,10 @@ export type UpdateAppearanceSettingsResponses = {
         appName: string | null;
         ogDescription: string | null;
         footerText: string | null;
+        helpCenterUrl: string | null;
+        helpCenterLabel: string | null;
         chatPlaceholders: Array<string> | null;
+        animateChatPlaceholders: boolean;
         iconLogo: string | null;
         showTwoFactor: boolean;
     };
@@ -34641,7 +34653,10 @@ export type UpdateSecuritySettingsResponses = {
         appName: string | null;
         ogDescription: string | null;
         footerText: string | null;
+        helpCenterUrl: string | null;
+        helpCenterLabel: string | null;
         chatPlaceholders: Array<string> | null;
+        animateChatPlaceholders: boolean;
         iconLogo: string | null;
         showTwoFactor: boolean;
     };
@@ -34752,7 +34767,10 @@ export type UpdateLlmSettingsResponses = {
         appName: string | null;
         ogDescription: string | null;
         footerText: string | null;
+        helpCenterUrl: string | null;
+        helpCenterLabel: string | null;
         chatPlaceholders: Array<string> | null;
+        animateChatPlaceholders: boolean;
         iconLogo: string | null;
         showTwoFactor: boolean;
     };
@@ -34864,7 +34882,10 @@ export type UpdateAgentSettingsResponses = {
         appName: string | null;
         ogDescription: string | null;
         footerText: string | null;
+        helpCenterUrl: string | null;
+        helpCenterLabel: string | null;
         chatPlaceholders: Array<string> | null;
+        animateChatPlaceholders: boolean;
         iconLogo: string | null;
         showTwoFactor: boolean;
     };
@@ -34977,7 +34998,10 @@ export type UpdateKnowledgeSettingsResponses = {
         appName: string | null;
         ogDescription: string | null;
         footerText: string | null;
+        helpCenterUrl: string | null;
+        helpCenterLabel: string | null;
         chatPlaceholders: Array<string> | null;
+        animateChatPlaceholders: boolean;
         iconLogo: string | null;
         showTwoFactor: boolean;
     };
@@ -35084,7 +35108,10 @@ export type DropEmbeddingConfigResponses = {
         appName: string | null;
         ogDescription: string | null;
         footerText: string | null;
+        helpCenterUrl: string | null;
+        helpCenterLabel: string | null;
         chatPlaceholders: Array<string> | null;
+        animateChatPlaceholders: boolean;
         iconLogo: string | null;
         showTwoFactor: boolean;
     };
@@ -35274,7 +35301,10 @@ export type CompleteOnboardingResponses = {
         appName: string | null;
         ogDescription: string | null;
         footerText: string | null;
+        helpCenterUrl: string | null;
+        helpCenterLabel: string | null;
         chatPlaceholders: Array<string> | null;
+        animateChatPlaceholders: boolean;
         iconLogo: string | null;
         showTwoFactor: boolean;
     };

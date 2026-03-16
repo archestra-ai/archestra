@@ -36,6 +36,7 @@ import { Suggestion } from "@/components/ai-elements/suggestion";
 import { AppLogo } from "@/components/app-logo";
 import { ButtonWithTooltip } from "@/components/button-with-tooltip";
 import { BrowserPanel } from "@/components/chat/browser-panel";
+import { ChatHelpLink } from "@/components/chat/chat-help-link";
 import { ChatMessages } from "@/components/chat/chat-messages";
 import { ConversationArtifactPanel } from "@/components/chat/conversation-artifact";
 import {
@@ -1619,7 +1620,7 @@ export default function ChatPage() {
               // biome-ignore lint/a11y/noStaticElementInteractions: click-to-focus container
               // biome-ignore lint/a11y/useKeyWithClickEvents: click-to-focus container
               <div
-                className="flex-1 flex flex-col min-h-0"
+                className="relative flex-1 flex flex-col min-h-0"
                 onClick={(e) => {
                   // Focus textarea when clicking empty space outside interactive elements
                   if (
@@ -1632,6 +1633,14 @@ export default function ChatPage() {
                   }
                 }}
               >
+                {organization?.helpCenterUrl && (
+                  <div className="absolute top-4 right-4 z-10">
+                    <ChatHelpLink
+                      url={organization.helpCenterUrl}
+                      label={organization.helpCenterLabel}
+                    />
+                  </div>
+                )}
                 {isPlaywrightSetupRequired && (
                   <PlaywrightInstallDialog
                     agentId={playwrightSetupAgentId}

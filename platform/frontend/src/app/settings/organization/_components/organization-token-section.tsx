@@ -3,14 +3,9 @@
 import { Key } from "lucide-react";
 import { useState } from "react";
 import { WithPermissions } from "@/components/roles/with-permissions";
+import { SettingsCardHeader } from "@/components/settings/settings-block";
 import { TokenManagerDialog } from "@/components/teams/token-manager-dialog";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { type TeamToken, useTokens } from "@/lib/team-token.query";
 
@@ -26,16 +21,10 @@ export function OrganizationTokenSection() {
       noPermissionHandle="hide"
     >
       <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle>Organization Token</CardTitle>
-              <CardDescription>
-                Organization-wide authentication token for MCP Gateway access
-              </CardDescription>
-            </div>
-          </div>
-        </CardHeader>
+        <SettingsCardHeader
+          title="Organization Token"
+          description="Organization-wide authentication token for MCP Gateway access"
+        />
         <CardContent>
           {tokensLoading ? (
             <p className="text-sm text-muted-foreground">Loading token...</p>

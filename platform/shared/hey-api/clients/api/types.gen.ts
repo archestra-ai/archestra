@@ -2202,61 +2202,7 @@ export type MistralChatCompletionResponseInput = {
          */
         prompt_tokens_details?: unknown;
     };
-    [key: string]: unknown | string | Array<{
-        finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call';
-        index: number;
-        logprobs: unknown;
-        /**
-         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
-         */
-        message: {
-            content: string | unknown;
-            refusal?: string | unknown;
-            role: 'assistant';
-            annotations?: Array<unknown>;
-            audio?: unknown;
-            /**
-             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
-             */
-            function_call?: {
-                arguments: string;
-                name: string;
-            } | unknown;
-            tool_calls?: Array<{
-                id: string;
-                type: 'function';
-                /**
-                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1165
-                 */
-                function: {
-                    arguments: string;
-                    name: string;
-                };
-            } | {
-                id: string;
-                type: 'custom';
-                /**
-                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1128
-                 */
-                custom: {
-                    input: string;
-                    name: string;
-                };
-            }> | unknown;
-        };
-    }> | number | 'chat.completion' | string | unknown | {
-        completion_tokens: number;
-        prompt_tokens: number;
-        total_tokens: number;
-        /**
-         * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L144
-         */
-        completion_tokens_details?: unknown;
-        /**
-         * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L173
-         */
-        prompt_tokens_details?: unknown;
-    } | undefined;
+    [key: string]: unknown;
 };
 
 export type PerplexityChatCompletionRequestInput = {
@@ -2613,61 +2559,7 @@ export type PerplexityChatCompletionResponseInput = {
          */
         prompt_tokens_details?: unknown;
     };
-    [key: string]: unknown | string | Array<{
-        finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call';
-        index: number;
-        logprobs: unknown;
-        /**
-         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
-         */
-        message: {
-            content: string | unknown;
-            refusal?: string | unknown;
-            role: 'assistant';
-            annotations?: Array<unknown>;
-            audio?: unknown;
-            /**
-             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
-             */
-            function_call?: {
-                arguments: string;
-                name: string;
-            } | unknown;
-            tool_calls?: Array<{
-                id: string;
-                type: 'function';
-                /**
-                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1165
-                 */
-                function: {
-                    arguments: string;
-                    name: string;
-                };
-            } | {
-                id: string;
-                type: 'custom';
-                /**
-                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1128
-                 */
-                custom: {
-                    input: string;
-                    name: string;
-                };
-            }> | unknown;
-        };
-    }> | number | 'chat.completion' | string | unknown | {
-        completion_tokens: number;
-        prompt_tokens: number;
-        total_tokens: number;
-        /**
-         * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L144
-         */
-        completion_tokens_details?: unknown;
-        /**
-         * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L173
-         */
-        prompt_tokens_details?: unknown;
-    } | undefined;
+    [key: string]: unknown;
 };
 
 export type GroqChatCompletionRequestInput = {
@@ -3024,61 +2916,7 @@ export type GroqChatCompletionResponseInput = {
          */
         prompt_tokens_details?: unknown;
     };
-    [key: string]: unknown | string | Array<{
-        finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call';
-        index: number;
-        logprobs: unknown;
-        /**
-         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
-         */
-        message: {
-            content: string | unknown;
-            refusal?: string | unknown;
-            role: 'assistant';
-            annotations?: Array<unknown>;
-            audio?: unknown;
-            /**
-             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
-             */
-            function_call?: {
-                arguments: string;
-                name: string;
-            } | unknown;
-            tool_calls?: Array<{
-                id: string;
-                type: 'function';
-                /**
-                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1165
-                 */
-                function: {
-                    arguments: string;
-                    name: string;
-                };
-            } | {
-                id: string;
-                type: 'custom';
-                /**
-                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1128
-                 */
-                custom: {
-                    input: string;
-                    name: string;
-                };
-            }> | unknown;
-        };
-    }> | number | 'chat.completion' | string | unknown | {
-        completion_tokens: number;
-        prompt_tokens: number;
-        total_tokens: number;
-        /**
-         * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L144
-         */
-        completion_tokens_details?: unknown;
-        /**
-         * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L173
-         */
-        prompt_tokens_details?: unknown;
-    } | undefined;
+    [key: string]: unknown;
 };
 
 export type OpenrouterChatCompletionRequestInput = {
@@ -3435,61 +3273,7 @@ export type OpenrouterChatCompletionResponseInput = {
          */
         prompt_tokens_details?: unknown;
     };
-    [key: string]: unknown | string | Array<{
-        finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call';
-        index: number;
-        logprobs: unknown;
-        /**
-         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
-         */
-        message: {
-            content: string | unknown;
-            refusal?: string | unknown;
-            role: 'assistant';
-            annotations?: Array<unknown>;
-            audio?: unknown;
-            /**
-             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
-             */
-            function_call?: {
-                arguments: string;
-                name: string;
-            } | unknown;
-            tool_calls?: Array<{
-                id: string;
-                type: 'function';
-                /**
-                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1165
-                 */
-                function: {
-                    arguments: string;
-                    name: string;
-                };
-            } | {
-                id: string;
-                type: 'custom';
-                /**
-                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1128
-                 */
-                custom: {
-                    input: string;
-                    name: string;
-                };
-            }> | unknown;
-        };
-    }> | number | 'chat.completion' | string | unknown | {
-        completion_tokens: number;
-        prompt_tokens: number;
-        total_tokens: number;
-        /**
-         * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L144
-         */
-        completion_tokens_details?: unknown;
-        /**
-         * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L173
-         */
-        prompt_tokens_details?: unknown;
-    } | undefined;
+    [key: string]: unknown;
 };
 
 export type VllmChatCompletionRequestInput = {
@@ -4601,272 +4385,7 @@ export type DeepSeekChatCompletionRequestInput = {
     temperature?: number | unknown;
     max_tokens?: number | unknown;
     stream?: boolean | unknown;
-    [key: string]: unknown | string | Array<{
-        content: string | Array<{
-            type: 'text';
-            text: string;
-        }>;
-        role: 'developer';
-        name?: string;
-    } | {
-        content: string | Array<{
-            type: 'text';
-            text: string;
-        }>;
-        role: 'system';
-        name?: string;
-    } | {
-        content: string | Array<{
-            type: 'text';
-            text: string;
-        } | {
-            type: 'image_url';
-            /**
-             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
-             */
-            image_url: {
-                url: string;
-                detail?: 'auto' | 'low' | 'high';
-            };
-        } | {
-            type: 'input_audio';
-            /**
-             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L792
-             */
-            input_audio: {
-                data: string;
-                format: 'wav' | 'mp3';
-            };
-        } | {
-            type: 'file';
-            /**
-             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
-             */
-            file: {
-                file_data?: string;
-                file_id?: string;
-                filename?: string;
-            };
-        }>;
-        role: 'user';
-        name?: string;
-    } | {
-        role: 'assistant';
-        audio?: {
-            id: string;
-        } | unknown;
-        content?: string | Array<{
-            type: 'text';
-            text: string;
-        }> | Array<{
-            type: 'refusal';
-            refusal: string;
-        }> | unknown;
-        /**
-         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
-         */
-        function_call?: {
-            arguments: string;
-            name: string;
-        } | unknown;
-        name?: string;
-        refusal?: string | unknown;
-        /**
-         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
-         */
-        tool_calls?: Array<{
-            id: string;
-            type: 'function';
-            /**
-             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1165
-             */
-            function: {
-                arguments: string;
-                name: string;
-            };
-        } | {
-            id: string;
-            type: 'custom';
-            /**
-             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1128
-             */
-            custom: {
-                input: string;
-                name: string;
-            };
-        }>;
-    } | {
-        role: 'tool';
-        content: string | Array<{
-            type: 'text';
-            text: string;
-        } | {
-            type: 'image_url';
-            /**
-             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
-             */
-            image_url: {
-                url: string;
-                detail?: 'auto' | 'low' | 'high';
-            };
-        }>;
-        tool_call_id: string;
-    } | {
-        role: 'function';
-        content: string | unknown;
-        name: string;
-    }> | Array<{
-        type: 'function';
-        /**
-         * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
-         */
-        function: {
-            name: string;
-            description?: string;
-            /**
-             *
-             * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
-             *
-             * The parameters the functions accepts, described as a JSON Schema object. See the
-             * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
-             * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
-             * documentation about the format.
-             *
-             * Omitting parameters defines a function with an empty parameter list.
-             *
-             */
-            parameters?: {
-                [key: string]: unknown;
-            };
-            strict?: boolean | unknown;
-        };
-    } | {
-        type: 'custom';
-        custom: {
-            /**
-             * The name of the custom tool, used to identify it in tool calls
-             */
-            name: string;
-            /**
-             * Optional description of the custom tool, used to provide more context
-             */
-            description?: string;
-            /**
-             * The input format for the custom tool. Default is unconstrained text.
-             */
-            format?: {
-                /**
-                 * Unconstrained text format. Always `text`
-                 */
-                type: 'text';
-            } | {
-                type: 'grammar';
-                /**
-                 * Your chosen grammar
-                 */
-                grammar: {
-                    /**
-                     * The grammar definition
-                     */
-                    definition: string;
-                    /**
-                     * The syntax of the grammar definition
-                     */
-                    syntax: 'lark' | 'regex';
-                };
-            };
-        };
-    }> | 'none' | 'auto' | 'required' | {
-        type: 'allowed_tools';
-        /**
-         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1455
-         */
-        allowed_tools: {
-            /**
-             *
-             * Constrains the tools available to the model to a pre-defined set.
-             *
-             * auto allows the model to pick from among the allowed tools and generate a
-             * message.
-             *
-             * required requires the model to call one or more of the allowed tools.
-             *
-             */
-            mode: 'auto' | 'required';
-            /**
-             * A list of tool definitions that the model should be allowed to call
-             */
-            tools: Array<{
-                [key: string]: {
-                    type: 'function';
-                    /**
-                     * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
-                     */
-                    function: {
-                        name: string;
-                        description?: string;
-                        /**
-                         *
-                         * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
-                         *
-                         * The parameters the functions accepts, described as a JSON Schema object. See the
-                         * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
-                         * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
-                         * documentation about the format.
-                         *
-                         * Omitting parameters defines a function with an empty parameter list.
-                         *
-                         */
-                        parameters?: {
-                            [key: string]: unknown;
-                        };
-                        strict?: boolean | unknown;
-                    };
-                };
-            }>;
-        };
-    } | {
-        type: 'function';
-        function: {
-            name: string;
-        };
-    } | {
-        type: 'custom';
-        custom: {
-            /**
-             * The name of the custom tool, used to identify it in tool calls
-             */
-            name: string;
-            /**
-             * Optional description of the custom tool, used to provide more context
-             */
-            description?: string;
-            /**
-             * The input format for the custom tool. Default is unconstrained text.
-             */
-            format?: {
-                /**
-                 * Unconstrained text format. Always `text`
-                 */
-                type: 'text';
-            } | {
-                type: 'grammar';
-                /**
-                 * Your chosen grammar
-                 */
-                grammar: {
-                    /**
-                     * The grammar definition
-                     */
-                    definition: string;
-                    /**
-                     * The syntax of the grammar definition
-                     */
-                    syntax: 'lark' | 'regex';
-                };
-            };
-        };
-    } | number | unknown | number | unknown | boolean | unknown | undefined;
+    [key: string]: unknown;
 };
 
 export type DeepSeekChatCompletionResponseInput = {
@@ -4935,61 +4454,7 @@ export type DeepSeekChatCompletionResponseInput = {
          */
         prompt_tokens_details?: unknown;
     };
-    [key: string]: unknown | string | Array<{
-        finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call';
-        index: number;
-        logprobs: unknown;
-        /**
-         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
-         */
-        message: {
-            content: string | unknown;
-            refusal?: string | unknown;
-            role: 'assistant';
-            annotations?: Array<unknown>;
-            audio?: unknown;
-            /**
-             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
-             */
-            function_call?: {
-                arguments: string;
-                name: string;
-            } | unknown;
-            tool_calls?: Array<{
-                id: string;
-                type: 'function';
-                /**
-                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1165
-                 */
-                function: {
-                    arguments: string;
-                    name: string;
-                };
-            } | {
-                id: string;
-                type: 'custom';
-                /**
-                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1128
-                 */
-                custom: {
-                    input: string;
-                    name: string;
-                };
-            }> | unknown;
-        };
-    }> | number | 'chat.completion' | string | unknown | {
-        completion_tokens: number;
-        prompt_tokens: number;
-        total_tokens: number;
-        /**
-         * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L144
-         */
-        completion_tokens_details?: unknown;
-        /**
-         * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L173
-         */
-        prompt_tokens_details?: unknown;
-    } | undefined;
+    [key: string]: unknown;
 };
 
 export type MinimaxChatCompletionRequestInput = {
@@ -5702,61 +5167,7 @@ export type XaiChatCompletionResponseInput = {
          */
         prompt_tokens_details?: unknown;
     };
-    [key: string]: unknown | string | Array<{
-        finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call';
-        index: number;
-        logprobs: unknown;
-        /**
-         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
-         */
-        message: {
-            content: string | unknown;
-            refusal?: string | unknown;
-            role: 'assistant';
-            annotations?: Array<unknown>;
-            audio?: unknown;
-            /**
-             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
-             */
-            function_call?: {
-                arguments: string;
-                name: string;
-            } | unknown;
-            tool_calls?: Array<{
-                id: string;
-                type: 'function';
-                /**
-                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1165
-                 */
-                function: {
-                    arguments: string;
-                    name: string;
-                };
-            } | {
-                id: string;
-                type: 'custom';
-                /**
-                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1128
-                 */
-                custom: {
-                    input: string;
-                    name: string;
-                };
-            }> | unknown;
-        };
-    }> | number | 'chat.completion' | string | unknown | {
-        completion_tokens: number;
-        prompt_tokens: number;
-        total_tokens: number;
-        /**
-         * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L144
-         */
-        completion_tokens_details?: unknown;
-        /**
-         * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L173
-         */
-        prompt_tokens_details?: unknown;
-    } | undefined;
+    [key: string]: unknown;
 };
 
 export type OpenAiChatCompletionRequest = {
@@ -7957,61 +7368,7 @@ export type MistralChatCompletionResponse = {
          */
         prompt_tokens_details?: unknown;
     };
-    [key: string]: unknown | string | Array<{
-        finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call';
-        index: number;
-        logprobs: unknown;
-        /**
-         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
-         */
-        message: {
-            content: string | unknown;
-            refusal?: string | unknown;
-            role: 'assistant';
-            annotations?: Array<unknown>;
-            audio?: unknown;
-            /**
-             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
-             */
-            function_call?: {
-                arguments: string;
-                name: string;
-            } | unknown;
-            tool_calls?: Array<{
-                id: string;
-                type: 'function';
-                /**
-                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1165
-                 */
-                function: {
-                    arguments: string;
-                    name: string;
-                };
-            } | {
-                id: string;
-                type: 'custom';
-                /**
-                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1128
-                 */
-                custom: {
-                    input: string;
-                    name: string;
-                };
-            }> | unknown;
-        };
-    }> | number | 'chat.completion' | string | unknown | {
-        completion_tokens: number;
-        prompt_tokens: number;
-        total_tokens: number;
-        /**
-         * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L144
-         */
-        completion_tokens_details?: unknown;
-        /**
-         * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L173
-         */
-        prompt_tokens_details?: unknown;
-    } | undefined;
+    [key: string]: unknown;
 };
 
 export type PerplexityChatCompletionRequest = {
@@ -8368,61 +7725,7 @@ export type PerplexityChatCompletionResponse = {
          */
         prompt_tokens_details?: unknown;
     };
-    [key: string]: unknown | string | Array<{
-        finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call';
-        index: number;
-        logprobs: unknown;
-        /**
-         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
-         */
-        message: {
-            content: string | unknown;
-            refusal?: string | unknown;
-            role: 'assistant';
-            annotations?: Array<unknown>;
-            audio?: unknown;
-            /**
-             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
-             */
-            function_call?: {
-                arguments: string;
-                name: string;
-            } | unknown;
-            tool_calls?: Array<{
-                id: string;
-                type: 'function';
-                /**
-                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1165
-                 */
-                function: {
-                    arguments: string;
-                    name: string;
-                };
-            } | {
-                id: string;
-                type: 'custom';
-                /**
-                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1128
-                 */
-                custom: {
-                    input: string;
-                    name: string;
-                };
-            }> | unknown;
-        };
-    }> | number | 'chat.completion' | string | unknown | {
-        completion_tokens: number;
-        prompt_tokens: number;
-        total_tokens: number;
-        /**
-         * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L144
-         */
-        completion_tokens_details?: unknown;
-        /**
-         * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L173
-         */
-        prompt_tokens_details?: unknown;
-    } | undefined;
+    [key: string]: unknown;
 };
 
 export type GroqChatCompletionRequest = {
@@ -8779,61 +8082,7 @@ export type GroqChatCompletionResponse = {
          */
         prompt_tokens_details?: unknown;
     };
-    [key: string]: unknown | string | Array<{
-        finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call';
-        index: number;
-        logprobs: unknown;
-        /**
-         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
-         */
-        message: {
-            content: string | unknown;
-            refusal?: string | unknown;
-            role: 'assistant';
-            annotations?: Array<unknown>;
-            audio?: unknown;
-            /**
-             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
-             */
-            function_call?: {
-                arguments: string;
-                name: string;
-            } | unknown;
-            tool_calls?: Array<{
-                id: string;
-                type: 'function';
-                /**
-                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1165
-                 */
-                function: {
-                    arguments: string;
-                    name: string;
-                };
-            } | {
-                id: string;
-                type: 'custom';
-                /**
-                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1128
-                 */
-                custom: {
-                    input: string;
-                    name: string;
-                };
-            }> | unknown;
-        };
-    }> | number | 'chat.completion' | string | unknown | {
-        completion_tokens: number;
-        prompt_tokens: number;
-        total_tokens: number;
-        /**
-         * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L144
-         */
-        completion_tokens_details?: unknown;
-        /**
-         * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L173
-         */
-        prompt_tokens_details?: unknown;
-    } | undefined;
+    [key: string]: unknown;
 };
 
 export type OpenrouterChatCompletionRequest = {
@@ -9190,61 +8439,7 @@ export type OpenrouterChatCompletionResponse = {
          */
         prompt_tokens_details?: unknown;
     };
-    [key: string]: unknown | string | Array<{
-        finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call';
-        index: number;
-        logprobs: unknown;
-        /**
-         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
-         */
-        message: {
-            content: string | unknown;
-            refusal?: string | unknown;
-            role: 'assistant';
-            annotations?: Array<unknown>;
-            audio?: unknown;
-            /**
-             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
-             */
-            function_call?: {
-                arguments: string;
-                name: string;
-            } | unknown;
-            tool_calls?: Array<{
-                id: string;
-                type: 'function';
-                /**
-                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1165
-                 */
-                function: {
-                    arguments: string;
-                    name: string;
-                };
-            } | {
-                id: string;
-                type: 'custom';
-                /**
-                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1128
-                 */
-                custom: {
-                    input: string;
-                    name: string;
-                };
-            }> | unknown;
-        };
-    }> | number | 'chat.completion' | string | unknown | {
-        completion_tokens: number;
-        prompt_tokens: number;
-        total_tokens: number;
-        /**
-         * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L144
-         */
-        completion_tokens_details?: unknown;
-        /**
-         * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L173
-         */
-        prompt_tokens_details?: unknown;
-    } | undefined;
+    [key: string]: unknown;
 };
 
 export type VllmChatCompletionRequest = {
@@ -10356,272 +9551,7 @@ export type DeepSeekChatCompletionRequest = {
     temperature?: number | unknown;
     max_tokens?: number | unknown;
     stream?: boolean | unknown;
-    [key: string]: unknown | string | Array<{
-        content: string | Array<{
-            type: 'text';
-            text: string;
-        }>;
-        role: 'developer';
-        name?: string;
-    } | {
-        content: string | Array<{
-            type: 'text';
-            text: string;
-        }>;
-        role: 'system';
-        name?: string;
-    } | {
-        content: string | Array<{
-            type: 'text';
-            text: string;
-        } | {
-            type: 'image_url';
-            /**
-             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
-             */
-            image_url: {
-                url: string;
-                detail?: 'auto' | 'low' | 'high';
-            };
-        } | {
-            type: 'input_audio';
-            /**
-             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L792
-             */
-            input_audio: {
-                data: string;
-                format: 'wav' | 'mp3';
-            };
-        } | {
-            type: 'file';
-            /**
-             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
-             */
-            file: {
-                file_data?: string;
-                file_id?: string;
-                filename?: string;
-            };
-        }>;
-        role: 'user';
-        name?: string;
-    } | {
-        role: 'assistant';
-        audio?: {
-            id: string;
-        } | unknown;
-        content?: string | Array<{
-            type: 'text';
-            text: string;
-        }> | Array<{
-            type: 'refusal';
-            refusal: string;
-        }> | unknown;
-        /**
-         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
-         */
-        function_call?: {
-            arguments: string;
-            name: string;
-        } | unknown;
-        name?: string;
-        refusal?: string | unknown;
-        /**
-         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
-         */
-        tool_calls?: Array<{
-            id: string;
-            type: 'function';
-            /**
-             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1165
-             */
-            function: {
-                arguments: string;
-                name: string;
-            };
-        } | {
-            id: string;
-            type: 'custom';
-            /**
-             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1128
-             */
-            custom: {
-                input: string;
-                name: string;
-            };
-        }>;
-    } | {
-        role: 'tool';
-        content: string | Array<{
-            type: 'text';
-            text: string;
-        } | {
-            type: 'image_url';
-            /**
-             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
-             */
-            image_url: {
-                url: string;
-                detail?: 'auto' | 'low' | 'high';
-            };
-        }>;
-        tool_call_id: string;
-    } | {
-        role: 'function';
-        content: string | unknown;
-        name: string;
-    }> | Array<{
-        type: 'function';
-        /**
-         * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
-         */
-        function: {
-            name: string;
-            description?: string;
-            /**
-             *
-             * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
-             *
-             * The parameters the functions accepts, described as a JSON Schema object. See the
-             * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
-             * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
-             * documentation about the format.
-             *
-             * Omitting parameters defines a function with an empty parameter list.
-             *
-             */
-            parameters?: {
-                [key: string]: unknown;
-            };
-            strict?: boolean | unknown;
-        };
-    } | {
-        type: 'custom';
-        custom: {
-            /**
-             * The name of the custom tool, used to identify it in tool calls
-             */
-            name: string;
-            /**
-             * Optional description of the custom tool, used to provide more context
-             */
-            description?: string;
-            /**
-             * The input format for the custom tool. Default is unconstrained text.
-             */
-            format?: {
-                /**
-                 * Unconstrained text format. Always `text`
-                 */
-                type: 'text';
-            } | {
-                type: 'grammar';
-                /**
-                 * Your chosen grammar
-                 */
-                grammar: {
-                    /**
-                     * The grammar definition
-                     */
-                    definition: string;
-                    /**
-                     * The syntax of the grammar definition
-                     */
-                    syntax: 'lark' | 'regex';
-                };
-            };
-        };
-    }> | 'none' | 'auto' | 'required' | {
-        type: 'allowed_tools';
-        /**
-         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1455
-         */
-        allowed_tools: {
-            /**
-             *
-             * Constrains the tools available to the model to a pre-defined set.
-             *
-             * auto allows the model to pick from among the allowed tools and generate a
-             * message.
-             *
-             * required requires the model to call one or more of the allowed tools.
-             *
-             */
-            mode: 'auto' | 'required';
-            /**
-             * A list of tool definitions that the model should be allowed to call
-             */
-            tools: Array<{
-                [key: string]: {
-                    type: 'function';
-                    /**
-                     * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
-                     */
-                    function: {
-                        name: string;
-                        description?: string;
-                        /**
-                         *
-                         * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
-                         *
-                         * The parameters the functions accepts, described as a JSON Schema object. See the
-                         * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
-                         * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
-                         * documentation about the format.
-                         *
-                         * Omitting parameters defines a function with an empty parameter list.
-                         *
-                         */
-                        parameters?: {
-                            [key: string]: unknown;
-                        };
-                        strict?: boolean | unknown;
-                    };
-                };
-            }>;
-        };
-    } | {
-        type: 'function';
-        function: {
-            name: string;
-        };
-    } | {
-        type: 'custom';
-        custom: {
-            /**
-             * The name of the custom tool, used to identify it in tool calls
-             */
-            name: string;
-            /**
-             * Optional description of the custom tool, used to provide more context
-             */
-            description?: string;
-            /**
-             * The input format for the custom tool. Default is unconstrained text.
-             */
-            format?: {
-                /**
-                 * Unconstrained text format. Always `text`
-                 */
-                type: 'text';
-            } | {
-                type: 'grammar';
-                /**
-                 * Your chosen grammar
-                 */
-                grammar: {
-                    /**
-                     * The grammar definition
-                     */
-                    definition: string;
-                    /**
-                     * The syntax of the grammar definition
-                     */
-                    syntax: 'lark' | 'regex';
-                };
-            };
-        };
-    } | number | unknown | number | unknown | boolean | unknown | undefined;
+    [key: string]: unknown;
 };
 
 export type DeepSeekChatCompletionResponse = {
@@ -10690,61 +9620,7 @@ export type DeepSeekChatCompletionResponse = {
          */
         prompt_tokens_details?: unknown;
     };
-    [key: string]: unknown | string | Array<{
-        finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call';
-        index: number;
-        logprobs: unknown;
-        /**
-         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
-         */
-        message: {
-            content: string | unknown;
-            refusal?: string | unknown;
-            role: 'assistant';
-            annotations?: Array<unknown>;
-            audio?: unknown;
-            /**
-             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
-             */
-            function_call?: {
-                arguments: string;
-                name: string;
-            } | unknown;
-            tool_calls?: Array<{
-                id: string;
-                type: 'function';
-                /**
-                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1165
-                 */
-                function: {
-                    arguments: string;
-                    name: string;
-                };
-            } | {
-                id: string;
-                type: 'custom';
-                /**
-                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1128
-                 */
-                custom: {
-                    input: string;
-                    name: string;
-                };
-            }> | unknown;
-        };
-    }> | number | 'chat.completion' | string | unknown | {
-        completion_tokens: number;
-        prompt_tokens: number;
-        total_tokens: number;
-        /**
-         * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L144
-         */
-        completion_tokens_details?: unknown;
-        /**
-         * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L173
-         */
-        prompt_tokens_details?: unknown;
-    } | undefined;
+    [key: string]: unknown;
 };
 
 export type MinimaxChatCompletionRequest = {
@@ -11457,61 +10333,7 @@ export type XaiChatCompletionResponse = {
          */
         prompt_tokens_details?: unknown;
     };
-    [key: string]: unknown | string | Array<{
-        finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call';
-        index: number;
-        logprobs: unknown;
-        /**
-         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
-         */
-        message: {
-            content: string | unknown;
-            refusal?: string | unknown;
-            role: 'assistant';
-            annotations?: Array<unknown>;
-            audio?: unknown;
-            /**
-             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
-             */
-            function_call?: {
-                arguments: string;
-                name: string;
-            } | unknown;
-            tool_calls?: Array<{
-                id: string;
-                type: 'function';
-                /**
-                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1165
-                 */
-                function: {
-                    arguments: string;
-                    name: string;
-                };
-            } | {
-                id: string;
-                type: 'custom';
-                /**
-                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1128
-                 */
-                custom: {
-                    input: string;
-                    name: string;
-                };
-            }> | unknown;
-        };
-    }> | number | 'chat.completion' | string | unknown | {
-        completion_tokens: number;
-        prompt_tokens: number;
-        total_tokens: number;
-        /**
-         * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L144
-         */
-        completion_tokens_details?: unknown;
-        /**
-         * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L173
-         */
-        prompt_tokens_details?: unknown;
-    } | undefined;
+    [key: string]: unknown;
 };
 
 export type GetV1A2aByAgentIdWellKnownAgentJsonData = {
@@ -12658,7 +11480,7 @@ export type GetAgentResponses = {
 export type GetAgentResponse = GetAgentResponses[keyof GetAgentResponses];
 
 export type UpdateAgentData = {
-    body?: {
+    body: {
         organizationId?: string;
         scope?: 'personal' | 'team' | 'org';
         name?: string;
@@ -13290,7 +12112,7 @@ export type UnassignToolFromAgentResponses = {
 export type UnassignToolFromAgentResponse = UnassignToolFromAgentResponses[keyof UnassignToolFromAgentResponses];
 
 export type AssignToolToAgentData = {
-    body?: {
+    body: {
         credentialSourceMcpServerId?: string | null;
         executionSourceMcpServerId?: string | null;
         useDynamicTeamCredential?: boolean;
@@ -13665,7 +12487,7 @@ export type GetAgentToolsResponses = {
 export type GetAgentToolsResponse = GetAgentToolsResponses[keyof GetAgentToolsResponses];
 
 export type UpdateAgentToolData = {
-    body?: {
+    body: {
         credentialSourceMcpServerId?: string | null;
         executionSourceMcpServerId?: string | null;
         useDynamicTeamCredential?: boolean;
@@ -14087,7 +12909,7 @@ export type GetAllDelegationConnectionsResponses = {
 export type GetAllDelegationConnectionsResponse = GetAllDelegationConnectionsResponses[keyof GetAllDelegationConnectionsResponses];
 
 export type AnthropicMessagesWithDefaultAgentData = {
-    body?: AnthropicMessagesRequestInput;
+    body: AnthropicMessagesRequestInput;
     headers: {
         /**
          * The user agent of the client
@@ -14178,7 +13000,7 @@ export type AnthropicMessagesWithDefaultAgentResponses = {
 export type AnthropicMessagesWithDefaultAgentResponse = AnthropicMessagesWithDefaultAgentResponses[keyof AnthropicMessagesWithDefaultAgentResponses];
 
 export type AnthropicMessagesWithAgentData = {
-    body?: AnthropicMessagesRequestInput;
+    body: AnthropicMessagesRequestInput;
     headers: {
         /**
          * The user agent of the client
@@ -14363,7 +13185,7 @@ export type GetApiKeysResponses = {
 export type GetApiKeysResponse = GetApiKeysResponses[keyof GetApiKeysResponses];
 
 export type CreateApiKeyData = {
-    body?: {
+    body: {
         name?: string | null;
         expiresIn?: number | null;
     };
@@ -14745,7 +13567,7 @@ export type SubmitOAuthConsentResponses = {
 export type SubmitOAuthConsentResponse = SubmitOAuthConsentResponses[keyof SubmitOAuthConsentResponses];
 
 export type PostApiAuthOauth2RegisterData = {
-    body?: {
+    body: {
         [key: string]: unknown;
     };
     path?: never;
@@ -15222,7 +14044,7 @@ export type GetToolInvocationPolicyResponses = {
 export type GetToolInvocationPolicyResponse = GetToolInvocationPolicyResponses[keyof GetToolInvocationPolicyResponses];
 
 export type UpdateToolInvocationPolicyData = {
-    body?: {
+    body: {
         toolId?: string;
         conditions?: Array<{
             key: string;
@@ -15671,7 +14493,7 @@ export type GetTrustedDataPolicyResponses = {
 export type GetTrustedDataPolicyResponse = GetTrustedDataPolicyResponses[keyof GetTrustedDataPolicyResponses];
 
 export type UpdateTrustedDataPolicyData = {
-    body?: {
+    body: {
         toolId?: string;
         description?: string | null;
         conditions?: Array<{
@@ -16889,7 +15711,7 @@ export type BedrockConverseStreamWithAgentResponses = {
 };
 
 export type BedrockConverseWithAgentAndModelData = {
-    body?: {
+    body: {
         modelId?: string;
         messages?: Array<{
             role: 'user' | 'assistant';
@@ -17190,7 +16012,7 @@ export type BedrockConverseWithAgentAndModelResponses = {
 export type BedrockConverseWithAgentAndModelResponse = BedrockConverseWithAgentAndModelResponses[keyof BedrockConverseWithAgentAndModelResponses];
 
 export type BedrockConverseStreamWithAgentAndModelData = {
-    body?: {
+    body: {
         modelId?: string;
         messages?: Array<{
             role: 'user' | 'assistant';
@@ -17372,7 +16194,7 @@ export type BedrockConverseStreamWithAgentAndModelResponses = {
 };
 
 export type CerebrasChatCompletionsWithDefaultAgentData = {
-    body?: XaiChatCompletionRequestInput;
+    body: XaiChatCompletionRequestInput;
     headers: {
         /**
          * The user agent of the client
@@ -17457,7 +16279,7 @@ export type CerebrasChatCompletionsWithDefaultAgentResponses = {
 export type CerebrasChatCompletionsWithDefaultAgentResponse = CerebrasChatCompletionsWithDefaultAgentResponses[keyof CerebrasChatCompletionsWithDefaultAgentResponses];
 
 export type CerebrasChatCompletionsWithAgentData = {
-    body?: XaiChatCompletionRequestInput;
+    body: XaiChatCompletionRequestInput;
     headers: {
         /**
          * The user agent of the client
@@ -18018,7 +16840,7 @@ export type GetChatApiKeyResponses = {
 export type GetChatApiKeyResponse = GetChatApiKeyResponses[keyof GetChatApiKeyResponses];
 
 export type UpdateChatApiKeyData = {
-    body?: {
+    body: {
         name?: string;
         apiKey?: string;
         baseUrl?: string | null;
@@ -18402,7 +17224,7 @@ export type GetModelsWithApiKeysResponses = {
 export type GetModelsWithApiKeysResponse = GetModelsWithApiKeysResponses[keyof GetModelsWithApiKeysResponses];
 
 export type UpdateModelData = {
-    body?: {
+    body: {
         customPricePerMillionInput?: string | null;
         customPricePerMillionOutput?: string | null;
         inputModalities?: Array<'text' | 'image' | 'audio' | 'video' | 'pdf'> | null;
@@ -19040,7 +17862,7 @@ export type GetChatConversationResponses = {
 export type GetChatConversationResponse = GetChatConversationResponses[keyof GetChatConversationResponses];
 
 export type UpdateChatConversationData = {
-    body?: {
+    body: {
         title?: string | null;
         selectedModel?: string;
         selectedProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax';
@@ -19233,7 +18055,7 @@ export type GetChatAgentMcpToolsResponses = {
 export type GetChatAgentMcpToolsResponse = GetChatAgentMcpToolsResponses[keyof GetChatAgentMcpToolsResponses];
 
 export type GenerateChatConversationTitleData = {
-    body?: {
+    body: {
         /**
          * Force regeneration even if title already exists (for manual regeneration)
          */
@@ -20143,7 +18965,7 @@ export type ForkSharedConversationResponses = {
 export type ForkSharedConversationResponse = ForkSharedConversationResponses[keyof ForkSharedConversationResponses];
 
 export type PostApiWebhooksChatopsMsTeamsData = {
-    body?: unknown;
+    body: unknown;
     path?: never;
     query?: never;
     url: '/api/webhooks/chatops/ms-teams';
@@ -20195,7 +19017,7 @@ export type PostApiWebhooksChatopsMsTeamsResponses = {
 export type PostApiWebhooksChatopsMsTeamsResponse = PostApiWebhooksChatopsMsTeamsResponses[keyof PostApiWebhooksChatopsMsTeamsResponses];
 
 export type PostApiWebhooksChatopsSlackData = {
-    body?: unknown;
+    body: unknown;
     path?: never;
     query?: never;
     url: '/api/webhooks/chatops/slack';
@@ -20247,7 +19069,7 @@ export type PostApiWebhooksChatopsSlackResponses = {
 export type PostApiWebhooksChatopsSlackResponse = PostApiWebhooksChatopsSlackResponses[keyof PostApiWebhooksChatopsSlackResponses];
 
 export type PostApiWebhooksChatopsSlackInteractiveData = {
-    body?: unknown;
+    body: unknown;
     path?: never;
     query?: never;
     url: '/api/webhooks/chatops/slack/interactive';
@@ -20288,7 +19110,7 @@ export type PostApiWebhooksChatopsSlackInteractiveResponses = {
 export type PostApiWebhooksChatopsSlackInteractiveResponse = PostApiWebhooksChatopsSlackInteractiveResponses[keyof PostApiWebhooksChatopsSlackInteractiveResponses];
 
 export type PostApiWebhooksChatopsSlackSlashCommandData = {
-    body?: unknown;
+    body: unknown;
     path?: never;
     query?: never;
     url: '/api/webhooks/chatops/slack/slash-command';
@@ -20706,7 +19528,7 @@ export type DeleteChatOpsBindingResponses = {
 export type DeleteChatOpsBindingResponse = DeleteChatOpsBindingResponses[keyof DeleteChatOpsBindingResponses];
 
 export type UpdateChatOpsBindingData = {
-    body?: {
+    body: {
         agentId?: string | null;
     };
     path: {
@@ -20889,7 +19711,7 @@ export type CreateChatOpsDmBindingResponses = {
 export type CreateChatOpsDmBindingResponse = CreateChatOpsDmBindingResponses[keyof CreateChatOpsDmBindingResponses];
 
 export type UpdateChatOpsConfigInQuickstartData = {
-    body?: {
+    body: {
         enabled?: boolean;
         appId?: string;
         appSecret?: string;
@@ -20971,7 +19793,7 @@ export type UpdateChatOpsConfigInQuickstartResponses = {
 export type UpdateChatOpsConfigInQuickstartResponse = UpdateChatOpsConfigInQuickstartResponses[keyof UpdateChatOpsConfigInQuickstartResponses];
 
 export type UpdateSlackChatOpsConfigData = {
-    body?: {
+    body: {
         enabled?: boolean;
         botToken?: string;
         signingSecret?: string;
@@ -21134,7 +19956,7 @@ export type RefreshChatOpsChannelDiscoveryResponses = {
 export type RefreshChatOpsChannelDiscoveryResponse = RefreshChatOpsChannelDiscoveryResponses[keyof RefreshChatOpsChannelDiscoveryResponses];
 
 export type CohereChatWithDefaultAgentData = {
-    body?: CohereChatRequestInput;
+    body: CohereChatRequestInput;
     headers?: {
         /**
          * The user agent of the client
@@ -21219,7 +20041,7 @@ export type CohereChatWithDefaultAgentResponses = {
 export type CohereChatWithDefaultAgentResponse = CohereChatWithDefaultAgentResponses[keyof CohereChatWithDefaultAgentResponses];
 
 export type CohereChatWithAgentData = {
-    body?: CohereChatRequestInput;
+    body: CohereChatRequestInput;
     headers?: {
         /**
          * The user agent of the client
@@ -21349,7 +20171,7 @@ export type GetConfigResponses = {
 export type GetConfigResponse = GetConfigResponses[keyof GetConfigResponses];
 
 export type DeepseekChatCompletionsWithDefaultAgentData = {
-    body?: DeepSeekChatCompletionRequestInput;
+    body: DeepSeekChatCompletionRequestInput;
     headers: {
         /**
          * The user agent of the client
@@ -21434,7 +20256,7 @@ export type DeepseekChatCompletionsWithDefaultAgentResponses = {
 export type DeepseekChatCompletionsWithDefaultAgentResponse = DeepseekChatCompletionsWithDefaultAgentResponses[keyof DeepseekChatCompletionsWithDefaultAgentResponses];
 
 export type DeepseekChatCompletionsWithAgentData = {
-    body?: DeepSeekChatCompletionRequestInput;
+    body: DeepSeekChatCompletionRequestInput;
     headers: {
         /**
          * The user agent of the client
@@ -21944,7 +20766,7 @@ export type GetDualLlmConfigResponses = {
 export type GetDualLlmConfigResponse = GetDualLlmConfigResponses[keyof GetDualLlmConfigResponses];
 
 export type UpdateDualLlmConfigData = {
-    body?: {
+    body: {
         enabled?: boolean;
         mainAgentPrompt?: string;
         quarantinedAgentPrompt?: string;
@@ -22208,7 +21030,7 @@ export type GetDualLlmResultsByInteractionResponses = {
 export type GetDualLlmResultsByInteractionResponse = GetDualLlmResultsByInteractionResponses[keyof GetDualLlmResultsByInteractionResponses];
 
 export type PostV1GeminiV1BetaModelsByModelGenerateContentData = {
-    body?: GeminiGenerateContentRequestInput;
+    body: GeminiGenerateContentRequestInput;
     headers?: {
         /**
          * The user agent of the client
@@ -22298,7 +21120,7 @@ export type PostV1GeminiV1BetaModelsByModelGenerateContentResponses = {
 export type PostV1GeminiV1BetaModelsByModelGenerateContentResponse = PostV1GeminiV1BetaModelsByModelGenerateContentResponses[keyof PostV1GeminiV1BetaModelsByModelGenerateContentResponses];
 
 export type PostV1GeminiV1BetaModelsByModelStreamGenerateContentData = {
-    body?: GeminiGenerateContentRequestInput;
+    body: GeminiGenerateContentRequestInput;
     headers?: {
         /**
          * The user agent of the client
@@ -22379,7 +21201,7 @@ export type PostV1GeminiV1BetaModelsByModelStreamGenerateContentErrors = {
 export type PostV1GeminiV1BetaModelsByModelStreamGenerateContentError = PostV1GeminiV1BetaModelsByModelStreamGenerateContentErrors[keyof PostV1GeminiV1BetaModelsByModelStreamGenerateContentErrors];
 
 export type PostV1GeminiByAgentIdV1BetaModelsByModelGenerateContentData = {
-    body?: GeminiGenerateContentRequestInput;
+    body: GeminiGenerateContentRequestInput;
     headers?: {
         /**
          * The user agent of the client
@@ -22470,7 +21292,7 @@ export type PostV1GeminiByAgentIdV1BetaModelsByModelGenerateContentResponses = {
 export type PostV1GeminiByAgentIdV1BetaModelsByModelGenerateContentResponse = PostV1GeminiByAgentIdV1BetaModelsByModelGenerateContentResponses[keyof PostV1GeminiByAgentIdV1BetaModelsByModelGenerateContentResponses];
 
 export type PostV1GeminiByAgentIdV1BetaModelsByModelStreamGenerateContentData = {
-    body?: GeminiGenerateContentRequestInput;
+    body: GeminiGenerateContentRequestInput;
     headers?: {
         /**
          * The user agent of the client
@@ -22552,7 +21374,7 @@ export type PostV1GeminiByAgentIdV1BetaModelsByModelStreamGenerateContentErrors 
 export type PostV1GeminiByAgentIdV1BetaModelsByModelStreamGenerateContentError = PostV1GeminiByAgentIdV1BetaModelsByModelStreamGenerateContentErrors[keyof PostV1GeminiByAgentIdV1BetaModelsByModelStreamGenerateContentErrors];
 
 export type GroqChatCompletionsWithDefaultAgentData = {
-    body?: XaiChatCompletionRequestInput;
+    body: XaiChatCompletionRequestInput;
     headers: {
         /**
          * The user agent of the client
@@ -22637,7 +21459,7 @@ export type GroqChatCompletionsWithDefaultAgentResponses = {
 export type GroqChatCompletionsWithDefaultAgentResponse = GroqChatCompletionsWithDefaultAgentResponses[keyof GroqChatCompletionsWithDefaultAgentResponses];
 
 export type GroqChatCompletionsWithAgentData = {
-    body?: XaiChatCompletionRequestInput;
+    body: XaiChatCompletionRequestInput;
     headers: {
         /**
          * The user agent of the client
@@ -22779,7 +21601,7 @@ export type GetReadyResponses = {
 export type GetReadyResponse = GetReadyResponses[keyof GetReadyResponses];
 
 export type PostApiWebhooksIncomingEmailData = {
-    body?: unknown;
+    body: unknown;
     path?: never;
     query?: never;
     url: '/api/webhooks/incoming-email';
@@ -26106,7 +24928,7 @@ export type GetInternalMcpCatalogItemResponses = {
 export type GetInternalMcpCatalogItemResponse = GetInternalMcpCatalogItemResponses[keyof GetInternalMcpCatalogItemResponses];
 
 export type UpdateInternalMcpCatalogItemData = {
-    body?: {
+    body: {
         name?: string;
         version?: string | null;
         description?: string | null;
@@ -27486,7 +26308,7 @@ export type GetKnowledgeBaseResponses = {
 export type GetKnowledgeBaseResponse = GetKnowledgeBaseResponses[keyof GetKnowledgeBaseResponses];
 
 export type UpdateKnowledgeBaseData = {
-    body?: {
+    body: {
         name?: string;
         description?: string | null;
         visibility?: 'org-wide' | 'team-scoped' | 'auto-sync-permissions';
@@ -28240,7 +27062,7 @@ export type GetConnectorResponses = {
 export type GetConnectorResponse = GetConnectorResponses[keyof GetConnectorResponses];
 
 export type UpdateConnectorData = {
-    body?: {
+    body: {
         name?: string;
         description?: string | null;
         config?: {
@@ -29493,7 +28315,7 @@ export type GetLimitResponses = {
 export type GetLimitResponse = GetLimitResponses[keyof GetLimitResponses];
 
 export type UpdateLimitData = {
-    body?: {
+    body: {
         entityType?: 'organization' | 'team' | 'agent';
         entityId?: string;
         limitType?: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
@@ -29636,7 +28458,7 @@ export type GetV1McpByProfileIdResponses = {
 export type GetV1McpByProfileIdResponse = GetV1McpByProfileIdResponses[keyof GetV1McpByProfileIdResponses];
 
 export type PostV1McpByProfileIdData = {
-    body?: {
+    body: {
         [key: string]: unknown;
     };
     path: {
@@ -30322,7 +29144,7 @@ export type GetMcpServerInstallationRequestResponses = {
 export type GetMcpServerInstallationRequestResponse = GetMcpServerInstallationRequestResponses[keyof GetMcpServerInstallationRequestResponses];
 
 export type UpdateMcpServerInstallationRequestData = {
-    body?: {
+    body: {
         status?: 'pending' | 'approved' | 'declined';
         requestReason?: string | null;
         customServerConfig?: {
@@ -30580,7 +29402,7 @@ export type UpdateMcpServerInstallationRequestResponses = {
 export type UpdateMcpServerInstallationRequestResponse = UpdateMcpServerInstallationRequestResponses[keyof UpdateMcpServerInstallationRequestResponses];
 
 export type ApproveMcpServerInstallationRequestData = {
-    body?: {
+    body: {
         adminResponse?: string;
     };
     path: {
@@ -30752,7 +29574,7 @@ export type ApproveMcpServerInstallationRequestResponses = {
 export type ApproveMcpServerInstallationRequestResponse = ApproveMcpServerInstallationRequestResponses[keyof ApproveMcpServerInstallationRequestResponses];
 
 export type DeclineMcpServerInstallationRequestData = {
-    body?: {
+    body: {
         adminResponse?: string;
     };
     path: {
@@ -31513,7 +30335,7 @@ export type GetMcpServerResponses = {
 export type GetMcpServerResponse = GetMcpServerResponses[keyof GetMcpServerResponses];
 
 export type ReauthenticateMcpServerData = {
-    body?: {
+    body: {
         secretId?: string;
         accessToken?: string;
         userConfigValues?: {
@@ -31884,7 +30706,7 @@ export type InspectMcpServerResponses = {
 export type InspectMcpServerResponse = InspectMcpServerResponses[keyof InspectMcpServerResponses];
 
 export type ReinstallMcpServerData = {
-    body?: {
+    body: {
         environmentValues?: {
             [key: string]: string;
         };
@@ -32323,7 +31145,7 @@ export type GetMembersResponses = {
 export type GetMembersResponse = GetMembersResponses[keyof GetMembersResponses];
 
 export type MinimaxChatCompletionsWithDefaultAgentData = {
-    body?: MinimaxChatCompletionRequestInput;
+    body: MinimaxChatCompletionRequestInput;
     headers?: {
         authorization?: string;
     };
@@ -32401,7 +31223,7 @@ export type MinimaxChatCompletionsWithDefaultAgentResponses = {
 export type MinimaxChatCompletionsWithDefaultAgentResponse = MinimaxChatCompletionsWithDefaultAgentResponses[keyof MinimaxChatCompletionsWithDefaultAgentResponses];
 
 export type MinimaxChatCompletionsWithAgentData = {
-    body?: MinimaxChatCompletionRequestInput;
+    body: MinimaxChatCompletionRequestInput;
     headers?: {
         authorization?: string;
     };
@@ -32481,7 +31303,7 @@ export type MinimaxChatCompletionsWithAgentResponses = {
 export type MinimaxChatCompletionsWithAgentResponse = MinimaxChatCompletionsWithAgentResponses[keyof MinimaxChatCompletionsWithAgentResponses];
 
 export type MistralChatCompletionsWithDefaultAgentData = {
-    body?: XaiChatCompletionRequestInput;
+    body: XaiChatCompletionRequestInput;
     headers: {
         /**
          * The user agent of the client
@@ -32566,7 +31388,7 @@ export type MistralChatCompletionsWithDefaultAgentResponses = {
 export type MistralChatCompletionsWithDefaultAgentResponse = MistralChatCompletionsWithDefaultAgentResponses[keyof MistralChatCompletionsWithDefaultAgentResponses];
 
 export type MistralChatCompletionsWithAgentData = {
-    body?: XaiChatCompletionRequestInput;
+    body: XaiChatCompletionRequestInput;
     headers: {
         /**
          * The user agent of the client
@@ -32871,7 +31693,7 @@ export type GetWellKnownOauthAuthorizationServerResponses = {
 export type GetWellKnownOauthAuthorizationServerResponse = GetWellKnownOauthAuthorizationServerResponses[keyof GetWellKnownOauthAuthorizationServerResponses];
 
 export type OllamaChatCompletionsWithDefaultAgentData = {
-    body?: OllamaChatCompletionRequestInput;
+    body: OllamaChatCompletionRequestInput;
     headers?: {
         /**
          * The user agent of the client
@@ -32956,7 +31778,7 @@ export type OllamaChatCompletionsWithDefaultAgentResponses = {
 export type OllamaChatCompletionsWithDefaultAgentResponse = OllamaChatCompletionsWithDefaultAgentResponses[keyof OllamaChatCompletionsWithDefaultAgentResponses];
 
 export type OllamaChatCompletionsWithAgentData = {
-    body?: OllamaChatCompletionRequestInput;
+    body: OllamaChatCompletionRequestInput;
     headers?: {
         /**
          * The user agent of the client
@@ -33043,7 +31865,7 @@ export type OllamaChatCompletionsWithAgentResponses = {
 export type OllamaChatCompletionsWithAgentResponse = OllamaChatCompletionsWithAgentResponses[keyof OllamaChatCompletionsWithAgentResponses];
 
 export type OpenAiChatCompletionsWithDefaultAgentData = {
-    body?: XaiChatCompletionRequestInput;
+    body: XaiChatCompletionRequestInput;
     headers: {
         /**
          * The user agent of the client
@@ -33128,7 +31950,7 @@ export type OpenAiChatCompletionsWithDefaultAgentResponses = {
 export type OpenAiChatCompletionsWithDefaultAgentResponse = OpenAiChatCompletionsWithDefaultAgentResponses[keyof OpenAiChatCompletionsWithDefaultAgentResponses];
 
 export type OpenAiChatCompletionsWithAgentData = {
-    body?: XaiChatCompletionRequestInput;
+    body: XaiChatCompletionRequestInput;
     headers: {
         /**
          * The user agent of the client
@@ -33215,7 +32037,7 @@ export type OpenAiChatCompletionsWithAgentResponses = {
 export type OpenAiChatCompletionsWithAgentResponse = OpenAiChatCompletionsWithAgentResponses[keyof OpenAiChatCompletionsWithAgentResponses];
 
 export type OpenrouterChatCompletionsWithDefaultAgentData = {
-    body?: XaiChatCompletionRequestInput;
+    body: XaiChatCompletionRequestInput;
     headers: {
         /**
          * The user agent of the client
@@ -33300,7 +32122,7 @@ export type OpenrouterChatCompletionsWithDefaultAgentResponses = {
 export type OpenrouterChatCompletionsWithDefaultAgentResponse = OpenrouterChatCompletionsWithDefaultAgentResponses[keyof OpenrouterChatCompletionsWithDefaultAgentResponses];
 
 export type OpenrouterChatCompletionsWithAgentData = {
-    body?: XaiChatCompletionRequestInput;
+    body: XaiChatCompletionRequestInput;
     headers: {
         /**
          * The user agent of the client
@@ -33658,7 +32480,7 @@ export type DeleteOptimizationRuleResponses = {
 export type DeleteOptimizationRuleResponse = DeleteOptimizationRuleResponses[keyof DeleteOptimizationRuleResponses];
 
 export type UpdateOptimizationRuleData = {
-    body?: {
+    body: {
         id?: string;
         entityType?: 'organization' | 'team' | 'agent';
         entityId?: string;
@@ -34131,7 +32953,7 @@ export type GetRoleResponses = {
 export type GetRoleResponse = GetRoleResponses[keyof GetRoleResponses];
 
 export type UpdateRoleData = {
-    body?: {
+    body: {
         name?: string;
         description?: string;
         permission?: {
@@ -34427,7 +33249,7 @@ export type GetAppearanceSettingsResponses = {
 export type GetAppearanceSettingsResponse = GetAppearanceSettingsResponses[keyof GetAppearanceSettingsResponses];
 
 export type UpdateAppearanceSettingsData = {
-    body?: {
+    body: {
         theme?: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont?: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         logo?: string | null;
@@ -34552,7 +33374,7 @@ export type UpdateAppearanceSettingsResponses = {
 export type UpdateAppearanceSettingsResponse = UpdateAppearanceSettingsResponses[keyof UpdateAppearanceSettingsResponses];
 
 export type UpdateSecuritySettingsData = {
-    body?: {
+    body: {
         globalToolPolicy?: 'permissive' | 'restrictive';
         allowChatFileUploads?: boolean;
     };
@@ -34665,7 +33487,7 @@ export type UpdateSecuritySettingsResponses = {
 export type UpdateSecuritySettingsResponse = UpdateSecuritySettingsResponses[keyof UpdateSecuritySettingsResponses];
 
 export type UpdateLlmSettingsData = {
-    body?: {
+    body: {
         convertToolResultsToToon?: boolean;
         compressionScope?: 'organization' | 'team';
         limitCleanupInterval?: '1h' | '12h' | '24h' | '1w' | '1m';
@@ -34779,7 +33601,7 @@ export type UpdateLlmSettingsResponses = {
 export type UpdateLlmSettingsResponse = UpdateLlmSettingsResponses[keyof UpdateLlmSettingsResponses];
 
 export type UpdateAgentSettingsData = {
-    body?: {
+    body: {
         defaultLlmModel?: string | null;
         defaultLlmProvider?: string | null;
         defaultLlmApiKeyId?: string | null;
@@ -34894,7 +33716,7 @@ export type UpdateAgentSettingsResponses = {
 export type UpdateAgentSettingsResponse = UpdateAgentSettingsResponses[keyof UpdateAgentSettingsResponses];
 
 export type UpdateKnowledgeSettingsData = {
-    body?: {
+    body: {
         embeddingModel?: string;
         embeddingDimensions?: 1536 | 768;
         embeddingChatApiKeyId?: string | null;
@@ -35719,7 +34541,7 @@ export type GetOrganizationMemberResponses = {
 export type GetOrganizationMemberResponse = GetOrganizationMemberResponses[keyof GetOrganizationMemberResponses];
 
 export type PerplexityChatCompletionsWithDefaultAgentData = {
-    body?: XaiChatCompletionRequestInput;
+    body: XaiChatCompletionRequestInput;
     headers: {
         /**
          * The user agent of the client
@@ -35804,7 +34626,7 @@ export type PerplexityChatCompletionsWithDefaultAgentResponses = {
 export type PerplexityChatCompletionsWithDefaultAgentResponse = PerplexityChatCompletionsWithDefaultAgentResponses[keyof PerplexityChatCompletionsWithDefaultAgentResponses];
 
 export type PerplexityChatCompletionsWithAgentData = {
-    body?: XaiChatCompletionRequestInput;
+    body: XaiChatCompletionRequestInput;
     headers: {
         /**
          * The user agent of the client
@@ -36951,7 +35773,7 @@ export type GetTeamResponses = {
 export type GetTeamResponse = GetTeamResponses[keyof GetTeamResponses];
 
 export type UpdateTeamData = {
-    body?: {
+    body: {
         name?: string;
         description?: string;
         convertToolResultsToToon?: boolean;
@@ -38812,7 +37634,7 @@ export type DeleteVirtualApiKeyResponses = {
 export type DeleteVirtualApiKeyResponse = DeleteVirtualApiKeyResponses[keyof DeleteVirtualApiKeyResponses];
 
 export type VllmChatCompletionsWithDefaultAgentData = {
-    body?: VllmChatCompletionRequestInput;
+    body: VllmChatCompletionRequestInput;
     headers?: {
         /**
          * The user agent of the client
@@ -38897,7 +37719,7 @@ export type VllmChatCompletionsWithDefaultAgentResponses = {
 export type VllmChatCompletionsWithDefaultAgentResponse = VllmChatCompletionsWithDefaultAgentResponses[keyof VllmChatCompletionsWithDefaultAgentResponses];
 
 export type VllmChatCompletionsWithAgentData = {
-    body?: VllmChatCompletionRequestInput;
+    body: VllmChatCompletionRequestInput;
     headers?: {
         /**
          * The user agent of the client
@@ -38984,7 +37806,7 @@ export type VllmChatCompletionsWithAgentResponses = {
 export type VllmChatCompletionsWithAgentResponse = VllmChatCompletionsWithAgentResponses[keyof VllmChatCompletionsWithAgentResponses];
 
 export type XaiChatCompletionsWithDefaultAgentData = {
-    body?: XaiChatCompletionRequestInput;
+    body: XaiChatCompletionRequestInput;
     headers: {
         /**
          * The user agent of the client
@@ -39069,7 +37891,7 @@ export type XaiChatCompletionsWithDefaultAgentResponses = {
 export type XaiChatCompletionsWithDefaultAgentResponse = XaiChatCompletionsWithDefaultAgentResponses[keyof XaiChatCompletionsWithDefaultAgentResponses];
 
 export type XaiChatCompletionsWithAgentData = {
-    body?: XaiChatCompletionRequestInput;
+    body: XaiChatCompletionRequestInput;
     headers: {
         /**
          * The user agent of the client
@@ -39156,7 +37978,7 @@ export type XaiChatCompletionsWithAgentResponses = {
 export type XaiChatCompletionsWithAgentResponse = XaiChatCompletionsWithAgentResponses[keyof XaiChatCompletionsWithAgentResponses];
 
 export type ZhipuaiChatCompletionsWithDefaultAgentData = {
-    body?: ZhipuaiChatCompletionRequestInput;
+    body: ZhipuaiChatCompletionRequestInput;
     headers: {
         /**
          * The user agent of the client
@@ -39242,7 +38064,7 @@ export type ZhipuaiChatCompletionsWithDefaultAgentResponses = {
 export type ZhipuaiChatCompletionsWithDefaultAgentResponse = ZhipuaiChatCompletionsWithDefaultAgentResponses[keyof ZhipuaiChatCompletionsWithDefaultAgentResponses];
 
 export type ZhipuaiChatCompletionsWithAgentData = {
-    body?: ZhipuaiChatCompletionRequestInput;
+    body: ZhipuaiChatCompletionRequestInput;
     headers: {
         /**
          * The user agent of the client
@@ -40229,7 +39051,7 @@ export type GetIdentityProviderResponses = {
 export type GetIdentityProviderResponse = GetIdentityProviderResponses[keyof GetIdentityProviderResponses];
 
 export type UpdateIdentityProviderData = {
-    body?: {
+    body: {
         issuer?: string;
         /**
          * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L22
@@ -40770,7 +39592,7 @@ export type SetTeamVaultFolderResponses = {
 export type SetTeamVaultFolderResponse = SetTeamVaultFolderResponses[keyof SetTeamVaultFolderResponses];
 
 export type CheckTeamVaultFolderConnectivityData = {
-    body?: {
+    body: {
         vaultPath?: string;
     };
     path: {

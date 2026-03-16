@@ -36316,6 +36316,7 @@
         ],
         "description": "Execute A2A JSON-RPC message on an internal agent (must be agentType='agent')",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -36379,8 +36380,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "parameters": [
           {
@@ -37272,6 +37272,7 @@
         ],
         "description": "Create a new agent",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -37451,8 +37452,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -40312,6 +40312,7 @@
         ],
         "description": "Update an agent",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -42518,6 +42519,7 @@
         ],
         "description": "Assign a tool to an agent",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -43067,6 +43069,7 @@
         ],
         "description": "Assign multiple tools to multiple agents in bulk",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -43115,8 +43118,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -43419,6 +43421,7 @@
         ],
         "description": "Automatically configure security policies for tools using LLM analysis",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -43439,8 +43442,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -44067,6 +44069,7 @@
         ],
         "description": "Update an agent-tool relationship",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -44646,6 +44649,7 @@
         ],
         "description": "Sync delegation targets for an agent. Replaces all existing delegations with the new list. Not applicable to LLM proxies.",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -44665,8 +44669,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "parameters": [
           {
@@ -45499,6 +45502,7 @@
         ],
         "description": "Send a message to Anthropic using the default agent",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -45784,6 +45788,7 @@
         ],
         "description": "Send a message to Anthropic using a specific agent (n8n URL format)",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -46383,6 +46388,7 @@
         ],
         "description": "Create an Archestra API key for the authenticated user",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -47399,6 +47405,7 @@
         ],
         "description": "Submit OAuth consent decision (accept or deny)",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -47421,8 +47428,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -47453,6 +47459,7 @@
           "auth"
         ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -48082,6 +48089,7 @@
         ],
         "description": "Create a new tool invocation policy",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -48144,8 +48152,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -48770,6 +48777,7 @@
         ],
         "description": "Update a tool invocation policy",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -49705,6 +49713,7 @@
         ],
         "description": "Create a new trusted data policy",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -49767,8 +49776,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -50393,6 +50401,7 @@
         ],
         "description": "Update a trusted data policy",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -51021,6 +51030,7 @@
         ],
         "description": "Bulk upsert default tool invocation policies (empty conditions) for multiple tools",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -51050,8 +51060,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -51298,6 +51307,7 @@
         ],
         "description": "Bulk upsert default trusted data policies (empty conditions) for multiple tools",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -51327,8 +51337,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -51575,6 +51584,7 @@
         ],
         "description": "Send a message to Amazon Bedrock using the default agent",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -52276,8 +52286,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "parameters": [
           {
@@ -52741,6 +52750,7 @@
         ],
         "description": "Send a message to Amazon Bedrock for a specific agent",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -53442,8 +53452,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "parameters": [
           {
@@ -53917,6 +53926,7 @@
         ],
         "description": "Stream a message response from Amazon Bedrock using the default agent",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -54618,8 +54628,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "parameters": [
           {
@@ -54656,6 +54665,7 @@
         ],
         "description": "Stream a message response from Amazon Bedrock for a specific agent",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -55357,8 +55367,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "parameters": [
           {
@@ -55405,6 +55414,7 @@
         ],
         "description": "Send a message to Amazon Bedrock for a specific agent (AI SDK format)",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -56585,6 +56595,7 @@
         ],
         "description": "Stream a message response from Amazon Bedrock for a specific agent (AI SDK format)",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -57338,6 +57349,7 @@
         ],
         "description": "Create a chat completion with Cerebras (uses default agent)",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -57598,6 +57610,7 @@
         ],
         "description": "Create a chat completion with Cerebras for a specific agent",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -58259,6 +58272,7 @@
         ],
         "description": "Create a new chat API key with specified scope",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -58328,8 +58342,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -59410,6 +59423,7 @@
         ],
         "description": "Update a chat API key (name, API key value, scope, or team)",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -61142,6 +61156,7 @@
         ],
         "description": "Update model details including custom pricing and modalities.",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -61557,6 +61572,7 @@
         ],
         "description": "Stream chat response with MCP tools (useChat format)",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -61585,8 +61601,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "400": {
@@ -62471,6 +62486,7 @@
         ],
         "description": "Create a new conversation with an agent",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -62521,8 +62537,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -63331,6 +63346,7 @@
         ],
         "description": "Update conversation title, model, agent, or API key",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -64316,6 +64332,7 @@
         ],
         "description": "Generate a title for the conversation based on the first user message and assistant response",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -64741,6 +64758,7 @@
         ],
         "description": "Update a specific text part in a message",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -64765,8 +64783,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "parameters": [
           {
@@ -65436,6 +65453,7 @@
         ],
         "description": "Set enabled tools for a conversation. Replaces all existing selections.",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -65453,8 +65471,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "parameters": [
           {
@@ -66245,6 +66262,7 @@
         ],
         "description": "Share a conversation with your organization",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -66262,8 +66280,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "parameters": [
           {
@@ -67210,6 +67227,7 @@
         ],
         "description": "Create a new conversation from a shared conversation's messages",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -67226,8 +67244,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "parameters": [
           {
@@ -67639,6 +67656,7 @@
         ],
         "description": "MS Teams Bot Framework webhook endpoint",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {}
@@ -67787,6 +67805,7 @@
         ],
         "description": "Slack Events API webhook endpoint",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {}
@@ -67935,6 +67954,7 @@
         ],
         "description": "Slack interactive components endpoint",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {}
@@ -68035,6 +68055,7 @@
         ],
         "description": "Slack slash commands endpoint",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {}
@@ -68922,6 +68943,7 @@
         ],
         "description": "Bulk-update agent assignment for multiple channel bindings",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -68950,8 +68972,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -69513,6 +69534,7 @@
         ],
         "description": "Update a chatops channel binding",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -69848,6 +69870,7 @@
         ],
         "description": "Create a pending DM binding so an agent can be pre-assigned before the first DM interaction",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -69873,8 +69896,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -70183,6 +70205,7 @@
         ],
         "description": "Update MS Teams chatops configuration",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -70452,6 +70475,7 @@
         ],
         "description": "Update Slack chatops configuration",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -70729,6 +70753,7 @@
         ],
         "description": "Refresh channel discovery cache for a chatops provider",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -70747,8 +70772,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -70991,6 +71015,7 @@
         ],
         "description": "Send a chat request to Cohere using the default agent",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -71251,6 +71276,7 @@
         ],
         "description": "Send a chat request to Cohere using a specific agent",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -71677,6 +71703,7 @@
         ],
         "description": "Create a chat completion with DeepSeek (uses default agent)",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -71937,6 +71964,7 @@
         ],
         "description": "Create a chat completion with DeepSeek for a specific agent",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -72756,6 +72784,7 @@
         ],
         "description": "Create a new dual LLM configuration",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -72786,8 +72815,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -73348,6 +73376,7 @@
         ],
         "description": "Update a dual LLM configuration",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -74526,6 +74555,7 @@
         ],
         "description": "Generate content using Gemini (default agent)",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -74795,6 +74825,7 @@
         ],
         "description": "Stream generated content using Gemini (default agent)",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -75054,6 +75085,7 @@
         ],
         "description": "Generate content using Gemini with specific agent",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -75333,6 +75365,7 @@
         ],
         "description": "Stream generated content using Gemini with specific agent",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -75602,6 +75635,7 @@
         ],
         "description": "Create a chat completion with Groq (uses default agent)",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -75862,6 +75896,7 @@
         ],
         "description": "Create a chat completion with Groq for a specific agent",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -76238,6 +76273,7 @@
         ],
         "description": "Webhook endpoint for incoming email notifications",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {}
@@ -76892,6 +76928,7 @@
         ],
         "description": "Setup or renew incoming email webhook subscription",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -76907,8 +76944,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -89157,6 +89193,7 @@
         ],
         "description": "Create a new Internal MCP catalog item",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -89639,8 +89676,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -91189,6 +91225,7 @@
         ],
         "description": "Update an Internal MCP catalog item",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -93496,6 +93533,7 @@
         ],
         "description": "Validate a deployment YAML template",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -93511,8 +93549,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -95476,6 +95513,7 @@
         ],
         "description": "Create a new knowledge base",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -95508,8 +95546,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -96090,6 +96127,7 @@
         ],
         "description": "Update a knowledge base",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -97673,6 +97711,7 @@
         ],
         "description": "Create a new connector",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -97983,8 +98022,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -99191,6 +99229,7 @@
         ],
         "description": "Update a connector",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -101073,6 +101112,7 @@
         ],
         "description": "Assign a connector to one or more knowledge bases",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -101091,8 +101131,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "parameters": [
           {
@@ -103097,6 +103136,7 @@
         ],
         "description": "Create a new limit",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -103155,8 +103195,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -103779,6 +103818,7 @@
         ],
         "description": "Update a limit",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -104512,6 +104552,7 @@
           "mcp-gateway"
         ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -105231,6 +105272,7 @@
         ],
         "description": "Create a new MCP server installation request",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -105583,8 +105625,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -106929,6 +106970,7 @@
         ],
         "description": "Update an MCP server installation request",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -108255,6 +108297,7 @@
         ],
         "description": "Approve an MCP server installation request",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -108947,6 +108990,7 @@
         ],
         "description": "Decline an MCP server installation request",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -109639,6 +109683,7 @@
         ],
         "description": "Add a note to an MCP server installation request",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -109654,8 +109699,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "parameters": [
           {
@@ -110739,6 +110783,7 @@
         ],
         "description": "Install an MCP server (from catalog or custom)",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -110832,8 +110877,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -111882,6 +111926,7 @@
         ],
         "description": "Update MCP server secret after re-authentication (clears OAuth refresh errors)",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -112882,6 +112927,7 @@
         ],
         "description": "Inspect a running MCP server (list tools or call a tool)",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -112907,8 +112953,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "parameters": [
           {
@@ -113155,6 +113200,7 @@
         ],
         "description": "Reinstall an MCP server without losing tool assignments and policies",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -114730,6 +114776,7 @@
         ],
         "description": "Create a chat completion with MiniMax (uses default agent)",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -114980,6 +115027,7 @@
         ],
         "description": "Create a chat completion with MiniMax for a specific agent",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -115240,6 +115288,7 @@
         ],
         "description": "Create a chat completion with Mistral (uses default agent)",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -115500,6 +115549,7 @@
         ],
         "description": "Create a chat completion with Mistral for a specific agent",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -115770,6 +115820,7 @@
         ],
         "description": "Initiate OAuth flow for MCP server installation",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -115791,8 +115842,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -116040,6 +116090,7 @@
         ],
         "description": "Handle OAuth callback and exchange code for tokens",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -116058,8 +116109,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -116470,6 +116520,7 @@
         ],
         "description": "Create a chat completion with Ollama (uses default agent)",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -116730,6 +116781,7 @@
         ],
         "description": "Create a chat completion with Ollama for a specific agent",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -117000,6 +117052,7 @@
         ],
         "description": "Create a chat completion with OpenAI (uses default agent)",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -117260,6 +117313,7 @@
         ],
         "description": "Create a chat completion with OpenAI for a specific agent",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -117530,6 +117584,7 @@
         ],
         "description": "Create a chat completion with OpenRouter (uses default agent)",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -117790,6 +117845,7 @@
         ],
         "description": "Create a chat completion with OpenRouter for a specific agent",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -118390,6 +118446,7 @@
         ],
         "description": "Create a new optimization rule for the organization",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -118481,8 +118538,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -118814,6 +118870,7 @@
         ],
         "description": "Update an optimization rule",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -119867,6 +119924,7 @@
         ],
         "description": "Create a new custom role",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -119907,8 +119965,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -120518,6 +120575,7 @@
         ],
         "description": "Update a custom role",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -121578,6 +121636,7 @@
         ],
         "description": "Update appearance settings",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -122464,6 +122523,7 @@
         ],
         "description": "Update security settings (global tool policy, chat file uploads)",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -122939,6 +122999,7 @@
         ],
         "description": "Update LLM settings (TOON compression, compression scope, limit cleanup interval)",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -123425,6 +123486,7 @@
         ],
         "description": "Update agent settings (default model, default agent)",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -123910,6 +123972,7 @@
         ],
         "description": "Update knowledge settings (embedding model)",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -124865,6 +124928,7 @@
         ],
         "description": "Test the embedding connection by embedding a sample text",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -124886,8 +124950,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -125133,6 +125196,7 @@
         ],
         "description": "Mark organization onboarding as complete",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -125150,8 +125214,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -126897,6 +126960,7 @@
         ],
         "description": "Create a chat completion with Perplexity (uses default agent). Note: Perplexity does not support external tool calling.",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -127157,6 +127221,7 @@
         ],
         "description": "Create a chat completion with Perplexity for a specific agent. Note: Perplexity does not support external tool calling.",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -130164,6 +130229,7 @@
         ],
         "description": "Create a new team",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -130182,8 +130248,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -130808,6 +130873,7 @@
         ],
         "description": "Update a team",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -131666,6 +131732,7 @@
         ],
         "description": "Add a member to a team",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -131684,8 +131751,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "parameters": [
           {
@@ -132481,6 +132547,7 @@
         ],
         "description": "Add an external group mapping to a team for SSO team sync",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -132496,8 +132563,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "parameters": [
           {
@@ -136671,6 +136737,7 @@
         ],
         "description": "Create a new virtual API key. Returns the full token value once.",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -136690,8 +136757,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "parameters": [
           {
@@ -137253,6 +137319,7 @@
         ],
         "description": "Create a chat completion with vLLM (uses default agent)",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -137513,6 +137580,7 @@
         ],
         "description": "Create a chat completion with vLLM for a specific agent",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -137783,6 +137851,7 @@
         ],
         "description": "Create a chat completion with xAI (uses default agent)",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -138043,6 +138112,7 @@
         ],
         "description": "Create a chat completion with xAI for a specific agent",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -138313,6 +138383,7 @@
         ],
         "description": "Create a chat completion with Zhipu AI (uses default agent)",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -138581,6 +138652,7 @@
         ],
         "description": "Create a chat completion with Zhipu AI for a specific agent",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -139674,6 +139746,7 @@
         ],
         "description": "Create a new identity provider",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -139994,8 +140067,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -141381,6 +141453,7 @@
         ],
         "description": "Update identity provider",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -142789,6 +142862,7 @@
         ],
         "description": "Set or update a team's Vault folder path",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -142804,8 +142878,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "parameters": [
           {
@@ -143326,6 +143399,7 @@
         ],
         "description": "Check connectivity to a team's Vault folder",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -143856,6 +143930,7 @@
         ],
         "description": "Get the keys of a specific secret in a team's Vault folder",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -143871,8 +143946,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "parameters": [
           {

@@ -13,6 +13,7 @@ import { LightDarkToggle } from "@/app/settings/account/_components/light-dark-t
 import { LoadingSpinner } from "@/components/loading";
 import { PersonalTokenCard } from "@/components/settings/personal-token-card";
 import { RolePermissionsCard } from "@/components/settings/role-permissions-card";
+import { SettingsSectionStack } from "@/components/settings/settings-block";
 import config from "@/lib/config";
 import { useOrganization } from "@/lib/organization.query";
 import { useOrgTheme } from "@/lib/theme.hook";
@@ -40,7 +41,7 @@ function AccountSettingsContent() {
   }, [highlight]);
 
   return (
-    <div className="space-y-6">
+    <SettingsSectionStack>
       <RolePermissionsCard />
       <UpdateNameCard classNames={{ base: "w-full" }} />
       <PersonalTokenCard />
@@ -61,7 +62,7 @@ function AccountSettingsContent() {
       )}
       <SessionsCard classNames={{ base: "w-full" }} />
       <LightDarkToggle currentThemeId={currentUITheme} />
-    </div>
+    </SettingsSectionStack>
   );
 }
 

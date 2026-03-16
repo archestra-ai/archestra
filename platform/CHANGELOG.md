@@ -1,5 +1,38 @@
 # Changelog
 
+## [1.1.24](https://github.com/archestra-ai/archestra/compare/platform-v1.1.23...platform-v1.1.24) (2026-03-16)
+
+
+### Features
+
+* improve chat branding, placeholder behavior, settings consistency, and help center UX ([#3379](https://github.com/archestra-ai/archestra/issues/3379)) ([a00d1b8](https://github.com/archestra-ai/archestra/commit/a00d1b8a31fd21fdf729cab8aa53c6612f574c3c))
+
+
+### Bug Fixes
+
+* prevent duplicate and missing messages on chat stream errors ([#3385](https://github.com/archestra-ai/archestra/issues/3385)) ([4f8a58e](https://github.com/archestra-ai/archestra/commit/4f8a58edc4bfb905e9d8f74a036d2cc750cea91e))
+
+
+### Miscellaneous Chores
+
+* add force re-sync ([#3386](https://github.com/archestra-ai/archestra/issues/3386)) ([b50d8a3](https://github.com/archestra-ai/archestra/commit/b50d8a3ced3cc63012ec390240d93ad48a7d581c))
+* improve keyword retrieval accuracy ([#3382](https://github.com/archestra-ai/archestra/issues/3382)) ([1db7878](https://github.com/archestra-ai/archestra/commit/1db7878ed15ff184519e61a6d16cd06ef7b02395))
+
+## [1.1.23](https://github.com/archestra-ai/archestra/compare/platform-v1.1.22...platform-v1.1.23) (2026-03-16)
+
+
+### Features
+
+* agent suggested prompts, schema cleanup, white-label app name, and type improvements ([#3371](https://github.com/archestra-ai/archestra/issues/3371)) ([a80a0d9](https://github.com/archestra-ai/archestra/commit/a80a0d99d4c6f31d70457878c529058d478245b8))
+* standardize tables, dialogs, filters, and RBAC across settings/knowledge/LLM/MCP ([#3375](https://github.com/archestra-ai/archestra/issues/3375)) ([dbb8167](https://github.com/archestra-ai/archestra/commit/dbb81673d11dc39e84eda01ab29ea6390793532e))
+
+
+### Bug Fixes
+
+* prevent unneeded 403s ([#3364](https://github.com/archestra-ai/archestra/issues/3364)) ([cd43edb](https://github.com/archestra-ai/archestra/commit/cd43edb236bcffa3cab95ede9317ce2dc2d89ede))
+* prioritize personal agents and polish agent management UX ([#3377](https://github.com/archestra-ai/archestra/issues/3377)) ([34b6db6](https://github.com/archestra-ai/archestra/commit/34b6db63896eed79736de117d4c6fa1ebc3cc629))
+* resolve N+1 queries in bulk-assign and HTML escaping in prompt templates ([#3369](https://github.com/archestra-ai/archestra/issues/3369)) ([00aec06](https://github.com/archestra-ai/archestra/commit/00aec06e500c9a66be36553e4ae3b802226cfa79))
+
 ## [1.1.22](https://github.com/archestra-ai/archestra/compare/platform-v1.1.21...platform-v1.1.22) (2026-03-13)
 
 

@@ -4,14 +4,9 @@ import { DARK_ONLY_THEMES, LIGHT_ONLY_THEMES, type ThemeId } from "@shared";
 import { Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useEffect } from "react";
+import { SettingsCardHeader } from "@/components/settings/settings-block";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 
 interface LightDarkToggleProps {
   currentThemeId?: ThemeId;
@@ -38,14 +33,16 @@ export function LightDarkToggle({ currentThemeId }: LightDarkToggleProps) {
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>Theme Mode</CardTitle>
-        <CardDescription>
-          Switch between light and dark modes for your interface.
-          {isLightOnly && " This theme only supports light mode."}
-          {isDarkOnly && " This theme only supports dark mode."}
-        </CardDescription>
-      </CardHeader>
+      <SettingsCardHeader
+        title="Theme Mode"
+        description={
+          <>
+            Switch between light and dark modes for your interface.
+            {isLightOnly && " This theme only supports light mode."}
+            {isDarkOnly && " This theme only supports dark mode."}
+          </>
+        }
+      />
       <CardContent>
         <div className="flex gap-2">
           <div className="flex-1">

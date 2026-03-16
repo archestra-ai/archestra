@@ -147,6 +147,14 @@ class KbDocumentModel {
     return result?.count ?? 0;
   }
 
+  static async deleteByConnector(connectorId: string): Promise<number> {
+    const result = await db
+      .delete(schema.kbDocumentsTable)
+      .where(eq(schema.kbDocumentsTable.connectorId, connectorId));
+
+    return result.rowCount ?? 0;
+  }
+
   static async deleteByOrganization(organizationId: string): Promise<number> {
     const result = await db
       .delete(schema.kbDocumentsTable)

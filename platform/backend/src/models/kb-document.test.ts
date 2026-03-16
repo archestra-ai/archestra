@@ -362,6 +362,62 @@ describe("KbDocumentModel", () => {
     });
   });
 
+  describe("deleteByConnector", () => {
+    test("deletes all documents for a connector", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+      await KbDocumentModel.create(createDocumentData(connector.id, org.id));
+      await KbDocumentModel.create(createDocumentData(connector.id, org.id));
+      await KbDocumentModel.create(createDocumentData(connector.id, org.id));
+
+      await KbDocumentModel.deleteByConnector(connector.id);
+
+      const count = await KbDocumentModel.countByConnector(connector.id);
+      expect(count).toBe(0);
+    });
+
+    test("does not delete documents from other connectors", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const connector1 = await makeKnowledgeBaseConnector(kb.id, org.id);
+      const connector2 = await makeKnowledgeBaseConnector(kb.id, org.id);
+      await KbDocumentModel.create(createDocumentData(connector1.id, org.id));
+      await KbDocumentModel.create(createDocumentData(connector2.id, org.id));
+      await KbDocumentModel.create(createDocumentData(connector2.id, org.id));
+
+      await KbDocumentModel.deleteByConnector(connector1.id);
+
+      const count1 = await KbDocumentModel.countByConnector(connector1.id);
+      const count2 = await KbDocumentModel.countByConnector(connector2.id);
+      expect(count1).toBe(0);
+      expect(count2).toBe(2);
+    });
+
+    test("returns 0 when connector has no documents", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+
+      const count = await KbDocumentModel.deleteByConnector(connector.id);
+
+      // PGlite may return 0
+      expect(count).toBe(0);
+    });
+  });
+
   describe("countByKnowledgeBase", () => {
     test("returns the count of documents in a knowledge base", async ({
       makeOrganization,

@@ -10,6 +10,7 @@ const {
   updateConnector,
   deleteConnector,
   syncConnector,
+  forceResyncConnector,
   testConnectorConnection,
   getConnectorRuns,
   getConnectorRun,
@@ -211,6 +212,32 @@ export function useSyncConnector() {
         queryKey: ["connectors", connectorId, "runs"],
       });
       toast.success("Sync started successfully");
+    },
+  });
+}
+
+export function useForceResyncConnector() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (connectorId: string) => {
+      const { data, error } = await forceResyncConnector({
+        path: { id: connectorId },
+      });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
+    onSuccess: (data, connectorId) => {
+      if (!data) return;
+      queryClient.invalidateQueries({
+        queryKey: ["connectors", connectorId],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["connectors", connectorId, "runs"],
+      });
+      toast.success("Force re-sync started");
     },
   });
 }

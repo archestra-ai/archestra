@@ -96,6 +96,7 @@
     "better-auth": "1.4.19",
     "botbuilder": "^4.23.3",
     "botframework-connector": "^4.23.3",
+    "cheerio": "^1.2.0",
     "confluence.js": "^2.1.0",
     "croner": "^10.0.1",
     "dotenv": "^17.2.2",

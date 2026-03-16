@@ -130,4 +130,73 @@ describe("reciprocalRankFusion", () => {
     expect(resultK1).toHaveLength(2);
     expect(resultK1000).toHaveLength(2);
   });
+
+  it("applies weights to rank scores", () => {
+    const list1: Item[] = [{ id: "a", value: "a" }];
+    const list2: Item[] = [{ id: "b", value: "b" }];
+
+    // Give list2 a much higher weight
+    const result = reciprocalRankFusion({
+      rankings: [list1, list2],
+      idExtractor: id,
+      weights: [1.0, 10.0],
+    });
+
+    // b should rank first because its list has 10x weight
+    expect(result[0].id).toBe("b");
+    expect(result[1].id).toBe("a");
+  });
+
+  it("is backward compatible without weights", () => {
+    const list1: Item[] = [
+      { id: "a", value: "a" },
+      { id: "b", value: "b" },
+    ];
+    const list2: Item[] = [
+      { id: "b", value: "b2" },
+      { id: "c", value: "c" },
+    ];
+
+    const withWeights = reciprocalRankFusion({
+      rankings: [list1, list2],
+      idExtractor: id,
+      weights: [1, 1],
+    });
+
+    const withoutWeights = reciprocalRankFusion({
+      rankings: [list1, list2],
+      idExtractor: id,
+    });
+
+    // Same ordering when weights are all 1
+    expect(withWeights.map((r) => r.id)).toEqual(
+      withoutWeights.map((r) => r.id),
+    );
+  });
+
+  it("correctly weights keyword bias for BM25-heavy queries", () => {
+    // Simulate: vector finds a, b; fulltext finds b, c
+    // With weights [1.0, 4.0], fulltext items should rank higher
+    const vectorResults: Item[] = [
+      { id: "a", value: "vector-a" },
+      { id: "b", value: "vector-b" },
+    ];
+    const fullTextResults: Item[] = [
+      { id: "b", value: "ft-b" },
+      { id: "c", value: "ft-c" },
+    ];
+
+    const result = reciprocalRankFusion({
+      rankings: [vectorResults, fullTextResults],
+      idExtractor: id,
+      weights: [1.0, 4.0],
+    });
+
+    // b appears in both lists and gets boosted fulltext score → should be first
+    expect(result[0].id).toBe("b");
+    // c has fulltext weight 4.0 at rank 2 → score = 4/(50+2) = ~0.077
+    // a has vector weight 1.0 at rank 1 → score = 1/(50+1) = ~0.0196
+    expect(result[1].id).toBe("c");
+    expect(result[2].id).toBe("a");
+  });
 });

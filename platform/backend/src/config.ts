@@ -749,6 +749,8 @@ const config = {
   kb: {
     hybridSearchEnabled:
       process.env.ARCHESTRA_KNOWLEDGE_BASE_HYBRID_SEARCH_ENABLED !== "false",
+    queryExpansionEnabled:
+      process.env.ARCHESTRA_KNOWLEDGE_BASE_QUERY_EXPANSION_ENABLED !== "false",
     connectorSyncMaxDurationSeconds: parseConnectorSyncMaxDuration(
       process.env.ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_SYNC_MAX_DURATION_SECONDS,
     ),

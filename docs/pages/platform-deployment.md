@@ -977,6 +977,10 @@ These environment variables configure the [Knowledge Base](/docs/platform-knowle
   - Default: `true`
   - Set to `false` to use vector similarity search only.
 
+- **`ARCHESTRA_KNOWLEDGE_BASE_QUERY_EXPANSION_ENABLED`** - Enable or disable multi-query expansion. When enabled, an LLM generates a semantic rephrase and keyword queries from the original query to improve recall. Requires a reranker API key to be configured.
+  - Default: `true`
+  - Set to `false` to use only the original query without expansion.
+
 ### Enterprise Licensing
 
 To learn more about enterprise licensing, please reach out to [sales@archestra.ai](mailto:sales@archestra.ai).

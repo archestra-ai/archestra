@@ -37,6 +37,7 @@ const SOURCE_ICON: Record<InteractionSource, ReactNode> = {
   email: <Mail className="h-3 w-3 shrink-0" />,
   "knowledge:embedding": <Database className="h-3 w-3 shrink-0" />,
   "knowledge:reranker": <Database className="h-3 w-3 shrink-0" />,
+  "knowledge:query-expansion": <Database className="h-3 w-3 shrink-0" />,
 };
 
 export function SourceIcon({

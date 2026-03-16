@@ -2,18 +2,21 @@ function reciprocalRankFusion<T>(params: {
   rankings: T[][];
   idExtractor: (item: T) => string;
   k?: number;
+  weights?: number[];
 }): T[] {
-  const { rankings, idExtractor, k = 60 } = params;
+  const { rankings, idExtractor, k = 50, weights } = params;
 
   const scores = new Map<string, number>();
   const bestItem = new Map<string, { item: T; bestRank: number }>();
 
-  for (const ranking of rankings) {
+  for (let listIdx = 0; listIdx < rankings.length; listIdx++) {
+    const ranking = rankings[listIdx];
+    const weight = weights?.[listIdx] ?? 1;
     for (let i = 0; i < ranking.length; i++) {
       const item = ranking[i];
       const id = idExtractor(item);
       const rank = i + 1;
-      const score = 1 / (k + rank);
+      const score = weight / (k + rank);
 
       scores.set(id, (scores.get(id) ?? 0) + score);
 

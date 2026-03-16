@@ -1045,7 +1045,9 @@ export async function buildKnowledgeSourcesDescription(
   let description =
     "Query the organization's knowledge sources to retrieve relevant information. " +
     "Use this tool when the user asks a question you cannot answer from your training data alone, " +
-    "or when they explicitly ask you to search internal documents and data sources.";
+    "or when they explicitly ask you to search internal documents and data sources. " +
+    "Pass the user's original query as-is — do not rephrase, summarize, or expand it. " +
+    "The system performs its own query optimization internally.";
 
   if (kbNames.length > 0) {
     const kbList = kbNames.join(", ");
@@ -1059,8 +1061,7 @@ export async function buildKnowledgeSourcesDescription(
   }
 
   description +=
-    " Formulate queries about the actual content you are looking for — " +
-    "ask about topics, concepts, or information rather than about source systems.";
+    " Pass the user's original query verbatim — the system handles query optimization internally.";
 
   kbDescriptionCache.set(agentId, {
     description,

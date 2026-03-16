@@ -257,4 +257,42 @@ describe("VirtualApiKeyModel", () => {
     expect(result.data).toHaveLength(0);
     expect(result.pagination.total).toBe(0);
   });
+
+  test("findAllByOrganization: filters by search and parent chat api key", async ({
+    makeOrganization,
+    makeSecret,
+    makeChatApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const secret = await makeSecret({ secret: { apiKey: "sk-real" } });
+    const anthropicKey = await makeChatApiKey(org.id, secret.id, {
+      name: "Anthropic Parent",
+      provider: "anthropic",
+    });
+    const openAiKey = await makeChatApiKey(org.id, secret.id, {
+      name: "OpenAI Parent",
+      provider: "openai",
+    });
+
+    await VirtualApiKeyModel.create({
+      chatApiKeyId: anthropicKey.id,
+      name: "Primary Virtual Key",
+    });
+    await VirtualApiKeyModel.create({
+      chatApiKeyId: openAiKey.id,
+      name: "Backup Virtual Key",
+    });
+
+    const result = await VirtualApiKeyModel.findAllByOrganization({
+      organizationId: org.id,
+      pagination: { limit: 20, offset: 0 },
+      search: "primary",
+      chatApiKeyId: anthropicKey.id,
+    });
+
+    expect(result.data).toHaveLength(1);
+    expect(result.data[0].name).toBe("Primary Virtual Key");
+    expect(result.data[0].parentKeyName).toBe("Anthropic Parent");
+    expect(result.pagination.total).toBe(1);
+  });
 });

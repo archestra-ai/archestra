@@ -13,7 +13,7 @@ import { getServerApiHeaders } from "@/lib/server-utils";
 import {
   DEFAULT_SORT_BY,
   DEFAULT_SORT_DIRECTION,
-  DEFAULT_TOOLS_PAGE_SIZE,
+  DEFAULT_TABLE_LIMIT,
   handleApiError,
 } from "@/lib/utils";
 import { ToolPoliciesClient } from "./page.client";
@@ -33,7 +33,7 @@ export default async function ToolPoliciesPage() {
       data: [],
       pagination: {
         currentPage: 1,
-        limit: DEFAULT_TOOLS_PAGE_SIZE,
+        limit: DEFAULT_TABLE_LIMIT,
         total: 0,
         totalPages: 0,
         hasNext: false,
@@ -55,7 +55,7 @@ export default async function ToolPoliciesPage() {
       archestraApiSdk.getToolsWithAssignments({
         headers,
         query: {
-          limit: DEFAULT_TOOLS_PAGE_SIZE,
+          limit: DEFAULT_TABLE_LIMIT,
           offset: 0,
           sortBy: DEFAULT_SORT_BY,
           sortDirection: DEFAULT_SORT_DIRECTION,

@@ -1,6 +1,6 @@
 import { randomBytes, timingSafeEqual } from "node:crypto";
-import { ARCHESTRA_TOKEN_PREFIX } from "@shared";
-import { count, eq } from "drizzle-orm";
+import { ARCHESTRA_TOKEN_PREFIX, type PaginationQuery } from "@shared";
+import { and, count, eq, ilike } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { PaginatedResult } from "@/database/utils/pagination";
 import { createPaginatedResult } from "@/database/utils/pagination";
@@ -8,7 +8,6 @@ import logger from "@/logging";
 import { secretManager } from "@/secrets-manager";
 import type {
   ChatApiKey,
-  PaginationQuery,
   SelectVirtualApiKey,
   VirtualApiKeyWithParentInfo,
 } from "@/types";
@@ -143,13 +142,28 @@ class VirtualApiKeyModel {
   static async findAllByOrganization(params: {
     organizationId: string;
     pagination: PaginationQuery;
+    search?: string;
+    chatApiKeyId?: string;
   }): Promise<PaginatedResult<VirtualApiKeyWithParentInfo>> {
-    const { organizationId, pagination } = params;
+    const { organizationId, pagination, search, chatApiKeyId } = params;
 
-    const whereClause = eq(
-      schema.chatApiKeysTable.organizationId,
-      organizationId,
-    );
+    const whereConditions = [
+      eq(schema.chatApiKeysTable.organizationId, organizationId),
+    ];
+
+    if (search) {
+      whereConditions.push(
+        ilike(schema.virtualApiKeysTable.name, `%${search.trim()}%`),
+      );
+    }
+
+    if (chatApiKeyId) {
+      whereConditions.push(
+        eq(schema.virtualApiKeysTable.chatApiKeyId, chatApiKeyId),
+      );
+    }
+
+    const whereClause = and(...whereConditions);
 
     const [rows, [{ total }]] = await Promise.all([
       db
@@ -228,7 +242,18 @@ class VirtualApiKeyModel {
 
     for (const virtualKey of candidates) {
       const secret = await secretManager().getSecret(virtualKey.secretId);
-      const storedToken = (secret?.secret as { token?: string })?.token;
+      if (!secret) {
+        logger.warn(
+          {
+            virtualKeyId: virtualKey.id,
+            secretId: virtualKey.secretId,
+          },
+          "Virtual API key references a missing secret",
+        );
+        continue;
+      }
+
+      const storedToken = (secret.secret as { token?: string })?.token;
       if (storedToken && constantTimeEqual(storedToken, tokenValue)) {
         // Found the match — look up the parent chat API key
         const [chatApiKey] = await db

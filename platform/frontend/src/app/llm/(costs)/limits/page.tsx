@@ -1,46 +1,26 @@
 "use client";
 
 import type { archestraApiTypes } from "@shared";
-import {
-  ChevronsUpDown,
-  Edit,
-  Plus,
-  Save,
-  Settings,
-  Trash2,
-  X,
-} from "lucide-react";
-import { useCallback, useState } from "react";
-import type { CatalogItem } from "@/app/mcp/registry/_parts/mcp-server-card";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
+import type { ColumnDef } from "@tanstack/react-table";
+import { Edit, Plus, Trash2, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSetCostsAction } from "@/app/llm/(costs)/layout";
+import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { FormDialog } from "@/components/form-dialog";
+import { LlmModelSearchableSelect } from "@/components/llm-model-select";
+import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
+import { TableRowActions } from "@/components/table-row-actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { DataTable } from "@/components/ui/data-table";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
+  DialogBody,
+  DialogForm,
+  DialogStickyFooter,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PermissionButton } from "@/components/ui/permission-button";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
 import { Progress } from "@/components/ui/progress";
 import {
   Select,
@@ -49,17 +29,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { TooltipProvider } from "@/components/ui/tooltip";
 import { useModelsWithApiKeys } from "@/lib/chat-models.query";
-import { useInternalMcpCatalog } from "@/lib/internal-mcp-catalog.query";
 import {
   useCreateLimit,
   useDeleteLimit,
@@ -68,742 +38,521 @@ import {
 } from "@/lib/limits.query";
 import { useOrganization } from "@/lib/organization.query";
 import { useTeams } from "@/lib/team.query";
+import { useDataTableQueryParams } from "@/lib/use-data-table-query-params";
 
-// Type aliases for better readability
 type LimitData = archestraApiTypes.GetLimitsResponses["200"][number];
-type TokenPriceData = {
-  model: string;
-  provider: string;
-  pricePerMillionInput: string;
-  pricePerMillionOutput: string;
-};
-type TeamData = archestraApiTypes.GetTeamsResponses["200"][number];
+type LimitEntityType = archestraApiTypes.CreateLimitData["body"]["entityType"];
 type UsageStatus = "safe" | "warning" | "danger";
-type LimitEntityType = CreateLimitData["entityType"];
-type CreateLimitData = archestraApiTypes.CreateLimitData["body"];
 
-const LIMIT_ENTITY_TYPE_LABELS: Record<LimitEntityType, string> = {
-  team: "Team",
-  organization: "The whole organization",
-  agent: "Agent",
+type LimitFormState = {
+  entityType: LimitEntityType;
+  entityId: string;
+  limitValue: string;
+  model: string[];
 };
-type LimitType = Pick<LimitData, "limitType">["limitType"];
-type TokenCostLimitType = Extract<LimitType, "token_cost">;
-type McpServerCallsLimitType = Extract<LimitType, "mcp_server_calls">;
 
-// Loading skeleton component
-function LoadingSkeleton({ count, prefix }: { count: number; prefix: string }) {
-  const skeletons = Array.from(
-    { length: count },
-    (_, i) => `${prefix}-skeleton-${i}`,
-  );
+const DEFAULT_FORM_STATE: LimitFormState = {
+  entityType: "organization",
+  entityId: "",
+  limitValue: "",
+  model: [],
+};
 
-  return (
-    <div className="space-y-3">
-      {skeletons.map((key) => (
-        <div key={key} className="h-16 bg-muted animate-pulse rounded" />
-      ))}
-    </div>
-  );
+function formatCurrencyWhole(value: number) {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  }).format(value);
 }
 
-// Inline Form Component for adding/editing limits
-function LimitInlineForm({
-  initialData,
-  limitType,
-  onSave,
-  onCancel,
-  teams,
-  mcpServers,
-  tokenPrices,
-  hasOrganizationMcpLimit,
-  getTeamsWithMcpLimits,
-  organizationId,
-}: {
-  initialData?: LimitData;
-  limitType: TokenCostLimitType | McpServerCallsLimitType;
-  onSave: (data: archestraApiTypes.CreateLimitData["body"]) => void;
-  onCancel: () => void;
-  teams: TeamData[];
-  mcpServers: CatalogItem[];
-  tokenPrices: TokenPriceData[];
-  hasOrganizationMcpLimit?: (mcpServerName?: string) => boolean;
-  getTeamsWithMcpLimits?: (mcpServerName?: string) => string[];
-  organizationId: string;
-}) {
-  const [formData, setFormData] = useState<{
-    entityType: LimitEntityType;
-    entityId: string;
-    mcpServerName: string;
-    limitValue: string;
-    model: string[];
-  }>({
-    entityType: (initialData?.entityType as LimitEntityType) || "team",
-    entityId: initialData?.entityId || "",
-    mcpServerName: initialData?.mcpServerName || "",
-    limitValue: initialData?.limitValue?.toString() || "",
-    model: (initialData?.model as string[]) || [],
-  });
-
-  const handleSubmit = useCallback(
-    (e: React.FormEvent) => {
-      e.preventDefault();
-      onSave({
-        ...formData,
-        limitType,
-        limitValue: parseInt(formData.limitValue, 10),
-        entityId:
-          formData.entityType === "organization"
-            ? organizationId
-            : formData.entityId,
-      });
-    },
-    [formData, onSave, limitType, organizationId],
-  );
-
-  const isValid =
-    formData.limitValue &&
-    (formData.entityType === "organization" || formData.entityId) &&
-    (limitType === "token_cost"
-      ? Array.isArray(formData.model) && formData.model.length > 0
-      : formData.mcpServerName);
-
-  return (
-    <tr className="border-b">
-      <td colSpan={5} className="p-4 bg-muted/30">
-        <TooltipProvider>
-          <form
-            onSubmit={handleSubmit}
-            className="flex flex-wrap items-center gap-4"
-          >
-            <div className="flex items-center gap-2">
-              <Label htmlFor="entityType" className="text-sm whitespace-nowrap">
-                Apply To
-              </Label>
-              <Select
-                value={formData.entityType}
-                onValueChange={(value: LimitEntityType) =>
-                  setFormData({
-                    ...formData,
-                    entityType: value,
-                    entityId: "",
-                  })
-                }
-              >
-                <SelectTrigger className="w-48">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {Object.entries(LIMIT_ENTITY_TYPE_LABELS).map(
-                    ([value, label]) => (
-                      <SelectItem key={value} value={value}>
-                        {label}
-                      </SelectItem>
-                    ),
-                  )}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {formData.entityType === "team" && (
-              <div className="flex items-center gap-2">
-                <Label htmlFor="team" className="text-sm whitespace-nowrap">
-                  Team
-                </Label>
-                <Select
-                  value={formData.entityId}
-                  onValueChange={(value) =>
-                    setFormData({ ...formData, entityId: value })
-                  }
-                >
-                  <SelectTrigger className="w-48">
-                    <SelectValue placeholder="Select a team" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {teams.length === 0 ? (
-                      <div className="px-2 py-1.5 text-sm text-muted-foreground">
-                        No teams available
-                      </div>
-                    ) : (
-                      teams.map((team) => (
-                        <SelectItem key={team.id} value={team.id}>
-                          {team.name}
-                        </SelectItem>
-                      ))
-                    )}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-
-            {limitType !== "token_cost" && (
-              <div className="flex items-center gap-2">
-                <Label
-                  htmlFor="mcpServer"
-                  className="text-sm whitespace-nowrap"
-                >
-                  MCP Server
-                </Label>
-                <Select
-                  value={formData.mcpServerName}
-                  onValueChange={(value) =>
-                    setFormData({
-                      ...formData,
-                      mcpServerName: value,
-                    })
-                  }
-                >
-                  <SelectTrigger className="w-48">
-                    <SelectValue placeholder="Select an MCP server" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {mcpServers.length === 0 ? (
-                      <div className="px-2 py-1.5 text-sm text-muted-foreground">
-                        No MCP servers available
-                      </div>
-                    ) : (
-                      mcpServers.map((server) => {
-                        // For MCP limits, check if this server already has a limit for the selected entity
-                        const isDisabled =
-                          limitType === "mcp_server_calls" &&
-                          ((formData.entityType === "organization" &&
-                            hasOrganizationMcpLimit?.(server.name)) ||
-                            (formData.entityType === "team" &&
-                              formData.entityId &&
-                              formData.entityId.trim() !== "" &&
-                              getTeamsWithMcpLimits?.(server.name)?.includes(
-                                formData.entityId,
-                              )));
-
-                        return (
-                          <SelectItem
-                            key={server.id}
-                            value={server.name}
-                            disabled={Boolean(isDisabled)}
-                          >
-                            {server.name}
-                          </SelectItem>
-                        );
-                      })
-                    )}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-
-            {limitType === "token_cost" && (
-              <div className="flex items-center gap-2">
-                <Label htmlFor="model" className="text-sm whitespace-nowrap">
-                  Models
-                </Label>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      role="combobox"
-                      className="flex-1 justify-between"
-                    >
-                      {Array.isArray(formData.model) &&
-                      formData.model.length > 0
-                        ? `${formData.model.length} model${formData.model.length > 1 ? "s" : ""} selected`
-                        : "Select models"}
-                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-[300px] p-0" align="start">
-                    <div className="max-h-[300px] overflow-y-auto p-2">
-                      {tokenPrices?.map((price) => (
-                        <button
-                          key={price.model}
-                          type="button"
-                          className="flex items-center space-x-2 p-2 hover:bg-accent rounded-sm cursor-pointer w-full text-left"
-                          onClick={() => {
-                            const currentModels = Array.isArray(formData.model)
-                              ? formData.model
-                              : [];
-                            const isSelected = currentModels.includes(
-                              price.model,
-                            );
-                            const newModels = isSelected
-                              ? currentModels.filter((m) => m !== price.model)
-                              : [...currentModels, price.model];
-                            setFormData((prev) => ({
-                              ...prev,
-                              model: newModels,
-                            }));
-                          }}
-                        >
-                          <Checkbox
-                            checked={
-                              Array.isArray(formData.model) &&
-                              formData.model.includes(price.model)
-                            }
-                            onCheckedChange={() => {
-                              // Handled by parent onClick
-                            }}
-                          />
-                          <span className="flex-1 cursor-pointer text-sm">
-                            {price.model}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  </PopoverContent>
-                </Popover>
-                {Array.isArray(formData.model) && formData.model.length > 0 && (
-                  <div className="flex flex-wrap gap-1">
-                    {formData.model.map((modelName) => (
-                      <Badge
-                        key={modelName}
-                        variant="secondary"
-                        className="text-xs"
-                      >
-                        {modelName}
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const newModels = formData.model.filter(
-                              (m: string) => m !== modelName,
-                            );
-                            setFormData((prev) => ({
-                              ...prev,
-                              model: newModels,
-                            }));
-                          }}
-                          className="ml-1 hover:text-destructive"
-                        >
-                          <X className="h-3 w-3" />
-                        </button>
-                      </Badge>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-
-            <div className="flex items-center gap-2">
-              <Label htmlFor="limitValue" className="text-sm whitespace-nowrap">
-                Limit Value ({limitType === "token_cost" ? "cost $" : "calls"})
-              </Label>
-              <Input
-                id="limitValue"
-                type="text"
-                value={
-                  formData.limitValue
-                    ? parseInt(formData.limitValue, 10).toLocaleString()
-                    : ""
-                }
-                onChange={(e) => {
-                  // Remove commas and keep only numbers
-                  const value = e.target.value.replace(/[^0-9]/g, "");
-                  setFormData({ ...formData, limitValue: value });
-                }}
-                placeholder={
-                  limitType === "token_cost" ? "e.g. 100,000" : "e.g. 10,000"
-                }
-                min="1"
-                required
-                className="w-32"
-              />
-            </div>
-
-            <div className="flex gap-2 flex-shrink-0">
-              <Button type="submit" disabled={!isValid} size="sm">
-                <Save className="h-4 w-4 mr-1" />
-                Save
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={onCancel}
-                size="sm"
-              >
-                <X className="h-4 w-4 mr-1" />
-                Cancel
-              </Button>
-            </div>
-          </form>
-        </TooltipProvider>
-      </td>
-    </tr>
-  );
-}
-
-// Limit Row Component for displaying/editing individual limits
-function LimitRow({
-  limit,
-  isEditing,
-  onEdit,
-  onSave,
-  onCancel,
-  onDelete,
-  teams,
-  mcpServers,
-  tokenPrices,
-  getEntityName,
-  getUsageStatus,
-  organizationId,
-}: {
-  limit: LimitData;
-  isEditing: boolean;
-  onEdit: () => void;
-  onSave: (data: archestraApiTypes.UpdateLimitData["body"]) => void;
-  onCancel: () => void;
-  onDelete: () => void;
-  teams: TeamData[];
-  mcpServers: CatalogItem[];
-  tokenPrices: TokenPriceData[];
-  getEntityName: (limit: LimitData) => string;
-  getUsageStatus: (
-    limitValue: number,
-    limitType: string,
-    modelUsage?: Array<{
-      model: string;
-      tokensIn: number;
-      tokensOut: number;
-      cost: number;
-    }>,
-  ) => {
-    percentage: number;
-    status: UsageStatus;
-    actualUsage: number;
-    actualLimit: number;
-  };
-  organizationId: string;
-}) {
-  if (isEditing) {
-    return (
-      <LimitInlineForm
-        initialData={limit}
-        limitType={
-          limit.limitType as TokenCostLimitType | McpServerCallsLimitType
-        }
-        onSave={onSave}
-        onCancel={onCancel}
-        teams={teams}
-        mcpServers={mcpServers}
-        tokenPrices={tokenPrices}
-        organizationId={organizationId}
-      />
-    );
-  }
-
-  const { percentage, status, actualUsage, actualLimit } = getUsageStatus(
-    limit.limitValue,
-    limit.limitType,
-    limit.modelUsage,
-  );
-
-  return (
-    <tr className="border-b hover:bg-muted/30">
-      <td className="p-4">
-        <div className="flex items-center gap-2">
-          <Badge
-            variant={
-              status === "danger"
-                ? "destructive"
-                : status === "warning"
-                  ? "secondary"
-                  : "default"
-            }
-          >
-            {status === "danger"
-              ? "Exceeded"
-              : status === "warning"
-                ? "Near Limit"
-                : "Safe"}
-          </Badge>
-        </div>
-      </td>
-      <td className="p-4 text-sm text-muted-foreground">
-        {getEntityName(limit)}
-      </td>
-      {limit.limitType === "token_cost" ? (
-        <td className="p-4">
-          <div className="flex flex-wrap gap-1">
-            {Array.isArray(limit.model) && limit.model.length > 0 ? (
-              (limit.model as string[]).map((modelName: string) => (
-                <Badge key={modelName} variant="outline" className="text-xs">
-                  {modelName}
-                </Badge>
-              ))
-            ) : (
-              <span className="text-muted-foreground">-</span>
-            )}
-          </div>
-        </td>
-      ) : (
-        <td className="p-4 text-sm text-muted-foreground">
-          {limit.mcpServerName || "-"}
-        </td>
-      )}
-      <td className="p-4">
-        <div className="space-y-1">
-          <div className="flex justify-between text-sm">
-            <span>
-              {limit.limitType === "token_cost"
-                ? `$${actualUsage.toFixed(2)} / $${actualLimit.toFixed(2)}`
-                : `${actualUsage.toLocaleString()} / ${limit.limitValue.toLocaleString()} calls`}
-            </span>
-            <span>{percentage.toFixed(1)}%</span>
-          </div>
-          <Progress
-            value={Math.min(percentage, 100)}
-            className={`h-2 ${
-              status === "danger"
-                ? "bg-red-100"
-                : status === "warning"
-                  ? "bg-orange-100"
-                  : ""
-            }`}
-          />
-        </div>
-      </td>
-      <td className="p-4">
-        <div className="flex items-center gap-2">
-          <PermissionButton
-            permissions={{ llmLimit: ["update"] }}
-            variant="ghost"
-            size="sm"
-            onClick={onEdit}
-          >
-            <Edit className="h-4 w-4" />
-          </PermissionButton>
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <PermissionButton
-                permissions={{ llmLimit: ["delete"] }}
-                variant="ghost"
-                size="sm"
-                className="text-destructive hover:text-destructive"
-              >
-                <Trash2 className="h-4 w-4" />
-              </PermissionButton>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Delete Limit</AlertDialogTitle>
-                <AlertDialogDescription>
-                  Are you sure you want to delete this limit? This action cannot
-                  be undone.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction
-                  onClick={onDelete}
-                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                >
-                  Delete
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-        </div>
-      </td>
-    </tr>
-  );
+function formatNumericInput(value: string) {
+  if (!value) return "";
+  return Number(value).toLocaleString("en-US");
 }
 
 export default function LimitsPage() {
-  const [editingLimitId, setEditingLimitId] = useState<string | null>(null);
-  const [isAddingLlmLimit, setIsAddingLlmLimit] = useState(false);
-
-  // Data fetching hooks
-  const { data: limits = [], isLoading: limitsLoading } = useLimits();
-  const { data: mcpServers = [] } = useInternalMcpCatalog();
+  const setActionButton = useSetCostsAction();
+  const { data: limits = [], isPending } = useLimits();
   const { data: teams = [] } = useTeams();
-  const { data: organizationDetails } = useOrganization();
+  const { data: organization } = useOrganization();
   const { data: modelsWithApiKeys = [] } = useModelsWithApiKeys();
-  const tokenPrices: TokenPriceData[] = modelsWithApiKeys.map((m) => ({
-    model: m.modelId,
-    provider: m.provider,
-    pricePerMillionInput: m.capabilities?.pricePerMillionInput ?? "0",
-    pricePerMillionOutput: m.capabilities?.pricePerMillionOutput ?? "0",
-  }));
-
-  const deleteLimit = useDeleteLimit();
   const createLimit = useCreateLimit();
   const updateLimit = useUpdateLimit();
+  const deleteLimit = useDeleteLimit();
 
-  // Filter limits by type
-  const llmLimits = limits.filter((limit) => limit.limitType === "token_cost");
+  const { searchParams, updateQueryParams } = useDataTableQueryParams();
+  const statusFilter = searchParams.get("status") || "all";
+  const appliedToFilter = searchParams.get("appliedTo") || "all";
+  const modelFilter = searchParams.get("model") || "all";
+  const [modelToAdd, setModelToAdd] = useState("");
+  const [editingLimit, setEditingLimit] = useState<LimitData | null>(null);
+  const [limitToDelete, setLimitToDelete] = useState<LimitData | null>(null);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [formState, setFormState] =
+    useState<LimitFormState>(DEFAULT_FORM_STATE);
 
-  // Helper function to get entity name
-  const getEntityName = useCallback(
+  const llmLimits = useMemo(
+    () => limits.filter((limit) => limit.limitType === "token_cost"),
+    [limits],
+  );
+
+  const modelOptions = useMemo(
+    () =>
+      modelsWithApiKeys.map((model) => ({
+        value: model.modelId,
+        model: model.modelId,
+        provider: model.provider,
+        pricePerMillionInput: model.capabilities?.pricePerMillionInput ?? "0",
+        pricePerMillionOutput: model.capabilities?.pricePerMillionOutput ?? "0",
+      })),
+    [modelsWithApiKeys],
+  );
+
+  const handleCreateOpen = useCallback(() => {
+    setEditingLimit(null);
+    setFormState(DEFAULT_FORM_STATE);
+    setModelToAdd("");
+    setIsDialogOpen(true);
+  }, []);
+
+  useEffect(() => {
+    setActionButton(
+      <PermissionButton
+        permissions={{ llmLimit: ["create"] }}
+        onClick={handleCreateOpen}
+      >
+        <Plus className="mr-2 h-4 w-4" />
+        Add Limit
+      </PermissionButton>,
+    );
+
+    return () => setActionButton(null);
+  }, [handleCreateOpen, setActionButton]);
+
+  const handleEditOpen = useCallback((limit: LimitData) => {
+    setEditingLimit(limit);
+    setFormState({
+      entityType: limit.entityType as LimitEntityType,
+      entityId: limit.entityType === "organization" ? "" : limit.entityId,
+      limitValue: String(limit.limitValue),
+      model: getLimitModels(limit),
+    });
+    setModelToAdd("");
+    setIsDialogOpen(true);
+  }, []);
+
+  const getEntityLabel = useCallback(
     (limit: LimitData) => {
-      if (limit.entityType === "team") {
-        const team = teams.find((t) => t.id === limit.entityId);
-        return team?.name || "Unknown Team";
-      }
-      if (limit.entityType === "organization") {
-        return "The whole organization";
-      }
-      return "Unknown Profile";
+      if (limit.entityType === "organization") return "Organization";
+      const team = teams.find((candidate) => candidate.id === limit.entityId);
+      return team?.name ?? "Unknown team";
     },
     [teams],
   );
 
-  // Helper function to get usage percentage and status
   const getUsageStatus = useCallback(
     (
-      limitValue: number,
-      limitType: string,
-      modelUsage?: Array<{
-        model: string;
-        tokensIn: number;
-        tokensOut: number;
-        cost: number;
-      }>,
-    ) => {
-      let actualUsage: number;
-      const actualLimit = limitValue;
-
-      if (limitType === "token_cost") {
-        // Use precise per-model cost sum from backend
-        if (modelUsage && modelUsage.length > 0) {
-          actualUsage = modelUsage.reduce((sum, usage) => sum + usage.cost, 0);
-        } else {
-          // No usage tracked yet
-          actualUsage = 0;
-        }
-      } else {
-        // MCP server calls and tool calls limits are not currently tracked
-        actualUsage = 0;
+      limit: LimitData,
+    ): {
+      percentage: number;
+      status: UsageStatus;
+      actualUsage: number;
+      actualLimit: number;
+    } => {
+      const actualUsage = (limit.modelUsage ?? []).reduce(
+        (sum, usage) => sum + usage.cost,
+        0,
+      );
+      const actualLimit = limit.limitValue;
+      const percentage =
+        actualLimit > 0 ? (actualUsage / actualLimit) * 100 : 0;
+      if (percentage >= 90) {
+        return { percentage, status: "danger", actualUsage, actualLimit };
       }
-
-      const percentage = (actualUsage / actualLimit) * 100;
-      let status: UsageStatus = "safe";
-
-      if (percentage >= 90) status = "danger";
-      else if (percentage >= 75) status = "warning";
-
-      return { percentage, status, actualUsage, actualLimit };
+      if (percentage >= 75) {
+        return { percentage, status: "warning", actualUsage, actualLimit };
+      }
+      return { percentage, status: "safe", actualUsage, actualLimit };
     },
     [],
   );
 
-  const handleDeleteLimit = useCallback(
-    async (id: string) => {
-      await deleteLimit.mutateAsync({ id });
-    },
-    [deleteLimit],
+  const filteredLimits = useMemo(() => {
+    return llmLimits.filter((limit) => {
+      const usageStatus = getUsageStatus(limit).status;
+      const matchesStatus =
+        statusFilter === "all" || usageStatus === statusFilter;
+      const matchesAppliedTo =
+        appliedToFilter === "all" || limit.entityType === appliedToFilter;
+      const matchesModel =
+        modelFilter === "all" ||
+        (Array.isArray(limit.model) && limit.model.includes(modelFilter));
+
+      return matchesStatus && matchesAppliedTo && matchesModel;
+    });
+  }, [appliedToFilter, llmLimits, modelFilter, statusFilter, getUsageStatus]);
+
+  const columns = useMemo<ColumnDef<LimitData>[]>(
+    () => [
+      {
+        accessorKey: "status",
+        header: "Status",
+        cell: ({ row }) => {
+          const status = getUsageStatus(row.original).status;
+          return (
+            <Badge
+              variant={
+                status === "danger"
+                  ? "destructive"
+                  : status === "warning"
+                    ? "secondary"
+                    : "outline"
+              }
+            >
+              {status === "danger"
+                ? "Exceeded"
+                : status === "warning"
+                  ? "Near limit"
+                  : "Safe"}
+            </Badge>
+          );
+        },
+      },
+      {
+        accessorKey: "entityId",
+        header: "Applied to",
+        cell: ({ row }) => getEntityLabel(row.original),
+      },
+      {
+        accessorKey: "model",
+        header: "Models",
+        cell: ({ row }) => (
+          <div className="flex flex-wrap gap-1">
+            {getLimitModels(row.original).map((model) => (
+              <Badge key={model} variant="outline" className="text-xs">
+                {model}
+              </Badge>
+            ))}
+          </div>
+        ),
+      },
+      {
+        accessorKey: "usage",
+        header: "Usage",
+        cell: ({ row }) => {
+          const usage = getUsageStatus(row.original);
+          return (
+            <div className="w-[180px]">
+              <Progress
+                value={Math.min(usage.percentage, 100)}
+                className={
+                  usage.status === "danger"
+                    ? "bg-red-100"
+                    : usage.status === "warning"
+                      ? "bg-orange-100"
+                      : undefined
+                }
+              />
+              <p className="mt-1 text-left text-xs text-muted-foreground">
+                {`${formatCurrencyWhole(usage.actualUsage)} / ${formatCurrencyWhole(usage.actualLimit)} (${usage.percentage.toFixed(1)}%)`}
+              </p>
+            </div>
+          );
+        },
+      },
+      {
+        id: "actions",
+        header: "Actions",
+        cell: ({ row }) => (
+          <TableRowActions
+            actions={[
+              {
+                icon: <Edit className="h-4 w-4" />,
+                label: "Edit limit",
+                onClick: () => handleEditOpen(row.original),
+              },
+              {
+                icon: <Trash2 className="h-4 w-4" />,
+                label: "Delete limit",
+                variant: "destructive",
+                onClick: () => setLimitToDelete(row.original),
+              },
+            ]}
+          />
+        ),
+      },
+    ],
+    [getEntityLabel, getUsageStatus, handleEditOpen],
   );
 
-  const handleCreateLimit = useCallback(
-    async (data: archestraApiTypes.CreateLimitData["body"]) => {
-      try {
-        await createLimit.mutateAsync(data);
-        setIsAddingLlmLimit(false);
-      } catch {
-        // Error toast handled by mutation hook
+  const hasActiveFilters =
+    statusFilter !== "all" ||
+    appliedToFilter !== "all" ||
+    modelFilter !== "all";
+
+  async function handleSubmit() {
+    const body = {
+      entityType: formState.entityType,
+      entityId:
+        formState.entityType === "organization"
+          ? (organization?.id ?? "")
+          : formState.entityId,
+      limitType: "token_cost" as const,
+      limitValue: Number(formState.limitValue),
+      model: formState.model,
+    };
+
+    if (editingLimit) {
+      const result = await updateLimit.mutateAsync({
+        id: editingLimit.id,
+        ...body,
+      });
+      if (result) {
+        setIsDialogOpen(false);
+        setEditingLimit(null);
       }
-    },
-    [createLimit],
-  );
+      return;
+    }
 
-  const handleUpdateLimit = useCallback(
-    async (id: string, data: archestraApiTypes.UpdateLimitData["body"]) => {
-      try {
-        await updateLimit.mutateAsync({ id, ...data });
-        setEditingLimitId(null);
-      } catch {
-        // Error toast handled by mutation hook
-      }
-    },
-    [updateLimit],
-  );
+    const result = await createLimit.mutateAsync(body);
+    if (result) {
+      setIsDialogOpen(false);
+    }
+  }
 
-  const handleCancelEdit = useCallback(() => {
-    setEditingLimitId(null);
-    setIsAddingLlmLimit(false);
-  }, []);
+  async function handleDelete() {
+    if (!limitToDelete) return;
+    await deleteLimit.mutateAsync({ id: limitToDelete.id });
+    setLimitToDelete(null);
+  }
+
+  const canSubmit =
+    Number(formState.limitValue) > 0 &&
+    formState.model.length > 0 &&
+    (formState.entityType === "organization" || formState.entityId.length > 0);
 
   return (
-    <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="text-xl">LLM Limits</CardTitle>
-              <CardDescription>
-                Token cost limits for LLM usage across teams and organization
-              </CardDescription>
+    <div className="space-y-4">
+      <div className="flex flex-wrap gap-3">
+        <Select
+          value={statusFilter}
+          onValueChange={(value) =>
+            updateQueryParams({ status: value === "all" ? null : value })
+          }
+        >
+          <SelectTrigger className="w-full sm:w-[220px]">
+            <SelectValue placeholder="All statuses" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All statuses</SelectItem>
+            <SelectItem value="safe">Safe</SelectItem>
+            <SelectItem value="warning">Near limit</SelectItem>
+            <SelectItem value="danger">Exceeded</SelectItem>
+          </SelectContent>
+        </Select>
+
+        <Select
+          value={appliedToFilter}
+          onValueChange={(value) =>
+            updateQueryParams({ appliedTo: value === "all" ? null : value })
+          }
+        >
+          <SelectTrigger className="w-full sm:w-[220px]">
+            <SelectValue placeholder="All scopes" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All applied to</SelectItem>
+            <SelectItem value="organization">Organization</SelectItem>
+            <SelectItem value="team">Team</SelectItem>
+          </SelectContent>
+        </Select>
+
+        <LlmModelSearchableSelect
+          value={modelFilter}
+          onValueChange={(value) =>
+            updateQueryParams({ model: value === "all" ? null : value })
+          }
+          options={modelOptions}
+          placeholder="All models"
+          className="sm:max-w-[320px]"
+          showPricing={false}
+          includeAllOption
+          allLabel="All models"
+        />
+      </div>
+
+      <LoadingWrapper
+        isPending={isPending}
+        loadingFallback={<LoadingSpinner />}
+      >
+        <DataTable
+          columns={columns}
+          data={filteredLimits}
+          emptyMessage="No limits configured"
+          hasActiveFilters={hasActiveFilters}
+          filteredEmptyMessage="No limits match your filters. Try adjusting your search."
+          onClearFilters={() => {
+            updateQueryParams({ status: null, appliedTo: null, model: null });
+          }}
+        />
+      </LoadingWrapper>
+
+      <FormDialog
+        open={isDialogOpen}
+        onOpenChange={setIsDialogOpen}
+        title={editingLimit ? "Edit limit" : "Create limit"}
+        description="Configure scoped LLM token-cost limits for the organization or a team."
+        size="small"
+      >
+        <DialogForm
+          className="flex min-h-0 flex-1 flex-col"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void handleSubmit();
+          }}
+        >
+          <DialogBody className="space-y-4">
+            <div className="space-y-2">
+              <Label>Apply to</Label>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <Select
+                  value={formState.entityType}
+                  onValueChange={(value: LimitEntityType) =>
+                    setFormState((current) => ({
+                      ...current,
+                      entityType: value,
+                      entityId: "",
+                    }))
+                  }
+                >
+                  <SelectTrigger className="w-full sm:flex-1">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="organization">Organization</SelectItem>
+                    <SelectItem value="team">Team</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                {formState.entityType === "team" && (
+                  <Select
+                    value={formState.entityId}
+                    onValueChange={(value) =>
+                      setFormState((current) => ({
+                        ...current,
+                        entityId: value,
+                      }))
+                    }
+                  >
+                    <SelectTrigger className="w-full sm:flex-1">
+                      <SelectValue placeholder="Select team" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {teams.map((team) => (
+                        <SelectItem key={team.id} value={team.id}>
+                          {team.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
             </div>
-            <PermissionButton
-              permissions={{ llmLimit: ["create"] }}
-              onClick={() => setIsAddingLlmLimit(true)}
-              size="sm"
-              disabled={isAddingLlmLimit || editingLimitId !== null}
-            >
-              <Plus className="h-4 w-4 mr-1" />
-              Add LLM Limit
-            </PermissionButton>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {limitsLoading ? (
-            <LoadingSkeleton count={3} prefix="llm-limits" />
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Applied to</TableHead>
-                  <TableHead>Models</TableHead>
-                  <TableHead>Usage</TableHead>
-                  <TableHead>Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {isAddingLlmLimit && (
-                  <LimitInlineForm
-                    limitType="token_cost"
-                    onSave={handleCreateLimit}
-                    onCancel={handleCancelEdit}
-                    teams={teams}
-                    mcpServers={mcpServers}
-                    tokenPrices={tokenPrices}
-                    organizationId={organizationDetails?.id || ""}
-                  />
-                )}
-                {llmLimits.length === 0 && !isAddingLlmLimit ? (
-                  <TableRow>
-                    <TableCell
-                      colSpan={5}
-                      className="text-center py-8 text-muted-foreground"
+
+            <div className="space-y-2">
+              <Label>Add model</Label>
+              <LlmModelSearchableSelect
+                value={modelToAdd}
+                onValueChange={(value) => {
+                  setModelToAdd("");
+                  setFormState((current) => ({
+                    ...current,
+                    model: current.model.includes(value)
+                      ? current.model
+                      : [...current.model, value],
+                  }));
+                }}
+                options={modelOptions}
+                placeholder="Select model..."
+                showPricing
+              />
+              <div className="flex flex-wrap gap-1">
+                {formState.model.map((model) => (
+                  <Badge key={model} variant="secondary" className="gap-1 pr-1">
+                    {model}
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-4 w-4"
+                      onClick={() =>
+                        setFormState((current) => ({
+                          ...current,
+                          model: current.model.filter(
+                            (currentModel) => currentModel !== model,
+                          ),
+                        }))
+                      }
                     >
-                      <Settings className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                      <p>No LLM limits configured</p>
-                      <p className="text-sm">
-                        Click "Add LLM Limit" to get started
-                      </p>
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  llmLimits.map((limit) => (
-                    <LimitRow
-                      key={limit.id}
-                      limit={limit}
-                      isEditing={editingLimitId === limit.id}
-                      onEdit={() => setEditingLimitId(limit.id)}
-                      onSave={(data) => handleUpdateLimit(limit.id, data)}
-                      onCancel={handleCancelEdit}
-                      onDelete={() => handleDeleteLimit(limit.id)}
-                      teams={teams}
-                      mcpServers={mcpServers}
-                      tokenPrices={tokenPrices}
-                      getEntityName={getEntityName}
-                      getUsageStatus={getUsageStatus}
-                      organizationId={organizationDetails?.id || ""}
-                    />
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+                      <X className="h-3 w-3" />
+                    </Button>
+                  </Badge>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Limit value ($)</Label>
+              <Input
+                value={formatNumericInput(formState.limitValue)}
+                onChange={(event) =>
+                  setFormState((current) => ({
+                    ...current,
+                    limitValue: event.target.value.replace(/[^0-9]/g, ""),
+                  }))
+                }
+                placeholder="1,000"
+                inputMode="numeric"
+              />
+            </div>
+          </DialogBody>
+          <DialogStickyFooter className="mt-0">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setIsDialogOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              disabled={
+                !canSubmit || createLimit.isPending || updateLimit.isPending
+              }
+            >
+              {editingLimit ? "Save changes" : "Create limit"}
+            </Button>
+          </DialogStickyFooter>
+        </DialogForm>
+      </FormDialog>
+
+      <DeleteConfirmDialog
+        open={!!limitToDelete}
+        onOpenChange={(open) => !open && setLimitToDelete(null)}
+        title="Delete limit"
+        description="This action cannot be undone."
+        isPending={deleteLimit.isPending}
+        onConfirm={handleDelete}
+        confirmLabel="Delete"
+        pendingLabel="Deleting..."
+      />
     </div>
   );
+}
+
+function getLimitModels(limit: LimitData): string[] {
+  return Array.isArray(limit.model)
+    ? limit.model.filter((model): model is string => typeof model === "string")
+    : [];
 }

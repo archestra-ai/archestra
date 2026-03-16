@@ -26,12 +26,12 @@ import {
 } from "@/models";
 import {
   ApiError,
+  AppearanceSettingsSchema,
   CompleteOnboardingSchema,
   constructResponseSchema,
-  PublicAppearanceSchema,
   SelectOrganizationSchema,
   UpdateAgentSettingsSchema,
-  UpdateAppearanceSchema,
+  UpdateAppearanceSettingsSchema,
   UpdateKnowledgeSettingsSchema,
   UpdateLlmSettingsSchema,
   UpdateSecuritySettingsSchema,
@@ -60,13 +60,13 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.patch(
-    "/api/organization/appearance",
+    "/api/organization/appearance-settings",
     {
       schema: {
-        operationId: RouteId.UpdateAppearance,
-        description: "Update appearance settings (theme, logo, fonts)",
+        operationId: RouteId.UpdateAppearanceSettings,
+        description: "Update appearance settings",
         tags: ["Organization"],
-        body: UpdateAppearanceSchema,
+        body: UpdateAppearanceSettingsSchema,
         response: constructResponseSchema(SelectOrganizationSchema),
       },
     },
@@ -405,6 +405,10 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
             pendingSignupMembers: z.array(
               z.object({
                 userId: z.string(),
+                name: z.string().nullable(),
+                email: z.string(),
+                image: z.string().nullable(),
+                role: z.string(),
                 provider: z.string().nullable(),
                 invitationId: z.string().nullable(),
               }),
@@ -471,14 +475,33 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Get emails for pending users
       const pendingUsers = await db
-        .select({ id: schema.usersTable.id, email: schema.usersTable.email })
-        .from(schema.usersTable)
-        .where(inArray(schema.usersTable.id, pendingUserIds));
+        .select({
+          id: schema.usersTable.id,
+          email: schema.usersTable.email,
+          name: schema.usersTable.name,
+          image: schema.usersTable.image,
+          role: schema.membersTable.role,
+        })
+        .from(schema.membersTable)
+        .innerJoin(
+          schema.usersTable,
+          eq(schema.membersTable.userId, schema.usersTable.id),
+        )
+        .where(
+          and(
+            eq(schema.membersTable.organizationId, organizationId),
+            inArray(schema.usersTable.id, pendingUserIds),
+          ),
+        );
 
       const pendingSignupMembers = pendingUsers.map((u) => {
         const inv = emailToInvitation.get(u.email);
         return {
           userId: u.id,
+          name: u.name,
+          email: u.email,
+          image: u.image,
+          role: u.role,
           provider: inv?.provider ?? null,
           invitationId: inv?.invitationId ?? null,
         };
@@ -583,18 +606,50 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.get(
-    "/api/organization/appearance",
+    "/api/organization/members/:idOrEmail",
     {
       schema: {
-        operationId: RouteId.GetPublicAppearance,
+        operationId: RouteId.GetOrganizationMember,
         description:
-          "Get public appearance settings (theme, logo, font) for unauthenticated pages",
+          "Get a member of the organization by user ID or email address",
         tags: ["Organization"],
-        response: constructResponseSchema(PublicAppearanceSchema),
+        params: z.object({
+          idOrEmail: z.string().min(1).describe("User ID or email address"),
+        }),
+        response: constructResponseSchema(
+          z.object({
+            id: z.string(),
+            name: z.string(),
+            email: z.string(),
+            role: z.string(),
+          }),
+        ),
+      },
+    },
+    async ({ organizationId, params: { idOrEmail } }, reply) => {
+      const member = await MemberModel.findByIdOrEmail(
+        idOrEmail,
+        organizationId,
+      );
+      if (!member) {
+        throw new ApiError(404, "Member not found");
+      }
+      return reply.send(member);
+    },
+  );
+
+  fastify.get(
+    "/api/organization/appearance-settings",
+    {
+      schema: {
+        operationId: RouteId.GetAppearanceSettings,
+        description: "Get organization appearance settings",
+        tags: ["Organization"],
+        response: constructResponseSchema(AppearanceSettingsSchema),
       },
     },
     async (_request, reply) => {
-      return reply.send(await OrganizationModel.getPublicAppearance());
+      return reply.send(await OrganizationModel.getAppearanceSettings());
     },
   );
 };

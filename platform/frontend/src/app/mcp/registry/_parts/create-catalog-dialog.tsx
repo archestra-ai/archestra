@@ -3,15 +3,9 @@
 import type { archestraApiTypes } from "@shared";
 import { ArrowLeft, Search } from "lucide-react";
 import { useState } from "react";
+import { FormDialog } from "@/components/form-dialog";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogStickyFooter,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { DialogBody, DialogStickyFooter } from "@/components/ui/dialog";
 import {
   useCreateInternalMcpCatalogItem,
   useInternalMcpCatalog,
@@ -65,7 +59,7 @@ export function CreateCatalogDialog({
   };
 
   const footer = (
-    <DialogStickyFooter>
+    <DialogStickyFooter className="mt-0">
       <Button variant="outline" onClick={handleClose} type="button">
         Cancel
       </Button>
@@ -88,45 +82,50 @@ export function CreateCatalogDialog({
   );
 
   return (
-    <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="max-w-5xl h-[90vh] overflow-y-auto overflow-x-hidden">
-        <DialogHeader>
-          <DialogTitle>Add MCP Server to the Private Registry</DialogTitle>
-          <DialogDescription>
-            {step === "form"
-              ? "Once you add an MCP server here, it will be available for installation."
-              : "Select a server from the online catalog to pre-fill the form."}
-          </DialogDescription>
-        </DialogHeader>
+    <FormDialog
+      open={isOpen}
+      onOpenChange={(open) => {
+        if (!open) handleClose();
+      }}
+      title={
+        step === "catalog-browse" ? (
+          <button
+            type="button"
+            onClick={() => setStep("form")}
+            className="inline-flex items-center gap-2 text-left"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            <span>Add MCP Server to the Private Registry</span>
+          </button>
+        ) : (
+          "Add MCP Server to the Private Registry"
+        )
+      }
+      description={
+        step === "form"
+          ? "Once you add an MCP server here, it will be available for installation."
+          : "Select a server from the online catalog to pre-fill the form."
+      }
+      size="large"
+    >
+      {step === "form" && (
+        <McpCatalogForm
+          mode="create"
+          onSubmit={onSubmit}
+          footer={footer}
+          catalogButton={catalogButton}
+          formValues={prefilledValues}
+        />
+      )}
 
-        {step === "form" && (
-          <McpCatalogForm
-            mode="create"
-            onSubmit={onSubmit}
-            footer={footer}
-            catalogButton={catalogButton}
-            formValues={prefilledValues}
+      {step === "catalog-browse" && (
+        <DialogBody className="pt-3">
+          <ArchestraCatalogTab
+            catalogItems={catalogItems}
+            onSelectServer={handleSelectFromCatalog}
           />
-        )}
-
-        {step === "catalog-browse" && (
-          <div className="flex flex-col">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setStep("form")}
-              className="self-start mb-2"
-            >
-              <ArrowLeft className="h-4 w-4 mr-1" />
-              Back to form
-            </Button>
-            <ArchestraCatalogTab
-              catalogItems={catalogItems}
-              onSelectServer={handleSelectFromCatalog}
-            />
-          </div>
-        )}
-      </DialogContent>
-    </Dialog>
+        </DialogBody>
+      )}
+    </FormDialog>
   );
 }

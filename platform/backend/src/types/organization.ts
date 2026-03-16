@@ -6,6 +6,7 @@ import { schema } from "@/database";
 const DATA_URI_PREFIX = "data:image/png;base64,";
 const MAX_LOGO_SIZE_BYTES = 2 * 1024 * 1024; // 2 MB decoded
 const PNG_MAGIC_BYTES = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+const MAX_HELP_CENTER_URL_LENGTH = 2000;
 
 /**
  * Validates a Base64-encoded PNG data URI.
@@ -62,11 +63,18 @@ const Base64PngSchema = z
     }
   });
 
+const HelpCenterUrlSchema = z
+  .string()
+  .max(MAX_HELP_CENTER_URL_LENGTH)
+  .refine((value) => isValidHttpUrl(value), {
+    message: "Help Center URL must be a valid HTTP or HTTPS URL",
+  });
+
 /**
- * Public appearance schema - used for unauthenticated access to branding settings.
+ * Appearance settings schema - used for unauthenticated access to branding settings.
  * Only exposes theme, logo, and font - no sensitive organization data.
  */
-export const PublicAppearanceSchema = z.object({
+export const AppearanceSettingsSchema = z.object({
   theme: OrganizationThemeSchema,
   customFont: OrganizationCustomFontSchema,
   logo: z.string().nullable(),
@@ -76,6 +84,9 @@ export const PublicAppearanceSchema = z.object({
   appName: z.string().nullable(),
   ogDescription: z.string().nullable(),
   footerText: z.string().nullable(),
+  helpCenterUrl: z.string().nullable(),
+  helpCenterLabel: z.string().nullable(),
+  animateChatPlaceholders: z.boolean(),
 });
 
 export const OrganizationLimitCleanupIntervalSchema = z
@@ -105,7 +116,10 @@ const extendedFields = {
   appName: z.string().nullable(),
   ogDescription: z.string().nullable(),
   footerText: z.string().nullable(),
+  helpCenterUrl: z.string().nullable(),
+  helpCenterLabel: z.string().nullable(),
   chatPlaceholders: z.array(z.string()).nullable(),
+  animateChatPlaceholders: z.boolean(),
   showTwoFactor: z.boolean(),
 };
 
@@ -117,7 +131,7 @@ export const InsertOrganizationSchema = createInsertSchema(
   schema.organizationsTable,
   extendedFields,
 );
-export const UpdateAppearanceSchema = z.object({
+export const UpdateAppearanceSettingsSchema = z.object({
   theme: OrganizationThemeSchema.optional(),
   customFont: OrganizationCustomFontSchema.optional(),
   logo: Base64PngSchema.optional(),
@@ -127,7 +141,10 @@ export const UpdateAppearanceSchema = z.object({
   appName: z.string().max(100).nullable().optional(),
   ogDescription: z.string().max(500).nullable().optional(),
   footerText: z.string().max(500).nullable().optional(),
+  helpCenterUrl: HelpCenterUrlSchema.nullable().optional(),
+  helpCenterLabel: z.string().max(80).nullable().optional(),
   chatPlaceholders: z.array(z.string().max(80)).max(20).nullable().optional(),
+  animateChatPlaceholders: z.boolean().optional(),
   showTwoFactor: z.boolean().optional(),
 });
 
@@ -170,4 +187,13 @@ export type OrganizationCompressionScope = z.infer<
 export type GlobalToolPolicy = z.infer<typeof GlobalToolPolicySchema>;
 export type Organization = z.infer<typeof SelectOrganizationSchema>;
 export type InsertOrganization = z.infer<typeof InsertOrganizationSchema>;
-export type PublicAppearance = z.infer<typeof PublicAppearanceSchema>;
+export type AppearanceSettings = z.infer<typeof AppearanceSettingsSchema>;
+
+function isValidHttpUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
+}

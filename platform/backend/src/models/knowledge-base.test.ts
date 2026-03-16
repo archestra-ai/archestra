@@ -187,6 +187,36 @@ describe("KnowledgeBaseModel", () => {
 
       expect(results).toEqual([]);
     });
+
+    test("filters by search across name and description", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+      await KnowledgeBaseModel.create({
+        organizationId: org.id,
+        name: "Product Docs",
+        description: "Release notes and architecture decisions",
+      });
+      await KnowledgeBaseModel.create({
+        organizationId: org.id,
+        name: "Support KB",
+        description: "Troubleshooting playbooks",
+      });
+
+      const nameResults = await KnowledgeBaseModel.findByOrganization({
+        organizationId: org.id,
+        search: "product",
+      });
+      const descriptionResults = await KnowledgeBaseModel.findByOrganization({
+        organizationId: org.id,
+        search: "playbooks",
+      });
+
+      expect(nameResults).toHaveLength(1);
+      expect(nameResults[0]?.name).toBe("Product Docs");
+      expect(descriptionResults).toHaveLength(1);
+      expect(descriptionResults[0]?.name).toBe("Support KB");
+    });
   });
 
   describe("update", () => {
@@ -272,7 +302,9 @@ describe("KnowledgeBaseModel", () => {
       await makeKnowledgeBase(org.id);
       await makeKnowledgeBase(org.id);
 
-      const count = await KnowledgeBaseModel.countByOrganization(org.id);
+      const count = await KnowledgeBaseModel.countByOrganization({
+        organizationId: org.id,
+      });
       expect(count).toBe(3);
     });
 
@@ -281,7 +313,9 @@ describe("KnowledgeBaseModel", () => {
     }) => {
       const org = await makeOrganization();
 
-      const count = await KnowledgeBaseModel.countByOrganization(org.id);
+      const count = await KnowledgeBaseModel.countByOrganization({
+        organizationId: org.id,
+      });
       expect(count).toBe(0);
     });
 
@@ -295,8 +329,43 @@ describe("KnowledgeBaseModel", () => {
       await makeKnowledgeBase(org1.id);
       await makeKnowledgeBase(org2.id);
 
-      const count = await KnowledgeBaseModel.countByOrganization(org1.id);
+      const count = await KnowledgeBaseModel.countByOrganization({
+        organizationId: org1.id,
+      });
       expect(count).toBe(2);
+    });
+
+    test("supports search filtering by name and description", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+      await KnowledgeBaseModel.create({
+        organizationId: org.id,
+        name: "Engineering Handbook",
+        description: "Internal runbooks",
+      });
+      await KnowledgeBaseModel.create({
+        organizationId: org.id,
+        name: "Sales Playbook",
+        description: "Customer objection handling",
+      });
+      await KnowledgeBaseModel.create({
+        organizationId: org.id,
+        name: "Unrelated",
+        description: "Nothing to see here",
+      });
+
+      const nameCount = await KnowledgeBaseModel.countByOrganization({
+        organizationId: org.id,
+        search: "sales",
+      });
+      const descriptionCount = await KnowledgeBaseModel.countByOrganization({
+        organizationId: org.id,
+        search: "runbooks",
+      });
+
+      expect(nameCount).toBe(1);
+      expect(descriptionCount).toBe(1);
     });
   });
 });

@@ -5,6 +5,7 @@ import { ApiError } from "@/types";
 
 // Create a hoisted mock function that defaults to returning true (healthy)
 const mockIsDatabaseHealthy = vi.hoisted(() => vi.fn().mockResolvedValue(true));
+const mockSentryCaptureException = vi.hoisted(() => vi.fn());
 
 // Mock the database module before any imports that depend on it
 vi.mock("@/database", async (importOriginal) => {
@@ -12,6 +13,14 @@ vi.mock("@/database", async (importOriginal) => {
   return {
     ...actual,
     isDatabaseHealthy: mockIsDatabaseHealthy,
+  };
+});
+
+vi.mock("@sentry/node", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@sentry/node")>();
+  return {
+    ...actual,
+    captureException: mockSentryCaptureException,
   };
 });
 
@@ -216,6 +225,133 @@ describe("createFastifyInstance", () => {
           type: "api_internal_server_error",
         },
       });
+    });
+
+    test("handles response serialization errors when response doesn't match schema", async () => {
+      const app = createFastifyInstance();
+
+      app.get(
+        "/test-serialization-error",
+        {
+          schema: {
+            response: {
+              200: z.object({
+                name: z.string(),
+                count: z.number(),
+              }),
+            },
+          },
+        },
+        async () => {
+          // Return data that doesn't match the response schema (wrong type for "count")
+          return { name: "test", count: "not-a-number" };
+        },
+      );
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/test-serialization-error",
+      });
+
+      expect(response.statusCode).toBe(500);
+      expect(response.json()).toEqual({
+        error: {
+          message: "Response doesn't match the schema",
+          type: "api_internal_server_error",
+        },
+      });
+    });
+
+    test("captures response serialization errors in Sentry with validation details", async () => {
+      mockSentryCaptureException.mockClear();
+      const app = createFastifyInstance();
+
+      app.get(
+        "/test-serialization-sentry",
+        {
+          schema: {
+            response: {
+              200: z.object({
+                id: z.string(),
+                active: z.boolean(),
+              }),
+            },
+          },
+        },
+        async () => {
+          // Return wrong type for "active" to trigger serialization error
+          return { id: "123", active: "yes" };
+        },
+      );
+
+      await app.inject({
+        method: "GET",
+        url: "/test-serialization-sentry",
+      });
+
+      // Verify Sentry.captureException was called with the error and validation details
+      expect(mockSentryCaptureException).toHaveBeenCalledTimes(1);
+
+      const [capturedError, capturedContext] =
+        mockSentryCaptureException.mock.calls[0];
+      expect(capturedError).toBeDefined();
+      expect(capturedContext.extra).toBeDefined();
+      expect(capturedContext.extra.method).toBe("GET");
+      expect(capturedContext.extra.url).toContain("/test-serialization-sentry");
+      expect(capturedContext.extra.validationErrors).toBeInstanceOf(Array);
+      expect(capturedContext.extra.validationErrors.length).toBeGreaterThan(0);
+      expect(capturedContext.tags).toEqual({
+        error_type: "response_serialization",
+      });
+
+      // Verify the validation error has useful details
+      const firstError = capturedContext.extra.validationErrors[0];
+      expect(firstError).toHaveProperty("path");
+      expect(firstError).toHaveProperty("code");
+      expect(firstError).toHaveProperty("message");
+    });
+
+    test("logs response serialization errors with validation details in message", async () => {
+      const app = createFastifyInstance();
+      const loggerErrorSpy = vi.spyOn(app.log, "error");
+
+      app.get(
+        "/test-serialization-logging",
+        {
+          schema: {
+            response: {
+              200: z.object({
+                value: z.number(),
+              }),
+            },
+          },
+        },
+        async () => {
+          return { value: "not-a-number" };
+        },
+      );
+
+      await app.inject({
+        method: "GET",
+        url: "/test-serialization-logging",
+      });
+
+      // Verify the log message includes the URL and validation error details
+      expect(loggerErrorSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          statusCode: 500,
+          method: "GET",
+          validationErrors: expect.arrayContaining([
+            expect.objectContaining({
+              code: expect.any(String),
+              message: expect.any(String),
+            }),
+          ]),
+        }),
+        expect.stringContaining("/test-serialization-logging"),
+      );
+
+      loggerErrorSpy.mockRestore();
     });
 
     test("handles validation errors from Zod", async () => {

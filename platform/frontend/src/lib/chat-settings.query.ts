@@ -15,6 +15,18 @@ export type ChatApiKeyScope =
 export type ChatApiKey =
   archestraApiTypes.GetChatApiKeysResponses["200"][number];
 
+type ChatApiKeysQuery = NonNullable<
+  archestraApiTypes.GetChatApiKeysData["query"]
+>;
+type AvailableChatApiKeysQuery = NonNullable<
+  archestraApiTypes.GetAvailableChatApiKeysData["query"]
+>;
+type AllVirtualApiKeysQuery = NonNullable<
+  archestraApiTypes.GetAllVirtualApiKeysData["query"]
+>;
+type ChatApiKeysQueryParams = Partial<ChatApiKeysQuery> & { enabled?: boolean };
+type AvailableChatApiKeysParams = Partial<AvailableChatApiKeysQuery>;
+
 const {
   getChatApiKeys,
   getAvailableChatApiKeys,
@@ -28,11 +40,18 @@ const {
   deleteVirtualApiKey,
 } = archestraApiSdk;
 
-export function useChatApiKeys(params?: { enabled?: boolean }) {
+export function useChatApiKeys(params?: ChatApiKeysQueryParams) {
+  const search = params?.search;
+  const provider = params?.provider;
   return useQuery({
-    queryKey: ["chat-api-keys"],
+    queryKey: ["chat-api-keys", search, provider],
     queryFn: async () => {
-      const { data, error } = await getChatApiKeys();
+      const { data, error } = await getChatApiKeys({
+        query: {
+          search: search || undefined,
+          provider: provider || undefined,
+        },
+      });
       if (error) {
         handleApiError(error);
         return [];
@@ -43,16 +62,13 @@ export function useChatApiKeys(params?: { enabled?: boolean }) {
   });
 }
 
-export function useAvailableChatApiKeys(params?: {
-  provider?: SupportedProvider;
-  includeKeyId?: string | null;
-}) {
+export function useAvailableChatApiKeys(params?: AvailableChatApiKeysParams) {
   const provider = params?.provider;
   const includeKeyId = params?.includeKeyId;
   return useQuery({
     queryKey: ["available-chat-api-keys", provider, includeKeyId],
     queryFn: async () => {
-      const query: { provider?: SupportedProvider; includeKeyId?: string } = {};
+      const query: Partial<AvailableChatApiKeysQuery> = {};
       if (provider) query.provider = provider;
       if (includeKeyId) query.includeKeyId = includeKeyId;
       const { data, error } = await getAvailableChatApiKeys({
@@ -227,17 +243,21 @@ export function useDeleteVirtualApiKey() {
   });
 }
 
-export function useAllVirtualApiKeys(params?: {
-  limit?: number;
-  offset?: number;
-}) {
+export function useAllVirtualApiKeys(params?: Partial<AllVirtualApiKeysQuery>) {
   const limit = params?.limit ?? 20;
   const offset = params?.offset ?? 0;
+  const search = params?.search;
+  const chatApiKeyId = params?.chatApiKeyId;
   return useQuery({
-    queryKey: ["all-virtual-api-keys", limit, offset],
+    queryKey: ["all-virtual-api-keys", limit, offset, search, chatApiKeyId],
     queryFn: async () => {
       const { data, error } = await getAllVirtualApiKeys({
-        query: { limit, offset },
+        query: {
+          limit,
+          offset,
+          search: search || undefined,
+          chatApiKeyId: chatApiKeyId || undefined,
+        },
       });
       if (error) {
         handleApiError(error);

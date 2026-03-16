@@ -1,45 +1,34 @@
 "use client";
 
 import {
+  type AgentType,
   archestraApiSdk,
   type archestraApiTypes,
-  DocsPage,
   E2eTestId,
-  getDocsUrl,
 } from "@shared";
 import { useQuery } from "@tanstack/react-query";
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
 import { ChevronDown, ChevronUp, Globe, Plus, User, Users } from "lucide-react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { A2AConnectionInstructions } from "@/components/a2a-connection-instructions";
-import { AgentBadge } from "@/components/agent-badge";
 import { AgentDialog } from "@/components/agent-dialog";
 import { AgentIcon } from "@/components/agent-icon";
+import { AgentNameCell } from "@/components/agent-name-cell";
 import {
   ActiveFilterBadges,
   AgentScopeFilter,
 } from "@/components/agent-scope-filter";
-import { PromptVersionHistoryDialog } from "@/components/chat/prompt-version-history-dialog";
 import { ConnectDialog } from "@/components/connect-dialog";
-import { LabelTags } from "@/components/label-tags";
+import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
 import { SearchInput } from "@/components/search-input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogForm,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { PermissionButton } from "@/components/ui/permission-button";
 import {
   Tooltip,
@@ -55,17 +44,13 @@ import {
 } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
-import {
-  DEFAULT_AGENTS_PAGE_SIZE,
-  DEFAULT_SORT_BY,
-  DEFAULT_SORT_DIRECTION,
-  formatDate,
-} from "@/lib/utils";
+import { useDataTableQueryParams } from "@/lib/use-data-table-query-params";
+import { DEFAULT_SORT_BY, DEFAULT_SORT_DIRECTION } from "@/lib/utils";
 import { AgentActions } from "./agent-actions";
 
 type AgentsInitialData = {
   agents: archestraApiTypes.GetAgentsResponses["200"] | null;
-  teams: archestraApiTypes.GetTeamsResponses["200"];
+  teams: archestraApiTypes.GetTeamsResponses["200"]["data"];
 };
 
 export default function AgentsPage({
@@ -82,7 +67,13 @@ export default function AgentsPage({
   );
 }
 
-function SortIcon({ isSorted }: { isSorted: false | "asc" | "desc" }) {
+function SortIcon({
+  isSorted,
+}: {
+  isSorted:
+    | NonNullable<archestraApiTypes.GetAgentsData["query"]>["sortDirection"]
+    | false;
+}) {
   const upArrow = <ChevronUp className="h-3 w-3" />;
   const downArrow = <ChevronDown className="h-3 w-3" />;
   if (isSorted === "asc") {
@@ -113,6 +104,7 @@ function VisibilityBadge({
   currentUserId: string | undefined;
 }) {
   const MAX_TEAMS_TO_SHOW = 3;
+  const MAX_BADGE_TEXT_LENGTH = 15;
 
   if (scope === "org") {
     return (
@@ -128,9 +120,14 @@ function VisibilityBadge({
       currentUserId && authorId === currentUserId ? "Me" : authorName;
     if (!displayName) return <span className="text-muted-foreground">-</span>;
     return (
-      <Badge variant="secondary" className="text-xs gap-1">
-        <User className="h-3 w-3" />
-        {displayName}
+      <Badge
+        variant="secondary"
+        className="inline-flex max-w-[180px] items-center gap-1 overflow-hidden text-xs"
+      >
+        <User className="h-3 w-3 shrink-0" />
+        <span className="min-w-0 flex-1 truncate">
+          {truncateBadgeText(displayName, MAX_BADGE_TEXT_LENGTH)}
+        </span>
       </Badge>
     );
   }
@@ -146,11 +143,17 @@ function VisibilityBadge({
   const remainingTeams = teams.slice(MAX_TEAMS_TO_SHOW);
 
   return (
-    <div className="flex items-center gap-1 flex-wrap">
+    <div className="flex min-w-0 flex-wrap items-center gap-1">
       {visibleTeams.map((team) => (
-        <Badge key={team.id} variant="secondary" className="text-xs gap-1">
-          <Users className="h-3 w-3" />
-          {team.name}
+        <Badge
+          key={team.id}
+          variant="secondary"
+          className="inline-flex max-w-[180px] items-center gap-1 overflow-hidden text-xs"
+        >
+          <Users className="h-3 w-3 shrink-0" />
+          <span className="min-w-0 flex-1 truncate">
+            {truncateBadgeText(team.name, MAX_BADGE_TEXT_LENGTH)}
+          </span>
         </Badge>
       ))}
       {remainingTeams.length > 0 && (
@@ -175,16 +178,28 @@ function VisibilityBadge({
       )}
     </div>
   );
+  function truncateBadgeText(text: string, maxLength: number) {
+    if (text.length <= maxLength) {
+      return text;
+    }
+
+    return `${text.slice(0, maxLength)}...`;
+  }
 }
 
 function Agents({ initialData }: { initialData?: AgentsInitialData }) {
-  const searchParams = useSearchParams();
+  const {
+    searchParams,
+    pathname,
+    pageIndex,
+    pageSize,
+    offset,
+    updateQueryParams,
+    setPagination,
+  } = useDataTableQueryParams();
   const router = useRouter();
-  const pathname = usePathname();
 
   // Get pagination/filter params from URL
-  const pageFromUrl = searchParams.get("page");
-  const pageSizeFromUrl = searchParams.get("pageSize");
   const nameFilter = searchParams.get("name") || "";
   const sortByFromUrl = searchParams.get("sortBy") as
     | "name"
@@ -207,10 +222,6 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
   const authorIdsFromUrl = searchParams.get("authorIds");
   const excludeAuthorIdsFromUrl = searchParams.get("excludeAuthorIds");
   const labelsFromUrl = searchParams.get("labels");
-
-  const pageIndex = Number(pageFromUrl || "1") - 1;
-  const pageSize = Number(pageSizeFromUrl || DEFAULT_AGENTS_PAGE_SIZE);
-  const offset = pageIndex * pageSize;
 
   // Default sorting
   const sortBy = sortByFromUrl || DEFAULT_SORT_BY;
@@ -237,8 +248,10 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
   const { data: userTeams } = useQuery({
     queryKey: ["teams"],
     queryFn: async () => {
-      const { data } = await archestraApiSdk.getTeams();
-      return data || [];
+      const { data } = await archestraApiSdk.getTeams({
+        query: { limit: 100, offset: 0 },
+      });
+      return data?.data || [];
     },
     initialData: initialData?.teams,
   });
@@ -268,12 +281,10 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
   const [connectingAgent, setConnectingAgent] = useState<{
     id: string;
     name: string;
-    agentType: "profile" | "mcp_gateway" | "llm_proxy" | "agent";
+    agentType: AgentType;
   } | null>(null);
   const [editingAgent, setEditingAgent] = useState<AgentData | null>(null);
   const [deletingAgentId, setDeletingAgentId] = useState<string | null>(null);
-  const [versionHistoryAgent, setVersionHistoryAgent] =
-    useState<AgentData | null>(null);
 
   // Handle 'create' URL parameter to open the Create Agent dialog
   useEffect(() => {
@@ -312,34 +323,47 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
         typeof updater === "function" ? updater(sorting) : updater;
       setSorting(newSorting);
 
-      const params = new URLSearchParams(searchParams.toString());
       if (newSorting.length > 0) {
-        params.set("sortBy", newSorting[0].id);
-        params.set("sortDirection", newSorting[0].desc ? "desc" : "asc");
+        updateQueryParams({
+          page: "1",
+          sortBy: newSorting[0].id,
+          sortDirection: newSorting[0].desc ? "desc" : "asc",
+        });
       } else {
-        params.delete("sortBy");
-        params.delete("sortDirection");
+        updateQueryParams({
+          page: "1",
+          sortBy: null,
+          sortDirection: null,
+        });
       }
-      params.set("page", "1"); // Reset to first page when sorting changes
-      router.push(`${pathname}?${params.toString()}`, { scroll: false });
     },
-    [sorting, searchParams, router, pathname],
+    [sorting, updateQueryParams],
   );
 
   // Update URL when pagination changes
   const handlePaginationChange = useCallback(
     (newPagination: { pageIndex: number; pageSize: number }) => {
-      const params = new URLSearchParams(searchParams.toString());
-      params.set("page", String(newPagination.pageIndex + 1));
-      params.set("pageSize", String(newPagination.pageSize));
-      router.push(`${pathname}?${params.toString()}`, { scroll: false });
+      setPagination(newPagination);
     },
-    [searchParams, router, pathname],
+    [setPagination],
   );
 
   const agents = agentsResponse?.data || [];
   const pagination = agentsResponse?.pagination;
   const showLoading = isPending && !initialData?.agents;
+  const hasActiveFilters = !!(nameFilter || scopeFromUrl || labelsFromUrl);
+
+  const clearFilters = useCallback(() => {
+    updateQueryParams({
+      page: "1",
+      name: null,
+      scope: null,
+      teamIds: null,
+      authorIds: null,
+      excludeAuthorIds: null,
+      labels: null,
+    });
+  }, [updateQueryParams]);
 
   const columns: ColumnDef<AgentData>[] = [
     {
@@ -356,7 +380,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     {
       id: "name",
       accessorKey: "name",
-      size: 300,
+      size: 240,
       header: ({ column }) => (
         <Button
           variant="ghost"
@@ -369,48 +393,20 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
       ),
       cell: ({ row }) => {
         const agent = row.original;
-        const scope = agent.scope;
         return (
-          <div className="font-medium">
-            <div className="flex items-start gap-2">
-              <span className="break-words min-w-0">{agent.name}</span>
-              <AgentBadge type={agent.builtIn ? "builtIn" : scope} />
-              {agent.labels && agent.labels.length > 0 && (
-                <LabelTags labels={agent.labels} />
-              )}
-            </div>
-            {agent.description && (
-              <div className="text-[11px] text-muted-foreground truncate">
-                {agent.description}
-              </div>
-            )}
-          </div>
+          <AgentNameCell
+            name={agent.name}
+            scope={agent.scope}
+            builtIn={agent.builtIn ?? undefined}
+            description={agent.description}
+            labels={agent.labels}
+          />
         );
       },
     },
     {
-      id: "createdAt",
-      accessorKey: "createdAt",
-      header: ({ column }) => (
-        <Button
-          variant="ghost"
-          className="h-auto !p-0 font-medium hover:bg-transparent"
-          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-        >
-          Created
-          <SortIcon isSorted={column.getIsSorted()} />
-        </Button>
-      ),
-      cell: ({ row }) => (
-        <div className="font-mono text-xs">
-          {formatDate({ date: row.original.createdAt })}
-        </div>
-      ),
-    },
-    {
       id: "toolsCount",
       accessorKey: "toolsCount",
-      size: 80,
       header: ({ column }) => (
         <Button
           variant="ghost"
@@ -429,9 +425,27 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
       },
     },
     {
+      id: "knowledgeSourcesCount",
+      header: ({ column }) => (
+        <Button
+          variant="ghost"
+          className="h-auto !p-0 font-medium hover:bg-transparent"
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+        >
+          Knowledge Sources
+          <SortIcon isSorted={column.getIsSorted()} />
+        </Button>
+      ),
+      cell: ({ row }) => {
+        const count =
+          (row.original.knowledgeBaseIds?.length ?? 0) +
+          (row.original.connectorIds?.length ?? 0);
+        return <div>{count}</div>;
+      },
+    },
+    {
       id: "subagentsCount",
       accessorKey: "subagentsCount",
-      size: 80,
       header: ({ column }) => (
         <Button
           variant="ghost"
@@ -457,24 +471,10 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
             enableSorting: false,
             cell: ({ row }: { row: { original: AgentData } }) => (
               <VisibilityBadge
-                scope={
-                  (row.original as unknown as Record<string, unknown>)
-                    .scope as string
-                }
-                teams={
-                  row.original.teams as unknown as Array<{
-                    id: string;
-                    name: string;
-                  }>
-                }
-                authorId={
-                  (row.original as unknown as Record<string, unknown>)
-                    .authorId as string | null
-                }
-                authorName={
-                  (row.original as unknown as Record<string, unknown>)
-                    .authorName as string | null
-                }
+                scope={row.original.scope}
+                teams={row.original.teams}
+                authorId={row.original.authorId}
+                authorName={row.original.authorName}
                 currentUserId={currentUserId}
               />
             ),
@@ -484,18 +484,12 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     {
       id: "actions",
       header: "Actions",
-      size: 200,
       enableHiding: false,
       cell: ({ row }) => {
         const agent = row.original;
-        const scope = (agent as unknown as Record<string, unknown>).scope as
-          | string
-          | undefined;
-        const authorId = (agent as unknown as Record<string, unknown>)
-          .authorId as string | null | undefined;
-        const agentTeams = (
-          agent as unknown as { teams?: Array<{ id: string }> }
-        ).teams;
+        const scope = agent.scope;
+        const authorId = agent.authorId;
+        const agentTeams = agent.teams;
         const isPersonal = scope === "personal";
         const isTeamScoped = scope === "team";
         const isOwner = !!currentUserId && authorId === currentUserId;
@@ -530,16 +524,8 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
         title="Agents"
         description={
           <p className="text-sm text-muted-foreground">
-            Agents are internal AI assistants with system prompts, tools, and
-            integrations like ChatOps, email, and A2A.{" "}
-            <a
-              href={getDocsUrl(DocsPage.PlatformAgents)}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="underline hover:text-foreground"
-            >
-              Read more in the docs
-            </a>
+            Agents are AI assistants with system prompts, tools, knowledge
+            sources, and integrations like ChatOps, email, and A2A.
           </p>
         }
         actionButton={
@@ -558,39 +544,35 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
             <div className="mb-6 flex flex-col gap-2">
               <div className="flex items-center gap-4">
                 <SearchInput
-                  placeholder="Search agents by name..."
+                  objectNamePlural="agents"
+                  searchFields={["name"]}
                   paramName="name"
-                  className="relative max-w-md flex-1"
                 />
                 <AgentScopeFilter showBuiltIn />
               </div>
               <ActiveFilterBadges />
             </div>
 
-            {!agents || agents.length === 0 ? (
-              <div className="text-muted-foreground">
-                {nameFilter || scopeFromUrl || labelsFromUrl
-                  ? "No agents found matching your filters"
-                  : "No agents found"}
-              </div>
-            ) : (
-              <div data-testid={E2eTestId.AgentsTable}>
-                <DataTable
-                  columns={columns}
-                  data={agents}
-                  sorting={sorting}
-                  onSortingChange={handleSortingChange}
-                  manualSorting={true}
-                  manualPagination={true}
-                  pagination={{
-                    pageIndex,
-                    pageSize,
-                    total: pagination?.total || 0,
-                  }}
-                  onPaginationChange={handlePaginationChange}
-                />
-              </div>
-            )}
+            <div data-testid={E2eTestId.AgentsTable}>
+              <DataTable
+                columns={columns}
+                data={agents}
+                sorting={sorting}
+                onSortingChange={handleSortingChange}
+                manualSorting={true}
+                manualPagination={true}
+                pagination={{
+                  pageIndex,
+                  pageSize,
+                  total: pagination?.total ?? 0,
+                }}
+                onPaginationChange={handlePaginationChange}
+                emptyMessage="No agents found"
+                hasActiveFilters={hasActiveFilters}
+                filteredEmptyMessage="No agents match your filters. Try adjusting your search."
+                onClearFilters={clearFilters}
+              />
+            </div>
 
             <AgentDialog
               open={isCreateDialogOpen}
@@ -599,7 +581,6 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
               onCreated={() => {
                 setIsCreateDialogOpen(false);
               }}
-              onViewVersionHistory={setVersionHistoryAgent}
             />
 
             {connectingAgent && (
@@ -615,17 +596,6 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
               onOpenChange={(open) => !open && setEditingAgent(null)}
               agent={editingAgent}
               agentType="agent"
-              onViewVersionHistory={setVersionHistoryAgent}
-            />
-
-            <PromptVersionHistoryDialog
-              open={!!versionHistoryAgent}
-              onOpenChange={(open) => {
-                if (!open) {
-                  setVersionHistoryAgent(null);
-                }
-              }}
-              agent={versionHistoryAgent}
             />
 
             {deletingAgentId && (
@@ -670,7 +640,7 @@ function ConnectAgentDialog({
   agent: {
     id: string;
     name: string;
-    agentType: "profile" | "mcp_gateway" | "llm_proxy" | "agent";
+    agentType: AgentType;
   };
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -707,34 +677,15 @@ function DeleteAgentDialog({
   }, [agentId, deleteAgent, onOpenChange]);
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>Delete Agent</DialogTitle>
-          <DialogDescription>
-            Are you sure you want to delete this agent? This action cannot be
-            undone.
-          </DialogDescription>
-        </DialogHeader>
-        <DialogForm onSubmit={handleDelete}>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              variant="destructive"
-              disabled={deleteAgent.isPending}
-            >
-              {deleteAgent.isPending ? "Deleting..." : "Delete Agent"}
-            </Button>
-          </DialogFooter>
-        </DialogForm>
-      </DialogContent>
-    </Dialog>
+    <DeleteConfirmDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Delete Agent"
+      description="Are you sure you want to delete this agent? This action cannot be undone."
+      isPending={deleteAgent.isPending}
+      onConfirm={handleDelete}
+      confirmLabel="Delete Agent"
+      pendingLabel="Deleting..."
+    />
   );
 }

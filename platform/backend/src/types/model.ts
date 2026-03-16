@@ -82,6 +82,64 @@ export const ModelCapabilitiesSchema = SelectModelSchema.pick({
 export type ModelCapabilities = z.infer<typeof ModelCapabilitiesSchema>;
 
 /**
+ * Schema for updating model details (pricing + modalities) from the edit dialog.
+ */
+export const PatchModelBodySchema = z
+  .object({
+    customPricePerMillionInput: z.string().nullable().optional(),
+    customPricePerMillionOutput: z.string().nullable().optional(),
+    inputModalities: z
+      .array(ModelInputModalitySchema)
+      .min(1, "At least one input modality is required")
+      .nullable()
+      .optional(),
+    outputModalities: z
+      .array(ModelOutputModalitySchema)
+      .min(1, "At least one output modality is required")
+      .nullable()
+      .optional(),
+  })
+  .refine(
+    (data) => {
+      // If either pricing field is provided, both must be provided
+      const inputProvided = data.customPricePerMillionInput !== undefined;
+      const outputProvided = data.customPricePerMillionOutput !== undefined;
+      if (inputProvided !== outputProvided) return false;
+      // If both provided, both must be null or both non-null
+      if (inputProvided && outputProvided) {
+        const inputSet = data.customPricePerMillionInput !== null;
+        const outputSet = data.customPricePerMillionOutput !== null;
+        if (inputSet !== outputSet) return false;
+      }
+      return true;
+    },
+    {
+      message: "Both custom prices must be set together or both must be null",
+    },
+  )
+  .refine(
+    (data) => {
+      if (
+        data.customPricePerMillionInput != null &&
+        data.customPricePerMillionInput !== undefined
+      ) {
+        const price = parseFloat(data.customPricePerMillionInput);
+        if (Number.isNaN(price) || price < 0) return false;
+      }
+      if (
+        data.customPricePerMillionOutput != null &&
+        data.customPricePerMillionOutput !== undefined
+      ) {
+        const price = parseFloat(data.customPricePerMillionOutput);
+        if (Number.isNaN(price) || price < 0) return false;
+      }
+      return true;
+    },
+    { message: "Prices must be non-negative numbers" },
+  );
+export type PatchModelBody = z.infer<typeof PatchModelBodySchema>;
+
+/**
  * Schema for updating custom model pricing
  */
 export const UpdateModelPricingSchema = z

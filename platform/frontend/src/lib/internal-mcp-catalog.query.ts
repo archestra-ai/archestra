@@ -7,6 +7,8 @@ const {
   deleteInternalMcpCatalogItem,
   getDeploymentYamlPreview,
   getInternalMcpCatalog,
+  getInternalMcpCatalogLabelKeys,
+  getInternalMcpCatalogLabelValues,
   getInternalMcpCatalogTools,
   getK8sImagePullSecrets,
   resetDeploymentYaml,
@@ -14,15 +16,44 @@ const {
   validateDeploymentYaml,
 } = archestraApiSdk;
 
-export function useInternalMcpCatalog(params?: {
+type InternalMcpCatalogParams = {
   initialData?: archestraApiTypes.GetInternalMcpCatalogResponses["200"];
   enabled?: boolean;
-}) {
+};
+type McpCatalogLabelValuesQuery = NonNullable<
+  archestraApiTypes.GetInternalMcpCatalogLabelValuesData["query"]
+>;
+type UpdateInternalMcpCatalogItemParams =
+  archestraApiTypes.UpdateInternalMcpCatalogItemData["path"] & {
+    data: archestraApiTypes.UpdateInternalMcpCatalogItemData["body"];
+  };
+
+export function useInternalMcpCatalog(params?: InternalMcpCatalogParams) {
   return useQuery({
     queryKey: ["mcp-catalog"],
     queryFn: async () => (await getInternalMcpCatalog()).data ?? [],
     initialData: params?.initialData,
     enabled: params?.enabled,
+  });
+}
+
+export function useMcpCatalogLabelKeys() {
+  return useQuery({
+    queryKey: ["mcp-catalog", "labels", "keys"],
+    queryFn: async () => (await getInternalMcpCatalogLabelKeys()).data ?? [],
+  });
+}
+
+export function useMcpCatalogLabelValues(
+  params?: Partial<McpCatalogLabelValuesQuery>,
+) {
+  const { key } = params || {};
+  return useQuery({
+    queryKey: ["mcp-catalog", "labels", "values", key],
+    queryFn: async () =>
+      (await getInternalMcpCatalogLabelValues({ query: key ? { key } : {} }))
+        .data ?? [],
+    enabled: !!key,
   });
 }
 
@@ -49,13 +80,7 @@ export function useCreateInternalMcpCatalogItem() {
 export function useUpdateInternalMcpCatalogItem() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({
-      id,
-      data,
-    }: {
-      id: string;
-      data: archestraApiTypes.UpdateInternalMcpCatalogItemData["body"];
-    }) => {
+    mutationFn: async ({ id, data }: UpdateInternalMcpCatalogItemParams) => {
       const response = await updateInternalMcpCatalogItem({
         path: { id },
         body: data,
@@ -152,7 +177,9 @@ export function useGetDeploymentYamlPreview(catalogId: string | null) {
  */
 export function useValidateDeploymentYaml() {
   return useMutation({
-    mutationFn: async (params: { yaml: string }) => {
+    mutationFn: async (
+      params: NonNullable<archestraApiTypes.ValidateDeploymentYamlData["body"]>,
+    ) => {
       const response = await validateDeploymentYaml({ body: params });
       return response.data;
     },

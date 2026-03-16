@@ -2,18 +2,12 @@
 
 import { type AnyRoleName, E2eTestId, MEMBER_ROLE_NAME } from "@shared";
 import { QueryErrorResetBoundary } from "@tanstack/react-query";
-import { Check, Copy, Link as LinkIcon, Loader2 } from "lucide-react";
+import { Check, Copy, Loader2 } from "lucide-react";
 import { useCallback, useState } from "react";
 import { ErrorBoundary } from "react-error-boundary";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { DialogForm, DialogStickyFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PermissionButton } from "@/components/ui/permission-button";
@@ -74,18 +68,8 @@ function InviteByLinkCardContent({
   }, []);
 
   return (
-    <Card className="w-full">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <LinkIcon className="h-5 w-5" />
-          Invite User by Link
-        </CardTitle>
-        <CardDescription>
-          Generate an invitation link to share with the person you want to
-          invite to your organization.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
+    <DialogForm className="flex min-h-0 flex-1 flex-col" onSubmit={() => {}}>
+      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 space-y-4">
         {!invitationLink ? (
           <>
             <div className="space-y-2">
@@ -119,70 +103,77 @@ function InviteByLinkCardContent({
                 disabled={createMutation.isPending}
                 placeholder="Select a role"
                 data-testid={E2eTestId.InviteRoleSelect}
+                className="w-full"
               />
               <p className="text-xs text-muted-foreground">
                 The role this person will have in your organization
               </p>
             </div>
-
+          </>
+        ) : (
+          <div className="space-y-2">
+            <Label>Invitation Link</Label>
+            <div className="flex items-center gap-2">
+              <Input
+                value={invitationLink}
+                readOnly
+                className="flex-1"
+                data-testid={E2eTestId.InvitationLinkInput}
+              />
+              <Button
+                type="button"
+                size="icon"
+                variant="outline"
+                onClick={handleCopyLink}
+                data-testid={E2eTestId.InvitationLinkCopyButton}
+              >
+                {isCopied ? (
+                  <Check className="h-4 w-4 text-green-600" />
+                ) : (
+                  <Copy className="h-4 w-4" />
+                )}
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Share this link with <span className="font-medium">{email}</span>{" "}
+              to invite them as a <span className="font-medium">{role}</span>
+            </p>
+          </div>
+        )}
+      </div>
+      <DialogStickyFooter>
+        {invitationLink ? (
+          <>
+            <Button onClick={handleReset} type="button" variant="outline">
+              Create Another
+            </Button>
+            <Button type="button" onClick={handleCopyLink}>
+              {isCopied ? (
+                <Check className="mr-2 h-4 w-4 text-green-600" />
+              ) : (
+                <Copy className="mr-2 h-4 w-4" />
+              )}
+              Copy Link
+            </Button>
+          </>
+        ) : (
+          <>
+            <div />
             <PermissionButton
               permissions={{ invitation: ["create"] }}
               onClick={handleGenerateLink}
               disabled={createMutation.isPending || !isValidEmail}
-              className="w-full"
               data-testid={E2eTestId.GenerateInvitationButton}
             >
               {createMutation.isPending && (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               )}
               Generate Invitation Link
             </PermissionButton>
           </>
-        ) : (
-          <>
-            <div className="space-y-2">
-              <Label>Invitation Link</Label>
-              <div className="flex items-center gap-2">
-                <Input
-                  value={invitationLink}
-                  readOnly
-                  className="flex-1"
-                  data-testid={E2eTestId.InvitationLinkInput}
-                />
-                <Button
-                  type="button"
-                  size="icon"
-                  variant="outline"
-                  onClick={handleCopyLink}
-                  data-testid={E2eTestId.InvitationLinkCopyButton}
-                >
-                  {isCopied ? (
-                    <Check className="h-4 w-4 text-green-600" />
-                  ) : (
-                    <Copy className="h-4 w-4" />
-                  )}
-                </Button>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Share this link with{" "}
-                <span className="font-medium">{email}</span> to invite them as a{" "}
-                <span className="font-medium">{role}</span>
-              </p>
-            </div>
-
-            <div className="flex gap-2">
-              <Button
-                onClick={handleReset}
-                variant="outline"
-                className="flex-1"
-              >
-                Create Another
-              </Button>
-            </div>
-          </>
         )}
-      </CardContent>
-    </Card>
+      </DialogStickyFooter>
+    </DialogForm>
   );
 }
 
@@ -196,26 +187,19 @@ export function InviteByLinkCard({
         <ErrorBoundary
           onReset={reset}
           fallbackRender={({ error, resetErrorBoundary }) => (
-            <Card className="w-full">
-              <CardHeader>
-                <CardTitle className="text-destructive">
-                  Error Creating Invitation
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p
-                  className="text-sm text-muted-foreground mb-4"
-                  data-testid={E2eTestId.InvitationErrorMessage}
-                >
-                  {error instanceof Error
-                    ? error.message
-                    : "Failed to create invitation"}
-                </p>
-                <Button onClick={resetErrorBoundary} variant="outline">
-                  Try Again
-                </Button>
-              </CardContent>
-            </Card>
+            <div className="space-y-4 py-4">
+              <p
+                className="text-sm text-destructive"
+                data-testid={E2eTestId.InvitationErrorMessage}
+              >
+                {error instanceof Error
+                  ? error.message
+                  : "Failed to create invitation"}
+              </p>
+              <Button onClick={resetErrorBoundary} variant="outline">
+                Try Again
+              </Button>
+            </div>
           )}
         >
           <InviteByLinkCardContent

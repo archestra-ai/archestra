@@ -2,41 +2,42 @@
 
 import {
   type archestraApiTypes,
-  DocsPage,
-  getDocsUrl,
   type Permissions,
+  type PredefinedRoleName,
+  roleDescriptions,
 } from "@shared";
 import { allAvailableActions } from "@shared/access-control";
-import { Plus, Shield, Trash2 } from "lucide-react";
-import { useCallback, useState } from "react";
+import type { ColumnDef } from "@tanstack/react-table";
+import { Eye, Pencil, Plus, Trash2 } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { PredefinedRoles } from "@/components/roles/predefined-roles";
+import { useSetSettingsAction } from "@/app/settings/layout";
+import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { FormDialog } from "@/components/form-dialog";
+import { RoleTypeIcon } from "@/components/role-type-icon";
+import { SearchInput } from "@/components/search-input";
+import {
+  type TableRowAction,
+  TableRowActions,
+} from "@/components/table-row-actions";
 import { Button } from "@/components/ui/button";
+import { DataTable } from "@/components/ui/data-table";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
+  DialogBody,
   DialogForm,
-  DialogHeader,
-  DialogTitle,
+  DialogStickyFooter,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PermissionButton } from "@/components/ui/permission-button";
+import { Textarea } from "@/components/ui/textarea";
 import {
   useCreateRole,
   useDeleteRole,
-  useRoles,
+  useRolesPaginated,
   useUpdateRole,
 } from "@/lib/role.query";
+import { useDataTableQueryParams } from "@/lib/use-data-table-query-params";
 import { RolePermissionBuilder } from "./role-permission-builder.ee";
 
 type Role = archestraApiTypes.GetRoleResponses["200"];
@@ -46,20 +47,54 @@ type Role = archestraApiTypes.GetRoleResponses["200"];
  * Shows both predefined roles (read-only) and custom roles (CRUD).
  */
 export function RolesList() {
-  const { data: roles, isLoading } = useRoles();
+  const setActionButton = useSetSettingsAction();
+  const {
+    pageIndex,
+    pageSize,
+    offset,
+    searchParams,
+    setPagination,
+    updateQueryParams,
+  } = useDataTableQueryParams();
+  const nameFilter = searchParams.get("name") || undefined;
+  const { data: rolesResponse, isLoading } = useRolesPaginated({
+    limit: pageSize,
+    offset,
+    name: nameFilter,
+  });
   const createMutation = useCreateRole();
   const updateMutation = useUpdateRole();
   const deleteMutation = useDeleteRole();
 
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [viewPermissionsDialogOpen, setViewPermissionsDialogOpen] =
+    useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
   const [selectedRole, setSelectedRole] = useState<Role | null>(null);
+  const [viewPermissionsRole, setViewPermissionsRole] = useState<Role | null>(
+    null,
+  );
   const [roleToDelete, setRoleToDelete] = useState<Role | null>(null);
 
   const [roleName, setRoleName] = useState("");
+  const [roleDescription, setRoleDescription] = useState("");
   const [permission, setPermission] = useState<Permissions>({});
+
+  useEffect(() => {
+    setActionButton(
+      <PermissionButton
+        permissions={{ ac: ["create"] }}
+        onClick={() => setCreateDialogOpen(true)}
+      >
+        <Plus className="mr-2 h-4 w-4" />
+        Create Custom Role
+      </PermissionButton>,
+    );
+
+    return () => setActionButton(null);
+  }, [setActionButton]);
 
   const handleCreateRole = useCallback(() => {
     if (!roleName.trim()) {
@@ -74,13 +109,16 @@ export function RolesList() {
 
     createMutation.mutate(
       // Cast needed: shared Permissions type includes "team-admin" before API types are regenerated
-      { name: roleName, permission } as Parameters<
-        typeof createMutation.mutate
-      >[0],
+      {
+        name: roleName,
+        description: roleDescription || undefined,
+        permission,
+      } as Parameters<typeof createMutation.mutate>[0],
       {
         onSuccess: () => {
           setCreateDialogOpen(false);
           setRoleName("");
+          setRoleDescription("");
           setPermission({});
           toast.success("Role created successfully");
         },
@@ -89,7 +127,7 @@ export function RolesList() {
         },
       },
     );
-  }, [roleName, permission, createMutation]);
+  }, [roleDescription, roleName, permission, createMutation]);
 
   const handleEditRole = useCallback(() => {
     if (!selectedRole) return;
@@ -108,13 +146,18 @@ export function RolesList() {
       // Cast needed: shared Permissions type includes "team-admin" before API types are regenerated
       {
         roleId: selectedRole.id,
-        data: { name: roleName, permission },
+        data: {
+          name: roleName,
+          description: roleDescription || undefined,
+          permission,
+        },
       } as Parameters<typeof updateMutation.mutate>[0],
       {
         onSuccess: () => {
           setEditDialogOpen(false);
           setSelectedRole(null);
           setRoleName("");
+          setRoleDescription("");
           setPermission({});
           toast.success("Role updated successfully");
         },
@@ -123,7 +166,7 @@ export function RolesList() {
         },
       },
     );
-  }, [selectedRole, roleName, permission, updateMutation]);
+  }, [selectedRole, roleDescription, roleName, permission, updateMutation]);
 
   const handleDeleteRole = useCallback(() => {
     if (roleToDelete) {
@@ -143,237 +186,326 @@ export function RolesList() {
   const openEditDialog = useCallback((role: Role) => {
     setSelectedRole(role);
     setRoleName(role.name);
+    setRoleDescription(role.description ?? "");
     setPermission(role.permission);
     setEditDialogOpen(true);
   }, []);
 
-  if (isLoading) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Roles</CardTitle>
-          <CardDescription>Loading roles...</CardDescription>
-        </CardHeader>
-      </Card>
-    );
-  }
+  // Sort: predefined first, then custom
+  const allRoles = [...(rolesResponse?.data ?? [])].sort((a, b) => {
+    if (a.predefined && !b.predefined) return -1;
+    if (!a.predefined && b.predefined) return 1;
+    return 0;
+  });
+  const total = rolesResponse?.pagination.total ?? 0;
 
-  const predefinedRoles = roles?.filter((role) => role.predefined) || [];
-  const customRoles = roles?.filter((role) => !role.predefined) || [];
+  const columns: ColumnDef<Role>[] = [
+    {
+      id: "icon",
+      size: 24,
+      enableSorting: false,
+      header: "",
+      cell: ({ row }) => (
+        <div className="flex items-center justify-center">
+          <RoleTypeIcon predefined={row.original.predefined} withTooltip />
+        </div>
+      ),
+    },
+    {
+      id: "name",
+      accessorKey: "name",
+      header: "Name",
+      size: 520,
+      enableSorting: false,
+      cell: ({ row }) => {
+        const role = row.original;
+        const predefinedDescription = role.predefined
+          ? roleDescriptions[role.name as PredefinedRoleName]
+          : null;
+        const description = role.description || predefinedDescription;
+        return (
+          <div>
+            <div className="font-medium capitalize">{role.name}</div>
+            {description && (
+              <div className="text-xs text-muted-foreground">{description}</div>
+            )}
+          </div>
+        );
+      },
+    },
+    {
+      id: "actions",
+      header: "Actions",
+      enableSorting: false,
+      cell: ({ row }) => {
+        const role = row.original;
+
+        if (role.predefined) {
+          const actions: TableRowAction[] = [
+            {
+              icon: <Eye className="h-4 w-4" />,
+              label: "View permissions",
+              onClick: () => {
+                setViewPermissionsRole(role);
+                setViewPermissionsDialogOpen(true);
+              },
+            },
+          ];
+          return <TableRowActions actions={actions} />;
+        }
+
+        const actions: TableRowAction[] = [
+          {
+            icon: <Pencil className="h-4 w-4" />,
+            label: "Edit role",
+            permissions: { ac: ["update"] },
+            onClick: () => openEditDialog(role),
+          },
+          {
+            icon: <Trash2 className="h-4 w-4" />,
+            label: "Delete role",
+            permissions: { ac: ["delete"] },
+            variant: "destructive",
+            onClick: () => {
+              setRoleToDelete(role);
+              setDeleteDialogOpen(true);
+            },
+          },
+        ];
+        return <TableRowActions actions={actions} />;
+      },
+    },
+  ];
 
   return (
     <>
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle>Roles & Permissions</CardTitle>
-              <CardDescription className="pt-2">
-                Manage roles and their permissions. Custom roles can be created
-                with specific permission sets.
-                <br />
-                See documentation{" "}
-                <a
-                  href={getDocsUrl(DocsPage.PlatformAccessControl)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-blue-500 hover:underline inline-flex items-center gap-1 block"
-                >
-                  here
-                </a>{" "}
-                for more information, including a complete list of available
-                permissions.
-              </CardDescription>
+      <div className="space-y-6">
+        <SearchInput
+          objectNamePlural="roles"
+          searchFields={["name"]}
+          paramName="name"
+        />
+
+        <DataTable
+          columns={columns}
+          data={allRoles}
+          isLoading={isLoading}
+          manualPagination
+          pagination={{
+            pageIndex,
+            pageSize,
+            total,
+          }}
+          onPaginationChange={setPagination}
+          hasActiveFilters={Boolean(nameFilter)}
+          onClearFilters={() =>
+            updateQueryParams({
+              name: null,
+              page: "1",
+            })
+          }
+          emptyMessage="No roles found"
+          hideSelectedCount
+        />
+      </div>
+
+      {/* Create Role Dialog */}
+      <FormDialog
+        open={createDialogOpen}
+        onOpenChange={setCreateDialogOpen}
+        title="Create Custom Role"
+        description="Create a new custom role with specific permissions. Users with this role will only have access to the selected resources and actions."
+        size="large"
+      >
+        <DialogForm
+          className="flex min-h-0 flex-1 flex-col"
+          onSubmit={handleCreateRole}
+        >
+          <DialogBody className="space-y-4 pb-4">
+            <div className="space-y-2">
+              <Label htmlFor="name">Role Name *</Label>
+              <Input
+                id="name"
+                placeholder="e.g., Developer, Viewer, Editor"
+                value={roleName}
+                onChange={(e) => setRoleName(e.target.value)}
+              />
             </div>
-            <PermissionButton
-              permissions={{ ac: ["create"] }}
-              onClick={() => setCreateDialogOpen(true)}
+            <div className="space-y-2">
+              <Label htmlFor="description">Description</Label>
+              <Textarea
+                id="description"
+                placeholder="What this role is used for"
+                value={roleDescription}
+                onChange={(e) => setRoleDescription(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Permissions *</Label>
+              <RolePermissionBuilder
+                permission={permission}
+                onChange={setPermission}
+                userPermissions={allAvailableActions}
+              />
+            </div>
+          </DialogBody>
+          <DialogStickyFooter className="mt-0">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setCreateDialogOpen(false);
+                setRoleName("");
+                setRoleDescription("");
+                setPermission({});
+              }}
             >
-              <Plus className="mr-2 h-4 w-4" />
-              Create Custom Role
-            </PermissionButton>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          <PredefinedRoles predefinedRoles={predefinedRoles} />
-          {customRoles.length > 0 && (
-            <div>
-              <h3 className="mb-3 text-sm font-semibold text-muted-foreground">
-                Custom Roles
-              </h3>
-              <div className="space-y-3">
-                {customRoles.map((role) => (
-                  <div
-                    key={role.id}
-                    className="flex items-center justify-between rounded-lg border p-4"
-                  >
-                    <div className="flex items-center gap-3">
-                      <Shield className="h-5 w-5" />
-                      <div>
-                        <h4 className="font-semibold">{role.name}</h4>
-                      </div>
-                    </div>
-                    <div className="flex gap-2">
-                      <PermissionButton
-                        permissions={{ ac: ["update"] }}
-                        variant="outline"
-                        size="sm"
-                        onClick={() => openEditDialog(role)}
-                      >
-                        Edit
-                      </PermissionButton>
-                      <PermissionButton
-                        permissions={{ ac: ["delete"] }}
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          setRoleToDelete(role);
-                          setDeleteDialogOpen(true);
-                        }}
-                      >
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                      </PermissionButton>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={createMutation.isPending}>
+              {createMutation.isPending ? "Creating..." : "Create Role"}
+            </Button>
+          </DialogStickyFooter>
+        </DialogForm>
+      </FormDialog>
 
-      <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
-        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Create Custom Role</DialogTitle>
-            <DialogDescription>
-              Create a new custom role with specific permissions. Users with
-              this role will only have access to the selected resources and
-              actions.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogForm onSubmit={handleCreateRole}>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="name">Role Name *</Label>
-                <Input
-                  id="name"
-                  placeholder="e.g., Developer, Viewer, Editor"
-                  value={roleName}
-                  onChange={(e) => setRoleName(e.target.value)}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Permissions *</Label>
-                <RolePermissionBuilder
-                  permission={permission}
-                  onChange={setPermission}
-                  userPermissions={allAvailableActions}
-                />
-              </div>
+      {/* Edit Role Dialog */}
+      <FormDialog
+        open={editDialogOpen}
+        onOpenChange={setEditDialogOpen}
+        title="Edit Role"
+        description="Modify the role name and permissions. Changes will affect all users with this role."
+        size="large"
+      >
+        <DialogForm
+          className="flex min-h-0 flex-1 flex-col"
+          onSubmit={handleEditRole}
+        >
+          <DialogBody className="space-y-4 pb-4">
+            <div className="space-y-2">
+              <Label htmlFor="edit-name">Role Name *</Label>
+              <Input
+                id="edit-name"
+                placeholder="e.g., Developer, Viewer, Editor"
+                value={roleName}
+                onChange={(e) => setRoleName(e.target.value)}
+              />
             </div>
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  setCreateDialogOpen(false);
-                  setRoleName("");
-                  setPermission({});
-                }}
-              >
-                Cancel
-              </Button>
-              <Button type="submit" disabled={createMutation.isPending}>
-                {createMutation.isPending ? "Creating..." : "Create Role"}
-              </Button>
-            </DialogFooter>
-          </DialogForm>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
-        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Edit Role</DialogTitle>
-            <DialogDescription>
-              Modify the role name and permissions. Changes will affect all
-              users with this role.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogForm onSubmit={handleEditRole}>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="edit-name">Role Name *</Label>
-                <Input
-                  id="edit-name"
-                  placeholder="e.g., Developer, Viewer, Editor"
-                  value={roleName}
-                  onChange={(e) => setRoleName(e.target.value)}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Permissions *</Label>
-                <RolePermissionBuilder
-                  permission={permission}
-                  onChange={setPermission}
-                  userPermissions={allAvailableActions}
-                />
-              </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-description">Description</Label>
+              <Textarea
+                id="edit-description"
+                placeholder="What this role is used for"
+                value={roleDescription}
+                onChange={(e) => setRoleDescription(e.target.value)}
+              />
             </div>
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  setEditDialogOpen(false);
-                  setSelectedRole(null);
-                  setRoleName("");
-                  setPermission({});
-                }}
-              >
-                Cancel
-              </Button>
-              <Button type="submit" disabled={updateMutation.isPending}>
-                {updateMutation.isPending ? "Saving..." : "Save Changes"}
-              </Button>
-            </DialogFooter>
-          </DialogForm>
-        </DialogContent>
-      </Dialog>
+            <div className="space-y-2">
+              <Label>Permissions *</Label>
+              <RolePermissionBuilder
+                permission={permission}
+                onChange={setPermission}
+                userPermissions={allAvailableActions}
+              />
+            </div>
+          </DialogBody>
+          <DialogStickyFooter className="mt-0">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setEditDialogOpen(false);
+                setSelectedRole(null);
+                setRoleName("");
+                setRoleDescription("");
+                setPermission({});
+              }}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" disabled={updateMutation.isPending}>
+              {updateMutation.isPending ? "Saving..." : "Save Changes"}
+            </Button>
+          </DialogStickyFooter>
+        </DialogForm>
+      </FormDialog>
 
-      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Delete Role</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to delete the role "{roleToDelete?.name}"?
-              This action cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogForm onSubmit={handleDeleteRole}>
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  setDeleteDialogOpen(false);
-                  setRoleToDelete(null);
-                }}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                variant="destructive"
-                disabled={deleteMutation.isPending}
-              >
-                {deleteMutation.isPending ? "Deleting..." : "Delete"}
-              </Button>
-            </DialogFooter>
-          </DialogForm>
-        </DialogContent>
-      </Dialog>
+      <FormDialog
+        open={viewPermissionsDialogOpen}
+        onOpenChange={(open) => {
+          setViewPermissionsDialogOpen(open);
+          if (!open) {
+            setViewPermissionsRole(null);
+          }
+        }}
+        title="View Predefined Role"
+        description="This is a predefined role. It cannot be modified."
+        size="large"
+      >
+        {viewPermissionsRole && (
+          <DialogBody className="space-y-4 pb-4">
+            <div className="space-y-2">
+              <Label htmlFor="view-name">Role Name</Label>
+              <Input
+                id="view-name"
+                value={viewPermissionsRole.name}
+                disabled
+                className="capitalize"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="view-description">Description</Label>
+              <Textarea
+                id="view-description"
+                value={
+                  viewPermissionsRole.description ||
+                  roleDescriptions[
+                    viewPermissionsRole.name as PredefinedRoleName
+                  ] ||
+                  ""
+                }
+                disabled
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Permissions</Label>
+              <RolePermissionBuilder
+                permission={viewPermissionsRole.permission}
+                onChange={() => {}}
+                userPermissions={viewPermissionsRole.permission}
+                readOnly
+                readOnlyTooltip="This is a predefined role. Permissions cannot be modified."
+              />
+            </div>
+          </DialogBody>
+        )}
+        <DialogStickyFooter className="mt-0">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
+              setViewPermissionsDialogOpen(false);
+              setViewPermissionsRole(null);
+            }}
+          >
+            Close
+          </Button>
+        </DialogStickyFooter>
+      </FormDialog>
+
+      <DeleteConfirmDialog
+        open={deleteDialogOpen}
+        onOpenChange={(open) => {
+          setDeleteDialogOpen(open);
+          if (!open) {
+            setRoleToDelete(null);
+          }
+        }}
+        title="Delete Role"
+        description={`Are you sure you want to delete the role "${roleToDelete?.name ?? ""}"? This action cannot be undone.`}
+        isPending={deleteMutation.isPending}
+        onConfirm={handleDeleteRole}
+      />
     </>
   );
 }

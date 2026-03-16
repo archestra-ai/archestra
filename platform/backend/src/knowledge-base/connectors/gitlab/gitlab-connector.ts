@@ -5,8 +5,8 @@ import type {
   ConnectorSyncBatch,
   GitlabCheckpoint,
   GitlabConfig,
-} from "@/types/knowledge-connector";
-import { GitlabConfigSchema } from "@/types/knowledge-connector";
+} from "@/types";
+import { GitlabConfigSchema } from "@/types";
 import {
   BaseConnector,
   buildCheckpoint,

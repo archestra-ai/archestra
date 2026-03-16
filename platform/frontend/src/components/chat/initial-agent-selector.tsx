@@ -1,6 +1,10 @@
 "use client";
 
-import { type archestraApiTypes, isBuiltInCatalogId } from "@shared";
+import {
+  type AgentScope,
+  type archestraApiTypes,
+  isBuiltInCatalogId,
+} from "@shared";
 import { useQueries } from "@tanstack/react-query";
 import {
   ArrowLeft,
@@ -14,6 +18,7 @@ import {
   Search,
   XIcon,
 } from "lucide-react";
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ConnectorTypeIcon } from "@/app/knowledge/knowledge-bases/_parts/connector-icons";
 import { LocalServerInstallDialog } from "@/app/mcp/registry/_parts/local-server-install-dialog";
@@ -25,6 +30,7 @@ import { AgentIconPicker } from "@/components/agent-icon-picker";
 import { McpCatalogIcon, ToolChecklist } from "@/components/agent-tools-editor";
 import { PromptInputButton } from "@/components/ai-elements/prompt-input";
 import { OAuthConfirmationDialog } from "@/components/oauth-confirmation-dialog";
+import { SystemPromptEditor } from "@/components/system-prompt-editor";
 import { TokenSelect } from "@/components/token-select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -43,7 +49,6 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Tooltip,
   TooltipContent,
@@ -80,7 +85,9 @@ import {
   useMcpServers,
   useMcpServersGroupedByCatalog,
 } from "@/lib/mcp-server.query";
+import { useAppName } from "@/lib/use-app-name";
 import { cn } from "@/lib/utils";
+import { filterAndSortInitialAgents } from "./initial-agent-selector.utils";
 
 type CatalogItem =
   archestraApiTypes.GetInternalMcpCatalogResponses["200"][number];
@@ -118,25 +125,11 @@ export function InitialAgentSelector({
   const installer = useMcpInstallOrchestrator();
 
   const filteredAgents = useMemo(() => {
-    let result = allAgents.filter((a) => {
-      if (a.scope === "personal") {
-        return a.authorId === userId;
-      }
-      return true;
-    });
-    if (search) {
-      const lower = search.toLowerCase();
-      result = result.filter(
-        (a) =>
-          a.name.toLowerCase().includes(lower) ||
-          a.description?.toLowerCase().includes(lower),
-      );
-    }
-    const scopeOrder: Record<string, number> = { personal: 0, team: 1, org: 2 };
-    return [...result].sort((a, b) => {
-      if (a.id === currentAgentId) return -1;
-      if (b.id === currentAgentId) return 1;
-      return (scopeOrder[a.scope] ?? 3) - (scopeOrder[b.scope] ?? 3);
+    return filterAndSortInitialAgents({
+      allAgents,
+      currentAgentId,
+      search,
+      userId,
     });
   }, [allAgents, search, currentAgentId, userId]);
 
@@ -149,8 +142,7 @@ export function InitialAgentSelector({
   const canEditCurrentAgent = useMemo(() => {
     if (!currentAgent) return false;
     if (isAgentAdmin) return true;
-    const authorId = (currentAgent as unknown as Record<string, unknown>)
-      .authorId as string;
+    const authorId = currentAgent.authorId;
     return authorId === userId;
   }, [currentAgent, isAgentAdmin, userId]);
 
@@ -197,8 +189,8 @@ export function InitialAgentSelector({
     enabled: !!canReadKnowledgeBase,
   });
 
-  const allKnowledgeBases = knowledgeBasesData?.data ?? [];
-  const allConnectors = connectorsData?.data ?? [];
+  const allKnowledgeBases = knowledgeBasesData ?? [];
+  const allConnectors = connectorsData ?? [];
   const knowledgeBaseIds = currentAgent?.knowledgeBaseIds ?? [];
   const connectorIds = currentAgent?.connectorIds ?? [];
 
@@ -265,14 +257,7 @@ export function InitialAgentSelector({
             data-agent-selector
             className="max-w-[300px] min-w-0"
           >
-            <AgentIcon
-              icon={
-                (currentAgent as unknown as Record<string, unknown>)?.icon as
-                  | string
-                  | null
-              }
-              size={16}
-            />
+            <AgentIcon icon={currentAgent.icon} size={16} />
             <span className="truncate flex-1 text-left">
               {currentAgent?.name ?? "Select agent"}
             </span>
@@ -316,9 +301,7 @@ export function InitialAgentSelector({
             ) : (
               filteredAgents.map((agent) => {
                 const isSelected = currentAgentId === agent.id;
-                const authorId = (agent as unknown as Record<string, unknown>)
-                  .authorId as string;
-                const canEdit = isAgentAdmin || authorId === userId;
+                const canEdit = isAgentAdmin || agent.authorId === userId;
                 return (
                   <div
                     key={agent.id}
@@ -340,13 +323,7 @@ export function InitialAgentSelector({
                             : "bg-muted",
                         )}
                       >
-                        <AgentIcon
-                          icon={
-                            (agent as unknown as Record<string, unknown>)
-                              .icon as string | null
-                          }
-                          size={14}
-                        />
+                        <AgentIcon icon={agent.icon} size={14} />
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="text-sm font-medium truncate">
@@ -372,19 +349,14 @@ export function InitialAgentSelector({
                           setOpen(false);
                           setEditingAgentId(agent.id);
                         } else {
-                          const agentData = agent as unknown as Record<
-                            string,
-                            unknown
-                          >;
                           createProfile.mutate(
                             {
                               name: `Copy ${agent.name}`,
                               scope: "personal",
                               agentType: "agent",
                               description: agent.description,
-                              systemPrompt:
-                                (agentData.systemPrompt as string) ?? undefined,
-                              icon: (agentData.icon as string) ?? undefined,
+                              systemPrompt: agent.systemPrompt,
+                              icon: agent.icon,
                             },
                             {
                               onSuccess: (newAgent) => {
@@ -416,7 +388,7 @@ export function InitialAgentSelector({
         }}
       >
         <DialogContent
-          className="max-w-3xl h-[600px] p-0 gap-0 overflow-hidden flex flex-col"
+          className="max-w-3xl h-[660px] p-0 gap-0 overflow-hidden flex flex-col"
           onCloseAutoFocus={(e) => e.preventDefault()}
           showCloseButton={false}
         >
@@ -605,6 +577,8 @@ function AgentSettingsView({
     scope?: string;
     knowledgeBaseIds?: string[];
     connectorIds?: string[];
+    createdAt?: string;
+    authorName?: string | null;
   } | null;
   onAddTool: () => void;
   onEditTool: (catalog: CatalogItem) => void;
@@ -615,6 +589,7 @@ function AgentSettingsView({
   const updateProfile = useUpdateProfile();
   const { data: canReadAgents } = useHasPermissions({ agent: ["read"] });
 
+  const appName = useAppName();
   const [instructions, setInstructions] = useState(agent?.systemPrompt ?? "");
   const [isSaving, setIsSaving] = useState(false);
   const [isEditingName, setIsEditingName] = useState(false);
@@ -790,9 +765,7 @@ function AgentSettingsView({
                   {agent.name}
                 </button>
                 <AgentBadge
-                  type={
-                    (agent.scope as "personal" | "team" | "org") ?? "personal"
-                  }
+                  type={(agent.scope as AgentScope) ?? "personal"}
                   className="text-[10px] px-1.5 py-0"
                 />
               </div>
@@ -825,7 +798,22 @@ function AgentSettingsView({
               ))}
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-4 shrink-0">
+          {agent?.createdAt &&
+            (() => {
+              const authorName = agent.authorName ?? appName;
+              return (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground whitespace-nowrap">
+                  <div className="h-5 w-5 rounded-full bg-green-500 flex items-center justify-center text-[10px] font-medium text-white shrink-0">
+                    {authorName.charAt(0).toUpperCase()}
+                  </div>
+                  <span>
+                    Created by {authorName} on{" "}
+                    {new Date(agent.createdAt).toLocaleDateString()}
+                  </span>
+                </div>
+              );
+            })()}
           {isSaving && (
             <Loader2 className="size-3.5 animate-spin text-muted-foreground" />
           )}
@@ -837,24 +825,20 @@ function AgentSettingsView({
       </div>
 
       <div className="p-4 space-y-4 flex-1 min-h-0 overflow-y-auto">
-        {((agent as unknown as Record<string, unknown>).scope === "org" ||
-          (agent as unknown as Record<string, unknown>).scope === "team") && (
-          <Alert variant="info" className="border-0 py-2 text-xs">
-            <Info className="size-3.5" />
-            <AlertDescription className="text-xs">
-              You are editing a shared agent
-            </AlertDescription>
-          </Alert>
-        )}
-        <div>
-          <Label className="mb-1.5">Instructions</Label>
-          <Textarea
-            value={instructions}
-            onChange={(e) => setInstructions(e.target.value)}
-            className="resize-none text-sm min-h-[80px] max-h-[200px]"
-            placeholder="Tell the agent what to do..."
-          />
-        </div>
+        {agent.scope === "org" ||
+          (agent.scope === "team" && (
+            <Alert variant="info" className="border-0 py-2 text-xs">
+              <Info className="size-3.5" />
+              <AlertDescription className="text-xs">
+                You are editing a shared agent
+              </AlertDescription>
+            </Alert>
+          ))}
+        <SystemPromptEditor
+          value={instructions}
+          onChange={setInstructions}
+          height="120px"
+        />
 
         <div>
           <Label className="mb-1.5">Tools and subagents</Label>
@@ -964,12 +948,12 @@ function AgentSettingsView({
 
       <div className="border-t px-4 py-3 shrink-0 flex items-center justify-between gap-3">
         {canReadAgents ? (
-          <a
+          <Link
             href={`/agents?edit=${agent.id}`}
             className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1.5"
           >
             Full configuration <ExternalLink className="size-3" />
-          </a>
+          </Link>
         ) : (
           <div />
         )}
@@ -1071,14 +1055,7 @@ function AssignedToolsGrid({
             <XIcon className="size-3" />
           </button>
           <div className="flex flex-col items-center gap-1.5 w-full">
-            <AgentIcon
-              icon={
-                (agent as unknown as Record<string, unknown>).icon as
-                  | string
-                  | null
-              }
-              size={24}
-            />
+            <AgentIcon icon={agent.icon} size={24} />
             <span className="text-xs font-medium truncate w-full">
               {agent.name}
             </span>
@@ -1729,14 +1706,7 @@ function AddDelegationView({
               >
                 <div className="flex w-full items-center gap-2">
                   <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-muted">
-                    <AgentIcon
-                      icon={
-                        (agent as unknown as Record<string, unknown>).icon as
-                          | string
-                          | null
-                      }
-                      size={16}
-                    />
+                    <AgentIcon icon={agent.icon} size={16} />
                   </div>
                   <span className="text-sm font-medium truncate flex-1">
                     {agent.name}
@@ -1752,12 +1722,7 @@ function AddDelegationView({
                 )}
                 <div className="flex items-center gap-2 w-full mt-auto">
                   <AgentBadge
-                    type={
-                      (agent as unknown as Record<string, unknown>).scope as
-                        | "personal"
-                        | "team"
-                        | "org"
-                    }
+                    type={agent.scope}
                     className="text-[10px] px-1.5 py-0"
                   />
                   <div className="flex-1" />

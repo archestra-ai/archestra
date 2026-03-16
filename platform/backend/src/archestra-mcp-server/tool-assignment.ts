@@ -5,6 +5,7 @@ import {
 } from "@shared";
 import logger from "@/logging";
 import { assignToolToAgent } from "@/routes/agent-tool";
+import { catchError, errorResult, successResult } from "./helpers";
 import type { ArchestraContext } from "./types";
 
 // === Constants ===
@@ -56,6 +57,11 @@ export const tools: Tool[] = [
                 description:
                   "Optional ID of the MCP server to use as execution source",
               },
+              useDynamicTeamCredential: {
+                type: "boolean",
+                description:
+                  "When true, credentials are resolved at call time based on the caller's identity instead of using a fixed credential source. Resolution order: (1) the calling user's own personal credential, (2) a credential owned by a team member on the same team. Use this as an alternative to credentialSourceMcpServerId or executionSourceMcpServerId.",
+              },
             },
             required: ["agentId", "toolId"],
           },
@@ -97,6 +103,11 @@ export const tools: Tool[] = [
                 type: "string",
                 description:
                   "Optional ID of the MCP server to use as execution source",
+              },
+              useDynamicTeamCredential: {
+                type: "boolean",
+                description:
+                  "When true, credentials are resolved at call time based on the caller's identity instead of using a fixed credential source. Resolution order: (1) the calling user's own personal credential, (2) a credential owned by a team member on the same team. Use this as an alternative to credentialSourceMcpServerId or executionSourceMcpServerId.",
               },
             },
             required: ["mcpGatewayId", "toolId"],
@@ -147,15 +158,9 @@ export async function handleTool(
     const assignments = args?.assignments as Array<Record<string, any>>;
 
     if (!assignments || !Array.isArray(assignments)) {
-      return {
-        content: [
-          {
-            type: "text",
-            text: "Error: assignments parameter is required and must be an array",
-          },
-        ],
-        isError: true,
-      };
+      return errorResult(
+        "assignments parameter is required and must be an array",
+      );
     }
 
     const results = await Promise.allSettled(
@@ -165,6 +170,8 @@ export async function handleTool(
           assignment.toolId,
           assignment.credentialSourceMcpServerId,
           assignment.executionSourceMcpServerId,
+          undefined,
+          assignment.useDynamicTeamCredential,
         ),
       ),
     );
@@ -194,30 +201,10 @@ export async function handleTool(
       }
     });
 
-    return {
-      content: [
-        {
-          type: "text",
-          text: JSON.stringify({ succeeded, failed, duplicates }, null, 2),
-        },
-      ],
-      isError: false,
-    };
-  } catch (error) {
-    logger.error(
-      { err: error },
-      `Error bulk assigning tools to ${bulkAssignLabel}`,
+    return successResult(
+      JSON.stringify({ succeeded, failed, duplicates }, null, 2),
     );
-    return {
-      content: [
-        {
-          type: "text",
-          text: `Error bulk assigning tools to ${bulkAssignLabel}: ${
-            error instanceof Error ? error.message : "Unknown error"
-          }`,
-        },
-      ],
-      isError: true,
-    };
+  } catch (error) {
+    return catchError(error, `bulk assigning tools to ${bulkAssignLabel}`);
   }
 }

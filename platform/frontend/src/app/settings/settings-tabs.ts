@@ -11,9 +11,8 @@ export function useSettingsTabs() {
 
   return [
     { label: "Your Account", href: "/settings/account" },
-    { label: "Authentication", href: "/settings/auth" },
-    ...(permissionMap?.["/settings/security"]
-      ? [{ label: "Security", href: "/settings/security" }]
+    ...(permissionMap?.["/settings/api-keys"]
+      ? [{ label: "API Keys", href: "/settings/api-keys" }]
       : []),
     ...(permissionMap?.["/settings/agents"]
       ? [{ label: "Agents", href: "/settings/agents" }]

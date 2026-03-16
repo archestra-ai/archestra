@@ -7,6 +7,7 @@ import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { CodeText } from "@/components/code-text";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { WithPermissions } from "@/components/roles/with-permissions";
+import { SettingsSectionStack } from "@/components/settings/settings-block";
 import {
   Collapsible,
   CollapsibleContent,
@@ -195,7 +196,7 @@ function DualLLMContent({
   return (
     <LoadingWrapper isPending={isPending} loadingFallback={<LoadingSpinner />}>
       <div>
-        <div className="space-y-6">
+        <SettingsSectionStack>
           {/* Mobile: Collapsible "How it works" */}
           <Collapsible className="bg-card rounded-lg p-4 shadow-sm md:hidden">
             <CollapsibleTrigger className="flex w-full items-center justify-between cursor-pointer group">
@@ -777,7 +778,7 @@ function DualLLMContent({
               )}
             </WithPermissions>
           </div>
-        </div>
+        </SettingsSectionStack>
       </div>
     </LoadingWrapper>
   );

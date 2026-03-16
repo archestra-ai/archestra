@@ -2,14 +2,9 @@
 
 import { useState } from "react";
 import { useForm } from "react-hook-form";
+import { FormDialog } from "@/components/form-dialog";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { DialogForm, DialogStickyFooter } from "@/components/ui/dialog";
 import {
   Form,
   FormControl,
@@ -65,16 +60,19 @@ export function CreateKnowledgeBaseDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
-        <DialogHeader>
-          <DialogTitle>Create Knowledge Base</DialogTitle>
-        </DialogHeader>
-        <Form {...form}>
-          <form
-            onSubmit={form.handleSubmit(handleSubmit)}
-            className="space-y-4"
-          >
+    <FormDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Create Knowledge Base"
+      size="medium"
+      className="max-w-lg"
+    >
+      <Form {...form}>
+        <DialogForm
+          onSubmit={form.handleSubmit(handleSubmit)}
+          className="flex min-h-0 flex-1 flex-col"
+        >
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4">
             <FormField
               control={form.control}
               name="name"
@@ -113,24 +111,24 @@ export function CreateKnowledgeBaseDialog({
               teamIds={teamIds}
               onTeamIdsChange={setTeamIds}
             />
+          </div>
 
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => onOpenChange(false)}
-              >
-                Cancel
-              </Button>
-              <Button type="submit" disabled={createKnowledgeBase.isPending}>
-                {createKnowledgeBase.isPending
-                  ? "Creating..."
-                  : "Create Knowledge Base"}
-              </Button>
-            </DialogFooter>
-          </form>
-        </Form>
-      </DialogContent>
-    </Dialog>
+          <DialogStickyFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" disabled={createKnowledgeBase.isPending}>
+              {createKnowledgeBase.isPending
+                ? "Creating..."
+                : "Create Knowledge Base"}
+            </Button>
+          </DialogStickyFooter>
+        </DialogForm>
+      </Form>
+    </FormDialog>
   );
 }

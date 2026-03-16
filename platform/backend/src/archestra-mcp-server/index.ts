@@ -18,10 +18,10 @@ import {
   tools as identityTools,
 } from "./identity";
 import {
-  handleTool as handleKnowledge,
-  toolShortNames as knowledgeToolNames,
-  tools as knowledgeTools,
-} from "./knowledge";
+  handleTool as handleKnowledgeManagement,
+  toolShortNames as knowledgeManagementToolNames,
+  tools as knowledgeManagementTools,
+} from "./knowledge-management";
 import {
   handleTool as handleLimits,
   toolShortNames as limitToolNames,
@@ -37,6 +37,7 @@ import {
   toolShortNames as policyToolNames,
   tools as policyTools,
 } from "./policies";
+import { checkToolPermission } from "./rbac";
 import {
   handleTool as handleToolAssignment,
   toolShortNames as toolAssignmentToolNames,
@@ -45,6 +46,7 @@ import {
 import type { ArchestraContext } from "./types";
 
 export { getAgentTools } from "./delegation";
+export { filterToolNamesByPermission, TOOL_PERMISSIONS } from "./rbac";
 export type { ArchestraContext } from "./types";
 
 export const ALL_TOOL_SHORT_NAMES = [
@@ -54,7 +56,7 @@ export const ALL_TOOL_SHORT_NAMES = [
   ...limitToolNames,
   ...policyToolNames,
   ...toolAssignmentToolNames,
-  ...knowledgeToolNames,
+  ...knowledgeManagementToolNames,
   ...chatToolNames,
 ] as const;
 
@@ -67,7 +69,7 @@ const handlers = [
   handleLimits,
   handlePolicies,
   handleToolAssignment,
-  handleKnowledge,
+  handleKnowledgeManagement,
   handleChat,
 ];
 
@@ -79,7 +81,7 @@ export function getArchestraMcpTools() {
     ...limitTools,
     ...policyTools,
     ...toolAssignmentTools,
-    ...knowledgeTools,
+    ...knowledgeManagementTools,
     ...chatTools,
   ];
 }
@@ -89,10 +91,15 @@ export async function executeArchestraTool(
   args: Record<string, unknown> | undefined,
   context: ArchestraContext,
 ): Promise<CallToolResult> {
-  // Handle dynamic agent delegation tools first
+  // Agent delegation tools are dynamic (one per agent) and not in TOOL_PERMISSIONS,
+  // so they bypass centralized RBAC. They enforce team-based access checks internally.
   if (toolName.startsWith(AGENT_TOOL_PREFIX)) {
     return handleDelegation(toolName, args, context);
   }
+
+  // Centralized RBAC check — ensures the user has the required permission
+  const rbacDenied = await checkToolPermission(toolName, context);
+  if (rbacDenied) return rbacDenied;
 
   // Try each group handler
   for (const handler of handlers) {

@@ -6,9 +6,10 @@ import {
   type PredefinedRoleName,
   PredefinedRoleNameSchema,
   type Resource,
+  roleDescriptions,
 } from "@shared";
 import { predefinedPermissionsMap } from "@shared/access-control";
-import { and, eq, getTableColumns, sql } from "drizzle-orm";
+import { and, eq, getTableColumns, ilike, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import logger from "@/logging";
 import type { OrganizationRole } from "@/types";
@@ -20,6 +21,7 @@ const generatePredefinedRole = (
   id: role,
   role: role,
   name: role,
+  description: roleDescriptions[role],
   organizationId,
   permission: OrganizationRoleModel.getPredefinedRolePermissions(role),
   predefined: true,
@@ -252,7 +254,7 @@ class OrganizationRoleModel {
     );
     return {
       ...result,
-      permission: JSON.parse(result.permission),
+      permission: parseRolePermissions(result.permission),
     };
   }
 
@@ -299,7 +301,7 @@ class OrganizationRoleModel {
     logger.debug({ roleId }, "OrganizationRoleModel.getById: completed");
     return {
       ...result,
-      permission: JSON.parse(result.permission),
+      permission: parseRolePermissions(result.permission),
     };
   }
 
@@ -385,7 +387,7 @@ class OrganizationRoleModel {
         ...predefinedRoles,
         ...customRoles.map((role) => ({
           ...role,
-          permission: JSON.parse(role.permission),
+          permission: parseRolePermissions(role.permission),
         })),
       ];
     } catch (_error) {
@@ -396,6 +398,86 @@ class OrganizationRoleModel {
       // Return predefined roles as fallback
       return predefinedRoles;
     }
+  }
+
+  /**
+   * List roles for an organization with pagination and optional name filtering.
+   * Predefined roles are always ordered first.
+   */
+  static async getAllPaginated(params: {
+    organizationId: string;
+    limit: number;
+    offset: number;
+    name?: string;
+    isAdmin: boolean;
+  }): Promise<{ data: OrganizationRole[]; total: number }> {
+    const { organizationId, limit, offset, name, isAdmin } = params;
+
+    const normalizedSearch = name?.trim().toLowerCase();
+    const predefinedRoles = OrganizationRoleModel.getPredefinedOnly(
+      organizationId,
+    ).filter((role) => {
+      if (!normalizedSearch) return true;
+      return role.name.toLowerCase().includes(normalizedSearch);
+    });
+
+    if (!isAdmin) {
+      const pagedPredefined = predefinedRoles.slice(offset, offset + limit);
+      return {
+        data: pagedPredefined,
+        total: predefinedRoles.length,
+      };
+    }
+
+    const customFilters = [
+      eq(schema.organizationRolesTable.organizationId, organizationId),
+      ...(normalizedSearch
+        ? [ilike(schema.organizationRolesTable.name, `%${normalizedSearch}%`)]
+        : []),
+    ];
+
+    const [{ count: customTotalRaw = 0 }] = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(schema.organizationRolesTable)
+      .where(and(...customFilters));
+
+    const customTotal = Number(customTotalRaw);
+
+    const predefinedCount = predefinedRoles.length;
+    const total = predefinedCount + customTotal;
+
+    const takeFromPredefined =
+      offset < predefinedCount
+        ? predefinedRoles.slice(offset, offset + limit)
+        : [];
+    const remainingLimit = Math.max(0, limit - takeFromPredefined.length);
+    const customOffset =
+      offset < predefinedCount ? 0 : Math.max(0, offset - predefinedCount);
+
+    const customRoles =
+      remainingLimit > 0
+        ? await db
+            .select({
+              ...getTableColumns(schema.organizationRolesTable),
+              predefined: sql<boolean>`false`,
+            })
+            .from(schema.organizationRolesTable)
+            .where(and(...customFilters))
+            .orderBy(schema.organizationRolesTable.name)
+            .limit(remainingLimit)
+            .offset(customOffset)
+        : [];
+
+    return {
+      data: [
+        ...takeFromPredefined,
+        ...customRoles.map((role) => ({
+          ...role,
+          permission: parseRolePermissions(role.permission),
+        })),
+      ],
+      total,
+    };
   }
 
   /**
@@ -430,3 +512,15 @@ class OrganizationRoleModel {
 }
 
 export default OrganizationRoleModel;
+
+function parseRolePermissions(value: string): Permissions {
+  try {
+    return JSON.parse(value) as Permissions;
+  } catch (error) {
+    logger.warn(
+      { error, permission: value },
+      "Failed to parse organization role permissions JSON",
+    );
+    return {};
+  }
+}

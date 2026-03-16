@@ -7,7 +7,6 @@ import {
 } from "@shared/access-control";
 import {
   adminClient,
-  apiKeyClient,
   inferOrgAdditionalFields,
   organizationClient,
   twoFactorClient,
@@ -42,12 +41,15 @@ export const authClient = createAuthClient({
               type: "string",
               required: true,
             },
+            description: {
+              type: "string",
+              required: false,
+            },
           },
         },
       }),
     }),
     adminClient(),
-    apiKeyClient(),
     twoFactorClient(),
     ssoClient(),
     oauthProviderClient(),

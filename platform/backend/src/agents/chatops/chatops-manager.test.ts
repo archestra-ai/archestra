@@ -9,7 +9,7 @@ import type {
   ChatOpsProvider,
   ChatReplyOptions,
   IncomingChatMessage,
-} from "@/types/chatops";
+} from "@/types";
 import {
   buildChatOpsSessionId,
   ChatOpsManager,

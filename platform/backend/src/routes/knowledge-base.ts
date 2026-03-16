@@ -1,4 +1,9 @@
-import { RouteId } from "@shared";
+import {
+  calculatePaginationMeta,
+  createPaginatedResponseSchema,
+  PaginationQuerySchema,
+  RouteId,
+} from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { getConnector } from "@/knowledge-base/connectors/registry";
@@ -17,22 +22,19 @@ import { secretManager } from "@/secrets-manager";
 import { taskQueueService } from "@/task-queue";
 import {
   ApiError,
+  ConnectorConfigSchema,
+  type ConnectorCredentials,
+  ConnectorCredentialsSchema,
+  type ConnectorType,
+  ConnectorTypeSchema,
   constructResponseSchema,
-  createPaginatedResponseSchema,
   DeleteObjectResponseSchema,
-  PaginationQuerySchema,
+  KnowledgeBaseVisibilitySchema,
   SelectConnectorRunListSchema,
   SelectConnectorRunSchema,
   SelectKnowledgeBaseConnectorSchema,
   SelectKnowledgeBaseSchema,
 } from "@/types";
-import { KnowledgeBaseVisibilitySchema } from "@/types/knowledge-base";
-import {
-  ConnectorConfigSchema,
-  type ConnectorCredentials,
-  ConnectorCredentialsSchema,
-  ConnectorTypeSchema,
-} from "@/types/knowledge-connector";
 
 const AssignedAgentSummarySchema = z.object({
   id: z.string(),
@@ -62,20 +64,23 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.GetKnowledgeBases,
         description: "List all knowledge bases for the organization",
         tags: ["Knowledge Bases"],
-        querystring: PaginationQuerySchema,
+        querystring: PaginationQuerySchema.extend({
+          search: z.string().optional(),
+        }),
         response: constructResponseSchema(
           createPaginatedResponseSchema(KnowledgeBaseWithConnectorsSchema),
         ),
       },
     },
-    async ({ query: { limit, offset }, organizationId }, reply) => {
+    async ({ query: { limit, offset, search }, organizationId }, reply) => {
       const [knowledgeBases, total] = await Promise.all([
         KnowledgeBaseModel.findByOrganization({
           organizationId,
           limit,
           offset,
+          search,
         }),
-        KnowledgeBaseModel.countByOrganization(organizationId),
+        KnowledgeBaseModel.countByOrganization({ organizationId, search }),
       ]);
 
       const kbIds = knowledgeBases.map((kb) => kb.id);
@@ -107,14 +112,14 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       const connectorsByKbId = new Map<
         string,
-        { id: string; name: string; connectorType: "jira" | "confluence" }[]
+        { id: string; name: string; connectorType: ConnectorType }[]
       >();
       for (const connector of allConnectors) {
         const list = connectorsByKbId.get(connector.knowledgeBaseId) ?? [];
         list.push({
           id: connector.id,
           name: connector.name,
-          connectorType: connector.connectorType as "jira" | "confluence",
+          connectorType: connector.connectorType,
         });
         connectorsByKbId.set(connector.knowledgeBaseId, list);
       }
@@ -131,19 +136,9 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           ),
       }));
 
-      const currentPage = Math.floor(offset / limit) + 1;
-      const totalPages = Math.ceil(total / limit);
-
       return reply.send({
         data,
-        pagination: {
-          currentPage,
-          limit,
-          total,
-          totalPages,
-          hasNext: currentPage < totalPages,
-          hasPrev: currentPage > 1,
-        },
+        pagination: calculatePaginationMeta(total, { limit, offset }),
       });
     },
   );
@@ -218,7 +213,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       const updated = await KnowledgeBaseModel.update(id, body);
       if (!updated) {
-        throw new ApiError(404, "Knowledge graph not found");
+        throw new ApiError(404, "Knowledge base not found");
       }
 
       return reply.send(updated);
@@ -241,7 +236,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       const success = await KnowledgeBaseModel.delete(id);
       if (!success) {
-        throw new ApiError(404, "Knowledge graph not found");
+        throw new ApiError(404, "Knowledge base not found");
       }
 
       return reply.send({ success: true });
@@ -287,6 +282,8 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["Connectors"],
         querystring: PaginationQuerySchema.extend({
           knowledgeBaseId: z.string().optional(),
+          search: z.string().optional(),
+          connectorType: ConnectorTypeSchema.optional(),
         }),
         response: constructResponseSchema(
           createPaginatedResponseSchema(
@@ -298,7 +295,10 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (
-      { query: { limit, offset, knowledgeBaseId }, organizationId },
+      {
+        query: { limit, offset, knowledgeBaseId, search, connectorType },
+        organizationId,
+      },
       reply,
     ) => {
       let data: Awaited<
@@ -314,14 +314,16 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           );
         total = data.length;
       } else {
-        [data, total] = await Promise.all([
-          KnowledgeBaseConnectorModel.findByOrganization({
+        const result =
+          await KnowledgeBaseConnectorModel.findByOrganizationPaginated({
             organizationId,
             limit,
             offset,
-          }),
-          KnowledgeBaseConnectorModel.countByOrganization(organizationId),
-        ]);
+            search,
+            connectorType,
+          });
+        data = result.data;
+        total = result.total;
       }
 
       // Enrich connectors with assigned agents (batch query to avoid N+1)
@@ -339,15 +341,16 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         { id: string; name: string; agentType: string }
       >();
       if (allAgentIdsForConnectors.length > 0) {
-        const agents = await AgentModel.findByOrganizationId(organizationId);
+        const agents = await AgentModel.findBasicByOrganizationIdAndIds({
+          organizationId,
+          agentIds: allAgentIdsForConnectors,
+        });
         for (const agent of agents) {
-          if (allAgentIdsForConnectors.includes(agent.id)) {
-            connectorAgentDetailsMap.set(agent.id, {
-              id: agent.id,
-              name: agent.name,
-              agentType: agent.agentType,
-            });
-          }
+          connectorAgentDetailsMap.set(agent.id, {
+            id: agent.id,
+            name: agent.name,
+            agentType: agent.agentType,
+          });
         }
       }
 
@@ -608,6 +611,58 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.post(
+    "/api/connectors/:id/force-resync",
+    {
+      schema: {
+        operationId: RouteId.ForceResyncConnector,
+        description:
+          "Force a full re-sync: deletes all documents, chunks, run history, and resets the checkpoint",
+        tags: ["Connectors"],
+        params: z.object({ id: z.string() }),
+        response: constructResponseSchema(
+          z.object({
+            taskId: z.string(),
+            status: z.string(),
+          }),
+        ),
+      },
+    },
+    async ({ params: { id }, organizationId }, reply) => {
+      await findConnectorOrThrow(id, organizationId);
+
+      const hasPendingOrProcessing = await TaskModel.hasPendingOrProcessing(
+        "connector_sync",
+        id,
+      );
+      if (hasPendingOrProcessing) {
+        throw new ApiError(
+          409,
+          "A sync is already in progress for this connector",
+        );
+      }
+
+      // Delete all documents (chunks cascade via FK) and run history
+      await KbDocumentModel.deleteByConnector(id);
+      await ConnectorRunModel.deleteByConnector(id);
+
+      // Reset connector checkpoint and sync status
+      await KnowledgeBaseConnectorModel.update(id, {
+        checkpoint: null,
+        lastSyncStatus: "running",
+        lastSyncAt: null,
+      });
+
+      // Enqueue a fresh sync task
+      const taskId = await taskQueueService.enqueue({
+        taskType: "connector_sync",
+        payload: { connectorId: id },
+      });
+
+      return reply.send({ taskId, status: "enqueued" });
+    },
+  );
+
+  fastify.post(
     "/api/connectors/:id/test",
     {
       schema: {
@@ -807,7 +862,7 @@ export default knowledgeBaseRoutes;
 async function findKnowledgeBaseOrThrow(id: string, organizationId: string) {
   const kg = await KnowledgeBaseModel.findById(id);
   if (!kg || kg.organizationId !== organizationId) {
-    throw new ApiError(404, "Knowledge graph not found");
+    throw new ApiError(404, "Knowledge base not found");
   }
   return kg;
 }

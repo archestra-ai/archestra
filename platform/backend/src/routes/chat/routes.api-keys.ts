@@ -60,12 +60,16 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description:
           "Get all chat API keys visible to the current user based on scope access",
         tags: ["Chat API Keys"],
+        querystring: z.object({
+          search: z.string().trim().min(1).optional(),
+          provider: SupportedProvidersSchema.optional(),
+        }),
         response: constructResponseSchema(
           z.array(ChatApiKeyWithScopeInfoSchema),
         ),
       },
     },
-    async ({ organizationId, user }, reply) => {
+    async ({ organizationId, user, query }, reply) => {
       // Get user's team IDs
       const userTeamIds = await TeamModel.getUserTeamIds(user.id);
 
@@ -80,6 +84,10 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         user.id,
         userTeamIds,
         isAgentAdmin,
+        {
+          search: query.search,
+          provider: query.provider,
+        },
       );
       return reply.send(apiKeys);
     },

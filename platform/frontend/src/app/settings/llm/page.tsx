@@ -8,6 +8,7 @@ import { WithPermissions } from "@/components/roles/with-permissions";
 import {
   SettingsBlock,
   SettingsSaveBar,
+  SettingsSectionStack,
 } from "@/components/settings/settings-block";
 import { CardTitle } from "@/components/ui/card";
 import { MultiSelect } from "@/components/ui/multi-select";
@@ -52,8 +53,9 @@ const COMPRESSION_MODE_LABELS: Record<CompressionMode, string> = {
 };
 
 export default function LlmSettingsPage() {
-  const { data: organization } = useOrganization();
-  const { data: teams } = useTeams();
+  const { data: organization, isPending: isOrganizationPending } =
+    useOrganization();
+  const { data: teams, isPending: areTeamsPending } = useTeams();
   const queryClient = useQueryClient();
 
   const [compressionMode, setCompressionMode] =
@@ -115,7 +117,9 @@ export default function LlmSettingsPage() {
 
   const hasCleanupChanges = cleanupInterval !== serverCleanupInterval;
 
-  const hasChanges = hasCompressionChanges || hasCleanupChanges;
+  const isInitialLoading = isOrganizationPending || areTeamsPending;
+  const hasChanges =
+    !isInitialLoading && (hasCompressionChanges || hasCleanupChanges);
 
   const handleSave = async () => {
     const mutations: Promise<unknown>[] = [];
@@ -193,7 +197,7 @@ export default function LlmSettingsPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <SettingsSectionStack>
       <SettingsBlock
         title="Apply compression to tool results"
         description="Reduce LLM token usage up to 60% by using TOON (Token-Oriented Object Notation) compression for tool results."
@@ -291,6 +295,6 @@ export default function LlmSettingsPage() {
         onSave={handleSave}
         onCancel={handleCancel}
       />
-    </div>
+    </SettingsSectionStack>
   );
 }

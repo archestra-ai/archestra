@@ -3,11 +3,18 @@ import {
   ARCHESTRA_MCP_SERVER_NAME,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
   TOOL_ARTIFACT_WRITE_FULL_NAME,
+  TOOL_SWAP_TO_DEFAULT_AGENT_FULL_NAME,
   TOOL_TODO_WRITE_FULL_NAME,
 } from "@shared";
 import { userHasPermission } from "@/auth/utils";
 import logger from "@/logging";
-import { AgentModel, AgentTeamModel, ConversationModel } from "@/models";
+import {
+  AgentModel,
+  AgentTeamModel,
+  ConversationModel,
+  OrganizationModel,
+} from "@/models";
+import { catchError, errorResult, successResult } from "./helpers";
 import type { ArchestraContext } from "./types";
 
 // === Constants ===
@@ -18,6 +25,7 @@ const TOOL_SWAP_AGENT_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL
 export const toolShortNames = [
   "todo_write",
   "swap_agent",
+  "swap_to_default_agent",
   "artifact_write",
 ] as const;
 
@@ -80,6 +88,19 @@ export const tools: Tool[] = [
     _meta: {},
   },
   {
+    name: TOOL_SWAP_TO_DEFAULT_AGENT_FULL_NAME,
+    title: "Swap to Default Agent",
+    description:
+      "Return to the default agent. You MUST call this — without asking the user — when you don't have the right tools to fulfill a request, when you are stuck and cannot help further, when you are done with your task, or when the user wants to go back. Always write a brief message before calling this tool summarizing why you are switching back (e.g. what you accomplished, what tool is missing, or why you cannot continue).",
+    inputSchema: {
+      type: "object",
+      properties: {},
+      required: [],
+    },
+    annotations: {},
+    _meta: {},
+  },
+  {
     name: TOOL_ARTIFACT_WRITE_FULL_NAME,
     title: "Write Artifact",
     description:
@@ -125,41 +146,16 @@ export async function handleTool(
         | undefined;
 
       if (!todos || !Array.isArray(todos)) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: "Error: todos parameter is required and must be an array",
-            },
-          ],
-          isError: true,
-        };
+        return errorResult("todos parameter is required and must be an array");
       }
 
       // For now, just return a success message
       // In the future, this could persist todos to database
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Successfully wrote ${todos.length} todo item(s) to the conversation`,
-          },
-        ],
-        isError: false,
-      };
+      return successResult(
+        `Successfully wrote ${todos.length} todo item(s) to the conversation`,
+      );
     } catch (error) {
-      logger.error({ err: error }, "Error writing todos");
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Error writing todos: ${
-              error instanceof Error ? error.message : "Unknown error"
-            }`,
-          },
-        ],
-        isError: true,
-      };
+      return catchError(error, "writing todos");
     }
   }
 
@@ -173,12 +169,7 @@ export async function handleTool(
       const agentName = args?.agent_name as string | undefined;
 
       if (!agentName) {
-        return {
-          content: [
-            { type: "text", text: "Error: agent_name parameter is required." },
-          ],
-          isError: true,
-        };
+        return errorResult("agent_name parameter is required.");
       }
 
       if (
@@ -186,15 +177,9 @@ export async function handleTool(
         !context.userId ||
         !context.organizationId
       ) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: "Error: This tool requires conversation context. It can only be used within an active chat conversation.",
-            },
-          ],
-          isError: true,
-        };
+        return errorResult(
+          "This tool requires conversation context. It can only be used within an active chat conversation.",
+        );
       }
 
       // Look up agent by name (search across all accessible agents)
@@ -207,15 +192,7 @@ export async function handleTool(
       );
 
       if (results.data.length === 0) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Error: No agent found matching "${agentName}".`,
-            },
-          ],
-          isError: true,
-        };
+        return errorResult(`No agent found matching "${agentName}".`);
       }
 
       // Pick exact name match if available, otherwise first result
@@ -226,15 +203,9 @@ export async function handleTool(
 
       // Prevent swapping to the same agent
       if (targetAgent.id === contextAgent.id) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Error: Already using agent "${targetAgent.name}". Choose a different agent.`,
-            },
-          ],
-          isError: true,
-        };
+        return errorResult(
+          `Already using agent "${targetAgent.name}". Choose a different agent.`,
+        );
       }
 
       // Verify user has access via team-based authorization
@@ -250,15 +221,9 @@ export async function handleTool(
       );
 
       if (!accessibleIds.includes(targetAgent.id)) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Error: You do not have access to agent "${targetAgent.name}".`,
-            },
-          ],
-          isError: true,
-        };
+        return errorResult(
+          `You do not have access to agent "${targetAgent.name}".`,
+        );
       }
 
       // Update the conversation's agent
@@ -270,43 +235,81 @@ export async function handleTool(
       );
 
       if (!updated) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: "Error: Failed to update conversation agent.",
-            },
-          ],
-          isError: true,
-        };
+        return errorResult("Failed to update conversation agent.");
       }
 
-      return {
-        content: [
-          {
-            type: "text",
-            text: JSON.stringify({
-              success: true,
-              agent_id: targetAgent.id,
-              agent_name: targetAgent.name,
-            }),
-          },
-        ],
-        isError: false,
-      };
+      return successResult(
+        JSON.stringify({
+          success: true,
+          agent_id: targetAgent.id,
+          agent_name: targetAgent.name,
+        }),
+      );
     } catch (error) {
-      logger.error({ err: error }, "Error swapping agent");
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Error swapping agent: ${
-              error instanceof Error ? error.message : "Unknown error"
-            }`,
-          },
-        ],
-        isError: true,
-      };
+      return catchError(error, "swapping agent");
+    }
+  }
+
+  if (toolName === TOOL_SWAP_TO_DEFAULT_AGENT_FULL_NAME) {
+    logger.info(
+      { agentId: contextAgent.id },
+      "swap_to_default_agent tool called",
+    );
+
+    try {
+      if (
+        !context.conversationId ||
+        !context.userId ||
+        !context.organizationId
+      ) {
+        return errorResult(
+          "This tool requires conversation context. It can only be used within an active chat conversation.",
+        );
+      }
+
+      // Look up org's default agent
+      const org = await OrganizationModel.getById(context.organizationId);
+      const defaultAgentId = org?.defaultAgentId ?? null;
+
+      if (!defaultAgentId) {
+        return errorResult(
+          "No default agent is configured for this organization.",
+        );
+      }
+
+      const targetAgent = await AgentModel.findById(defaultAgentId);
+      if (!targetAgent) {
+        return errorResult("Default agent not found.");
+      }
+
+      // Prevent no-op swap to the same agent
+      if (targetAgent.id === contextAgent.id) {
+        return errorResult(
+          `Already using the default agent "${targetAgent.name}".`,
+        );
+      }
+
+      // Update the conversation's agent
+      const updated = await ConversationModel.update(
+        context.conversationId,
+        context.userId,
+        context.organizationId,
+        { agentId: defaultAgentId },
+      );
+
+      if (!updated) {
+        return errorResult("Failed to update conversation agent.");
+      }
+
+      return successResult(
+        JSON.stringify({
+          success: true,
+          agent_id: targetAgent.id,
+          agent_name: targetAgent.name,
+        }),
+      );
+    } catch (error) {
+      return catchError(error, "swapping to default agent");
     }
   }
 
@@ -323,15 +326,9 @@ export async function handleTool(
       const content = args?.content as string | undefined;
 
       if (!content || typeof content !== "string") {
-        return {
-          content: [
-            {
-              type: "text",
-              text: "Error: content parameter is required and must be a string",
-            },
-          ],
-          isError: true,
-        };
+        return errorResult(
+          "content parameter is required and must be a string",
+        );
       }
 
       // Check if we have conversation context
@@ -340,15 +337,9 @@ export async function handleTool(
         !context.userId ||
         !context.organizationId
       ) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: "Error: This tool requires conversation context. It can only be used within an active chat conversation.",
-            },
-          ],
-          isError: true,
-        };
+        return errorResult(
+          "This tool requires conversation context. It can only be used within an active chat conversation.",
+        );
       }
 
       // Update the conversation's artifact
@@ -360,39 +351,16 @@ export async function handleTool(
       );
 
       if (!updated) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: "Error: Failed to update conversation artifact. The conversation may not exist or you may not have permission to update it.",
-            },
-          ],
-          isError: true,
-        };
+        return errorResult(
+          "Failed to update conversation artifact. The conversation may not exist or you may not have permission to update it.",
+        );
       }
 
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Successfully updated conversation artifact (${content.length} characters)`,
-          },
-        ],
-        isError: false,
-      };
+      return successResult(
+        `Successfully updated conversation artifact (${content.length} characters)`,
+      );
     } catch (error) {
-      logger.error({ err: error }, "Error writing artifact");
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Error writing artifact: ${
-              error instanceof Error ? error.message : "Unknown error"
-            }`,
-          },
-        ],
-        isError: true,
-      };
+      return catchError(error, "writing artifact");
     }
   }
 

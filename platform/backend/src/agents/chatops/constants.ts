@@ -3,6 +3,7 @@
  */
 
 import { TimeInMs } from "@shared";
+import type { ChatOpsConnectionMode } from "@/types";
 
 /**
  * Rate limit configuration for chatops webhooks
@@ -72,7 +73,8 @@ export const CHATOPS_COMMANDS = {
 /**
  * Default connection mode for Slack when not explicitly configured.
  */
-export const SLACK_DEFAULT_CONNECTION_MODE = "socket" as const;
+export const SLACK_DEFAULT_CONNECTION_MODE: ChatOpsConnectionMode =
+  "socket" as const;
 
 export const SLACK_SLASH_COMMANDS = {
   SELECT_AGENT: "/archestra-select-agent",

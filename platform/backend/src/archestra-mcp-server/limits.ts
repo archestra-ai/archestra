@@ -6,6 +6,7 @@ import {
 import logger from "@/logging";
 import { LimitModel } from "@/models";
 import { type LimitEntityType, type LimitType, LimitTypeSchema } from "@/types";
+import { catchError, errorResult, successResult } from "./helpers";
 import type { ArchestraContext } from "./types";
 
 // === Constants ===
@@ -212,15 +213,9 @@ export async function handleTool(
 
       // Validate required fields
       if (!entityType || !entityId || !limitType || limitValue === undefined) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: "Error: entity_type, entity_id, limit_type, and limit_value are required fields.",
-            },
-          ],
-          isError: true,
-        };
+        return errorResult(
+          "entity_type, entity_id, limit_type, and limit_value are required fields.",
+        );
       }
 
       // Validate limit type specific requirements
@@ -228,39 +223,21 @@ export async function handleTool(
         limitType === "token_cost" &&
         (!model || !Array.isArray(model) || model.length === 0)
       ) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: "Error: model array with at least one model is required for token_cost limits.",
-            },
-          ],
-          isError: true,
-        };
+        return errorResult(
+          "model array with at least one model is required for token_cost limits.",
+        );
       }
 
       if (limitType === "mcp_server_calls" && !mcpServerName) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: "Error: mcp_server_name is required for mcp_server_calls limits.",
-            },
-          ],
-          isError: true,
-        };
+        return errorResult(
+          "mcp_server_name is required for mcp_server_calls limits.",
+        );
       }
 
       if (limitType === "tool_calls" && (!mcpServerName || !limitToolName)) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: "Error: mcp_server_name and tool_name are required for tool_calls limits.",
-            },
-          ],
-          isError: true,
-        };
+        return errorResult(
+          "mcp_server_name and tool_name are required for tool_calls limits.",
+        );
       }
 
       // Create the limit
@@ -274,36 +251,19 @@ export async function handleTool(
         toolName: limitToolName,
       });
 
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Successfully created limit.\n\nLimit ID: ${
-              limit.id
-            }\nEntity Type: ${limit.entityType}\nEntity ID: ${
-              limit.entityId
-            }\nLimit Type: ${limit.limitType}\nLimit Value: ${
-              limit.limitValue
-            }${limit.model ? `\nModel: ${limit.model}` : ""}${
-              limit.mcpServerName ? `\nMCP Server: ${limit.mcpServerName}` : ""
-            }${limit.toolName ? `\nTool: ${limit.toolName}` : ""}`,
-          },
-        ],
-        isError: false,
-      };
+      return successResult(
+        `Successfully created limit.\n\nLimit ID: ${
+          limit.id
+        }\nEntity Type: ${limit.entityType}\nEntity ID: ${
+          limit.entityId
+        }\nLimit Type: ${limit.limitType}\nLimit Value: ${
+          limit.limitValue
+        }${limit.model ? `\nModel: ${limit.model}` : ""}${
+          limit.mcpServerName ? `\nMCP Server: ${limit.mcpServerName}` : ""
+        }${limit.toolName ? `\nTool: ${limit.toolName}` : ""}`,
+      );
     } catch (error) {
-      logger.error({ err: error }, "Error creating limit");
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Error creating limit: ${
-              error instanceof Error ? error.message : "Unknown error"
-            }`,
-          },
-        ],
-        isError: true,
-      };
+      return catchError(error, "creating limit");
     }
   }
 
@@ -321,20 +281,13 @@ export async function handleTool(
       const limits = await LimitModel.findAll(entityType, entityId);
 
       if (limits.length === 0) {
-        return {
-          content: [
-            {
-              type: "text",
-              text:
-                entityType || entityId
-                  ? `No limits found${
-                      entityType ? ` for entity type: ${entityType}` : ""
-                    }${entityId ? ` and entity ID: ${entityId}` : ""}.`
-                  : "No limits found.",
-            },
-          ],
-          isError: false,
-        };
+        return successResult(
+          entityType || entityId
+            ? `No limits found${
+                entityType ? ` for entity type: ${entityType}` : ""
+              }${entityId ? ` and entity ID: ${entityId}` : ""}.`
+            : "No limits found.",
+        );
       }
 
       const formattedLimits = limits
@@ -354,28 +307,11 @@ export async function handleTool(
         })
         .join("\n\n");
 
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Found ${limits.length} limit(s):\n\n${formattedLimits}`,
-          },
-        ],
-        isError: false,
-      };
+      return successResult(
+        `Found ${limits.length} limit(s):\n\n${formattedLimits}`,
+      );
     } catch (error) {
-      logger.error({ err: error }, "Error getting limits");
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Error getting limits: ${
-              error instanceof Error ? error.message : "Unknown error"
-            }`,
-          },
-        ],
-        isError: true,
-      };
+      return catchError(error, "getting limits");
     }
   }
 
@@ -390,15 +326,7 @@ export async function handleTool(
       const limitValue = args?.limit_value as number | undefined;
 
       if (!id) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: "Error: id is required to update a limit.",
-            },
-          ],
-          isError: true,
-        };
+        return errorResult("id is required to update a limit.");
       }
 
       const updateData: Record<string, unknown> = {};
@@ -407,53 +335,20 @@ export async function handleTool(
       }
 
       if (Object.keys(updateData).length === 0) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: "Error: No fields provided to update.",
-            },
-          ],
-          isError: true,
-        };
+        return errorResult("No fields provided to update.");
       }
 
       const limit = await LimitModel.patch(id, updateData);
 
       if (!limit) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Error: Limit with ID ${id} not found.`,
-            },
-          ],
-          isError: true,
-        };
+        return errorResult(`Limit with ID ${id} not found.`);
       }
 
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Successfully updated limit.\n\nLimit ID: ${limit.id}\nEntity Type: ${limit.entityType}\nEntity ID: ${limit.entityId}\nLimit Type: ${limit.limitType}\nLimit Value: ${limit.limitValue}`,
-          },
-        ],
-        isError: false,
-      };
+      return successResult(
+        `Successfully updated limit.\n\nLimit ID: ${limit.id}\nEntity Type: ${limit.entityType}\nEntity ID: ${limit.entityId}\nLimit Type: ${limit.limitType}\nLimit Value: ${limit.limitValue}`,
+      );
     } catch (error) {
-      logger.error({ err: error }, "Error updating limit");
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Error updating limit: ${
-              error instanceof Error ? error.message : "Unknown error"
-            }`,
-          },
-        ],
-        isError: true,
-      };
+      return catchError(error, "updating limit");
     }
   }
 
@@ -467,53 +362,18 @@ export async function handleTool(
       const id = args?.id as string;
 
       if (!id) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: "Error: id is required to delete a limit.",
-            },
-          ],
-          isError: true,
-        };
+        return errorResult("id is required to delete a limit.");
       }
 
       const deleted = await LimitModel.delete(id);
 
       if (!deleted) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Error: Limit with ID ${id} not found.`,
-            },
-          ],
-          isError: true,
-        };
+        return errorResult(`Limit with ID ${id} not found.`);
       }
 
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Successfully deleted limit with ID: ${id}`,
-          },
-        ],
-        isError: false,
-      };
+      return successResult(`Successfully deleted limit with ID: ${id}`);
     } catch (error) {
-      logger.error({ err: error }, "Error deleting limit");
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Error deleting limit: ${
-              error instanceof Error ? error.message : "Unknown error"
-            }`,
-          },
-        ],
-        isError: true,
-      };
+      return catchError(error, "deleting limit");
     }
   }
 
@@ -541,31 +401,11 @@ export async function handleTool(
       const targetId = (args?.id as string) || contextAgent.id;
       const usage = await LimitModel.getAgentTokenUsage(targetId);
 
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Token usage for ${tokenUsageLabel} ${targetId}:\n\nTotal Input Tokens: ${usage.totalInputTokens.toLocaleString()}\nTotal Output Tokens: ${usage.totalOutputTokens.toLocaleString()}\nTotal Tokens: ${usage.totalTokens.toLocaleString()}`,
-          },
-        ],
-        isError: false,
-      };
-    } catch (error) {
-      logger.error(
-        { err: error },
-        `Error getting ${tokenUsageLabel} token usage`,
+      return successResult(
+        `Token usage for ${tokenUsageLabel} ${targetId}:\n\nTotal Input Tokens: ${usage.totalInputTokens.toLocaleString()}\nTotal Output Tokens: ${usage.totalOutputTokens.toLocaleString()}\nTotal Tokens: ${usage.totalTokens.toLocaleString()}`,
       );
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Error getting ${tokenUsageLabel} token usage: ${
-              error instanceof Error ? error.message : "Unknown error"
-            }`,
-          },
-        ],
-        isError: true,
-      };
+    } catch (error) {
+      return catchError(error, `getting ${tokenUsageLabel} token usage`);
     }
   }
 

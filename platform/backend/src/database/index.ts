@@ -114,8 +114,7 @@ export async function isDatabaseHealthy(): Promise<boolean> {
 }
 
 /**
- * Default export for backward compatibility.
- * Uses a Proxy to defer access until after initialization.
+ * Default export to use a Proxy to defer access until after database initialization.
  */
 export default new Proxy({} as ReturnType<typeof getDb>, {
   get(_, prop) {

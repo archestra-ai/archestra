@@ -1,6 +1,6 @@
 {
   "name": "@frontend",
-  "version": "1.1.15",
+  "version": "1.1.24",
   "private": true,
   "type": "module",
   "scripts": {
@@ -18,8 +18,8 @@
   },
   "dependencies": {
     "@ai-sdk/react": "^3.0.118",
-    "@better-auth/oauth-provider": "1.5.3",
-    "@better-auth/sso": "1.5.3",
+    "@better-auth/oauth-provider": "1.4.19",
+    "@better-auth/sso": "1.4.19",
     "@daveyplate/better-auth-ui": "github:archestra-ai/better-auth-ui#516664e",
     "@ferrucc-io/emoji-picker": "^0.0.48",
     "@hookform/resolvers": "^5.2.2",
@@ -54,7 +54,7 @@
     "@xterm/xterm": "^6.0.0",
     "@xyflow/react": "^12.10.1",
     "ai": "^6.0.82",
-    "better-auth": "1.5.3",
+    "better-auth": "1.4.19",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",

@@ -1,3 +1,4 @@
+import type { PaginationQuery } from "@shared";
 import {
   and,
   asc,
@@ -18,12 +19,7 @@ import {
   createPaginatedResult,
   type PaginatedResult,
 } from "@/database/utils/pagination";
-import type {
-  InsertMcpToolCall,
-  McpToolCall,
-  PaginationQuery,
-  SortingQuery,
-} from "@/types";
+import type { InsertMcpToolCall, McpToolCall, SortingQuery } from "@/types";
 import AgentTeamModel from "./agent-team";
 
 /**

@@ -1,9 +1,9 @@
 import { archestraApiSdk, type archestraApiTypes } from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  DEFAULT_AGENTS_PAGE_SIZE,
   DEFAULT_SORT_BY,
   DEFAULT_SORT_DIRECTION,
+  DEFAULT_TABLE_LIMIT,
   handleApiError,
 } from "./utils";
 
@@ -18,8 +18,6 @@ const {
   updateAgent,
   getLabelKeys,
   getLabelValues,
-  getAgentVersions,
-  rollbackAgent,
   getMemberDefaultAgent,
 } = archestraApiSdk;
 
@@ -67,7 +65,7 @@ export function useProfilesPaginated(
 
   // Check if we can use initialData (server-side fetched data)
   // Only use it for the first page (offset 0), default sorting, no search filter,
-  // no scope filter, AND matching default page size (20)
+  // no scope filter, AND matching default table page size
   // Note: agentTypes is allowed since the server fetches with the page-specific agentTypes
   const useInitialData =
     offset === 0 &&
@@ -79,7 +77,7 @@ export function useProfilesPaginated(
     authorIds === undefined &&
     excludeAuthorIds === undefined &&
     labels === undefined &&
-    (limit === undefined || limit === DEFAULT_AGENTS_PAGE_SIZE);
+    (limit === undefined || limit === DEFAULT_TABLE_LIMIT);
 
   return useQuery({
     queryKey: [
@@ -254,14 +252,6 @@ export function useLabelValues(params?: { key?: string }) {
   });
 }
 
-// ============================================================================
-// Internal Agents (Prompt-based agents) - Version History & Rollback
-// ============================================================================
-
-/**
- * Get internal agents only (agents with prompts).
- * Non-suspense version for components that need loading states.
- */
 /**
  * Get the current user's default agent ID.
  */
@@ -300,46 +290,6 @@ export function useOrgScopedAgents() {
         query: { agentType: "agent", excludeBuiltIn: true, scope: "org" },
       });
       return response.data ?? [];
-    },
-  });
-}
-
-/**
- * Get version history for an internal agent.
- * Only applicable to internal agents (agents with prompts).
- */
-export function useAgentVersions(id: string | undefined) {
-  return useQuery({
-    queryKey: ["agents", id, "versions"],
-    queryFn: async () => {
-      if (!id) return null;
-      const response = await getAgentVersions({ path: { id } });
-      return response.data ?? null;
-    },
-    enabled: !!id,
-  });
-}
-
-/**
- * Rollback an internal agent to a previous version.
- * Only applicable to internal agents (agents with prompts).
- */
-export function useRollbackAgent() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async ({ id, version }: { id: string; version: number }) => {
-      const response = await rollbackAgent({
-        path: { id },
-        body: { version },
-      });
-      return response.data;
-    },
-    onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ["agents"] });
-      queryClient.invalidateQueries({ queryKey: ["agents", variables.id] });
-      queryClient.invalidateQueries({
-        queryKey: ["agents", variables.id, "versions"],
-      });
     },
   });
 }

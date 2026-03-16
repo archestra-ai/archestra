@@ -14,11 +14,12 @@ import {
 } from "@/models";
 import { RouteCategory, startActiveChatSpan } from "@/observability/tracing";
 import type {
+  ChatOpsConnectionMode,
   ChatOpsProcessingResult,
   ChatOpsProvider,
   ChatOpsProviderType,
   IncomingChatMessage,
-} from "@/types/chatops";
+} from "@/types";
 import {
   autoProvisionUser,
   buildWelcomeMessage,
@@ -1173,10 +1174,9 @@ export class ChatOpsManager {
       const signingSecret =
         process.env.ARCHESTRA_CHATOPS_SLACK_SIGNING_SECRET || "";
       const connectionMode =
-        (process.env.ARCHESTRA_CHATOPS_SLACK_CONNECTION_MODE as
-          | "webhook"
-          | "socket"
-          | undefined) || SLACK_DEFAULT_CONNECTION_MODE;
+        (process.env
+          .ARCHESTRA_CHATOPS_SLACK_CONNECTION_MODE as ChatOpsConnectionMode) ||
+        SLACK_DEFAULT_CONNECTION_MODE;
       const appLevelToken =
         process.env.ARCHESTRA_CHATOPS_SLACK_APP_LEVEL_TOKEN || "";
 

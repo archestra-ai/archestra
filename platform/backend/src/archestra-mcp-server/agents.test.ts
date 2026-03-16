@@ -51,10 +51,15 @@ describe("agent tool execution", () => {
   let testAgent: Agent;
   let mockContext: ArchestraContext;
 
-  beforeEach(async ({ makeAgent }) => {
-    testAgent = await makeAgent({ name: "Test Agent" });
+  beforeEach(async ({ makeAgent, makeUser, makeOrganization, makeMember }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "admin" });
+    testAgent = await makeAgent({ name: "Test Agent", organizationId: org.id });
     mockContext = {
       agent: { id: testAgent.id, name: testAgent.name },
+      userId: user.id,
+      organizationId: org.id,
     };
   });
 
@@ -160,6 +165,7 @@ describe("agent tool execution", () => {
       `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}list_agents`,
       { name: "Agent With Resources" },
       {
+        ...mockContext,
         agent: { id: agent.id, name: agent.name },
       },
     );

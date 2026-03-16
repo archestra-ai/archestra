@@ -19,6 +19,7 @@ import { eq } from "drizzle-orm";
 import type { FastifyRequest } from "fastify";
 import {
   executeArchestraTool,
+  filterToolNamesByPermission,
   getArchestraMcpTools,
 } from "@/archestra-mcp-server";
 import { userHasPermission } from "@/auth/utils";
@@ -118,21 +119,31 @@ export async function createAgentServer(
     // Fetch fresh on every request to ensure we get newly assigned tools
     const mcpTools = await ToolModel.getMcpToolsByAgent(agentId);
 
+    // Filter Archestra tools based on user RBAC permissions
+    const permittedNames = await filterToolNamesByPermission(
+      mcpTools.map((t) => t.name),
+      tokenAuth?.userId,
+      tokenAuth?.organizationId,
+    );
+    const permittedTools = mcpTools.filter((t) => permittedNames.has(t.name));
+
     // Dynamically enrich the knowledge sources tool description with
     // the agent's actual knowledge base names and connector types
     const kbToolDescription = await buildKnowledgeSourcesDescription(agentId);
 
-    const toolsList = mcpTools.map(({ name, description, parameters }) => ({
-      name,
-      title: archestraToolTitles.get(name) || name,
-      description:
-        name === TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME && kbToolDescription
-          ? kbToolDescription
-          : description,
-      inputSchema: parameters,
-      annotations: {},
-      _meta: {},
-    }));
+    const toolsList = permittedTools.map(
+      ({ name, description, parameters }) => ({
+        name,
+        title: archestraToolTitles.get(name) || name,
+        description:
+          name === TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME && kbToolDescription
+            ? kbToolDescription
+            : description,
+        inputSchema: parameters,
+        annotations: {},
+        _meta: {},
+      }),
+    );
 
     // Log tools/list request
     try {
@@ -1034,7 +1045,9 @@ export async function buildKnowledgeSourcesDescription(
   let description =
     "Query the organization's knowledge sources to retrieve relevant information. " +
     "Use this tool when the user asks a question you cannot answer from your training data alone, " +
-    "or when they explicitly ask you to search internal documents and data sources.";
+    "or when they explicitly ask you to search internal documents and data sources. " +
+    "Pass the user's original query as-is — do not rephrase, summarize, or expand it. " +
+    "The system performs its own query optimization internally.";
 
   if (kbNames.length > 0) {
     const kbList = kbNames.join(", ");
@@ -1048,8 +1061,7 @@ export async function buildKnowledgeSourcesDescription(
   }
 
   description +=
-    " Formulate queries about the actual content you are looking for — " +
-    "ask about topics, concepts, or information rather than about source systems.";
+    " Pass the user's original query verbatim — the system handles query optimization internally.";
 
   kbDescriptionCache.set(agentId, {
     description,

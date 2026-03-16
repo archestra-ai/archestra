@@ -54,10 +54,15 @@ describe("mcp server tool execution", () => {
   let testAgent: Agent;
   let mockContext: ArchestraContext;
 
-  beforeEach(async ({ makeAgent }) => {
-    testAgent = await makeAgent({ name: "Test Agent" });
+  beforeEach(async ({ makeAgent, makeUser, makeOrganization, makeMember }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "admin" });
+    testAgent = await makeAgent({ name: "Test Agent", organizationId: org.id });
     mockContext = {
       agent: { id: testAgent.id, name: testAgent.name },
+      userId: user.id,
+      organizationId: org.id,
     };
   });
 
@@ -107,14 +112,17 @@ describe("mcp server tool execution", () => {
   });
 
   test("edit_mcp_description returns error when user/org context is missing", async () => {
+    const noAuthContext: ArchestraContext = {
+      agent: { id: testAgent.id, name: testAgent.name },
+    };
     const result = await executeArchestraTool(
       `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}edit_mcp_description`,
       { id: "some-id" },
-      mockContext,
+      noAuthContext,
     );
     expect(result.isError).toBe(true);
     expect((result.content[0] as any).text).toContain(
-      "user/organization context not available",
+      "User context not available",
     );
   });
 
@@ -195,24 +203,11 @@ describe("mcp server tool execution", () => {
 
   test("edit_mcp_description updates an existing catalog item", async ({
     makeInternalMcpCatalog,
-    makeUser,
-    makeOrganization,
-    makeMember,
   }) => {
-    const org = await makeOrganization();
-    const user = await makeUser();
-    await makeMember(user.id, org.id, { role: "admin" });
-
     const catalog = await makeInternalMcpCatalog({
       name: "Original Name",
       description: "Original description",
     });
-
-    const contextWithAuth: ArchestraContext = {
-      ...mockContext,
-      userId: user.id,
-      organizationId: org.id,
-    };
 
     const result = await executeArchestraTool(
       `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}edit_mcp_description`,
@@ -221,7 +216,7 @@ describe("mcp server tool execution", () => {
         name: "Updated Name",
         description: "Updated description",
       },
-      contextWithAuth,
+      mockContext,
     );
     expect(result.isError).toBe(false);
     const text = (result.content[0] as any).text;

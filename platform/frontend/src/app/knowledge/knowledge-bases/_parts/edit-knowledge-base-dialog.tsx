@@ -3,15 +3,9 @@
 import type { archestraApiTypes } from "@shared";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
+import { FormDialog } from "@/components/form-dialog";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { DialogForm, DialogStickyFooter } from "@/components/ui/dialog";
 import {
   Form,
   FormControl,
@@ -84,19 +78,20 @@ export function EditKnowledgeBaseDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
-        <DialogHeader>
-          <DialogTitle>Edit Knowledge Base</DialogTitle>
-          <DialogDescription>
-            Update the knowledge base settings.
-          </DialogDescription>
-        </DialogHeader>
-        <Form {...form}>
-          <form
-            onSubmit={form.handleSubmit(handleSubmit)}
-            className="space-y-4"
-          >
+    <FormDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Edit Knowledge Base"
+      description="Update the knowledge base settings."
+      size="medium"
+      className="max-w-lg"
+    >
+      <Form {...form}>
+        <DialogForm
+          onSubmit={form.handleSubmit(handleSubmit)}
+          className="flex min-h-0 flex-1 flex-col"
+        >
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4">
             <FormField
               control={form.control}
               name="name"
@@ -135,22 +130,22 @@ export function EditKnowledgeBaseDialog({
               teamIds={teamIds}
               onTeamIdsChange={setTeamIds}
             />
+          </div>
 
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => onOpenChange(false)}
-              >
-                Cancel
-              </Button>
-              <Button type="submit" disabled={updateKnowledgeBase.isPending}>
-                {updateKnowledgeBase.isPending ? "Saving..." : "Save Changes"}
-              </Button>
-            </DialogFooter>
-          </form>
-        </Form>
-      </DialogContent>
-    </Dialog>
+          <DialogStickyFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" disabled={updateKnowledgeBase.isPending}>
+              {updateKnowledgeBase.isPending ? "Saving..." : "Save Changes"}
+            </Button>
+          </DialogStickyFooter>
+        </DialogForm>
+      </Form>
+    </FormDialog>
   );
 }

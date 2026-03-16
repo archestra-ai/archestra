@@ -1,4 +1,10 @@
-import { PredefinedRoleNameSchema, RouteId } from "@shared";
+import {
+  calculatePaginationMeta,
+  createPaginatedResponseSchema,
+  PaginationQuerySchema,
+  PredefinedRoleNameSchema,
+  RouteId,
+} from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { hasPermission } from "@/auth";
@@ -25,25 +31,33 @@ const organizationRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.GetRoles,
         description: "Get all roles in the organization",
         tags: ["Roles"],
+        querystring: PaginationQuerySchema.extend({
+          name: z.string().optional(),
+        }),
         response: constructResponseSchema(
-          z.array(SelectOrganizationRoleSchema),
+          createPaginatedResponseSchema(SelectOrganizationRoleSchema),
         ),
       },
     },
-    async ({ organizationId, headers }, reply) => {
+    async ({ organizationId, headers, query }, reply) => {
       const { success: canManageRoles } = await hasPermission(
         { ac: ["create"] },
         headers,
       );
+      const { limit, offset, name } = query;
 
-      if (!canManageRoles) {
-        // Non-admin users only see predefined roles
-        return reply.send(
-          OrganizationRoleModel.getPredefinedOnly(organizationId),
-        );
-      }
+      const result = await OrganizationRoleModel.getAllPaginated({
+        organizationId,
+        limit,
+        offset,
+        name,
+        isAdmin: canManageRoles,
+      });
 
-      return reply.send(await OrganizationRoleModel.getAll(organizationId));
+      return reply.send({
+        data: result.data,
+        pagination: calculatePaginationMeta(result.total, { limit, offset }),
+      });
     },
   );
 

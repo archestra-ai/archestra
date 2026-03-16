@@ -1,5 +1,5 @@
 import { MEMBER_ROLE_NAME } from "@shared";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, count, eq, getTableColumns, ilike, inArray } from "drizzle-orm";
 import db, { schema } from "@/database";
 import logger from "@/logging";
 import type {
@@ -77,6 +77,57 @@ class TeamModel {
       "TeamModel.findByOrganization: completed",
     );
     return teamsWithMembers;
+  }
+
+  /**
+   * Find all teams in an organization with pagination and optional name filter
+   */
+  static async findByOrganizationPaginated(params: {
+    organizationId: string;
+    limit: number;
+    offset: number;
+    name?: string;
+  }): Promise<{ data: Team[]; total: number }> {
+    const { organizationId, limit, offset, name } = params;
+    logger.debug(
+      { organizationId, limit, offset, name },
+      "TeamModel.findByOrganizationPaginated: fetching teams",
+    );
+
+    const filters = [
+      eq(schema.teamsTable.organizationId, organizationId),
+      ...(name ? [ilike(schema.teamsTable.name, `%${name}%`)] : []),
+    ];
+
+    const [teams, totalResult] = await Promise.all([
+      db
+        .select()
+        .from(schema.teamsTable)
+        .where(and(...filters))
+        .orderBy(schema.teamsTable.name)
+        .limit(limit)
+        .offset(offset),
+      db
+        .select({ count: count() })
+        .from(schema.teamsTable)
+        .where(and(...filters)),
+    ]);
+
+    const teamIds = teams.map((t) => t.id);
+    const membersByTeam = await TeamModel.getTeamMembersBatch(teamIds);
+
+    const teamsWithMembers = teams.map((team) => ({
+      ...team,
+      members: membersByTeam.get(team.id) || [],
+    }));
+
+    const total = totalResult[0]?.count ?? 0;
+    logger.debug(
+      { organizationId, count: teamsWithMembers.length, total },
+      "TeamModel.findByOrganizationPaginated: completed",
+    );
+
+    return { data: teamsWithMembers, total };
   }
 
   /**
@@ -339,6 +390,65 @@ class TeamModel {
       "TeamModel.getUserTeams: completed",
     );
     return teamsWithMembers;
+  }
+
+  /**
+   * Get paginated teams a user belongs to with optional name filter
+   */
+  static async getUserTeamsPaginated(params: {
+    userId: string;
+    limit: number;
+    offset: number;
+    name?: string;
+  }): Promise<{ data: Team[]; total: number }> {
+    const { userId, limit, offset, name } = params;
+    logger.debug(
+      { userId, limit, offset, name },
+      "TeamModel.getUserTeamsPaginated: fetching user teams",
+    );
+
+    const filters = [
+      eq(schema.teamMembersTable.userId, userId),
+      ...(name ? [ilike(schema.teamsTable.name, `%${name}%`)] : []),
+    ];
+
+    const [teams, totalResult] = await Promise.all([
+      db
+        .select(getTableColumns(schema.teamsTable))
+        .from(schema.teamMembersTable)
+        .innerJoin(
+          schema.teamsTable,
+          eq(schema.teamMembersTable.teamId, schema.teamsTable.id),
+        )
+        .where(and(...filters))
+        .orderBy(schema.teamsTable.name)
+        .limit(limit)
+        .offset(offset),
+      db
+        .select({ count: count() })
+        .from(schema.teamMembersTable)
+        .innerJoin(
+          schema.teamsTable,
+          eq(schema.teamMembersTable.teamId, schema.teamsTable.id),
+        )
+        .where(and(...filters)),
+    ]);
+
+    const teamIds = teams.map((t) => t.id);
+    const membersByTeam = await TeamModel.getTeamMembersBatch(teamIds);
+
+    const teamsWithMembers = teams.map((team) => ({
+      ...team,
+      members: membersByTeam.get(team.id) || [],
+    }));
+
+    const total = totalResult[0]?.count ?? 0;
+    logger.debug(
+      { userId, count: teamsWithMembers.length, total },
+      "TeamModel.getUserTeamsPaginated: completed",
+    );
+
+    return { data: teamsWithMembers, total };
   }
 
   /**

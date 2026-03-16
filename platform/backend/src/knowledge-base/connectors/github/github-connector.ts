@@ -6,8 +6,8 @@ import type {
   ConnectorSyncBatch,
   GithubCheckpoint,
   GithubConfig,
-} from "@/types/knowledge-connector";
-import { GithubConfigSchema } from "@/types/knowledge-connector";
+} from "@/types";
+import { GithubConfigSchema } from "@/types";
 import {
   BaseConnector,
   buildCheckpoint,
@@ -194,7 +194,7 @@ export class GithubConnector extends BaseConnector {
   private async *syncRepoItems(params: {
     octokit: Octokit;
     config: GithubConfig;
-    repo: { owner: string; name: string; htmlUrl: string };
+    repo: GithubRepo;
     checkpoint: GithubCheckpoint;
     kind: "issue" | "pr";
     isLastGroup: boolean;
@@ -303,7 +303,7 @@ export class GithubConnector extends BaseConnector {
   }
   private async *syncRepoMarkdownFiles(params: {
     octokit: Octokit;
-    repo: { owner: string; name: string; htmlUrl: string };
+    repo: GithubRepo;
     checkpoint: GithubCheckpoint;
     isLastGroup: boolean;
   }): AsyncGenerator<ConnectorSyncBatch> {
@@ -313,66 +313,39 @@ export class GithubConnector extends BaseConnector {
     this.log.info({ repo: repoFullName }, "Starting markdown file sync");
 
     let treeSha: string;
-    let branch = "main";
+    let branch: string;
 
-    this.log.debug(
-      { repo: repoFullName, branch: "main" },
-      "Resolving branch ref",
+    const branchCandidates = repo.defaultBranch
+      ? [repo.defaultBranch]
+      : FALLBACK_BRANCHES;
+
+    const resolved = await resolveDefaultBranch(
+      octokit,
+      repo,
+      branchCandidates,
+      this.log,
     );
-    try {
-      const refResponse = await octokit.rest.git.getRef({
-        owner: repo.owner,
-        repo: repo.name,
-        ref: "heads/main",
-      });
-      treeSha = refResponse.data.object.sha;
-      this.log.debug(
-        { repo: repoFullName, branch: "main", treeSha },
-        "Resolved branch ref",
+
+    if (!resolved) {
+      this.log.error(
+        { repo: repoFullName, triedBranches: branchCandidates },
+        "Could not resolve default branch, skipping markdown sync",
       );
-    } catch (mainErr) {
-      this.log.info(
-        {
-          repo: repoFullName,
-          branch: "main",
-          error: extractErrorMessage(mainErr),
-        },
-        "Branch 'main' not found, trying 'master'",
-      );
-      try {
-        const refResponse = await octokit.rest.git.getRef({
-          owner: repo.owner,
-          repo: repo.name,
-          ref: "heads/master",
-        });
-        treeSha = refResponse.data.object.sha;
-        branch = "master";
-        this.log.debug(
-          { repo: repoFullName, branch: "master", treeSha },
-          "Resolved branch ref",
-        );
-      } catch (masterErr) {
-        this.log.error(
-          {
-            repo: repoFullName,
-            mainError: extractErrorMessage(mainErr),
-            masterError: extractErrorMessage(masterErr),
-          },
-          "Could not resolve default branch (tried 'main' and 'master'), skipping markdown sync",
-        );
-        yield {
-          documents: [],
-          failures: this.flushFailures(),
-          checkpoint: buildCheckpoint({
-            type: "github",
-            itemUpdatedAt: null,
-            previousLastSyncedAt: checkpoint.lastSyncedAt,
-          }),
-          hasMore: !isLastGroup,
-        };
-        return;
-      }
+      yield {
+        documents: [],
+        failures: this.flushFailures(),
+        checkpoint: buildCheckpoint({
+          type: "github",
+          itemUpdatedAt: null,
+          previousLastSyncedAt: checkpoint.lastSyncedAt,
+        }),
+        hasMore: !isLastGroup,
+      };
+      return;
     }
+
+    branch = resolved.branch;
+    treeSha = resolved.sha;
 
     this.log.debug(
       { repo: repoFullName, branch, treeSha },
@@ -547,19 +520,41 @@ function parseGithubConfig(
   return result.success ? result.data : null;
 }
 
+type GithubRepo = {
+  owner: string;
+  name: string;
+  htmlUrl: string;
+  defaultBranch: string | null;
+};
+
 async function getRepos(
   octokit: Octokit,
   config: GithubConfig,
-): Promise<Array<{ owner: string; name: string; htmlUrl: string }>> {
+): Promise<GithubRepo[]> {
   if (config.repos && config.repos.length > 0) {
-    return config.repos.map((name) => ({
-      owner: config.owner,
-      name,
-      htmlUrl: `${config.githubUrl.replace(/\/api\/v3$/, "").replace(/\/+$/, "")}/${config.owner}/${name}`,
-    }));
+    const repos: GithubRepo[] = [];
+    for (const name of config.repos) {
+      let defaultBranch: string | null = null;
+      try {
+        const response = await octokit.rest.repos.get({
+          owner: config.owner,
+          repo: name,
+        });
+        defaultBranch = response.data.default_branch;
+      } catch {
+        // If we can't fetch repo metadata, fall back to null (main→master fallback)
+      }
+      repos.push({
+        owner: config.owner,
+        name,
+        htmlUrl: `${config.githubUrl.replace(/\/api\/v3$/, "").replace(/\/+$/, "")}/${config.owner}/${name}`,
+        defaultBranch,
+      });
+    }
+    return repos;
   }
 
-  const repos: Array<{ owner: string; name: string; htmlUrl: string }> = [];
+  const repos: GithubRepo[] = [];
   let page = 1;
   let hasMore = true;
 
@@ -576,6 +571,7 @@ async function getRepos(
         owner: config.owner,
         name: repo.name,
         htmlUrl: repo.html_url,
+        defaultBranch: repo.default_branch ?? null,
       });
     }
 
@@ -584,6 +580,49 @@ async function getRepos(
   }
 
   return repos;
+}
+
+const FALLBACK_BRANCHES = ["main", "master", "dev", "develop"];
+
+async function resolveDefaultBranch(
+  octokit: Octokit,
+  repo: { owner: string; name: string },
+  candidates: string[],
+  log: pino.Logger,
+): Promise<{ branch: string; sha: string } | null> {
+  const repoFullName = `${repo.owner}/${repo.name}`;
+  for (const candidate of candidates) {
+    try {
+      log.debug(
+        { repo: repoFullName, branch: candidate },
+        "Resolving branch ref",
+      );
+      const refResponse = await octokit.rest.git.getRef({
+        owner: repo.owner,
+        repo: repo.name,
+        ref: `heads/${candidate}`,
+      });
+      log.debug(
+        {
+          repo: repoFullName,
+          branch: candidate,
+          sha: refResponse.data.object.sha,
+        },
+        "Resolved branch ref",
+      );
+      return { branch: candidate, sha: refResponse.data.object.sha };
+    } catch (err) {
+      log.info(
+        {
+          repo: repoFullName,
+          branch: candidate,
+          error: extractErrorMessage(err),
+        },
+        "Branch not found, trying next candidate",
+      );
+    }
+  }
+  return null;
 }
 
 async function getItemComments(

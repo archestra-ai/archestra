@@ -13,8 +13,11 @@ import { useMemo } from "react";
 import { toast } from "sonner";
 import { handleApiError } from "./utils";
 
-const { getChatModels, getModelsWithApiKeys, updateModelPricing } =
-  archestraApiSdk;
+const { getChatModels, getModelsWithApiKeys, updateModel } = archestraApiSdk;
+type ChatModelsQuery = NonNullable<
+  archestraApiTypes.GetChatModelsData["query"]
+>;
+type ChatModelsParams = Partial<ChatModelsQuery>;
 
 /**
  * Chat model type from the API response.
@@ -31,7 +34,7 @@ export type ModelCapabilities = NonNullable<ChatModel["capabilities"]>;
  * Fetch available chat models from all configured providers.
  * When apiKeyId is provided, only returns models linked to that specific key.
  */
-export function useChatModels(params?: { apiKeyId?: string | null }) {
+export function useChatModels(params?: ChatModelsParams) {
   const apiKeyId = params?.apiKeyId;
   return useQuery({
     queryKey: ["chat-models", apiKeyId ?? null],
@@ -56,7 +59,7 @@ export function useChatModels(params?: { apiKeyId?: string | null }) {
  * Returns models grouped by provider with loading/error states.
  * When apiKeyId is provided, only returns models linked to that specific key.
  */
-export function useModelsByProvider(params?: { apiKeyId?: string | null }) {
+export function useModelsByProvider(params?: ChatModelsParams) {
   const query = useChatModels(params);
 
   // Memoize to prevent creating new object reference on every render
@@ -111,17 +114,17 @@ export function useModelsWithApiKeys() {
 }
 
 /**
- * Update custom pricing for a model.
+ * Update model details (pricing + modalities).
  * Set prices to null to reset to default pricing.
  */
-export function useUpdateModelPricing() {
+export function useUpdateModel() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (
-      params: archestraApiTypes.UpdateModelPricingData["body"] & { id: string },
+      params: archestraApiTypes.UpdateModelData["body"] & { id: string },
     ) => {
       const { id, ...body } = params;
-      const { data, error } = await updateModelPricing({
+      const { data, error } = await updateModel({
         path: { id },
         body,
       });
@@ -132,12 +135,12 @@ export function useUpdateModelPricing() {
       return data;
     },
     onSuccess: () => {
-      toast.success("Model pricing updated");
+      toast.success("Model updated");
       queryClient.invalidateQueries({ queryKey: ["models-with-api-keys"] });
       queryClient.invalidateQueries({ queryKey: ["chat-models"] });
     },
     onError: () => {
-      toast.error("Failed to update model pricing");
+      toast.error("Failed to update model");
     },
   });
 }

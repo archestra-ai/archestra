@@ -10,6 +10,7 @@ const {
   updateConnector,
   deleteConnector,
   syncConnector,
+  forceResyncConnector,
   testConnectorConnection,
   getConnectorRuns,
   getConnectorRun,
@@ -18,34 +19,67 @@ const {
   getConnectorKnowledgeBases,
 } = archestraApiSdk;
 
+type ConnectorsQuery = NonNullable<
+  archestraApiTypes.GetConnectorsData["query"]
+>;
+type ConnectorsListParams = Pick<
+  ConnectorsQuery,
+  "knowledgeBaseId" | "limit" | "offset"
+> & {
+  enabled?: boolean;
+};
+type ConnectorsPaginatedParams = Pick<
+  ConnectorsQuery,
+  "limit" | "offset" | "search" | "connectorType"
+>;
+
 // ===== Query hooks =====
 
-export function useConnectors(
-  params?: string | { knowledgeBaseId?: string; enabled?: boolean },
-) {
+export function useConnectors(params?: string | Partial<ConnectorsListParams>) {
   const knowledgeBaseId =
     typeof params === "string" ? params : params?.knowledgeBaseId;
   const enabled = typeof params === "object" ? params?.enabled : undefined;
+  const limit = typeof params === "object" ? params?.limit : undefined;
+  const offset = typeof params === "object" ? params?.offset : undefined;
   return useQuery({
     queryKey: knowledgeBaseId
-      ? ["connectors", { knowledgeBaseId }]
-      : ["connectors"],
+      ? ["connectors", { knowledgeBaseId, limit, offset }]
+      : ["connectors", { limit, offset }],
     queryFn: async () => {
       const { data, error } = await getConnectors({
-        query: { knowledgeBaseId },
+        query: {
+          knowledgeBaseId,
+          limit: limit ?? 100,
+          offset: offset ?? 0,
+        },
       });
       if (error) {
         handleApiError(error);
         return null;
       }
-      return data;
+      return data?.data ?? [];
     },
     enabled,
     refetchInterval: (query) => {
-      const hasRunning = query.state.data?.data?.some(
+      const hasRunning = query.state.data?.some(
         (c) => c.lastSyncStatus === "running",
       );
       return hasRunning ? 3000 : false;
+    },
+  });
+}
+
+export function useConnectorsPaginated(params: ConnectorsPaginatedParams) {
+  return useQuery({
+    queryKey: ["connectors", "paginated", params],
+    placeholderData: (previousData) => previousData,
+    queryFn: async () => {
+      const { data, error } = await getConnectors({ query: params });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
     },
   });
 }
@@ -182,6 +216,32 @@ export function useSyncConnector() {
   });
 }
 
+export function useForceResyncConnector() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (connectorId: string) => {
+      const { data, error } = await forceResyncConnector({
+        path: { id: connectorId },
+      });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
+    onSuccess: (data, connectorId) => {
+      if (!data) return;
+      queryClient.invalidateQueries({
+        queryKey: ["connectors", connectorId],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["connectors", connectorId, "runs"],
+      });
+      toast.success("Force re-sync started");
+    },
+  });
+}
+
 export function useTestConnectorConnection() {
   return useMutation({
     mutationFn: async (connectorId: string) => {
@@ -265,10 +325,9 @@ export function useAssignConnectorToKnowledgeBases() {
     mutationFn: async ({
       connectorId,
       knowledgeBaseIds,
-    }: {
-      connectorId: string;
-      knowledgeBaseIds: string[];
-    }) => {
+    }: { connectorId: string } & NonNullable<
+      archestraApiTypes.AssignConnectorToKnowledgeBasesData["body"]
+    >) => {
       const { data, error } = await assignConnectorToKnowledgeBases({
         path: { id: connectorId },
         body: { knowledgeBaseIds },

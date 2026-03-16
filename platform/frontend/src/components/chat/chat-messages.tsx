@@ -1,7 +1,10 @@
 import type { UIMessage } from "@ai-sdk/react";
 import {
+  SWAP_AGENT_POKE_PREFIX,
   SWAP_AGENT_POKE_TEXT,
+  SWAP_TO_DEFAULT_AGENT_POKE_TEXT,
   TOOL_SWAP_AGENT_FULL_NAME,
+  TOOL_SWAP_TO_DEFAULT_AGENT_FULL_NAME,
   TOOL_TODO_WRITE_FULL_NAME,
 } from "@shared";
 import type { ChatStatus, DynamicToolUIPart, ToolUIPart } from "ai";
@@ -134,12 +137,17 @@ export function ChatMessages({
   const { data: canExpandToolCalls } = useHasPermissions({
     chatExpandToolCalls: ["enable"],
   });
+  const { data: canReadMcpRegistry } = useHasPermissions({
+    mcpRegistry: ["read"],
+  });
   const { data: organization } = useOrganization();
   const orchestrator = useMcpInstallOrchestrator();
 
   // Build tool name → icon map from agent tools + catalog data
   const { data: agentTools } = useProfileToolsWithIds(agentId);
-  const { data: catalogItems } = useInternalMcpCatalog({ enabled: !!agentId });
+  const { data: catalogItems } = useInternalMcpCatalog({
+    enabled: !!agentId && !!canReadMcpRegistry,
+  });
   const toolIconMap = useMemo(() => {
     const map = new Map<string, { icon?: string | null; catalogId?: string }>();
     if (!agentTools || !catalogItems) return map;
@@ -337,16 +345,22 @@ export function ChatMessages({
                   const { groupMap, consumedIndices } = identifyCompactGroups(
                     message.parts,
                   );
+                  const partKeyTracker = new Map<string, number>();
                   return message.parts?.map((part, i) => {
+                    const partKey = getMessagePartKey(
+                      message.id,
+                      part,
+                      partKeyTracker,
+                    );
                     // Render compact group at its start index
                     if (groupMap.has(i)) {
                       const group = groupMap.get(i);
                       if (!group) return null;
                       return (
                         <CompactToolGroup
-                          key={`compact-${message.id}-${i}`}
+                          key={getCompactGroupKey(message.id, group.entries)}
                           tools={group.entries.map((entry) => ({
-                            key: `${message.id}-${entry.partIndex}`,
+                            key: getToolEntryKey(message.id, entry),
                             toolName: entry.toolName,
                             part: entry.part,
                             toolResultPart: entry.toolResultPart,
@@ -388,8 +402,6 @@ export function ChatMessages({
                         if (!part.text && message.role === "assistant") {
                           return null;
                         }
-
-                        const partKey = `${message.id}-${i}`;
 
                         // Anthropic sends policy denials as text blocks (see MessageTool for OpenAI path)
                         const policyDenied = parsePolicyDenied(part.text);
@@ -566,7 +578,7 @@ export function ChatMessages({
 
                         // Regular rendering for system messages
                         return (
-                          <Fragment key={`${message.id}-${i}`}>
+                          <Fragment key={partKey}>
                             <Message from={message.role}>
                               <MessageContent>
                                 {message.role === "system" && (
@@ -583,10 +595,7 @@ export function ChatMessages({
 
                       case "reasoning":
                         return (
-                          <Reasoning
-                            key={`${message.id}-${i}`}
-                            className="w-full"
-                          >
+                          <Reasoning key={partKey} className="w-full">
                             <ReasoningTrigger />
                             <ReasoningContent>{part.text}</ReasoningContent>
                           </Reasoning>
@@ -648,7 +657,7 @@ export function ChatMessages({
 
                         return (
                           <div
-                            key={`${message.id}-${i}`}
+                            key={partKey}
                             className="py-1 -mt-2 flex justify-start"
                           >
                             <div className="max-w-sm">
@@ -729,7 +738,7 @@ export function ChatMessages({
                         return (
                           <MessageTool
                             part={part}
-                            key={`${message.id}-${i}`}
+                            key={partKey}
                             toolResultPart={toolResultPart}
                             toolName={toolName}
                             agentId={agentId}
@@ -771,7 +780,7 @@ export function ChatMessages({
                           return (
                             <MessageTool
                               part={part}
-                              key={`${message.id}-${i}`}
+                              key={partKey}
                               toolResultPart={toolResultPart}
                               toolName={toolName}
                               agentId={agentId}
@@ -817,6 +826,57 @@ export function ChatMessages({
       <McpInstallDialogs orchestrator={orchestrator} />
     </Conversation>
   );
+}
+
+function getCompactGroupKey(
+  messageId: string,
+  entries: Array<{
+    toolName: string;
+    part: DynamicToolUIPart | ToolUIPart;
+  }>,
+): string {
+  const signature = entries
+    .map((entry) => entry.part.toolCallId ?? entry.toolName)
+    .join(":");
+  return `${messageId}-compact-${signature}`;
+}
+
+function getToolEntryKey(
+  messageId: string,
+  entry: {
+    toolName: string;
+    part: DynamicToolUIPart | ToolUIPart;
+  },
+): string {
+  return `${messageId}-${entry.part.toolCallId ?? entry.toolName}`;
+}
+
+function getMessagePartKey(
+  messageId: string,
+  part: UIMessage["parts"][number],
+  keyTracker: Map<string, number>,
+): string {
+  const signature = getMessagePartSignature(part);
+  const occurrence = keyTracker.get(signature) ?? 0;
+  keyTracker.set(signature, occurrence + 1);
+  return `${messageId}-${signature}-${occurrence}`;
+}
+
+function getMessagePartSignature(part: UIMessage["parts"][number]): string {
+  if (isToolPart(part)) {
+    return `tool:${part.toolCallId ?? part.type}`;
+  }
+
+  switch (part.type) {
+    case "text":
+      return `text:${part.text}`;
+    case "reasoning":
+      return `reasoning:${part.text}`;
+    case "file":
+      return `file:${part.url}:${part.mediaType}:${part.filename ?? ""}`;
+    default:
+      return `part:${JSON.stringify(part)}`;
+  }
 }
 
 // Custom hook to detect when streaming has stalled (>500ms without updates)
@@ -980,9 +1040,13 @@ function MessageTool({
     }
   }
 
-  // swap_agent is rendered as a divider after all message parts (see SwapAgentDivider below)
+  // swap_agent / swap_to_default_agent are rendered as dividers after all message parts (see SwapAgentDivider below)
   // Show the raw tool call when the user's name ends with "(debugging)"
-  if (!isDebugging && toolName === TOOL_SWAP_AGENT_FULL_NAME) {
+  if (
+    !isDebugging &&
+    (toolName === TOOL_SWAP_AGENT_FULL_NAME ||
+      toolName === TOOL_SWAP_TO_DEFAULT_AGENT_FULL_NAME)
+  ) {
     return null;
   }
 
@@ -1299,11 +1363,22 @@ function identifyCompactGroups(
 function isSwapAgentPokeMessage(message: UIMessage): boolean {
   if (message.role !== "user") return false;
   const textParts = message.parts?.filter((p) => p.type === "text") ?? [];
+  if (textParts.length !== 1) return false;
+  const text = (textParts[0] as { text?: string }).text;
+  if (typeof text !== "string") return false;
   return (
-    textParts.length === 1 &&
-    (textParts[0] as { text: string }).text === SWAP_AGENT_POKE_TEXT
+    text === SWAP_AGENT_POKE_TEXT ||
+    text === SWAP_TO_DEFAULT_AGENT_POKE_TEXT ||
+    text.startsWith(SWAP_AGENT_POKE_PREFIX)
   );
 }
+
+const SWAP_TOOL_NAMES = new Set([
+  TOOL_SWAP_AGENT_FULL_NAME,
+  `tool-${TOOL_SWAP_AGENT_FULL_NAME}`,
+  TOOL_SWAP_TO_DEFAULT_AGENT_FULL_NAME,
+  `tool-${TOOL_SWAP_TO_DEFAULT_AGENT_FULL_NAME}`,
+]);
 
 function SwapAgentDivider({ message }: { message: UIMessage }) {
   if (message.role !== "assistant") return null;
@@ -1311,11 +1386,7 @@ function SwapAgentDivider({ message }: { message: UIMessage }) {
   for (const part of message.parts ?? []) {
     if (!isToolPart(part)) continue;
     const type = part.type as string;
-    if (
-      type !== TOOL_SWAP_AGENT_FULL_NAME &&
-      type !== `tool-${TOOL_SWAP_AGENT_FULL_NAME}`
-    )
-      continue;
+    if (!SWAP_TOOL_NAMES.has(type)) continue;
 
     // Try tool call args first (always available), then fall back to output
     let agentName = "another agent";

@@ -3,6 +3,7 @@ import {
   DOMAIN_VALIDATION_REGEX,
   IncomingEmailSecurityModeSchema,
   MAX_DOMAIN_LENGTH,
+  MAX_SUGGESTED_PROMPTS,
 } from "@shared";
 import {
   createInsertSchema,
@@ -11,6 +12,7 @@ import {
 } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
+import { SuggestedPromptInputSchema } from "./agent-suggested-prompt";
 import { AgentLabelWithDetailsSchema } from "./label";
 import { SelectToolSchema } from "./tool";
 
@@ -57,17 +59,6 @@ export type BuiltInAgentConfig = z.infer<typeof BuiltInAgentConfigSchema>;
 export type PolicyConfigAgentConfig = z.infer<
   typeof PolicyConfigAgentConfigSchema
 >;
-
-/**
- * Represents a historical version of an agent's prompt stored in the prompt_history JSONB array.
- * Only used when agent_type is 'agent'.
- */
-export interface AgentHistoryEntry {
-  version: number;
-  userPrompt: string | null;
-  systemPrompt: string | null;
-  createdAt: string; // ISO timestamp
-}
 
 // Team info schema for agent responses (just id and name)
 export const AgentTeamInfoSchema = z.object({
@@ -152,6 +143,10 @@ export const SelectAgentSchema = createSelectSchema(
   authorName: z.string().nullable().optional(),
   knowledgeBaseIds: z.array(z.string()),
   connectorIds: z.array(z.string()),
+  suggestedPrompts: z
+    .array(SuggestedPromptInputSchema)
+    .max(MAX_SUGGESTED_PROMPTS)
+    .default([]),
 });
 
 // Base schema without refinement - can be used with .partial()
@@ -167,13 +162,15 @@ export const InsertAgentSchemaBase = createInsertSchema(
     scope: AgentScopeSchema,
     knowledgeBaseIds: z.array(z.string()).default([]),
     connectorIds: z.array(z.string()).default([]),
+    suggestedPrompts: z
+      .array(SuggestedPromptInputSchema)
+      .max(MAX_SUGGESTED_PROMPTS)
+      .optional(),
   })
   .omit({
     id: true,
     createdAt: true,
     updatedAt: true,
-    promptHistory: true,
-    promptVersion: true,
     authorId: true,
   });
 
@@ -193,13 +190,15 @@ export const UpdateAgentSchemaBase = createUpdateSchema(
     scope: AgentScopeSchema.optional(),
     knowledgeBaseIds: z.array(z.string()).optional(),
     connectorIds: z.array(z.string()).optional(),
+    suggestedPrompts: z
+      .array(SuggestedPromptInputSchema)
+      .max(MAX_SUGGESTED_PROMPTS)
+      .optional(),
   })
   .omit({
     id: true,
     createdAt: true,
     updatedAt: true,
-    promptVersion: true,
-    promptHistory: true,
     authorId: true,
   });
 
@@ -208,24 +207,9 @@ export const UpdateAgentSchema = UpdateAgentSchemaBase.superRefine(
   validateIncomingEmailDomain,
 );
 
-// Schema for history entry in API responses (for internal agents)
-export const AgentHistoryEntrySchema = z.object({
-  version: z.number(),
-  userPrompt: z.string().nullable(),
-  systemPrompt: z.string().nullable(),
-  createdAt: z.string(),
-});
-
-// Schema for versions endpoint response (for internal agents)
-export const AgentVersionsResponseSchema = z.object({
-  current: SelectAgentSchema,
-  history: z.array(AgentHistoryEntrySchema),
-});
-
 export type Agent = z.infer<typeof SelectAgentSchema>;
 export type InsertAgent = z.input<typeof InsertAgentSchema>;
 export type UpdateAgent = z.infer<typeof UpdateAgentSchema>;
-export type AgentVersionsResponse = z.infer<typeof AgentVersionsResponseSchema>;
 
 /**
  * Schema for auto-policy LLM analysis output.

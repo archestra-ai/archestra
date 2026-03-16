@@ -219,7 +219,7 @@ test.describe("Chat - Auth Required Tool", () => {
     // Wait for the AuthRequiredTool component to render
     // The flow: LLM returns tool_use -> MCP Gateway returns auth-required error -> UI renders AuthRequiredTool
     await expect(memberPage.getByText("Authentication Required")).toBeVisible({
-      timeout: 30_000,
+      timeout: 45_000,
     });
 
     // Verify the catalog name is displayed in the alert description

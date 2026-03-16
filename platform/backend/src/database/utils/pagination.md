@@ -23,10 +23,12 @@ The pagination system provides:
 ### Key Files
 
 ```
+shared/
+└── pagination.ts                  # Shared pagination schemas and metadata helpers
+
 backend/src/
-├── types/api.ts                    # Pagination types and schemas
 ├── database/utils/
-│   └── pagination.ts              # Pagination utility functions
+│   └── pagination.ts              # Backend pagination result helper
 ├── models/
 │   └── interaction.ts             # Example: Model with pagination
 └── routes/
@@ -40,7 +42,7 @@ backend/src/
 Users pass pagination parameters as query strings:
 
 ```typescript
-// From @/types/api.ts
+// From @shared
 PaginationQuerySchema = {
   limit: number   // Items per page (default: 20, max: 100)
   offset: number  // Starting position (default: 0)
@@ -79,8 +81,8 @@ All paginated endpoints return this structure:
 
 ```typescript
 import { count } from "drizzle-orm";
+import type { PaginationQuery } from "@shared";
 import db, { schema } from "@/database";
-import type { PaginationQuery } from "@/types";
 import { createPaginatedResult } from "@/database/utils/pagination";
 
 class YourModel {
@@ -112,6 +114,8 @@ import { z } from "zod";
 import {
   PaginationQuerySchema,
   createPaginatedResponseSchema,
+} from "@shared";
+import {
   SelectYourSchema,
 } from "@/types";
 
@@ -150,7 +154,7 @@ curl http://localhost:9000/api/your-endpoint?limit=20&offset=40
 
 ## API Reference
 
-### Types (from `@/types`)
+### Types (from `@shared`)
 
 #### `PaginationQuerySchema`
 
@@ -273,17 +277,17 @@ static async findAllPaginated(
 ): Promise<PaginatedResult<YourType>> {
   // Build WHERE conditions
   const conditions: SQL[] = [];
-  
+
   if (filters?.agentId) {
     conditions.push(eq(schema.yourTable.agentId, filters.agentId));
   }
-  
+
   if (filters?.status) {
     conditions.push(eq(schema.yourTable.status, filters.status));
   }
-  
-  const whereCondition = conditions.length > 0 
-    ? and(...conditions) 
+
+  const whereCondition = conditions.length > 0
+    ? and(...conditions)
     : undefined;
 
   // Apply same WHERE to both queries
@@ -340,7 +344,7 @@ Extend pagination with sorting capabilities:
 // Define sort options
 interface SortOptions {
   sortBy?: "createdAt" | "name" | "status";
-  sortDirection?: "asc" | "desc";
+  sortDirection?: SortDirection;
 }
 
 static async findAllPaginated(
@@ -348,12 +352,12 @@ static async findAllPaginated(
   sort: SortOptions = { sortBy: "createdAt", sortDirection: "desc" },
 ): Promise<PaginatedResult<YourType>> {
   // Build order clause
-  const orderColumn = sort.sortBy === "name" 
+  const orderColumn = sort.sortBy === "name"
     ? schema.yourTable.name
     : sort.sortBy === "status"
     ? schema.yourTable.status
     : schema.yourTable.createdAt;
-  
+
   const orderFn = sort.sortDirection === "asc" ? asc : desc;
 
   const [data, [{ total }]] = await Promise.all([
@@ -373,14 +377,13 @@ static async findAllPaginated(
 Route with sorting:
 
 ```typescript
+import { createSortingQuerySchema } from "@/types";
+
 fastify.get(
   "/api/your-endpoint",
   {
     schema: {
-      querystring: z.object({
-        sortBy: z.enum(["createdAt", "name", "status"]).optional(),
-        sortDirection: z.enum(["asc", "desc"]).default("desc"),
-      }).merge(PaginationQuerySchema),
+      querystring: createSortingQuerySchema(["createdAt", "name", "status"] as const).merge(PaginationQuerySchema),
       response: {
         200: createPaginatedResponseSchema(SelectYourSchema),
       },
@@ -549,17 +552,17 @@ See `backend/src/models/interaction.ts` for a real implementation with sorting:
 ```typescript
 static async findAllPaginated(
   pagination: PaginationQuery,
-  sort: { sortBy?: "createdAt" | "model" | "agentId"; sortDirection?: "asc" | "desc" } = {},
+  sort: { sortBy?: "createdAt" | "model" | "agentId"; sortDirection?: SortDirection } = {},
 ): Promise<PaginatedResult<Interaction>> {
   const { sortBy = "createdAt", sortDirection = "desc" } = sort;
-  
+
   // Map sortBy to actual column
   const orderColumn = sortBy === "model"
     ? schema.interactionsTable.model
     : sortBy === "agentId"
     ? schema.interactionsTable.agentId
     : schema.interactionsTable.createdAt;
-  
+
   const orderFn = sortDirection === "asc" ? asc : desc;
 
   const [data, [{ total }]] = await Promise.all([
@@ -727,4 +730,3 @@ When adding pagination to an existing endpoint:
 - [ ] Update frontend to handle paginated responses
 - [ ] Test with various page sizes and offsets
 - [ ] Update API documentation
-

@@ -1,4 +1,9 @@
-import { RouteId } from "@shared";
+import {
+  calculatePaginationMeta,
+  createPaginatedResponseSchema,
+  PaginationQuerySchema,
+  RouteId,
+} from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { hasAnyAgentTypeAdminPermission, hasPermission } from "@/auth";
@@ -25,10 +30,16 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.GetTeams,
         description: "Get all teams in the organization",
         tags: ["Teams"],
-        response: constructResponseSchema(z.array(SelectTeamSchema)),
+        querystring: PaginationQuerySchema.extend({
+          name: z.string().optional(),
+        }),
+        response: constructResponseSchema(
+          createPaginatedResponseSchema(SelectTeamSchema),
+        ),
       },
     },
     async (request, reply) => {
+      const { limit, offset, name } = request.query;
       const { success: isTeamAdmin } = await hasPermission(
         { team: ["admin"] },
         request.headers,
@@ -36,12 +47,28 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Non-team admins only see teams they're members of
       if (!isTeamAdmin) {
-        return reply.send(await TeamModel.getUserTeams(request.user.id));
+        const result = await TeamModel.getUserTeamsPaginated({
+          userId: request.user.id,
+          limit,
+          offset,
+          name,
+        });
+        return reply.send({
+          data: result.data,
+          pagination: calculatePaginationMeta(result.total, { limit, offset }),
+        });
       }
       // Team admins see all teams in the organization
-      return reply.send(
-        await TeamModel.findByOrganization(request.organizationId),
-      );
+      const result = await TeamModel.findByOrganizationPaginated({
+        organizationId: request.organizationId,
+        limit,
+        offset,
+        name,
+      });
+      return reply.send({
+        data: result.data,
+        pagination: calculatePaginationMeta(result.total, { limit, offset }),
+      });
     },
   );
 

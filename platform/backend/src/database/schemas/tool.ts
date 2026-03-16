@@ -10,7 +10,6 @@ import {
 import type { ToolParametersContent } from "@/types";
 import agentsTable from "./agent";
 import mcpCatalogTable from "./internal-mcp-catalog";
-import mcpServerTable from "./mcp-server";
 
 const toolsTable = pgTable(
   "tools",
@@ -24,10 +23,6 @@ const toolsTable = pgTable(
     // null for proxy-sniffed tools
     catalogId: uuid("catalog_id").references(() => mcpCatalogTable.id, {
       onDelete: "cascade",
-    }),
-    /** @deprecated Kept for schema compatibility only. Use `catalogId` instead. Will be dropped in a future migration. */
-    mcpServerId: uuid("mcp_server_id").references(() => mcpServerTable.id, {
-      onDelete: "set null",
     }),
     // delegateToAgentId links delegation tools directly to their target agent
     // When set, the tool is a delegation tool that forwards requests to the target agent

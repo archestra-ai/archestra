@@ -28,17 +28,21 @@ import { useForm } from "react-hook-form";
 import { CreateCatalogDialog } from "@/app/mcp/registry/_parts/create-catalog-dialog";
 import { CustomServerRequestDialog } from "@/app/mcp/registry/_parts/custom-server-request-dialog";
 import { AgentDialog } from "@/components/agent-dialog";
-import type { PromptInputProps } from "@/components/ai-elements/prompt-input";
+import type {
+  PromptInputMessage,
+  PromptInputProps,
+} from "@/components/ai-elements/prompt-input";
+import { Suggestion } from "@/components/ai-elements/suggestion";
 import { AppLogo } from "@/components/app-logo";
 import { ButtonWithTooltip } from "@/components/button-with-tooltip";
 import { BrowserPanel } from "@/components/chat/browser-panel";
+import { ChatHelpLink } from "@/components/chat/chat-help-link";
 import { ChatMessages } from "@/components/chat/chat-messages";
 import { ConversationArtifactPanel } from "@/components/chat/conversation-artifact";
 import {
   PlaywrightInstallDialog,
   usePlaywrightSetupRequired,
 } from "@/components/chat/playwright-install-dialog";
-import { PromptVersionHistoryDialog } from "@/components/chat/prompt-version-history-dialog";
 import { RightSidePanel } from "@/components/chat/right-side-panel";
 import { ShareConversationDialog } from "@/components/chat/share-conversation-dialog";
 import { StreamTimeoutWarning } from "@/components/chat/stream-timeout-warning";
@@ -115,10 +119,14 @@ import {
 } from "@/lib/pending-tool-state";
 import { useTeams } from "@/lib/team.query";
 import {
+  clearModelOverride,
   getSavedAgent,
+  getSavedModelOverride,
+  type ModelSource,
   resolveInitialModel,
   resolveModelForAgent,
   saveAgent,
+  saveModelOverride,
 } from "@/lib/use-chat-preferences";
 import { useIsMobile } from "@/lib/use-mobile.hook";
 import { cn } from "@/lib/utils";
@@ -222,14 +230,11 @@ export default function ChatPage() {
   const [initialAgentId, setInitialAgentId] = useState<string | null>(null);
   const [initialModel, setInitialModel] = useState<string>("");
   const [initialApiKeyId, setInitialApiKeyId] = useState<string | null>(null);
+  const [initialModelSource, setInitialModelSource] =
+    useState<ModelSource | null>(null);
   // Track which agentId URL param has been consumed (so we don't re-apply the same one after user clears selection,
   // but do apply a new one when navigating from a different agent page)
   const urlParamsConsumedRef = useRef<string | null>(null);
-
-  // Version history dialog state
-  const [versionHistoryAgent, setVersionHistoryAgent] = useState<
-    (typeof internalAgents)[number] | null
-  >(null);
 
   // Resolve which agent to use on page load (URL param > localStorage > first available).
   // Stores the resolved agent in a ref so the model init effect can read it synchronously.
@@ -332,6 +337,9 @@ export default function ChatPage() {
     if (!resolved) return; // No models available yet
 
     setInitialModel(resolved.modelId);
+    setInitialModelSource(
+      resolved.source === "fallback" ? null : resolved.source,
+    );
     if (resolved.apiKeyId) {
       setInitialApiKeyId(resolved.apiKeyId);
     }
@@ -355,6 +363,10 @@ export default function ChatPage() {
       return;
     }
     setInitialModel(modelId);
+    if (modelSelectorWasOpenRef.current) {
+      setInitialModelSource("user");
+      saveModelOverride(modelId);
+    }
     modelSelectorWasOpenRef.current = false;
   }, []);
   const handleInitialModelSelectorOpenChange = useCallback((open: boolean) => {
@@ -371,10 +383,40 @@ export default function ChatPage() {
         const bestModel =
           providerModels.find((m) => m.isBest) ?? providerModels[0];
         setInitialModel(bestModel.id);
+        setInitialModelSource("user");
+        saveModelOverride(bestModel.id);
       }
     },
     [modelsByProvider],
   );
+
+  // Reset model override: clear localStorage and re-resolve from agent/org defaults
+  const handleResetModelOverride = useCallback(() => {
+    clearModelOverride();
+    modelInitializedRef.current = false;
+
+    const agent = resolvedAgentRef.current;
+    const resolved = resolveInitialModel({
+      modelsByProvider,
+      agent: agent ?? null,
+      chatApiKeys,
+      organization: organization
+        ? {
+            defaultLlmModel: organization.defaultLlmModel,
+            defaultLlmApiKeyId: organization.defaultLlmApiKeyId,
+          }
+        : null,
+    });
+
+    if (resolved) {
+      setInitialModel(resolved.modelId);
+      setInitialApiKeyId(resolved.apiKeyId);
+      setInitialModelSource(
+        resolved.source === "fallback" ? null : resolved.source,
+      );
+    }
+    modelInitializedRef.current = true;
+  }, [modelsByProvider, chatApiKeys, organization]);
 
   // Derive provider from initial model for API key filtering
   const initialProvider = useMemo((): SupportedProvider | undefined => {
@@ -417,6 +459,7 @@ export default function ChatPage() {
         // Reset initial state to trigger re-selection from useEffects
         setInitialAgentId(null);
         setInitialModel("");
+        setInitialModelSource(null);
         modelInitializedRef.current = false;
       }
 
@@ -492,6 +535,40 @@ export default function ChatPage() {
     const model = chatModels.find((m) => m.id === conversation.selectedModel);
     return model?.provider;
   }, [conversation?.selectedModel, chatModels]);
+
+  // Derive model source for existing conversations by comparing with agent/org defaults.
+  // Check localStorage override first — if the user explicitly saved this model as their
+  // override, it's a user override even if it matches the agent or org default.
+  const conversationModelSource = useMemo((): ModelSource | null => {
+    if (!conversation?.selectedModel) return null;
+
+    const userOverride = getSavedModelOverride();
+    if (userOverride && conversation.selectedModel === userOverride) {
+      return "user";
+    }
+
+    const agentId = conversation?.agentId;
+    if (agentId) {
+      const agent = internalAgents.find((a) => a.id === agentId) as
+        | (Record<string, unknown> & { llmModel?: string })
+        | undefined;
+      if (agent?.llmModel && conversation.selectedModel === agent.llmModel) {
+        return "agent";
+      }
+    }
+    if (
+      organization?.defaultLlmModel &&
+      conversation.selectedModel === organization.defaultLlmModel
+    ) {
+      return "organization";
+    }
+    return null;
+  }, [
+    conversation?.selectedModel,
+    conversation?.agentId,
+    internalAgents,
+    organization?.defaultLlmModel,
+  ]);
 
   // Get selected model's context length for the context indicator
   const selectedModelContextLength = useMemo((): number | null => {
@@ -576,6 +653,51 @@ export default function ChatPage() {
     },
     [conversation],
   );
+
+  // Reset model override for an existing conversation: clear localStorage,
+  // resolve default from the conversation's agent, and update the conversation.
+  const handleConversationResetModelOverride = useCallback(() => {
+    clearModelOverride();
+    if (!conversation) return;
+
+    const agent = conversation.agentId
+      ? (internalAgents.find((a) => a.id === conversation.agentId) as
+          | (Record<string, unknown> & {
+              llmModel?: string;
+              llmApiKeyId?: string;
+            })
+          | undefined)
+      : null;
+
+    const resolved = resolveInitialModel({
+      modelsByProvider,
+      agent: agent ?? null,
+      chatApiKeys,
+      organization: organization
+        ? {
+            defaultLlmModel: organization.defaultLlmModel,
+            defaultLlmApiKeyId: organization.defaultLlmApiKeyId,
+          }
+        : null,
+    });
+
+    if (resolved) {
+      updateConversationMutateRef.current({
+        id: conversation.id,
+        selectedModel: resolved.modelId,
+        selectedProvider:
+          chatModels.find((m) => m.id === resolved.modelId)?.provider ??
+          undefined,
+      });
+    }
+  }, [
+    conversation,
+    internalAgents,
+    modelsByProvider,
+    chatApiKeys,
+    organization,
+    chatModels,
+  ]);
 
   // Find the specific internal agent for this conversation (if any)
   const _conversationInternalAgent = conversation?.agentId
@@ -1027,16 +1149,18 @@ export default function ChatPage() {
         if (resolved) {
           setInitialModel(resolved.modelId);
           setInitialApiKeyId(resolved.apiKeyId);
+          setInitialModelSource(
+            resolved.source === "fallback" ? null : resolved.source,
+          );
         }
       }
     },
     [internalAgents, modelsByProvider, chatApiKeys, organization],
   );
 
-  // Handle initial submit (when no conversation exists)
-  const handleInitialSubmit: PromptInputProps["onSubmit"] = useCallback(
-    (message, e) => {
-      e.preventDefault();
+  // Core logic for starting a new conversation with a message
+  const submitInitialMessage = useCallback(
+    (message: Partial<PromptInputMessage>) => {
       if (isPlaywrightSetupVisible) return;
       const hasText = message.text?.trim();
       const hasFiles = message.files && message.files.length > 0;
@@ -1131,6 +1255,15 @@ export default function ChatPage() {
       selectConversation,
       queryClient,
     ],
+  );
+
+  // Form submit handler wraps submitInitialMessage with event.preventDefault
+  const handleInitialSubmit: PromptInputProps["onSubmit"] = useCallback(
+    (message, e) => {
+      e.preventDefault();
+      submitInitialMessage(message);
+    },
+    [submitInitialMessage],
   );
 
   // Auto-send message from URL when conditions are met (deep link support)
@@ -1598,6 +1731,10 @@ export default function ChatPage() {
                         isPlaywrightSetupVisible={isPlaywrightSetupVisible}
                         selectorAgentId={conversation?.agentId ?? null}
                         onAgentChange={handleConversationAgentChange}
+                        modelSource={conversationModelSource}
+                        onResetModelOverride={
+                          handleConversationResetModelOverride
+                        }
                       />
                       <div className="text-center">
                         <Version inline />
@@ -1613,7 +1750,7 @@ export default function ChatPage() {
               // biome-ignore lint/a11y/noStaticElementInteractions: click-to-focus container
               // biome-ignore lint/a11y/useKeyWithClickEvents: click-to-focus container
               <div
-                className="flex-1 flex flex-col min-h-0"
+                className="relative flex-1 flex flex-col min-h-0"
                 onClick={(e) => {
                   // Focus textarea when clicking empty space outside interactive elements
                   if (
@@ -1626,17 +1763,48 @@ export default function ChatPage() {
                   }
                 }}
               >
+                {organization?.helpCenterUrl && (
+                  <div className="absolute top-4 right-4 z-10">
+                    <ChatHelpLink
+                      url={organization.helpCenterUrl}
+                      label={organization.helpCenterLabel}
+                    />
+                  </div>
+                )}
                 {isPlaywrightSetupRequired && (
                   <PlaywrightInstallDialog
                     agentId={playwrightSetupAgentId}
                     conversationId={conversationId}
                   />
                 )}
-                <div className="flex-1 flex items-center justify-center p-4">
-                  <div className="w-full max-w-4xl space-y-24">
-                    <div className="flex justify-center scale-150">
-                      <AppLogo />
-                    </div>
+                <div className="flex-1 flex flex-col items-center justify-center p-4 gap-8">
+                  <div className="scale-150">
+                    <AppLogo />
+                  </div>
+                  {(() => {
+                    const currentAgent = internalAgents.find(
+                      (a) => a.id === initialAgentId,
+                    );
+                    const prompts = currentAgent?.suggestedPrompts;
+                    if (!prompts || prompts.length === 0) return null;
+                    return (
+                      <div className="flex flex-wrap items-center justify-center gap-2 max-w-2xl">
+                        {prompts.map((sp) => (
+                          <Suggestion
+                            key={`${sp.summaryTitle}-${sp.prompt}`}
+                            suggestion={sp.summaryTitle}
+                            onClick={() =>
+                              submitInitialMessage({
+                                text: sp.prompt,
+                                files: [],
+                              })
+                            }
+                          />
+                        ))}
+                      </div>
+                    );
+                  })()}
+                  <div className="w-full max-w-4xl">
                     <ArchestraPromptInput
                       onSubmit={handleInitialSubmit}
                       status={
@@ -1671,6 +1839,8 @@ export default function ChatPage() {
                       isPlaywrightSetupVisible={isPlaywrightSetupVisible}
                       selectorAgentId={initialAgentId}
                       onAgentChange={handleInitialAgentChange}
+                      modelSource={initialModelSource}
+                      onResetModelOverride={handleResetModelOverride}
                     />
                   </div>
                 </div>
@@ -1722,16 +1892,6 @@ export default function ChatPage() {
               : undefined
         }
         agentType="agent"
-      />
-
-      <PromptVersionHistoryDialog
-        open={!!versionHistoryAgent}
-        onOpenChange={(open) => {
-          if (!open) {
-            setVersionHistoryAgent(null);
-          }
-        }}
-        agent={versionHistoryAgent}
       />
 
       {conversationId && (

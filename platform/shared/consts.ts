@@ -1,6 +1,18 @@
 import { z } from "zod";
 import type { SupportedProvider } from "./model-constants";
 
+/** Default app name used as fallback when organization.appName is not configured */
+export const DEFAULT_APP_NAME = "Archestra";
+
+/** Maximum number of suggested prompts per agent */
+export const MAX_SUGGESTED_PROMPTS = 10;
+
+/** Maximum character length for a suggested prompt's summary title (button label) */
+export const MAX_SUGGESTED_PROMPT_TITLE_LENGTH = 50;
+
+/** Maximum character length for a suggested prompt's full prompt text */
+export const MAX_SUGGESTED_PROMPT_TEXT_LENGTH = 5000;
+
 /** Prefix for all Archestra-generated tokens (team tokens, user tokens, virtual API keys, API keys) */
 export const ARCHESTRA_TOKEN_PREFIX = "archestra_";
 
@@ -16,6 +28,7 @@ export const InteractionSourceSchema = z.enum([
   "email",
   "knowledge:embedding",
   "knowledge:reranker",
+  "knowledge:query-expansion",
 ]);
 
 export type InteractionSource = z.infer<typeof InteractionSourceSchema>;
@@ -36,6 +49,7 @@ export const INTERACTION_SOURCE_DISPLAY: Record<
   email: { label: "Email" },
   "knowledge:embedding": { label: "Knowledge - Embedding" },
   "knowledge:reranker": { label: "Knowledge - Reranker" },
+  "knowledge:query-expansion": { label: "Knowledge - Query Expansion" },
 };
 
 export const E2eTestId = {
@@ -170,8 +184,15 @@ export const TOOL_ARTIFACT_WRITE_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_
 export const TOOL_TODO_WRITE_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}todo_write`;
 export const TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}query_knowledge_sources`;
 export const TOOL_SWAP_AGENT_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}swap_agent`;
+export const TOOL_SWAP_TO_DEFAULT_AGENT_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}swap_to_default_agent`;
 export const SWAP_AGENT_POKE_TEXT =
   "(Agent was swapped. Please continue the conversation.)";
+export const SWAP_AGENT_POKE_PREFIX = "(Switched to ";
+export function makeSwapAgentPokeText(agentName: string): string {
+  return `${SWAP_AGENT_POKE_PREFIX}${agentName}. Please continue the conversation. If you have the swap_to_default_agent tool and you don't have the right tools to fulfill the request, use it immediately — write a brief message explaining why you are switching back, then call swap_to_default_agent.)`;
+}
+export const SWAP_TO_DEFAULT_AGENT_POKE_TEXT =
+  "(Switched back to the default agent. Briefly explain why you switched back and continue the conversation.)";
 
 export const DEFAULT_ARCHESTRA_TOOL_NAMES = [
   TOOL_ARTIFACT_WRITE_FULL_NAME,

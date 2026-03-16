@@ -5,6 +5,7 @@ import {
   type SupportedProvider,
   TimeInMs,
   TOOL_SWAP_AGENT_FULL_NAME,
+  TOOL_SWAP_TO_DEFAULT_AGENT_FULL_NAME,
   type TokenUsage,
 } from "@shared";
 import {
@@ -42,6 +43,11 @@ import {
   TeamModel,
 } from "@/models";
 import { startActiveChatSpan } from "@/observability/tracing";
+import {
+  promptNeedsRendering,
+  renderSystemPrompt,
+  type SystemPromptContext,
+} from "@/templating";
 import {
   ApiError,
   constructResponseSchema,
@@ -187,29 +193,33 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         user: { id: user.id, email: user.email, name: user.name },
       });
 
-      // Build system prompt from agent's systemPrompt and userPrompt fields
+      // Build system prompt from agent's systemPrompt field
       let systemPrompt: string | undefined;
-      const systemPromptParts: string[] = [];
-      const userPromptParts: string[] = [];
 
-      // Collect system and user prompts from the agent
-      if (agent.systemPrompt) {
-        systemPromptParts.push(agent.systemPrompt);
-      }
-      if (agent.userPrompt) {
-        userPromptParts.push(agent.userPrompt);
+      // Build template context only when prompts use Handlebars syntax
+      let promptContext: SystemPromptContext | null = null;
+      if (promptNeedsRendering(agent.systemPrompt)) {
+        const userTeams = await TeamModel.getUserTeams(user.id);
+        promptContext = {
+          user: {
+            name: user.name,
+            email: user.email,
+            teams: userTeams.map((t) => t.name),
+          },
+        };
       }
 
-      // Add instruction about tool approval denials
-      systemPromptParts.push(
-        "When a tool execution is not approved by the user, do not retry it. Explain what happened and ask the user what they'd like to do instead.",
+      const renderedPrompt = renderSystemPrompt(
+        agent.systemPrompt,
+        promptContext,
       );
 
-      // Combine all prompts into system prompt (system prompts first, then user prompts)
-      if (systemPromptParts.length > 0 || userPromptParts.length > 0) {
-        const allParts = [...systemPromptParts, ...userPromptParts];
-        systemPrompt = allParts.join("\n\n");
-      }
+      const toolDenialInstruction =
+        "When a tool execution is not approved by the user, do not retry it. Explain what happened and ask the user what they'd like to do instead.";
+
+      systemPrompt =
+        [renderedPrompt, toolDenialInstruction].filter(Boolean).join("\n\n") ||
+        undefined;
 
       // Use stored provider if available, otherwise detect from model name for backward compatibility
       // At the moment of migration, all supported providers (anthropic, openai, gemini) serve different models,
@@ -230,9 +240,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           model: conversation.selectedModel,
           provider,
           providerSource: conversation.selectedProvider ? "stored" : "detected",
-          hasSystemPromptParts: systemPromptParts.length > 0,
-          hasUserPromptParts: userPromptParts.length > 0,
-          systemPromptProvided: !!systemPrompt,
+          hasSystemPrompt: !!systemPrompt,
           externalAgentId,
         },
         "Starting chat stream",
@@ -286,6 +294,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             stopWhen: [
               stepCountIs(500),
               hasToolCall(TOOL_SWAP_AGENT_FULL_NAME),
+              hasToolCall(TOOL_SWAP_TO_DEFAULT_AGENT_FULL_NAME),
             ],
             abortSignal: chatAbortController.signal,
             onFinish: async ({ usage, finishReason }) => {
@@ -340,6 +349,35 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             },
             stream: createUIMessageStream({
               onError: (error) => {
+                // Persist messages on stream-level errors (e.g. errors thrown
+                // in execute before writer.merge() is reached). Without this,
+                // user messages are lost on refresh after an error.
+                const shouldPersist = !messagesPersisted && !!conversationId;
+                if (shouldPersist) {
+                  messagesPersisted = true;
+                }
+                (async () => {
+                  if (shouldPersist) {
+                    try {
+                      await persistNewMessages(
+                        conversationId,
+                        messages,
+                        "onStreamError",
+                      );
+                    } catch (persistError) {
+                      logger.error(
+                        { persistError, conversationId },
+                        "Failed to persist messages during stream error",
+                      );
+                    }
+                  }
+                })().catch((err) => {
+                  logger.error(
+                    { err },
+                    "Unexpected error in onError async persist handler",
+                  );
+                });
+
                 const mapped = mapProviderError(error, provider);
                 try {
                   return JSON.stringify(mapped);
@@ -352,6 +390,24 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 }
               },
               execute: async ({ writer }) => {
+                // ⚠️ TEMPORARY: Error injection for testing retries. Remove after testing.
+                const lastMsg = (
+                  messages as { parts?: { type: string; text?: string }[] }[]
+                ).at(-1);
+                const lastText =
+                  lastMsg?.parts?.find((p) => p.type === "text")?.text ?? "";
+                if (lastText.includes("__test_500")) {
+                  throw new Error("Simulated server error (500)");
+                }
+                if (lastText.includes("__test_network")) {
+                  throw new TypeError("Failed to fetch");
+                }
+                if (lastText.includes("__test_no_output")) {
+                  throw new Error(
+                    "No output generated. Check the stream for errors.",
+                  );
+                }
+
                 // Stream tokens to the client in real-time while also
                 // handling context-length errors from vLLM/LiteLLM.
                 //
@@ -392,6 +448,23 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                       messages: trimmed,
                     });
                   } else {
+                    // Save messages before throwing — this error path runs before
+                    // writer.merge(), so onError/onFinish callbacks won't fire.
+                    if (!messagesPersisted && conversationId) {
+                      messagesPersisted = true;
+                      try {
+                        await persistNewMessages(
+                          conversationId,
+                          messages,
+                          "onExecuteError",
+                        );
+                      } catch (persistError) {
+                        logger.error(
+                          { persistError, conversationId },
+                          "Failed to persist messages during execute error",
+                        );
+                      }
+                    }
                     throw error;
                   }
                 }
@@ -401,7 +474,14 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   result.toUIMessageStream({
                     originalMessages: messages as UIMessage[],
                     onError: (error) => {
-                      // Use an async IIFE to handle async operations within the sync onError handler
+                      // Claim persistence before the async work below starts,
+                      // otherwise onFinish can race and also persist (duplicates).
+                      const shouldPersist =
+                        !messagesPersisted && !!conversationId;
+                      if (shouldPersist) {
+                        messagesPersisted = true;
+                      }
+
                       (async () => {
                         logger.error(
                           {
@@ -413,15 +493,13 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                         );
 
                         // Persist messages despite error so they have a valid ID for editing
-                        // Only persist if not already persisted by onFinish
-                        if (!messagesPersisted && conversationId) {
+                        if (shouldPersist) {
                           try {
                             await persistNewMessages(
                               conversationId,
                               messages,
                               "onError",
                             );
-                            messagesPersisted = true;
                           } catch (persistError) {
                             // Log persistence error but don't prevent the error response
                             logger.error(

@@ -148,6 +148,93 @@ describe("KnowledgeBaseConnectorModel", () => {
     });
   });
 
+  describe("findByOrganizationPaginated", () => {
+    test("returns paginated connectors for an organization", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const { default: db, schema } = await import("@/database");
+      const { eq } = await import("drizzle-orm");
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const first = await makeKnowledgeBaseConnector(kb.id, org.id, {
+        name: "First",
+      });
+      const second = await makeKnowledgeBaseConnector(kb.id, org.id, {
+        name: "Second",
+      });
+      const third = await makeKnowledgeBaseConnector(kb.id, org.id, {
+        name: "Third",
+      });
+
+      await db
+        .update(schema.knowledgeBaseConnectorsTable)
+        .set({ createdAt: new Date("2026-01-01T00:00:00.000Z") })
+        .where(eq(schema.knowledgeBaseConnectorsTable.id, first.id));
+      await db
+        .update(schema.knowledgeBaseConnectorsTable)
+        .set({ createdAt: new Date("2026-01-02T00:00:00.000Z") })
+        .where(eq(schema.knowledgeBaseConnectorsTable.id, second.id));
+      await db
+        .update(schema.knowledgeBaseConnectorsTable)
+        .set({ createdAt: new Date("2026-01-03T00:00:00.000Z") })
+        .where(eq(schema.knowledgeBaseConnectorsTable.id, third.id));
+
+      const result =
+        await KnowledgeBaseConnectorModel.findByOrganizationPaginated({
+          organizationId: org.id,
+          limit: 1,
+          offset: 1,
+        });
+
+      expect(result.total).toBe(3);
+      expect(result.data).toHaveLength(1);
+      expect(result.data[0]?.id).toBe(second.id);
+    });
+
+    test("filters by connector type and search across name and description", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      await makeKnowledgeBaseConnector(kb.id, org.id, {
+        name: "GitHub Docs",
+        connectorType: "github",
+      });
+      await makeKnowledgeBaseConnector(kb.id, org.id, {
+        name: "Jira Backlog",
+        connectorType: "jira",
+      });
+      await makeKnowledgeBaseConnector(kb.id, org.id, {
+        name: "GitLab Issues",
+        connectorType: "gitlab",
+      });
+
+      const byDescription =
+        await KnowledgeBaseConnectorModel.findByOrganizationPaginated({
+          organizationId: org.id,
+          limit: 10,
+          offset: 0,
+          search: "backlog",
+        });
+      const byType =
+        await KnowledgeBaseConnectorModel.findByOrganizationPaginated({
+          organizationId: org.id,
+          limit: 10,
+          offset: 0,
+          connectorType: "github",
+        });
+
+      expect(byDescription.total).toBe(1);
+      expect(byDescription.data[0]?.name).toBe("Jira Backlog");
+      expect(byType.total).toBe(1);
+      expect(byType.data[0]?.name).toBe("GitHub Docs");
+    });
+  });
+
   describe("findByKnowledgeBaseId", () => {
     test("returns connectors assigned to a knowledge base", async ({
       makeOrganization,

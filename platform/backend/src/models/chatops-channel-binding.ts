@@ -1,3 +1,4 @@
+import type { PaginationQuery } from "@shared";
 import {
   and,
   asc,
@@ -19,8 +20,11 @@ import {
   type PaginatedResult,
 } from "@/database/utils/pagination";
 import logger from "@/logging";
-import type { PaginationQuery, SortingQueryFor } from "@/types";
-import type { ChatOpsProviderType } from "@/types/chatops";
+import type {
+  ChatOpsProviderType,
+  ChatOpsStatus,
+  SortingQueryFor,
+} from "@/types";
 import type {
   ChatOpsChannelBinding,
   InsertChatOpsChannelBinding,
@@ -151,7 +155,7 @@ class ChatOpsChannelBindingModel {
       provider?: ChatOpsProviderType;
       workspaceId?: string;
       search?: string;
-      status?: "configured" | "unassigned";
+      status?: ChatOpsStatus;
     };
   }): Promise<
     PaginatedResult<ChatOpsChannelBinding> & {

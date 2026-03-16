@@ -109,7 +109,7 @@ export function DefaultCredentialsWarning({
               {" "}
               or{" "}
               <a
-                href="/settings/auth"
+                href="/settings/account"
                 className="inline-flex items-center underline"
               >
                 Change

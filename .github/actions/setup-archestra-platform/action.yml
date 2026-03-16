@@ -246,6 +246,23 @@ runs:
           kubectl wait --for=condition=Ready pods -l app.kubernetes.io/name=keycloak --timeout=180s
           kubectl wait --for=condition=Ready pods -l app.kubernetes.io/name=wiremock --timeout=60s
 
+          echo "Verifying WireMock is accessible and stubs are loaded..."
+          for i in $(seq 1 10); do
+            HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 http://localhost:8080/__admin/health 2>/dev/null || echo "000")
+            if [ "$HTTP_CODE" = "200" ]; then
+              echo "WireMock is accessible (HTTP $HTTP_CODE)"
+              break
+            fi
+            echo "WireMock returned HTTP $HTTP_CODE, retrying... ($i/10)"
+            sleep 2
+          done
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "ERROR: WireMock not accessible after 10 attempts"
+            kubectl get pods -l app.kubernetes.io/name=wiremock -o wide
+            kubectl logs -l app.kubernetes.io/name=wiremock --tail=30 2>/dev/null || true
+            exit 1
+          fi
+
           echo "Verifying Keycloak is accessible..."
           # kubectl wait already confirmed the pod is Ready, so Keycloak should respond quickly.
           # Keycloak's /health/ready is on the management port (9000), NOT the main HTTP port (8080).

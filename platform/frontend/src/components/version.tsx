@@ -2,10 +2,12 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { usePublicAppearance } from "@/lib/appearance.query";
 import { useLatestGitHubRelease } from "@/lib/github-release.query";
 import { useHealth } from "@/lib/health.query";
-import { useOrganization } from "@/lib/organization.query";
+import {
+  useAppearanceSettings,
+  useOrganization,
+} from "@/lib/organization.query";
 import { hasNewerVersion } from "@/lib/version-utils";
 
 interface VersionProps {
@@ -16,7 +18,7 @@ export function Version({ inline = false }: VersionProps) {
   const { data } = useHealth();
   const { data: latestRelease } = useLatestGitHubRelease();
   const { data: organization } = useOrganization();
-  const { data: appearance } = usePublicAppearance();
+  const { data: appearance } = useAppearanceSettings();
   const [shouldHide, setShouldHide] = useState(false);
 
   // Prefer authenticated org data; fall back to public appearance for unauthenticated pages (e.g. sign-in)

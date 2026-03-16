@@ -8,24 +8,10 @@ import {
 import { Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
-import {
-  AlertDialog,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { FormDialog } from "@/components/form-dialog";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogStickyFooter,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { DialogForm, DialogStickyFooter } from "@/components/ui/dialog";
 import { Form } from "@/components/ui/form";
 import { PermissionButton } from "@/components/ui/permission-button";
 import {
@@ -167,22 +153,27 @@ export function EditIdentityProviderDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Edit Identity Provider</DialogTitle>
-          <DialogDescription>
-            Update the configuration for "{provider.providerId}".
-          </DialogDescription>
-        </DialogHeader>
-
+    <>
+      <FormDialog
+        open={open}
+        onOpenChange={handleClose}
+        title="Edit Identity Provider"
+        description={`Update the configuration for "${provider.providerId}".`}
+        size="large"
+        className="max-w-4xl"
+      >
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)}>
-            {providerType === "saml" ? (
-              <SamlConfigForm form={form} />
-            ) : (
-              <OidcConfigForm form={form} />
-            )}
+          <DialogForm
+            className="flex min-h-0 flex-1 flex-col"
+            onSubmit={form.handleSubmit(onSubmit)}
+          >
+            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+              {providerType === "saml" ? (
+                <SamlConfigForm form={form} />
+              ) : (
+                <OidcConfigForm form={form} />
+              )}
+            </div>
 
             <DialogStickyFooter>
               <div className="flex w-full justify-between">
@@ -211,34 +202,18 @@ export function EditIdentityProviderDialog({
                 </div>
               </div>
             </DialogStickyFooter>
-          </form>
+          </DialogForm>
         </Form>
-      </DialogContent>
+      </FormDialog>
 
-      {/* Delete Confirmation Dialog */}
-      <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete Identity Provider</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to delete "{provider.providerId}"? This
-              action cannot be undone. Users will no longer be able to sign in
-              using this provider.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <PermissionButton
-              permissions={{ identityProvider: ["delete"] }}
-              onClick={handleDelete}
-              disabled={deleteIdentityProvider.isPending}
-              variant="destructive"
-            >
-              {deleteIdentityProvider.isPending ? "Deleting..." : "Delete"}
-            </PermissionButton>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </Dialog>
+      <DeleteConfirmDialog
+        open={showDeleteConfirm}
+        onOpenChange={setShowDeleteConfirm}
+        title="Delete Identity Provider"
+        description={`Are you sure you want to delete "${provider.providerId}"? This action cannot be undone. Users will no longer be able to sign in using this provider.`}
+        isPending={deleteIdentityProvider.isPending}
+        onConfirm={handleDelete}
+      />
+    </>
   );
 }

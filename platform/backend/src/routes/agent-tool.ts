@@ -1,4 +1,8 @@
-import { RouteId } from "@shared";
+import {
+  createPaginatedResponseSchema,
+  PaginationQuerySchema,
+  RouteId,
+} from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { policyConfigurationService } from "@/agents/subagents/policy-configuration";
@@ -25,13 +29,11 @@ import {
 import type { InternalMcpCatalog, Tool } from "@/types";
 import {
   AgentToolFilterSchema,
-  AgentToolSortBySchema,
-  AgentToolSortDirectionSchema,
+  AgentToolSortBy,
   ApiError,
   constructResponseSchema,
-  createPaginatedResponseSchema,
+  createSortingQuerySchema,
   DeleteObjectResponseSchema,
-  PaginationQuerySchema,
   SelectAgentToolSchema,
   SelectToolSchema,
   UpdateAgentToolSchema,
@@ -47,11 +49,12 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description:
           "Get all agent-tool relationships with pagination, sorting, and filtering",
         tags: ["Agent Tools"],
-        querystring: AgentToolFilterSchema.extend({
-          sortBy: AgentToolSortBySchema.optional(),
-          sortDirection: AgentToolSortDirectionSchema.optional(),
-          skipPagination: z.coerce.boolean().optional(),
-        }).merge(PaginationQuerySchema),
+        querystring: createSortingQuerySchema(AgentToolSortBy)
+          .merge(AgentToolFilterSchema)
+          .merge(PaginationQuerySchema)
+          .extend({
+            skipPagination: z.coerce.boolean().optional(),
+          }),
         response: constructResponseSchema(
           createPaginatedResponseSchema(SelectAgentToolSchema),
         ),
@@ -223,36 +226,35 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const uniqueAgentIds = [...new Set(assignments.map((a) => a.agentId))];
       const uniqueToolIds = [...new Set(assignments.map((a) => a.toolId))];
 
-      // Check agent-type-specific modify permission based on scope for each unique agent
-      const checker = await getAgentTypePermissionChecker({
-        userId: request.user.id,
-        organizationId: request.organizationId,
-      });
+      // Batch fetch agents for permission checks (avoids N+1 findById calls)
+      const [agentsForPermCheck, checker] = await Promise.all([
+        AgentModel.findByIdsForPermissionCheck(uniqueAgentIds),
+        getAgentTypePermissionChecker({
+          userId: request.user.id,
+          organizationId: request.organizationId,
+        }),
+      ]);
+
       let userTeamIds: string[] | null = null;
-      for (const agentId of uniqueAgentIds) {
-        const agent = await AgentModel.findById(agentId);
-        if (agent) {
-          checker.require(agent.agentType, "update");
-          if (!checker.isAdmin(agent.agentType) && userTeamIds === null) {
-            userTeamIds = await TeamModel.getUserTeamIds(request.user.id);
-          }
-          requireAgentModifyPermission({
-            checker,
-            agentType: agent.agentType,
-            agentScope: agent.scope,
-            agentAuthorId: agent.authorId,
-            agentTeamIds: agent.teams.map((t) => t.id),
-            userTeamIds: userTeamIds ?? [],
-            userId: request.user.id,
-          });
+      for (const [, agent] of agentsForPermCheck) {
+        checker.require(agent.agentType, "update");
+        if (!checker.isAdmin(agent.agentType) && userTeamIds === null) {
+          userTeamIds = await TeamModel.getUserTeamIds(request.user.id);
         }
+        requireAgentModifyPermission({
+          checker,
+          agentType: agent.agentType,
+          agentScope: agent.scope,
+          agentAuthorId: agent.authorId,
+          agentTeamIds: agent.teamIds,
+          userTeamIds: userTeamIds ?? [],
+          userId: request.user.id,
+        });
       }
 
       // Batch fetch all required data in parallel
-      const [existingAgentIds, tools] = await Promise.all([
-        AgentModel.existsBatch(uniqueAgentIds),
-        ToolModel.getByIds(uniqueToolIds),
-      ]);
+      const existingAgentIds = new Set(agentsForPermCheck.keys());
+      const tools = await ToolModel.getByIds(uniqueToolIds);
 
       // Create maps for efficient lookup
       const toolsMap = new Map(tools.map((tool) => [tool.id, tool]));
@@ -290,7 +292,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
-      // Prepare pre-fetched data to pass to assignToolToAgent
+      // Prepare pre-fetched data to pass to assignToolToAgent for validation
       const preFetchedData = {
         existingAgentIds,
         toolsMap,
@@ -298,46 +300,46 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         mcpServersBasicMap,
       };
 
-      const results = await Promise.allSettled(
-        assignments.map((assignment) =>
-          assignToolToAgent(
-            assignment.agentId,
-            assignment.toolId,
-            assignment.credentialSourceMcpServerId,
-            assignment.executionSourceMcpServerId,
-            preFetchedData,
-            assignment.useDynamicTeamCredential,
-          ),
-        ),
+      // Validate all assignments first (no DB writes)
+      const validated: typeof assignments = [];
+      const failed: { agentId: string; toolId: string; error: string }[] = [];
+
+      for (const assignment of assignments) {
+        const validationError = await validateAssignment(
+          assignment.agentId,
+          assignment.toolId,
+          assignment.credentialSourceMcpServerId,
+          assignment.executionSourceMcpServerId,
+          preFetchedData,
+          assignment.useDynamicTeamCredential,
+        );
+        if (validationError) {
+          failed.push({
+            agentId: assignment.agentId,
+            toolId: assignment.toolId,
+            error: validationError.error.message,
+          });
+        } else {
+          validated.push(assignment);
+        }
+      }
+
+      // Bulk create-or-update all validated assignments
+      const bulkResults = await AgentToolModel.bulkCreateOrUpdateCredentials(
+        validated,
+        request.organizationId,
       );
 
       const succeeded: { agentId: string; toolId: string }[] = [];
-      const failed: { agentId: string; toolId: string; error: string }[] = [];
       const duplicates: { agentId: string; toolId: string }[] = [];
 
-      results.forEach((result, index) => {
-        const { agentId, toolId } = assignments[index];
-        if (result.status === "fulfilled") {
-          if (result.value === null || result.value === "updated") {
-            // Success (created or updated credentials)
-            succeeded.push({ agentId, toolId });
-          } else if (result.value === "duplicate") {
-            // Already assigned with same credentials
-            duplicates.push({ agentId, toolId });
-          } else {
-            // Validation error
-            const error = result.value.error.message || "Unknown error";
-            failed.push({ agentId, toolId, error });
-          }
-        } else if (result.status === "rejected") {
-          // Runtime error
-          const error =
-            result.reason instanceof Error
-              ? result.reason.message
-              : "Unknown error";
-          failed.push({ agentId, toolId, error });
+      for (const result of bulkResults) {
+        if (result.status === "created" || result.status === "updated") {
+          succeeded.push({ agentId: result.agentId, toolId: result.toolId });
+        } else {
+          duplicates.push({ agentId: result.agentId, toolId: result.toolId });
         }
-      });
+      }
 
       // Clear chat MCP client cache for all affected agents
       const affectedAgentIds = new Set([
@@ -537,7 +539,6 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
           id: UuidIdSchema,
         }),
         body: UpdateAgentToolSchema.pick({
-          responseModifierTemplate: true,
           credentialSourceMcpServerId: true,
           executionSourceMcpServerId: true,
           useDynamicTeamCredential: true,
@@ -1132,6 +1133,108 @@ export async function assignToolToAgent(
   }
 
   return null; // created
+}
+
+/**
+ * Validates a single tool-to-agent assignment without performing any DB writes.
+ * Returns an error object if validation fails, or null if valid.
+ * Used by the bulk-assign route to validate all assignments before batch writing.
+ */
+export async function validateAssignment(
+  agentId: string,
+  toolId: string,
+  credentialSourceMcpServerId: string | null | undefined,
+  executionSourceMcpServerId: string | null | undefined,
+  preFetchedData: {
+    existingAgentIds: Set<string>;
+    toolsMap: Map<string, Tool>;
+    catalogItemsMap: Map<string, InternalMcpCatalog>;
+    mcpServersBasicMap: Map<
+      string,
+      { id: string; ownerId: string | null; catalogId: string | null }
+    >;
+  },
+  useDynamicTeamCredential?: boolean,
+): Promise<{
+  status: 400 | 404;
+  error: { message: string; type: string };
+} | null> {
+  if (!preFetchedData.existingAgentIds.has(agentId)) {
+    return {
+      status: 404,
+      error: {
+        message: `Agent with ID ${agentId} not found`,
+        type: "not_found",
+      },
+    };
+  }
+
+  const tool = preFetchedData.toolsMap.get(toolId) || null;
+  if (!tool) {
+    return {
+      status: 404,
+      error: {
+        message: `Tool with ID ${toolId} not found`,
+        type: "not_found",
+      },
+    };
+  }
+
+  if (tool.catalogId) {
+    const catalogItem =
+      preFetchedData.catalogItemsMap.get(tool.catalogId) || null;
+
+    if (catalogItem?.serverType === "local") {
+      if (!executionSourceMcpServerId && !useDynamicTeamCredential) {
+        return {
+          status: 400,
+          error: {
+            message:
+              "Execution source installation or dynamic team credential is required for local MCP server tools",
+            type: "validation_error",
+          },
+        };
+      }
+    }
+    if (catalogItem?.serverType === "remote") {
+      if (!credentialSourceMcpServerId && !useDynamicTeamCredential) {
+        return {
+          status: 400,
+          error: {
+            message:
+              "Credential source or dynamic team credential is required for remote MCP server tools",
+            type: "validation_error",
+          },
+        };
+      }
+    }
+  }
+
+  if (credentialSourceMcpServerId) {
+    const preFetchedServer = preFetchedData.mcpServersBasicMap.get(
+      credentialSourceMcpServerId,
+    );
+    const validationError = await validateCredentialSource(
+      agentId,
+      credentialSourceMcpServerId,
+      preFetchedServer,
+    );
+    if (validationError) return validationError;
+  }
+
+  if (executionSourceMcpServerId) {
+    const preFetchedServer = preFetchedData.mcpServersBasicMap.get(
+      executionSourceMcpServerId,
+    );
+    const validationError = await validateExecutionSource(
+      toolId,
+      executionSourceMcpServerId,
+      preFetchedServer,
+    );
+    if (validationError) return validationError;
+  }
+
+  return null;
 }
 
 /**

@@ -5,7 +5,12 @@ import { userHasPermission } from "@/auth/utils";
 import logger from "@/logging";
 import { AgentTeamModel, ToolModel } from "@/models";
 import { ProviderError } from "@/routes/chat/errors";
-import { isAbortLikeError, slugify } from "./helpers";
+import {
+  errorResult,
+  isAbortLikeError,
+  slugify,
+  successResult,
+} from "./helpers";
 import type { ArchestraContext } from "./types";
 
 // === Exports ===
@@ -84,26 +89,15 @@ export async function handleDelegation(
   const message = args?.message as string;
 
   if (!message) {
-    return {
-      content: [{ type: "text", text: "Error: message is required." }],
-      isError: true,
-    };
+    return errorResult("message is required.");
   }
 
   if (!agentId) {
-    return {
-      content: [{ type: "text", text: "Error: No agent context available." }],
-      isError: true,
-    };
+    return errorResult("No agent context available.");
   }
 
   if (!organizationId) {
-    return {
-      content: [
-        { type: "text", text: "Error: Organization context not available." },
-      ],
-      isError: true,
-    };
+    return errorResult("Organization context not available.");
   }
 
   // Extract target agent slug from tool name
@@ -118,15 +112,7 @@ export async function handleDelegation(
   );
 
   if (!delegation) {
-    return {
-      content: [
-        {
-          type: "text",
-          text: `Error: Agent not found or not configured for delegation.`,
-        },
-      ],
-      isError: true,
-    };
+    return errorResult("Agent not found or not configured for delegation.");
   }
 
   // Check user has access if user token is being used
@@ -142,15 +128,7 @@ export async function handleDelegation(
     const userAccessibleAgentIds =
       await AgentTeamModel.getUserAccessibleAgentIds(userId, isAgentAdmin);
     if (!userAccessibleAgentIds.includes(delegation.targetAgent.id)) {
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Error: You don't have access to this agent.`,
-          },
-        ],
-        isError: true,
-      };
+      return errorResult("You don't have access to this agent.");
     }
   }
 
@@ -183,10 +161,7 @@ export async function handleDelegation(
       abortSignal: context.abortSignal,
     });
 
-    return {
-      content: [{ type: "text", text: result.text }],
-      isError: false,
-    };
+    return successResult(result.text);
   } catch (error) {
     if (isAbortLikeError(error)) {
       logger.info(
@@ -204,14 +179,8 @@ export async function handleDelegation(
     if (error instanceof ProviderError) {
       throw error;
     }
-    return {
-      content: [
-        {
-          type: "text",
-          text: `Error: ${error instanceof Error ? error.message : "Unknown error"}`,
-        },
-      ],
-      isError: true,
-    };
+    return errorResult(
+      error instanceof Error ? error.message : "Unknown error",
+    );
   }
 }

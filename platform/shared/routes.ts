@@ -8,8 +8,6 @@ export const RouteId = {
   GetDefaultLlmProxy: "getDefaultLlmProxy",
   UpdateAgent: "updateAgent",
   DeleteAgent: "deleteAgent",
-  GetAgentVersions: "getAgentVersions",
-  RollbackAgent: "rollbackAgent",
   GetLabelKeys: "getLabelKeys",
   GetLabelValues: "getLabelValues",
 
@@ -80,6 +78,7 @@ export const RouteId = {
   SubmitOAuthConsent: "submitOAuthConsent",
 
   // Team Routes
+  GetMembers: "getMembers",
   GetTeams: "getTeams",
   CreateTeam: "createTeam",
   GetTeam: "getTeam",
@@ -258,6 +257,12 @@ export const RouteId = {
   UpdateChatApiKey: "updateChatApiKey",
   DeleteChatApiKey: "deleteChatApiKey",
 
+  // User API Key Routes
+  GetApiKeys: "getApiKeys",
+  GetApiKey: "getApiKey",
+  CreateApiKey: "createApiKey",
+  DeleteApiKey: "deleteApiKey",
+
   // Virtual API Key Routes
   GetVirtualApiKeys: "getVirtualApiKeys",
   GetAllVirtualApiKeys: "getAllVirtualApiKeys",
@@ -266,6 +271,7 @@ export const RouteId = {
 
   // Models with API Keys Routes
   GetModelsWithApiKeys: "getModelsWithApiKeys",
+  UpdateModel: "updateModel",
 
   // Limits Routes
   GetLimits: "getLimits",
@@ -279,12 +285,13 @@ export const RouteId = {
   GetOnboardingStatus: "getOnboardingStatus",
   GetMemberSignupStatus: "getMemberSignupStatus",
   GetOrganizationMembers: "getOrganizationMembers",
+  GetOrganizationMember: "getOrganizationMember",
   DeletePendingSignupMember: "deletePendingSignupMember",
   CompleteOnboarding: "completeOnboarding",
 
-  // Appearance Routes
-  GetPublicAppearance: "getPublicAppearance",
-  UpdateAppearance: "updateAppearance",
+  // Appearance Settings Routes
+  GetAppearanceSettings: "getAppearanceSettings",
+  UpdateAppearanceSettings: "updateAppearanceSettings",
 
   // Security Settings Routes
   UpdateSecuritySettings: "updateSecuritySettings",
@@ -310,14 +317,10 @@ export const RouteId = {
   GetIdentityProviderIdpLogoutUrl: "getIdentityProviderIdpLogoutUrl",
 
   // Member Routes
-  UpdateMemberDefaultAgent: "updateMemberDefaultAgent",
   GetMemberDefaultAgent: "getMemberDefaultAgent",
 
   // User Routes
   GetUserPermissions: "getUserPermissions",
-
-  // Model Pricing Routes
-  UpdateModelPricing: "updateModelPricing",
 
   // Team Token Routes
   GetTokens: "getTokens",
@@ -380,6 +383,7 @@ export const RouteId = {
   UpdateConnector: "updateConnector",
   DeleteConnector: "deleteConnector",
   SyncConnector: "syncConnector",
+  ForceResyncConnector: "forceResyncConnector",
   TestConnectorConnection: "testConnectorConnection",
 
   // Connector Knowledge Base Assignment Routes

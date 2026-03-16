@@ -1,4 +1,4 @@
-import type { Connector, ConnectorType } from "@/types/knowledge-connector";
+import type { Connector, ConnectorType } from "@/types";
 import { ConfluenceConnector } from "./confluence/confluence-connector";
 import { GithubConnector } from "./github/github-connector";
 import { GitlabConnector } from "./gitlab/gitlab-connector";

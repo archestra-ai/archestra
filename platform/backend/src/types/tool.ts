@@ -21,7 +21,6 @@ export const SelectToolSchema = createSelectSchema(schema.toolsTable, {
 
 export const ExtendedSelectToolSchema = SelectToolSchema.omit({
   agentId: true,
-  mcpServerId: true,
 }).extend({
   // Nullable for MCP tools
   agent: z
@@ -65,7 +64,6 @@ export const ToolAssignmentSchema = z.object({
   executionSourceMcpServerId: z.string().nullable(),
   executionOwnerEmail: z.string().nullable(),
   useDynamicTeamCredential: z.boolean(),
-  responseModifierTemplate: z.string().nullable(),
 });
 
 // Tool with embedded assignments schema
@@ -94,17 +92,14 @@ export const ToolFilterSchema = z.object({
     .describe("Hide built-in Archestra tools"),
 });
 
-// Sort options for tools
-export const ToolSortBySchema = z.enum([
+export const ToolSortBy = [
   "name",
   "origin",
   "createdAt",
   "assignmentCount",
-]);
-export const ToolSortDirectionSchema = z.enum(["asc", "desc"]);
+] as const;
+export type ToolSortBy = (typeof ToolSortBy)[number];
 
 export type ToolAssignment = z.infer<typeof ToolAssignmentSchema>;
 export type ToolWithAssignments = z.infer<typeof ToolWithAssignmentsSchema>;
 export type ToolFilters = z.infer<typeof ToolFilterSchema>;
-export type ToolSortBy = z.infer<typeof ToolSortBySchema>;
-export type ToolSortDirection = z.infer<typeof ToolSortDirectionSchema>;

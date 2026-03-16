@@ -104,7 +104,7 @@ If ARCHESTRA_AUTH_SECRET env variable is explicitly set, it will override the au
   valueFrom:
     secretKeyRef:
       name: {{ include "archestra-platform.authSecretName" . }}
-      key: auth-secret
+      key: {{ include "archestra-platform.authSecretKey" . }}
 {{- end }}
 {{- if not (hasKey .Values.archestra.env "ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE") }}
 - name: ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE
@@ -154,7 +154,17 @@ If ARCHESTRA_AUTH_SECRET env variable is explicitly set, it will override the au
 Auth secret name for the Archestra Platform
 */}}
 {{- define "archestra-platform.authSecretName" -}}
-{{- printf "%s-auth" (include "archestra-platform.fullname" .) -}}
+{{- default (printf "%s-auth" (include "archestra-platform.fullname" .)) .Values.archestra.authSecret.existingSecretName -}}
+{{- end }}
+
+{{/*
+Auth secret key for the Archestra Platform
+*/}}
+{{- define "archestra-platform.authSecretKey" -}}
+{{- if and (not .Values.archestra.authSecret.existingSecretName) (ne .Values.archestra.authSecret.existingSecretKey "auth-secret") -}}
+{{- fail "archestra.authSecret.existingSecretKey requires archestra.authSecret.existingSecretName to also be set." -}}
+{{- end -}}
+{{- default "auth-secret" .Values.archestra.authSecret.existingSecretKey -}}
 {{- end }}
 
 {{/*

@@ -1,6 +1,6 @@
 import { and, eq, inArray, lt, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
-import type { InsertTask, Task } from "@/types/task";
+import type { InsertTask, Task } from "@/types";
 
 class TaskModel {
   static async create(data: InsertTask): Promise<Task> {

@@ -1,27 +1,17 @@
 "use client";
 
-import {
-  ARCHESTRA_MCP_CATALOG_ID,
-  type McpDeploymentStatusEntry,
-} from "@shared";
-import { AlertCircle, PlugZap, RefreshCw, Server, XIcon } from "lucide-react";
-import Image from "next/image";
+import type { McpDeploymentStatusEntry } from "@shared";
+import { AlertCircle, PlugZap, RefreshCw, XIcon } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogForm,
+  DialogHeader,
+  DialogStickyFooter,
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
@@ -106,7 +96,7 @@ const PAGE_TITLES: Record<SettingsPage, string> = {
   "debug-logs": "Logs",
   "debug-inspector": "Inspector",
   "debug-shell": "Shell",
-  yaml: "K8s deployment YAML",
+  yaml: "K8s Deployment YAML",
 };
 
 function SidebarIcon({
@@ -116,42 +106,7 @@ function SidebarIcon({
   icon?: string | null;
   catalogId?: string;
 }) {
-  const size = 28;
-  if (!icon && catalogId === ARCHESTRA_MCP_CATALOG_ID) {
-    return (
-      <Image
-        src="/logo.png"
-        alt="Archestra"
-        width={size}
-        height={size}
-        className="shrink-0 rounded-sm object-contain"
-      />
-    );
-  }
-  if (!icon) {
-    return (
-      <Server
-        className="shrink-0 text-muted-foreground"
-        style={{ width: size, height: size }}
-      />
-    );
-  }
-  if (icon.startsWith("data:")) {
-    return (
-      <Image
-        src={icon}
-        alt="MCP server icon"
-        width={size}
-        height={size}
-        className="shrink-0 rounded-sm object-contain"
-      />
-    );
-  }
-  return (
-    <span className="shrink-0 leading-none" style={{ fontSize: size }}>
-      {icon}
-    </span>
-  );
+  return <McpCatalogIcon icon={icon} catalogId={catalogId} size={28} />;
 }
 
 export function McpServerSettingsDialog({
@@ -198,7 +153,7 @@ export function McpServerSettingsDialog({
     navItems.push({ id: "debug-inspector", label: "Inspector" });
   }
   if (showYaml) {
-    navItems.push({ id: "yaml", label: "K8s YAML" });
+    navItems.push({ id: "yaml", label: "K8s Deployment YAML" });
   }
 
   const defaultPage = initialPage ?? navItems[0]?.id ?? "configuration";
@@ -267,8 +222,8 @@ export function McpServerSettingsDialog({
           {/* Sidebar */}
           <nav className="w-[220px] border-r flex flex-col shrink-0">
             {/* Server header */}
-            <div className="p-4 pb-3 border-b">
-              <div className="flex items-center gap-2.5">
+            <div className="flex min-h-[72px] items-center border-b px-4 py-4">
+              <div className="flex min-w-0 items-center gap-2.5">
                 <SidebarIcon icon={item.icon} catalogId={item.id} />
                 <div className="min-w-0 flex-1">
                   <TruncatedTooltip content={item.label || item.name}>
@@ -358,7 +313,7 @@ export function McpServerSettingsDialog({
           {/* Content */}
           <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
             {/* Content header */}
-            <div className="flex items-center justify-between px-6 py-4 shrink-0">
+            <div className="flex min-h-[72px] shrink-0 items-center justify-between border-b px-4 py-4">
               <h2 className="text-lg font-semibold">
                 {PAGE_TITLES[validPage]}
               </h2>
@@ -378,8 +333,8 @@ export function McpServerSettingsDialog({
               className={cn(
                 "flex-1 flex flex-col min-h-0",
                 isDebugPage
-                  ? "overflow-hidden px-6 pb-6"
-                  : "overflow-y-auto p-6",
+                  ? "overflow-hidden px-4 pt-4 pb-4"
+                  : "overflow-hidden p-0",
               )}
             >
               {validPage === "configuration" && !isBuiltin && (
@@ -463,50 +418,63 @@ export function McpServerSettingsDialog({
         </DialogContent>
       </Dialog>
 
-      <AlertDialog
+      <Dialog
         open={pendingAction !== null}
         onOpenChange={(open) => {
           if (!open) setPendingAction(null);
         }}
       >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle className="flex items-center gap-2">
+        <DialogContent className="max-w-md flex flex-col overflow-hidden">
+          <DialogHeader className="border-b-0">
+            <DialogTitle className="flex items-center gap-2">
               <AlertCircle className="h-5 w-5 text-amber-500" />
               Unsaved changes
-            </AlertDialogTitle>
-            <AlertDialogDescription>
+            </DialogTitle>
+            <DialogDescription>
               You have unsaved configuration changes. What would you like to do?
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Go back</AlertDialogCancel>
-            <Button
-              variant="outline"
-              className="text-destructive hover:text-destructive hover:bg-destructive/10"
-              onClick={() => {
-                pendingAction?.();
-                setIsConfigDirty(false);
-                setPendingAction(null);
-              }}
-            >
-              Discard
-            </Button>
-            <AlertDialogAction
-              onClick={async () => {
-                if (configSubmitRef.current) {
-                  await configSubmitRef.current();
-                }
-                pendingAction?.();
-                setIsConfigDirty(false);
-                setPendingAction(null);
-              }}
-            >
-              Save first
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogForm
+            className="flex min-h-0 flex-1 flex-col"
+            onSubmit={(e) => e.preventDefault()}
+          >
+            <DialogStickyFooter className="mt-0">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setPendingAction(null)}
+              >
+                Go back
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                onClick={() => {
+                  pendingAction?.();
+                  setIsConfigDirty(false);
+                  setPendingAction(null);
+                }}
+              >
+                Discard
+              </Button>
+              <Button
+                type="button"
+                onClick={async () => {
+                  if (configSubmitRef.current) {
+                    await configSubmitRef.current();
+                  }
+                  pendingAction?.();
+                  setIsConfigDirty(false);
+                  setPendingAction(null);
+                }}
+              >
+                Save first
+              </Button>
+            </DialogStickyFooter>
+          </DialogForm>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

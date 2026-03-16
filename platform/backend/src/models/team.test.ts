@@ -1025,4 +1025,226 @@ describe("TeamModel", () => {
       expect(added.sort()).toEqual([team1.id, team2.id].sort());
     });
   });
+
+  describe("findByOrganizationPaginated", () => {
+    test("returns paginated teams with total count", async ({
+      makeOrganization,
+      makeUser,
+      makeTeam,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      await makeTeam(org.id, user.id, { name: "Alpha" });
+      await makeTeam(org.id, user.id, { name: "Beta" });
+      await makeTeam(org.id, user.id, { name: "Gamma" });
+
+      const result = await TeamModel.findByOrganizationPaginated({
+        organizationId: org.id,
+        limit: 2,
+        offset: 0,
+      });
+
+      expect(result.data).toHaveLength(2);
+      expect(result.total).toBe(3);
+    });
+
+    test("supports offset pagination", async ({
+      makeOrganization,
+      makeUser,
+      makeTeam,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      await makeTeam(org.id, user.id, { name: "Alpha" });
+      await makeTeam(org.id, user.id, { name: "Beta" });
+      await makeTeam(org.id, user.id, { name: "Gamma" });
+
+      const result = await TeamModel.findByOrganizationPaginated({
+        organizationId: org.id,
+        limit: 2,
+        offset: 2,
+      });
+
+      expect(result.data).toHaveLength(1);
+      expect(result.total).toBe(3);
+    });
+
+    test("filters by name with ILIKE", async ({
+      makeOrganization,
+      makeUser,
+      makeTeam,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      await makeTeam(org.id, user.id, { name: "Engineering" });
+      await makeTeam(org.id, user.id, { name: "Sales" });
+      await makeTeam(org.id, user.id, { name: "Senior Engineers" });
+
+      const result = await TeamModel.findByOrganizationPaginated({
+        organizationId: org.id,
+        limit: 10,
+        offset: 0,
+        name: "engineer",
+      });
+
+      expect(result.data).toHaveLength(2);
+      expect(result.total).toBe(2);
+    });
+
+    test("returns empty when no teams match", async ({ makeOrganization }) => {
+      const org = await makeOrganization();
+
+      const result = await TeamModel.findByOrganizationPaginated({
+        organizationId: org.id,
+        limit: 10,
+        offset: 0,
+      });
+
+      expect(result.data).toHaveLength(0);
+      expect(result.total).toBe(0);
+    });
+
+    test("includes team members", async ({
+      makeOrganization,
+      makeUser,
+      makeTeam,
+      makeTeamMember,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      const team = await makeTeam(org.id, user.id);
+      await makeTeamMember(team.id, user.id);
+
+      const result = await TeamModel.findByOrganizationPaginated({
+        organizationId: org.id,
+        limit: 10,
+        offset: 0,
+      });
+
+      expect(result.data).toHaveLength(1);
+      expect(result.data[0].members).toBeDefined();
+      expect(result.data[0].members).toHaveLength(1);
+      expect(result.data[0].members?.[0].userId).toBe(user.id);
+    });
+
+    test("does not include teams from other orgs", async ({
+      makeOrganization,
+      makeUser,
+      makeTeam,
+    }) => {
+      const org1 = await makeOrganization();
+      const org2 = await makeOrganization();
+      const user = await makeUser();
+      await makeTeam(org1.id, user.id, { name: "Org1 Team" });
+      await makeTeam(org2.id, user.id, { name: "Org2 Team" });
+
+      const result = await TeamModel.findByOrganizationPaginated({
+        organizationId: org1.id,
+        limit: 10,
+        offset: 0,
+      });
+
+      expect(result.data).toHaveLength(1);
+      expect(result.data[0].name).toBe("Org1 Team");
+      expect(result.total).toBe(1);
+    });
+  });
+
+  describe("getUserTeamsPaginated", () => {
+    test("returns only teams the user belongs to", async ({
+      makeOrganization,
+      makeUser,
+      makeTeam,
+      makeTeamMember,
+    }) => {
+      const org = await makeOrganization();
+      const user1 = await makeUser();
+      const user2 = await makeUser();
+      const team1 = await makeTeam(org.id, user1.id, { name: "User1 Team" });
+      const team2 = await makeTeam(org.id, user2.id, { name: "User2 Team" });
+      await makeTeamMember(team1.id, user1.id);
+      await makeTeamMember(team2.id, user2.id);
+
+      const result = await TeamModel.getUserTeamsPaginated({
+        userId: user1.id,
+        limit: 10,
+        offset: 0,
+      });
+
+      expect(result.data).toHaveLength(1);
+      expect(result.data[0].name).toBe("User1 Team");
+      expect(result.total).toBe(1);
+    });
+
+    test("supports pagination", async ({
+      makeOrganization,
+      makeUser,
+      makeTeam,
+      makeTeamMember,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      const teamA = await makeTeam(org.id, user.id, { name: "Team A" });
+      const teamB = await makeTeam(org.id, user.id, { name: "Team B" });
+      const teamC = await makeTeam(org.id, user.id, { name: "Team C" });
+      await makeTeamMember(teamA.id, user.id);
+      await makeTeamMember(teamB.id, user.id);
+      await makeTeamMember(teamC.id, user.id);
+
+      const page1 = await TeamModel.getUserTeamsPaginated({
+        userId: user.id,
+        limit: 2,
+        offset: 0,
+      });
+
+      expect(page1.data).toHaveLength(2);
+      expect(page1.total).toBe(3);
+
+      const page2 = await TeamModel.getUserTeamsPaginated({
+        userId: user.id,
+        limit: 2,
+        offset: 2,
+      });
+
+      expect(page2.data).toHaveLength(1);
+      expect(page2.total).toBe(3);
+    });
+
+    test("filters by name", async ({
+      makeOrganization,
+      makeUser,
+      makeTeam,
+      makeTeamMember,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      const frontend = await makeTeam(org.id, user.id, { name: "Frontend" });
+      const backend = await makeTeam(org.id, user.id, { name: "Backend" });
+      await makeTeamMember(frontend.id, user.id);
+      await makeTeamMember(backend.id, user.id);
+
+      const result = await TeamModel.getUserTeamsPaginated({
+        userId: user.id,
+        limit: 10,
+        offset: 0,
+        name: "front",
+      });
+
+      expect(result.data).toHaveLength(1);
+      expect(result.data[0].name).toBe("Frontend");
+    });
+
+    test("returns empty for user with no teams", async ({ makeUser }) => {
+      const user = await makeUser();
+
+      const result = await TeamModel.getUserTeamsPaginated({
+        userId: user.id,
+        limit: 10,
+        offset: 0,
+      });
+
+      expect(result.data).toHaveLength(0);
+      expect(result.total).toBe(0);
+    });
+  });
 });

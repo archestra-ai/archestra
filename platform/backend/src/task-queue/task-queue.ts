@@ -2,10 +2,8 @@ import config from "@/config";
 import logger from "@/logging";
 import { TaskModel } from "@/models";
 import * as metrics from "@/observability/metrics";
-import type { InsertTask, Task } from "@/types/task";
+import type { InsertTask, Task, TaskHandler } from "@/types";
 import PERIODIC_TASK_DEFINITIONS from "./periodic-tasks";
-
-type TaskHandler = (payload: Record<string, unknown>) => Promise<void>;
 
 export class TaskQueueService {
   private handlers = new Map<string, TaskHandler>();

@@ -2,7 +2,7 @@ import { DEFAULT_THEME_ID } from "@shared";
 import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
-import { UpdateAppearanceSchema } from "@/types";
+import { UpdateAppearanceSettingsSchema } from "@/types";
 import OrganizationModel from "./organization";
 
 // Minimal valid 1x1 transparent PNG (Base64-encoded)
@@ -10,10 +10,10 @@ const VALID_PNG_BASE64 =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/58BAwAI/AL+hc2rNAAAAABJRU5ErkJggg==";
 
 describe("OrganizationModel", () => {
-  describe("getPublicAppearance", () => {
+  describe("getAppearanceSettings", () => {
     test("should return default appearance when no organization exists", async () => {
       // Ensure no organizations exist (test setup clears DB)
-      const appearance = await OrganizationModel.getPublicAppearance();
+      const appearance = await OrganizationModel.getAppearanceSettings();
 
       expect(appearance).toEqual({
         theme: DEFAULT_THEME_ID,
@@ -25,6 +25,9 @@ describe("OrganizationModel", () => {
         appName: null,
         ogDescription: null,
         footerText: null,
+        helpCenterUrl: null,
+        helpCenterLabel: null,
+        animateChatPlaceholders: true,
       });
     });
 
@@ -33,7 +36,7 @@ describe("OrganizationModel", () => {
     }) => {
       await makeOrganization();
 
-      const appearance = await OrganizationModel.getPublicAppearance();
+      const appearance = await OrganizationModel.getAppearanceSettings();
 
       expect(appearance).toEqual({
         theme: "cosmic-night",
@@ -45,6 +48,9 @@ describe("OrganizationModel", () => {
         appName: null,
         ogDescription: null,
         footerText: null,
+        helpCenterUrl: null,
+        helpCenterLabel: null,
+        animateChatPlaceholders: true,
       });
     });
 
@@ -59,7 +65,7 @@ describe("OrganizationModel", () => {
         .set({ theme: "twitter" })
         .where(eq(schema.organizationsTable.id, org.id));
 
-      const appearance = await OrganizationModel.getPublicAppearance();
+      const appearance = await OrganizationModel.getAppearanceSettings();
 
       expect(appearance.theme).toBe("twitter");
     });
@@ -73,7 +79,7 @@ describe("OrganizationModel", () => {
         .set({ customFont: "inter" })
         .where(eq(schema.organizationsTable.id, org.id));
 
-      const appearance = await OrganizationModel.getPublicAppearance();
+      const appearance = await OrganizationModel.getAppearanceSettings();
 
       expect(appearance.customFont).toBe("inter");
     });
@@ -87,7 +93,7 @@ describe("OrganizationModel", () => {
         .set({ logo: VALID_PNG_BASE64 })
         .where(eq(schema.organizationsTable.id, org.id));
 
-      const appearance = await OrganizationModel.getPublicAppearance();
+      const appearance = await OrganizationModel.getAppearanceSettings();
 
       expect(appearance.logo).toBe(VALID_PNG_BASE64);
     });
@@ -100,7 +106,7 @@ describe("OrganizationModel", () => {
         .set({ logoDark: VALID_PNG_BASE64 })
         .where(eq(schema.organizationsTable.id, org.id));
 
-      const appearance = await OrganizationModel.getPublicAppearance();
+      const appearance = await OrganizationModel.getAppearanceSettings();
 
       expect(appearance.logoDark).toBe(VALID_PNG_BASE64);
     });
@@ -118,7 +124,7 @@ describe("OrganizationModel", () => {
       // Create second organization with different settings
       await makeOrganization();
 
-      const appearance = await OrganizationModel.getPublicAppearance();
+      const appearance = await OrganizationModel.getAppearanceSettings();
 
       // Should return first organization's appearance
       expect(appearance.theme).toBe("claude");
@@ -130,20 +136,38 @@ describe("OrganizationModel", () => {
     }) => {
       await makeOrganization();
 
-      const appearance = await OrganizationModel.getPublicAppearance();
+      const appearance = await OrganizationModel.getAppearanceSettings();
 
       // Verify only expected fields are returned
       expect(Object.keys(appearance).sort()).toEqual([
+        "animateChatPlaceholders",
         "appName",
         "customFont",
         "favicon",
         "footerText",
+        "helpCenterLabel",
+        "helpCenterUrl",
         "iconLogo",
         "logo",
         "logoDark",
         "ogDescription",
         "theme",
       ]);
+    });
+
+    test("should return animateChatPlaceholders when set", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+
+      await db
+        .update(schema.organizationsTable)
+        .set({ animateChatPlaceholders: false })
+        .where(eq(schema.organizationsTable.id, org.id));
+
+      const appearance = await OrganizationModel.getAppearanceSettings();
+
+      expect(appearance.animateChatPlaceholders).toBe(false);
     });
   });
 
@@ -261,6 +285,38 @@ describe("OrganizationModel", () => {
       expect(updated).toBeNull();
     });
 
+    test("should update animateChatPlaceholders", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+
+      const updated = await OrganizationModel.patch(org.id, {
+        animateChatPlaceholders: false,
+      });
+
+      expect(updated?.animateChatPlaceholders).toBe(false);
+    });
+
+    test("should update helpCenterUrl", async ({ makeOrganization }) => {
+      const org = await makeOrganization();
+
+      const updated = await OrganizationModel.patch(org.id, {
+        helpCenterUrl: "https://support.example.com/help",
+      });
+
+      expect(updated?.helpCenterUrl).toBe("https://support.example.com/help");
+    });
+
+    test("should update helpCenterLabel", async ({ makeOrganization }) => {
+      const org = await makeOrganization();
+
+      const updated = await OrganizationModel.patch(org.id, {
+        helpCenterLabel: "Docs & Support",
+      });
+
+      expect(updated?.helpCenterLabel).toBe("Docs & Support");
+    });
+
     test("should set default LLM model and provider", async ({
       makeOrganization,
     }) => {
@@ -328,9 +384,9 @@ describe("OrganizationModel", () => {
     });
   });
 
-  describe("patch logoDark validation (via UpdateAppearanceSchema)", () => {
+  describe("patch logoDark validation (via UpdateAppearanceSettingsSchema)", () => {
     const parseLogoDarkField = (logoDark: string | null) =>
-      UpdateAppearanceSchema.shape.logoDark.safeParse(logoDark);
+      UpdateAppearanceSettingsSchema.shape.logoDark.safeParse(logoDark);
 
     test("should accept null", () => {
       const result = parseLogoDarkField(null);
@@ -350,9 +406,9 @@ describe("OrganizationModel", () => {
     });
   });
 
-  describe("patch logo validation (via UpdateAppearanceSchema)", () => {
+  describe("patch logo validation (via UpdateAppearanceSettingsSchema)", () => {
     const parseLogoField = (logo: string | null) =>
-      UpdateAppearanceSchema.shape.logo.safeParse(logo);
+      UpdateAppearanceSettingsSchema.shape.logo.safeParse(logo);
 
     describe("MIME type validation", () => {
       test("should reject non-PNG data URI prefix", () => {
@@ -454,6 +510,74 @@ describe("OrganizationModel", () => {
           expect(result.data).toBe(VALID_PNG_BASE64);
         }
       });
+    });
+  });
+
+  describe("helpCenterUrl validation (via UpdateAppearanceSettingsSchema)", () => {
+    const parseHelpCenterUrlField = (helpCenterUrl: string | null) =>
+      UpdateAppearanceSettingsSchema.shape.helpCenterUrl.safeParse(
+        helpCenterUrl,
+      );
+
+    test("should accept null", () => {
+      const result = parseHelpCenterUrlField(null);
+
+      expect(result.success).toBe(true);
+    });
+
+    test("should accept valid https URL", () => {
+      const result = parseHelpCenterUrlField(
+        "https://teams.microsoft.com/l/channel/123",
+      );
+
+      expect(result.success).toBe(true);
+    });
+
+    test("should reject invalid URL", () => {
+      const result = parseHelpCenterUrlField("not-a-url");
+
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.issues[0]?.message).toContain(
+          "valid HTTP or HTTPS URL",
+        );
+      }
+    });
+
+    test("should reject non-http protocol", () => {
+      const result = parseHelpCenterUrlField("ftp://example.com/help");
+
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.issues[0]?.message).toContain(
+          "valid HTTP or HTTPS URL",
+        );
+      }
+    });
+  });
+
+  describe("helpCenterLabel validation (via UpdateAppearanceSettingsSchema)", () => {
+    const parseHelpCenterLabelField = (helpCenterLabel: string | null) =>
+      UpdateAppearanceSettingsSchema.shape.helpCenterLabel.safeParse(
+        helpCenterLabel,
+      );
+
+    test("should accept null", () => {
+      const result = parseHelpCenterLabelField(null);
+
+      expect(result.success).toBe(true);
+    });
+
+    test("should accept a custom label", () => {
+      const result = parseHelpCenterLabelField("Docs & Support");
+
+      expect(result.success).toBe(true);
+    });
+
+    test("should reject labels longer than 80 characters", () => {
+      const result = parseHelpCenterLabelField("A".repeat(81));
+
+      expect(result.success).toBe(false);
     });
   });
 

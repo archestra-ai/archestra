@@ -6,21 +6,15 @@ import type {
   RowSelectionState,
   SortingState,
 } from "@tanstack/react-table";
-import {
-  ChevronDown,
-  ChevronUp,
-  Loader2,
-  Pencil,
-  Search,
-  Wand2,
-} from "lucide-react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { ChevronDown, ChevronUp, Loader2, Pencil, Wand2 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { LoadingSpinner } from "@/components/loading";
+import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { PermissivePolicyOverlay } from "@/components/permissive-policy-overlay";
 import { WithPermissions } from "@/components/roles/with-permissions";
 import { SearchInput } from "@/components/search-input";
+import { TableRowActions } from "@/components/table-row-actions";
 import { TruncatedText } from "@/components/truncated-text";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -63,10 +57,11 @@ import {
   useToolsWithAssignments,
 } from "@/lib/tool.query";
 import { isMcpToolByProperties } from "@/lib/tool.utils";
+import { useDataTableQueryParams } from "@/lib/use-data-table-query-params";
 import {
   DEFAULT_FILTER_ALL,
   DEFAULT_SORT_BY,
-  DEFAULT_TOOLS_PAGE_SIZE,
+  DEFAULT_TABLE_LIMIT,
 } from "@/lib/utils";
 import type { ToolsInitialData } from "../page";
 import { CallPolicyToggle } from "./call-policy-toggle";
@@ -86,7 +81,11 @@ interface AssignedToolsTableProps {
   initialData?: ToolsInitialData;
 }
 
-function SortIcon({ isSorted }: { isSorted: false | "asc" | "desc" }) {
+function SortIcon({
+  isSorted,
+}: {
+  isSorted: NonNullable<ToolsSortDirectionValues> | false;
+}) {
   if (isSorted === "asc") return <ChevronUp className="h-3 w-3" />;
   if (isSorted === "desc") return <ChevronDown className="h-3 w-3" />;
 
@@ -119,22 +118,21 @@ export function AssignedToolsTable({
     initialData: initialData?.internalMcpCatalog,
   });
 
-  const searchParams = useSearchParams();
-  const router = useRouter();
-  const pathname = usePathname();
+  const {
+    searchParams,
+    pageIndex,
+    pageSize,
+    updateQueryParams,
+    setPagination,
+  } = useDataTableQueryParams();
 
   // Get URL params
-  const pageFromUrl = searchParams.get("page");
-  const pageSizeFromUrl = searchParams.get("pageSize");
   const searchFromUrl = searchParams.get("search");
   const originFromUrl = searchParams.get("origin");
   const sortByFromUrl = searchParams.get("sortBy") as ToolsSortByValues;
   const sortDirectionFromUrl = searchParams.get(
     "sortDirection",
   ) as ToolsSortDirectionValues;
-
-  const pageIndex = Number(pageFromUrl || "1") - 1;
-  const pageSize = Number(pageSizeFromUrl || DEFAULT_TOOLS_PAGE_SIZE);
 
   // State
   const [originFilter, setOriginFilter] = useState(
@@ -162,7 +160,7 @@ export function AssignedToolsTable({
   // Only use initialData for first page with default sorting and no filters
   const useInitialData =
     pageIndex === 0 &&
-    pageSize === DEFAULT_TOOLS_PAGE_SIZE &&
+    pageSize === DEFAULT_TABLE_LIMIT &&
     !searchFromUrl &&
     originFilter === DEFAULT_FILTER_ALL &&
     (sorting[0]?.id === DEFAULT_SORT_BY || !sorting[0]?.id) &&
@@ -187,32 +185,14 @@ export function AssignedToolsTable({
   const tools = toolsData?.data ?? [];
 
   // Helper to update URL params
-  const updateUrlParams = useCallback(
-    (updates: Record<string, string | null>) => {
-      const params = new URLSearchParams(searchParams.toString());
-      Object.entries(updates).forEach(([key, value]) => {
-        if (value === null || value === "" || value === "all") {
-          params.delete(key);
-        } else {
-          params.set(key, value);
-        }
-      });
-      router.push(`${pathname}?${params.toString()}`, { scroll: false });
-    },
-    [searchParams, router, pathname],
-  );
-
   const handlePaginationChange = useCallback(
     (newPagination: { pageIndex: number; pageSize: number }) => {
       setRowSelection({});
       setSelectedTools([]);
 
-      updateUrlParams({
-        page: String(newPagination.pageIndex + 1),
-        pageSize: String(newPagination.pageSize),
-      });
+      setPagination(newPagination);
     },
-    [updateUrlParams],
+    [setPagination],
   );
 
   const handleRowSelectionChange = useCallback(
@@ -236,23 +216,30 @@ export function AssignedToolsTable({
   const handleOriginFilterChange = useCallback(
     (value: string) => {
       setOriginFilter(value);
-      updateUrlParams({
+      updateQueryParams({
         origin: value === "all" ? null : value,
         page: "1", // Reset to first page
       });
       setRowSelection({});
       setSelectedTools([]);
     },
-    [updateUrlParams],
+    [updateQueryParams],
   );
 
   const handleSortingChange = useCallback(
     (newSorting: SortingState) => {
       setSorting(newSorting);
       if (newSorting.length > 0) {
-        updateUrlParams({
+        updateQueryParams({
+          page: "1",
           sortBy: newSorting[0].id,
           sortDirection: newSorting[0].desc ? "desc" : "asc",
+        });
+      } else {
+        updateQueryParams({
+          page: "1",
+          sortBy: null,
+          sortDirection: null,
         });
       }
 
@@ -268,7 +255,7 @@ export function AssignedToolsTable({
         setRowSelection(newSelection);
       }
     },
-    [updateUrlParams, rowSelection, tools],
+    [updateQueryParams, rowSelection, tools],
   );
 
   const handleBulkAction = useCallback(
@@ -296,20 +283,23 @@ export function AssignedToolsTable({
       if (toolIds.length === 0) {
         return;
       }
-      setIsBulkUpdating(true);
+      try {
+        setIsBulkUpdating(true);
 
-      if (field === "callPolicy") {
-        bulkCallPolicyMutation.mutate({
-          toolIds,
-          action: value as CallPolicyAction,
-        });
-      } else {
-        bulkResultPolicyMutation.mutate({
-          toolIds,
-          action: value as ResultPolicyAction,
-        });
+        if (field === "callPolicy") {
+          await bulkCallPolicyMutation.mutateAsync({
+            toolIds,
+            action: value as CallPolicyAction,
+          });
+        } else {
+          await bulkResultPolicyMutation.mutateAsync({
+            toolIds,
+            action: value as ResultPolicyAction,
+          });
+        }
+      } finally {
+        setIsBulkUpdating(false);
       }
-      setIsBulkUpdating(false);
     },
     [
       selectedTools,
@@ -366,6 +356,16 @@ export function AssignedToolsTable({
     setRowSelection({});
     setSelectedTools([]);
   }, []);
+
+  const clearFilters = useCallback(() => {
+    setOriginFilter(DEFAULT_FILTER_ALL);
+    handleSearchChange();
+    updateQueryParams({
+      search: null,
+      origin: null,
+      page: "1",
+    });
+  }, [handleSearchChange, updateQueryParams]);
 
   const isRowFieldUpdating = useCallback(
     (id: string, field: "callPolicy" | "resultPolicyAction") => {
@@ -469,13 +469,12 @@ export function AssignedToolsTable({
           );
         },
         size: 200,
-        minSize: 200,
-        maxSize: 200,
       },
       {
         id: "origin",
         accessorFn: (row) =>
           isMcpToolByProperties(row) ? "1-mcp" : "2-intercepted",
+        size: 180,
         header: ({ column }) => (
           <Button
             variant="ghost"
@@ -494,21 +493,30 @@ export function AssignedToolsTable({
 
           if (catalogItem) {
             return (
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Badge
-                      variant="default"
-                      className="bg-indigo-500 max-w-[150px]"
-                    >
-                      <span className="truncate">{catalogItem.name}</span>
-                    </Badge>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>{catalogItem.name}</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
+              <div className="min-w-0 max-w-full">
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Badge
+                        variant="default"
+                        className="bg-indigo-500 inline-flex max-w-full gap-1.5 overflow-hidden align-middle"
+                      >
+                        <McpCatalogIcon
+                          icon={catalogItem.icon}
+                          catalogId={catalogItem.id}
+                          size={14}
+                        />
+                        <span className="min-w-0 truncate">
+                          {catalogItem.name}
+                        </span>
+                      </Badge>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>{catalogItem.name}</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
             );
           }
 
@@ -530,11 +538,11 @@ export function AssignedToolsTable({
             </TooltipProvider>
           );
         },
-        size: 180,
       },
       {
         id: "assignmentCount",
         header: "Assignments",
+        size: 140,
         cell: ({ row }) => {
           const count = row.original.assignmentCount;
           return (
@@ -543,7 +551,6 @@ export function AssignedToolsTable({
             </Badge>
           );
         },
-        size: 100,
       },
       {
         id: "callPolicy",
@@ -612,7 +619,6 @@ export function AssignedToolsTable({
             </WithPermissions>
           );
         },
-        size: 140,
       },
       {
         id: "toolResultTreatment",
@@ -696,31 +702,22 @@ export function AssignedToolsTable({
             </WithPermissions>
           );
         },
-        size: 140,
       },
       {
         id: "actions",
         header: "Actions",
         cell: ({ row }) => (
-          <WithPermissions
-            permissions={{ toolPolicy: ["update"] }}
-            noPermissionHandle="tooltip"
-          >
-            {({ hasPermission }) => (
-              <Button
-                variant="outline"
-                size="icon"
-                className="h-8 w-8"
-                aria-label="Edit policies"
-                disabled={!hasPermission}
-                onClick={() => onToolClick(row.original)}
-              >
-                <Pencil className="h-4 w-4" />
-              </Button>
-            )}
-          </WithPermissions>
+          <TableRowActions
+            actions={[
+              {
+                icon: <Pencil className="h-4 w-4" />,
+                label: "Edit policies",
+                permissions: { toolPolicy: ["update"] },
+                onClick: () => onToolClick(row.original),
+              },
+            ]}
+          />
         ),
-        size: 60,
       },
     ],
     [
@@ -749,9 +746,9 @@ export function AssignedToolsTable({
       <div className="space-y-6">
         <div className="flex flex-wrap gap-4">
           <SearchInput
-            placeholder="Search tools by name..."
+            objectNamePlural="tools"
+            searchFields={["name"]}
             paramName="search"
-            className="relative flex-1 min-w-[200px] max-w-md"
             onSearchChange={handleSearchChange}
           />
 
@@ -765,6 +762,34 @@ export function AssignedToolsTable({
               ...uniqueOrigins.map((origin) => ({
                 value: origin.id,
                 label: origin.name,
+                content: (
+                  <div className="flex items-center gap-2 min-w-0">
+                    <McpCatalogIcon
+                      icon={
+                        internalMcpCatalogItems?.find(
+                          (item) => item.id === origin.id,
+                        )?.icon
+                      }
+                      catalogId={origin.id}
+                      size={16}
+                    />
+                    <span className="truncate">{origin.name}</span>
+                  </div>
+                ),
+                selectedContent: (
+                  <div className="flex items-center gap-2 min-w-0">
+                    <McpCatalogIcon
+                      icon={
+                        internalMcpCatalogItems?.find(
+                          (item) => item.id === origin.id,
+                        )?.icon
+                      }
+                      catalogId={origin.id}
+                      size={16}
+                    />
+                    <span className="truncate">{origin.name}</span>
+                  </div>
+                ),
               })),
             ]}
             className="w-[200px]"
@@ -1053,51 +1078,30 @@ export function AssignedToolsTable({
           </div>
         </div>
 
-        {isLoading ? (
-          <div className="flex flex-col items-center justify-center py-16 text-center">
-            <LoadingSpinner />
-          </div>
-        ) : tools.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 text-center">
-            <Search className="mb-4 h-12 w-12 text-muted-foreground/50" />
-            <h3 className="mb-2 text-lg font-semibold">No tools found</h3>
-            <p className="mb-4 text-sm text-muted-foreground">
-              {searchFromUrl || originFilter !== DEFAULT_FILTER_ALL
-                ? "No tools match your filters. Try adjusting your search or filters."
-                : "No tools have been assigned yet."}
-            </p>
-            {(searchFromUrl || originFilter !== DEFAULT_FILTER_ALL) && (
-              <Button
-                variant="outline"
-                onClick={() => {
-                  handleSearchChange();
-                  handleOriginFilterChange(DEFAULT_FILTER_ALL);
-                  updateUrlParams({ search: null, page: "1" });
-                }}
-              >
-                Clear all filters
-              </Button>
-            )}
-          </div>
-        ) : (
-          <DataTable
-            columns={columns}
-            data={tools}
-            sorting={sorting}
-            onSortingChange={handleSortingChange}
-            manualSorting={true}
-            manualPagination={true}
-            pagination={{
-              pageIndex,
-              pageSize,
-              total: toolsData?.pagination?.total ?? 0,
-            }}
-            onPaginationChange={handlePaginationChange}
-            rowSelection={rowSelection}
-            onRowSelectionChange={handleRowSelectionChange}
-            getRowId={(row) => row.id}
-          />
-        )}
+        <DataTable
+          columns={columns}
+          data={tools}
+          sorting={sorting}
+          onSortingChange={handleSortingChange}
+          manualSorting
+          manualPagination
+          pagination={{
+            pageIndex,
+            pageSize,
+            total: toolsData?.pagination?.total ?? 0,
+          }}
+          onPaginationChange={handlePaginationChange}
+          rowSelection={rowSelection}
+          onRowSelectionChange={handleRowSelectionChange}
+          getRowId={(row) => row.id}
+          isLoading={isLoading}
+          hasActiveFilters={
+            !!searchFromUrl || originFilter !== DEFAULT_FILTER_ALL
+          }
+          emptyMessage="No tools have been assigned yet."
+          filteredEmptyMessage="No tools match your filters. Try adjusting your search."
+          onClearFilters={clearFilters}
+        />
       </div>
     </PermissivePolicyOverlay>
   );

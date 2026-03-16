@@ -481,7 +481,10 @@ test.describe("LLM Provider API Keys Team Scope", () => {
       method: "get",
       urlSuffix: "/api/teams",
     });
-    const teams = await teamsResponse.json();
+    const teamsResult = await teamsResponse.json();
+    const teams = Array.isArray(teamsResult)
+      ? teamsResult
+      : (teamsResult.data ?? []);
 
     // Skip if no teams exist
     if (teams.length === 0) {

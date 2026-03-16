@@ -1,11 +1,4 @@
-import {
-  boolean,
-  pgTable,
-  text,
-  timestamp,
-  unique,
-  uuid,
-} from "drizzle-orm/pg-core";
+import { boolean, pgTable, timestamp, unique, uuid } from "drizzle-orm/pg-core";
 import agentsTable from "./agent";
 import mcpServerTable from "./mcp-server";
 import toolsTable from "./tool";
@@ -20,7 +13,6 @@ const agentToolsTable = pgTable(
     toolId: uuid("tool_id")
       .notNull()
       .references(() => toolsTable.id, { onDelete: "cascade" }),
-    responseModifierTemplate: text("response_modifier_template"),
     // credentialSourceMcpServerId specifies which !!!REMOTE!!! MCP server to use for credentials
     credentialSourceMcpServerId: uuid(
       "credential_source_mcp_server_id",

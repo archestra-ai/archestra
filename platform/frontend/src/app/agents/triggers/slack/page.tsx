@@ -10,6 +10,7 @@ import { SlackSetupDialog } from "@/components/slack-setup-dialog";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogHeader,
@@ -21,6 +22,7 @@ import { useChatOpsStatus } from "@/lib/chatops.query";
 import { useUpdateSlackChatOpsConfig } from "@/lib/chatops-config.query";
 import config from "@/lib/config";
 import { useConfig, usePublicBaseUrl } from "@/lib/config.query";
+import { useAppName } from "@/lib/use-app-name";
 import { ChannelsSection } from "../_components/channels-section";
 import { CollapsibleSetupSection } from "../_components/collapsible-setup-section";
 import { CredentialField } from "../_components/credential-field";
@@ -29,25 +31,28 @@ import { SetupStep } from "../_components/setup-step";
 import type { ProviderConfig } from "../_components/types";
 import { useTriggerStatuses } from "../_components/use-trigger-statuses";
 
-const slackProviderConfig: ProviderConfig = {
-  provider: "slack",
-  providerLabel: "Slack",
-  providerIcon: "/icons/slack.png",
-  webhookPath: "/api/webhooks/chatops/slack",
-  docsUrl: getDocsUrl(DocsPage.PlatformSlack),
-  slashCommand: "/archestra-select-agent",
-  buildDeepLink: (binding) => {
-    if (binding.workspaceId) {
-      return `slack://channel?team=${binding.workspaceId}&id=${binding.channelId}`;
-    }
-    return `slack://channel?id=${binding.channelId}`;
-  },
-  getDmDeepLink: (providerStatus) => {
-    const { botUserId, teamId } = providerStatus.dmInfo ?? {};
-    if (!botUserId || !teamId) return null;
-    return `slack://user?team=${teamId}&id=${botUserId}`;
-  },
-};
+function useSlackProviderConfig(): ProviderConfig {
+  const appName = useAppName();
+  return {
+    provider: "slack",
+    providerLabel: "Slack",
+    providerIcon: "/icons/slack.png",
+    webhookPath: "/api/webhooks/chatops/slack",
+    docsUrl: getDocsUrl(DocsPage.PlatformSlack),
+    slashCommand: `/${appName.toLowerCase()}-select-agent`,
+    buildDeepLink: (binding) => {
+      if (binding.workspaceId) {
+        return `slack://channel?team=${binding.workspaceId}&id=${binding.channelId}`;
+      }
+      return `slack://channel?id=${binding.channelId}`;
+    },
+    getDmDeepLink: (providerStatus) => {
+      const { botUserId, teamId } = providerStatus.dmInfo ?? {};
+      if (!botUserId || !teamId) return null;
+      return `slack://user?team=${teamId}&id=${botUserId}`;
+    },
+  };
+}
 
 type SlackConnectionMode = NonNullable<
   NonNullable<
@@ -56,6 +61,8 @@ type SlackConnectionMode = NonNullable<
 >;
 
 export default function SlackPage() {
+  const appName = useAppName();
+  const slackProviderConfig = useSlackProviderConfig();
   const publicBaseUrl = usePublicBaseUrl();
   const [slackSetupOpen, setSlackSetupOpen] = useState(false);
   const [ngrokDialogOpen, setNgrokDialogOpen] = useState(false);
@@ -66,7 +73,7 @@ export default function SlackPage() {
 
   const ngrokDomain = configData?.features.ngrokDomain;
   const slack = chatOpsProviders?.find((p) => p.id === "slack");
-  const slackCreds = slack?.credentials as Record<string, string> | undefined;
+  const slackCreds = slack?.credentials;
 
   const resetMutation = useUpdateSlackChatOpsConfig();
 
@@ -99,7 +106,7 @@ export default function SlackPage() {
       >
         <SetupStep
           title="Choose connection mode"
-          description="How Slack delivers events to Archestra"
+          description={`How Slack delivers events to ${appName}`}
           done={
             !hasModeChange && (isSocket || (isLocalDev ? !!ngrokDomain : true))
           }
@@ -123,7 +130,7 @@ export default function SlackPage() {
                   WebSocket
                 </span>
                 <span className="text-xs text-muted-foreground">
-                  Archestra exchanges WebSocket messages with Slack, no public
+                  {appName} exchanges WebSocket messages with Slack, no public
                   URL needed
                 </span>
               </div>
@@ -136,7 +143,7 @@ export default function SlackPage() {
                   Webhook
                 </span>
                 <span className="text-xs text-muted-foreground">
-                  Slack makes HTTP requests to Archestra, requires a public URL
+                  Slack makes HTTP requests to {appName}, requires a public URL
                 </span>
               </div>
             </label>
@@ -159,8 +166,8 @@ export default function SlackPage() {
                     <code className="bg-muted px-1 py-0.5 rounded">
                       POST {`${publicBaseUrl}/api/webhooks/chatops/slack`}
                     </code>{" "}
-                    must be publicly accessible so Slack can deliver events to
-                    Archestra.
+                    must be publicly accessible so Slack can deliver events to{" "}
+                    {appName}.
                     {isLocalDev &&
                       " Configure ngrok or deploy to a public URL."}
                   </>
@@ -207,7 +214,7 @@ export default function SlackPage() {
         <LlmKeySetupStep />
         <SetupStep
           title="Setup Slack"
-          description="Create a Slack App from manifest and connect it to Archestra"
+          description={`Create a Slack App from manifest and connect it to ${appName}`}
           done={!!slack?.configured}
           ctaLabel="Setup Slack"
           onAction={() => setSlackSetupOpen(true)}
@@ -263,6 +270,7 @@ function NgrokSetupDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  const appName = useAppName();
   const [step, setStep] = useState<1 | 2>(1);
   const [authToken, setAuthToken] = useState("");
 
@@ -298,7 +306,7 @@ function NgrokSetupDialog({
                 </Link>
               </DialogDescription>
             </DialogHeader>
-            <div className="space-y-4 pt-2">
+            <DialogBody className="space-y-4 p-3">
               <Input
                 placeholder="ngrok auth token"
                 value={authToken}
@@ -311,17 +319,17 @@ function NgrokSetupDialog({
               >
                 Continue
               </Button>
-            </div>
+            </DialogBody>
           </>
         ) : (
           <>
             <DialogHeader>
               <DialogTitle>Run ngrok for Slack webhooks</DialogTitle>
               <DialogDescription>
-                Start an ngrok tunnel to make Archestra reachable from Slack.
+                Start an ngrok tunnel to make {appName} reachable from Slack.
               </DialogDescription>
             </DialogHeader>
-            <div className="space-y-4 pt-2">
+            <DialogBody className="space-y-4 p-3">
               <div className="space-y-2 text-sm">
                 <p>1. Start an ngrok tunnel:</p>
                 <div className="relative">
@@ -351,10 +359,10 @@ function NgrokSetupDialog({
                 </div>
               </div>
               <p className="text-xs text-muted-foreground">
-                Then restart Archestra with{" "}
+                Then restart {appName} with{" "}
                 <code className="bg-muted px-1 py-0.5 rounded">tilt up</code>
               </p>
-            </div>
+            </DialogBody>
           </>
         )}
       </DialogContent>

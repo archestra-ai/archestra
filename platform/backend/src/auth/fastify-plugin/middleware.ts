@@ -8,6 +8,8 @@ import logger from "@/logging";
 import { UserModel } from "@/models";
 import {
   HEALTH_PATH,
+  INCOMING_EMAIL_WEBHOOK_PREFIX,
+  ORGANIZATION_APPEARANCE_SETTINGS_PATH,
   READY_PATH,
   WELL_KNOWN_ACME_PREFIX,
   WELL_KNOWN_OAUTH_PREFIX,
@@ -119,11 +121,11 @@ export class Authnz {
       // Allow fetching public SSO providers list for login page (minimal info, no secrets)
       (method === "GET" && url === "/api/identity-providers/public") ||
       // Allow fetching public appearance settings for login page (theme, logo, font)
-      (method === "GET" && url === "/api/organization/appearance") ||
+      (method === "GET" && url === ORGANIZATION_APPEARANCE_SETTINGS_PATH) ||
       // Incoming email webhooks - Microsoft Graph calls these directly
       // Only allow the exact webhook path (with optional query params), not sub-paths like /setup
-      url === "/api/webhooks/incoming-email" ||
-      url.startsWith("/api/webhooks/incoming-email?") ||
+      url === INCOMING_EMAIL_WEBHOOK_PREFIX ||
+      url.startsWith(`${INCOMING_EMAIL_WEBHOOK_PREFIX}?`) ||
       // ChatOps webhooks - Bot Framework calls these directly
       // JWT validation is handled by the Bot Framework adapter
       url.startsWith("/api/webhooks/chatops/")
@@ -188,14 +190,23 @@ export class Authnz {
       | RouteId
       | undefined;
 
-    logger.trace({ routeId }, "[Authnz] Checking authorization for route");
+    logger.info({ routeId }, "[Authnz] Checking authorization for route");
 
     const requiredPermissions = routeId
       ? requiredEndpointPermissionsMap[routeId]
       : undefined;
 
+    logger.info(
+      {
+        routeId,
+        requiredPermissions,
+        hasPermissions: requiredPermissions !== undefined,
+      },
+      "[Authnz] DEBUG: permissions lookup result",
+    );
+
     if (requiredPermissions === undefined) {
-      logger.trace(
+      logger.info(
         { routeId },
         "[Authnz] Route not configured in permissions map, denying by default",
       );
@@ -209,18 +220,24 @@ export class Authnz {
 
     // If no specific permissions are required (empty object), allow any authenticated user
     if (Object.keys(requiredPermissions).length === 0) {
-      logger.trace(
+      logger.info(
         { routeId },
         "[Authnz] No specific permissions required, allowing access",
       );
       return { success: true, error: null };
     }
 
-    logger.trace(
-      { routeId, permissionCount: Object.keys(requiredPermissions).length },
+    logger.info(
+      {
+        routeId,
+        requiredPermissions,
+        permissionCount: Object.keys(requiredPermissions).length,
+      },
       "[Authnz] Checking required permissions",
     );
-    return await hasPermission(requiredPermissions, request.headers);
+    const result = await hasPermission(requiredPermissions, request.headers);
+    logger.info({ routeId, result }, "[Authnz] DEBUG: hasPermission result");
+    return result;
   };
 
   private populateUserInfo = async (request: FastifyRequest): Promise<void> => {

@@ -88,7 +88,7 @@ export function ChatApiKeySelector({
   // Include agent's configured key even if user doesn't have direct access
   const { data: availableKeys = [], isLoading: isLoadingKeys } =
     useAvailableChatApiKeys({
-      includeKeyId: agentLlmApiKeyId,
+      includeKeyId: agentLlmApiKeyId ?? undefined,
     });
 
   // Combined loading state - wait for both API keys and models
@@ -108,10 +108,7 @@ export function ChatApiKeySelector({
 
   // Group keys by provider for display
   const keysByProvider = useMemo(() => {
-    const grouped: Record<SupportedProvider, ChatApiKey[]> = {} as Record<
-      SupportedProvider,
-      ChatApiKey[]
-    >;
+    const grouped = {} as Record<SupportedProvider, ChatApiKey[]>;
 
     for (const key of availableKeys) {
       if (!grouped[key.provider]) {
@@ -298,16 +295,6 @@ export function ChatApiKeySelector({
     return null;
   }
 
-  const getKeyDisplayName = (key: ChatApiKey) => {
-    if (key.scope === "personal") {
-      return key.name;
-    }
-    if (key.scope === "team") {
-      return `${key.name} (${key.teamName || "Team"})`;
-    }
-    return key.name;
-  };
-
   return (
     <>
       <Popover open={open} onOpenChange={handleOpenChange}>
@@ -317,13 +304,6 @@ export function ChatApiKeySelector({
             className="max-w-[220px] min-w-0"
           >
             <Key className="size-4 shrink-0" />
-            <span className="truncate flex-1 text-left">
-              {currentConversationChatApiKey
-                ? getKeyDisplayName(currentConversationChatApiKey)
-                : isLoading
-                  ? "Loading..."
-                  : "Select key"}
-            </span>
           </PromptInputButton>
         </PopoverTrigger>
         <PopoverContent className="w-80 p-0" align="start">

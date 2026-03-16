@@ -10,18 +10,30 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { Search } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { DebouncedInput } from "@/components/debounced-input";
+import {
+  LabelFilterBadges,
+  LabelKeyRowBase,
+  LabelSelect,
+  parseLabelsParam,
+  serializeLabels,
+} from "@/components/label-select";
 import {
   OAuthConfirmationDialog,
   type OAuthInstallResult,
 } from "@/components/oauth-confirmation-dialog";
+import { SearchInput } from "@/components/search-input";
+import { Button } from "@/components/ui/button";
 import { useHasPermissions } from "@/lib/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import { useDialogs } from "@/lib/dialog.hook";
 import { useMcpRegistryServer } from "@/lib/external-mcp-catalog.query";
-import { useInternalMcpCatalog } from "@/lib/internal-mcp-catalog.query";
+import {
+  useInternalMcpCatalog,
+  useMcpCatalogLabelKeys,
+  useMcpCatalogLabelValues,
+} from "@/lib/internal-mcp-catalog.query";
 import {
   useInstallMcpServer,
   useMcpDeploymentStatuses,
@@ -957,18 +969,34 @@ export function InternalMCPCatalog({
     const normalizedQuery = query.trim().toLowerCase();
     if (!normalizedQuery) return items;
 
-    return items.filter((item) => {
-      const labelText =
-        typeof item.name === "string" ? item.name.toLowerCase() : "";
-      return (
-        item.name.toLowerCase().includes(normalizedQuery) ||
-        labelText.includes(normalizedQuery)
-      );
-    });
+    return items.filter((item) =>
+      item.name.toLowerCase().includes(normalizedQuery),
+    );
+  };
+
+  const labelsParam = searchParams.get("labels");
+  const parsedLabels = useMemo(
+    () => parseLabelsParam(labelsParam),
+    [labelsParam],
+  );
+
+  const filterByLabels = (
+    items: CatalogItem[],
+    labels: Record<string, string[]> | null,
+  ) => {
+    if (!labels || Object.keys(labels).length === 0) return items;
+    return items.filter((item) =>
+      Object.entries(labels).every(([key, values]) =>
+        item.labels.some((l) => l.key === key && values.includes(l.value)),
+      ),
+    );
   };
 
   const allFilteredItems = sortInstalledFirst(
-    filterCatalogItems(catalogItems || [], searchQueryFromUrl),
+    filterByLabels(
+      filterCatalogItems(catalogItems || [], searchQueryFromUrl),
+      parsedLabels,
+    ),
   ).filter((item) => item.id !== ARCHESTRA_MCP_CATALOG_ID);
 
   const draftItems = allFilteredItems.filter(
@@ -1003,18 +1031,55 @@ export function InternalMCPCatalog({
     };
   };
 
+  const handleRemoveLabel = useCallback(
+    (key: string, value: string) => {
+      if (!parsedLabels) return;
+      const updated = { ...parsedLabels };
+      updated[key] = updated[key].filter((v) => v !== value);
+      if (updated[key].length === 0) {
+        delete updated[key];
+      }
+      const params = new URLSearchParams(searchParams.toString());
+      const serialized = serializeLabels(updated);
+      if (serialized) {
+        params.set("labels", serialized);
+      } else {
+        params.delete("labels");
+      }
+      router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+    },
+    [parsedLabels, searchParams, router, pathname],
+  );
+
+  const handleClearFilters = useCallback(() => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("search");
+    params.delete("labels");
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+  }, [searchParams, router, pathname]);
+
+  const hasLabelFilters = parsedLabels && Object.keys(parsedLabels).length > 0;
+  const hasActiveFilters = Boolean(
+    searchQueryFromUrl.trim() || hasLabelFilters,
+  );
+
   return (
     <div className="space-y-4">
-      <div className="relative max-w-md">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground z-10 pointer-events-none" />
-        <DebouncedInput
-          placeholder="Search registry by name..."
-          initialValue={searchQueryFromUrl}
-          onChange={handleSearchChange}
+      <div className="flex items-center gap-2">
+        <SearchInput
+          objectNamePlural="MCP servers"
+          searchFields={["name"]}
+          value={searchQueryFromUrl}
+          onSearchChange={handleSearchChange}
+          syncQueryParams={false}
           debounceMs={300}
-          className="pl-9 h-11 bg-background/50 backdrop-blur-sm border-border/50 focus:border-primary/50 transition-colors"
+          inputClassName="w-full bg-background/50 backdrop-blur-sm border-border/50 focus:border-primary/50 transition-colors pl-9"
         />
+        <McpCatalogLabelFilter />
       </div>
+      {hasLabelFilters && (
+        <LabelFilterBadges onRemoveLabel={handleRemoveLabel} />
+      )}
       <div className="space-y-6">
         {draftItems.length > 0 && (
           <div className="space-y-3">
@@ -1128,12 +1193,25 @@ export function InternalMCPCatalog({
           </div>
         ) : (
           draftItems.length === 0 && (
-            <div className="py-8 text-center">
-              <p className="text-muted-foreground">
-                {searchQueryFromUrl.trim()
-                  ? `No MCP servers match "${searchQueryFromUrl}".`
-                  : "No MCP servers found."}
-              </p>
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              {hasActiveFilters ? (
+                <>
+                  <Search className="mb-4 h-10 w-10 text-muted-foreground" />
+                  <p className="text-muted-foreground">
+                    No MCP servers match your filters. Try adjusting your
+                    search.
+                  </p>
+                  <Button
+                    variant="outline"
+                    className="mt-4"
+                    onClick={handleClearFilters}
+                  >
+                    Clear filters
+                  </Button>
+                </>
+              ) : (
+                <p className="text-muted-foreground">No MCP servers found.</p>
+              )}
             </div>
           )
         )}
@@ -1313,5 +1391,39 @@ export function InternalMCPCatalog({
         />
       )}
     </div>
+  );
+}
+
+function McpCatalogLabelFilter() {
+  const { data: labelKeys } = useMcpCatalogLabelKeys();
+  return (
+    <LabelSelect
+      labelKeys={labelKeys}
+      LabelKeyRowComponent={McpCatalogLabelKeyRow}
+    />
+  );
+}
+
+function McpCatalogLabelKeyRow({
+  labelKey,
+  selectedValues,
+  onToggleValue,
+}: {
+  labelKey: string;
+  selectedValues: string[];
+  onToggleValue: (key: string, value: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const { data: values } = useMcpCatalogLabelValues({
+    key: open ? labelKey : undefined,
+  });
+  return (
+    <LabelKeyRowBase
+      labelKey={labelKey}
+      selectedValues={selectedValues}
+      onToggleValue={onToggleValue}
+      values={values}
+      onOpenChange={setOpen}
+    />
   );
 }

@@ -1282,6 +1282,41 @@
       "when": 1773364789895,
       "tag": "0182_outgoing_clea",
       "breakpoints": true
+    },
+    {
+      "idx": 183,
+      "version": "7",
+      "when": 1773418534761,
+      "tag": "0183_fix-corrupted-auth-fields",
+      "breakpoints": true
+    },
+    {
+      "idx": 184,
+      "version": "7",
+      "when": 1773490444423,
+      "tag": "0184_spicy_nocturne",
+      "breakpoints": true
+    },
+    {
+      "idx": 185,
+      "version": "7",
+      "when": 1773577713598,
+      "tag": "0185_organic_true_believers",
+      "breakpoints": true
+    },
+    {
+      "idx": 186,
+      "version": "7",
+      "when": 1773612758010,
+      "tag": "0186_split_optimization_rule_rbac_resource",
+      "breakpoints": true
+    },
+    {
+      "idx": 187,
+      "version": "7",
+      "when": 1773689443901,
+      "tag": "0187_soft_gargoyle",
+      "breakpoints": true
     }
   ]
 }

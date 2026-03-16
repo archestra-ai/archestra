@@ -99,6 +99,7 @@ export function parsePolicyDenied(text: string): PolicyDeniedPart | null {
   }
 
   // Check for policy denial keywords
+  if (typeof actualText !== "string") return null;
   const lowerText = actualText.toLowerCase();
   const hasKeywords =
     lowerText.includes("denied") &&

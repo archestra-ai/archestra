@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  type AgentType,
   archestraApiSdk,
   type archestraApiTypes,
   DocsPage,
@@ -21,18 +22,18 @@ import {
   User,
   Users,
 } from "lucide-react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
-import { AgentBadge } from "@/components/agent-badge";
 import { AgentDialog } from "@/components/agent-dialog";
+import { AgentIcon } from "@/components/agent-icon";
+import { AgentNameCell } from "@/components/agent-name-cell";
 import {
   ActiveFilterBadges,
   AgentScopeFilter,
 } from "@/components/agent-scope-filter";
 import { ConnectDialog } from "@/components/connect-dialog";
-import { LabelTags } from "@/components/label-tags";
+import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { McpConnectionInstructions } from "@/components/mcp-connection-instructions";
 import { PageLayout } from "@/components/page-layout";
@@ -41,15 +42,6 @@ import { SearchInput } from "@/components/search-input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogForm,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { PermissionButton } from "@/components/ui/permission-button";
 import {
   Tooltip,
@@ -60,17 +52,13 @@ import {
 import { useDeleteProfile, useProfilesPaginated } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
-import {
-  DEFAULT_AGENTS_PAGE_SIZE,
-  DEFAULT_SORT_BY,
-  DEFAULT_SORT_DIRECTION,
-  formatDate,
-} from "@/lib/utils";
+import { useDataTableQueryParams } from "@/lib/use-data-table-query-params";
+import { DEFAULT_SORT_BY, DEFAULT_SORT_DIRECTION } from "@/lib/utils";
 import { McpGatewayActions } from "./mcp-gateway-actions";
 
 type McpGatewaysInitialData = {
   agents: archestraApiTypes.GetAgentsResponses["200"] | null;
-  teams: archestraApiTypes.GetTeamsResponses["200"];
+  teams: archestraApiTypes.GetTeamsResponses["200"]["data"];
 };
 
 export default function McpGatewaysPage({
@@ -87,7 +75,13 @@ export default function McpGatewaysPage({
   );
 }
 
-function SortIcon({ isSorted }: { isSorted: false | "asc" | "desc" }) {
+function SortIcon({
+  isSorted,
+}: {
+  isSorted:
+    | NonNullable<archestraApiTypes.GetAgentsData["query"]>["sortDirection"]
+    | false;
+}) {
   const upArrow = <ChevronUp className="h-3 w-3" />;
   const downArrow = <ChevronDown className="h-3 w-3" />;
   if (isSorted === "asc") {
@@ -152,13 +146,16 @@ function VisibilityBadge({
   const visibleTeams = hasTeams ? teams.slice(0, MAX_TEAMS_TO_SHOW) : [];
   const remainingTeams = hasTeams ? teams.slice(MAX_TEAMS_TO_SHOW) : [];
 
+  const truncateTeamName = (value: string) =>
+    value.length > 20 ? `${value.slice(0, 20)}...` : value;
+
   return (
     <div className="flex items-center gap-1 flex-wrap">
       {scopeBadge}
       {visibleTeams.map((team) => (
         <Badge key={team.id} variant="secondary" className="text-xs gap-1">
           <Users className="h-3 w-3" />
-          {team.name}
+          {truncateTeamName(team.name)}
         </Badge>
       ))}
       {remainingTeams.length > 0 && (
@@ -190,13 +187,15 @@ function McpGateways({
 }: {
   initialData?: McpGatewaysInitialData;
 }) {
-  const searchParams = useSearchParams();
-  const router = useRouter();
-  const pathname = usePathname();
+  const {
+    searchParams,
+    pageIndex,
+    pageSize,
+    offset,
+    updateQueryParams,
+    setPagination,
+  } = useDataTableQueryParams();
 
-  // Get pagination/filter params from URL
-  const pageFromUrl = searchParams.get("page");
-  const pageSizeFromUrl = searchParams.get("pageSize");
   const nameFilter = searchParams.get("name") || "";
   const sortByFromUrl = searchParams.get("sortBy") as
     | "name"
@@ -220,11 +219,6 @@ function McpGateways({
   const excludeAuthorIdsFromUrl = searchParams.get("excludeAuthorIds");
   const labelsFromUrl = searchParams.get("labels");
 
-  const pageIndex = Number(pageFromUrl || "1") - 1;
-  const pageSize = Number(pageSizeFromUrl || DEFAULT_AGENTS_PAGE_SIZE);
-  const offset = pageIndex * pageSize;
-
-  // Default sorting
   const sortBy = sortByFromUrl || DEFAULT_SORT_BY;
   const sortDirection = sortDirectionFromUrl || DEFAULT_SORT_DIRECTION;
 
@@ -248,8 +242,10 @@ function McpGateways({
   const { data: userTeams } = useQuery({
     queryKey: ["teams"],
     queryFn: async () => {
-      const { data } = await archestraApiSdk.getTeams();
-      return data || [];
+      const { data } = await archestraApiSdk.getTeams({
+        query: { limit: 100, offset: 0 },
+      });
+      return data?.data || [];
     },
     initialData: initialData?.teams,
   });
@@ -266,7 +262,6 @@ function McpGateways({
     { id: sortBy, desc: sortDirection === "desc" },
   ]);
 
-  // Sync sorting state with URL params
   useEffect(() => {
     setSorting([{ id: sortBy, desc: sortDirection === "desc" }]);
   }, [sortBy, sortDirection]);
@@ -280,7 +275,7 @@ function McpGateways({
   const [connectingGateway, setConnectingGateway] = useState<{
     id: string;
     name: string;
-    agentType: "profile" | "mcp_gateway" | "llm_proxy" | "agent";
+    agentType: AgentType;
   } | null>(null);
   const [editingGateway, setEditingGateway] = useState<GatewayData | null>(
     null,
@@ -289,36 +284,34 @@ function McpGateways({
     null,
   );
 
-  // Update URL when sorting changes
   const handleSortingChange = useCallback(
     (updater: SortingState | ((old: SortingState) => SortingState)) => {
       const newSorting =
         typeof updater === "function" ? updater(sorting) : updater;
       setSorting(newSorting);
 
-      const params = new URLSearchParams(searchParams.toString());
       if (newSorting.length > 0) {
-        params.set("sortBy", newSorting[0].id);
-        params.set("sortDirection", newSorting[0].desc ? "desc" : "asc");
+        updateQueryParams({
+          page: "1",
+          sortBy: newSorting[0].id,
+          sortDirection: newSorting[0].desc ? "desc" : "asc",
+        });
       } else {
-        params.delete("sortBy");
-        params.delete("sortDirection");
+        updateQueryParams({
+          page: "1",
+          sortBy: null,
+          sortDirection: null,
+        });
       }
-      params.set("page", "1"); // Reset to first page when sorting changes
-      router.push(`${pathname}?${params.toString()}`, { scroll: false });
     },
-    [sorting, searchParams, router, pathname],
+    [sorting, updateQueryParams],
   );
 
-  // Update URL when pagination changes
   const handlePaginationChange = useCallback(
     (newPagination: { pageIndex: number; pageSize: number }) => {
-      const params = new URLSearchParams(searchParams.toString());
-      params.set("page", String(newPagination.pageIndex + 1));
-      params.set("pageSize", String(newPagination.pageSize));
-      router.push(`${pathname}?${params.toString()}`, { scroll: false });
+      setPagination(newPagination);
     },
-    [searchParams, router, pathname],
+    [setPagination],
   );
 
   const agents = agentsResponse?.data || [];
@@ -327,9 +320,24 @@ function McpGateways({
 
   const columns: ColumnDef<GatewayData>[] = [
     {
+      id: "icon",
+      size: 40,
+      enableSorting: false,
+      header: "",
+      cell: ({ row }) => (
+        <div className="flex items-center justify-center">
+          <AgentIcon
+            icon={row.original.icon}
+            size={20}
+            fallbackType="mcp_gateway"
+          />
+        </div>
+      ),
+    },
+    {
       id: "name",
       accessorKey: "name",
-      size: 300,
+      size: 240,
       header: ({ column }) => (
         <Button
           variant="ghost"
@@ -342,13 +350,13 @@ function McpGateways({
       ),
       cell: ({ row }) => {
         const agent = row.original;
-        const scope = agent.scope;
         return (
-          <div className="font-medium">
-            <div className="flex items-center gap-2">
-              {agent.name}
-              <AgentBadge type={scope} />
-              {agent.agentType === "profile" && (
+          <AgentNameCell
+            name={agent.name}
+            scope={agent.scope}
+            description={agent.description}
+            extraBadges={
+              agent.agentType === "profile" ? (
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>
@@ -365,33 +373,12 @@ function McpGateways({
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
-              )}
-              {agent.labels && agent.labels.length > 0 && (
-                <LabelTags labels={agent.labels} />
-              )}
-            </div>
-          </div>
+              ) : null
+            }
+            labels={agent.labels}
+          />
         );
       },
-    },
-    {
-      id: "createdAt",
-      accessorKey: "createdAt",
-      header: ({ column }) => (
-        <Button
-          variant="ghost"
-          className="h-auto !p-0 font-medium hover:bg-transparent"
-          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-        >
-          Created
-          <SortIcon isSorted={column.getIsSorted()} />
-        </Button>
-      ),
-      cell: ({ row }) => (
-        <div className="font-mono text-xs">
-          {formatDate({ date: row.original.createdAt })}
-        </div>
-      ),
     },
     {
       id: "toolsCount",
@@ -441,24 +428,10 @@ function McpGateways({
             enableSorting: false,
             cell: ({ row }: { row: { original: GatewayData } }) => (
               <VisibilityBadge
-                scope={
-                  (row.original as unknown as Record<string, unknown>)
-                    .scope as string
-                }
-                teams={
-                  row.original.teams as unknown as Array<{
-                    id: string;
-                    name: string;
-                  }>
-                }
-                authorId={
-                  (row.original as unknown as Record<string, unknown>)
-                    .authorId as string | null
-                }
-                authorName={
-                  (row.original as unknown as Record<string, unknown>)
-                    .authorName as string | null
-                }
+                scope={row.original.scope}
+                teams={row.original.teams}
+                authorId={row.original.authorId}
+                authorName={row.original.authorName}
                 currentUserId={currentUserId}
               />
             ),
@@ -468,18 +441,12 @@ function McpGateways({
     {
       id: "actions",
       header: "Actions",
-      size: 176,
       enableHiding: false,
       cell: ({ row }) => {
         const agent = row.original;
-        const scope = (agent as unknown as Record<string, unknown>).scope as
-          | string
-          | undefined;
-        const authorId = (agent as unknown as Record<string, unknown>)
-          .authorId as string | null | undefined;
-        const agentTeams = (
-          agent as unknown as { teams?: Array<{ id: string }> }
-        ).teams;
+        const scope = agent.scope;
+        const authorId = agent.authorId;
+        const agentTeams = agent.teams;
         const isPersonal = scope === "personal";
         const isTeamScoped = scope === "team";
         const isOwner = !!currentUserId && authorId === currentUserId;
@@ -542,44 +509,57 @@ function McpGateways({
             <div className="mb-6 flex flex-col gap-2">
               <div className="flex items-center gap-4">
                 <SearchInput
-                  placeholder="Search gateways by name..."
+                  objectNamePlural="gateways"
+                  searchFields={["name"]}
                   paramName="name"
-                  className="relative max-w-md flex-1"
                 />
                 <AgentScopeFilter />
               </div>
               <ActiveFilterBadges />
             </div>
 
-            {!agents || agents.length === 0 ? (
-              <div className="text-muted-foreground">
-                {nameFilter || scopeFromUrl || labelsFromUrl
-                  ? "No MCP gateways found matching your filters"
-                  : "No MCP gateways found"}
-              </div>
-            ) : (
-              <div data-testid={E2eTestId.AgentsTable}>
-                <DataTable
-                  columns={columns}
-                  data={agents}
-                  sorting={sorting}
-                  onSortingChange={handleSortingChange}
-                  manualSorting={true}
-                  manualPagination={true}
-                  pagination={{
-                    pageIndex,
-                    pageSize,
-                    total: pagination?.total || 0,
-                  }}
-                  onPaginationChange={handlePaginationChange}
-                />
-              </div>
-            )}
+            <div data-testid={E2eTestId.AgentsTable}>
+              <DataTable
+                columns={columns}
+                data={agents}
+                sorting={sorting}
+                onSortingChange={handleSortingChange}
+                manualSorting={true}
+                manualPagination={true}
+                pagination={{
+                  pageIndex,
+                  pageSize,
+                  total: pagination?.total ?? 0,
+                }}
+                onPaginationChange={handlePaginationChange}
+                hasActiveFilters={Boolean(
+                  nameFilter ||
+                    scopeFromUrl ||
+                    teamIdsFromUrl ||
+                    authorIdsFromUrl ||
+                    excludeAuthorIdsFromUrl ||
+                    labelsFromUrl,
+                )}
+                onClearFilters={() =>
+                  updateQueryParams({
+                    name: null,
+                    scope: null,
+                    teamIds: null,
+                    authorIds: null,
+                    excludeAuthorIds: null,
+                    labels: null,
+                    page: "1",
+                  })
+                }
+                emptyMessage="No MCP gateways found"
+              />
+            </div>
 
             <AgentDialog
               open={isCreateDialogOpen}
               onOpenChange={setIsCreateDialogOpen}
               agentType="mcp_gateway"
+              defaultIconType="mcp_gateway"
               onCreated={(gateway) => {
                 setIsCreateDialogOpen(false);
                 setConnectingGateway({ ...gateway, agentType: "mcp_gateway" });
@@ -599,6 +579,7 @@ function McpGateways({
               onOpenChange={(open) => !open && setEditingGateway(null)}
               agent={editingGateway}
               agentType={editingGateway?.agentType || "mcp_gateway"}
+              defaultIconType="mcp_gateway"
             />
 
             {deletingGatewayId && (
@@ -620,13 +601,12 @@ function GatewayConnectionColumns({
   agentType,
 }: {
   agentId: string;
-  agentType: "profile" | "mcp_gateway" | "llm_proxy" | "agent";
+  agentType: AgentType;
 }) {
   const [activeTab, setActiveTab] = useState<"proxy" | "mcp">("mcp");
 
   return (
     <div className="space-y-6">
-      {/* Tab Selection with inline features */}
       <div className="flex gap-3">
         <button
           type="button"
@@ -655,7 +635,6 @@ function GatewayConnectionColumns({
           </div>
         </button>
 
-        {/* Show LLM Proxy tab for profile type (backwards compatibility) */}
         {agentType === "profile" && (
           <button
             type="button"
@@ -686,7 +665,6 @@ function GatewayConnectionColumns({
         )}
       </div>
 
-      {/* Content - render all tabs, hide inactive ones to preload */}
       <div className="relative">
         <div className={activeTab === "mcp" ? "block" : "hidden"}>
           <div className="p-4 rounded-lg border bg-card">
@@ -713,7 +691,7 @@ function ConnectGatewayDialog({
   agent: {
     id: string;
     name: string;
-    agentType: "profile" | "mcp_gateway" | "llm_proxy" | "agent";
+    agentType: AgentType;
   };
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -753,34 +731,15 @@ function DeleteGatewayDialog({
   }, [agentId, deleteGateway, onOpenChange]);
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>Delete MCP Gateway</DialogTitle>
-          <DialogDescription>
-            Are you sure you want to delete this MCP Gateway? This action cannot
-            be undone.
-          </DialogDescription>
-        </DialogHeader>
-        <DialogForm onSubmit={handleDelete}>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              variant="destructive"
-              disabled={deleteGateway.isPending}
-            >
-              {deleteGateway.isPending ? "Deleting..." : "Delete MCP Gateway"}
-            </Button>
-          </DialogFooter>
-        </DialogForm>
-      </DialogContent>
-    </Dialog>
+    <DeleteConfirmDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Delete MCP Gateway"
+      description="Are you sure you want to delete this MCP Gateway? This action cannot be undone."
+      isPending={deleteGateway.isPending}
+      onConfirm={handleDelete}
+      confirmLabel="Delete MCP Gateway"
+      pendingLabel="Deleting..."
+    />
   );
 }

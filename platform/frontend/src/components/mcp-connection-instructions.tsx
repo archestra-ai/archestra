@@ -76,6 +76,9 @@ export function McpConnectionInstructions({
   const { data: mcpServers = [] } = useMcpServers();
   const { data: catalogItems = [] } = useInternalMcpCatalog();
   const { data: userToken } = useUserToken();
+  const { data: canReadTeams } = useHasPermissions({
+    team: ["read"],
+  });
   const { data: hasAdminPermission } = useHasPermissions({
     mcpGateway: ["admin"],
   });
@@ -92,7 +95,10 @@ export function McpConnectionInstructions({
   );
 
   // Fetch tokens filtered by the selected profile's teams
-  const { data: tokensData } = useTokens({ profileId: selectedProfileId });
+  const { data: tokensData } = useTokens({
+    profileId: selectedProfileId,
+    enabled: !!canReadTeams,
+  });
   const tokens = tokensData?.tokens;
   const [showExposedToken, setShowExposedToken] = useState(false);
   const [exposedTokenValue, setExposedTokenValue] = useState<string | null>(

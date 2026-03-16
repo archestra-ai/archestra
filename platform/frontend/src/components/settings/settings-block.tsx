@@ -9,6 +9,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { PermissionButton } from "@/components/ui/permission-button";
+import { cn } from "@/lib/utils";
 
 interface SettingsBlockProps {
   title: ReactNode;
@@ -100,4 +101,16 @@ export function SettingsSaveBar({
       </Button>
     </div>
   );
+}
+
+interface SettingsSectionStackProps {
+  children: ReactNode;
+  className?: string;
+}
+
+export function SettingsSectionStack({
+  children,
+  className,
+}: SettingsSectionStackProps) {
+  return <div className={cn("space-y-5", className)}>{children}</div>;
 }

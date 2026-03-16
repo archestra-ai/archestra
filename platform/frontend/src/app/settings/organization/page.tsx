@@ -5,6 +5,7 @@ import { useCallback, useState } from "react";
 import {
   SettingsCardHeader,
   SettingsSaveBar,
+  SettingsSectionStack,
 } from "@/components/settings/settings-block";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -129,11 +130,11 @@ export default function OrganizationSettingsPage() {
   }
 
   return (
-    <div className="space-y-8">
+    <SettingsSectionStack>
       {/* Appearance Section */}
       <div>
         <h3 className="text-lg font-medium mb-4">Appearance</h3>
-        <div className="space-y-6">
+        <SettingsSectionStack>
           <LogoUpload
             currentLogo={logo}
             currentLogoDark={logoDark}
@@ -227,13 +228,13 @@ export default function OrganizationSettingsPage() {
               />
             </CardContent>
           </Card>
-        </div>
+        </SettingsSectionStack>
       </div>
 
       {/* Auth Section */}
       <div>
         <h3 className="text-lg font-medium mb-4">Authentication</h3>
-        <div className="space-y-6">
+        <SettingsSectionStack>
           <Card>
             <SettingsCardHeader
               title="Two-Factor Authentication"
@@ -249,7 +250,7 @@ export default function OrganizationSettingsPage() {
           </Card>
 
           <OrganizationTokenSection />
-        </div>
+        </SettingsSectionStack>
       </div>
 
       {/* Unified save bar for all changes (theme + fields) */}
@@ -279,6 +280,6 @@ export default function OrganizationSettingsPage() {
           setShowTwoFactor(null);
         }}
       />
-    </div>
+    </SettingsSectionStack>
   );
 }

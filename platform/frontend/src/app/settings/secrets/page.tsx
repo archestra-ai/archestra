@@ -3,7 +3,10 @@
 import { RefreshCw, Server } from "lucide-react";
 import { useCallback, useEffect } from "react";
 import { useSetSettingsAction } from "@/app/settings/layout";
-import { SettingsCardHeader } from "@/components/settings/settings-block";
+import {
+  SettingsCardHeader,
+  SettingsSectionStack,
+} from "@/components/settings/settings-block";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Card, CardContent } from "@/components/ui/card";
 import { PermissionButton } from "@/components/ui/permission-button";
@@ -62,7 +65,7 @@ export default function SecretsSettingsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <SettingsSectionStack>
       <Card>
         <SettingsCardHeader
           title={
@@ -103,6 +106,6 @@ export default function SecretsSettingsPage() {
             )}
         </CardContent>
       </Card>
-    </div>
+    </SettingsSectionStack>
   );
 }

@@ -13,6 +13,7 @@ permissions:
 jobs:
   release-please:
     name: Release Please
+    environment: release
     runs-on: blacksmith-2vcpu-ubuntu-2404
     permissions:
       contents: write
@@ -75,6 +76,7 @@ jobs:
       contents: read
       id-token: write # Required for Workload Identity Federation
     with:
+      environment_name: release
       push_to_gcr: true
       version: ${{ needs.release-please.outputs.platform_version }}
     secrets:
@@ -96,6 +98,7 @@ jobs:
       contents: read
       id-token: write
     with:
+      environment_name: release
       image_directory: ./platform
       image_name: platform
       version: ${{ needs.release-please.outputs.platform_version }}
@@ -120,6 +123,7 @@ jobs:
       contents: write
       id-token: write # Required for Workload Identity Federation
     with:
+      environment_name: release
       version: ${{ needs.release-please.outputs.platform_version }}
       push_chart: true
     secrets:
@@ -128,6 +132,7 @@ jobs:
 
   publish-github-release:
     name: Publish GitHub Release
+    environment: release
     # Un-drafts the GitHub release and triggers the website deploy only after ALL artifacts
     # (MCP server image, platform Docker image, Helm chart) are published.
     if: needs.release-please.outputs.platform_release_created

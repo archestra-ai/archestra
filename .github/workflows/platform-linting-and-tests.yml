@@ -4,6 +4,10 @@ on:
   workflow_dispatch:
   workflow_call:
     inputs:
+      environment_name:
+        description: "GitHub Actions environment name for jobs that use secrets"
+        required: true
+        type: string
       should-skip-running-and-always-succeed:
         description: "Whether to force the checks to succeed"
         required: false
@@ -38,6 +42,7 @@ on:
 jobs:
   platform-linting-and-tests:
     name: Platform Linting and Tests
+    environment: ${{ inputs.environment_name }}
     runs-on: blacksmith-16vcpu-ubuntu-2404
     permissions:
       contents: write # Required for release-please auto-commit of codegen changes

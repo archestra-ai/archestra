@@ -65,6 +65,12 @@ describe("isTransientDbError", () => {
     expect(isTransientDbError(new Error("timeout expired"))).toBe(true);
   });
 
+  test("detects 'timeout exceeded when trying to connect'", () => {
+    expect(
+      isTransientDbError(new Error("timeout exceeded when trying to connect")),
+    ).toBe(true);
+  });
+
   test("detects PostgreSQL SQLSTATE connection error codes", () => {
     const codes = [
       "08000",

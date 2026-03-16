@@ -341,15 +341,16 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         { id: string; name: string; agentType: string }
       >();
       if (allAgentIdsForConnectors.length > 0) {
-        const agents = await AgentModel.findByOrganizationId(organizationId);
+        const agents = await AgentModel.findBasicByOrganizationIdAndIds({
+          organizationId,
+          agentIds: allAgentIdsForConnectors,
+        });
         for (const agent of agents) {
-          if (allAgentIdsForConnectors.includes(agent.id)) {
-            connectorAgentDetailsMap.set(agent.id, {
-              id: agent.id,
-              name: agent.name,
-              agentType: agent.agentType,
-            });
-          }
+          connectorAgentDetailsMap.set(agent.id, {
+            id: agent.id,
+            name: agent.name,
+            agentType: agent.agentType,
+          });
         }
       }
 

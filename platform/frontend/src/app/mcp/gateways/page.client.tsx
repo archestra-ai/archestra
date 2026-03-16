@@ -25,16 +25,15 @@ import {
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
-import { AgentBadge } from "@/components/agent-badge";
 import { AgentDialog } from "@/components/agent-dialog";
 import { AgentIcon } from "@/components/agent-icon";
+import { AgentNameCell } from "@/components/agent-name-cell";
 import {
   ActiveFilterBadges,
   AgentScopeFilter,
 } from "@/components/agent-scope-filter";
 import { ConnectDialog } from "@/components/connect-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
-import { LabelTags } from "@/components/label-tags";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { McpConnectionInstructions } from "@/components/mcp-connection-instructions";
 import { PageLayout } from "@/components/page-layout";
@@ -351,37 +350,33 @@ function McpGateways({
       ),
       cell: ({ row }) => {
         const agent = row.original;
-        const scope = agent.scope;
         return (
-          <div className="font-medium">
-            <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:gap-2">
-              <span className="break-words min-w-0">{agent.name}</span>
-              <div className="flex flex-wrap items-center gap-2">
-                <AgentBadge type={scope} />
-                {agent.agentType === "profile" && (
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Badge
-                          variant="outline"
-                          className="bg-orange-500/10 text-orange-600 border-orange-500/30 text-xs cursor-help"
-                        >
-                          Profile
-                        </Badge>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        This is a legacy entity that works both as MCP Gateway
-                        and LLM Proxy
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                )}
-                {agent.labels && agent.labels.length > 0 && (
-                  <LabelTags labels={agent.labels} />
-                )}
-              </div>
-            </div>
-          </div>
+          <AgentNameCell
+            name={agent.name}
+            scope={agent.scope}
+            description={agent.description}
+            extraBadges={
+              agent.agentType === "profile" ? (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Badge
+                        variant="outline"
+                        className="bg-orange-500/10 text-orange-600 border-orange-500/30 text-xs cursor-help"
+                      >
+                        Profile
+                      </Badge>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      This is a legacy entity that works both as MCP Gateway and
+                      LLM Proxy
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              ) : null
+            }
+            labels={agent.labels}
+          />
         );
       },
     },

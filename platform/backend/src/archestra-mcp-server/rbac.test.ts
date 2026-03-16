@@ -1,8 +1,11 @@
 // biome-ignore-all lint/suspicious/noExplicitAny: test
+
 import {
   ARCHESTRA_MCP_SERVER_NAME,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
 } from "@shared";
+import { vi } from "vitest";
+import { UserModel } from "@/models";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { ArchestraContext } from ".";
 import { ALL_TOOL_SHORT_NAMES } from ".";
@@ -227,5 +230,31 @@ describe("filterToolNamesByPermission", () => {
     expect(result.has(t("whoami"))).toBe(true);
     expect(result.has("external__tool")).toBe(true);
     expect(result.has(t("create_agent"))).toBe(false);
+  });
+
+  test("loads user permissions once for repeated permission checks", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "admin" });
+
+    const permissionsSpy = vi.spyOn(UserModel, "getUserPermissions");
+
+    const result = await filterToolNamesByPermission(
+      [
+        t("create_agent"),
+        t("get_agent"),
+        t("create_knowledge_base"),
+        t("get_knowledge_bases"),
+      ],
+      user.id,
+      org.id,
+    );
+
+    expect(result.size).toBe(4);
+    expect(permissionsSpy).toHaveBeenCalledTimes(1);
   });
 });

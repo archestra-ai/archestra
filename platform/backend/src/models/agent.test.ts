@@ -19,6 +19,78 @@ describe("AgentModel", () => {
     expect(await AgentModel.findAll()).toHaveLength(2);
   });
 
+  describe("findBasicByOrganizationIdAndIds", () => {
+    test("returns only agents from the requested organization", async ({
+      makeOrganization,
+    }) => {
+      const organization = await makeOrganization();
+      const otherOrganization = await makeOrganization();
+
+      const includedAgent = await AgentModel.create({
+        name: "Included Agent",
+        organizationId: organization.id,
+        teams: [],
+        scope: "org",
+      });
+      const excludedAgent = await AgentModel.create({
+        name: "Excluded Agent",
+        organizationId: otherOrganization.id,
+        teams: [],
+        scope: "org",
+      });
+
+      const result = await AgentModel.findBasicByOrganizationIdAndIds({
+        organizationId: organization.id,
+        agentIds: [includedAgent.id, excludedAgent.id],
+      });
+
+      expect(result).toEqual([
+        {
+          id: includedAgent.id,
+          name: "Included Agent",
+          agentType: includedAgent.agentType,
+        },
+      ]);
+    });
+
+    test("returns basic agent fields ordered by newest first", async ({
+      makeOrganization,
+    }) => {
+      const organization = await makeOrganization();
+
+      const olderAgent = await AgentModel.create({
+        name: "Older Agent",
+        organizationId: organization.id,
+        teams: [],
+        scope: "org",
+      });
+      const newerAgent = await AgentModel.create({
+        name: "Newer Agent",
+        organizationId: organization.id,
+        teams: [],
+        scope: "org",
+      });
+
+      const result = await AgentModel.findBasicByOrganizationIdAndIds({
+        organizationId: organization.id,
+        agentIds: [olderAgent.id, newerAgent.id],
+      });
+
+      expect(result).toEqual([
+        {
+          id: newerAgent.id,
+          name: "Newer Agent",
+          agentType: newerAgent.agentType,
+        },
+        {
+          id: olderAgent.id,
+          name: "Older Agent",
+          agentType: olderAgent.agentType,
+        },
+      ]);
+    });
+  });
+
   describe("exists", () => {
     test("returns true for an existing agent", async () => {
       const agent = await AgentModel.create({
@@ -1076,6 +1148,41 @@ describe("AgentModel", () => {
       const page2Ids = page2.data.map((a) => a.id);
       const intersection = page1Ids.filter((id) => page2Ids.includes(id));
       expect(intersection).toHaveLength(0);
+    });
+
+    test("prioritizes the current user's personal agent ahead of other sort results", async ({
+      makeAdmin,
+    }) => {
+      const admin = await makeAdmin();
+
+      await AgentModel.create(
+        {
+          name: "Alpha Shared Agent",
+          teams: [],
+          scope: "org",
+        },
+        admin.id,
+      );
+      await AgentModel.create(
+        {
+          name: "Zulu Personal Agent",
+          teams: [],
+          scope: "personal",
+        },
+        admin.id,
+      );
+
+      const result = await AgentModel.findAllPaginated(
+        { limit: 10, offset: 0 },
+        { sortBy: "name", sortDirection: "asc" },
+        {},
+        admin.id,
+        true,
+      );
+
+      expect(result.data).toHaveLength(2);
+      expect(result.data[0].name).toBe("Zulu Personal Agent");
+      expect(result.data[0].scope).toBe("personal");
     });
   });
 

@@ -53,6 +53,53 @@ test.describe("Agents API CRUD", () => {
     expect(Array.isArray(agent.teams)).toBe(true);
   });
 
+  test("should return the current user's personal agent first in paginated agent lists", async ({
+    request,
+    createAgent,
+    deleteAgent,
+    makeApiRequest,
+  }) => {
+    let personalAgentId: string | null = null;
+    let sharedAgentId: string | null = null;
+
+    try {
+      const uniqueSuffix = crypto.randomUUID().slice(0, 8);
+      const sharedResponse = await createAgent(
+        request,
+        `Alpha Shared Agent ${uniqueSuffix}`,
+        "org",
+      );
+      const sharedAgent = await sharedResponse.json();
+      sharedAgentId = sharedAgent.id;
+
+      const personalResponse = await createAgent(
+        request,
+        `Zulu Personal Agent ${uniqueSuffix}`,
+        "personal",
+      );
+      const personalAgent = await personalResponse.json();
+      personalAgentId = personalAgent.id;
+
+      const response = await makeApiRequest({
+        request,
+        method: "get",
+        urlSuffix: `/api/agents?limit=10&offset=0&sortBy=name&sortDirection=asc&name=${uniqueSuffix}`,
+      });
+      const agents = await response.json();
+
+      expect(Array.isArray(agents.data)).toBe(true);
+      expect(agents.data[0].id).toBe(personalAgent.id);
+      expect(agents.data[0].scope).toBe("personal");
+    } finally {
+      if (personalAgentId) {
+        await deleteAgent(request, personalAgentId);
+      }
+      if (sharedAgentId) {
+        await deleteAgent(request, sharedAgentId);
+      }
+    }
+  });
+
   test("should get agent by ID", async ({
     request,
     createAgent,

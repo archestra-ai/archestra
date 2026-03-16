@@ -26,7 +26,7 @@ test(
     // Poll for the agent to appear in the table
     const agentLocator = page
       .getByTestId(E2eTestId.AgentsTable)
-      .getByText(AGENT_NAME);
+      .getByTitle(AGENT_NAME);
 
     await waitForElementWithReload(page, agentLocator, {
       timeout: 30_000,
@@ -77,7 +77,7 @@ test(
     // Poll for the LLM proxy to appear in the table
     const proxyLocator = page
       .getByTestId(E2eTestId.AgentsTable)
-      .getByText(PROXY_NAME);
+      .getByTitle(PROXY_NAME);
 
     await waitForElementWithReload(page, proxyLocator, {
       timeout: 30_000,
@@ -128,7 +128,7 @@ test(
     // Poll for the MCP gateway to appear in the table
     const gatewayLocator = page
       .getByTestId(E2eTestId.AgentsTable)
-      .getByText(GATEWAY_NAME);
+      .getByTitle(GATEWAY_NAME);
 
     await waitForElementWithReload(page, gatewayLocator, {
       timeout: 30_000,

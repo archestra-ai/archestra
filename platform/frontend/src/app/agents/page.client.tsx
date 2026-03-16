@@ -14,16 +14,15 @@ import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { A2AConnectionInstructions } from "@/components/a2a-connection-instructions";
-import { AgentBadge } from "@/components/agent-badge";
 import { AgentDialog } from "@/components/agent-dialog";
 import { AgentIcon } from "@/components/agent-icon";
+import { AgentNameCell } from "@/components/agent-name-cell";
 import {
   ActiveFilterBadges,
   AgentScopeFilter,
 } from "@/components/agent-scope-filter";
 import { ConnectDialog } from "@/components/connect-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
-import { LabelTags } from "@/components/label-tags";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
 import { SearchInput } from "@/components/search-input";
@@ -394,24 +393,14 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
       ),
       cell: ({ row }) => {
         const agent = row.original;
-        const scope = agent.scope;
         return (
-          <div className="font-medium">
-            <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:gap-2">
-              <span className="break-words min-w-0">{agent.name}</span>
-              <div className="flex flex-wrap items-center gap-2">
-                <AgentBadge type={agent.builtIn ? "builtIn" : scope} />
-                {agent.labels && agent.labels.length > 0 && (
-                  <LabelTags labels={agent.labels} />
-                )}
-              </div>
-            </div>
-            {agent.description && (
-              <div className="text-[11px] text-muted-foreground line-clamp-2">
-                {agent.description}
-              </div>
-            )}
-          </div>
+          <AgentNameCell
+            name={agent.name}
+            scope={agent.scope}
+            builtIn={agent.builtIn ?? undefined}
+            description={agent.description}
+            labels={agent.labels}
+          />
         );
       },
     },

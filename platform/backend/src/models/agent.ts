@@ -45,6 +45,32 @@ import MemberModel from "./member";
 import ToolModel from "./tool";
 
 class AgentModel {
+  static async findBasicByOrganizationIdAndIds(params: {
+    organizationId: string;
+    agentIds: string[];
+  }): Promise<Array<Pick<Agent, "id" | "name" | "agentType">>> {
+    const { organizationId, agentIds } = params;
+
+    if (agentIds.length === 0) {
+      return [];
+    }
+
+    return await db
+      .select({
+        id: schema.agentsTable.id,
+        name: schema.agentsTable.name,
+        agentType: schema.agentsTable.agentType,
+      })
+      .from(schema.agentsTable)
+      .where(
+        and(
+          eq(schema.agentsTable.organizationId, organizationId),
+          inArray(schema.agentsTable.id, agentIds),
+        ),
+      )
+      .orderBy(desc(schema.agentsTable.createdAt));
+  }
+
   /**
    * Populate authorName on agents by looking up user names from the user table.
    */
@@ -567,6 +593,8 @@ class AgentModel {
   ): Promise<PaginatedResult<Agent>> {
     // Determine the ORDER BY clause based on sorting params
     const orderByClause = AgentModel.getOrderByClause(sorting);
+    const personalAgentPriorityOrderClauses =
+      AgentModel.getPersonalAgentPriorityOrderClauses(userId);
 
     // Build where clause for filters and access control
     const whereConditions: SQL[] = [];
@@ -722,6 +750,7 @@ class AgentModel {
           eq(schema.agentsTable.id, subagentsCountSubquery.agentId),
         )
         .orderBy(
+          ...personalAgentPriorityOrderClauses,
           direction(sql`COALESCE(${subagentsCountSubquery.subagentsCount}, 0)`),
         );
     } else if (sorting?.sortBy === "toolsCount") {
@@ -739,7 +768,10 @@ class AgentModel {
           toolsCountSubquery,
           eq(schema.agentsTable.id, toolsCountSubquery.agentId),
         )
-        .orderBy(direction(sql`COALESCE(${toolsCountSubquery.toolsCount}, 0)`));
+        .orderBy(
+          ...personalAgentPriorityOrderClauses,
+          direction(sql`COALESCE(${toolsCountSubquery.toolsCount}, 0)`),
+        );
     } else if (sorting?.sortBy === "knowledgeSourcesCount") {
       const knowledgeSourcesCountSubquery = db
         .select({
@@ -758,6 +790,7 @@ class AgentModel {
           eq(schema.agentsTable.id, knowledgeSourcesCountSubquery.agentId),
         )
         .orderBy(
+          ...personalAgentPriorityOrderClauses,
           direction(
             sql`COALESCE(${knowledgeSourcesCountSubquery.knowledgeSourcesCount}, 0)`,
           ),
@@ -781,9 +814,15 @@ class AgentModel {
           teamNameSubquery,
           eq(schema.agentsTable.id, teamNameSubquery.agentId),
         )
-        .orderBy(direction(sql`COALESCE(${teamNameSubquery.teamName}, '')`));
+        .orderBy(
+          ...personalAgentPriorityOrderClauses,
+          direction(sql`COALESCE(${teamNameSubquery.teamName}, '')`),
+        );
     } else {
-      query = query.orderBy(orderByClause);
+      query = query.orderBy(
+        ...personalAgentPriorityOrderClauses,
+        orderByClause,
+      );
     }
 
     const sortedAgents = await query
@@ -897,6 +936,23 @@ class AgentModel {
         // Default: newest first
         return desc(schema.agentsTable.createdAt);
     }
+  }
+
+  private static getPersonalAgentPriorityOrderClauses(userId?: string) {
+    if (!userId) {
+      return [];
+    }
+
+    return [
+      asc(sql`
+        CASE
+          WHEN ${schema.agentsTable.scope} = 'personal'
+            AND ${schema.agentsTable.authorId} = ${userId}
+          THEN 0
+          ELSE 1
+        END
+      `),
+    ];
   }
 
   /**

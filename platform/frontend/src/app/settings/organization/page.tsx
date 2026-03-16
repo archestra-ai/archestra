@@ -205,21 +205,19 @@ export default function OrganizationSettingsPage() {
                   Custom text shown in the footer alongside the version number.
                 </p>
               </div>
-              <div className="flex items-center justify-between gap-4 rounded-lg border p-4">
-                <div>
-                  <Label
-                    htmlFor="animateChatPlaceholders"
-                    className="text-base font-semibold"
-                  >
+              <div className="flex items-start justify-between gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="animateChatPlaceholders">
                     Animate Chat Placeholders
                   </Label>
-                  <p className="mt-1 text-sm text-muted-foreground">
+                  <p className="text-xs text-muted-foreground">
                     Show the chat placeholder text with a typing animation.
                     Single placeholder entries always stay static.
                   </p>
                 </div>
                 <Switch
                   id="animateChatPlaceholders"
+                  className="mt-0.5"
                   checked={effectiveAnimateChatPlaceholders}
                   onCheckedChange={(checked) =>
                     setAnimateChatPlaceholders(checked)

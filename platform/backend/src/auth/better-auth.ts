@@ -29,7 +29,7 @@ import { and, eq, ne } from "drizzle-orm";
 import { z } from "zod";
 import config from "@/config";
 import db, { schema } from "@/database";
-import logger from "@/logging";
+import logger, { LOG_LEVEL } from "@/logging";
 // Import directly from files to avoid circular dependency through barrel export
 import AgentModel from "@/models/agent";
 import InvitationModel from "@/models/invitation";
@@ -68,6 +68,31 @@ export const auth: any = betterAuth({
   appName: APP_NAME,
   baseURL: frontendBaseUrl,
   secret,
+  logger: {
+    disabled: LOG_LEVEL === "silent",
+    level:
+      LOG_LEVEL === "trace"
+        ? "debug"
+        : LOG_LEVEL === "fatal"
+          ? "error"
+          : LOG_LEVEL,
+    log(level, message, ...args) {
+      const formattedMessage = `[Better Auth] ${message}`;
+      const payload = args.length > 0 ? { args } : {};
+
+      if (level === "error") {
+        logger.error(payload, formattedMessage);
+        return;
+      }
+
+      if (level === "warn") {
+        logger.warn(payload, formattedMessage);
+        return;
+      }
+
+      logger.info(payload, formattedMessage);
+    },
+  },
   // Prevent JWT plugin's /token endpoint from conflicting with OAuth provider's /oauth2/token
   disabledPaths: ["/token"],
   ...(config.authRateLimitDisabled ? { rateLimit: { enabled: false } } : {}),

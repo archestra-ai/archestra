@@ -24,6 +24,8 @@ import { afterAll, afterEach, beforeAll, beforeEach, vi } from "vitest";
 // Disable Sentry for tests - set BEFORE any config modules are loaded
 process.env.ARCHESTRA_SENTRY_BACKEND_DSN = "";
 process.env.ARCHESTRA_SENTRY_ENVIRONMENT = "test";
+// Silence backend pino output during unit tests while preserving logger calls for spies/assertions.
+process.env.ARCHESTRA_LOGGING_LEVEL = "silent";
 
 // Set auth secret for tests
 process.env.ARCHESTRA_AUTH_SECRET = "auth-secret-unit-tests-32-chars!";

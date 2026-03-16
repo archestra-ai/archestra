@@ -4,10 +4,6 @@ name: Build Docker Hub image
 on:
   workflow_call:
     inputs:
-      environment_name:
-        description: "GitHub Actions environment name for jobs that use secrets"
-        required: true
-        type: string
       image_directory:
         description: "Directory containing the Dockerfile"
         required: true
@@ -42,7 +38,6 @@ jobs:
   # (to avoid emulation which is very slow), then we publish a single "multi-arch" image to Docker Hub.
   build-dockerhub-image:
     name: Build Docker Hub image (${{ matrix.os_and_arch }})
-    environment: ${{ inputs.environment_name }}
     runs-on: ${{ matrix.platform }}
     strategy:
       fail-fast: false
@@ -123,7 +118,6 @@ jobs:
   merge-manifests:
     name: Create multi-arch manifest
     if: inputs.push_image
-    environment: ${{ inputs.environment_name }}
     runs-on: blacksmith-4vcpu-ubuntu-2404
     needs:
       - build-dockerhub-image

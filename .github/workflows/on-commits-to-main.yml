@@ -14,7 +14,6 @@ permissions: {}
 jobs:
   build-staging-image:
     name: Build Platform Staging Docker Image
-    environment: staging
     runs-on: blacksmith-16vcpu-ubuntu-2404
     permissions:
       contents: read
@@ -90,7 +89,6 @@ jobs:
       contents: read
       id-token: write
     with:
-      environment_name: staging
       push_to_gcr: true
       version: ${{ github.sha }}
     secrets:
@@ -99,7 +97,6 @@ jobs:
 
   deploy-to-staging:
     name: Deploy to staging
-    environment: staging
     runs-on: blacksmith-2vcpu-ubuntu-2404
     needs: [build-staging-image, build-mcp-server-base-image]
     permissions:

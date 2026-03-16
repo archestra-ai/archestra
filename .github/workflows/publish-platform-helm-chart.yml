@@ -3,10 +3,6 @@ name: Publish platform Helm chart
 on:
   workflow_call:
     inputs:
-      environment_name:
-        description: "GitHub Actions environment name for jobs that use secrets"
-        required: true
-        type: string
       version:
         description: "Version tag for the Helm chart"
         required: true
@@ -26,7 +22,6 @@ jobs:
   # https://medium.com/google-cloud/ci-gitops-with-helm-github-actions-google-artifact-registry-and-config-sync-b48604191fda
   publish-platform-helm-chart:
     name: Publish platform Helm chart
-    environment: ${{ inputs.environment_name }}
     runs-on: blacksmith-2vcpu-ubuntu-2404
     permissions:
       contents: write

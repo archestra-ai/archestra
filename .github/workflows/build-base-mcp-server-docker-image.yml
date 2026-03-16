@@ -3,10 +3,6 @@ name: Build MCP Server Base Docker Image
 on:
   workflow_call:
     inputs:
-      environment_name:
-        description: "GitHub Actions environment name for jobs that use secrets"
-        required: true
-        type: string
       push_to_gcr:
         description: "Whether to push the built image to GCR"
         required: true
@@ -30,7 +26,6 @@ jobs:
   # (Alpine's musl libc has known issues with QEMU emulation for ARM64)
   build-mcp-server-base-image:
     name: Build MCP Server Base Image (${{ matrix.os_and_arch }})
-    environment: ${{ inputs.environment_name }}
     runs-on: ${{ matrix.platform }}
     strategy:
       fail-fast: false
@@ -91,7 +86,6 @@ jobs:
   merge-manifests:
     name: Create multi-arch manifest
     if: inputs.push_to_gcr
-    environment: ${{ inputs.environment_name }}
     runs-on: blacksmith-4vcpu-ubuntu-2404
     needs:
       - build-mcp-server-base-image

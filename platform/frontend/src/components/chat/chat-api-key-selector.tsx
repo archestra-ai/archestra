@@ -314,13 +314,6 @@ export function ChatApiKeySelector({
             className="max-w-[220px] min-w-0"
           >
             <Key className="size-4 shrink-0" />
-            <span className="truncate flex-1 text-left">
-              {currentConversationChatApiKey
-                ? getKeyDisplayName(currentConversationChatApiKey)
-                : isLoading
-                  ? "Loading..."
-                  : "Select key"}
-            </span>
           </PromptInputButton>
         </PopoverTrigger>
         <PopoverContent className="w-80 p-0" align="start">

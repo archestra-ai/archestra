@@ -22,6 +22,13 @@ Chat will use LLM API Keys configured in Settings -> LLM API Keys. When a chat r
 2. **Organization default** - Fall back to the organization's default key for that provider
 3. **Environment variable** - Final fallback to `ARCHESTRA_CHAT_<PROVIDER>_API_KEY`
 
+### Branding
+Chat inherits organization branding from Settings -> Organization -> Branding.
+
+- `Chat Placeholders` controls the prompts shown in the new-chat input
+- `Animate Chat Placeholders` enables or disables the typing animation for placeholder rotation
+- If only one placeholder is configured, Chat always renders it as static text
+
 ### Supported Providers
 
 See [Supported LLM Providers](/docs/platform-supported-llm-providers) for the full list.

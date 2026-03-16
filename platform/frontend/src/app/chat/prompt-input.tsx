@@ -163,13 +163,30 @@ const PromptInputContent = ({
 
   // Chat placeholders from organization settings
   const { data: orgData } = useOrganization();
-  const chatPlaceholders = useMemo(
-    () => orgData?.chatPlaceholders,
+  const chatPlaceholders = useMemo(() => {
+    return orgData?.chatPlaceholders?.filter(
+      (placeholder) => placeholder.length > 0,
+    );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [orgData?.chatPlaceholders],
+  }, [orgData?.chatPlaceholders]);
+  const staticPlaceholder = useMemo(() => {
+    if (!chatPlaceholders?.length) {
+      return null;
+    }
+
+    if (
+      chatPlaceholders.length === 1 ||
+      orgData?.animateChatPlaceholders === false
+    ) {
+      return chatPlaceholders[0];
+    }
+
+    return null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chatPlaceholders, orgData?.animateChatPlaceholders]);
+  const { text: animatedPlaceholder, isAnimating } = useTypingAnimation(
+    staticPlaceholder ? null : chatPlaceholders,
   );
-  const { text: animatedPlaceholder, isAnimating } =
-    useTypingAnimation(chatPlaceholders);
 
   // RBAC: check if user can see agent picker and provider settings in chat
   const { data: canSeeAgentPicker } = useHasPermissions({
@@ -270,9 +287,11 @@ const PromptInputContent = ({
             placeholder={
               conversationId
                 ? "Ask a follow-up..."
-                : isAnimating
-                  ? animatedPlaceholder
-                  : "What would you like to get done?"
+                : staticPlaceholder
+                  ? staticPlaceholder
+                  : isAnimating
+                    ? animatedPlaceholder
+                    : "What would you like to get done?"
             }
             ref={textareaRef}
             className="px-4"

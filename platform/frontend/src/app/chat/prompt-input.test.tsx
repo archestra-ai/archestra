@@ -2,6 +2,11 @@ import { E2eTestId } from "@shared";
 import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+const { mockUseOrganization, mockUseTypingAnimation } = vi.hoisted(() => ({
+  mockUseOrganization: vi.fn(),
+  mockUseTypingAnimation: vi.fn(),
+}));
+
 // Mock ResizeObserver which is used by Radix UI components
 global.ResizeObserver = vi.fn().mockImplementation(() => ({
   observe: vi.fn(),
@@ -74,7 +79,9 @@ vi.mock("@/components/ai-elements/prompt-input", () => ({
   ),
   PromptInputSpeechButton: () => <button type="button">Speech</button>,
   PromptInputSubmit: () => <button type="submit">Submit</button>,
-  PromptInputTextarea: () => <textarea />,
+  PromptInputTextarea: ({ placeholder }: { placeholder?: string }) => (
+    <textarea placeholder={placeholder} />
+  ),
   PromptInputTools: ({ children }: { children: React.ReactNode }) => (
     <div data-testid="prompt-tools">{children}</div>
   ),
@@ -149,10 +156,11 @@ vi.mock("@/lib/chat.query", () => ({
 }));
 
 vi.mock("@/lib/organization.query", () => ({
-  useOrganization: () => ({
-    data: null,
-    isLoading: false,
-  }),
+  useOrganization: () => mockUseOrganization(),
+}));
+
+vi.mock("@/lib/typing-animation.hook", () => ({
+  useTypingAnimation: (...args: unknown[]) => mockUseTypingAnimation(...args),
 }));
 
 // Mock for useHasPermissions - default to non-admin
@@ -181,6 +189,14 @@ describe("ArchestraPromptInput", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockUseOrganization.mockReturnValue({
+      data: null,
+      isLoading: false,
+    });
+    mockUseTypingAnimation.mockReturnValue({
+      text: "Animated placeholder",
+      isAnimating: true,
+    });
   });
 
   describe("File Upload Button", () => {
@@ -323,6 +339,48 @@ describe("ArchestraPromptInput", () => {
       );
 
       expect(screen.getByTestId("model-selector")).toBeInTheDocument();
+    });
+
+    it("should keep a single organization placeholder static", () => {
+      mockUseOrganization.mockReturnValue({
+        data: {
+          chatPlaceholders: ["Ask the support agent"],
+          animateChatPlaceholders: true,
+        },
+        isLoading: false,
+      });
+
+      render(
+        <ArchestraPromptInput {...defaultProps} allowFileUploads={true} />,
+      );
+
+      expect(
+        screen.getByPlaceholderText("Ask the support agent"),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByPlaceholderText("Animated placeholder"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("should keep placeholders static when animation is disabled", () => {
+      mockUseOrganization.mockReturnValue({
+        data: {
+          chatPlaceholders: ["First placeholder", "Second placeholder"],
+          animateChatPlaceholders: false,
+        },
+        isLoading: false,
+      });
+
+      render(
+        <ArchestraPromptInput {...defaultProps} allowFileUploads={true} />,
+      );
+
+      expect(
+        screen.getByPlaceholderText("First placeholder"),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByPlaceholderText("Animated placeholder"),
+      ).not.toBeInTheDocument();
     });
   });
 });

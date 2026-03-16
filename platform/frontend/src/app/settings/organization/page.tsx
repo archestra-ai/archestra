@@ -72,6 +72,9 @@ export default function OrganizationSettingsPage() {
   const [chatPlaceholders, setChatPlaceholders] = useState<string[] | null>(
     null,
   );
+  const [animateChatPlaceholders, setAnimateChatPlaceholders] = useState<
+    boolean | null
+  >(null);
   const [showTwoFactor, setShowTwoFactor] = useState<boolean | null>(null);
 
   // Derived values (use local state if changed, otherwise org data)
@@ -81,6 +84,8 @@ export default function OrganizationSettingsPage() {
   const effectiveFooterText = footerText ?? organization?.footerText ?? "";
   const effectiveChatPlaceholders =
     chatPlaceholders ?? organization?.chatPlaceholders ?? [];
+  const effectiveAnimateChatPlaceholders =
+    animateChatPlaceholders ?? organization?.animateChatPlaceholders ?? true;
   const effectiveShowTwoFactor =
     showTwoFactor ?? organization?.showTwoFactor ?? false;
 
@@ -89,6 +94,7 @@ export default function OrganizationSettingsPage() {
     ogDescription !== null ||
     footerText !== null ||
     chatPlaceholders !== null ||
+    animateChatPlaceholders !== null ||
     showTwoFactor !== null;
 
   const handleSaveFields = async () => {
@@ -99,6 +105,9 @@ export default function OrganizationSettingsPage() {
     if (chatPlaceholders !== null)
       data.chatPlaceholders =
         chatPlaceholders.length > 0 ? chatPlaceholders : null;
+    if (animateChatPlaceholders !== null) {
+      data.animateChatPlaceholders = animateChatPlaceholders;
+    }
     if (showTwoFactor !== null) data.showTwoFactor = showTwoFactor;
 
     await updateMutation.mutateAsync(data);
@@ -107,6 +116,7 @@ export default function OrganizationSettingsPage() {
     setOgDescription(null);
     setFooterText(null);
     setChatPlaceholders(null);
+    setAnimateChatPlaceholders(null);
     setShowTwoFactor(null);
   };
 
@@ -195,6 +205,27 @@ export default function OrganizationSettingsPage() {
                   Custom text shown in the footer alongside the version number.
                 </p>
               </div>
+              <div className="flex items-center justify-between gap-4 rounded-lg border p-4">
+                <div>
+                  <Label
+                    htmlFor="animateChatPlaceholders"
+                    className="text-base font-semibold"
+                  >
+                    Animate Chat Placeholders
+                  </Label>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Show the chat placeholder text with a typing animation.
+                    Single placeholder entries always stay static.
+                  </p>
+                </div>
+                <Switch
+                  id="animateChatPlaceholders"
+                  checked={effectiveAnimateChatPlaceholders}
+                  onCheckedChange={(checked) =>
+                    setAnimateChatPlaceholders(checked)
+                  }
+                />
+              </div>
               <ChatPlaceholdersEditor
                 placeholders={effectiveChatPlaceholders}
                 onChange={setChatPlaceholders}
@@ -262,6 +293,7 @@ export default function OrganizationSettingsPage() {
               setOgDescription(null);
               setFooterText(null);
               setChatPlaceholders(null);
+              setAnimateChatPlaceholders(null);
               setShowTwoFactor(null);
             }}
             disabled={updateMutation.isPending}

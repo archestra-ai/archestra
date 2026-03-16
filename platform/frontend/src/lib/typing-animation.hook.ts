@@ -53,6 +53,13 @@ export function useTypingAnimation(texts: string[] | null | undefined): {
       return;
     }
 
+    if (validTexts.length === 1) {
+      clearTimer();
+      setDisplayText(validTexts[0]);
+      setIsAnimating(false);
+      return;
+    }
+
     // Reset and start
     phaseRef.current = "PICKING_NEXT";
     currentIndexRef.current = -1;

@@ -121007,6 +121007,9 @@
                         "type": "string"
                       }
                     },
+                    "animateChatPlaceholders": {
+                      "type": "boolean"
+                    },
                     "iconLogo": {
                       "nullable": true,
                       "type": "string"
@@ -121045,6 +121048,7 @@
                     "ogDescription",
                     "footerText",
                     "chatPlaceholders",
+                    "animateChatPlaceholders",
                     "iconLogo",
                     "showTwoFactor"
                   ],
@@ -121359,6 +121363,9 @@
                       "maxLength": 80
                     }
                   },
+                  "animateChatPlaceholders": {
+                    "type": "boolean"
+                  },
                   "showTwoFactor": {
                     "type": "boolean"
                   }
@@ -121541,6 +121548,9 @@
                         "type": "string"
                       }
                     },
+                    "animateChatPlaceholders": {
+                      "type": "boolean"
+                    },
                     "iconLogo": {
                       "nullable": true,
                       "type": "string"
@@ -121579,6 +121589,7 @@
                     "ogDescription",
                     "footerText",
                     "chatPlaceholders",
+                    "animateChatPlaceholders",
                     "iconLogo",
                     "showTwoFactor"
                   ],
@@ -121880,6 +121891,9 @@
                     "footerText": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "animateChatPlaceholders": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -121891,7 +121905,8 @@
                     "iconLogo",
                     "appName",
                     "ogDescription",
-                    "footerText"
+                    "footerText",
+                    "animateChatPlaceholders"
                   ],
                   "additionalProperties": false
                 }
@@ -122313,6 +122328,9 @@
                         "type": "string"
                       }
                     },
+                    "animateChatPlaceholders": {
+                      "type": "boolean"
+                    },
                     "iconLogo": {
                       "nullable": true,
                       "type": "string"
@@ -122351,6 +122369,7 @@
                     "ogDescription",
                     "footerText",
                     "chatPlaceholders",
+                    "animateChatPlaceholders",
                     "iconLogo",
                     "showTwoFactor"
                   ],
@@ -122785,6 +122804,9 @@
                         "type": "string"
                       }
                     },
+                    "animateChatPlaceholders": {
+                      "type": "boolean"
+                    },
                     "iconLogo": {
                       "nullable": true,
                       "type": "string"
@@ -122823,6 +122845,7 @@
                     "ogDescription",
                     "footerText",
                     "chatPlaceholders",
+                    "animateChatPlaceholders",
                     "iconLogo",
                     "showTwoFactor"
                   ],
@@ -123256,6 +123279,9 @@
                         "type": "string"
                       }
                     },
+                    "animateChatPlaceholders": {
+                      "type": "boolean"
+                    },
                     "iconLogo": {
                       "nullable": true,
                       "type": "string"
@@ -123294,6 +123320,7 @@
                     "ogDescription",
                     "footerText",
                     "chatPlaceholders",
+                    "animateChatPlaceholders",
                     "iconLogo",
                     "showTwoFactor"
                   ],
@@ -123743,6 +123770,9 @@
                         "type": "string"
                       }
                     },
+                    "animateChatPlaceholders": {
+                      "type": "boolean"
+                    },
                     "iconLogo": {
                       "nullable": true,
                       "type": "string"
@@ -123781,6 +123811,7 @@
                     "ogDescription",
                     "footerText",
                     "chatPlaceholders",
+                    "animateChatPlaceholders",
                     "iconLogo",
                     "showTwoFactor"
                   ],
@@ -124183,6 +124214,9 @@
                         "type": "string"
                       }
                     },
+                    "animateChatPlaceholders": {
+                      "type": "boolean"
+                    },
                     "iconLogo": {
                       "nullable": true,
                       "type": "string"
@@ -124221,6 +124255,7 @@
                     "ogDescription",
                     "footerText",
                     "chatPlaceholders",
+                    "animateChatPlaceholders",
                     "iconLogo",
                     "showTwoFactor"
                   ],
@@ -124912,6 +124947,9 @@
                         "type": "string"
                       }
                     },
+                    "animateChatPlaceholders": {
+                      "type": "boolean"
+                    },
                     "iconLogo": {
                       "nullable": true,
                       "type": "string"
@@ -124950,6 +124988,7 @@
                     "ogDescription",
                     "footerText",
                     "chatPlaceholders",
+                    "animateChatPlaceholders",
                     "iconLogo",
                     "showTwoFactor"
                   ],

@@ -122,6 +122,8 @@ class OrganizationModel {
         appName: schema.organizationsTable.appName,
         ogDescription: schema.organizationsTable.ogDescription,
         footerText: schema.organizationsTable.footerText,
+        animateChatPlaceholders:
+          schema.organizationsTable.animateChatPlaceholders,
       })
       .from(schema.organizationsTable)
       .limit(1);
@@ -138,6 +140,7 @@ class OrganizationModel {
         appName: null,
         ogDescription: null,
         footerText: null,
+        animateChatPlaceholders: true,
       };
     }
 

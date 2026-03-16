@@ -25,6 +25,7 @@ describe("OrganizationModel", () => {
         appName: null,
         ogDescription: null,
         footerText: null,
+        animateChatPlaceholders: true,
       });
     });
 
@@ -45,6 +46,7 @@ describe("OrganizationModel", () => {
         appName: null,
         ogDescription: null,
         footerText: null,
+        animateChatPlaceholders: true,
       });
     });
 
@@ -134,6 +136,7 @@ describe("OrganizationModel", () => {
 
       // Verify only expected fields are returned
       expect(Object.keys(appearance).sort()).toEqual([
+        "animateChatPlaceholders",
         "appName",
         "customFont",
         "favicon",
@@ -144,6 +147,21 @@ describe("OrganizationModel", () => {
         "ogDescription",
         "theme",
       ]);
+    });
+
+    test("should return animateChatPlaceholders when set", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+
+      await db
+        .update(schema.organizationsTable)
+        .set({ animateChatPlaceholders: false })
+        .where(eq(schema.organizationsTable.id, org.id));
+
+      const appearance = await OrganizationModel.getAppearanceSettings();
+
+      expect(appearance.animateChatPlaceholders).toBe(false);
     });
   });
 
@@ -259,6 +277,18 @@ describe("OrganizationModel", () => {
       const updated = await OrganizationModel.patch("non-existent-id", {});
 
       expect(updated).toBeNull();
+    });
+
+    test("should update animateChatPlaceholders", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+
+      const updated = await OrganizationModel.patch(org.id, {
+        animateChatPlaceholders: false,
+      });
+
+      expect(updated?.animateChatPlaceholders).toBe(false);
     });
 
     test("should set default LLM model and provider", async ({

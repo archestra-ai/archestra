@@ -1,0 +1,1 @@
+ALTER TABLE "organization" ADD COLUMN "animate_chat_placeholders" boolean DEFAULT true NOT NULL;

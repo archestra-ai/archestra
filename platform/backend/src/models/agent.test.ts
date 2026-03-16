@@ -1077,6 +1077,41 @@ describe("AgentModel", () => {
       const intersection = page1Ids.filter((id) => page2Ids.includes(id));
       expect(intersection).toHaveLength(0);
     });
+
+    test("prioritizes the current user's personal agent ahead of other sort results", async ({
+      makeAdmin,
+    }) => {
+      const admin = await makeAdmin();
+
+      await AgentModel.create(
+        {
+          name: "Alpha Shared Agent",
+          teams: [],
+          scope: "org",
+        },
+        admin.id,
+      );
+      await AgentModel.create(
+        {
+          name: "Zulu Personal Agent",
+          teams: [],
+          scope: "personal",
+        },
+        admin.id,
+      );
+
+      const result = await AgentModel.findAllPaginated(
+        { limit: 10, offset: 0 },
+        { sortBy: "name", sortDirection: "asc" },
+        {},
+        admin.id,
+        true,
+      );
+
+      expect(result.data).toHaveLength(2);
+      expect(result.data[0].name).toBe("Zulu Personal Agent");
+      expect(result.data[0].scope).toBe("personal");
+    });
   });
 
   describe("Archestra Tools Inclusion", () => {

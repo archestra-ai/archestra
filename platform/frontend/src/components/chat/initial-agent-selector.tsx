@@ -140,9 +140,21 @@ export function InitialAgentSelector({
     }
     const scopeOrder: Record<string, number> = { personal: 0, team: 1, org: 2 };
     return [...result].sort((a, b) => {
+      const aIsMyPersonalAgent =
+        a.scope === "personal" && a.authorId === userId ? 1 : 0;
+      const bIsMyPersonalAgent =
+        b.scope === "personal" && b.authorId === userId ? 1 : 0;
+
+      if (aIsMyPersonalAgent !== bIsMyPersonalAgent) {
+        return bIsMyPersonalAgent - aIsMyPersonalAgent;
+      }
       if (a.id === currentAgentId) return -1;
       if (b.id === currentAgentId) return 1;
-      return (scopeOrder[a.scope] ?? 3) - (scopeOrder[b.scope] ?? 3);
+      if ((scopeOrder[a.scope] ?? 3) !== (scopeOrder[b.scope] ?? 3)) {
+        return (scopeOrder[a.scope] ?? 3) - (scopeOrder[b.scope] ?? 3);
+      }
+
+      return a.name.localeCompare(b.name);
     });
   }, [allAgents, search, currentAgentId, userId]);
 

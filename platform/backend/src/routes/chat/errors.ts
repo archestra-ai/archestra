@@ -1,4 +1,9 @@
 import {
+  isSpanContextValid,
+  context as otelContext,
+  trace,
+} from "@opentelemetry/api";
+import {
   AnthropicErrorTypes,
   BedrockErrorTypes,
   ChatErrorCode,
@@ -13,11 +18,6 @@ import {
   VllmErrorTypes,
   ZhipuaiErrorTypes,
 } from "@shared";
-import {
-  context as otelContext,
-  isSpanContextValid,
-  trace,
-} from "@opentelemetry/api";
 import { APICallError, NoOutputGeneratedError, RetryError } from "ai";
 import logger from "@/logging";
 

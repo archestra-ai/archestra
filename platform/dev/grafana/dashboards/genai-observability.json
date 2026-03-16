@@ -1876,7 +1876,7 @@
           "exemplar": true
         }
       ],
-      "title": "Total Cost By Provider",
+      "title": "Cost Trend By Provider",
       "transparent": true,
       "type": "timeseries"
     },
@@ -1984,7 +1984,7 @@
           "exemplar": true
         }
       ],
-      "title": "Total Cost By Model",
+      "title": "Cost Trend By Model",
       "transparent": true,
       "type": "timeseries"
     },

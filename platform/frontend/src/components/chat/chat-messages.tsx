@@ -806,7 +806,13 @@ export function ChatMessages({
             );
           })}
           {/* Inline error display */}
-          {error && <InlineChatError error={error} />}
+          {error && (
+            <InlineChatError
+              error={error}
+              conversationId={conversationId}
+              supportMessage={organization?.chatErrorSupportMessage}
+            />
+          )}
           {(status === "submitted" ||
             (status === "streaming" && isStreamingStalled)) && (
             <div className="absolute bottom-[-10] left-0">

@@ -124,6 +124,9 @@ const organizationsTable = pgTable("organization", {
   /** Square icon logo (28x28px recommended) for collapsed sidebar and chat loading indicator */
   iconLogo: text("icon_logo"),
 
+  /** Support contact message shown in chat error cards */
+  chatErrorSupportMessage: text("chat_error_support_message"),
+
   /** Organization-level 2FA visibility toggle */
   showTwoFactor: boolean("show_two_factor").notNull().default(false),
 });

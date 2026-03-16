@@ -1317,6 +1317,13 @@
       "when": 1773689443901,
       "tag": "0187_soft_gargoyle",
       "breakpoints": true
+    },
+    {
+      "idx": 188,
+      "version": "7",
+      "when": 1773695991051,
+      "tag": "0188_numerous_yellow_claw",
+      "breakpoints": true
     }
   ]
 }

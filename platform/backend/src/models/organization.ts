@@ -124,6 +124,8 @@ class OrganizationModel {
         footerText: schema.organizationsTable.footerText,
         helpCenterUrl: schema.organizationsTable.helpCenterUrl,
         helpCenterLabel: schema.organizationsTable.helpCenterLabel,
+        chatErrorSupportMessage:
+          schema.organizationsTable.chatErrorSupportMessage,
         animateChatPlaceholders:
           schema.organizationsTable.animateChatPlaceholders,
       })
@@ -144,6 +146,7 @@ class OrganizationModel {
         footerText: null,
         helpCenterUrl: null,
         helpCenterLabel: null,
+        chatErrorSupportMessage: null,
         animateChatPlaceholders: true,
       };
     }

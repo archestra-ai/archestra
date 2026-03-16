@@ -68,7 +68,11 @@ import {
   parseMaxInputTokens,
   trimMessagesToTokenLimit,
 } from "./context-trimming";
-import { mapProviderError, ProviderError } from "./errors";
+import {
+  getActiveTraceContext,
+  mapProviderError,
+  ProviderError,
+} from "./errors";
 import {
   stripImagesFromMessages,
   type UiMessage,
@@ -379,13 +383,15 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 });
 
                 const mapped = mapProviderError(error, provider);
+                const traceCtx = getActiveTraceContext();
                 try {
-                  return JSON.stringify(mapped);
+                  return JSON.stringify({ ...mapped, ...traceCtx });
                 } catch {
                   return JSON.stringify({
                     code: mapped.code,
                     message: mapped.message,
                     isRetryable: mapped.isRetryable,
+                    ...traceCtx,
                   });
                 }
               },
@@ -522,6 +528,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                         error instanceof ProviderError
                           ? error.chatErrorResponse
                           : mapProviderError(error, provider);
+                      const traceCtx = getActiveTraceContext();
 
                       logger.info(
                         {
@@ -535,7 +542,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
                       // mapProviderError safely serializes raw errors, but add defensive try-catch
                       try {
-                        return JSON.stringify(mappedError);
+                        return JSON.stringify({ ...mappedError, ...traceCtx });
                       } catch (stringifyError) {
                         logger.error(
                           { stringifyError, errorCode: mappedError.code },
@@ -546,6 +553,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                           code: mappedError.code,
                           message: mappedError.message,
                           isRetryable: mappedError.isRetryable,
+                          ...traceCtx,
                         });
                       }
                     },

@@ -329,6 +329,7 @@ export function useUpdateAppearanceSettings(
         ogDescription: updatedOrganization.ogDescription,
         footerText: updatedOrganization.footerText,
         helpCenterUrl: updatedOrganization.helpCenterUrl,
+        helpCenterLabel: updatedOrganization.helpCenterLabel,
         animateChatPlaceholders: updatedOrganization.animateChatPlaceholders,
       });
       toast.success(onSuccessMessage);

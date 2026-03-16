@@ -68,6 +68,7 @@ export default function OrganizationSettingsPage() {
   const [ogDescription, setOgDescription] = useState<string | null>(null);
   const [footerText, setFooterText] = useState<string | null>(null);
   const [helpCenterUrl, setHelpCenterUrl] = useState<string | null>(null);
+  const [helpCenterLabel, setHelpCenterLabel] = useState<string | null>(null);
   const [chatPlaceholders, setChatPlaceholders] = useState<string[] | null>(
     null,
   );
@@ -83,6 +84,8 @@ export default function OrganizationSettingsPage() {
   const effectiveFooterText = footerText ?? organization?.footerText ?? "";
   const effectiveHelpCenterUrl =
     helpCenterUrl ?? organization?.helpCenterUrl ?? "";
+  const effectiveHelpCenterLabel =
+    helpCenterLabel ?? organization?.helpCenterLabel ?? "";
   const effectiveChatPlaceholders =
     chatPlaceholders ?? organization?.chatPlaceholders ?? [];
   const effectiveAnimateChatPlaceholders =
@@ -101,6 +104,7 @@ export default function OrganizationSettingsPage() {
     ogDescription !== null ||
     footerText !== null ||
     helpCenterUrl !== null ||
+    helpCenterLabel !== null ||
     chatPlaceholders !== null ||
     animateChatPlaceholders !== null ||
     showTwoFactor !== null;
@@ -112,6 +116,9 @@ export default function OrganizationSettingsPage() {
     if (footerText !== null) data.footerText = footerText || null;
     if (helpCenterUrl !== null) {
       data.helpCenterUrl = helpCenterUrl.trim() || null;
+    }
+    if (helpCenterLabel !== null) {
+      data.helpCenterLabel = helpCenterLabel.trim() || null;
     }
     if (chatPlaceholders !== null)
       data.chatPlaceholders =
@@ -131,6 +138,7 @@ export default function OrganizationSettingsPage() {
     setOgDescription(null);
     setFooterText(null);
     setHelpCenterUrl(null);
+    setHelpCenterLabel(null);
     setChatPlaceholders(null);
     setAnimateChatPlaceholders(null);
     setShowTwoFactor(null);
@@ -218,27 +226,42 @@ export default function OrganizationSettingsPage() {
                   Custom text shown in the footer alongside the version number.
                 </p>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="helpCenterUrl">Help Center URL</Label>
-                <Input
-                  id="helpCenterUrl"
-                  type="url"
-                  placeholder="https://support.example.com/help"
-                  value={effectiveHelpCenterUrl}
-                  onChange={(e) => setHelpCenterUrl(e.target.value)}
-                  maxLength={2000}
-                  aria-invalid={!!helpCenterUrlError}
-                />
-                <p
-                  className={
-                    helpCenterUrlError
-                      ? "text-xs text-destructive"
-                      : "text-xs text-muted-foreground"
-                  }
-                >
-                  {helpCenterUrlError ??
-                    "Optional external link shown on the new chat page for help or documentation."}
-                </p>
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="helpCenterUrl">Help Center URL</Label>
+                  <Input
+                    id="helpCenterUrl"
+                    type="url"
+                    placeholder="https://support.example.com/help"
+                    value={effectiveHelpCenterUrl}
+                    onChange={(e) => setHelpCenterUrl(e.target.value)}
+                    maxLength={2000}
+                    aria-invalid={!!helpCenterUrlError}
+                  />
+                  <p
+                    className={
+                      helpCenterUrlError
+                        ? "text-xs text-destructive"
+                        : "text-xs text-muted-foreground"
+                    }
+                  >
+                    {helpCenterUrlError ??
+                      "Optional external link shown on the new chat page for help or documentation."}
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="helpCenterLabel">Help Center Label</Label>
+                  <Input
+                    id="helpCenterLabel"
+                    placeholder="Help Center"
+                    value={effectiveHelpCenterLabel}
+                    onChange={(e) => setHelpCenterLabel(e.target.value)}
+                    maxLength={80}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Optional button text. Defaults to &quot;Help Center&quot;.
+                  </p>
+                </div>
               </div>
               <div className="flex items-start justify-between gap-4">
                 <div className="space-y-2">
@@ -313,6 +336,7 @@ export default function OrganizationSettingsPage() {
           setOgDescription(null);
           setFooterText(null);
           setHelpCenterUrl(null);
+          setHelpCenterLabel(null);
           setChatPlaceholders(null);
           setAnimateChatPlaceholders(null);
           setShowTwoFactor(null);

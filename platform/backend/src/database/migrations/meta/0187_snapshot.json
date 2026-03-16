@@ -1,5 +1,5 @@
 {
-  "id": "3426c9f2-6f4f-4049-b9c4-7557b6ecd86f",
+  "id": "b2e82fdc-604c-4ef8-a75c-9dba6f557d67",
   "prevId": "ccb27671-6310-4be9-bb0d-a8c3e03484d6",
   "version": "7",
   "dialect": "postgresql",
@@ -6078,6 +6078,12 @@
         },
         "help_center_url": {
           "name": "help_center_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "help_center_label": {
+          "name": "help_center_label",
           "type": "text",
           "primaryKey": false,
           "notNull": false

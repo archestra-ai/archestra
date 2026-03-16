@@ -110,6 +110,9 @@ const organizationsTable = pgTable("organization", {
   /** Optional help/documentation URL shown on the new chat page */
   helpCenterUrl: text("help_center_url"),
 
+  /** Optional custom label for the new chat help/documentation link */
+  helpCenterLabel: text("help_center_label"),
+
   /** Chat input placeholder texts (cycles with typing animation) */
   chatPlaceholders: text("chat_placeholders").array(),
 

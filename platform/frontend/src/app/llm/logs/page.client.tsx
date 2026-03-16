@@ -79,6 +79,69 @@ type SessionData =
   archestraApiTypes.GetInteractionSessionsResponses["200"]["data"][number];
 type UniqueUser = archestraApiTypes.GetUniqueUserIdsResponses["200"][number];
 
+const MOCK_KNOWLEDGE_SOURCE_SESSIONS: SessionData[] = [
+  {
+    sessionId: "00000000-0000-0000-0000-000000000001",
+    sessionSource: "mock_preview",
+    source: "knowledge:embedding",
+    interactionId: null,
+    requestCount: 1,
+    totalInputTokens: 1280,
+    totalOutputTokens: 148,
+    totalCost: "0.0012",
+    totalBaselineCost: "0.0012",
+    totalToonCostSavings: "0",
+    toonSkipReasonCounts: {
+      applied: 0,
+      notEnabled: 1,
+      notEffective: 0,
+      noToolResults: 0,
+    },
+    firstRequestTime: "2026-03-16T15:31:09.000Z",
+    lastRequestTime: "2026-03-16T15:31:09.000Z",
+    models: ["text-embedding-3-large"],
+    profileId: null,
+    profileName: "Knowledge Base",
+    externalAgentIds: [],
+    externalAgentIdLabels: [],
+    userNames: ["Preview User"],
+    lastInteractionRequest: null,
+    lastInteractionType: null,
+    conversationTitle: null,
+    claudeCodeTitle: null,
+  },
+  {
+    sessionId: "00000000-0000-0000-0000-000000000002",
+    sessionSource: "mock_preview",
+    source: "knowledge:reranker",
+    interactionId: null,
+    requestCount: 1,
+    totalInputTokens: 864,
+    totalOutputTokens: 92,
+    totalCost: "0.0008",
+    totalBaselineCost: "0.0008",
+    totalToonCostSavings: "0",
+    toonSkipReasonCounts: {
+      applied: 0,
+      notEnabled: 1,
+      notEffective: 0,
+      noToolResults: 0,
+    },
+    firstRequestTime: "2026-03-16T15:30:58.000Z",
+    lastRequestTime: "2026-03-16T15:30:58.000Z",
+    models: ["rerank-v3.5"],
+    profileId: null,
+    profileName: "Knowledge Base",
+    externalAgentIds: [],
+    externalAgentIdLabels: [],
+    userNames: ["Preview User"],
+    lastInteractionRequest: null,
+    lastInteractionType: null,
+    conversationTitle: null,
+    claudeCodeTitle: null,
+  },
+];
+
 function getSessionDisplayData(session: SessionData) {
   const isSingleInteraction =
     session.sessionId === null && session.interactionId;
@@ -149,6 +212,8 @@ function SessionsTable({
   const profileIdFromUrl = searchParams.get("profileId");
   const userIdFromUrl = searchParams.get("userId");
   const sourceFromUrl = searchParams.get("source");
+  const shouldMockKnowledgeSources =
+    searchParams.get("mockKnowledgeSources") === "1";
   const startDateFromUrl = searchParams.get("startDate");
   const endDateFromUrl = searchParams.get("endDate");
   const searchFromUrl = searchParams.get("search");
@@ -231,7 +296,22 @@ function SessionsTable({
 
   const { data: uniqueUsers } = useUniqueUserIds();
 
-  const sessions = sessionsResponse?.data ?? [];
+  const sessions = useMemo(() => {
+    const sourceMatchesMock =
+      sourceFilter === "all" ||
+      sourceFilter === "knowledge:embedding" ||
+      sourceFilter === "knowledge:reranker";
+
+    if (!shouldMockKnowledgeSources || !sourceMatchesMock) {
+      return sessionsResponse?.data ?? [];
+    }
+
+    const filteredMocks = MOCK_KNOWLEDGE_SOURCE_SESSIONS.filter((session) =>
+      sourceFilter === "all" ? true : session.source === sourceFilter,
+    );
+
+    return [...filteredMocks, ...(sessionsResponse?.data ?? [])];
+  }, [sessionsResponse?.data, shouldMockKnowledgeSources, sourceFilter]);
   const paginationMeta = sessionsResponse?.pagination;
   const hasFilters =
     profileFilter !== "all" ||
@@ -382,7 +462,12 @@ function SessionsTable({
       {
         id: "source",
         header: "Source",
-        cell: ({ row }) => <SourceBadge source={row.original.source} />,
+        cell: ({ row }) => (
+          <SourceBadge
+            source={row.original.source}
+            className="max-w-[12.5rem]"
+          />
+        ),
       },
       {
         id: "time",
@@ -545,6 +630,10 @@ function SessionsTable({
         filteredEmptyMessage="No LLM logs match your filters. Try adjusting your search."
         onClearFilters={clearFilters}
         onRowClick={(session) => {
+          if (session.sessionSource === "mock_preview") {
+            return;
+          }
+
           const { isSingleInteraction } = getSessionDisplayData(session);
           if (isSingleInteraction) {
             router.push(`/llm/logs/${session.interactionId}`);

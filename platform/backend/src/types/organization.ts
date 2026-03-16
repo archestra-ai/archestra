@@ -85,6 +85,7 @@ export const AppearanceSettingsSchema = z.object({
   ogDescription: z.string().nullable(),
   footerText: z.string().nullable(),
   helpCenterUrl: z.string().nullable(),
+  helpCenterLabel: z.string().nullable(),
   animateChatPlaceholders: z.boolean(),
 });
 
@@ -116,6 +117,7 @@ const extendedFields = {
   ogDescription: z.string().nullable(),
   footerText: z.string().nullable(),
   helpCenterUrl: z.string().nullable(),
+  helpCenterLabel: z.string().nullable(),
   chatPlaceholders: z.array(z.string()).nullable(),
   animateChatPlaceholders: z.boolean(),
   showTwoFactor: z.boolean(),
@@ -140,6 +142,7 @@ export const UpdateAppearanceSettingsSchema = z.object({
   ogDescription: z.string().max(500).nullable().optional(),
   footerText: z.string().max(500).nullable().optional(),
   helpCenterUrl: HelpCenterUrlSchema.nullable().optional(),
+  helpCenterLabel: z.string().max(80).nullable().optional(),
   chatPlaceholders: z.array(z.string().max(80)).max(20).nullable().optional(),
   animateChatPlaceholders: z.boolean().optional(),
   showTwoFactor: z.boolean().optional(),

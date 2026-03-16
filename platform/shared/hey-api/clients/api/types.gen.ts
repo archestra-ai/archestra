@@ -34248,6 +34248,7 @@ export type GetOrganizationResponses = {
         ogDescription: string | null;
         footerText: string | null;
         helpCenterUrl: string | null;
+        helpCenterLabel: string | null;
         chatPlaceholders: Array<string> | null;
         animateChatPlaceholders: boolean;
         iconLogo: string | null;
@@ -34338,6 +34339,7 @@ export type GetAppearanceSettingsResponses = {
         ogDescription: string | null;
         footerText: string | null;
         helpCenterUrl: string | null;
+        helpCenterLabel: string | null;
         animateChatPlaceholders: boolean;
     };
 };
@@ -34356,6 +34358,7 @@ export type UpdateAppearanceSettingsData = {
         ogDescription?: string | null;
         footerText?: string | null;
         helpCenterUrl?: string | null;
+        helpCenterLabel?: string | null;
         chatPlaceholders?: Array<string> | null;
         animateChatPlaceholders?: boolean;
         showTwoFactor?: boolean;
@@ -34458,6 +34461,7 @@ export type UpdateAppearanceSettingsResponses = {
         ogDescription: string | null;
         footerText: string | null;
         helpCenterUrl: string | null;
+        helpCenterLabel: string | null;
         chatPlaceholders: Array<string> | null;
         animateChatPlaceholders: boolean;
         iconLogo: string | null;
@@ -34570,6 +34574,7 @@ export type UpdateSecuritySettingsResponses = {
         ogDescription: string | null;
         footerText: string | null;
         helpCenterUrl: string | null;
+        helpCenterLabel: string | null;
         chatPlaceholders: Array<string> | null;
         animateChatPlaceholders: boolean;
         iconLogo: string | null;
@@ -34683,6 +34688,7 @@ export type UpdateLlmSettingsResponses = {
         ogDescription: string | null;
         footerText: string | null;
         helpCenterUrl: string | null;
+        helpCenterLabel: string | null;
         chatPlaceholders: Array<string> | null;
         animateChatPlaceholders: boolean;
         iconLogo: string | null;
@@ -34797,6 +34803,7 @@ export type UpdateAgentSettingsResponses = {
         ogDescription: string | null;
         footerText: string | null;
         helpCenterUrl: string | null;
+        helpCenterLabel: string | null;
         chatPlaceholders: Array<string> | null;
         animateChatPlaceholders: boolean;
         iconLogo: string | null;
@@ -34912,6 +34919,7 @@ export type UpdateKnowledgeSettingsResponses = {
         ogDescription: string | null;
         footerText: string | null;
         helpCenterUrl: string | null;
+        helpCenterLabel: string | null;
         chatPlaceholders: Array<string> | null;
         animateChatPlaceholders: boolean;
         iconLogo: string | null;
@@ -35021,6 +35029,7 @@ export type DropEmbeddingConfigResponses = {
         ogDescription: string | null;
         footerText: string | null;
         helpCenterUrl: string | null;
+        helpCenterLabel: string | null;
         chatPlaceholders: Array<string> | null;
         animateChatPlaceholders: boolean;
         iconLogo: string | null;
@@ -35213,6 +35222,7 @@ export type CompleteOnboardingResponses = {
         ogDescription: string | null;
         footerText: string | null;
         helpCenterUrl: string | null;
+        helpCenterLabel: string | null;
         chatPlaceholders: Array<string> | null;
         animateChatPlaceholders: boolean;
         iconLogo: string | null;

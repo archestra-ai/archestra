@@ -17,4 +17,17 @@ describe("ChatHelpLink", () => {
     expect(link).toHaveAttribute("target", "_blank");
     expect(link).toHaveAttribute("rel", "noopener noreferrer");
   });
+
+  it("renders a custom label when provided", () => {
+    render(
+      <ChatHelpLink
+        url="https://support.example.com/help"
+        label="Docs & Support"
+      />,
+    );
+
+    expect(
+      screen.getByRole("link", { name: /Docs & Support/i }),
+    ).toBeInTheDocument();
+  });
 });

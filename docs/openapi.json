@@ -121004,6 +121004,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "helpCenterLabel": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "chatPlaceholders": {
                       "nullable": true,
                       "type": "array",
@@ -121052,6 +121056,7 @@
                     "ogDescription",
                     "footerText",
                     "helpCenterUrl",
+                    "helpCenterLabel",
                     "chatPlaceholders",
                     "animateChatPlaceholders",
                     "iconLogo",
@@ -121364,6 +121369,11 @@
                     "type": "string",
                     "maxLength": 2000
                   },
+                  "helpCenterLabel": {
+                    "nullable": true,
+                    "type": "string",
+                    "maxLength": 80
+                  },
                   "chatPlaceholders": {
                     "nullable": true,
                     "maxItems": 20,
@@ -121555,6 +121565,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "helpCenterLabel": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "chatPlaceholders": {
                       "nullable": true,
                       "type": "array",
@@ -121603,6 +121617,7 @@
                     "ogDescription",
                     "footerText",
                     "helpCenterUrl",
+                    "helpCenterLabel",
                     "chatPlaceholders",
                     "animateChatPlaceholders",
                     "iconLogo",
@@ -121911,6 +121926,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "helpCenterLabel": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "animateChatPlaceholders": {
                       "type": "boolean"
                     }
@@ -121926,6 +121945,7 @@
                     "ogDescription",
                     "footerText",
                     "helpCenterUrl",
+                    "helpCenterLabel",
                     "animateChatPlaceholders"
                   ],
                   "additionalProperties": false
@@ -122345,6 +122365,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "helpCenterLabel": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "chatPlaceholders": {
                       "nullable": true,
                       "type": "array",
@@ -122393,6 +122417,7 @@
                     "ogDescription",
                     "footerText",
                     "helpCenterUrl",
+                    "helpCenterLabel",
                     "chatPlaceholders",
                     "animateChatPlaceholders",
                     "iconLogo",
@@ -122826,6 +122851,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "helpCenterLabel": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "chatPlaceholders": {
                       "nullable": true,
                       "type": "array",
@@ -122874,6 +122903,7 @@
                     "ogDescription",
                     "footerText",
                     "helpCenterUrl",
+                    "helpCenterLabel",
                     "chatPlaceholders",
                     "animateChatPlaceholders",
                     "iconLogo",
@@ -123306,6 +123336,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "helpCenterLabel": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "chatPlaceholders": {
                       "nullable": true,
                       "type": "array",
@@ -123354,6 +123388,7 @@
                     "ogDescription",
                     "footerText",
                     "helpCenterUrl",
+                    "helpCenterLabel",
                     "chatPlaceholders",
                     "animateChatPlaceholders",
                     "iconLogo",
@@ -123802,6 +123837,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "helpCenterLabel": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "chatPlaceholders": {
                       "nullable": true,
                       "type": "array",
@@ -123850,6 +123889,7 @@
                     "ogDescription",
                     "footerText",
                     "helpCenterUrl",
+                    "helpCenterLabel",
                     "chatPlaceholders",
                     "animateChatPlaceholders",
                     "iconLogo",
@@ -124251,6 +124291,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "helpCenterLabel": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "chatPlaceholders": {
                       "nullable": true,
                       "type": "array",
@@ -124299,6 +124343,7 @@
                     "ogDescription",
                     "footerText",
                     "helpCenterUrl",
+                    "helpCenterLabel",
                     "chatPlaceholders",
                     "animateChatPlaceholders",
                     "iconLogo",
@@ -124989,6 +125034,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "helpCenterLabel": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "chatPlaceholders": {
                       "nullable": true,
                       "type": "array",
@@ -125037,6 +125086,7 @@
                     "ogDescription",
                     "footerText",
                     "helpCenterUrl",
+                    "helpCenterLabel",
                     "chatPlaceholders",
                     "animateChatPlaceholders",
                     "iconLogo",

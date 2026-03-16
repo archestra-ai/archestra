@@ -123,6 +123,7 @@ class OrganizationModel {
         ogDescription: schema.organizationsTable.ogDescription,
         footerText: schema.organizationsTable.footerText,
         helpCenterUrl: schema.organizationsTable.helpCenterUrl,
+        helpCenterLabel: schema.organizationsTable.helpCenterLabel,
         animateChatPlaceholders:
           schema.organizationsTable.animateChatPlaceholders,
       })
@@ -142,6 +143,7 @@ class OrganizationModel {
         ogDescription: null,
         footerText: null,
         helpCenterUrl: null,
+        helpCenterLabel: null,
         animateChatPlaceholders: true,
       };
     }

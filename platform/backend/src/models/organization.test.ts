@@ -26,6 +26,7 @@ describe("OrganizationModel", () => {
         ogDescription: null,
         footerText: null,
         helpCenterUrl: null,
+        helpCenterLabel: null,
         animateChatPlaceholders: true,
       });
     });
@@ -48,6 +49,7 @@ describe("OrganizationModel", () => {
         ogDescription: null,
         footerText: null,
         helpCenterUrl: null,
+        helpCenterLabel: null,
         animateChatPlaceholders: true,
       });
     });
@@ -143,6 +145,7 @@ describe("OrganizationModel", () => {
         "customFont",
         "favicon",
         "footerText",
+        "helpCenterLabel",
         "helpCenterUrl",
         "iconLogo",
         "logo",
@@ -302,6 +305,16 @@ describe("OrganizationModel", () => {
       });
 
       expect(updated?.helpCenterUrl).toBe("https://support.example.com/help");
+    });
+
+    test("should update helpCenterLabel", async ({ makeOrganization }) => {
+      const org = await makeOrganization();
+
+      const updated = await OrganizationModel.patch(org.id, {
+        helpCenterLabel: "Docs & Support",
+      });
+
+      expect(updated?.helpCenterLabel).toBe("Docs & Support");
     });
 
     test("should set default LLM model and provider", async ({
@@ -540,6 +553,31 @@ describe("OrganizationModel", () => {
           "valid HTTP or HTTPS URL",
         );
       }
+    });
+  });
+
+  describe("helpCenterLabel validation (via UpdateAppearanceSettingsSchema)", () => {
+    const parseHelpCenterLabelField = (helpCenterLabel: string | null) =>
+      UpdateAppearanceSettingsSchema.shape.helpCenterLabel.safeParse(
+        helpCenterLabel,
+      );
+
+    test("should accept null", () => {
+      const result = parseHelpCenterLabelField(null);
+
+      expect(result.success).toBe(true);
+    });
+
+    test("should accept a custom label", () => {
+      const result = parseHelpCenterLabelField("Docs & Support");
+
+      expect(result.success).toBe(true);
+    });
+
+    test("should reject labels longer than 80 characters", () => {
+      const result = parseHelpCenterLabelField("A".repeat(81));
+
+      expect(result.success).toBe(false);
     });
   });
 

@@ -93,10 +93,7 @@ class KbChunkModel {
       sql`, `,
     );
 
-    const orQuery = queryText
-      .split(/\s+/)
-      .filter(Boolean)
-      .join(" OR ");
+    const orQuery = queryText.split(/\s+/).filter(Boolean).join(" OR ");
 
     const rows = await db.execute(sql`
       SELECT

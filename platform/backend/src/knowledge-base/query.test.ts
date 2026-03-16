@@ -44,7 +44,6 @@ vi.mock("@/config", async (importOriginal) => {
       ...original.default,
       kb: {
         hybridSearchEnabled: true,
-        queryExpansionEnabled: true,
       },
     },
   };

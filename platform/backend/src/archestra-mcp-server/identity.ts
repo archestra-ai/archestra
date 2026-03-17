@@ -4,7 +4,11 @@ import {
   MCP_SERVER_TOOL_NAME_SEPARATOR,
 } from "@shared";
 import logger from "@/logging";
-import { successResult } from "./helpers";
+import {
+  createToolDefinition,
+  EmptyToolArgsSchema,
+  successResult,
+} from "./helpers";
 import type { ArchestraContext } from "./types";
 
 const TOOL_WHOAMI_NAME = "whoami";
@@ -12,19 +16,17 @@ const TOOL_WHOAMI_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAM
 
 export const toolShortNames = ["whoami"] as const;
 
+export const toolArgsSchemas = {
+  [TOOL_WHOAMI_FULL_NAME]: EmptyToolArgsSchema,
+} as const;
+
 export const tools: Tool[] = [
-  {
+  createToolDefinition({
     name: TOOL_WHOAMI_FULL_NAME,
     title: "Who Am I",
-    description: "Returns the name and ID of the current agent",
-    inputSchema: {
-      type: "object",
-      properties: {},
-      required: [],
-    },
-    annotations: {},
-    _meta: {},
-  },
+    description: "Returns the name and ID of the current agent.",
+    schema: toolArgsSchemas[TOOL_WHOAMI_FULL_NAME],
+  }),
 ];
 
 export async function handleTool(

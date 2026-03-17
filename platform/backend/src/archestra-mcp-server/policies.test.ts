@@ -93,8 +93,9 @@ describe("policy tool execution", () => {
     );
     expect(result.isError).toBe(true);
     expect((result.content[0] as any).text).toContain(
-      "id parameter is required",
+      "Validation error in archestra__get_tool_invocation_policy",
     );
+    expect((result.content[0] as any).text).toContain("id:");
   });
 
   test("update_tool_invocation_policy returns error when id is missing", async () => {
@@ -105,8 +106,9 @@ describe("policy tool execution", () => {
     );
     expect(result.isError).toBe(true);
     expect((result.content[0] as any).text).toContain(
-      "id parameter is required",
+      "Validation error in archestra__update_tool_invocation_policy",
     );
+    expect((result.content[0] as any).text).toContain("id:");
   });
 
   test("delete_tool_invocation_policy returns error when id is missing", async () => {
@@ -117,8 +119,9 @@ describe("policy tool execution", () => {
     );
     expect(result.isError).toBe(true);
     expect((result.content[0] as any).text).toContain(
-      "id parameter is required",
+      "Validation error in archestra__delete_tool_invocation_policy",
     );
+    expect((result.content[0] as any).text).toContain("id:");
   });
 
   test("create and get tool invocation policy", async ({ makeTool }) => {
@@ -167,8 +170,9 @@ describe("policy tool execution", () => {
     );
     expect(result.isError).toBe(true);
     expect((result.content[0] as any).text).toContain(
-      "id parameter is required",
+      "Validation error in archestra__get_trusted_data_policy",
     );
+    expect((result.content[0] as any).text).toContain("id:");
   });
 
   test("delete_trusted_data_policy returns error when id is missing", async () => {
@@ -179,8 +183,9 @@ describe("policy tool execution", () => {
     );
     expect(result.isError).toBe(true);
     expect((result.content[0] as any).text).toContain(
-      "id parameter is required",
+      "Validation error in archestra__delete_trusted_data_policy",
     );
+    expect((result.content[0] as any).text).toContain("id:");
   });
 
   test("create and get trusted data policy", async ({ makeTool }) => {

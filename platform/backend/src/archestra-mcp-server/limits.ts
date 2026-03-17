@@ -3,10 +3,22 @@ import {
   ARCHESTRA_MCP_SERVER_NAME,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
 } from "@shared";
+import { z } from "zod";
 import logger from "@/logging";
 import { LimitModel } from "@/models";
-import { type LimitEntityType, type LimitType, LimitTypeSchema } from "@/types";
-import { catchError, errorResult, successResult } from "./helpers";
+import {
+  type LimitEntityType,
+  LimitEntityTypeSchema,
+  type LimitType,
+  LimitTypeSchema,
+  UuidIdSchema,
+} from "@/types";
+import {
+  catchError,
+  createToolDefinition,
+  errorResult,
+  successResult,
+} from "./helpers";
 import type { ArchestraContext } from "./types";
 
 // === Constants ===
@@ -34,158 +46,150 @@ export const toolShortNames = [
   "get_llm_proxy_token_usage",
 ] as const;
 
+const CreateLimitToolArgsSchema = z
+  .object({
+    entity_type: LimitEntityTypeSchema.describe(
+      "The type of entity to apply the limit to.",
+    ),
+    entity_id: UuidIdSchema.describe(
+      "The ID of the entity (organization, team, or agent).",
+    ),
+    limit_type: LimitTypeSchema.describe("The type of limit to apply."),
+    limit_value: z
+      .number()
+      .describe("The limit value (tokens or count depending on limit type)."),
+    model: z
+      .array(z.string())
+      .optional()
+      .describe("Array of model names. Required for token_cost limits."),
+    mcp_server_name: z
+      .string()
+      .optional()
+      .describe(
+        "MCP server name. Required for mcp_server_calls and tool_calls limits.",
+      ),
+    tool_name: z
+      .string()
+      .optional()
+      .describe("Tool name. Required for tool_calls limits."),
+  })
+  .strict()
+  .superRefine((args, ctx) => {
+    if (
+      args.limit_type === "token_cost" &&
+      (!args.model || !Array.isArray(args.model) || args.model.length === 0)
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["model"],
+        message:
+          "model array with at least one model is required for token_cost limits.",
+      });
+    }
+
+    if (args.limit_type === "mcp_server_calls" && !args.mcp_server_name) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["mcp_server_name"],
+        message: "mcp_server_name is required for mcp_server_calls limits.",
+      });
+    }
+
+    if (
+      args.limit_type === "tool_calls" &&
+      (!args.mcp_server_name || !args.tool_name)
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["tool_name"],
+        message:
+          "mcp_server_name and tool_name are required for tool_calls limits.",
+      });
+    }
+  });
+
+export const toolArgsSchemas = {
+  [TOOL_CREATE_LIMIT_FULL_NAME]: CreateLimitToolArgsSchema,
+  [TOOL_GET_LIMITS_FULL_NAME]: z
+    .object({
+      entity_type: LimitEntityTypeSchema.optional().describe(
+        "Optional filter by entity type.",
+      ),
+      entity_id: UuidIdSchema.optional().describe(
+        "Optional filter by entity ID.",
+      ),
+    })
+    .strict(),
+  [TOOL_UPDATE_LIMIT_FULL_NAME]: z
+    .object({
+      id: UuidIdSchema.describe("The ID of the limit to update."),
+      limit_value: z.number().optional().describe("The new limit value."),
+    })
+    .strict(),
+  [TOOL_DELETE_LIMIT_FULL_NAME]: z
+    .object({
+      id: UuidIdSchema.describe("The ID of the limit to delete."),
+    })
+    .strict(),
+  [TOOL_GET_AGENT_TOKEN_USAGE_FULL_NAME]: z
+    .object({
+      id: UuidIdSchema.optional().describe(
+        "Optional agent ID. Defaults to the current agent.",
+      ),
+    })
+    .strict(),
+  [TOOL_GET_LLM_PROXY_TOKEN_USAGE_FULL_NAME]: z
+    .object({
+      id: UuidIdSchema.optional().describe(
+        "Optional LLM proxy ID. Defaults to the current agent.",
+      ),
+    })
+    .strict(),
+} as const;
+
 // === Exports ===
 
 export const tools: Tool[] = [
-  {
+  createToolDefinition({
     name: TOOL_CREATE_LIMIT_FULL_NAME,
     title: "Create Limit",
     description:
       "Create a new cost or usage limit for an organization, team, agent, LLM proxy, or MCP gateway. Supports token_cost, mcp_server_calls, and tool_calls limit types.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        entity_type: {
-          type: "string",
-          enum: ["organization", "team", "agent", "llm_proxy", "mcp_gateway"],
-          description: "The type of entity to apply the limit to",
-        },
-        entity_id: {
-          type: "string",
-          description:
-            "The ID of the entity (organization, team, agent, LLM proxy, or MCP gateway)",
-        },
-        limit_type: {
-          type: "string",
-          enum: LimitTypeSchema.options,
-          description: "The type of limit to apply",
-        },
-        limit_value: {
-          type: "number",
-          description:
-            "The limit value (tokens or count depending on limit type)",
-        },
-        model: {
-          type: "array",
-          items: {
-            type: "string",
-          },
-          description: "Array of model names (required for token_cost limits)",
-        },
-        mcp_server_name: {
-          type: "string",
-          description:
-            "MCP server name (required for mcp_server_calls and tool_calls limits)",
-        },
-        tool_name: {
-          type: "string",
-          description: "Tool name (required for tool_calls limits)",
-        },
-      },
-      required: ["entity_type", "entity_id", "limit_type", "limit_value"],
-    },
-    annotations: {},
-    _meta: {},
-  },
-  {
+    schema: toolArgsSchemas[TOOL_CREATE_LIMIT_FULL_NAME],
+  }),
+  createToolDefinition({
     name: TOOL_GET_LIMITS_FULL_NAME,
     title: "Get Limits",
     description:
       "Retrieve all limits, optionally filtered by entity type and/or entity ID.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        entity_type: {
-          type: "string",
-          enum: ["organization", "team", "agent", "llm_proxy", "mcp_gateway"],
-          description: "Optional filter by entity type",
-        },
-        entity_id: {
-          type: "string",
-          description: "Optional filter by entity ID",
-        },
-      },
-      required: [],
-    },
-    annotations: {},
-    _meta: {},
-  },
-  {
+    schema: toolArgsSchemas[TOOL_GET_LIMITS_FULL_NAME],
+  }),
+  createToolDefinition({
     name: TOOL_UPDATE_LIMIT_FULL_NAME,
     title: "Update Limit",
     description: "Update an existing limit's value.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        id: {
-          type: "string",
-          description: "The ID of the limit to update",
-        },
-        limit_value: {
-          type: "number",
-          description: "The new limit value",
-        },
-      },
-      required: ["id", "limit_value"],
-    },
-    annotations: {},
-    _meta: {},
-  },
-  {
+    schema: toolArgsSchemas[TOOL_UPDATE_LIMIT_FULL_NAME],
+  }),
+  createToolDefinition({
     name: TOOL_DELETE_LIMIT_FULL_NAME,
     title: "Delete Limit",
     description: "Delete an existing limit by ID.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        id: {
-          type: "string",
-          description: "The ID of the limit to delete",
-        },
-      },
-      required: ["id"],
-    },
-    annotations: {},
-    _meta: {},
-  },
-  {
+    schema: toolArgsSchemas[TOOL_DELETE_LIMIT_FULL_NAME],
+  }),
+  createToolDefinition({
     name: TOOL_GET_AGENT_TOKEN_USAGE_FULL_NAME,
     title: "Get Agent Token Usage",
     description:
       "Get the total token usage (input and output) for a specific agent. If no id is provided, returns usage for the current agent.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        id: {
-          type: "string",
-          description:
-            "The ID of the agent to get usage for (optional, defaults to current agent)",
-        },
-      },
-      required: [],
-    },
-    annotations: {},
-    _meta: {},
-  },
-  {
+    schema: toolArgsSchemas[TOOL_GET_AGENT_TOKEN_USAGE_FULL_NAME],
+  }),
+  createToolDefinition({
     name: TOOL_GET_LLM_PROXY_TOKEN_USAGE_FULL_NAME,
     title: "Get LLM Proxy Token Usage",
     description:
       "Get the total token usage (input and output) for a specific LLM proxy. If no id is provided, returns usage for the current agent.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        id: {
-          type: "string",
-          description:
-            "The ID of the LLM proxy to get usage for (optional, defaults to current agent)",
-        },
-      },
-      required: [],
-    },
-    annotations: {},
-    _meta: {},
-  },
+    schema: toolArgsSchemas[TOOL_GET_LLM_PROXY_TOKEN_USAGE_FULL_NAME],
+  }),
 ];
 
 export async function handleTool(

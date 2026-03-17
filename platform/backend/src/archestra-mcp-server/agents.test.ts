@@ -115,11 +115,14 @@ describe("agent tool execution", () => {
       .find((line) => line.startsWith("ID: "))
       ?.replace("ID: ", "");
     expect(createdAgentId).toBeDefined();
+    if (!createdAgentId) {
+      throw new Error("Expected created agent id in tool output");
+    }
 
     const createdAssignments = await db
       .select()
       .from(schema.agentToolsTable)
-      .where(eq(schema.agentToolsTable.agentId, createdAgentId!));
+      .where(eq(schema.agentToolsTable.agentId, createdAgentId));
     expect(createdAssignments).toEqual([]);
   });
 
@@ -156,13 +159,16 @@ describe("agent tool execution", () => {
       .find((line) => line.startsWith("ID: "))
       ?.replace("ID: ", "");
     expect(createdAgentId).toBeDefined();
+    if (!createdAgentId) {
+      throw new Error("Expected created agent id in tool output");
+    }
 
     const [assignment] = await db
       .select()
       .from(schema.agentToolsTable)
       .where(
         and(
-          eq(schema.agentToolsTable.agentId, createdAgentId!),
+          eq(schema.agentToolsTable.agentId, createdAgentId),
           eq(schema.agentToolsTable.toolId, tool.id),
         ),
       );

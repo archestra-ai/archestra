@@ -6,6 +6,7 @@ import {
   TOOL_SWAP_TO_DEFAULT_AGENT_FULL_NAME,
   TOOL_TODO_WRITE_FULL_NAME,
 } from "@shared";
+import { z } from "zod";
 import { userHasPermission } from "@/auth/utils";
 import logger from "@/logging";
 import {
@@ -14,7 +15,13 @@ import {
   ConversationModel,
   OrganizationModel,
 } from "@/models";
-import { catchError, errorResult, successResult } from "./helpers";
+import {
+  catchError,
+  createToolDefinition,
+  EmptyToolArgsSchema,
+  errorResult,
+  successResult,
+} from "./helpers";
 import type { ArchestraContext } from "./types";
 
 // === Constants ===
@@ -29,98 +36,81 @@ export const toolShortNames = [
   "artifact_write",
 ] as const;
 
+const TodoItemSchema = z
+  .object({
+    id: z.number().int().describe("Unique identifier for the todo item."),
+    content: z
+      .string()
+      .describe("The content or description of the todo item."),
+    status: z
+      .enum(["pending", "in_progress", "completed"])
+      .describe("The current status of the todo item."),
+  })
+  .strict();
+
+export const toolArgsSchemas = {
+  [TOOL_TODO_WRITE_FULL_NAME]: z
+    .object({
+      todos: z
+        .array(TodoItemSchema)
+        .describe("Array of todo items to write to the conversation."),
+    })
+    .strict(),
+  [TOOL_SWAP_AGENT_FULL_NAME]: z
+    .object({
+      agent_name: z
+        .string()
+        .trim()
+        .min(1)
+        .describe("The name of the agent to switch to."),
+    })
+    .strict(),
+  [TOOL_SWAP_TO_DEFAULT_AGENT_FULL_NAME]: EmptyToolArgsSchema,
+  [TOOL_ARTIFACT_WRITE_FULL_NAME]: z
+    .object({
+      content: z
+        .string()
+        .min(1)
+        .describe(
+          "The markdown content to write to the conversation artifact. This completely replaces any existing artifact content.",
+        ),
+    })
+    .strict(),
+} as const;
+
 // === Exports ===
 
 export const tools: Tool[] = [
-  {
+  createToolDefinition({
     name: TOOL_TODO_WRITE_FULL_NAME,
     title: "Write Todos",
     description:
       "Write todos to the current conversation. You have access to this tool to help you manage and plan tasks. Use it VERY frequently to ensure that you are tracking your tasks and giving the user visibility into your progress. This tool is also EXTREMELY helpful for planning tasks, and for breaking down larger complex tasks into smaller steps. If you do not use this tool when planning, you may forget to do important tasks - and that is unacceptable. It is critical that you mark todos as completed as soon as you are done with a task. Do not batch up multiple tasks before marking them as completed.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        todos: {
-          type: "array",
-          description: "Array of todo items to write to the conversation",
-          items: {
-            type: "object",
-            properties: {
-              id: {
-                type: "integer",
-                description: "Unique identifier for the todo item",
-              },
-              content: {
-                type: "string",
-                description: "The content/description of the todo item",
-              },
-              status: {
-                type: "string",
-                enum: ["pending", "in_progress", "completed"],
-                description: "The current status of the todo item",
-              },
-            },
-            required: ["id", "content", "status"],
-          },
-        },
-      },
-      required: ["todos"],
-    },
-    annotations: {},
-    _meta: {},
-  },
-  {
+    schema: toolArgsSchemas[TOOL_TODO_WRITE_FULL_NAME],
+  }),
+  createToolDefinition({
     name: TOOL_SWAP_AGENT_FULL_NAME,
     title: "Swap Agent",
     description:
       "Switch the current conversation to a different agent. The new agent will automatically continue the conversation. Use this when the user asks to switch to or talk to a different agent.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        agent_name: {
-          type: "string",
-          description: "The name of the agent to switch to.",
-        },
-      },
-      required: ["agent_name"],
-    },
-    annotations: {},
-    _meta: {},
-  },
-  {
+    schema: toolArgsSchemas[TOOL_SWAP_AGENT_FULL_NAME],
+  }),
+  createToolDefinition({
     name: TOOL_SWAP_TO_DEFAULT_AGENT_FULL_NAME,
     title: "Swap to Default Agent",
     description:
       "Return to the default agent. You MUST call this — without asking the user — when you don't have the right tools to fulfill a request, when you are stuck and cannot help further, when you are done with your task, or when the user wants to go back. Always write a brief message before calling this tool summarizing why you are switching back (e.g. what you accomplished, what tool is missing, or why you cannot continue).",
-    inputSchema: {
-      type: "object",
-      properties: {},
-      required: [],
-    },
-    annotations: {},
-    _meta: {},
-  },
-  {
+    schema: toolArgsSchemas[TOOL_SWAP_TO_DEFAULT_AGENT_FULL_NAME],
+  }),
+  createToolDefinition({
     name: TOOL_ARTIFACT_WRITE_FULL_NAME,
     title: "Write Artifact",
     description:
       "Write or update a markdown artifact for the current conversation. Use this tool to maintain a persistent document that evolves throughout the conversation. The artifact should contain well-structured markdown content that can be referenced and updated as the conversation progresses. Each call to this tool completely replaces the existing artifact content. " +
       "Mermaid diagrams: Use ```mermaid blocks. " +
       "Supports: Headers, emphasis, lists, links, images, code blocks, tables, blockquotes, task lists, mermaid diagrams.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        content: {
-          type: "string",
-          description:
-            "The markdown content to write to the conversation artifact. This will completely replace any existing artifact content.",
-        },
-      },
-      required: ["content"],
-    },
-    annotations: {},
-    _meta: {},
-  },
+    schema: toolArgsSchemas[TOOL_ARTIFACT_WRITE_FULL_NAME],
+  }),
 ];
 
 export async function handleTool(

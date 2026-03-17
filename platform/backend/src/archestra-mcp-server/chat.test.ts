@@ -28,7 +28,7 @@ describe("chat tools", () => {
     const tool = tools.find((t) => t.name.endsWith("swap_to_default_agent"));
     expect(tool).toBeDefined();
     expect(tool?.title).toBe("Swap to Default Agent");
-    expect(tool?.inputSchema.required).toEqual([]);
+    expect(tool?.inputSchema.properties).toEqual({});
   });
 
   test("should have artifact_write tool", () => {
@@ -71,8 +71,9 @@ describe("chat tool execution", () => {
     );
     expect(result.isError).toBe(true);
     expect((result.content[0] as any).text).toContain(
-      "todos parameter is required",
+      "Validation error in archestra__todo_write",
     );
+    expect((result.content[0] as any).text).toContain("todos:");
   });
 
   test("todo_write succeeds with valid todos", async () => {
@@ -100,8 +101,9 @@ describe("chat tool execution", () => {
     );
     expect(result.isError).toBe(true);
     expect((result.content[0] as any).text).toContain(
-      "agent_name parameter is required",
+      "Validation error in archestra__swap_agent",
     );
+    expect((result.content[0] as any).text).toContain("agent_name:");
   });
 
   test("swap_agent returns error when conversation context is missing", async () => {
@@ -124,8 +126,9 @@ describe("chat tool execution", () => {
     );
     expect(result.isError).toBe(true);
     expect((result.content[0] as any).text).toContain(
-      "content parameter is required",
+      "Validation error in archestra__artifact_write",
     );
+    expect((result.content[0] as any).text).toContain("content:");
   });
 
   test("artifact_write returns error when conversation context is missing", async () => {

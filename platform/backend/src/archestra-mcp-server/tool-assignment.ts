@@ -35,20 +35,60 @@ export const toolShortNames = [
 ] as const;
 
 const AgentAssignmentSchema = AgentToolAssignmentInputSchema.extend({
-  agentId: UuidIdSchema,
-});
+  toolId: AgentToolAssignmentInputSchema.shape.toolId.describe(
+    "The ID of the tool to assign.",
+  ),
+  credentialSourceMcpServerId:
+    AgentToolAssignmentInputSchema.shape.credentialSourceMcpServerId.describe(
+      "For remote MCP tools, the deployed MCP server ID that should provide credentials.",
+    ),
+  executionSourceMcpServerId:
+    AgentToolAssignmentInputSchema.shape.executionSourceMcpServerId.describe(
+      "For local MCP tools, the deployed MCP server ID that should execute the tool.",
+    ),
+  useDynamicTeamCredential:
+    AgentToolAssignmentInputSchema.shape.useDynamicTeamCredential.describe(
+      "When true, resolve credentials dynamically from the invoking team instead of pinning a deployment.",
+    ),
+  agentId: UuidIdSchema.describe("The agent ID to assign the tool to."),
+}).strict();
 
 const McpGatewayAssignmentSchema = AgentToolAssignmentInputSchema.extend({
-  mcpGatewayId: UuidIdSchema,
-});
+  toolId: AgentToolAssignmentInputSchema.shape.toolId.describe(
+    "The ID of the tool to assign.",
+  ),
+  credentialSourceMcpServerId:
+    AgentToolAssignmentInputSchema.shape.credentialSourceMcpServerId.describe(
+      "For remote MCP tools, the deployed MCP server ID that should provide credentials.",
+    ),
+  executionSourceMcpServerId:
+    AgentToolAssignmentInputSchema.shape.executionSourceMcpServerId.describe(
+      "For local MCP tools, the deployed MCP server ID that should execute the tool.",
+    ),
+  useDynamicTeamCredential:
+    AgentToolAssignmentInputSchema.shape.useDynamicTeamCredential.describe(
+      "When true, resolve credentials dynamically from the invoking team instead of pinning a deployment.",
+    ),
+  mcpGatewayId: UuidIdSchema.describe(
+    "The MCP gateway ID to assign the tool to.",
+  ),
+}).strict();
 
 export const toolArgsSchemas = {
-  [TOOL_BULK_ASSIGN_TOOLS_TO_AGENTS_FULL_NAME]: z.object({
-    assignments: z.array(AgentAssignmentSchema),
-  }),
-  [TOOL_BULK_ASSIGN_TOOLS_TO_MCP_GATEWAYS_FULL_NAME]: z.object({
-    assignments: z.array(McpGatewayAssignmentSchema),
-  }),
+  [TOOL_BULK_ASSIGN_TOOLS_TO_AGENTS_FULL_NAME]: z
+    .object({
+      assignments: z
+        .array(AgentAssignmentSchema)
+        .describe("Assignments to create or update for agents."),
+    })
+    .strict(),
+  [TOOL_BULK_ASSIGN_TOOLS_TO_MCP_GATEWAYS_FULL_NAME]: z
+    .object({
+      assignments: z
+        .array(McpGatewayAssignmentSchema)
+        .describe("Assignments to create or update for MCP gateways."),
+    })
+    .strict(),
 } as const;
 
 // === Exports ===
@@ -106,6 +146,7 @@ export async function handleTool(
     if (!context.userId || !context.organizationId) {
       return errorResult("user/organization context not available.");
     }
+    const { organizationId, userId } = context;
 
     // biome-ignore lint/suspicious/noExplicitAny: dynamic property access by idField
     const assignments = args?.assignments as Array<Record<string, any>>;
@@ -114,8 +155,8 @@ export async function handleTool(
     const [targetAgents, checker] = await Promise.all([
       AgentModel.findByIdsForPermissionCheck(uniqueTargetIds),
       getAgentTypePermissionChecker({
-        userId: context.userId,
-        organizationId: context.organizationId,
+        userId,
+        organizationId,
       }),
     ]);
 
@@ -126,7 +167,7 @@ export async function handleTool(
         if (target) {
           checker.require(target.agentType, "update");
           if (!checker.isAdmin(target.agentType) && userTeamIds === null) {
-            userTeamIds = await TeamModel.getUserTeamIds(context.userId);
+            userTeamIds = await TeamModel.getUserTeamIds(userId);
           }
           requireAgentModifyPermission({
             checker,
@@ -135,7 +176,7 @@ export async function handleTool(
             agentAuthorId: target.authorId,
             agentTeamIds: target.teamIds,
             userTeamIds: userTeamIds ?? [],
-            userId: context.userId,
+            userId,
           });
         }
 

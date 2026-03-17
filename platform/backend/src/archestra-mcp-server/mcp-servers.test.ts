@@ -74,8 +74,9 @@ describe("mcp server tool execution", () => {
     );
     expect(result.isError).toBe(true);
     expect((result.content[0] as any).text).toContain(
-      "mcpServerId parameter is required",
+      "Validation error in archestra__get_mcp_server_tools",
     );
+    expect((result.content[0] as any).text).toContain("mcpServerId:");
   });
 
   test("get_mcp_servers returns catalog items", async () => {
@@ -107,8 +108,9 @@ describe("mcp server tool execution", () => {
     );
     expect(result.isError).toBe(true);
     expect((result.content[0] as any).text).toContain(
-      "MCP server catalog id is required",
+      "Validation error in archestra__edit_mcp_description",
     );
+    expect((result.content[0] as any).text).toContain("id:");
   });
 
   test("edit_mcp_description returns error when user/org context is missing", async () => {
@@ -117,7 +119,7 @@ describe("mcp server tool execution", () => {
     };
     const result = await executeArchestraTool(
       `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}edit_mcp_description`,
-      { id: "some-id" },
+      { id: "00000000-0000-4000-8000-000000000001" },
       noAuthContext,
     );
     expect(result.isError).toBe(true);

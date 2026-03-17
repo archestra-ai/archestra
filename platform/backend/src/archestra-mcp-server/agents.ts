@@ -14,9 +14,9 @@ import logger from "@/logging";
 import { AgentModel, KnowledgeBaseModel, TeamModel } from "@/models";
 import type { Agent, AgentScope } from "@/types";
 import {
-  AgentToolAssignmentInputSchema,
   AgentLabelWithDetailsSchema,
   AgentScopeSchema,
+  AgentToolAssignmentInputSchema,
   InsertAgentSchemaBase,
   SuggestedPromptInputSchema,
   UpdateAgentSchemaBase,
@@ -24,8 +24,8 @@ import {
 } from "@/types";
 import {
   assignMcpServerTools,
-  assignToolAssignments,
   assignSubAgentDelegations,
+  assignToolAssignments,
   catchError,
   createToolDefinition,
   deduplicateLabels,
@@ -66,59 +66,182 @@ export const toolShortNames = [
   "edit_agent",
 ] as const;
 
-const BaseCreateAgentToolArgsSchema = InsertAgentSchemaBase.pick({
-  labels: true,
-  name: true,
-  scope: true,
-  teams: true,
-});
+const LabelInputSchema = AgentLabelWithDetailsSchema.pick({
+  key: true,
+  value: true,
+})
+  .strict()
+  .describe("Key-value labels for organization/categorization.");
 
-const AgentCreateToolArgsSchema = BaseCreateAgentToolArgsSchema.extend({
-  description: InsertAgentSchemaBase.shape.description.optional(),
-  icon: InsertAgentSchemaBase.shape.icon.optional(),
-  mcpServerIds: z.array(UuidIdSchema).optional(),
-  subAgentIds: z.array(UuidIdSchema).optional(),
-  suggestedPrompts: z.array(SuggestedPromptInputSchema).optional(),
-  systemPrompt: InsertAgentSchemaBase.shape.systemPrompt.optional(),
-  toolAssignments: z.array(AgentToolAssignmentInputSchema).optional(),
-});
+const SuggestedPromptToolInputSchema = SuggestedPromptInputSchema.extend({
+  summaryTitle: SuggestedPromptInputSchema.shape.summaryTitle.describe(
+    "Short title shown to users for this suggested prompt.",
+  ),
+  prompt: SuggestedPromptInputSchema.shape.prompt.describe(
+    "Suggested prompt text users can click to start a conversation.",
+  ),
+}).strict();
 
-const NonAgentCreateToolArgsSchema = BaseCreateAgentToolArgsSchema;
+const ToolAssignmentToolInputSchema = AgentToolAssignmentInputSchema.extend({
+  toolId: AgentToolAssignmentInputSchema.shape.toolId.describe(
+    "The ID of the tool to assign to the agent.",
+  ),
+  credentialSourceMcpServerId:
+    AgentToolAssignmentInputSchema.shape.credentialSourceMcpServerId.describe(
+      "For remote MCP tools, the deployed MCP server ID that should supply credentials.",
+    ),
+  executionSourceMcpServerId:
+    AgentToolAssignmentInputSchema.shape.executionSourceMcpServerId.describe(
+      "For local MCP tools, the deployed MCP server ID that should execute the tool.",
+    ),
+  useDynamicTeamCredential:
+    AgentToolAssignmentInputSchema.shape.useDynamicTeamCredential.describe(
+      "When true, resolve credentials dynamically from the invoking team instead of pinning a deployment.",
+    ),
+}).strict();
+
+const CreateBaseToolArgsSchema = z
+  .object({
+    name: InsertAgentSchemaBase.shape.name.describe(
+      "Name for the new resource.",
+    ),
+    scope: AgentScopeSchema.optional().describe(
+      "Visibility scope. Defaults to personal for agents and org for LLM proxies/MCP gateways unless teams are provided.",
+    ),
+    labels: z
+      .array(LabelInputSchema)
+      .optional()
+      .describe(
+        "Optional key-value labels for organization and categorization.",
+      ),
+    teams: z
+      .array(UuidIdSchema)
+      .optional()
+      .describe("Team IDs to attach when creating a team-scoped resource."),
+  })
+  .strict();
+
+const AgentCreateToolArgsSchema = CreateBaseToolArgsSchema.extend({
+  description: InsertAgentSchemaBase.shape.description
+    .optional()
+    .describe("Optional human-readable description of the agent."),
+  icon: InsertAgentSchemaBase.shape.icon
+    .optional()
+    .describe("Optional emoji icon for the agent."),
+  mcpServerIds: z
+    .array(UuidIdSchema)
+    .optional()
+    .describe(
+      "Catalog item IDs from get_mcp_servers whose tools should be assigned to the agent.",
+    ),
+  subAgentIds: z
+    .array(UuidIdSchema)
+    .optional()
+    .describe("Agent IDs to delegate to from this newly created agent."),
+  suggestedPrompts: z
+    .array(SuggestedPromptToolInputSchema)
+    .optional()
+    .describe("Optional suggested prompts that appear in the chat UI."),
+  systemPrompt: InsertAgentSchemaBase.shape.systemPrompt
+    .optional()
+    .describe("The system prompt that defines the agent's behavior."),
+  toolAssignments: z
+    .array(ToolAssignmentToolInputSchema)
+    .optional()
+    .describe(
+      "Explicit tool assignments to create immediately after the agent is created.",
+    ),
+}).strict();
+
+const NonAgentCreateToolArgsSchema = CreateBaseToolArgsSchema;
 
 const GetAgentToolArgsSchema = z
   .object({
-    id: UuidIdSchema.optional(),
-    name: z.string().trim().min(1).optional(),
+    id: UuidIdSchema.optional().describe(
+      "The ID of the agent, LLM proxy, or MCP gateway to fetch.",
+    ),
+    name: z
+      .string()
+      .trim()
+      .min(1)
+      .optional()
+      .describe("The name of the resource to fetch."),
   })
+  .strict()
   .refine((data) => data.id || data.name, {
     message: "either id or name parameter is required",
   });
 
-const ListAgentsToolArgsSchema = z.object({
-  limit: z.number().int().positive().max(100).optional(),
-  name: z.string().trim().min(1).optional(),
-  scope: AgentScopeSchema.optional(),
-});
+const ListAgentsToolArgsSchema = z
+  .object({
+    limit: z
+      .number()
+      .int()
+      .positive()
+      .max(100)
+      .optional()
+      .describe("Maximum number of agents to return."),
+    name: z.string().trim().min(1).optional().describe("Optional name filter."),
+    scope: AgentScopeSchema.optional().describe(
+      "Optional scope filter: personal, team, or org.",
+    ),
+  })
+  .strict();
 
 const EditAgentToolArgsSchema = z
   .object({
-    id: UuidIdSchema,
-    mcpServerIds: z.array(UuidIdSchema).optional(),
-    subAgentIds: z.array(UuidIdSchema).optional(),
-    toolAssignments: z.array(AgentToolAssignmentInputSchema).optional(),
+    id: UuidIdSchema.describe(
+      "The ID of the agent to edit. Use get_agent or list_agents to look it up by name.",
+    ),
+    mcpServerIds: z
+      .array(UuidIdSchema)
+      .optional()
+      .describe(
+        "Catalog item IDs from get_mcp_servers whose tools should be added to the agent.",
+      ),
+    subAgentIds: z
+      .array(UuidIdSchema)
+      .optional()
+      .describe("Agent IDs to add as delegation targets."),
+    toolAssignments: z
+      .array(ToolAssignmentToolInputSchema)
+      .optional()
+      .describe("Explicit tool assignments to add or update on the agent."),
   })
   .merge(
-    UpdateAgentSchemaBase.pick({
-      description: true,
-      icon: true,
-      labels: true,
-      name: true,
-      scope: true,
-      suggestedPrompts: true,
-      systemPrompt: true,
-      teams: true,
-    }).partial(),
-  );
+    z
+      .object({
+        description: UpdateAgentSchemaBase.shape.description
+          .optional()
+          .describe("New description for the agent."),
+        icon: UpdateAgentSchemaBase.shape.icon
+          .optional()
+          .describe("New emoji icon for the agent."),
+        labels: z
+          .array(LabelInputSchema)
+          .optional()
+          .describe("Replace the agent's labels with this set."),
+        name: UpdateAgentSchemaBase.shape.name
+          .optional()
+          .describe("New name for the agent."),
+        scope: AgentScopeSchema.optional().describe(
+          "Updated visibility scope for the agent.",
+        ),
+        suggestedPrompts: z
+          .array(SuggestedPromptToolInputSchema)
+          .optional()
+          .describe("Replace the agent's suggested prompts."),
+        systemPrompt: UpdateAgentSchemaBase.shape.systemPrompt
+          .optional()
+          .describe("New system prompt for the agent."),
+        teams: z
+          .array(UuidIdSchema)
+          .optional()
+          .describe("Replace the teams attached to a team-scoped agent."),
+      })
+      .strict(),
+  )
+  .strict();
 
 export const toolArgsSchemas = {
   [TOOL_CREATE_AGENT_FULL_NAME]: AgentCreateToolArgsSchema,
@@ -274,14 +397,15 @@ export async function handleTool(
       // Assign MCP server tools and sub-agents (agent-only)
       const mcpServerIds = (args?.mcpServerIds as string[]) ?? [];
       const subAgentIds = (args?.subAgentIds as string[]) ?? [];
-      const toolAssignments = (args?.toolAssignments as
-        | Array<{
-            toolId: string;
-            credentialSourceMcpServerId?: string | null;
-            executionSourceMcpServerId?: string | null;
-            useDynamicTeamCredential?: boolean;
-          }>
-        | undefined) ?? [];
+      const toolAssignments =
+        (args?.toolAssignments as
+          | Array<{
+              toolId: string;
+              credentialSourceMcpServerId?: string | null;
+              executionSourceMcpServerId?: string | null;
+              useDynamicTeamCredential?: boolean;
+            }>
+          | undefined) ?? [];
       const mcpServerResults =
         targetAgentType === "agent" && mcpServerIds.length > 0
           ? await assignMcpServerTools(created.id, mcpServerIds)
@@ -550,14 +674,15 @@ export async function handleTool(
       // Assign MCP server tools and sub-agents (additive)
       const mcpServerIds = (args?.mcpServerIds as string[]) ?? [];
       const subAgentIds = (args?.subAgentIds as string[]) ?? [];
-      const toolAssignments = (args?.toolAssignments as
-        | Array<{
-            toolId: string;
-            credentialSourceMcpServerId?: string | null;
-            executionSourceMcpServerId?: string | null;
-            useDynamicTeamCredential?: boolean;
-          }>
-        | undefined) ?? [];
+      const toolAssignments =
+        (args?.toolAssignments as
+          | Array<{
+              toolId: string;
+              credentialSourceMcpServerId?: string | null;
+              executionSourceMcpServerId?: string | null;
+              useDynamicTeamCredential?: boolean;
+            }>
+          | undefined) ?? [];
       const mcpServerResults =
         mcpServerIds.length > 0
           ? await assignMcpServerTools(id, mcpServerIds)

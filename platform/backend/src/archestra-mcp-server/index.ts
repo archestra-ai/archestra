@@ -1,6 +1,10 @@
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import { AGENT_TOOL_PREFIX } from "@shared";
-import type { ZodType } from "zod";
+import {
+  AGENT_TOOL_PREFIX,
+  type ARCHESTRA_MCP_SERVER_NAME,
+  type MCP_SERVER_TOOL_NAME_SEPARATOR,
+} from "@shared";
+import { ZodError, type ZodType } from "zod";
 // Import all groups
 import {
   toolArgsSchemas as agentToolArgsSchemas,
@@ -9,33 +13,40 @@ import {
   handleTool as handleAgents,
 } from "./agents";
 import {
+  toolArgsSchemas as chatToolArgsSchemas,
   toolShortNames as chatToolNames,
   tools as chatTools,
   handleTool as handleChat,
 } from "./chat";
 import { delegationToolArgsSchema, handleDelegation } from "./delegation";
+import { errorResult, formatZodError } from "./helpers";
 import {
   handleTool as handleIdentity,
+  toolArgsSchemas as identityToolArgsSchemas,
   toolShortNames as identityToolNames,
   tools as identityTools,
 } from "./identity";
 import {
   handleTool as handleKnowledgeManagement,
+  toolArgsSchemas as knowledgeManagementToolArgsSchemas,
   toolShortNames as knowledgeManagementToolNames,
   tools as knowledgeManagementTools,
 } from "./knowledge-management";
 import {
   handleTool as handleLimits,
+  toolArgsSchemas as limitToolArgsSchemas,
   toolShortNames as limitToolNames,
   tools as limitTools,
 } from "./limits";
 import {
   handleTool as handleMcpServers,
+  toolArgsSchemas as mcpServerToolArgsSchemas,
   toolShortNames as mcpServerToolNames,
   tools as mcpServerTools,
 } from "./mcp-servers";
 import {
   handleTool as handlePolicies,
+  toolArgsSchemas as policyToolArgsSchemas,
   toolShortNames as policyToolNames,
   tools as policyTools,
 } from "./policies";
@@ -46,7 +57,6 @@ import {
   toolShortNames as toolAssignmentToolNames,
   tools as toolAssignmentTools,
 } from "./tool-assignment";
-import { errorResult } from "./helpers";
 import type { ArchestraContext } from "./types";
 
 export { getAgentTools } from "./delegation";
@@ -65,6 +75,8 @@ export const ALL_TOOL_SHORT_NAMES = [
 ] as const;
 
 export type ArchestraToolShortName = (typeof ALL_TOOL_SHORT_NAMES)[number];
+export type ArchestraToolFullName =
+  `${typeof ARCHESTRA_MCP_SERVER_NAME}${typeof MCP_SERVER_TOOL_NAME_SEPARATOR}${ArchestraToolShortName}`;
 
 const handlers = [
   handleIdentity,
@@ -77,9 +89,15 @@ const handlers = [
   handleChat,
 ];
 
-const toolArgsSchemas: Record<string, ZodType> = {
+const toolArgsSchemas: Partial<Record<ArchestraToolFullName, ZodType>> = {
+  ...identityToolArgsSchemas,
   ...agentToolArgsSchemas,
+  ...mcpServerToolArgsSchemas,
+  ...limitToolArgsSchemas,
+  ...policyToolArgsSchemas,
   ...toolAssignmentArgsSchemas,
+  ...knowledgeManagementToolArgsSchemas,
+  ...chatToolArgsSchemas,
 };
 
 export function getArchestraMcpTools() {
@@ -118,7 +136,7 @@ export async function executeArchestraTool(
   const rbacDenied = await checkToolPermission(toolName, context);
   if (rbacDenied) return rbacDenied;
 
-  const schema = toolArgsSchemas[toolName];
+  const schema = toolArgsSchemas[toolName as ArchestraToolFullName];
   if (schema) {
     const parsedArgs = validateToolArgs(schema, args, toolName);
     if ("error" in parsedArgs) {
@@ -127,10 +145,18 @@ export async function executeArchestraTool(
     args = parsedArgs.value;
   }
 
-  // Try each group handler
-  for (const handler of handlers) {
-    const result = await handler(toolName, args, context);
-    if (result !== null) return result;
+  try {
+    for (const handler of handlers) {
+      const result = await handler(toolName, args, context);
+      if (result !== null) return result;
+    }
+  } catch (error) {
+    if (error instanceof ZodError) {
+      return errorResult(
+        `Validation error in ${toolName}: ${formatZodError(error)}`,
+      );
+    }
+    throw error;
   }
 
   // If no handler matched
@@ -153,9 +179,7 @@ function validateToolArgs(
 
   return {
     error: errorResult(
-      `Validation error in ${toolName}: ${parsed.error.issues
-        .map((issue) => issue.message)
-        .join("; ")}`,
+      `Validation error in ${toolName}: ${formatZodError(parsed.error)}`,
     ),
   };
 }

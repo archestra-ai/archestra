@@ -105,8 +105,9 @@ describe("knowledge-management tool execution", () => {
       );
       expect(result.isError).toBe(true);
       expect((result.content[0] as any).text).toContain(
-        "query parameter is required",
+        "Validation error in archestra__query_knowledge_sources",
       );
+      expect((result.content[0] as any).text).toContain("query:");
     });
 
     test("returns error when no knowledge base assigned", async () => {
@@ -321,7 +322,10 @@ describe("knowledge-management tool execution", () => {
         mockContext,
       );
       expect(result.isError).toBe(true);
-      expect((result.content[0] as any).text).toContain("name is required");
+      expect((result.content[0] as any).text).toContain(
+        "Validation error in archestra__create_knowledge_base",
+      );
+      expect((result.content[0] as any).text).toContain("name:");
     });
 
     test("create_knowledge_base succeeds", async () => {
@@ -356,13 +360,16 @@ describe("knowledge-management tool execution", () => {
         mockContext,
       );
       expect(result.isError).toBe(true);
-      expect((result.content[0] as any).text).toContain("id is required");
+      expect((result.content[0] as any).text).toContain(
+        "Validation error in archestra__get_knowledge_base",
+      );
+      expect((result.content[0] as any).text).toContain("id:");
     });
 
     test("get_knowledge_base returns error for nonexistent id", async () => {
       const result = await executeArchestraTool(
         t("get_knowledge_base"),
-        { id: "00000000-0000-0000-0000-000000000000" },
+        { id: "00000000-0000-4000-8000-000000000001" },
         mockContext,
       );
       expect(result.isError).toBe(true);
@@ -372,7 +379,7 @@ describe("knowledge-management tool execution", () => {
     test("update_knowledge_base returns error when no fields provided", async () => {
       const result = await executeArchestraTool(
         t("update_knowledge_base"),
-        { id: "some-id" },
+        { id: "00000000-0000-4000-8000-000000000002" },
         mockContext,
       );
       expect(result.isError).toBe(true);
@@ -451,8 +458,10 @@ describe("knowledge-management tool execution", () => {
       );
       expect(result.isError).toBe(true);
       expect((result.content[0] as any).text).toContain(
-        "name, connector_type, and config are required",
+        "Validation error in archestra__create_knowledge_connector",
       );
+      expect((result.content[0] as any).text).toContain("connector_type:");
+      expect((result.content[0] as any).text).toContain("config:");
     });
 
     test("create_knowledge_connector succeeds", async () => {
@@ -494,13 +503,16 @@ describe("knowledge-management tool execution", () => {
         mockContext,
       );
       expect(result.isError).toBe(true);
-      expect((result.content[0] as any).text).toContain("id is required");
+      expect((result.content[0] as any).text).toContain(
+        "Validation error in archestra__get_knowledge_connector",
+      );
+      expect((result.content[0] as any).text).toContain("id:");
     });
 
     test("get_knowledge_connector returns error for nonexistent id", async () => {
       const result = await executeArchestraTool(
         t("get_knowledge_connector"),
-        { id: "00000000-0000-0000-0000-000000000000" },
+        { id: "00000000-0000-4000-8000-000000000003" },
         mockContext,
       );
       expect(result.isError).toBe(true);
@@ -510,7 +522,7 @@ describe("knowledge-management tool execution", () => {
     test("update_knowledge_connector returns error when no fields", async () => {
       const result = await executeArchestraTool(
         t("update_knowledge_connector"),
-        { id: "some-id" },
+        { id: "00000000-0000-4000-8000-000000000004" },
         mockContext,
       );
       expect(result.isError).toBe(true);
@@ -627,8 +639,9 @@ describe("knowledge-management tool execution", () => {
       );
       expect(result.isError).toBe(true);
       expect((result.content[0] as any).text).toContain(
-        "connector_id and knowledge_base_id are required",
+        "Validation error in archestra__assign_knowledge_connector_to_knowledge_base",
       );
+      expect((result.content[0] as any).text).toContain("knowledge_base_id:");
     });
 
     test("unassign succeeds", async () => {
@@ -704,8 +717,9 @@ describe("knowledge-management tool execution", () => {
       );
       expect(result.isError).toBe(true);
       expect((result.content[0] as any).text).toContain(
-        "knowledge_base_id and agent_id are required",
+        "Validation error in archestra__assign_knowledge_base_to_agent",
       );
+      expect((result.content[0] as any).text).toContain("agent_id:");
     });
 
     test("assign and unassign lifecycle", async () => {
@@ -761,8 +775,9 @@ describe("knowledge-management tool execution", () => {
       );
       expect(result.isError).toBe(true);
       expect((result.content[0] as any).text).toContain(
-        "connector_id and agent_id are required",
+        "Validation error in archestra__assign_knowledge_connector_to_agent",
       );
+      expect((result.content[0] as any).text).toContain("agent_id:");
     });
 
     test("assign and unassign lifecycle", async () => {

@@ -4,6 +4,7 @@ import {
   MCP_SERVER_TOOL_NAME_SEPARATOR,
   TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
 } from "@shared";
+import { z } from "zod";
 import { buildUserAcl, queryService } from "@/knowledge-base";
 import logger from "@/logging";
 import {
@@ -20,8 +21,15 @@ import {
   InsertKnowledgeBaseConnectorSchema,
   InsertKnowledgeBaseSchema,
   UpdateKnowledgeBaseConnectorSchema,
+  UpdateKnowledgeBaseSchema,
+  UuidIdSchema,
 } from "@/types";
-import { catchError, errorResult, successResult } from "./helpers";
+import {
+  catchError,
+  EmptyToolArgsSchema,
+  errorResult,
+  successResult,
+} from "./helpers";
 import type { ArchestraContext } from "./types";
 
 // === Constants ===
@@ -112,6 +120,137 @@ export const toolShortNames = [
   TOOL_ASSIGN_CONNECTOR_AGENT_NAME,
   TOOL_UNASSIGN_CONNECTOR_AGENT_NAME,
 ] as const;
+
+const KnowledgeBaseCreateToolArgsSchema = z
+  .object({
+    name: InsertKnowledgeBaseSchema.shape.name.describe(
+      "Name of the knowledge base.",
+    ),
+    description: InsertKnowledgeBaseSchema.shape.description
+      .optional()
+      .describe("Description of the knowledge base."),
+  })
+  .strict();
+
+const KnowledgeBaseUpdateToolArgsSchema = z
+  .object({
+    id: UuidIdSchema.describe("Knowledge base ID."),
+    name: UpdateKnowledgeBaseSchema.shape.name
+      .optional()
+      .describe("New knowledge base name."),
+    description: UpdateKnowledgeBaseSchema.shape.description
+      .optional()
+      .describe("New knowledge base description."),
+  })
+  .strict();
+
+const DynamicObjectSchema = z
+  .object({})
+  .catchall(z.unknown())
+  .describe("Provider-specific configuration object.");
+
+const ConnectorCreateToolArgsSchema = z
+  .object({
+    name: InsertKnowledgeBaseConnectorSchema.shape.name.describe(
+      "Name of the knowledge connector.",
+    ),
+    connector_type: z
+      .string()
+      .min(1)
+      .describe(
+        "Type of the knowledge connector (for example jira, confluence, or google_drive).",
+      ),
+    config: DynamicObjectSchema,
+    description: InsertKnowledgeBaseConnectorSchema.shape.description
+      .optional()
+      .describe("Description of the knowledge connector."),
+  })
+  .strict();
+
+const ConnectorUpdateToolArgsSchema = z
+  .object({
+    id: UuidIdSchema.describe("Knowledge connector ID."),
+    name: UpdateKnowledgeBaseConnectorSchema.shape.name
+      .optional()
+      .describe("New connector name."),
+    description: UpdateKnowledgeBaseConnectorSchema.shape.description
+      .optional()
+      .describe("New connector description."),
+    enabled: UpdateKnowledgeBaseConnectorSchema.shape.enabled
+      .optional()
+      .describe("Whether the connector is enabled."),
+    config: DynamicObjectSchema.optional().describe(
+      "Updated connector configuration (provider-specific settings).",
+    ),
+  })
+  .strict();
+
+const ConnectorKnowledgeBaseAssignmentSchema = z
+  .object({
+    connector_id: UuidIdSchema.describe("Knowledge connector ID."),
+    knowledge_base_id: UuidIdSchema.describe("Knowledge base ID."),
+  })
+  .strict();
+
+const KnowledgeBaseAgentAssignmentSchema = z
+  .object({
+    knowledge_base_id: UuidIdSchema.describe("Knowledge base ID."),
+    agent_id: UuidIdSchema.describe("Agent ID."),
+  })
+  .strict();
+
+const ConnectorAgentAssignmentSchema = z
+  .object({
+    connector_id: UuidIdSchema.describe("Knowledge connector ID."),
+    agent_id: UuidIdSchema.describe("Agent ID."),
+  })
+  .strict();
+
+export const toolArgsSchemas = {
+  [TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME]: z
+    .object({
+      query: z
+        .string()
+        .trim()
+        .min(1)
+        .describe(
+          "The user's original query, passed verbatim without rephrasing or expansion.",
+        ),
+    })
+    .strict(),
+  [TOOL_CREATE_KB_FULL]: KnowledgeBaseCreateToolArgsSchema,
+  [TOOL_GET_KBS_FULL]: EmptyToolArgsSchema,
+  [TOOL_GET_KB_FULL]: z
+    .object({
+      id: UuidIdSchema.describe("Knowledge base ID."),
+    })
+    .strict(),
+  [TOOL_UPDATE_KB_FULL]: KnowledgeBaseUpdateToolArgsSchema,
+  [TOOL_DELETE_KB_FULL]: z
+    .object({
+      id: UuidIdSchema.describe("Knowledge base ID."),
+    })
+    .strict(),
+  [TOOL_CREATE_CONNECTOR_FULL]: ConnectorCreateToolArgsSchema,
+  [TOOL_GET_CONNECTORS_FULL]: EmptyToolArgsSchema,
+  [TOOL_GET_CONNECTOR_FULL]: z
+    .object({
+      id: UuidIdSchema.describe("Knowledge connector ID."),
+    })
+    .strict(),
+  [TOOL_UPDATE_CONNECTOR_FULL]: ConnectorUpdateToolArgsSchema,
+  [TOOL_DELETE_CONNECTOR_FULL]: z
+    .object({
+      id: UuidIdSchema.describe("Knowledge connector ID."),
+    })
+    .strict(),
+  [TOOL_ASSIGN_CONNECTOR_KB_FULL]: ConnectorKnowledgeBaseAssignmentSchema,
+  [TOOL_UNASSIGN_CONNECTOR_KB_FULL]: ConnectorKnowledgeBaseAssignmentSchema,
+  [TOOL_ASSIGN_KB_AGENT_FULL]: KnowledgeBaseAgentAssignmentSchema,
+  [TOOL_UNASSIGN_KB_AGENT_FULL]: KnowledgeBaseAgentAssignmentSchema,
+  [TOOL_ASSIGN_CONNECTOR_AGENT_FULL]: ConnectorAgentAssignmentSchema,
+  [TOOL_UNASSIGN_CONNECTOR_AGENT_FULL]: ConnectorAgentAssignmentSchema,
+} as const;
 
 export const tools: Tool[] = [
   // --- Query Knowledge Sources ---

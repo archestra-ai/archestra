@@ -4,6 +4,7 @@ import {
   MCP_SERVER_TOOL_NAME_SEPARATOR,
   TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_FULL_NAME,
 } from "@shared";
+import { z } from "zod";
 import { userHasPermission } from "@/auth/utils";
 import McpServerRuntimeManager from "@/k8s/mcp-server-runtime/manager";
 import logger from "@/logging";
@@ -18,10 +19,12 @@ import {
   InsertInternalMcpCatalogSchema,
   type InternalMcpCatalog,
   UpdateInternalMcpCatalogSchema,
+  UuidIdSchema,
 } from "@/types";
 import {
   catchError,
   deduplicateLabels,
+  EmptyToolArgsSchema,
   errorResult,
   successResult,
 } from "./helpers";
@@ -61,6 +64,258 @@ export const toolShortNames = [
   "get_mcp_server_logs",
   "create_mcp_server_installation_request",
 ] as const;
+
+const CatalogLabelSchema = z
+  .object({
+    key: z.string().min(1).describe("Label key."),
+    value: z.string().min(1).describe("Label value."),
+  })
+  .strict();
+
+const AuthFieldSchema = z
+  .object({
+    name: z.string().describe("Auth field name."),
+    label: z.string().describe("Human-readable auth field label."),
+    type: z
+      .enum(["header", "query", "cookie"])
+      .describe("Where to send this auth field."),
+    secret: z.boolean().describe("Whether this field contains secret data."),
+  })
+  .strict();
+
+const EnvVarSchema = z
+  .object({
+    key: z.string().describe("Environment variable name."),
+    type: z
+      .enum(["plain_text", "secret", "boolean", "number"])
+      .describe("Environment variable value type."),
+    value: z
+      .string()
+      .optional()
+      .describe("Literal environment variable value."),
+    promptOnInstallation: z
+      .boolean()
+      .describe("Whether to prompt for this value during installation."),
+    required: z.boolean().optional().describe("Whether the value is required."),
+    description: z.string().optional().describe("Description shown to users."),
+    default: z.unknown().optional().describe("Default value."),
+    mounted: z
+      .boolean()
+      .optional()
+      .describe("For secret values, mount as a file instead of an env var."),
+  })
+  .strict();
+
+const EnvFromSchema = z
+  .object({
+    type: z.enum(["secret", "configMap"]).describe("Import source type."),
+    name: z.string().describe("Secret or ConfigMap name."),
+    prefix: z
+      .string()
+      .optional()
+      .describe("Optional environment variable prefix."),
+  })
+  .strict();
+
+const ImagePullSecretSchema = z
+  .object({
+    source: z.enum(["existing"]).describe("Image pull secret source."),
+    name: z.string().describe("Existing Kubernetes secret name."),
+  })
+  .strict();
+
+const LooseObjectSchema = z
+  .object({})
+  .catchall(z.unknown())
+  .describe("Arbitrary JSON object.");
+
+const CatalogMetadataToolSchema = z
+  .object({
+    name: InsertInternalMcpCatalogSchema.shape.name.describe(
+      "Display name for the MCP server.",
+    ),
+    description: InsertInternalMcpCatalogSchema.shape.description
+      .optional()
+      .describe("Description of the MCP server."),
+    icon: InsertInternalMcpCatalogSchema.shape.icon
+      .optional()
+      .describe("Emoji icon for the MCP server."),
+    docsUrl: InsertInternalMcpCatalogSchema.shape.docsUrl
+      .optional()
+      .describe("Documentation URL."),
+    repository: InsertInternalMcpCatalogSchema.shape.repository
+      .optional()
+      .describe("Source code repository URL."),
+    version: InsertInternalMcpCatalogSchema.shape.version
+      .optional()
+      .describe("Version string."),
+    instructions: InsertInternalMcpCatalogSchema.shape.instructions
+      .optional()
+      .describe("Setup or usage instructions."),
+    scope: InsertInternalMcpCatalogSchema.shape.scope
+      .optional()
+      .describe("Visibility scope."),
+    labels: z
+      .array(CatalogLabelSchema)
+      .optional()
+      .describe("Key-value labels for organization/categorization."),
+    teams: z
+      .array(UuidIdSchema)
+      .optional()
+      .describe("Team IDs for team-scoped access control."),
+  })
+  .strict();
+
+const McpConfigToolSchema = z
+  .object({
+    serverType: InsertInternalMcpCatalogSchema.shape.serverType
+      .optional()
+      .describe("Server type: local, remote, or builtin."),
+    serverUrl: InsertInternalMcpCatalogSchema.shape.serverUrl
+      .optional()
+      .describe("[Remote] The URL of the remote MCP server."),
+    requiresAuth: InsertInternalMcpCatalogSchema.shape.requiresAuth
+      .optional()
+      .describe("[Remote] Whether the server requires authentication."),
+    authDescription: InsertInternalMcpCatalogSchema.shape.authDescription
+      .optional()
+      .describe("[Remote] How to set up authentication."),
+    authFields: z
+      .array(AuthFieldSchema)
+      .optional()
+      .describe("[Remote] Authentication field definitions."),
+    oauthConfig: LooseObjectSchema.optional().describe(
+      "[Remote] OAuth configuration for the server.",
+    ),
+    command: z
+      .string()
+      .optional()
+      .describe("[Local] Command to run (for example npx, uvx, or node)."),
+    arguments: z
+      .array(z.string())
+      .optional()
+      .describe("[Local] Command-line arguments."),
+    environment: z
+      .array(EnvVarSchema)
+      .optional()
+      .describe("[Local] Environment variables for the server process."),
+    envFrom: z
+      .array(EnvFromSchema)
+      .optional()
+      .describe(
+        "[Local] Import env vars from Kubernetes Secrets or ConfigMaps.",
+      ),
+    dockerImage: z.string().optional().describe("[Local] Custom Docker image."),
+    serviceAccount: z
+      .string()
+      .optional()
+      .describe("[Local] Kubernetes ServiceAccount name."),
+    transportType: z
+      .enum(["stdio", "streamable-http"])
+      .optional()
+      .describe("[Local] Transport type."),
+    httpPort: z
+      .number()
+      .optional()
+      .describe("[Local] HTTP port for streamable-http transport."),
+    httpPath: z
+      .string()
+      .optional()
+      .describe("[Local] HTTP path for streamable-http transport."),
+    nodePort: z
+      .number()
+      .optional()
+      .describe("[Local] Kubernetes NodePort for local development."),
+    imagePullSecrets: z
+      .array(ImagePullSecretSchema)
+      .optional()
+      .describe("[Local] Image pull secrets for private registries."),
+    deploymentSpecYaml: z
+      .string()
+      .optional()
+      .describe("[Local] Custom Kubernetes deployment YAML override."),
+    installationCommand: z
+      .string()
+      .optional()
+      .describe("[Local] Command to install the MCP server package."),
+    userConfig: LooseObjectSchema.optional().describe(
+      "User-configurable fields shown during installation.",
+    ),
+  })
+  .strict();
+
+export const toolArgsSchemas = {
+  [TOOL_SEARCH_PRIVATE_MCP_REGISTRY_FULL_NAME]: z
+    .object({
+      query: z
+        .string()
+        .trim()
+        .min(1)
+        .optional()
+        .describe(
+          "Optional search query to filter MCP servers by name or description.",
+        ),
+    })
+    .strict(),
+  [TOOL_GET_MCP_SERVERS_FULL_NAME]: EmptyToolArgsSchema,
+  [TOOL_GET_MCP_SERVER_TOOLS_FULL_NAME]: z
+    .object({
+      mcpServerId: UuidIdSchema.describe("The catalog ID of the MCP server."),
+    })
+    .strict(),
+  [TOOL_EDIT_MCP_DESCRIPTION_FULL_NAME]: z
+    .object({
+      id: UuidIdSchema.describe(
+        "The catalog ID of the MCP server to edit. Use get_mcp_servers to look it up by name.",
+      ),
+    })
+    .merge(CatalogMetadataToolSchema.partial())
+    .strict(),
+  [TOOL_EDIT_MCP_CONFIG_FULL_NAME]: z
+    .object({
+      id: UuidIdSchema.describe(
+        "The catalog ID of the MCP server to edit. Use get_mcp_servers to look it up by name.",
+      ),
+    })
+    .merge(McpConfigToolSchema.partial())
+    .strict(),
+  [TOOL_CREATE_MCP_SERVER_FULL_NAME]: CatalogMetadataToolSchema.extend({
+    serverType: InsertInternalMcpCatalogSchema.shape.serverType
+      .optional()
+      .describe("Server type: local, remote, or builtin."),
+  })
+    .merge(McpConfigToolSchema.partial())
+    .strict(),
+  [TOOL_DEPLOY_MCP_SERVER_FULL_NAME]: z
+    .object({
+      catalogId: UuidIdSchema.describe(
+        "The catalog ID of the MCP server to deploy.",
+      ),
+      teamId: UuidIdSchema.optional().describe(
+        "Optional team ID for a team-scoped deployment.",
+      ),
+      agentIds: z
+        .array(UuidIdSchema)
+        .optional()
+        .describe(
+          "Optional agent IDs to assign the server's tools to after deployment.",
+        ),
+    })
+    .strict(),
+  [TOOL_LIST_MCP_SERVER_DEPLOYMENTS_FULL_NAME]: EmptyToolArgsSchema,
+  [TOOL_GET_MCP_SERVER_LOGS_FULL_NAME]: z
+    .object({
+      serverId: UuidIdSchema.describe("The deployment ID of the MCP server."),
+      lines: z
+        .number()
+        .int()
+        .positive()
+        .optional()
+        .describe("Number of log lines to retrieve."),
+    })
+    .strict(),
+  [TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_FULL_NAME]: EmptyToolArgsSchema,
+} as const;
 
 // === Exports ===
 

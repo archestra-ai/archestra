@@ -24,7 +24,10 @@ describe("delegation tool execution", () => {
       mockContext,
     );
     expect(result.isError).toBe(true);
-    expect((result.content[0] as any).text).toContain("message is required");
+    expect((result.content[0] as any).text).toContain(
+      "Validation error in agent__some_agent",
+    );
+    expect((result.content[0] as any).text).toContain("message:");
   });
 
   test("returns error when agentId is missing from context", async () => {

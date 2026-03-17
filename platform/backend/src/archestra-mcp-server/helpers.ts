@@ -1,5 +1,5 @@
 import type { CallToolResult, Tool } from "@modelcontextprotocol/sdk/types.js";
-import { z, ZodError, type ZodType } from "zod";
+import { ZodError, type ZodType, z } from "zod";
 import logger from "@/logging";
 import { AgentModel, AgentToolModel, ToolModel } from "@/models";
 import { assignToolToAgent } from "@/routes/agent-tool";
@@ -46,6 +46,8 @@ export type ToolAssignmentResult = {
   status: string;
   error?: string;
 };
+
+export const EmptyToolArgsSchema = z.strictObject({});
 
 export async function assignMcpServerTools(
   agentId: string,
@@ -259,8 +261,9 @@ export function catchError(error: unknown, action: string): CallToolResult {
   logger.error({ err: error }, `Error ${action}`);
   // Zod validation errors are safe to surface — they describe user input issues.
   if (error instanceof ZodError) {
-    const issues = error.issues.map((i) => i.message).join("; ");
-    return errorResult(`Validation error while ${action}: ${issues}`);
+    return errorResult(
+      `Validation error while ${action}: ${formatZodError(error)}`,
+    );
   }
   // Unique constraint violations are user-actionable (e.g., duplicate name).
   if (isUniqueConstraintError(error)) {
@@ -274,8 +277,34 @@ export function catchError(error: unknown, action: string): CallToolResult {
 
 // === Internal helpers ===
 
+export function formatZodError(error: ZodError): string {
+  return error.issues.map(formatZodIssue).join("; ");
+}
+
 function isUniqueConstraintError(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
   // PostgreSQL unique_violation code
   return "code" in error && (error as { code: string }).code === "23505";
+}
+
+function formatZodIssue(issue: z.core.$ZodIssue): string {
+  const path = formatIssuePath(issue.path);
+  return path ? `${path}: ${issue.message}` : issue.message;
+}
+
+function formatIssuePath(path: PropertyKey[] | undefined): string {
+  if (!path || path.length === 0) {
+    return "";
+  }
+
+  return path
+    .map((segment, index) => {
+      if (typeof segment === "number") {
+        return `[${segment}]`;
+      }
+
+      const key = String(segment);
+      return index === 0 ? key : `.${key}`;
+    })
+    .join("");
 }

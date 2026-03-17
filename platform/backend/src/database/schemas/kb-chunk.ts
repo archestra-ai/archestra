@@ -46,6 +46,8 @@ const kbChunksTable = pgTable(
     embedding: vector1536("embedding"),
     embedding768: vector768("embedding_768"),
     searchVector: tsvector("search_vector"),
+    metadataSuffixSemantic: text("metadata_suffix_semantic"),
+    metadataSuffixKeyword: text("metadata_suffix_keyword"),
     acl: jsonb("acl").$type<string[]>().notNull().default([]),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   },

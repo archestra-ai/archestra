@@ -223,6 +223,10 @@ archestra:
       # If not set, defaults to the namespace specified in the helm release
       namespace: ""
 
+      # Kubernetes cluster DNS domain for internal service URL construction (streamable-http MCP servers)
+      # If not set, defaults to cluster.local
+      clusterDomain: ""
+
       # Kubeconfig configuration
       # Choose one of the following methods:
 

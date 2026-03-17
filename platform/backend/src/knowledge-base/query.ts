@@ -21,6 +21,7 @@ interface ChunkResult {
   content: string;
   score: number;
   chunkIndex: number;
+  metadata: Record<string, unknown> | null;
   citation: {
     title: string;
     sourceUrl: string | null;
@@ -223,6 +224,7 @@ class QueryService {
       content: row.content,
       score: row.score,
       chunkIndex: row.chunkIndex,
+      metadata: row.metadata,
       citation: {
         title: row.title,
         sourceUrl: row.sourceUrl,

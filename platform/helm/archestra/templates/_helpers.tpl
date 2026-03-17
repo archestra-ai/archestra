@@ -120,6 +120,10 @@ If ARCHESTRA_AUTH_SECRET env variable is explicitly set, it will override the au
 {{- end }}
 - name: ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER
   value: {{ .Values.archestra.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster | quote }}
+{{- if .Values.archestra.orchestrator.kubernetes.clusterDomain }}
+- name: ARCHESTRA_ORCHESTRATOR_K8S_CLUSTER_DOMAIN
+  value: {{ .Values.archestra.orchestrator.kubernetes.clusterDomain | quote }}
+{{- end }}
 {{- range $key, $value := .Values.archestra.env }}
 {{/* Check if env var is in the explicit sensitive list OR matches ARCHESTRA_CHAT_*_API_KEY pattern */}}
 {{- $isSensitive := or (has $key $sensitiveEnvVars) (and (hasPrefix "ARCHESTRA_CHAT_" $key) (hasSuffix "_API_KEY" $key)) }}

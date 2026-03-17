@@ -21,8 +21,18 @@ vi.mock("@/task-queue", () => ({
 
 const mockChunkDocument = vi.hoisted(() =>
   vi.fn().mockResolvedValue([
-    { content: "chunk 1", chunkIndex: 0 },
-    { content: "chunk 2", chunkIndex: 1 },
+    {
+      content: "chunk 1",
+      chunkIndex: 0,
+      metadataSuffixSemantic: null,
+      metadataSuffixKeyword: null,
+    },
+    {
+      content: "chunk 2",
+      chunkIndex: 1,
+      metadataSuffixSemantic: null,
+      metadataSuffixKeyword: null,
+    },
   ]),
 );
 vi.mock("./chunker", () => ({
@@ -333,10 +343,11 @@ describe("ConnectorSyncService", () => {
 
     await connectorSyncService.executeSync(connector.id);
 
-    // Verify chunkDocument was called
+    // Verify chunkDocument was called with document metadata (no connectorType)
     expect(mockChunkDocument).toHaveBeenCalledWith({
       title: "Doc 1",
       content: "Content for chunking",
+      metadata: undefined,
     });
 
     // Verify chunks were stored

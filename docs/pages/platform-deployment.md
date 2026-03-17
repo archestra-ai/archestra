@@ -163,6 +163,7 @@ openssl rand -base64 32
 
 - `archestra.orchestrator.kubernetes.namespace` - Kubernetes namespace where MCP server pods will be created (defaults to Helm release namespace)
 - `archestra.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster` - Use in-cluster configuration (recommended when running inside K8s)
+- `archestra.orchestrator.kubernetes.clusterDomain` - Kubernetes cluster DNS domain for internal service URL construction (default: cluster.local)
 - `archestra.orchestrator.kubernetes.kubeconfig.enabled` - Enable mounting kubeconfig from a secret
 - `archestra.orchestrator.kubernetes.kubeconfig.secretName` - Name of secret containing kubeconfig file
 - `archestra.orchestrator.kubernetes.kubeconfig.mountPath` - Path where kubeconfig will be mounted

@@ -1,15 +1,20 @@
 import { RecursiveChunker, Tokenizer } from "@chonkiejs/core";
-import { get_encoding, type Tiktoken } from "tiktoken";
+import type { Tiktoken } from "tiktoken";
+import { buildMetadataSuffixes } from "./metadata-suffix";
+import { countTokens, getEncoding } from "./tokenizer";
 
 export interface Chunk {
   content: string;
   chunkIndex: number;
   tokenCount: number;
+  metadataSuffixSemantic: string | null;
+  metadataSuffixKeyword: string | null;
 }
 
 export interface DocumentInput {
   title: string;
   content: string;
+  metadata?: Record<string, unknown>;
 }
 
 const MAX_TOKENS = 512;
@@ -23,7 +28,27 @@ export async function chunkDocument(document: DocumentInput): Promise<Chunk[]> {
   const encoding = getEncoding();
   const titlePrefix = buildTitlePrefix(document.title);
   const titlePrefixTokens = countTokens(encoding, titlePrefix);
-  const contentBudget = MAX_TOKENS - titlePrefixTokens;
+
+  // Compute metadata suffixes if metadata provided
+  let semanticSuffix: string | null = null;
+  let keywordSuffix: string | null = null;
+  let semanticSuffixTokens = 0;
+
+  if (document.metadata && Object.keys(document.metadata).length > 0) {
+    const suffixes = buildMetadataSuffixes({
+      metadata: document.metadata,
+      maxTokens: MAX_TOKENS,
+      titleTokens: titlePrefixTokens,
+    });
+    semanticSuffix = suffixes.semantic;
+    keywordSuffix = suffixes.keyword || null;
+    semanticSuffixTokens = semanticSuffix
+      ? countTokens(encoding, semanticSuffix)
+      : 0;
+  }
+
+  // Reduce content budget by semantic suffix tokens
+  const contentBudget = MAX_TOKENS - titlePrefixTokens - semanticSuffixTokens;
 
   const effectiveTitlePrefix =
     contentBudget < MIN_CONTENT_BUDGET
@@ -31,7 +56,9 @@ export async function chunkDocument(document: DocumentInput): Promise<Chunk[]> {
       : titlePrefix;
   const effectiveBudget =
     contentBudget < MIN_CONTENT_BUDGET
-      ? MAX_TOKENS - countTokens(encoding, effectiveTitlePrefix)
+      ? MAX_TOKENS -
+        countTokens(encoding, effectiveTitlePrefix) -
+        semanticSuffixTokens
       : contentBudget;
 
   const tokenizer = createTiktokenAdapter(encoding);
@@ -48,24 +75,13 @@ export async function chunkDocument(document: DocumentInput): Promise<Chunk[]> {
       content,
       chunkIndex: index,
       tokenCount: countTokens(encoding, content),
+      metadataSuffixSemantic: semanticSuffix,
+      metadataSuffixKeyword: keywordSuffix,
     };
   });
 }
 
 // --- Internal helpers ---
-
-let cachedEncoding: Tiktoken | null = null;
-
-function getEncoding(): Tiktoken {
-  if (!cachedEncoding) {
-    cachedEncoding = get_encoding("cl100k_base");
-  }
-  return cachedEncoding;
-}
-
-function countTokens(encoding: Tiktoken, text: string): number {
-  return encoding.encode(text).length;
-}
 
 function buildTitlePrefix(title: string): string {
   if (!title.trim()) return "";

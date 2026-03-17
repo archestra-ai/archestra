@@ -226,6 +226,38 @@ export async function handleCreateResource<
           ? "personal"
           : "org");
 
+    // Scope-based authorization — mirrors the REST endpoint (routes/agent.ts)
+    if (context.userId && context.organizationId) {
+      const checker = await getAgentTypePermissionChecker({
+        userId: context.userId,
+        organizationId: context.organizationId,
+      });
+
+      if (!checker.isAdmin(targetAgentType)) {
+        if (scope === "org") {
+          return errorResult(
+            `Only admins can create org-scoped ${toolLabel}s.`,
+          );
+        }
+        if (scope === "team" || teams.length > 0) {
+          if (!checker.isTeamAdmin(targetAgentType)) {
+            return errorResult(
+              `You need team-admin permission to create team-scoped ${toolLabel}s.`,
+            );
+          }
+
+          const userTeamIds = await TeamModel.getUserTeamIds(context.userId);
+          const userTeamIdSet = new Set(userTeamIds);
+          const invalidTeams = teams.filter((id) => !userTeamIdSet.has(id));
+          if (invalidTeams.length > 0) {
+            return errorResult(
+              "You can only assign teams you are a member of.",
+            );
+          }
+        }
+      }
+    }
+
     const createParams: Parameters<typeof AgentModel.create>[0] = {
       name: args.name,
       scope,

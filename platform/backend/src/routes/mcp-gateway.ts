@@ -71,6 +71,23 @@ async function handleMcpPostRequest(
     fastify.log.trace({ profileId }, "Calling transport.handleRequest");
 
     // Hijack reply to let SDK handle raw response
+    reply.raw.writeHead(200, { 'Content-Type': 'application/json' });
+
+    const result = await transport.handleRequest(body as unknown as Record<string, unknown>);
+
+    // Support MCP Apps: If the payload is an app initialization, return app metadata.
+    if (isInitialize && result && typeof result === 'object' && 'result' in result) {
+      const initResult = result.result as Record<string, unknown>;
+      if (initResult.capabilities) {
+        // Ensure apps extension is supported in capabilities
+        initResult.capabilities = {
+          ...initResult.capabilities,
+          apps: {},
+        };
+      }
+    }
+
+    return result;
     reply.hijack();
 
     await transport.handleRequest(

@@ -1,4 +1,4 @@
-import { and, eq, gt } from "drizzle-orm";
+import { and, eq, gt, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { InsertMessage, Message } from "@/types";
 
@@ -73,6 +73,36 @@ class MessageModel {
       .where(eq(schema.messagesTable.id, messageId));
 
     return message || null;
+  }
+
+  /**
+   * Find a message by the AI SDK content ID stored in the JSONB content field.
+   * This handles in-session messages whose IDs haven't been replaced with DB UUIDs yet.
+   */
+  static async findByContentId(contentId: string): Promise<Message | null> {
+    const [message] = await db
+      .select()
+      .from(schema.messagesTable)
+      .where(sql`${schema.messagesTable.content}->>'id' = ${contentId}`);
+
+    return message || null;
+  }
+
+  /**
+   * Find a message by either its database UUID or AI SDK content ID.
+   * Messages loaded from DB have UUID IDs, but messages created in the current
+   * session retain their AI SDK nanoid IDs until the page is reloaded.
+   */
+  static async findByAnyId(id: string): Promise<Message | null> {
+    // Try DB UUID first (fast indexed lookup) — only if it looks like a UUID
+    // to avoid PostgreSQL "invalid input syntax for type uuid" errors
+    if (UUID_REGEX.test(id)) {
+      const byDbId = await MessageModel.findById(id);
+      if (byDbId) return byDbId;
+    }
+
+    // Fall back to content ID (AI SDK nanoid)
+    return MessageModel.findByContentId(id);
   }
 
   static async updateTextPart(
@@ -213,3 +243,6 @@ class MessageModel {
 }
 
 export default MessageModel;
+
+const UUID_REGEX =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

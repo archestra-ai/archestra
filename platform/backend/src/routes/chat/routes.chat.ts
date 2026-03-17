@@ -1149,7 +1149,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.UpdateChatMessage,
         description: "Update a specific text part in a message",
         tags: ["Chat"],
-        params: z.object({ id: UuidIdSchema }),
+        params: z.object({ id: z.string() }),
         body: z.object({
           partIndex: z.number().int().min(0),
           text: z.string().min(1),
@@ -1168,7 +1168,9 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       reply,
     ) => {
       // Fetch the message to get its conversation ID
-      const message = await MessageModel.findById(id);
+      // Use findByAnyId to support both DB UUIDs and AI SDK nanoid content IDs
+      // (in-session messages retain their nanoid IDs until page reload)
+      const message = await MessageModel.findByAnyId(id);
 
       if (!message) {
         throw new ApiError(404, "Message not found");
@@ -1190,7 +1192,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // preventing inconsistent state where message is updated but subsequent
       // messages remain when they should have been deleted
       await MessageModel.updateTextPartAndDeleteSubsequent(
-        id,
+        message.id,
         partIndex,
         text,
         deleteSubsequentMessages ?? false,

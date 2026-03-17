@@ -1,5 +1,25 @@
 # Changelog
 
+## [1.1.26](https://github.com/archestra-ai/archestra/compare/platform-v1.1.25...platform-v1.1.26) (2026-03-17)
+
+
+### Features
+
+* enable k8s cluster domain customization ([#3380](https://github.com/archestra-ai/archestra/issues/3380)) ([6a19c8f](https://github.com/archestra-ai/archestra/commit/6a19c8fc031def0b66ad3c97f2ba2d4fe1f1dde1))
+
+
+### Bug Fixes
+
+* improve error handling when swapping agents ([#3407](https://github.com/archestra-ai/archestra/issues/3407)) ([327e162](https://github.com/archestra-ai/archestra/commit/327e1626747d427e46dc4d132cfc8dad81f9daf8))
+* persist early ([#3404](https://github.com/archestra-ai/archestra/issues/3404)) ([8a7120f](https://github.com/archestra-ai/archestra/commit/8a7120fd2b0111e2f11e42373471c086f7325aa7))
+* prioritize current agent over personal agent in selector sort ([#3401](https://github.com/archestra-ai/archestra/issues/3401)) ([8dfa6eb](https://github.com/archestra-ai/archestra/commit/8dfa6ebe724d11919cdaf3655858bd80e48a0379))
+
+
+### Miscellaneous Chores
+
+* sync metadata when ingesting documents ([#3405](https://github.com/archestra-ai/archestra/issues/3405)) ([867476d](https://github.com/archestra-ai/archestra/commit/867476d1914cb9ef450e51bdf3c47310617376e5))
+* sync more metadata from jira ([#3408](https://github.com/archestra-ai/archestra/issues/3408)) ([fee42f4](https://github.com/archestra-ai/archestra/commit/fee42f4e6d9fcfc943cfb8224dda38015b98846e))
+
 ## [1.1.25](https://github.com/archestra-ai/archestra/compare/platform-v1.1.24...platform-v1.1.25) (2026-03-17)
 
 

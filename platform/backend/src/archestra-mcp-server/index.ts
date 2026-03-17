@@ -86,7 +86,9 @@ export type ArchestraToolShortName = (typeof ALL_TOOL_SHORT_NAMES)[number];
 export type ArchestraToolFullName =
   `${typeof ARCHESTRA_MCP_SERVER_NAME}${typeof MCP_SERVER_TOOL_NAME_SEPARATOR}${ArchestraToolShortName}`;
 
-const toolEntries: Partial<Record<ArchestraToolFullName, ArchestraRuntimeToolEntry>> = {
+const toolEntries: Partial<
+  Record<ArchestraToolFullName, ArchestraRuntimeToolEntry>
+> = {
   ...identityToolEntries,
   ...agentToolEntries,
   ...llmProxyToolEntries,
@@ -158,7 +160,11 @@ export async function executeArchestraTool(
     });
 
     if (toolEntry.outputSchema) {
-      const validatedResult = validateToolResult(toolEntry.outputSchema, result, toolName);
+      const validatedResult = validateToolResult(
+        toolEntry.outputSchema,
+        result,
+        toolName,
+      );
       if ("error" in validatedResult) {
         return validatedResult.error;
       }

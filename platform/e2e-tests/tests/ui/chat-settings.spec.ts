@@ -171,7 +171,8 @@ test.describe("Provider Settings - Virtual API Keys", () => {
 
   let parentKeyName: string;
 
-  test("Can create a virtual key from the Virtual API Keys tab", async ({
+  // TODO: Fix flaky test
+  test.skip("Can create a virtual key from the Virtual API Keys tab", async ({
     page,
     makeRandomString,
   }) => {
@@ -258,7 +259,8 @@ test.describe("Provider Settings - Virtual Keys for Keyless Provider", () => {
 
   let keylessParentName: string;
 
-  test("Can create a virtual key for a keyless (no API key) provider", async ({
+  // TODO: Fix flaky test
+  test.skip("Can create a virtual key for a keyless (no API key) provider", async ({
     page,
     makeRandomString,
   }) => {

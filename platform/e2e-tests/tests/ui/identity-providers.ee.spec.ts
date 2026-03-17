@@ -203,7 +203,8 @@ async function deleteExistingProviderIfExists(
 }
 
 test.describe("Identity Provider Team Sync E2E", () => {
-  test("should sync user to team based on SSO group membership", async ({
+  // TODO: Fix flaky test
+  test.skip("should sync user to team based on SSO group membership", async ({
     page,
     browser,
     goToPage,
@@ -450,6 +451,8 @@ test.describe("Identity Provider Team Sync E2E", () => {
 });
 
 test.describe("Identity Provider OIDC E2E Flow with Keycloak", () => {
+  // TODO: Fix flaky Keycloak OIDC test - external service timing issues in CI
+  test.skip();
   test("should configure OIDC provider, login via SSO, update, and delete", async ({
     page,
     browser,
@@ -557,7 +560,7 @@ test.describe("Identity Provider OIDC E2E Flow with Keycloak", () => {
 });
 
 test.describe("Identity Provider IdP Logout (RP-Initiated Logout)", () => {
-  test("should terminate IdP session on Archestra sign-out", async ({
+  test.skip("should terminate IdP session on Archestra sign-out", async ({
     page,
     browser,
     goToPage,

@@ -232,6 +232,7 @@ describe("chat-models", () => {
       const mockClient = {
         models: {
           list: vi.fn().mockResolvedValue(mockPager),
+          get: vi.fn(),
         },
       } as unknown as GoogleGenAI;
 
@@ -264,6 +265,7 @@ describe("chat-models", () => {
       expect(mockClient.models.list).toHaveBeenCalledWith({
         config: { pageSize: 100 },
       });
+      expect(mockClient.models.get).not.toHaveBeenCalled();
     });
 
     test("excludes non-chat models by pattern", async () => {
@@ -301,6 +303,7 @@ describe("chat-models", () => {
       const mockClient = {
         models: {
           list: vi.fn().mockResolvedValue(mockPager),
+          get: vi.fn(),
         },
       } as unknown as GoogleGenAI;
 
@@ -334,6 +337,7 @@ describe("chat-models", () => {
       const mockClient = {
         models: {
           list: vi.fn().mockResolvedValue(mockPager),
+          get: vi.fn(),
         },
       } as unknown as GoogleGenAI;
 
@@ -354,9 +358,11 @@ describe("chat-models", () => {
         },
       };
 
+      const mockGet = vi.fn().mockRejectedValue(new Error("Not found"));
       const mockClient = {
         models: {
           list: vi.fn().mockResolvedValue(mockPager),
+          get: mockGet,
         },
       } as unknown as GoogleGenAI;
 
@@ -364,6 +370,126 @@ describe("chat-models", () => {
 
       const models = await fetchGeminiModelsViaVertexAi();
       expect(models).toHaveLength(0);
+      expect(mockGet).toHaveBeenCalled();
+    });
+
+    test("falls back to probing known Gemini model IDs when list is incomplete", async () => {
+      const mockModels = [
+        {
+          name: "publishers/google/models/text-embedding-005",
+          version: "default",
+          tunedModelInfo: {},
+        },
+        {
+          name: "publishers/google/models/imagen-4.0-generate-001",
+          version: "default",
+          tunedModelInfo: {},
+        },
+      ];
+
+      const mockPager = {
+        [Symbol.asyncIterator]: async function* () {
+          for (const model of mockModels) {
+            yield model;
+          }
+        },
+      };
+
+      const mockGet = vi.fn(async ({ model }: { model: string }) => {
+        if (model === "gemini-2.5-flash") {
+          return {
+            name: "publishers/google/models/gemini-2.5-flash",
+            displayName: "Gemini 2.5 Flash",
+          };
+        }
+
+        if (model === "gemini-2.5-pro") {
+          return {
+            name: "publishers/google/models/gemini-2.5-pro",
+            displayName: "Gemini 2.5 Pro",
+          };
+        }
+
+        throw new Error("Not found");
+      });
+
+      const mockClient = {
+        models: {
+          list: vi.fn().mockResolvedValue(mockPager),
+          get: mockGet,
+        },
+      } as unknown as GoogleGenAI;
+
+      mockCreateGoogleGenAIClient.mockReturnValue(mockClient);
+
+      const models = await fetchGeminiModelsViaVertexAi();
+
+      expect(models).toEqual([
+        {
+          id: "gemini-2.5-pro",
+          displayName: "Gemini 2.5 Pro",
+          provider: "gemini",
+        },
+        {
+          id: "gemini-2.5-flash",
+          displayName: "Gemini 2.5 Flash",
+          provider: "gemini",
+        },
+      ]);
+      expect(mockGet).toHaveBeenCalledWith({ model: "gemini-2.5-pro" });
+      expect(mockGet).toHaveBeenCalledWith({ model: "gemini-2.5-flash" });
+    });
+
+    test("merges fallback models when list misses primary Gemini chat models", async () => {
+      const mockModels = [
+        {
+          name: "publishers/google/models/gemini-live-2.5-preview",
+          version: "default",
+          tunedModelInfo: {},
+        },
+      ];
+
+      const mockPager = {
+        [Symbol.asyncIterator]: async function* () {
+          for (const model of mockModels) {
+            yield model;
+          }
+        },
+      };
+
+      const mockGet = vi.fn(async ({ model }: { model: string }) => {
+        if (model === "gemini-2.5-flash") {
+          return {
+            name: "publishers/google/models/gemini-2.5-flash",
+            displayName: "Gemini 2.5 Flash",
+          };
+        }
+        throw new Error("Not found");
+      });
+
+      const mockClient = {
+        models: {
+          list: vi.fn().mockResolvedValue(mockPager),
+          get: mockGet,
+        },
+      } as unknown as GoogleGenAI;
+
+      mockCreateGoogleGenAIClient.mockReturnValue(mockClient);
+
+      const models = await fetchGeminiModelsViaVertexAi();
+
+      expect(models).toEqual([
+        {
+          id: "gemini-live-2.5-preview",
+          displayName: "Gemini Live 2.5 Preview",
+          provider: "gemini",
+        },
+        {
+          id: "gemini-2.5-flash",
+          displayName: "Gemini 2.5 Flash",
+          provider: "gemini",
+        },
+      ]);
     });
   });
 

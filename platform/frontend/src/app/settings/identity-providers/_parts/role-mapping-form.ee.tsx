@@ -2,7 +2,6 @@
 
 import { E2eTestId, type IdentityProviderFormValues } from "@shared";
 import { Info, Plus, Trash2 } from "lucide-react";
-import { useCallback, useRef } from "react";
 import { type UseFormReturn, useFieldArray } from "react-hook-form";
 import {
   Accordion,
@@ -61,31 +60,12 @@ export function RoleMappingForm({ form }: RoleMappingFormProps) {
     control: form.control,
     name: "roleMapping.rules",
   });
-  const accordionContentRef = useRef<HTMLDivElement>(null);
-
-  // Scroll the accordion content into view when expanded
-  const handleAccordionChange = useCallback((value: string) => {
-    if (value === "role-mapping") {
-      // Small delay to allow accordion animation to start
-      setTimeout(() => {
-        accordionContentRef.current?.scrollIntoView({
-          behavior: "smooth",
-          block: "start",
-        });
-      }, 100);
-    }
-  }, []);
 
   return (
     <div className="space-y-6">
       <Separator />
 
-      <Accordion
-        type="single"
-        collapsible
-        className="w-full"
-        onValueChange={handleAccordionChange}
-      >
+      <Accordion type="single" collapsible className="w-full">
         <AccordionItem value="role-mapping" className="border-none">
           <AccordionTrigger className="hover:no-underline">
             <div className="flex items-center gap-2">
@@ -106,10 +86,7 @@ export function RoleMappingForm({ form }: RoleMappingFormProps) {
               </TooltipProvider>
             </div>
           </AccordionTrigger>
-          <AccordionContent
-            ref={accordionContentRef}
-            className="space-y-4 pt-4"
-          >
+          <AccordionContent className="space-y-4 pt-4">
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <FormLabel>Mapping Rules</FormLabel>

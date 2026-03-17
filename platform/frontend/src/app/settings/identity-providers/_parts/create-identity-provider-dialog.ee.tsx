@@ -9,7 +9,11 @@ import { useCallback } from "react";
 import { useForm } from "react-hook-form";
 import { FormDialog } from "@/components/form-dialog";
 import { Button } from "@/components/ui/button";
-import { DialogForm, DialogStickyFooter } from "@/components/ui/dialog";
+import {
+  DialogBody,
+  DialogForm,
+  DialogStickyFooter,
+} from "@/components/ui/dialog";
 import { Form } from "@/components/ui/form";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { useCreateIdentityProvider } from "@/lib/identity-provider.query.ee";
@@ -111,14 +115,13 @@ export function CreateIdentityProviderDialog({
           : "Configure a new Single Sign-On provider for your organization."
       }
       size="large"
-      className="max-w-4xl"
     >
       <Form {...form}>
         <DialogForm
           className="flex min-h-0 flex-1 flex-col"
           onSubmit={form.handleSubmit(onSubmit)}
         >
-          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+          <DialogBody className="pb-4">
             {currentProviderType === "saml" ? (
               <SamlConfigForm form={form} hideProviderId={hideProviderId} />
             ) : (
@@ -128,9 +131,9 @@ export function CreateIdentityProviderDialog({
                 hideProviderId={hideProviderId}
               />
             )}
-          </div>
+          </DialogBody>
 
-          <DialogStickyFooter>
+          <DialogStickyFooter className="mt-0">
             <Button type="button" variant="outline" onClick={handleClose}>
               Cancel
             </Button>

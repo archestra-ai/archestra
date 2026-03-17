@@ -344,6 +344,13 @@ class GeminiRequestAdapter
 
     contents = this.convertToolResultContent(contents);
 
+    // Filter out content entries with empty parts - Gemini API rejects these
+    // with INVALID_ARGUMENT. This can happen when the AI SDK produces content
+    // entries where all parts were filtered (e.g., empty text in assistant messages).
+    contents = contents.filter(
+      (content) => content.parts && content.parts.length > 0,
+    );
+
     return {
       ...this.request,
       contents,

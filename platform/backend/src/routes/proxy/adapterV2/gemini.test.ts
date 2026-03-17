@@ -530,6 +530,28 @@ describe("GeminiRequestAdapter", () => {
         text: "Screenshot captured\n[Image omitted due to size]",
       });
     });
+
+    test("filters out content entries with empty parts", () => {
+      const request = createMockRequest([
+        { role: "user", parts: [{ text: "Hello" }] },
+        { role: "model", parts: [] },
+        { role: "user", parts: [] },
+        { role: "model", parts: [{ text: "Response" }] },
+      ]);
+
+      const adapter = geminiAdapterFactory.createRequestAdapter(request);
+      const result = adapter.toProviderRequest();
+
+      expect(result.contents).toHaveLength(2);
+      expect(result.contents?.[0]).toEqual({
+        role: "user",
+        parts: [{ text: "Hello" }],
+      });
+      expect(result.contents?.[1]).toEqual({
+        role: "model",
+        parts: [{ text: "Response" }],
+      });
+    });
   });
 });
 

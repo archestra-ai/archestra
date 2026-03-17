@@ -32,6 +32,9 @@ However, **RBAC (role-based access control) is still enforced**. Every tool is m
 |------|-------------|
 | `whoami` | Returns the name and ID of the current agent. |
 
+#### whoami
+
+This tool takes no arguments.
 ### Agents
 
 | Tool | Description |
@@ -53,6 +56,8 @@ However, **RBAC (role-based access control) is still enforced**. Every tool is m
 | `teams` | `string[]` | No | Team IDs to attach when creating a team-scoped resource. |
 | `description` | `any` | No | Optional human-readable description of the agent. |
 | `icon` | `any` | No | Optional emoji icon for the agent. |
+| `knowledgeBaseIds` | `string[]` | No | Knowledge base IDs to assign to the agent. Use get_knowledge_bases first when you need to look up IDs by name. |
+| `connectorIds` | `string[]` | No | Knowledge connector IDs to assign directly to the agent. Use get_knowledge_connectors first when you need to look up IDs by name. |
 | `mcpServerIds` | `string[]` | No | Catalog item IDs from get_mcp_servers whose tools should be assigned to the agent. |
 | `subAgentIds` | `string[]` | No | Agent IDs to delegate to from this newly created agent. |
 | `suggestedPrompts` | `object[]` | No | Optional suggested prompts that appear in the chat UI. |
@@ -69,15 +74,15 @@ However, **RBAC (role-based access control) is still enforced**. Every tool is m
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `id` | `string` | No | The ID of the agent, LLM proxy, or MCP gateway to fetch. |
-| `name` | `string` | No | The name of the resource to fetch. |
+| `id` | `string` | No | The ID of the agent to fetch. Prefer the ID when you already have it. |
+| `name` | `string` | No | The exact name of the agent to fetch when you do not already have the ID. |
 
 #### list_agents
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `limit` | `integer` | No | Maximum number of agents to return. |
-| `name` | `string` | No | Optional name filter. |
+| `name` | `string` | No | Optional agent name filter. Use this when the user names an agent but you still need to look up the ID. |
 | `scope` | `"personal" \| "team" \| "org"` | No | Optional scope filter: personal, team, or org. |
 
 #### edit_agent
@@ -94,10 +99,12 @@ However, **RBAC (role-based access control) is still enforced**. Every tool is m
 | `toolAssignments[].useDynamicTeamCredential` | `boolean` | No | When true, resolve credentials dynamically from the invoking team instead of pinning a deployment. |
 | `description` | `any` | No | New description for the agent. |
 | `icon` | `any` | No | New emoji icon for the agent. |
+| `knowledgeBaseIds` | `string[]` | No | Replace the agent's assigned knowledge bases with this set. |
 | `labels` | `object[]` | No | Replace the agent's labels with this set. |
 | `labels[].key` | `string` | Yes |  |
 | `labels[].value` | `string` | Yes |  |
 | `name` | `string` | No | New name for the agent. |
+| `connectorIds` | `string[]` | No | Replace the agent's directly assigned knowledge connectors with this set. |
 | `scope` | `"personal" \| "team" \| "org"` | No | Updated visibility scope for the agent. |
 | `suggestedPrompts` | `object[]` | No | Replace the agent's suggested prompts. |
 | `suggestedPrompts[].summaryTitle` | `string` | Yes | Short title shown to users for this suggested prompt. |
@@ -111,6 +118,7 @@ However, **RBAC (role-based access control) is still enforced**. Every tool is m
 |------|-------------|
 | `create_llm_proxy` | Create a new LLM proxy with the specified name and optional labels. |
 | `get_llm_proxy` | Get a specific LLM proxy by ID or name. |
+| `edit_llm_proxy` | Edit an existing LLM proxy. |
 
 #### create_llm_proxy
 
@@ -127,8 +135,22 @@ However, **RBAC (role-based access control) is still enforced**. Every tool is m
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `id` | `string` | No | The ID of the agent, LLM proxy, or MCP gateway to fetch. |
-| `name` | `string` | No | The name of the resource to fetch. |
+| `id` | `string` | No | The ID of the LLM proxy to fetch. Prefer the ID when you already have it. |
+| `name` | `string` | No | The exact name of the LLM proxy to fetch when you do not already have the ID. |
+
+#### edit_llm_proxy
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `id` | `string` | Yes | The ID of the LLM proxy to edit. Use get_llm_proxy to look it up by name first if needed. |
+| `description` | `any` | No | New description for the resource. |
+| `icon` | `any` | No | New emoji icon for the resource. |
+| `labels` | `object[]` | No | Replace the resource's labels with this set. |
+| `labels[].key` | `string` | Yes |  |
+| `labels[].value` | `string` | Yes |  |
+| `name` | `string` | No | New name for the resource. |
+| `scope` | `"personal" \| "team" \| "org"` | No | Updated visibility scope for the resource. |
+| `teams` | `string[]` | No | Replace the teams attached to a team-scoped resource. |
 
 ### MCP Gateways
 
@@ -136,6 +158,7 @@ However, **RBAC (role-based access control) is still enforced**. Every tool is m
 |------|-------------|
 | `create_mcp_gateway` | Create a new MCP gateway with the specified name and optional labels. |
 | `get_mcp_gateway` | Get a specific MCP gateway by ID or name. |
+| `edit_mcp_gateway` | Edit an existing MCP gateway. |
 
 #### create_mcp_gateway
 
@@ -152,8 +175,22 @@ However, **RBAC (role-based access control) is still enforced**. Every tool is m
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `id` | `string` | No | The ID of the agent, LLM proxy, or MCP gateway to fetch. |
-| `name` | `string` | No | The name of the resource to fetch. |
+| `id` | `string` | No | The ID of the MCP gateway to fetch. Prefer the ID when you already have it. |
+| `name` | `string` | No | The exact name of the MCP gateway to fetch when you do not already have the ID. |
+
+#### edit_mcp_gateway
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `id` | `string` | Yes | The ID of the MCP gateway to edit. Use get_mcp_gateway to look it up by name first if needed. |
+| `description` | `any` | No | New description for the resource. |
+| `icon` | `any` | No | New emoji icon for the resource. |
+| `labels` | `object[]` | No | Replace the resource's labels with this set. |
+| `labels[].key` | `string` | Yes |  |
+| `labels[].value` | `string` | Yes |  |
+| `name` | `string` | No | New name for the resource. |
+| `scope` | `"personal" \| "team" \| "org"` | No | Updated visibility scope for the resource. |
+| `teams` | `string[]` | No | Replace the teams attached to a team-scoped resource. |
 
 ### MCP Servers
 
@@ -174,151 +211,160 @@ However, **RBAC (role-based access control) is still enforced**. Every tool is m
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `query` | `string` | No | Optional search query to filter MCP servers by name or description |
+| `query` | `string` | No | Optional search query to filter MCP servers by name or description. |
 
+#### get_mcp_servers
+
+This tool takes no arguments.
 #### get_mcp_server_tools
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `mcpServerId` | `string` | Yes | The catalog ID of the MCP server |
+| `mcpServerId` | `string` | Yes | The catalog ID of the MCP server. |
 
 #### edit_mcp_description
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `id` | `string` | Yes | The catalog ID of the MCP server to edit. Use get_mcp_servers to look up by name. |
-| `name` | `string` | No | New display name for the MCP server |
-| `icon` | `string` | No | An emoji character to use as the MCP server icon |
-| `description` | `string` | No | New description for the MCP server |
-| `docsUrl` | `string` | No | Documentation URL |
-| `repository` | `string` | No | Source code repository URL |
-| `version` | `string` | No | Version string |
-| `instructions` | `string` | No | Setup or usage instructions |
-| `scope` | `"personal" \| "team" \| "org"` | No | Visibility scope. Changing scope requires admin permissions. |
-| `labels` | `object[]` | No | Key-value labels for organization/categorization |
-| `labels[].key` | `string` | Yes |  |
-| `labels[].value` | `string` | Yes |  |
-| `teams` | `string[]` | No | Team IDs for team-scoped access control |
+| `id` | `string` | Yes | The catalog ID of the MCP server to edit. Use get_mcp_servers to look it up by name. |
+| `name` | `string` | No | Display name for the MCP server. |
+| `description` | `any` | No | Description of the MCP server. |
+| `icon` | `any` | No | Emoji icon for the MCP server. |
+| `docsUrl` | `any` | No | Documentation URL. |
+| `repository` | `any` | No | Source code repository URL. |
+| `version` | `any` | No | Version string. |
+| `instructions` | `any` | No | Setup or usage instructions. |
+| `scope` | `"personal" \| "team" \| "org"` | No | Visibility scope. |
+| `labels` | `object[]` | No | Key-value labels for organization/categorization. |
+| `labels[].key` | `string` | Yes | Label key. |
+| `labels[].value` | `string` | Yes | Label value. |
+| `teams` | `string[]` | No | Team IDs for team-scoped access control. |
 
 #### edit_mcp_config
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `id` | `string` | Yes | The catalog ID of the MCP server to edit. Use get_mcp_servers to look up by name. |
-| `serverType` | `"local" \| "remote" \| "builtin"` | No | Server type: local (K8s pod), remote (HTTP URL), or builtin |
-| `serverUrl` | `string` | No | [Remote] The URL of the remote MCP server |
-| `requiresAuth` | `boolean` | No | [Remote] Whether the server requires authentication |
-| `authDescription` | `string` | No | [Remote] Description of how to set up authentication |
-| `authFields` | `object[]` | No | [Remote] Authentication field definitions |
-| `authFields[].name` | `string` | Yes |  |
-| `authFields[].label` | `string` | Yes |  |
-| `authFields[].type` | `"header" \| "query" \| "cookie"` | Yes |  |
-| `authFields[].secret` | `boolean` | Yes |  |
-| `oauthConfig` | `object` | No | [Remote] OAuth configuration for the server |
-| `command` | `string` | No | [Local] The command to run (e.g. 'npx', 'uvx', 'node') |
-| `arguments` | `string[]` | No | [Local] Command-line arguments |
-| `environment` | `object[]` | No | [Local] Environment variables for the server process |
-| `environment[].key` | `string` | Yes |  |
-| `environment[].type` | `"plain_text" \| "secret" \| "boolean" \| "number"` | Yes |  |
-| `environment[].value` | `string` | No |  |
-| `environment[].promptOnInstallation` | `boolean` | Yes |  |
-| `environment[].required` | `boolean` | No |  |
-| `environment[].description` | `string` | No |  |
-| `environment[].default` | `any` | No |  |
-| `environment[].mounted` | `boolean` | No |  |
-| `envFrom` | `object[]` | No | [Local] Import environment variables from K8s Secrets or ConfigMaps |
-| `envFrom[].type` | `"secret" \| "configMap"` | Yes |  |
-| `envFrom[].name` | `string` | Yes |  |
-| `envFrom[].prefix` | `string` | No |  |
-| `dockerImage` | `string` | No | [Local] Custom Docker image (overrides the base MCP server image) |
-| `serviceAccount` | `string` | No | [Local] K8s ServiceAccount name for the pod |
-| `transportType` | `"stdio" \| "streamable-http"` | No | [Local] Transport type: stdio (default, JSON-RPC proxy) or streamable-http (native HTTP/SSE) |
-| `httpPort` | `number` | No | [Local] HTTP port for streamable-http transport (default: 8080) |
-| `httpPath` | `string` | No | [Local] HTTP path for streamable-http transport (default: /mcp) |
-| `nodePort` | `number` | No | [Local] K8s NodePort for local dev access |
-| `imagePullSecrets` | `object[]` | No | [Local] Image pull secrets for private Docker registries |
-| `imagePullSecrets[].source` | `"existing"` | Yes |  |
-| `imagePullSecrets[].name` | `string` | Yes |  |
-| `deploymentSpecYaml` | `string` | No | [Local] Custom K8s deployment YAML override |
-| `installationCommand` | `string` | No | [Local] Command to install the MCP server package |
-| `userConfig` | `object` | No | User-configurable fields shown during installation (shared by both remote and local) |
+| `id` | `string` | Yes | The catalog ID of the MCP server to edit. Use get_mcp_servers to look it up by name. |
+| `serverType` | `"local" \| "remote" \| "builtin"` | No | Server type: local, remote, or builtin. |
+| `serverUrl` | `any` | No | [Remote] The URL of the remote MCP server. |
+| `requiresAuth` | `boolean` | No | [Remote] Whether the server requires authentication. |
+| `authDescription` | `any` | No | [Remote] How to set up authentication. |
+| `authFields` | `object[]` | No | [Remote] Authentication field definitions. |
+| `authFields[].name` | `string` | Yes | Auth field name. |
+| `authFields[].label` | `string` | Yes | Human-readable auth field label. |
+| `authFields[].type` | `"header" \| "query" \| "cookie"` | Yes | Where to send this auth field. |
+| `authFields[].secret` | `boolean` | Yes | Whether this field contains secret data. |
+| `oauthConfig` | `object` | No | [Remote] OAuth configuration for the server. |
+| `command` | `string` | No | [Local] Command to run (for example npx, uvx, or node). |
+| `arguments` | `string[]` | No | [Local] Command-line arguments. |
+| `environment` | `object[]` | No | [Local] Environment variables for the server process. |
+| `environment[].key` | `string` | Yes | Environment variable name. |
+| `environment[].type` | `"plain_text" \| "secret" \| "boolean" \| "number"` | Yes | Environment variable value type. |
+| `environment[].value` | `string` | No | Literal environment variable value. |
+| `environment[].promptOnInstallation` | `boolean` | Yes | Whether to prompt for this value during installation. |
+| `environment[].required` | `boolean` | No | Whether the value is required. |
+| `environment[].description` | `string` | No | Description shown to users. |
+| `environment[].default` | `any` | No | Default value. |
+| `environment[].mounted` | `boolean` | No | For secret values, mount as a file instead of an env var. |
+| `envFrom` | `object[]` | No | [Local] Import env vars from Kubernetes Secrets or ConfigMaps. |
+| `envFrom[].type` | `"secret" \| "configMap"` | Yes | Import source type. |
+| `envFrom[].name` | `string` | Yes | Secret or ConfigMap name. |
+| `envFrom[].prefix` | `string` | No | Optional environment variable prefix. |
+| `dockerImage` | `string` | No | [Local] Custom Docker image. |
+| `serviceAccount` | `string` | No | [Local] Kubernetes ServiceAccount name. |
+| `transportType` | `"stdio" \| "streamable-http"` | No | [Local] Transport type. |
+| `httpPort` | `number` | No | [Local] HTTP port for streamable-http transport. |
+| `httpPath` | `string` | No | [Local] HTTP path for streamable-http transport. |
+| `nodePort` | `number` | No | [Local] Kubernetes NodePort for local development. |
+| `imagePullSecrets` | `object[]` | No | [Local] Image pull secrets for private registries. |
+| `imagePullSecrets[].source` | `"existing"` | Yes | Image pull secret source. |
+| `imagePullSecrets[].name` | `string` | Yes | Existing Kubernetes secret name. |
+| `deploymentSpecYaml` | `string` | No | [Local] Custom Kubernetes deployment YAML override. |
+| `installationCommand` | `string` | No | [Local] Command to install the MCP server package. |
+| `userConfig` | `object` | No | User-configurable fields shown during installation. |
 
 #### create_mcp_server
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `name` | `string` | Yes | Display name for the MCP server |
-| `serverType` | `"local" \| "remote" \| "builtin"` | No | Server type: local (K8s pod, default), remote (HTTP URL), or builtin |
-| `description` | `string` | No | Description of the MCP server |
-| `icon` | `string` | No | An emoji character to use as the MCP server icon |
-| `docsUrl` | `string` | No | Documentation URL |
-| `repository` | `string` | No | Source code repository URL |
-| `version` | `string` | No | Version string |
-| `instructions` | `string` | No | Setup or usage instructions |
-| `serverUrl` | `string` | No | [Remote] The URL of the remote MCP server |
-| `requiresAuth` | `boolean` | No | [Remote] Whether the server requires authentication |
-| `authDescription` | `string` | No | [Remote] Description of how to set up authentication |
-| `authFields` | `object[]` | No | [Remote] Authentication field definitions |
-| `authFields[].name` | `string` | Yes |  |
-| `authFields[].label` | `string` | Yes |  |
-| `authFields[].type` | `"header" \| "query" \| "cookie"` | Yes |  |
-| `authFields[].secret` | `boolean` | Yes |  |
-| `oauthConfig` | `object` | No | [Remote] OAuth configuration for the server |
-| `command` | `string` | No | [Local] The command to run (e.g. 'npx', 'uvx', 'node') |
-| `arguments` | `string[]` | No | [Local] Command-line arguments |
-| `environment` | `object[]` | No | [Local] Environment variables for the server process |
-| `environment[].key` | `string` | Yes |  |
-| `environment[].type` | `"plain_text" \| "secret" \| "boolean" \| "number"` | Yes |  |
-| `environment[].value` | `string` | No |  |
-| `environment[].promptOnInstallation` | `boolean` | Yes |  |
-| `environment[].required` | `boolean` | No |  |
-| `environment[].description` | `string` | No |  |
-| `environment[].default` | `any` | No |  |
-| `environment[].mounted` | `boolean` | No |  |
-| `envFrom` | `object[]` | No | [Local] Import environment variables from K8s Secrets or ConfigMaps |
-| `envFrom[].type` | `"secret" \| "configMap"` | Yes |  |
-| `envFrom[].name` | `string` | Yes |  |
-| `envFrom[].prefix` | `string` | No |  |
-| `dockerImage` | `string` | No | [Local] Custom Docker image (overrides the base MCP server image) |
-| `serviceAccount` | `string` | No | [Local] K8s ServiceAccount name for the pod |
-| `transportType` | `"stdio" \| "streamable-http"` | No | [Local] Transport type: stdio (default, JSON-RPC proxy) or streamable-http (native HTTP/SSE) |
-| `httpPort` | `number` | No | [Local] HTTP port for streamable-http transport (default: 8080) |
-| `httpPath` | `string` | No | [Local] HTTP path for streamable-http transport (default: /mcp) |
-| `nodePort` | `number` | No | [Local] K8s NodePort for local dev access |
-| `imagePullSecrets` | `object[]` | No | [Local] Image pull secrets for private Docker registries |
-| `imagePullSecrets[].source` | `"existing"` | Yes |  |
-| `imagePullSecrets[].name` | `string` | Yes |  |
-| `deploymentSpecYaml` | `string` | No | [Local] Custom K8s deployment YAML override |
-| `installationCommand` | `string` | No | [Local] Command to install the MCP server package |
-| `userConfig` | `object` | No | User-configurable fields shown during installation (shared by both remote and local) |
-| `scope` | `"personal" \| "team" \| "org"` | No | Visibility scope (default: personal, or team if teams provided). Non-personal scopes require admin. |
-| `labels` | `object[]` | No | Key-value labels for organization/categorization |
-| `labels[].key` | `string` | Yes |  |
-| `labels[].value` | `string` | Yes |  |
-| `teams` | `string[]` | No | Team IDs for team-scoped access control |
+| `name` | `string` | Yes | Display name for the MCP server. |
+| `description` | `any` | No | Description of the MCP server. |
+| `icon` | `any` | No | Emoji icon for the MCP server. |
+| `docsUrl` | `any` | No | Documentation URL. |
+| `repository` | `any` | No | Source code repository URL. |
+| `version` | `any` | No | Version string. |
+| `instructions` | `any` | No | Setup or usage instructions. |
+| `scope` | `"personal" \| "team" \| "org"` | No | Visibility scope. |
+| `labels` | `object[]` | No | Key-value labels for organization/categorization. |
+| `labels[].key` | `string` | Yes | Label key. |
+| `labels[].value` | `string` | Yes | Label value. |
+| `teams` | `string[]` | No | Team IDs for team-scoped access control. |
+| `serverType` | `"local" \| "remote" \| "builtin"` | No | Server type: local, remote, or builtin. |
+| `serverUrl` | `any` | No | [Remote] The URL of the remote MCP server. |
+| `requiresAuth` | `boolean` | No | [Remote] Whether the server requires authentication. |
+| `authDescription` | `any` | No | [Remote] How to set up authentication. |
+| `authFields` | `object[]` | No | [Remote] Authentication field definitions. |
+| `authFields[].name` | `string` | Yes | Auth field name. |
+| `authFields[].label` | `string` | Yes | Human-readable auth field label. |
+| `authFields[].type` | `"header" \| "query" \| "cookie"` | Yes | Where to send this auth field. |
+| `authFields[].secret` | `boolean` | Yes | Whether this field contains secret data. |
+| `oauthConfig` | `object` | No | [Remote] OAuth configuration for the server. |
+| `command` | `string` | No | [Local] Command to run (for example npx, uvx, or node). |
+| `arguments` | `string[]` | No | [Local] Command-line arguments. |
+| `environment` | `object[]` | No | [Local] Environment variables for the server process. |
+| `environment[].key` | `string` | Yes | Environment variable name. |
+| `environment[].type` | `"plain_text" \| "secret" \| "boolean" \| "number"` | Yes | Environment variable value type. |
+| `environment[].value` | `string` | No | Literal environment variable value. |
+| `environment[].promptOnInstallation` | `boolean` | Yes | Whether to prompt for this value during installation. |
+| `environment[].required` | `boolean` | No | Whether the value is required. |
+| `environment[].description` | `string` | No | Description shown to users. |
+| `environment[].default` | `any` | No | Default value. |
+| `environment[].mounted` | `boolean` | No | For secret values, mount as a file instead of an env var. |
+| `envFrom` | `object[]` | No | [Local] Import env vars from Kubernetes Secrets or ConfigMaps. |
+| `envFrom[].type` | `"secret" \| "configMap"` | Yes | Import source type. |
+| `envFrom[].name` | `string` | Yes | Secret or ConfigMap name. |
+| `envFrom[].prefix` | `string` | No | Optional environment variable prefix. |
+| `dockerImage` | `string` | No | [Local] Custom Docker image. |
+| `serviceAccount` | `string` | No | [Local] Kubernetes ServiceAccount name. |
+| `transportType` | `"stdio" \| "streamable-http"` | No | [Local] Transport type. |
+| `httpPort` | `number` | No | [Local] HTTP port for streamable-http transport. |
+| `httpPath` | `string` | No | [Local] HTTP path for streamable-http transport. |
+| `nodePort` | `number` | No | [Local] Kubernetes NodePort for local development. |
+| `imagePullSecrets` | `object[]` | No | [Local] Image pull secrets for private registries. |
+| `imagePullSecrets[].source` | `"existing"` | Yes | Image pull secret source. |
+| `imagePullSecrets[].name` | `string` | Yes | Existing Kubernetes secret name. |
+| `deploymentSpecYaml` | `string` | No | [Local] Custom Kubernetes deployment YAML override. |
+| `installationCommand` | `string` | No | [Local] Command to install the MCP server package. |
+| `userConfig` | `object` | No | User-configurable fields shown during installation. |
 
 #### deploy_mcp_server
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `catalogId` | `string` | Yes | The catalog ID of the MCP server to deploy. Use get_mcp_servers to look up by name. |
-| `teamId` | `string` | No | Optional team ID for a team-scoped deployment. If omitted, deploys as a personal server. |
+| `catalogId` | `string` | Yes | The catalog ID of the MCP server to deploy. |
+| `teamId` | `string` | No | Optional team ID for a team-scoped deployment. |
 | `agentIds` | `string[]` | No | Optional agent IDs to assign the server's tools to after deployment. |
 
+#### list_mcp_server_deployments
+
+This tool takes no arguments.
 #### get_mcp_server_logs
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `serverId` | `string` | Yes | The deployment ID of the MCP server (from list_mcp_server_deployments). |
-| `lines` | `number` | No | Number of log lines to retrieve (default: 100, max recommended: 500). |
+| `serverId` | `string` | Yes | The deployment ID of the MCP server. |
+| `lines` | `integer` | No | Number of log lines to retrieve. |
 
+#### create_mcp_server_installation_request
+
+This tool takes no arguments.
 ### Limits
 
 | Tool | Description |
 |------|-------------|
 | `create_limit` | Create a new cost or usage limit for an organization, team, agent, LLM proxy, or MCP gateway. |
 | `get_limits` | Retrieve all limits, optionally filtered by entity type and/or entity ID. |
-| `update_limit` | Update an existing limit's value. |
+| `update_limit` | Update mutable fields on an existing limit. |
 | `delete_limit` | Delete an existing limit by ID. |
 | `get_agent_token_usage` | Get the total token usage (input and output) for a specific agent. |
 | `get_llm_proxy_token_usage` | Get the total token usage (input and output) for a specific LLM proxy. |
@@ -347,7 +393,7 @@ However, **RBAC (role-based access control) is still enforced**. Every tool is m
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `id` | `string` | Yes | The ID of the limit to update. |
-| `limit_value` | `number` | No | The new limit value. |
+| `limit_value` | `number` | No | Optional new limit value. |
 
 #### delete_limit
 
@@ -383,6 +429,12 @@ However, **RBAC (role-based access control) is still enforced**. Every tool is m
 | `update_trusted_data_policy` | Update a trusted data policy |
 | `delete_trusted_data_policy` | Delete a trusted data policy by ID |
 
+#### get_autonomy_policy_operators
+
+This tool takes no arguments.
+#### get_tool_invocation_policies
+
+This tool takes no arguments.
 #### create_tool_invocation_policy
 
 | Parameter | Type | Required | Description |
@@ -420,6 +472,9 @@ However, **RBAC (role-based access control) is still enforced**. Every tool is m
 |-----------|------|----------|-------------|
 | `id` | `string` | Yes | The ID of the tool invocation policy. |
 
+#### get_trusted_data_policies
+
+This tool takes no arguments.
 #### create_trusted_data_policy
 
 | Parameter | Type | Required | Description |
@@ -512,107 +567,113 @@ However, **RBAC (role-based access control) is still enforced**. Every tool is m
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `query` | `string` | Yes | The user's original query, passed verbatim without rephrasing or expansion. The system handles query optimization internally. |
+| `query` | `string` | Yes | The user's original query, passed verbatim without rephrasing or expansion. |
 
 #### create_knowledge_base
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `name` | `string` | Yes | Name of the knowledge base |
-| `description` | `string` | No | Description of the knowledge base |
+| `name` | `string` | Yes | Name of the knowledge base. |
+| `description` | `any` | No | Description of the knowledge base. |
 
+#### get_knowledge_bases
+
+This tool takes no arguments.
 #### get_knowledge_base
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `id` | `string` | Yes | Knowledge base ID |
+| `id` | `string` | Yes | Knowledge base ID. |
 
 #### update_knowledge_base
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `id` | `string` | Yes | Knowledge base ID |
-| `name` | `string` | No | New name |
-| `description` | `string` | No | New description |
+| `id` | `string` | Yes | Knowledge base ID. |
+| `name` | `string` | No | New knowledge base name. |
+| `description` | `any` | No | New knowledge base description. |
 
 #### delete_knowledge_base
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `id` | `string` | Yes | Knowledge base ID |
+| `id` | `string` | Yes | Knowledge base ID. |
 
 #### create_knowledge_connector
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `name` | `string` | Yes | Name of the knowledge connector |
-| `connector_type` | `string` | Yes | Type of the knowledge connector (e.g., jira, confluence, google_drive) |
-| `config` | `object` | Yes | Configuration for the knowledge connector (depends on connector_type) |
-| `description` | `string` | No | Description of the knowledge connector |
+| `name` | `string` | Yes | Name of the knowledge connector. |
+| `connector_type` | `string` | Yes | Type of the knowledge connector (for example jira, confluence, or google_drive). |
+| `config` | `object` | Yes | Provider-specific configuration object. |
+| `description` | `any` | No | Description of the knowledge connector. |
 
+#### get_knowledge_connectors
+
+This tool takes no arguments.
 #### get_knowledge_connector
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `id` | `string` | Yes | Knowledge connector ID |
+| `id` | `string` | Yes | Knowledge connector ID. |
 
 #### update_knowledge_connector
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `id` | `string` | Yes | Knowledge connector ID |
-| `name` | `string` | No | New name |
-| `description` | `string` | No | New description |
-| `enabled` | `boolean` | No | Whether the knowledge connector is enabled |
-| `config` | `object` | No | Updated connector configuration (provider-specific settings) |
+| `id` | `string` | Yes | Knowledge connector ID. |
+| `name` | `string` | No | New connector name. |
+| `description` | `any` | No | New connector description. |
+| `enabled` | `boolean` | No | Whether the connector is enabled. |
+| `config` | `object` | No | Updated connector configuration (provider-specific settings). |
 
 #### delete_knowledge_connector
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `id` | `string` | Yes | Knowledge connector ID |
+| `id` | `string` | Yes | Knowledge connector ID. |
 
 #### assign_knowledge_connector_to_knowledge_base
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `connector_id` | `string` | Yes | Knowledge connector ID |
-| `knowledge_base_id` | `string` | Yes | Knowledge base ID |
+| `connector_id` | `string` | Yes | Knowledge connector ID. |
+| `knowledge_base_id` | `string` | Yes | Knowledge base ID. |
 
 #### unassign_knowledge_connector_from_knowledge_base
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `connector_id` | `string` | Yes | Knowledge connector ID |
-| `knowledge_base_id` | `string` | Yes | Knowledge base ID |
+| `connector_id` | `string` | Yes | Knowledge connector ID. |
+| `knowledge_base_id` | `string` | Yes | Knowledge base ID. |
 
 #### assign_knowledge_base_to_agent
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `knowledge_base_id` | `string` | Yes | Knowledge base ID |
-| `agent_id` | `string` | Yes | Agent ID |
+| `knowledge_base_id` | `string` | Yes | Knowledge base ID. |
+| `agent_id` | `string` | Yes | Agent ID. |
 
 #### unassign_knowledge_base_from_agent
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `knowledge_base_id` | `string` | Yes | Knowledge base ID |
-| `agent_id` | `string` | Yes | Agent ID |
+| `knowledge_base_id` | `string` | Yes | Knowledge base ID. |
+| `agent_id` | `string` | Yes | Agent ID. |
 
 #### assign_knowledge_connector_to_agent
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `connector_id` | `string` | Yes | Knowledge connector ID |
-| `agent_id` | `string` | Yes | Agent ID |
+| `connector_id` | `string` | Yes | Knowledge connector ID. |
+| `agent_id` | `string` | Yes | Agent ID. |
 
 #### unassign_knowledge_connector_from_agent
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `connector_id` | `string` | Yes | Knowledge connector ID |
-| `agent_id` | `string` | Yes | Agent ID |
+| `connector_id` | `string` | Yes | Knowledge connector ID. |
+| `agent_id` | `string` | Yes | Agent ID. |
 
 ### Chat
 
@@ -638,6 +699,9 @@ However, **RBAC (role-based access control) is still enforced**. Every tool is m
 |-----------|------|----------|-------------|
 | `agent_name` | `string` | Yes | The name of the agent to switch to. |
 
+#### swap_to_default_agent
+
+This tool takes no arguments.
 #### artifact_write
 
 | Parameter | Type | Required | Description |

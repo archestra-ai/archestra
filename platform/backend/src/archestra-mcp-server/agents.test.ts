@@ -5,7 +5,7 @@ import {
 } from "@shared";
 import { and, eq } from "drizzle-orm";
 import db, { schema } from "@/database";
-import { AgentKnowledgeBaseModel } from "@/models";
+import { AgentKnowledgeBaseModel, AgentModel } from "@/models";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { Agent } from "@/types";
 import { type ArchestraContext, executeArchestraTool } from ".";
@@ -47,6 +47,18 @@ describe("agent tools", () => {
     expect(tool).toBeDefined();
     expect(tool?.title).toBe("Edit Agent");
   });
+
+  test("should have edit_llm_proxy tool", () => {
+    const tool = tools.find((t) => t.name.endsWith("edit_llm_proxy"));
+    expect(tool).toBeDefined();
+    expect(tool?.title).toBe("Edit LLM Proxy");
+  });
+
+  test("should have edit_mcp_gateway tool", () => {
+    const tool = tools.find((t) => t.name.endsWith("edit_mcp_gateway"));
+    expect(tool).toBeDefined();
+    expect(tool?.title).toBe("Edit MCP Gateway");
+  });
 });
 
 describe("agent tool execution", () => {
@@ -86,6 +98,42 @@ describe("agent tool execution", () => {
       "Successfully created agent",
     );
     expect((result.content[0] as any).text).toContain("New Test Agent");
+  });
+
+  test("create_agent assigns knowledge bases and connectors", async ({
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const organizationId = mockContext.organizationId;
+    if (!organizationId) {
+      throw new Error("Expected organizationId in test context");
+    }
+
+    const kb = await makeKnowledgeBase(organizationId);
+    const connector = await makeKnowledgeBaseConnector(kb.id, organizationId);
+
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_agent`,
+      {
+        name: "Agent With Knowledge",
+        knowledgeBaseIds: [kb.id],
+        connectorIds: [connector.id],
+      },
+      mockContext,
+    );
+
+    expect(result.isError).toBe(false);
+
+    const createdAgentId = extractCreatedId(result);
+    const created = await AgentModel.findById(
+      createdAgentId,
+      mockContext.userId,
+      true,
+    );
+
+    expect(created).toBeTruthy();
+    expect(created?.knowledgeBaseIds).toEqual([kb.id]);
+    expect(created?.connectorIds).toEqual([connector.id]);
   });
 
   test("create_agent does not write invalid remote MCP tool assignments from mcpServerIds", async ({
@@ -200,6 +248,139 @@ describe("agent tool execution", () => {
     );
   });
 
+  test("edit_agent replaces assigned knowledge bases and connectors", async ({
+    makeAgent,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const organizationId = mockContext.organizationId;
+    if (!organizationId) {
+      throw new Error("Expected organizationId in test context");
+    }
+
+    const existingKb = await makeKnowledgeBase(organizationId);
+    const existingConnector = await makeKnowledgeBaseConnector(
+      existingKb.id,
+      organizationId,
+    );
+    const agent = await makeAgent({
+      name: "Knowledge Agent",
+      agentType: "agent",
+      organizationId,
+      knowledgeBaseIds: [existingKb.id],
+      connectorIds: [existingConnector.id],
+    });
+
+    const replacementKb = await makeKnowledgeBase(organizationId);
+    const replacementConnector = await makeKnowledgeBaseConnector(
+      replacementKb.id,
+      organizationId,
+    );
+
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}edit_agent`,
+      {
+        id: agent.id,
+        knowledgeBaseIds: [replacementKb.id],
+        connectorIds: [replacementConnector.id],
+      },
+      mockContext,
+    );
+
+    expect(result.isError).toBe(false);
+    expect((result.content[0] as any).text).toContain(
+      "Successfully updated agent",
+    );
+
+    const updated = await AgentModel.findById(
+      agent.id,
+      mockContext.userId,
+      true,
+    );
+    expect(updated?.knowledgeBaseIds).toEqual([replacementKb.id]);
+    expect(updated?.connectorIds).toEqual([replacementConnector.id]);
+  });
+
+  test("edit_llm_proxy updates an llm proxy successfully", async ({
+    makeAgent,
+  }) => {
+    const organizationId = mockContext.organizationId;
+    if (!organizationId) {
+      throw new Error("Expected organizationId in test context");
+    }
+
+    const llmProxy = await makeAgent({
+      name: "Original LLM Proxy",
+      agentType: "llm_proxy",
+      organizationId,
+    });
+
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}edit_llm_proxy`,
+      {
+        id: llmProxy.id,
+        name: "Updated LLM Proxy",
+        labels: [{ key: "team", value: "platform" }],
+      },
+      mockContext,
+    );
+
+    expect(result.isError).toBe(false);
+    expect((result.content[0] as any).text).toContain(
+      "Successfully updated llm proxy",
+    );
+
+    const updated = await AgentModel.findById(
+      llmProxy.id,
+      mockContext.userId,
+      true,
+    );
+    expect(updated?.name).toBe("Updated LLM Proxy");
+    expect(updated?.labels).toContainEqual(
+      expect.objectContaining({ key: "team", value: "platform" }),
+    );
+  });
+
+  test("edit_mcp_gateway updates an mcp gateway successfully", async ({
+    makeAgent,
+  }) => {
+    const organizationId = mockContext.organizationId;
+    if (!organizationId) {
+      throw new Error("Expected organizationId in test context");
+    }
+
+    const mcpGateway = await makeAgent({
+      name: "Original MCP Gateway",
+      agentType: "mcp_gateway",
+      organizationId,
+    });
+
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}edit_mcp_gateway`,
+      {
+        id: mcpGateway.id,
+        name: "Updated MCP Gateway",
+        labels: [{ key: "env", value: "prod" }],
+      },
+      mockContext,
+    );
+
+    expect(result.isError).toBe(false);
+    expect((result.content[0] as any).text).toContain(
+      "Successfully updated mcp gateway",
+    );
+
+    const updated = await AgentModel.findById(
+      mcpGateway.id,
+      mockContext.userId,
+      true,
+    );
+    expect(updated?.name).toBe("Updated MCP Gateway");
+    expect(updated?.labels).toContainEqual(
+      expect.objectContaining({ key: "env", value: "prod" }),
+    );
+  });
+
   test("get_agent requires id or name", async () => {
     const result = await executeArchestraTool(
       `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}get_agent`,
@@ -229,6 +410,7 @@ describe("agent tool execution", () => {
     makeTool,
     makeAgentTool,
     makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
     makeOrganization,
   }) => {
     const org = await makeOrganization();
@@ -250,6 +432,12 @@ describe("agent tool execution", () => {
       name: "Product Docs",
     });
     await AgentKnowledgeBaseModel.assign(agent.id, kb.id);
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
+      name: "Jira Connector",
+    });
+    await AgentModel.update(agent.id, {
+      connectorIds: [connector.id],
+    });
 
     const result = await executeArchestraTool(
       `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}list_agents`,
@@ -272,8 +460,30 @@ describe("agent tool execution", () => {
     ]);
 
     // Verify knowledge sources
-    expect(found.knowledgeSources).toEqual([
-      { name: "Product Docs", description: null, type: "knowledge_base" },
-    ]);
+    expect(found.knowledgeSources).toContainEqual({
+      name: "Product Docs",
+      description: null,
+      type: "knowledge_base",
+    });
+    expect(found.knowledgeSources).toContainEqual({
+      name: "Jira Connector",
+      description: null,
+      type: "knowledge_connector",
+    });
   });
 });
+
+function extractCreatedId(
+  result: Awaited<ReturnType<typeof executeArchestraTool>>,
+) {
+  const createdAgentId = ((result.content[0] as any).text as string)
+    .split("\n")
+    .find((line) => line.startsWith("ID: "))
+    ?.replace("ID: ", "");
+
+  if (!createdAgentId) {
+    throw new Error("Expected created agent id in tool output");
+  }
+
+  return createdAgentId;
+}

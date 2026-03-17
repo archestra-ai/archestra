@@ -61,9 +61,11 @@ const toolGroups: Record<ArchestraToolShortName, ToolGroup> = {
 
   create_llm_proxy: ToolGroup.LLMProxies,
   get_llm_proxy: ToolGroup.LLMProxies,
+  edit_llm_proxy: ToolGroup.LLMProxies,
 
   create_mcp_gateway: ToolGroup.MCPGateways,
   get_mcp_gateway: ToolGroup.MCPGateways,
+  edit_mcp_gateway: ToolGroup.MCPGateways,
 
   search_private_mcp_registry: ToolGroup.MCPServers,
   get_mcp_servers: ToolGroup.MCPServers,
@@ -343,7 +345,7 @@ function renderInputSchema(
 ): string | null {
   const properties = schema.properties;
   if (!properties || Object.keys(properties).length === 0) {
-    return null;
+    return `#### ${toolName}\n\nThis tool takes no arguments.`;
   }
 
   const requiredSet = new Set(schema.required ?? []);

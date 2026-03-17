@@ -108,11 +108,15 @@ const registry = defineArchestraTools([
   {
     shortName: "update_limit",
     title: "Update Limit",
-    description: "Update an existing limit's value.",
+    description:
+      "Update mutable fields on an existing limit. At least one update field must be provided.",
     schema: z
       .object({
         id: UuidIdSchema.describe("The ID of the limit to update."),
-        limit_value: z.number().optional().describe("The new limit value."),
+        limit_value: z
+          .number()
+          .optional()
+          .describe("Optional new limit value."),
       })
       .strict(),
   },

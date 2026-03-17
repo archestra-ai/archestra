@@ -1,7 +1,5 @@
-import type { CallToolResult, Tool } from "@modelcontextprotocol/sdk/types.js";
+import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import {
-  ARCHESTRA_MCP_SERVER_NAME,
-  MCP_SERVER_TOOL_NAME_SEPARATOR,
   TOOL_ARTIFACT_WRITE_FULL_NAME,
   TOOL_SWAP_TO_DEFAULT_AGENT_FULL_NAME,
   TOOL_TODO_WRITE_FULL_NAME,
@@ -17,7 +15,7 @@ import {
 } from "@/models";
 import {
   catchError,
-  createToolDefinition,
+  defineArchestraTools,
   EmptyToolArgsSchema,
   errorResult,
   successResult,
@@ -25,16 +23,6 @@ import {
 import type { ArchestraContext } from "./types";
 
 // === Constants ===
-
-const TOOL_SWAP_AGENT_NAME = "swap_agent";
-const TOOL_SWAP_AGENT_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_SWAP_AGENT_NAME}`;
-
-export const toolShortNames = [
-  "todo_write",
-  "swap_agent",
-  "swap_to_default_agent",
-  "artifact_write",
-] as const;
 
 const TodoItemSchema = z
   .object({
@@ -48,70 +36,70 @@ const TodoItemSchema = z
   })
   .strict();
 
-export const toolArgsSchemas = {
-  [TOOL_TODO_WRITE_FULL_NAME]: z
-    .object({
-      todos: z
-        .array(TodoItemSchema)
-        .describe("Array of todo items to write to the conversation."),
-    })
-    .strict(),
-  [TOOL_SWAP_AGENT_FULL_NAME]: z
-    .object({
-      agent_name: z
-        .string()
-        .trim()
-        .min(1)
-        .describe("The name of the agent to switch to."),
-    })
-    .strict(),
-  [TOOL_SWAP_TO_DEFAULT_AGENT_FULL_NAME]: EmptyToolArgsSchema,
-  [TOOL_ARTIFACT_WRITE_FULL_NAME]: z
-    .object({
-      content: z
-        .string()
-        .min(1)
-        .describe(
-          "The markdown content to write to the conversation artifact. This completely replaces any existing artifact content.",
-        ),
-    })
-    .strict(),
-} as const;
-
-// === Exports ===
-
-export const tools: Tool[] = [
-  createToolDefinition({
-    name: TOOL_TODO_WRITE_FULL_NAME,
+const registry = defineArchestraTools([
+  {
+    shortName: "todo_write",
     title: "Write Todos",
     description:
       "Write todos to the current conversation. You have access to this tool to help you manage and plan tasks. Use it VERY frequently to ensure that you are tracking your tasks and giving the user visibility into your progress. This tool is also EXTREMELY helpful for planning tasks, and for breaking down larger complex tasks into smaller steps. If you do not use this tool when planning, you may forget to do important tasks - and that is unacceptable. It is critical that you mark todos as completed as soon as you are done with a task. Do not batch up multiple tasks before marking them as completed.",
-    schema: toolArgsSchemas[TOOL_TODO_WRITE_FULL_NAME],
-  }),
-  createToolDefinition({
-    name: TOOL_SWAP_AGENT_FULL_NAME,
+    schema: z
+      .object({
+        todos: z
+          .array(TodoItemSchema)
+          .describe("Array of todo items to write to the conversation."),
+      })
+      .strict(),
+  },
+  {
+    shortName: "swap_agent",
     title: "Swap Agent",
     description:
       "Switch the current conversation to a different agent. The new agent will automatically continue the conversation. Use this when the user asks to switch to or talk to a different agent.",
-    schema: toolArgsSchemas[TOOL_SWAP_AGENT_FULL_NAME],
-  }),
-  createToolDefinition({
-    name: TOOL_SWAP_TO_DEFAULT_AGENT_FULL_NAME,
+    schema: z
+      .object({
+        agent_name: z
+          .string()
+          .trim()
+          .min(1)
+          .describe("The name of the agent to switch to."),
+      })
+      .strict(),
+  },
+  {
+    shortName: "swap_to_default_agent",
     title: "Swap to Default Agent",
     description:
       "Return to the default agent. You MUST call this — without asking the user — when you don't have the right tools to fulfill a request, when you are stuck and cannot help further, when you are done with your task, or when the user wants to go back. Always write a brief message before calling this tool summarizing why you are switching back (e.g. what you accomplished, what tool is missing, or why you cannot continue).",
-    schema: toolArgsSchemas[TOOL_SWAP_TO_DEFAULT_AGENT_FULL_NAME],
-  }),
-  createToolDefinition({
-    name: TOOL_ARTIFACT_WRITE_FULL_NAME,
+    schema: EmptyToolArgsSchema,
+  },
+  {
+    shortName: "artifact_write",
     title: "Write Artifact",
     description:
       "Write or update a markdown artifact for the current conversation. Use this tool to maintain a persistent document that evolves throughout the conversation. The artifact should contain well-structured markdown content that can be referenced and updated as the conversation progresses. Each call to this tool completely replaces the existing artifact content. " +
       "Mermaid diagrams: Use ```mermaid blocks. " +
       "Supports: Headers, emphasis, lists, links, images, code blocks, tables, blockquotes, task lists, mermaid diagrams.",
-    schema: toolArgsSchemas[TOOL_ARTIFACT_WRITE_FULL_NAME],
-  }),
-];
+    schema: z
+      .object({
+        content: z
+          .string()
+          .min(1)
+          .describe(
+            "The markdown content to write to the conversation artifact. This completely replaces any existing artifact content.",
+          ),
+      })
+      .strict(),
+  },
+] as const);
+
+const { swap_agent: TOOL_SWAP_AGENT_FULL_NAME } = registry.toolFullNames;
+
+export const toolShortNames = registry.toolShortNames;
+export const toolArgsSchemas = registry.toolArgsSchemas;
+
+// === Exports ===
+
+export const tools = registry.tools;
 
 export async function handleTool(
   toolName: string,

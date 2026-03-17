@@ -1,8 +1,4 @@
-import type { CallToolResult, Tool } from "@modelcontextprotocol/sdk/types.js";
-import {
-  ARCHESTRA_MCP_SERVER_NAME,
-  MCP_SERVER_TOOL_NAME_SEPARATOR,
-} from "@shared";
+import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import logger from "@/logging";
 import { LimitModel } from "@/models";
@@ -15,36 +11,13 @@ import {
 } from "@/types";
 import {
   catchError,
-  createToolDefinition,
+  defineArchestraTools,
   errorResult,
   successResult,
 } from "./helpers";
 import type { ArchestraContext } from "./types";
 
 // === Constants ===
-
-const TOOL_CREATE_LIMIT_NAME = "create_limit";
-const TOOL_GET_LIMITS_NAME = "get_limits";
-const TOOL_UPDATE_LIMIT_NAME = "update_limit";
-const TOOL_DELETE_LIMIT_NAME = "delete_limit";
-const TOOL_GET_AGENT_TOKEN_USAGE_NAME = "get_agent_token_usage";
-const TOOL_GET_LLM_PROXY_TOKEN_USAGE_NAME = "get_llm_proxy_token_usage";
-
-const TOOL_CREATE_LIMIT_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_CREATE_LIMIT_NAME}`;
-const TOOL_GET_LIMITS_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_GET_LIMITS_NAME}`;
-const TOOL_UPDATE_LIMIT_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_UPDATE_LIMIT_NAME}`;
-const TOOL_DELETE_LIMIT_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_DELETE_LIMIT_NAME}`;
-const TOOL_GET_AGENT_TOKEN_USAGE_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_GET_AGENT_TOKEN_USAGE_NAME}`;
-const TOOL_GET_LLM_PROXY_TOKEN_USAGE_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_GET_LLM_PROXY_TOKEN_USAGE_NAME}`;
-
-export const toolShortNames = [
-  "create_limit",
-  "get_limits",
-  "update_limit",
-  "delete_limit",
-  "get_agent_token_usage",
-  "get_llm_proxy_token_usage",
-] as const;
 
 const CreateLimitToolArgsSchema = z
   .object({
@@ -108,89 +81,94 @@ const CreateLimitToolArgsSchema = z
     }
   });
 
-export const toolArgsSchemas = {
-  [TOOL_CREATE_LIMIT_FULL_NAME]: CreateLimitToolArgsSchema,
-  [TOOL_GET_LIMITS_FULL_NAME]: z
-    .object({
-      entity_type: LimitEntityTypeSchema.optional().describe(
-        "Optional filter by entity type.",
-      ),
-      entity_id: UuidIdSchema.optional().describe(
-        "Optional filter by entity ID.",
-      ),
-    })
-    .strict(),
-  [TOOL_UPDATE_LIMIT_FULL_NAME]: z
-    .object({
-      id: UuidIdSchema.describe("The ID of the limit to update."),
-      limit_value: z.number().optional().describe("The new limit value."),
-    })
-    .strict(),
-  [TOOL_DELETE_LIMIT_FULL_NAME]: z
-    .object({
-      id: UuidIdSchema.describe("The ID of the limit to delete."),
-    })
-    .strict(),
-  [TOOL_GET_AGENT_TOKEN_USAGE_FULL_NAME]: z
-    .object({
-      id: UuidIdSchema.optional().describe(
-        "Optional agent ID. Defaults to the current agent.",
-      ),
-    })
-    .strict(),
-  [TOOL_GET_LLM_PROXY_TOKEN_USAGE_FULL_NAME]: z
-    .object({
-      id: UuidIdSchema.optional().describe(
-        "Optional LLM proxy ID. Defaults to the current agent.",
-      ),
-    })
-    .strict(),
-} as const;
-
-// === Exports ===
-
-export const tools: Tool[] = [
-  createToolDefinition({
-    name: TOOL_CREATE_LIMIT_FULL_NAME,
+const registry = defineArchestraTools([
+  {
+    shortName: "create_limit",
     title: "Create Limit",
     description:
       "Create a new cost or usage limit for an organization, team, agent, LLM proxy, or MCP gateway. Supports token_cost, mcp_server_calls, and tool_calls limit types.",
-    schema: toolArgsSchemas[TOOL_CREATE_LIMIT_FULL_NAME],
-  }),
-  createToolDefinition({
-    name: TOOL_GET_LIMITS_FULL_NAME,
+    schema: CreateLimitToolArgsSchema,
+  },
+  {
+    shortName: "get_limits",
     title: "Get Limits",
     description:
       "Retrieve all limits, optionally filtered by entity type and/or entity ID.",
-    schema: toolArgsSchemas[TOOL_GET_LIMITS_FULL_NAME],
-  }),
-  createToolDefinition({
-    name: TOOL_UPDATE_LIMIT_FULL_NAME,
+    schema: z
+      .object({
+        entity_type: LimitEntityTypeSchema.optional().describe(
+          "Optional filter by entity type.",
+        ),
+        entity_id: UuidIdSchema.optional().describe(
+          "Optional filter by entity ID.",
+        ),
+      })
+      .strict(),
+  },
+  {
+    shortName: "update_limit",
     title: "Update Limit",
     description: "Update an existing limit's value.",
-    schema: toolArgsSchemas[TOOL_UPDATE_LIMIT_FULL_NAME],
-  }),
-  createToolDefinition({
-    name: TOOL_DELETE_LIMIT_FULL_NAME,
+    schema: z
+      .object({
+        id: UuidIdSchema.describe("The ID of the limit to update."),
+        limit_value: z.number().optional().describe("The new limit value."),
+      })
+      .strict(),
+  },
+  {
+    shortName: "delete_limit",
     title: "Delete Limit",
     description: "Delete an existing limit by ID.",
-    schema: toolArgsSchemas[TOOL_DELETE_LIMIT_FULL_NAME],
-  }),
-  createToolDefinition({
-    name: TOOL_GET_AGENT_TOKEN_USAGE_FULL_NAME,
+    schema: z
+      .object({
+        id: UuidIdSchema.describe("The ID of the limit to delete."),
+      })
+      .strict(),
+  },
+  {
+    shortName: "get_agent_token_usage",
     title: "Get Agent Token Usage",
     description:
       "Get the total token usage (input and output) for a specific agent. If no id is provided, returns usage for the current agent.",
-    schema: toolArgsSchemas[TOOL_GET_AGENT_TOKEN_USAGE_FULL_NAME],
-  }),
-  createToolDefinition({
-    name: TOOL_GET_LLM_PROXY_TOKEN_USAGE_FULL_NAME,
+    schema: z
+      .object({
+        id: UuidIdSchema.optional().describe(
+          "Optional agent ID. Defaults to the current agent.",
+        ),
+      })
+      .strict(),
+  },
+  {
+    shortName: "get_llm_proxy_token_usage",
     title: "Get LLM Proxy Token Usage",
     description:
       "Get the total token usage (input and output) for a specific LLM proxy. If no id is provided, returns usage for the current agent.",
-    schema: toolArgsSchemas[TOOL_GET_LLM_PROXY_TOKEN_USAGE_FULL_NAME],
-  }),
-];
+    schema: z
+      .object({
+        id: UuidIdSchema.optional().describe(
+          "Optional LLM proxy ID. Defaults to the current agent.",
+        ),
+      })
+      .strict(),
+  },
+] as const);
+
+const {
+  create_limit: TOOL_CREATE_LIMIT_FULL_NAME,
+  get_limits: TOOL_GET_LIMITS_FULL_NAME,
+  update_limit: TOOL_UPDATE_LIMIT_FULL_NAME,
+  delete_limit: TOOL_DELETE_LIMIT_FULL_NAME,
+  get_agent_token_usage: TOOL_GET_AGENT_TOKEN_USAGE_FULL_NAME,
+  get_llm_proxy_token_usage: TOOL_GET_LLM_PROXY_TOKEN_USAGE_FULL_NAME,
+} = registry.toolFullNames;
+
+export const toolShortNames = registry.toolShortNames;
+export const toolArgsSchemas = registry.toolArgsSchemas;
+
+// === Exports ===
+
+export const tools = registry.tools;
 
 export async function handleTool(
   toolName: string,

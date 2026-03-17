@@ -1,9 +1,4 @@
-import type { Tool } from "@modelcontextprotocol/sdk/types.js";
-import {
-  ARCHESTRA_MCP_SERVER_NAME,
-  MCP_SERVER_TOOL_NAME_SEPARATOR,
-  TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_FULL_NAME,
-} from "@shared";
+import { TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_FULL_NAME } from "@shared";
 import { z } from "zod";
 import { userHasPermission } from "@/auth/utils";
 import McpServerRuntimeManager from "@/k8s/mcp-server-runtime/manager";
@@ -24,6 +19,7 @@ import {
 import {
   catchError,
   deduplicateLabels,
+  defineArchestraTools,
   EmptyToolArgsSchema,
   errorResult,
   successResult,
@@ -31,39 +27,6 @@ import {
 import type { ArchestraContext } from "./types";
 
 // === Constants ===
-
-const TOOL_SEARCH_PRIVATE_MCP_REGISTRY_NAME = "search_private_mcp_registry";
-const TOOL_GET_MCP_SERVERS_NAME = "get_mcp_servers";
-const TOOL_GET_MCP_SERVER_TOOLS_NAME = "get_mcp_server_tools";
-const TOOL_EDIT_MCP_DESCRIPTION_NAME = "edit_mcp_description";
-const TOOL_EDIT_MCP_CONFIG_NAME = "edit_mcp_config";
-const TOOL_CREATE_MCP_SERVER_NAME = "create_mcp_server";
-const TOOL_DEPLOY_MCP_SERVER_NAME = "deploy_mcp_server";
-const TOOL_LIST_MCP_SERVER_DEPLOYMENTS_NAME = "list_mcp_server_deployments";
-const TOOL_GET_MCP_SERVER_LOGS_NAME = "get_mcp_server_logs";
-
-const TOOL_SEARCH_PRIVATE_MCP_REGISTRY_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_SEARCH_PRIVATE_MCP_REGISTRY_NAME}`;
-const TOOL_GET_MCP_SERVERS_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_GET_MCP_SERVERS_NAME}`;
-const TOOL_GET_MCP_SERVER_TOOLS_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_GET_MCP_SERVER_TOOLS_NAME}`;
-const TOOL_EDIT_MCP_DESCRIPTION_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_EDIT_MCP_DESCRIPTION_NAME}`;
-const TOOL_EDIT_MCP_CONFIG_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_EDIT_MCP_CONFIG_NAME}`;
-const TOOL_CREATE_MCP_SERVER_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_CREATE_MCP_SERVER_NAME}`;
-const TOOL_DEPLOY_MCP_SERVER_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_DEPLOY_MCP_SERVER_NAME}`;
-const TOOL_LIST_MCP_SERVER_DEPLOYMENTS_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_LIST_MCP_SERVER_DEPLOYMENTS_NAME}`;
-const TOOL_GET_MCP_SERVER_LOGS_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_GET_MCP_SERVER_LOGS_NAME}`;
-
-export const toolShortNames = [
-  "search_private_mcp_registry",
-  "get_mcp_servers",
-  "get_mcp_server_tools",
-  "edit_mcp_description",
-  "edit_mcp_config",
-  "create_mcp_server",
-  "deploy_mcp_server",
-  "list_mcp_server_deployments",
-  "get_mcp_server_logs",
-  "create_mcp_server_installation_request",
-] as const;
 
 const CatalogLabelSchema = z
   .object({
@@ -244,654 +207,159 @@ const McpConfigToolSchema = z
   })
   .strict();
 
-export const toolArgsSchemas = {
-  [TOOL_SEARCH_PRIVATE_MCP_REGISTRY_FULL_NAME]: z
-    .object({
-      query: z
-        .string()
-        .trim()
-        .min(1)
-        .optional()
-        .describe(
-          "Optional search query to filter MCP servers by name or description.",
-        ),
-    })
-    .strict(),
-  [TOOL_GET_MCP_SERVERS_FULL_NAME]: EmptyToolArgsSchema,
-  [TOOL_GET_MCP_SERVER_TOOLS_FULL_NAME]: z
-    .object({
-      mcpServerId: UuidIdSchema.describe("The catalog ID of the MCP server."),
-    })
-    .strict(),
-  [TOOL_EDIT_MCP_DESCRIPTION_FULL_NAME]: z
-    .object({
-      id: UuidIdSchema.describe(
-        "The catalog ID of the MCP server to edit. Use get_mcp_servers to look it up by name.",
-      ),
-    })
-    .merge(CatalogMetadataToolSchema.partial())
-    .strict(),
-  [TOOL_EDIT_MCP_CONFIG_FULL_NAME]: z
-    .object({
-      id: UuidIdSchema.describe(
-        "The catalog ID of the MCP server to edit. Use get_mcp_servers to look it up by name.",
-      ),
-    })
-    .merge(McpConfigToolSchema.partial())
-    .strict(),
-  [TOOL_CREATE_MCP_SERVER_FULL_NAME]: CatalogMetadataToolSchema.extend({
-    serverType: InsertInternalMcpCatalogSchema.shape.serverType
-      .optional()
-      .describe("Server type: local, remote, or builtin."),
-  })
-    .merge(McpConfigToolSchema.partial())
-    .strict(),
-  [TOOL_DEPLOY_MCP_SERVER_FULL_NAME]: z
-    .object({
-      catalogId: UuidIdSchema.describe(
-        "The catalog ID of the MCP server to deploy.",
-      ),
-      teamId: UuidIdSchema.optional().describe(
-        "Optional team ID for a team-scoped deployment.",
-      ),
-      agentIds: z
-        .array(UuidIdSchema)
-        .optional()
-        .describe(
-          "Optional agent IDs to assign the server's tools to after deployment.",
-        ),
-    })
-    .strict(),
-  [TOOL_LIST_MCP_SERVER_DEPLOYMENTS_FULL_NAME]: EmptyToolArgsSchema,
-  [TOOL_GET_MCP_SERVER_LOGS_FULL_NAME]: z
-    .object({
-      serverId: UuidIdSchema.describe("The deployment ID of the MCP server."),
-      lines: z
-        .number()
-        .int()
-        .positive()
-        .optional()
-        .describe("Number of log lines to retrieve."),
-    })
-    .strict(),
-  [TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_FULL_NAME]: EmptyToolArgsSchema,
-} as const;
-
-// === Exports ===
-
-export const tools: Tool[] = [
+const registry = defineArchestraTools([
   {
-    name: TOOL_SEARCH_PRIVATE_MCP_REGISTRY_FULL_NAME,
+    shortName: "search_private_mcp_registry",
     title: "Search Private MCP Registry",
     description:
       "Search the private MCP registry for available MCP servers. Optionally provide a search query to filter results by name or description.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        query: {
-          type: "string",
-          description:
-            "Optional search query to filter MCP servers by name or description",
-        },
-      },
-      required: [],
-    },
-    annotations: {},
-    _meta: {},
+    schema: z
+      .object({
+        query: z
+          .string()
+          .trim()
+          .min(1)
+          .optional()
+          .describe(
+            "Optional search query to filter MCP servers by name or description.",
+          ),
+      })
+      .strict(),
   },
   {
-    name: TOOL_GET_MCP_SERVERS_FULL_NAME,
+    shortName: "get_mcp_servers",
     title: "Get MCP Servers",
     description:
       "List all MCP servers from the catalog. Returns catalog item IDs that can be used with mcpServerIds in create_agent/edit_agent.",
-    inputSchema: {
-      type: "object",
-      properties: {},
-      required: [],
-    },
-    annotations: {},
-    _meta: {},
+    schema: EmptyToolArgsSchema,
   },
   {
-    name: TOOL_GET_MCP_SERVER_TOOLS_FULL_NAME,
+    shortName: "get_mcp_server_tools",
     title: "Get MCP Server Tools",
     description:
       "Get all tools available for a specific MCP server by its catalog ID (from get_mcp_servers).",
-    inputSchema: {
-      type: "object",
-      properties: {
-        mcpServerId: {
-          type: "string",
-          description: "The catalog ID of the MCP server",
-        },
-      },
-      required: ["mcpServerId"],
-    },
-    annotations: {},
-    _meta: {},
+    schema: z
+      .object({
+        mcpServerId: UuidIdSchema.describe("The catalog ID of the MCP server."),
+      })
+      .strict(),
   },
   {
-    name: TOOL_EDIT_MCP_DESCRIPTION_FULL_NAME,
+    shortName: "edit_mcp_description",
     title: "Edit MCP Server Description",
     description:
       "Edit an MCP server's display information and metadata. Use get_mcp_servers to look up IDs by name. Changing scope requires admin permissions.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        id: {
-          type: "string",
-          description:
-            "The catalog ID of the MCP server to edit. Use get_mcp_servers to look up by name.",
-        },
-        name: {
-          type: "string",
-          description: "New display name for the MCP server",
-        },
-        icon: {
-          type: "string",
-          description: "An emoji character to use as the MCP server icon",
-        },
-        description: {
-          type: "string",
-          description: "New description for the MCP server",
-        },
-        docsUrl: {
-          type: "string",
-          description: "Documentation URL",
-        },
-        repository: {
-          type: "string",
-          description: "Source code repository URL",
-        },
-        version: {
-          type: "string",
-          description: "Version string",
-        },
-        instructions: {
-          type: "string",
-          description: "Setup or usage instructions",
-        },
-        scope: {
-          type: "string",
-          enum: ["personal", "team", "org"],
-          description:
-            "Visibility scope. Changing scope requires admin permissions.",
-        },
-        labels: {
-          type: "array",
-          items: {
-            type: "object",
-            properties: {
-              key: { type: "string" },
-              value: { type: "string" },
-            },
-            required: ["key", "value"],
-          },
-          description: "Key-value labels for organization/categorization",
-        },
-        teams: {
-          type: "array",
-          items: { type: "string" },
-          description: "Team IDs for team-scoped access control",
-        },
-      },
-      required: ["id"],
-    },
-    annotations: {},
-    _meta: {},
+    schema: z
+      .object({
+        id: UuidIdSchema.describe(
+          "The catalog ID of the MCP server to edit. Use get_mcp_servers to look it up by name.",
+        ),
+      })
+      .merge(CatalogMetadataToolSchema.partial())
+      .strict(),
   },
   {
-    name: TOOL_EDIT_MCP_CONFIG_FULL_NAME,
+    shortName: "edit_mcp_config",
     title: "Edit MCP Server Configuration",
     description:
       "Edit an MCP server's technical configuration. For remote servers: use serverUrl, auth, and OAuth fields. For local (K8s) servers: use command, arguments, environment, Docker, and transport fields. Local config fields are merged into the existing configuration — only specified fields are overwritten. Use get_mcp_servers to look up IDs by name.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        id: {
-          type: "string",
-          description:
-            "The catalog ID of the MCP server to edit. Use get_mcp_servers to look up by name.",
-        },
-        serverType: {
-          type: "string",
-          enum: ["local", "remote", "builtin"],
-          description:
-            "Server type: local (K8s pod), remote (HTTP URL), or builtin",
-        },
-        serverUrl: {
-          type: "string",
-          description: "[Remote] The URL of the remote MCP server",
-        },
-        requiresAuth: {
-          type: "boolean",
-          description: "[Remote] Whether the server requires authentication",
-        },
-        authDescription: {
-          type: "string",
-          description: "[Remote] Description of how to set up authentication",
-        },
-        authFields: {
-          type: "array",
-          description: "[Remote] Authentication field definitions",
-          items: {
-            type: "object",
-            properties: {
-              name: { type: "string" },
-              label: { type: "string" },
-              type: {
-                type: "string",
-                enum: ["header", "query", "cookie"],
-              },
-              secret: { type: "boolean" },
-            },
-            required: ["name", "label", "type", "secret"],
-          },
-        },
-        oauthConfig: {
-          type: "object",
-          description: "[Remote] OAuth configuration for the server",
-        },
-        command: {
-          type: "string",
-          description: "[Local] The command to run (e.g. 'npx', 'uvx', 'node')",
-        },
-        arguments: {
-          type: "array",
-          items: { type: "string" },
-          description: "[Local] Command-line arguments",
-        },
-        environment: {
-          type: "array",
-          description: "[Local] Environment variables for the server process",
-          items: {
-            type: "object",
-            properties: {
-              key: { type: "string" },
-              type: {
-                type: "string",
-                enum: ["plain_text", "secret", "boolean", "number"],
-              },
-              value: { type: "string" },
-              promptOnInstallation: { type: "boolean" },
-              required: { type: "boolean" },
-              description: { type: "string" },
-              default: {},
-              mounted: { type: "boolean" },
-            },
-            required: ["key", "type", "promptOnInstallation"],
-          },
-        },
-        envFrom: {
-          type: "array",
-          description:
-            "[Local] Import environment variables from K8s Secrets or ConfigMaps",
-          items: {
-            type: "object",
-            properties: {
-              type: {
-                type: "string",
-                enum: ["secret", "configMap"],
-              },
-              name: { type: "string" },
-              prefix: { type: "string" },
-            },
-            required: ["type", "name"],
-          },
-        },
-        dockerImage: {
-          type: "string",
-          description:
-            "[Local] Custom Docker image (overrides the base MCP server image)",
-        },
-        serviceAccount: {
-          type: "string",
-          description: "[Local] K8s ServiceAccount name for the pod",
-        },
-        transportType: {
-          type: "string",
-          enum: ["stdio", "streamable-http"],
-          description:
-            "[Local] Transport type: stdio (default, JSON-RPC proxy) or streamable-http (native HTTP/SSE)",
-        },
-        httpPort: {
-          type: "number",
-          description:
-            "[Local] HTTP port for streamable-http transport (default: 8080)",
-        },
-        httpPath: {
-          type: "string",
-          description:
-            "[Local] HTTP path for streamable-http transport (default: /mcp)",
-        },
-        nodePort: {
-          type: "number",
-          description: "[Local] K8s NodePort for local dev access",
-        },
-        imagePullSecrets: {
-          type: "array",
-          description:
-            "[Local] Image pull secrets for private Docker registries",
-          items: {
-            type: "object",
-            properties: {
-              source: {
-                type: "string",
-                enum: ["existing"],
-              },
-              name: { type: "string" },
-            },
-            required: ["source", "name"],
-          },
-        },
-        deploymentSpecYaml: {
-          type: "string",
-          description: "[Local] Custom K8s deployment YAML override",
-        },
-        installationCommand: {
-          type: "string",
-          description: "[Local] Command to install the MCP server package",
-        },
-        userConfig: {
-          type: "object",
-          description:
-            "User-configurable fields shown during installation (shared by both remote and local)",
-        },
-      },
-      required: ["id"],
-    },
-    annotations: {},
-    _meta: {},
+    schema: z
+      .object({
+        id: UuidIdSchema.describe(
+          "The catalog ID of the MCP server to edit. Use get_mcp_servers to look it up by name.",
+        ),
+      })
+      .merge(McpConfigToolSchema.partial())
+      .strict(),
   },
   {
-    name: TOOL_CREATE_MCP_SERVER_FULL_NAME,
+    shortName: "create_mcp_server",
     title: "Create MCP Server",
     description:
       "Create a new MCP server in the private registry. Specify serverType to choose between local (K8s pod) or remote (HTTP URL). For local servers, provide command/arguments/environment. For remote servers, provide serverUrl and auth configuration. Defaults to personal scope.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        name: {
-          type: "string",
-          description: "Display name for the MCP server",
-        },
-        serverType: {
-          type: "string",
-          enum: ["local", "remote", "builtin"],
-          description:
-            "Server type: local (K8s pod, default), remote (HTTP URL), or builtin",
-        },
-        description: {
-          type: "string",
-          description: "Description of the MCP server",
-        },
-        icon: {
-          type: "string",
-          description: "An emoji character to use as the MCP server icon",
-        },
-        docsUrl: {
-          type: "string",
-          description: "Documentation URL",
-        },
-        repository: {
-          type: "string",
-          description: "Source code repository URL",
-        },
-        version: {
-          type: "string",
-          description: "Version string",
-        },
-        instructions: {
-          type: "string",
-          description: "Setup or usage instructions",
-        },
-        serverUrl: {
-          type: "string",
-          description: "[Remote] The URL of the remote MCP server",
-        },
-        requiresAuth: {
-          type: "boolean",
-          description: "[Remote] Whether the server requires authentication",
-        },
-        authDescription: {
-          type: "string",
-          description: "[Remote] Description of how to set up authentication",
-        },
-        authFields: {
-          type: "array",
-          description: "[Remote] Authentication field definitions",
-          items: {
-            type: "object",
-            properties: {
-              name: { type: "string" },
-              label: { type: "string" },
-              type: {
-                type: "string",
-                enum: ["header", "query", "cookie"],
-              },
-              secret: { type: "boolean" },
-            },
-            required: ["name", "label", "type", "secret"],
-          },
-        },
-        oauthConfig: {
-          type: "object",
-          description: "[Remote] OAuth configuration for the server",
-        },
-        command: {
-          type: "string",
-          description: "[Local] The command to run (e.g. 'npx', 'uvx', 'node')",
-        },
-        arguments: {
-          type: "array",
-          items: { type: "string" },
-          description: "[Local] Command-line arguments",
-        },
-        environment: {
-          type: "array",
-          description: "[Local] Environment variables for the server process",
-          items: {
-            type: "object",
-            properties: {
-              key: { type: "string" },
-              type: {
-                type: "string",
-                enum: ["plain_text", "secret", "boolean", "number"],
-              },
-              value: { type: "string" },
-              promptOnInstallation: { type: "boolean" },
-              required: { type: "boolean" },
-              description: { type: "string" },
-              default: {},
-              mounted: { type: "boolean" },
-            },
-            required: ["key", "type", "promptOnInstallation"],
-          },
-        },
-        envFrom: {
-          type: "array",
-          description:
-            "[Local] Import environment variables from K8s Secrets or ConfigMaps",
-          items: {
-            type: "object",
-            properties: {
-              type: {
-                type: "string",
-                enum: ["secret", "configMap"],
-              },
-              name: { type: "string" },
-              prefix: { type: "string" },
-            },
-            required: ["type", "name"],
-          },
-        },
-        dockerImage: {
-          type: "string",
-          description:
-            "[Local] Custom Docker image (overrides the base MCP server image)",
-        },
-        serviceAccount: {
-          type: "string",
-          description: "[Local] K8s ServiceAccount name for the pod",
-        },
-        transportType: {
-          type: "string",
-          enum: ["stdio", "streamable-http"],
-          description:
-            "[Local] Transport type: stdio (default, JSON-RPC proxy) or streamable-http (native HTTP/SSE)",
-        },
-        httpPort: {
-          type: "number",
-          description:
-            "[Local] HTTP port for streamable-http transport (default: 8080)",
-        },
-        httpPath: {
-          type: "string",
-          description:
-            "[Local] HTTP path for streamable-http transport (default: /mcp)",
-        },
-        nodePort: {
-          type: "number",
-          description: "[Local] K8s NodePort for local dev access",
-        },
-        imagePullSecrets: {
-          type: "array",
-          description:
-            "[Local] Image pull secrets for private Docker registries",
-          items: {
-            type: "object",
-            properties: {
-              source: {
-                type: "string",
-                enum: ["existing"],
-              },
-              name: { type: "string" },
-            },
-            required: ["source", "name"],
-          },
-        },
-        deploymentSpecYaml: {
-          type: "string",
-          description: "[Local] Custom K8s deployment YAML override",
-        },
-        installationCommand: {
-          type: "string",
-          description: "[Local] Command to install the MCP server package",
-        },
-        userConfig: {
-          type: "object",
-          description:
-            "User-configurable fields shown during installation (shared by both remote and local)",
-        },
-        scope: {
-          type: "string",
-          enum: ["personal", "team", "org"],
-          description:
-            "Visibility scope (default: personal, or team if teams provided). Non-personal scopes require admin.",
-        },
-        labels: {
-          type: "array",
-          items: {
-            type: "object",
-            properties: {
-              key: { type: "string" },
-              value: { type: "string" },
-            },
-            required: ["key", "value"],
-          },
-          description: "Key-value labels for organization/categorization",
-        },
-        teams: {
-          type: "array",
-          items: { type: "string" },
-          description: "Team IDs for team-scoped access control",
-        },
-      },
-      required: ["name"],
-    },
-    annotations: {},
-    _meta: {},
+    schema: CatalogMetadataToolSchema.extend({
+      serverType: InsertInternalMcpCatalogSchema.shape.serverType
+        .optional()
+        .describe("Server type: local, remote, or builtin."),
+    })
+      .merge(McpConfigToolSchema.partial())
+      .strict(),
   },
   {
-    name: TOOL_DEPLOY_MCP_SERVER_FULL_NAME,
+    shortName: "deploy_mcp_server",
     title: "Deploy MCP Server",
     description:
       "Deploy (install) an MCP server from the catalog. Creates a running instance. Only works for servers that do not require authentication — if auth is needed, tells the user to install via the UI. Use get_mcp_servers to find the catalog ID. Optionally assign the server's tools to agents.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        catalogId: {
-          type: "string",
-          description:
-            "The catalog ID of the MCP server to deploy. Use get_mcp_servers to look up by name.",
-        },
-        teamId: {
-          type: "string",
-          description:
-            "Optional team ID for a team-scoped deployment. If omitted, deploys as a personal server.",
-        },
-        agentIds: {
-          type: "array",
-          items: { type: "string" },
-          description:
+    schema: z
+      .object({
+        catalogId: UuidIdSchema.describe(
+          "The catalog ID of the MCP server to deploy.",
+        ),
+        teamId: UuidIdSchema.optional().describe(
+          "Optional team ID for a team-scoped deployment.",
+        ),
+        agentIds: z
+          .array(UuidIdSchema)
+          .optional()
+          .describe(
             "Optional agent IDs to assign the server's tools to after deployment.",
-        },
-      },
-      required: ["catalogId"],
-    },
-    annotations: {},
-    _meta: {},
+          ),
+      })
+      .strict(),
   },
   {
-    name: TOOL_LIST_MCP_SERVER_DEPLOYMENTS_FULL_NAME,
+    shortName: "list_mcp_server_deployments",
     title: "List MCP Server Deployments",
     description:
       "List all deployed (installed) MCP server instances accessible to the current user. Shows deployment status, server type, catalog info, team, and owner.",
-    inputSchema: {
-      type: "object",
-      properties: {},
-    },
-    annotations: {},
-    _meta: {},
+    schema: EmptyToolArgsSchema,
   },
   {
-    name: TOOL_GET_MCP_SERVER_LOGS_FULL_NAME,
+    shortName: "get_mcp_server_logs",
     title: "Get MCP Server Logs",
     description:
       "Get recent container logs from a deployed local (K8s) MCP server. Use list_mcp_server_deployments to find the server ID. Only works for local servers with K8s runtime enabled.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        serverId: {
-          type: "string",
-          description:
-            "The deployment ID of the MCP server (from list_mcp_server_deployments).",
-        },
-        lines: {
-          type: "number",
-          description:
-            "Number of log lines to retrieve (default: 100, max recommended: 500).",
-        },
-      },
-      required: ["serverId"],
-    },
-    annotations: {},
-    _meta: {},
+    schema: z
+      .object({
+        serverId: UuidIdSchema.describe("The deployment ID of the MCP server."),
+        lines: z
+          .number()
+          .int()
+          .positive()
+          .optional()
+          .describe("Number of log lines to retrieve."),
+      })
+      .strict(),
   },
   {
-    name: TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_FULL_NAME,
+    shortName: "create_mcp_server_installation_request",
     title: "Create MCP Server Installation Request",
     description:
       "Allows users from within the Archestra Platform chat UI to submit a request for an MCP server to be added to their Archestra Platform's internal MCP server registry. This will open a dialog for the user to submit an installation request. When you trigger this tool, just tell the user to go through the dialog to submit the request. Do not provider any additional information",
-    inputSchema: {
-      type: "object",
-      properties: {},
-      required: [],
-    },
-    annotations: {},
-    _meta: {},
+    schema: EmptyToolArgsSchema,
   },
-];
+] as const);
+
+const {
+  search_private_mcp_registry: TOOL_SEARCH_PRIVATE_MCP_REGISTRY_FULL_NAME,
+  get_mcp_servers: TOOL_GET_MCP_SERVERS_FULL_NAME,
+  get_mcp_server_tools: TOOL_GET_MCP_SERVER_TOOLS_FULL_NAME,
+  edit_mcp_description: TOOL_EDIT_MCP_DESCRIPTION_FULL_NAME,
+  edit_mcp_config: TOOL_EDIT_MCP_CONFIG_FULL_NAME,
+  create_mcp_server: TOOL_CREATE_MCP_SERVER_FULL_NAME,
+  deploy_mcp_server: TOOL_DEPLOY_MCP_SERVER_FULL_NAME,
+  list_mcp_server_deployments: TOOL_LIST_MCP_SERVER_DEPLOYMENTS_FULL_NAME,
+  get_mcp_server_logs: TOOL_GET_MCP_SERVER_LOGS_FULL_NAME,
+  create_mcp_server_installation_request:
+    _toolCreateMcpServerInstallationRequestFullName,
+} = registry.toolFullNames;
+
+export const toolShortNames = registry.toolShortNames;
+export const toolArgsSchemas = registry.toolArgsSchemas;
+
+// === Exports ===
+
+export const tools = registry.tools;
 
 export async function handleTool(
   toolName: string,

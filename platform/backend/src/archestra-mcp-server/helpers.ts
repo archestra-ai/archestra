@@ -1,4 +1,8 @@
 import type { CallToolResult, Tool } from "@modelcontextprotocol/sdk/types.js";
+import {
+  ARCHESTRA_MCP_SERVER_NAME,
+  MCP_SERVER_TOOL_NAME_SEPARATOR,
+} from "@shared";
 import { ZodError, type ZodType, z } from "zod";
 import logger from "@/logging";
 import { AgentModel, AgentToolModel, ToolModel } from "@/models";
@@ -45,6 +49,12 @@ export type ToolAssignmentResult = {
   toolId: string;
   status: string;
   error?: string;
+};
+export type ArchestraToolDefinition<ShortName extends string = string> = {
+  shortName: ShortName;
+  title: string;
+  description: string;
+  schema: ZodType;
 };
 
 export const EmptyToolArgsSchema = z.strictObject({});
@@ -247,6 +257,56 @@ export function createToolDefinition(params: {
     }) as Tool["inputSchema"],
     annotations: {},
     _meta: {},
+  };
+}
+
+export function defineArchestraTools<
+  const Definitions extends readonly ArchestraToolDefinition[],
+>(definitions: Definitions) {
+  type ShortName = Definitions[number]["shortName"];
+  type FullName<Name extends string> =
+    `${typeof ARCHESTRA_MCP_SERVER_NAME}${typeof MCP_SERVER_TOOL_NAME_SEPARATOR}${Name}`;
+
+  const toolShortNames = definitions.map(
+    (definition) => definition.shortName,
+  ) as {
+    [Index in keyof Definitions]: Definitions[Index]["shortName"];
+  };
+
+  const toolFullNames: Record<string, string> = {};
+  const toolArgsSchemas: Record<string, ZodType> = {};
+
+  for (const definition of definitions) {
+    const shortName = definition.shortName as ShortName;
+    const fullName =
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${definition.shortName}` as FullName<ShortName>;
+
+    toolFullNames[shortName] = fullName;
+    toolArgsSchemas[fullName] = definition.schema;
+  }
+
+  const tools = definitions.map((definition) =>
+    createToolDefinition({
+      name: toolFullNames[definition.shortName as ShortName],
+      title: definition.title,
+      description: definition.description,
+      schema: definition.schema,
+    }),
+  );
+
+  return {
+    toolShortNames,
+    toolFullNames: toolFullNames as {
+      [Definition in Definitions[number] as Definition["shortName"]]: FullName<
+        Definition["shortName"]
+      >;
+    },
+    toolArgsSchemas: toolArgsSchemas as {
+      [Definition in Definitions[number] as FullName<
+        Definition["shortName"]
+      >]: Definition["schema"];
+    },
+    tools,
   };
 }
 

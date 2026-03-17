@@ -1,8 +1,3 @@
-import type { Tool } from "@modelcontextprotocol/sdk/types.js";
-import {
-  ARCHESTRA_MCP_SERVER_NAME,
-  MCP_SERVER_TOOL_NAME_SEPARATOR,
-} from "@shared";
 import { z } from "zod";
 import {
   getAgentTypePermissionChecker,
@@ -27,8 +22,8 @@ import {
   assignSubAgentDelegations,
   assignToolAssignments,
   catchError,
-  createToolDefinition,
   deduplicateLabels,
+  defineArchestraTools,
   errorResult,
   formatAssignmentSummary,
   successResult,
@@ -36,35 +31,6 @@ import {
 import type { ArchestraContext } from "./types";
 
 // === Constants ===
-
-const TOOL_CREATE_AGENT_NAME = "create_agent";
-const TOOL_CREATE_LLM_PROXY_NAME = "create_llm_proxy";
-const TOOL_CREATE_MCP_GATEWAY_NAME = "create_mcp_gateway";
-const TOOL_GET_AGENT_NAME = "get_agent";
-const TOOL_GET_LLM_PROXY_NAME = "get_llm_proxy";
-const TOOL_GET_MCP_GATEWAY_NAME = "get_mcp_gateway";
-const TOOL_LIST_AGENTS_NAME = "list_agents";
-const TOOL_EDIT_AGENT_NAME = "edit_agent";
-
-const TOOL_CREATE_AGENT_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_CREATE_AGENT_NAME}`;
-const TOOL_CREATE_LLM_PROXY_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_CREATE_LLM_PROXY_NAME}`;
-const TOOL_CREATE_MCP_GATEWAY_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_CREATE_MCP_GATEWAY_NAME}`;
-const TOOL_GET_AGENT_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_GET_AGENT_NAME}`;
-const TOOL_GET_LLM_PROXY_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_GET_LLM_PROXY_NAME}`;
-const TOOL_GET_MCP_GATEWAY_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_GET_MCP_GATEWAY_NAME}`;
-const TOOL_LIST_AGENTS_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_LIST_AGENTS_NAME}`;
-const TOOL_EDIT_AGENT_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_EDIT_AGENT_NAME}`;
-
-export const toolShortNames = [
-  "create_agent",
-  "create_llm_proxy",
-  "create_mcp_gateway",
-  "get_agent",
-  "get_llm_proxy",
-  "get_mcp_gateway",
-  "list_agents",
-  "edit_agent",
-] as const;
 
 const LabelInputSchema = AgentLabelWithDetailsSchema.pick({
   key: true,
@@ -243,76 +209,81 @@ const EditAgentToolArgsSchema = z
   )
   .strict();
 
-export const toolArgsSchemas = {
-  [TOOL_CREATE_AGENT_FULL_NAME]: AgentCreateToolArgsSchema,
-  [TOOL_CREATE_LLM_PROXY_FULL_NAME]: NonAgentCreateToolArgsSchema,
-  [TOOL_CREATE_MCP_GATEWAY_FULL_NAME]: NonAgentCreateToolArgsSchema,
-  [TOOL_GET_AGENT_FULL_NAME]: GetAgentToolArgsSchema,
-  [TOOL_GET_LLM_PROXY_FULL_NAME]: GetAgentToolArgsSchema,
-  [TOOL_GET_MCP_GATEWAY_FULL_NAME]: GetAgentToolArgsSchema,
-  [TOOL_LIST_AGENTS_FULL_NAME]: ListAgentsToolArgsSchema,
-  [TOOL_EDIT_AGENT_FULL_NAME]: EditAgentToolArgsSchema,
-} as const;
-
-// === Exports ===
-
-export const tools: Tool[] = [
-  createToolDefinition({
-    name: TOOL_CREATE_AGENT_FULL_NAME,
+const registry = defineArchestraTools([
+  {
+    shortName: "create_agent",
     title: "Create Agent",
     description:
       "Create a new agent with the specified name, optional description, labels, prompts, icon emoji, MCP server tool assignments, and sub-agent delegations. Defaults to personal scope. IMPORTANT: When the user mentions MCP servers or sub-agents by name, you MUST first look up their IDs using get_mcp_servers / list_agents / get_agent, then pass the IDs via mcpServerIds / subAgentIds.",
     schema: AgentCreateToolArgsSchema,
-  }),
-  createToolDefinition({
-    name: TOOL_CREATE_LLM_PROXY_FULL_NAME,
+  },
+  {
+    shortName: "create_llm_proxy",
     title: "Create LLM Proxy",
     description:
       "Create a new LLM proxy with the specified name and optional labels.",
     schema: NonAgentCreateToolArgsSchema,
-  }),
-  createToolDefinition({
-    name: TOOL_CREATE_MCP_GATEWAY_FULL_NAME,
+  },
+  {
+    shortName: "create_mcp_gateway",
     title: "Create MCP Gateway",
     description:
       "Create a new MCP gateway with the specified name and optional labels.",
     schema: NonAgentCreateToolArgsSchema,
-  }),
-  createToolDefinition({
-    name: TOOL_GET_AGENT_FULL_NAME,
+  },
+  {
+    shortName: "get_agent",
     title: "Get Agent",
     description: "Get a specific agent by ID or name.",
     schema: GetAgentToolArgsSchema,
-  }),
-  createToolDefinition({
-    name: TOOL_GET_LLM_PROXY_FULL_NAME,
+  },
+  {
+    shortName: "get_llm_proxy",
     title: "Get LLM Proxy",
     description:
       "Get a specific LLM proxy by ID or name. When searching by name, only your personal proxies are matched.",
     schema: GetAgentToolArgsSchema,
-  }),
-  createToolDefinition({
-    name: TOOL_GET_MCP_GATEWAY_FULL_NAME,
+  },
+  {
+    shortName: "get_mcp_gateway",
     title: "Get MCP Gateway",
     description:
       "Get a specific MCP gateway by ID or name. When searching by name, only your personal gateways are matched.",
     schema: GetAgentToolArgsSchema,
-  }),
-  createToolDefinition({
-    name: TOOL_LIST_AGENTS_FULL_NAME,
+  },
+  {
+    shortName: "list_agents",
     title: "List Agents",
     description:
       "List agents with optional filtering by name and scope. Returns each agent's assigned tools and knowledge sources for discoverability.",
     schema: ListAgentsToolArgsSchema,
-  }),
-  createToolDefinition({
-    name: TOOL_EDIT_AGENT_FULL_NAME,
+  },
+  {
+    shortName: "edit_agent",
     title: "Edit Agent",
     description:
       "Edit an existing agent. All fields are optional except id. Only provided fields are updated. MCP server and sub-agent assignments are additive. Respects the calling user's access level. IMPORTANT: When the user mentions MCP servers or sub-agents by name, you MUST first look up their IDs using get_mcp_servers / list_agents / get_agent, then pass the IDs via mcpServerIds / subAgentIds.",
     schema: EditAgentToolArgsSchema,
-  }),
-];
+  },
+] as const);
+
+const {
+  create_agent: TOOL_CREATE_AGENT_FULL_NAME,
+  create_llm_proxy: TOOL_CREATE_LLM_PROXY_FULL_NAME,
+  create_mcp_gateway: TOOL_CREATE_MCP_GATEWAY_FULL_NAME,
+  get_agent: TOOL_GET_AGENT_FULL_NAME,
+  get_llm_proxy: TOOL_GET_LLM_PROXY_FULL_NAME,
+  get_mcp_gateway: TOOL_GET_MCP_GATEWAY_FULL_NAME,
+  list_agents: TOOL_LIST_AGENTS_FULL_NAME,
+  edit_agent: TOOL_EDIT_AGENT_FULL_NAME,
+} = registry.toolFullNames;
+
+export const toolShortNames = registry.toolShortNames;
+export const toolArgsSchemas = registry.toolArgsSchemas;
+
+// === Exports ===
+
+export const tools = registry.tools;
 
 export async function handleTool(
   toolName: string,

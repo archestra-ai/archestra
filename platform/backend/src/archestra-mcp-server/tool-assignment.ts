@@ -1,8 +1,4 @@
-import type { CallToolResult, Tool } from "@modelcontextprotocol/sdk/types.js";
-import {
-  ARCHESTRA_MCP_SERVER_NAME,
-  MCP_SERVER_TOOL_NAME_SEPARATOR,
-} from "@shared";
+import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import {
   getAgentTypePermissionChecker,
@@ -14,25 +10,13 @@ import { assignToolToAgent } from "@/routes/agent-tool";
 import { AgentToolAssignmentInputSchema, UuidIdSchema } from "@/types";
 import {
   catchError,
-  createToolDefinition,
+  defineArchestraTools,
   errorResult,
   successResult,
 } from "./helpers";
 import type { ArchestraContext } from "./types";
 
 // === Constants ===
-
-const TOOL_BULK_ASSIGN_TOOLS_TO_AGENTS_NAME = "bulk_assign_tools_to_agents";
-const TOOL_BULK_ASSIGN_TOOLS_TO_MCP_GATEWAYS_NAME =
-  "bulk_assign_tools_to_mcp_gateways";
-
-const TOOL_BULK_ASSIGN_TOOLS_TO_AGENTS_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_BULK_ASSIGN_TOOLS_TO_AGENTS_NAME}`;
-const TOOL_BULK_ASSIGN_TOOLS_TO_MCP_GATEWAYS_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_BULK_ASSIGN_TOOLS_TO_MCP_GATEWAYS_NAME}`;
-
-export const toolShortNames = [
-  "bulk_assign_tools_to_agents",
-  "bulk_assign_tools_to_mcp_gateways",
-] as const;
 
 const AgentAssignmentSchema = AgentToolAssignmentInputSchema.extend({
   toolId: AgentToolAssignmentInputSchema.shape.toolId.describe(
@@ -74,41 +58,47 @@ const McpGatewayAssignmentSchema = AgentToolAssignmentInputSchema.extend({
   ),
 }).strict();
 
-export const toolArgsSchemas = {
-  [TOOL_BULK_ASSIGN_TOOLS_TO_AGENTS_FULL_NAME]: z
-    .object({
-      assignments: z
-        .array(AgentAssignmentSchema)
-        .describe("Assignments to create or update for agents."),
-    })
-    .strict(),
-  [TOOL_BULK_ASSIGN_TOOLS_TO_MCP_GATEWAYS_FULL_NAME]: z
-    .object({
-      assignments: z
-        .array(McpGatewayAssignmentSchema)
-        .describe("Assignments to create or update for MCP gateways."),
-    })
-    .strict(),
-} as const;
-
-// === Exports ===
-
-export const tools: Tool[] = [
-  createToolDefinition({
-    name: TOOL_BULK_ASSIGN_TOOLS_TO_AGENTS_FULL_NAME,
+const registry = defineArchestraTools([
+  {
+    shortName: "bulk_assign_tools_to_agents",
     title: "Bulk Assign Tools to Agents",
     description:
       "Assign multiple tools to multiple agents in bulk with validation and error handling",
-    schema: toolArgsSchemas[TOOL_BULK_ASSIGN_TOOLS_TO_AGENTS_FULL_NAME],
-  }),
-  createToolDefinition({
-    name: TOOL_BULK_ASSIGN_TOOLS_TO_MCP_GATEWAYS_FULL_NAME,
+    schema: z
+      .object({
+        assignments: z
+          .array(AgentAssignmentSchema)
+          .describe("Assignments to create or update for agents."),
+      })
+      .strict(),
+  },
+  {
+    shortName: "bulk_assign_tools_to_mcp_gateways",
     title: "Bulk Assign Tools to MCP Gateways",
     description:
       "Assign multiple tools to multiple MCP gateways in bulk with validation and error handling",
-    schema: toolArgsSchemas[TOOL_BULK_ASSIGN_TOOLS_TO_MCP_GATEWAYS_FULL_NAME],
-  }),
-];
+    schema: z
+      .object({
+        assignments: z
+          .array(McpGatewayAssignmentSchema)
+          .describe("Assignments to create or update for MCP gateways."),
+      })
+      .strict(),
+  },
+] as const);
+
+const {
+  bulk_assign_tools_to_agents: TOOL_BULK_ASSIGN_TOOLS_TO_AGENTS_FULL_NAME,
+  bulk_assign_tools_to_mcp_gateways:
+    TOOL_BULK_ASSIGN_TOOLS_TO_MCP_GATEWAYS_FULL_NAME,
+} = registry.toolFullNames;
+
+export const toolShortNames = registry.toolShortNames;
+export const toolArgsSchemas = registry.toolArgsSchemas;
+
+// === Exports ===
+
+export const tools = registry.tools;
 
 export async function handleTool(
   toolName: string,

@@ -1,8 +1,4 @@
-import type { CallToolResult, Tool } from "@modelcontextprotocol/sdk/types.js";
-import {
-  ARCHESTRA_MCP_SERVER_NAME,
-  MCP_SERVER_TOOL_NAME_SEPARATOR,
-} from "@shared";
+import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import logger from "@/logging";
 import { ToolInvocationPolicyModel, TrustedDataPolicyModel } from "@/models";
@@ -14,7 +10,7 @@ import {
 } from "@/types";
 import {
   catchError,
-  createToolDefinition,
+  defineArchestraTools,
   EmptyToolArgsSchema,
   errorResult,
   successResult,
@@ -22,44 +18,6 @@ import {
 import type { ArchestraContext } from "./types";
 
 // === Constants ===
-
-const TOOL_GET_AUTONOMY_POLICY_OPERATORS_NAME = "get_autonomy_policy_operators";
-const TOOL_GET_TOOL_INVOCATION_POLICIES_NAME = "get_tool_invocation_policies";
-const TOOL_CREATE_TOOL_INVOCATION_POLICY_NAME = "create_tool_invocation_policy";
-const TOOL_GET_TOOL_INVOCATION_POLICY_NAME = "get_tool_invocation_policy";
-const TOOL_UPDATE_TOOL_INVOCATION_POLICY_NAME = "update_tool_invocation_policy";
-const TOOL_DELETE_TOOL_INVOCATION_POLICY_NAME = "delete_tool_invocation_policy";
-const TOOL_GET_TRUSTED_DATA_POLICIES_NAME = "get_trusted_data_policies";
-const TOOL_CREATE_TRUSTED_DATA_POLICY_NAME = "create_trusted_data_policy";
-const TOOL_GET_TRUSTED_DATA_POLICY_NAME = "get_trusted_data_policy";
-const TOOL_UPDATE_TRUSTED_DATA_POLICY_NAME = "update_trusted_data_policy";
-const TOOL_DELETE_TRUSTED_DATA_POLICY_NAME = "delete_trusted_data_policy";
-
-const TOOL_GET_AUTONOMY_POLICY_OPERATORS_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_GET_AUTONOMY_POLICY_OPERATORS_NAME}`;
-const TOOL_GET_TOOL_INVOCATION_POLICIES_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_GET_TOOL_INVOCATION_POLICIES_NAME}`;
-const TOOL_CREATE_TOOL_INVOCATION_POLICY_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_CREATE_TOOL_INVOCATION_POLICY_NAME}`;
-const TOOL_GET_TOOL_INVOCATION_POLICY_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_GET_TOOL_INVOCATION_POLICY_NAME}`;
-const TOOL_UPDATE_TOOL_INVOCATION_POLICY_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_UPDATE_TOOL_INVOCATION_POLICY_NAME}`;
-const TOOL_DELETE_TOOL_INVOCATION_POLICY_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_DELETE_TOOL_INVOCATION_POLICY_NAME}`;
-const TOOL_GET_TRUSTED_DATA_POLICIES_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_GET_TRUSTED_DATA_POLICIES_NAME}`;
-const TOOL_CREATE_TRUSTED_DATA_POLICY_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_CREATE_TRUSTED_DATA_POLICY_NAME}`;
-const TOOL_GET_TRUSTED_DATA_POLICY_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_GET_TRUSTED_DATA_POLICY_NAME}`;
-const TOOL_UPDATE_TRUSTED_DATA_POLICY_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_UPDATE_TRUSTED_DATA_POLICY_NAME}`;
-const TOOL_DELETE_TRUSTED_DATA_POLICY_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_DELETE_TRUSTED_DATA_POLICY_NAME}`;
-
-export const toolShortNames = [
-  "get_autonomy_policy_operators",
-  "get_tool_invocation_policies",
-  "create_tool_invocation_policy",
-  "get_tool_invocation_policy",
-  "update_tool_invocation_policy",
-  "delete_tool_invocation_policy",
-  "get_trusted_data_policies",
-  "create_trusted_data_policy",
-  "get_trusted_data_policy",
-  "update_trusted_data_policy",
-  "delete_trusted_data_policy",
-] as const;
 
 const ToolInvocationConditionSchema = z
   .object({
@@ -89,192 +47,205 @@ const TrustedDataConditionSchema = z
   })
   .strict();
 
-export const toolArgsSchemas = {
-  [TOOL_GET_AUTONOMY_POLICY_OPERATORS_FULL_NAME]: EmptyToolArgsSchema,
-  [TOOL_GET_TOOL_INVOCATION_POLICIES_FULL_NAME]: EmptyToolArgsSchema,
-  [TOOL_CREATE_TOOL_INVOCATION_POLICY_FULL_NAME]: z
-    .object({
-      toolId: UuidIdSchema.describe(
-        "The ID of the tool (UUID from the tools table).",
+const createToolInvocationPolicySchema = z
+  .object({
+    toolId: UuidIdSchema.describe(
+      "The ID of the tool (UUID from the tools table).",
+    ),
+    conditions: z
+      .array(ToolInvocationConditionSchema)
+      .describe(
+        "Array of conditions that must all match. Empty array means unconditional.",
       ),
-      conditions: z
-        .array(ToolInvocationConditionSchema)
-        .describe(
-          "Array of conditions that must all match. Empty array means unconditional.",
-        ),
-      action:
-        ToolInvocation.InsertToolInvocationPolicySchema.shape.action.describe(
-          "The action to take when the policy matches.",
-        ),
-      reason: z
-        .string()
-        .optional()
-        .describe("Human-readable explanation for why this policy exists."),
-    })
-    .strict(),
-  [TOOL_GET_TOOL_INVOCATION_POLICY_FULL_NAME]: z
-    .object({
-      id: UuidIdSchema.describe("The ID of the tool invocation policy."),
-    })
-    .strict(),
-  [TOOL_UPDATE_TOOL_INVOCATION_POLICY_FULL_NAME]: z
-    .object({
-      id: UuidIdSchema.describe(
-        "The ID of the tool invocation policy to update.",
-      ),
-      toolId: UuidIdSchema.optional().describe(
-        "The ID of the tool (UUID from the tools table).",
-      ),
-      conditions: z
-        .array(ToolInvocationConditionSchema)
-        .optional()
-        .describe(
-          "Updated array of conditions that must all match. Empty array means unconditional.",
-        ),
-      action: ToolInvocation.InsertToolInvocationPolicySchema.shape.action
-        .optional()
-        .describe("Updated action to take when the policy matches."),
-      reason: z
-        .string()
-        .nullable()
-        .optional()
-        .describe(
-          "Updated human-readable explanation for why this policy exists.",
-        ),
-    })
-    .strict(),
-  [TOOL_DELETE_TOOL_INVOCATION_POLICY_FULL_NAME]: z
-    .object({
-      id: UuidIdSchema.describe("The ID of the tool invocation policy."),
-    })
-    .strict(),
-  [TOOL_GET_TRUSTED_DATA_POLICIES_FULL_NAME]: EmptyToolArgsSchema,
-  [TOOL_CREATE_TRUSTED_DATA_POLICY_FULL_NAME]: z
-    .object({
-      toolId: UuidIdSchema.describe(
-        "The ID of the tool (UUID from the tools table).",
-      ),
-      conditions: z
-        .array(TrustedDataConditionSchema)
-        .describe(
-          "Array of conditions that must all match. Empty array means unconditional.",
-        ),
-      action: TrustedData.InsertTrustedDataPolicySchema.shape.action.describe(
+    action:
+      ToolInvocation.InsertToolInvocationPolicySchema.shape.action.describe(
         "The action to take when the policy matches.",
       ),
-      description: z
-        .string()
-        .optional()
-        .describe("Human-readable explanation for why this policy exists."),
-    })
-    .strict(),
-  [TOOL_GET_TRUSTED_DATA_POLICY_FULL_NAME]: z
-    .object({
-      id: UuidIdSchema.describe("The ID of the trusted data policy."),
-    })
-    .strict(),
-  [TOOL_UPDATE_TRUSTED_DATA_POLICY_FULL_NAME]: z
-    .object({
-      id: UuidIdSchema.describe("The ID of the trusted data policy to update."),
-      toolId: UuidIdSchema.optional().describe(
-        "The ID of the tool (UUID from the tools table).",
+    reason: z
+      .string()
+      .optional()
+      .describe("Human-readable explanation for why this policy exists."),
+  })
+  .strict();
+
+const updateToolInvocationPolicySchema = z
+  .object({
+    id: UuidIdSchema.describe(
+      "The ID of the tool invocation policy to update.",
+    ),
+    toolId: UuidIdSchema.optional().describe(
+      "The ID of the tool (UUID from the tools table).",
+    ),
+    conditions: z
+      .array(ToolInvocationConditionSchema)
+      .optional()
+      .describe(
+        "Updated array of conditions that must all match. Empty array means unconditional.",
       ),
-      conditions: z
-        .array(TrustedDataConditionSchema)
-        .optional()
-        .describe(
-          "Updated array of conditions that must all match. Empty array means unconditional.",
-        ),
-      action: TrustedData.InsertTrustedDataPolicySchema.shape.action
-        .optional()
-        .describe("Updated action to take when the policy matches."),
-      description: z
-        .string()
-        .nullable()
-        .optional()
-        .describe(
-          "Updated human-readable explanation for why this policy exists.",
-        ),
-    })
-    .strict(),
-  [TOOL_DELETE_TRUSTED_DATA_POLICY_FULL_NAME]: z
-    .object({
-      id: UuidIdSchema.describe("The ID of the trusted data policy."),
-    })
-    .strict(),
-} as const;
+    action: ToolInvocation.InsertToolInvocationPolicySchema.shape.action
+      .optional()
+      .describe("Updated action to take when the policy matches."),
+    reason: z
+      .string()
+      .nullable()
+      .optional()
+      .describe(
+        "Updated human-readable explanation for why this policy exists.",
+      ),
+  })
+  .strict();
 
-// === Exports ===
+const createTrustedDataPolicySchema = z
+  .object({
+    toolId: UuidIdSchema.describe(
+      "The ID of the tool (UUID from the tools table).",
+    ),
+    conditions: z
+      .array(TrustedDataConditionSchema)
+      .describe(
+        "Array of conditions that must all match. Empty array means unconditional.",
+      ),
+    action: TrustedData.InsertTrustedDataPolicySchema.shape.action.describe(
+      "The action to take when the policy matches.",
+    ),
+    description: z
+      .string()
+      .optional()
+      .describe("Human-readable explanation for why this policy exists."),
+  })
+  .strict();
 
-export const tools: Tool[] = [
-  createToolDefinition({
-    name: TOOL_GET_AUTONOMY_POLICY_OPERATORS_FULL_NAME,
+const updateTrustedDataPolicySchema = z
+  .object({
+    id: UuidIdSchema.describe("The ID of the trusted data policy to update."),
+    toolId: UuidIdSchema.optional().describe(
+      "The ID of the tool (UUID from the tools table).",
+    ),
+    conditions: z
+      .array(TrustedDataConditionSchema)
+      .optional()
+      .describe(
+        "Updated array of conditions that must all match. Empty array means unconditional.",
+      ),
+    action: TrustedData.InsertTrustedDataPolicySchema.shape.action
+      .optional()
+      .describe("Updated action to take when the policy matches."),
+    description: z
+      .string()
+      .nullable()
+      .optional()
+      .describe(
+        "Updated human-readable explanation for why this policy exists.",
+      ),
+  })
+  .strict();
+
+const registry = defineArchestraTools([
+  {
+    shortName: "get_autonomy_policy_operators",
     title: "Get Autonomy Policy Operators",
     description:
       "Get all supported policy operators with their human-readable labels",
-    schema: toolArgsSchemas[TOOL_GET_AUTONOMY_POLICY_OPERATORS_FULL_NAME],
-  }),
-  createToolDefinition({
-    name: TOOL_GET_TOOL_INVOCATION_POLICIES_FULL_NAME,
+    schema: EmptyToolArgsSchema,
+  },
+  {
+    shortName: "get_tool_invocation_policies",
     title: "Get Tool Invocation Policies",
     description: "Get all tool invocation policies",
-    schema: toolArgsSchemas[TOOL_GET_TOOL_INVOCATION_POLICIES_FULL_NAME],
-  }),
-  createToolDefinition({
-    name: TOOL_CREATE_TOOL_INVOCATION_POLICY_FULL_NAME,
+    schema: EmptyToolArgsSchema,
+  },
+  {
+    shortName: "create_tool_invocation_policy",
     title: "Create Tool Invocation Policy",
     description: "Create a new tool invocation policy",
-    schema: toolArgsSchemas[TOOL_CREATE_TOOL_INVOCATION_POLICY_FULL_NAME],
-  }),
-  createToolDefinition({
-    name: TOOL_GET_TOOL_INVOCATION_POLICY_FULL_NAME,
+    schema: createToolInvocationPolicySchema,
+  },
+  {
+    shortName: "get_tool_invocation_policy",
     title: "Get Tool Invocation Policy",
     description: "Get a specific tool invocation policy by ID",
-    schema: toolArgsSchemas[TOOL_GET_TOOL_INVOCATION_POLICY_FULL_NAME],
-  }),
-  createToolDefinition({
-    name: TOOL_UPDATE_TOOL_INVOCATION_POLICY_FULL_NAME,
+    schema: z
+      .object({
+        id: UuidIdSchema.describe("The ID of the tool invocation policy."),
+      })
+      .strict(),
+  },
+  {
+    shortName: "update_tool_invocation_policy",
     title: "Update Tool Invocation Policy",
     description: "Update a tool invocation policy",
-    schema: toolArgsSchemas[TOOL_UPDATE_TOOL_INVOCATION_POLICY_FULL_NAME],
-  }),
-  createToolDefinition({
-    name: TOOL_DELETE_TOOL_INVOCATION_POLICY_FULL_NAME,
+    schema: updateToolInvocationPolicySchema,
+  },
+  {
+    shortName: "delete_tool_invocation_policy",
     title: "Delete Tool Invocation Policy",
     description: "Delete a tool invocation policy by ID",
-    schema: toolArgsSchemas[TOOL_DELETE_TOOL_INVOCATION_POLICY_FULL_NAME],
-  }),
-  createToolDefinition({
-    name: TOOL_GET_TRUSTED_DATA_POLICIES_FULL_NAME,
+    schema: z
+      .object({
+        id: UuidIdSchema.describe("The ID of the tool invocation policy."),
+      })
+      .strict(),
+  },
+  {
+    shortName: "get_trusted_data_policies",
     title: "Get Trusted Data Policies",
     description: "Get all trusted data policies",
-    schema: toolArgsSchemas[TOOL_GET_TRUSTED_DATA_POLICIES_FULL_NAME],
-  }),
-  createToolDefinition({
-    name: TOOL_CREATE_TRUSTED_DATA_POLICY_FULL_NAME,
+    schema: EmptyToolArgsSchema,
+  },
+  {
+    shortName: "create_trusted_data_policy",
     title: "Create Trusted Data Policy",
     description: "Create a new trusted data policy",
-    schema: toolArgsSchemas[TOOL_CREATE_TRUSTED_DATA_POLICY_FULL_NAME],
-  }),
-  createToolDefinition({
-    name: TOOL_GET_TRUSTED_DATA_POLICY_FULL_NAME,
+    schema: createTrustedDataPolicySchema,
+  },
+  {
+    shortName: "get_trusted_data_policy",
     title: "Get Trusted Data Policy",
     description: "Get a specific trusted data policy by ID",
-    schema: toolArgsSchemas[TOOL_GET_TRUSTED_DATA_POLICY_FULL_NAME],
-  }),
-  createToolDefinition({
-    name: TOOL_UPDATE_TRUSTED_DATA_POLICY_FULL_NAME,
+    schema: z
+      .object({
+        id: UuidIdSchema.describe("The ID of the trusted data policy."),
+      })
+      .strict(),
+  },
+  {
+    shortName: "update_trusted_data_policy",
     title: "Update Trusted Data Policy",
     description: "Update a trusted data policy",
-    schema: toolArgsSchemas[TOOL_UPDATE_TRUSTED_DATA_POLICY_FULL_NAME],
-  }),
-  createToolDefinition({
-    name: TOOL_DELETE_TRUSTED_DATA_POLICY_FULL_NAME,
+    schema: updateTrustedDataPolicySchema,
+  },
+  {
+    shortName: "delete_trusted_data_policy",
     title: "Delete Trusted Data Policy",
     description: "Delete a trusted data policy by ID",
-    schema: toolArgsSchemas[TOOL_DELETE_TRUSTED_DATA_POLICY_FULL_NAME],
-  }),
-];
+    schema: z
+      .object({
+        id: UuidIdSchema.describe("The ID of the trusted data policy."),
+      })
+      .strict(),
+  },
+] as const);
+
+const {
+  get_autonomy_policy_operators: TOOL_GET_AUTONOMY_POLICY_OPERATORS_FULL_NAME,
+  get_tool_invocation_policies: TOOL_GET_TOOL_INVOCATION_POLICIES_FULL_NAME,
+  create_tool_invocation_policy: TOOL_CREATE_TOOL_INVOCATION_POLICY_FULL_NAME,
+  get_tool_invocation_policy: TOOL_GET_TOOL_INVOCATION_POLICY_FULL_NAME,
+  update_tool_invocation_policy: TOOL_UPDATE_TOOL_INVOCATION_POLICY_FULL_NAME,
+  delete_tool_invocation_policy: TOOL_DELETE_TOOL_INVOCATION_POLICY_FULL_NAME,
+  get_trusted_data_policies: TOOL_GET_TRUSTED_DATA_POLICIES_FULL_NAME,
+  create_trusted_data_policy: TOOL_CREATE_TRUSTED_DATA_POLICY_FULL_NAME,
+  get_trusted_data_policy: TOOL_GET_TRUSTED_DATA_POLICY_FULL_NAME,
+  update_trusted_data_policy: TOOL_UPDATE_TRUSTED_DATA_POLICY_FULL_NAME,
+  delete_trusted_data_policy: TOOL_DELETE_TRUSTED_DATA_POLICY_FULL_NAME,
+} = registry.toolFullNames;
+
+export const toolShortNames = registry.toolShortNames;
+export const toolArgsSchemas = registry.toolArgsSchemas;
+
+// === Exports ===
+
+export const tools = registry.tools;
 
 export async function handleTool(
   toolName: string,

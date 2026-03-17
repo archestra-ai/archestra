@@ -1,9 +1,4 @@
-import type { Tool } from "@modelcontextprotocol/sdk/types.js";
-import {
-  ARCHESTRA_MCP_SERVER_NAME,
-  MCP_SERVER_TOOL_NAME_SEPARATOR,
-  TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
-} from "@shared";
+import { TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME } from "@shared";
 import { z } from "zod";
 import { buildUserAcl, queryService } from "@/knowledge-base";
 import logger from "@/logging";
@@ -26,6 +21,7 @@ import {
 } from "@/types";
 import {
   catchError,
+  defineArchestraTools,
   EmptyToolArgsSchema,
   errorResult,
   successResult,
@@ -33,93 +29,6 @@ import {
 import type { ArchestraContext } from "./types";
 
 // === Constants ===
-
-const TOOL_CREATE_KB_NAME = "create_knowledge_base";
-const TOOL_GET_KBS_NAME = "get_knowledge_bases";
-const TOOL_GET_KB_NAME = "get_knowledge_base";
-const TOOL_UPDATE_KB_NAME = "update_knowledge_base";
-const TOOL_DELETE_KB_NAME = "delete_knowledge_base";
-const TOOL_CREATE_CONNECTOR_NAME = "create_knowledge_connector";
-const TOOL_GET_CONNECTORS_NAME = "get_knowledge_connectors";
-const TOOL_GET_CONNECTOR_NAME = "get_knowledge_connector";
-const TOOL_UPDATE_CONNECTOR_NAME = "update_knowledge_connector";
-const TOOL_DELETE_CONNECTOR_NAME = "delete_knowledge_connector";
-const TOOL_ASSIGN_CONNECTOR_KB_NAME =
-  "assign_knowledge_connector_to_knowledge_base";
-const TOOL_UNASSIGN_CONNECTOR_KB_NAME =
-  "unassign_knowledge_connector_from_knowledge_base";
-const TOOL_ASSIGN_KB_AGENT_NAME = "assign_knowledge_base_to_agent";
-const TOOL_UNASSIGN_KB_AGENT_NAME = "unassign_knowledge_base_from_agent";
-const TOOL_ASSIGN_CONNECTOR_AGENT_NAME = "assign_knowledge_connector_to_agent";
-const TOOL_UNASSIGN_CONNECTOR_AGENT_NAME =
-  "unassign_knowledge_connector_from_agent";
-
-const fullName = (short: string) =>
-  `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${short}`;
-
-const TOOL_CREATE_KB_FULL = fullName(TOOL_CREATE_KB_NAME);
-const TOOL_GET_KBS_FULL = fullName(TOOL_GET_KBS_NAME);
-const TOOL_GET_KB_FULL = fullName(TOOL_GET_KB_NAME);
-const TOOL_UPDATE_KB_FULL = fullName(TOOL_UPDATE_KB_NAME);
-const TOOL_DELETE_KB_FULL = fullName(TOOL_DELETE_KB_NAME);
-const TOOL_CREATE_CONNECTOR_FULL = fullName(TOOL_CREATE_CONNECTOR_NAME);
-const TOOL_GET_CONNECTORS_FULL = fullName(TOOL_GET_CONNECTORS_NAME);
-const TOOL_GET_CONNECTOR_FULL = fullName(TOOL_GET_CONNECTOR_NAME);
-const TOOL_UPDATE_CONNECTOR_FULL = fullName(TOOL_UPDATE_CONNECTOR_NAME);
-const TOOL_DELETE_CONNECTOR_FULL = fullName(TOOL_DELETE_CONNECTOR_NAME);
-const TOOL_ASSIGN_CONNECTOR_KB_FULL = fullName(TOOL_ASSIGN_CONNECTOR_KB_NAME);
-const TOOL_UNASSIGN_CONNECTOR_KB_FULL = fullName(
-  TOOL_UNASSIGN_CONNECTOR_KB_NAME,
-);
-const TOOL_ASSIGN_KB_AGENT_FULL = fullName(TOOL_ASSIGN_KB_AGENT_NAME);
-const TOOL_UNASSIGN_KB_AGENT_FULL = fullName(TOOL_UNASSIGN_KB_AGENT_NAME);
-const TOOL_ASSIGN_CONNECTOR_AGENT_FULL = fullName(
-  TOOL_ASSIGN_CONNECTOR_AGENT_NAME,
-);
-const TOOL_UNASSIGN_CONNECTOR_AGENT_FULL = fullName(
-  TOOL_UNASSIGN_CONNECTOR_AGENT_NAME,
-);
-
-const ALL_FULL_NAMES = new Set([
-  TOOL_CREATE_KB_FULL,
-  TOOL_GET_KBS_FULL,
-  TOOL_GET_KB_FULL,
-  TOOL_UPDATE_KB_FULL,
-  TOOL_DELETE_KB_FULL,
-  TOOL_CREATE_CONNECTOR_FULL,
-  TOOL_GET_CONNECTORS_FULL,
-  TOOL_GET_CONNECTOR_FULL,
-  TOOL_UPDATE_CONNECTOR_FULL,
-  TOOL_DELETE_CONNECTOR_FULL,
-  TOOL_ASSIGN_CONNECTOR_KB_FULL,
-  TOOL_UNASSIGN_CONNECTOR_KB_FULL,
-  TOOL_ASSIGN_KB_AGENT_FULL,
-  TOOL_UNASSIGN_KB_AGENT_FULL,
-  TOOL_ASSIGN_CONNECTOR_AGENT_FULL,
-  TOOL_UNASSIGN_CONNECTOR_AGENT_FULL,
-]);
-
-// === Exports ===
-
-export const toolShortNames = [
-  "query_knowledge_sources",
-  TOOL_CREATE_KB_NAME,
-  TOOL_GET_KBS_NAME,
-  TOOL_GET_KB_NAME,
-  TOOL_UPDATE_KB_NAME,
-  TOOL_DELETE_KB_NAME,
-  TOOL_CREATE_CONNECTOR_NAME,
-  TOOL_GET_CONNECTORS_NAME,
-  TOOL_GET_CONNECTOR_NAME,
-  TOOL_UPDATE_CONNECTOR_NAME,
-  TOOL_DELETE_CONNECTOR_NAME,
-  TOOL_ASSIGN_CONNECTOR_KB_NAME,
-  TOOL_UNASSIGN_CONNECTOR_KB_NAME,
-  TOOL_ASSIGN_KB_AGENT_NAME,
-  TOOL_UNASSIGN_KB_AGENT_NAME,
-  TOOL_ASSIGN_CONNECTOR_AGENT_NAME,
-  TOOL_UNASSIGN_CONNECTOR_AGENT_NAME,
-] as const;
 
 const KnowledgeBaseCreateToolArgsSchema = z
   .object({
@@ -206,359 +115,190 @@ const ConnectorAgentAssignmentSchema = z
   })
   .strict();
 
-export const toolArgsSchemas = {
-  [TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME]: z
-    .object({
-      query: z
-        .string()
-        .trim()
-        .min(1)
-        .describe(
-          "The user's original query, passed verbatim without rephrasing or expansion.",
-        ),
-    })
-    .strict(),
-  [TOOL_CREATE_KB_FULL]: KnowledgeBaseCreateToolArgsSchema,
-  [TOOL_GET_KBS_FULL]: EmptyToolArgsSchema,
-  [TOOL_GET_KB_FULL]: z
-    .object({
-      id: UuidIdSchema.describe("Knowledge base ID."),
-    })
-    .strict(),
-  [TOOL_UPDATE_KB_FULL]: KnowledgeBaseUpdateToolArgsSchema,
-  [TOOL_DELETE_KB_FULL]: z
-    .object({
-      id: UuidIdSchema.describe("Knowledge base ID."),
-    })
-    .strict(),
-  [TOOL_CREATE_CONNECTOR_FULL]: ConnectorCreateToolArgsSchema,
-  [TOOL_GET_CONNECTORS_FULL]: EmptyToolArgsSchema,
-  [TOOL_GET_CONNECTOR_FULL]: z
-    .object({
-      id: UuidIdSchema.describe("Knowledge connector ID."),
-    })
-    .strict(),
-  [TOOL_UPDATE_CONNECTOR_FULL]: ConnectorUpdateToolArgsSchema,
-  [TOOL_DELETE_CONNECTOR_FULL]: z
-    .object({
-      id: UuidIdSchema.describe("Knowledge connector ID."),
-    })
-    .strict(),
-  [TOOL_ASSIGN_CONNECTOR_KB_FULL]: ConnectorKnowledgeBaseAssignmentSchema,
-  [TOOL_UNASSIGN_CONNECTOR_KB_FULL]: ConnectorKnowledgeBaseAssignmentSchema,
-  [TOOL_ASSIGN_KB_AGENT_FULL]: KnowledgeBaseAgentAssignmentSchema,
-  [TOOL_UNASSIGN_KB_AGENT_FULL]: KnowledgeBaseAgentAssignmentSchema,
-  [TOOL_ASSIGN_CONNECTOR_AGENT_FULL]: ConnectorAgentAssignmentSchema,
-  [TOOL_UNASSIGN_CONNECTOR_AGENT_FULL]: ConnectorAgentAssignmentSchema,
-} as const;
-
-export const tools: Tool[] = [
-  // --- Query Knowledge Sources ---
+const registry = defineArchestraTools([
   {
-    name: TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
+    shortName: "query_knowledge_sources",
     title: "Query Knowledge Sources",
     description:
       "Query the organization's knowledge sources to retrieve relevant information. Use this tool when the user asks a question you cannot answer from your training data alone, or when they explicitly ask you to search internal documents and data sources. Pass the user's original query as-is — do not rephrase, summarize, or expand it. The system performs its own query optimization internally.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        query: {
-          type: "string",
-          description:
-            "The user's original query, passed verbatim without rephrasing or expansion. The system handles query optimization internally.",
-        },
-      },
-      required: ["query"],
-    },
-    annotations: {},
-    _meta: {},
+    schema: z
+      .object({
+        query: z
+          .string()
+          .trim()
+          .min(1)
+          .describe(
+            "The user's original query, passed verbatim without rephrasing or expansion.",
+          ),
+      })
+      .strict(),
   },
   // --- Knowledge Base CRUD ---
   {
-    name: TOOL_CREATE_KB_FULL,
+    shortName: "create_knowledge_base",
     title: "Create Knowledge Base",
     description:
       "Create a new knowledge base for organizing knowledge connectors.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        name: { type: "string", description: "Name of the knowledge base" },
-        description: {
-          type: "string",
-          description: "Description of the knowledge base",
-        },
-      },
-      required: ["name"],
-    },
-    annotations: {},
-    _meta: {},
+    schema: KnowledgeBaseCreateToolArgsSchema,
   },
   {
-    name: TOOL_GET_KBS_FULL,
+    shortName: "get_knowledge_bases",
     title: "Get Knowledge Bases",
     description: "List all knowledge bases in the organization.",
-    inputSchema: { type: "object", properties: {} },
-    annotations: {},
-    _meta: {},
+    schema: EmptyToolArgsSchema,
   },
   {
-    name: TOOL_GET_KB_FULL,
+    shortName: "get_knowledge_base",
     title: "Get Knowledge Base",
     description: "Get details of a specific knowledge base by ID.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        id: { type: "string", description: "Knowledge base ID" },
-      },
-      required: ["id"],
-    },
-    annotations: {},
-    _meta: {},
+    schema: z
+      .object({
+        id: UuidIdSchema.describe("Knowledge base ID."),
+      })
+      .strict(),
   },
   {
-    name: TOOL_UPDATE_KB_FULL,
+    shortName: "update_knowledge_base",
     title: "Update Knowledge Base",
     description: "Update an existing knowledge base.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        id: { type: "string", description: "Knowledge base ID" },
-        name: { type: "string", description: "New name" },
-        description: { type: "string", description: "New description" },
-      },
-      required: ["id"],
-    },
-    annotations: {},
-    _meta: {},
+    schema: KnowledgeBaseUpdateToolArgsSchema,
   },
   {
-    name: TOOL_DELETE_KB_FULL,
+    shortName: "delete_knowledge_base",
     title: "Delete Knowledge Base",
     description: "Delete a knowledge base by ID.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        id: { type: "string", description: "Knowledge base ID" },
-      },
-      required: ["id"],
-    },
-    annotations: {},
-    _meta: {},
+    schema: z
+      .object({
+        id: UuidIdSchema.describe("Knowledge base ID."),
+      })
+      .strict(),
   },
   // --- Knowledge Connector CRUD ---
   {
-    name: TOOL_CREATE_CONNECTOR_FULL,
+    shortName: "create_knowledge_connector",
     title: "Create Knowledge Connector",
     description:
       "Create a new knowledge connector for ingesting data from external sources.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        name: {
-          type: "string",
-          description: "Name of the knowledge connector",
-        },
-        connector_type: {
-          type: "string",
-          description:
-            "Type of the knowledge connector (e.g., jira, confluence, google_drive)",
-        },
-        config: {
-          type: "object",
-          description:
-            "Configuration for the knowledge connector (depends on connector_type)",
-        },
-        description: {
-          type: "string",
-          description: "Description of the knowledge connector",
-        },
-      },
-      required: ["name", "connector_type", "config"],
-    },
-    annotations: {},
-    _meta: {},
+    schema: ConnectorCreateToolArgsSchema,
   },
   {
-    name: TOOL_GET_CONNECTORS_FULL,
+    shortName: "get_knowledge_connectors",
     title: "Get Knowledge Connectors",
     description: "List all knowledge connectors in the organization.",
-    inputSchema: { type: "object", properties: {} },
-    annotations: {},
-    _meta: {},
+    schema: EmptyToolArgsSchema,
   },
   {
-    name: TOOL_GET_CONNECTOR_FULL,
+    shortName: "get_knowledge_connector",
     title: "Get Knowledge Connector",
     description: "Get details of a specific knowledge connector by ID.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        id: { type: "string", description: "Knowledge connector ID" },
-      },
-      required: ["id"],
-    },
-    annotations: {},
-    _meta: {},
+    schema: z
+      .object({
+        id: UuidIdSchema.describe("Knowledge connector ID."),
+      })
+      .strict(),
   },
   {
-    name: TOOL_UPDATE_CONNECTOR_FULL,
+    shortName: "update_knowledge_connector",
     title: "Update Knowledge Connector",
     description: "Update an existing knowledge connector.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        id: { type: "string", description: "Knowledge connector ID" },
-        name: { type: "string", description: "New name" },
-        description: { type: "string", description: "New description" },
-        enabled: {
-          type: "boolean",
-          description: "Whether the knowledge connector is enabled",
-        },
-        config: {
-          type: "object",
-          description:
-            "Updated connector configuration (provider-specific settings)",
-        },
-      },
-      required: ["id"],
-    },
-    annotations: {},
-    _meta: {},
+    schema: ConnectorUpdateToolArgsSchema,
   },
   {
-    name: TOOL_DELETE_CONNECTOR_FULL,
+    shortName: "delete_knowledge_connector",
     title: "Delete Knowledge Connector",
     description: "Delete a knowledge connector by ID.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        id: { type: "string", description: "Knowledge connector ID" },
-      },
-      required: ["id"],
-    },
-    annotations: {},
-    _meta: {},
+    schema: z
+      .object({
+        id: UuidIdSchema.describe("Knowledge connector ID."),
+      })
+      .strict(),
   },
   // --- Connector <-> Knowledge Base Assignments ---
   {
-    name: TOOL_ASSIGN_CONNECTOR_KB_FULL,
+    shortName: "assign_knowledge_connector_to_knowledge_base",
     title: "Assign Knowledge Connector to Knowledge Base",
     description: "Assign a knowledge connector to a knowledge base.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        connector_id: {
-          type: "string",
-          description: "Knowledge connector ID",
-        },
-        knowledge_base_id: {
-          type: "string",
-          description: "Knowledge base ID",
-        },
-      },
-      required: ["connector_id", "knowledge_base_id"],
-    },
-    annotations: {},
-    _meta: {},
+    schema: ConnectorKnowledgeBaseAssignmentSchema,
   },
   {
-    name: TOOL_UNASSIGN_CONNECTOR_KB_FULL,
+    shortName: "unassign_knowledge_connector_from_knowledge_base",
     title: "Unassign Knowledge Connector from Knowledge Base",
     description: "Remove a knowledge connector from a knowledge base.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        connector_id: {
-          type: "string",
-          description: "Knowledge connector ID",
-        },
-        knowledge_base_id: {
-          type: "string",
-          description: "Knowledge base ID",
-        },
-      },
-      required: ["connector_id", "knowledge_base_id"],
-    },
-    annotations: {},
-    _meta: {},
+    schema: ConnectorKnowledgeBaseAssignmentSchema,
   },
   // --- Knowledge Base <-> Agent Assignments ---
   {
-    name: TOOL_ASSIGN_KB_AGENT_FULL,
+    shortName: "assign_knowledge_base_to_agent",
     title: "Assign Knowledge Base to Agent",
     description: "Assign a knowledge base to an agent.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        knowledge_base_id: {
-          type: "string",
-          description: "Knowledge base ID",
-        },
-        agent_id: { type: "string", description: "Agent ID" },
-      },
-      required: ["knowledge_base_id", "agent_id"],
-    },
-    annotations: {},
-    _meta: {},
+    schema: KnowledgeBaseAgentAssignmentSchema,
   },
   {
-    name: TOOL_UNASSIGN_KB_AGENT_FULL,
+    shortName: "unassign_knowledge_base_from_agent",
     title: "Unassign Knowledge Base from Agent",
     description: "Remove a knowledge base from an agent.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        knowledge_base_id: {
-          type: "string",
-          description: "Knowledge base ID",
-        },
-        agent_id: { type: "string", description: "Agent ID" },
-      },
-      required: ["knowledge_base_id", "agent_id"],
-    },
-    annotations: {},
-    _meta: {},
+    schema: KnowledgeBaseAgentAssignmentSchema,
   },
   // --- Knowledge Connector <-> Agent Assignments ---
   {
-    name: TOOL_ASSIGN_CONNECTOR_AGENT_FULL,
+    shortName: "assign_knowledge_connector_to_agent",
     title: "Assign Knowledge Connector to Agent",
     description:
       "Directly assign a knowledge connector to an agent (bypassing knowledge base).",
-    inputSchema: {
-      type: "object",
-      properties: {
-        connector_id: {
-          type: "string",
-          description: "Knowledge connector ID",
-        },
-        agent_id: { type: "string", description: "Agent ID" },
-      },
-      required: ["connector_id", "agent_id"],
-    },
-    annotations: {},
-    _meta: {},
+    schema: ConnectorAgentAssignmentSchema,
   },
   {
-    name: TOOL_UNASSIGN_CONNECTOR_AGENT_FULL,
+    shortName: "unassign_knowledge_connector_from_agent",
     title: "Unassign Knowledge Connector from Agent",
     description:
       "Remove a directly-assigned knowledge connector from an agent.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        connector_id: {
-          type: "string",
-          description: "Knowledge connector ID",
-        },
-        agent_id: { type: "string", description: "Agent ID" },
-      },
-      required: ["connector_id", "agent_id"],
-    },
-    annotations: {},
-    _meta: {},
+    schema: ConnectorAgentAssignmentSchema,
   },
-];
+] as const);
+
+const {
+  query_knowledge_sources: _toolQueryKnowledgeSourcesFullName,
+  create_knowledge_base: TOOL_CREATE_KB_FULL,
+  get_knowledge_bases: TOOL_GET_KBS_FULL,
+  get_knowledge_base: TOOL_GET_KB_FULL,
+  update_knowledge_base: TOOL_UPDATE_KB_FULL,
+  delete_knowledge_base: TOOL_DELETE_KB_FULL,
+  create_knowledge_connector: TOOL_CREATE_CONNECTOR_FULL,
+  get_knowledge_connectors: TOOL_GET_CONNECTORS_FULL,
+  get_knowledge_connector: TOOL_GET_CONNECTOR_FULL,
+  update_knowledge_connector: TOOL_UPDATE_CONNECTOR_FULL,
+  delete_knowledge_connector: TOOL_DELETE_CONNECTOR_FULL,
+  assign_knowledge_connector_to_knowledge_base: TOOL_ASSIGN_CONNECTOR_KB_FULL,
+  unassign_knowledge_connector_from_knowledge_base:
+    TOOL_UNASSIGN_CONNECTOR_KB_FULL,
+  assign_knowledge_base_to_agent: TOOL_ASSIGN_KB_AGENT_FULL,
+  unassign_knowledge_base_from_agent: TOOL_UNASSIGN_KB_AGENT_FULL,
+  assign_knowledge_connector_to_agent: TOOL_ASSIGN_CONNECTOR_AGENT_FULL,
+  unassign_knowledge_connector_from_agent: TOOL_UNASSIGN_CONNECTOR_AGENT_FULL,
+} = registry.toolFullNames;
+
+const ALL_FULL_NAMES = new Set<string>([
+  TOOL_CREATE_KB_FULL,
+  TOOL_GET_KBS_FULL,
+  TOOL_GET_KB_FULL,
+  TOOL_UPDATE_KB_FULL,
+  TOOL_DELETE_KB_FULL,
+  TOOL_CREATE_CONNECTOR_FULL,
+  TOOL_GET_CONNECTORS_FULL,
+  TOOL_GET_CONNECTOR_FULL,
+  TOOL_UPDATE_CONNECTOR_FULL,
+  TOOL_DELETE_CONNECTOR_FULL,
+  TOOL_ASSIGN_CONNECTOR_KB_FULL,
+  TOOL_UNASSIGN_CONNECTOR_KB_FULL,
+  TOOL_ASSIGN_KB_AGENT_FULL,
+  TOOL_UNASSIGN_KB_AGENT_FULL,
+  TOOL_ASSIGN_CONNECTOR_AGENT_FULL,
+  TOOL_UNASSIGN_CONNECTOR_AGENT_FULL,
+]);
+
+export const toolShortNames = registry.toolShortNames;
+export const toolArgsSchemas = registry.toolArgsSchemas;
+export const tools = registry.tools;
 
 export async function handleTool(
   toolName: string,

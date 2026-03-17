@@ -2,6 +2,7 @@ import type { OrganizationCustomFont, OrganizationTheme } from "@shared";
 import {
   boolean,
   integer,
+  jsonb,
   pgTable,
   text,
   timestamp,
@@ -10,6 +11,7 @@ import {
 } from "drizzle-orm/pg-core";
 import type {
   GlobalToolPolicy,
+  OrganizationChatLink,
   OrganizationCompressionScope,
   OrganizationLimitCleanupInterval,
 } from "@/types";
@@ -107,11 +109,8 @@ const organizationsTable = pgTable("organization", {
   /** Custom footer text (replaces version display) */
   footerText: text("footer_text"),
 
-  /** Optional help/documentation URL shown on the new chat page */
-  helpCenterUrl: text("help_center_url"),
-
-  /** Optional custom label for the new chat help/documentation link */
-  helpCenterLabel: text("help_center_label"),
+  /** Optional quick links shown on the new chat page */
+  chatLinks: jsonb("chat_links").$type<OrganizationChatLink[]>(),
 
   /** Chat input placeholder texts (cycles with typing animation) */
   chatPlaceholders: text("chat_placeholders").array(),

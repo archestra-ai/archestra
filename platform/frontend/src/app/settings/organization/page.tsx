@@ -12,7 +12,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import { isValidHelpCenterUrl } from "@/lib/help-center-url";
 import { useOnUnmount } from "@/lib/lifecycle.hook";
 import {
   organizationKeys,
@@ -20,6 +19,12 @@ import {
   useUpdateAppearanceSettings,
 } from "@/lib/organization.query";
 import { useOrgTheme } from "@/lib/theme.hook";
+import { ChatLinksEditor } from "./_components/chat-links-editor";
+import {
+  type ChatLinkEditorValue,
+  sanitizeChatLinks,
+  validateChatLink,
+} from "./_components/chat-links-editor.utils";
 import { ChatPlaceholdersEditor } from "./_components/chat-placeholders-editor";
 import { FaviconUpload } from "./_components/favicon-upload";
 import { IconLogoUpload } from "./_components/icon-logo-upload";
@@ -67,14 +72,17 @@ export default function OrganizationSettingsPage() {
   const [appName, setAppName] = useState<string | null>(null);
   const [ogDescription, setOgDescription] = useState<string | null>(null);
   const [footerText, setFooterText] = useState<string | null>(null);
-  const [helpCenterUrl, setHelpCenterUrl] = useState<string | null>(null);
-  const [helpCenterLabel, setHelpCenterLabel] = useState<string | null>(null);
-  const [chatPlaceholders, setChatPlaceholders] = useState<string[] | null>(
+  const [chatLinks, setChatLinks] = useState<ChatLinkEditorValue[] | null>(
     null,
   );
+  const [showChatLinkValidationErrors, setShowChatLinkValidationErrors] =
+    useState(false);
   const [chatErrorSupportMessage, setChatErrorSupportMessage] = useState<
     string | null
   >(null);
+  const [chatPlaceholders, setChatPlaceholders] = useState<string[] | null>(
+    null,
+  );
   const [animateChatPlaceholders, setAnimateChatPlaceholders] = useState<
     boolean | null
   >(null);
@@ -85,31 +93,36 @@ export default function OrganizationSettingsPage() {
   const effectiveOgDescription =
     ogDescription ?? organization?.ogDescription ?? "";
   const effectiveFooterText = footerText ?? organization?.footerText ?? "";
-  const effectiveHelpCenterUrl =
-    helpCenterUrl ?? organization?.helpCenterUrl ?? "";
-  const effectiveHelpCenterLabel =
-    helpCenterLabel ?? organization?.helpCenterLabel ?? "";
-  const effectiveChatPlaceholders =
-    chatPlaceholders ?? organization?.chatPlaceholders ?? [];
+  const effectiveChatLinks = chatLinks ?? organization?.chatLinks ?? [];
   const effectiveChatErrorSupportMessage =
     chatErrorSupportMessage ?? organization?.chatErrorSupportMessage ?? "";
+  const effectiveChatPlaceholders =
+    chatPlaceholders ?? organization?.chatPlaceholders ?? [];
   const effectiveAnimateChatPlaceholders =
     animateChatPlaceholders ?? organization?.animateChatPlaceholders ?? true;
   const effectiveShowTwoFactor =
     showTwoFactor ?? organization?.showTwoFactor ?? false;
-  const trimmedHelpCenterUrl = effectiveHelpCenterUrl.trim();
-  const helpCenterUrlError =
-    trimmedHelpCenterUrl.length > 0 &&
-    !isValidHelpCenterUrl(trimmedHelpCenterUrl)
-      ? "Enter a valid HTTP or HTTPS URL."
-      : null;
+  const liveChatLinkValidationErrors = effectiveChatLinks.map((link) =>
+    validateChatLink(link),
+  );
+  const saveChatLinkValidationErrors = effectiveChatLinks.map((link) =>
+    validateChatLink(link, { requireComplete: true }),
+  );
+  const hasLiveChatLinkValidationErrors = liveChatLinkValidationErrors.some(
+    (errors) => !!errors.label || !!errors.url,
+  );
+  const displayedChatLinkValidationErrors = showChatLinkValidationErrors
+    ? saveChatLinkValidationErrors
+    : liveChatLinkValidationErrors;
+  const hasChatLinkValidationErrors = saveChatLinkValidationErrors.some(
+    (errors) => !!errors.label || !!errors.url,
+  );
 
   const hasFieldChanges =
     appName !== null ||
     ogDescription !== null ||
     footerText !== null ||
-    helpCenterUrl !== null ||
-    helpCenterLabel !== null ||
+    chatLinks !== null ||
     chatErrorSupportMessage !== null ||
     chatPlaceholders !== null ||
     animateChatPlaceholders !== null ||
@@ -120,11 +133,10 @@ export default function OrganizationSettingsPage() {
     if (appName !== null) data.appName = appName || null;
     if (ogDescription !== null) data.ogDescription = ogDescription || null;
     if (footerText !== null) data.footerText = footerText || null;
-    if (helpCenterUrl !== null) {
-      data.helpCenterUrl = helpCenterUrl.trim() || null;
-    }
-    if (helpCenterLabel !== null) {
-      data.helpCenterLabel = helpCenterLabel.trim() || null;
+    if (chatLinks !== null) {
+      const sanitizedChatLinks = sanitizeChatLinks(chatLinks);
+      data.chatLinks =
+        sanitizedChatLinks.length > 0 ? sanitizedChatLinks : null;
     }
     if (chatErrorSupportMessage !== null) {
       data.chatErrorSupportMessage = chatErrorSupportMessage.trim() || null;
@@ -146,8 +158,8 @@ export default function OrganizationSettingsPage() {
     setAppName(null);
     setOgDescription(null);
     setFooterText(null);
-    setHelpCenterUrl(null);
-    setHelpCenterLabel(null);
+    setChatLinks(null);
+    setShowChatLinkValidationErrors(false);
     setChatErrorSupportMessage(null);
     setChatPlaceholders(null);
     setAnimateChatPlaceholders(null);
@@ -192,7 +204,7 @@ export default function OrganizationSettingsPage() {
           <Card>
             <SettingsCardHeader
               title="Branding"
-              description="Customize your organization's browser tab title, OpenGraph description, footer text, and chat placeholders."
+              description="Customize your organization's browser tab title, OpenGraph description, footer text, chat links, and chat placeholders."
             />
             <CardContent className="space-y-4">
               <div className="space-y-2">
@@ -236,43 +248,11 @@ export default function OrganizationSettingsPage() {
                   Custom text shown in the footer alongside the version number.
                 </p>
               </div>
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="helpCenterUrl">Help Center URL</Label>
-                  <Input
-                    id="helpCenterUrl"
-                    type="url"
-                    placeholder="https://support.example.com/help"
-                    value={effectiveHelpCenterUrl}
-                    onChange={(e) => setHelpCenterUrl(e.target.value)}
-                    maxLength={2000}
-                    aria-invalid={!!helpCenterUrlError}
-                  />
-                  <p
-                    className={
-                      helpCenterUrlError
-                        ? "text-xs text-destructive"
-                        : "text-xs text-muted-foreground"
-                    }
-                  >
-                    {helpCenterUrlError ??
-                      "Optional external link shown on the new chat page for help or documentation."}
-                  </p>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="helpCenterLabel">Help Center Label</Label>
-                  <Input
-                    id="helpCenterLabel"
-                    placeholder="Help Center"
-                    value={effectiveHelpCenterLabel}
-                    onChange={(e) => setHelpCenterLabel(e.target.value)}
-                    maxLength={80}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Optional button text. Defaults to &quot;Help Center&quot;.
-                  </p>
-                </div>
-              </div>
+              <ChatLinksEditor
+                links={effectiveChatLinks}
+                validationErrors={displayedChatLinkValidationErrors}
+                onChange={setChatLinks}
+              />
               <div className="space-y-2">
                 <Label htmlFor="chatErrorSupportMessage">
                   Support Contact Message
@@ -345,11 +325,16 @@ export default function OrganizationSettingsPage() {
         isSaving={updateMutation.isPending}
         permissions={{ organizationSettings: ["update"] }}
         onSave={async () => {
+          if (hasFieldChanges && hasChatLinkValidationErrors) {
+            setShowChatLinkValidationErrors(true);
+            return;
+          }
+
           if (hasThemeChanges) {
             await saveAppearance?.(currentUITheme || DEFAULT_THEME);
             setHasThemeChanges(false);
           }
-          if (hasFieldChanges && !helpCenterUrlError) {
+          if (hasFieldChanges) {
             await handleSaveFields();
           }
         }}
@@ -361,14 +346,14 @@ export default function OrganizationSettingsPage() {
           setAppName(null);
           setOgDescription(null);
           setFooterText(null);
-          setHelpCenterUrl(null);
-          setHelpCenterLabel(null);
+          setChatLinks(null);
+          setShowChatLinkValidationErrors(false);
           setChatErrorSupportMessage(null);
           setChatPlaceholders(null);
           setAnimateChatPlaceholders(null);
           setShowTwoFactor(null);
         }}
-        disabledSave={!!helpCenterUrlError}
+        disabledSave={hasLiveChatLinkValidationErrors}
       />
     </SettingsSectionStack>
   );

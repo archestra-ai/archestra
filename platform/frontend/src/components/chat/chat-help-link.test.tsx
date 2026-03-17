@@ -1,18 +1,18 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { ChatHelpLink } from "./chat-help-link";
+import { ChatLinkButton } from "./chat-help-link";
 
-describe("ChatHelpLink", () => {
+describe("ChatLinkButton", () => {
   it("renders nothing when no URL is configured", () => {
-    const { container } = render(<ChatHelpLink url={null} />);
+    const { container } = render(<ChatLinkButton url={null} />);
 
     expect(container).toBeEmptyDOMElement();
   });
 
-  it("renders an external help link when configured", () => {
-    render(<ChatHelpLink url="https://support.example.com/help" />);
+  it("renders an external chat link when configured", () => {
+    render(<ChatLinkButton url="https://support.example.com/help" />);
 
-    const link = screen.getByRole("link", { name: /Help Center/i });
+    const link = screen.getByRole("link", { name: /Open Link/i });
     expect(link).toHaveAttribute("href", "https://support.example.com/help");
     expect(link).toHaveAttribute("target", "_blank");
     expect(link).toHaveAttribute("rel", "noopener noreferrer");
@@ -20,7 +20,7 @@ describe("ChatHelpLink", () => {
 
   it("renders a custom label when provided", () => {
     render(
-      <ChatHelpLink
+      <ChatLinkButton
         url="https://support.example.com/help"
         label="Docs & Support"
       />,

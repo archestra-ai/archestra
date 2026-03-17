@@ -25,10 +25,9 @@ describe("OrganizationModel", () => {
         appName: null,
         ogDescription: null,
         footerText: null,
-        helpCenterUrl: null,
-        helpCenterLabel: null,
-        animateChatPlaceholders: true,
+        chatLinks: null,
         chatErrorSupportMessage: null,
+        animateChatPlaceholders: true,
       });
     });
 
@@ -49,10 +48,9 @@ describe("OrganizationModel", () => {
         appName: null,
         ogDescription: null,
         footerText: null,
-        helpCenterUrl: null,
-        helpCenterLabel: null,
-        animateChatPlaceholders: true,
+        chatLinks: null,
         chatErrorSupportMessage: null,
+        animateChatPlaceholders: true,
       });
     });
 
@@ -145,11 +143,10 @@ describe("OrganizationModel", () => {
         "animateChatPlaceholders",
         "appName",
         "chatErrorSupportMessage",
+        "chatLinks",
         "customFont",
         "favicon",
         "footerText",
-        "helpCenterLabel",
-        "helpCenterUrl",
         "iconLogo",
         "logo",
         "logoDark",
@@ -300,24 +297,46 @@ describe("OrganizationModel", () => {
       expect(updated?.animateChatPlaceholders).toBe(false);
     });
 
-    test("should update helpCenterUrl", async ({ makeOrganization }) => {
+    test("should update chatLinks", async ({ makeOrganization }) => {
       const org = await makeOrganization();
 
       const updated = await OrganizationModel.patch(org.id, {
-        helpCenterUrl: "https://support.example.com/help",
+        chatLinks: [
+          {
+            label: "Docs",
+            url: "https://support.example.com/help",
+          },
+          {
+            label: "Status",
+            url: "https://status.example.com",
+          },
+        ],
       });
 
-      expect(updated?.helpCenterUrl).toBe("https://support.example.com/help");
+      expect(updated?.chatLinks).toEqual([
+        {
+          label: "Docs",
+          url: "https://support.example.com/help",
+        },
+        {
+          label: "Status",
+          url: "https://status.example.com",
+        },
+      ]);
     });
 
-    test("should update helpCenterLabel", async ({ makeOrganization }) => {
+    test("should update chatErrorSupportMessage", async ({
+      makeOrganization,
+    }) => {
       const org = await makeOrganization();
 
       const updated = await OrganizationModel.patch(org.id, {
-        helpCenterLabel: "Docs & Support",
+        chatErrorSupportMessage: "Contact support@example.com for help.",
       });
 
-      expect(updated?.helpCenterLabel).toBe("Docs & Support");
+      expect(updated?.chatErrorSupportMessage).toBe(
+        "Contact support@example.com for help.",
+      );
     });
 
     test("should set default LLM model and provider", async ({
@@ -516,28 +535,48 @@ describe("OrganizationModel", () => {
     });
   });
 
-  describe("helpCenterUrl validation (via UpdateAppearanceSettingsSchema)", () => {
-    const parseHelpCenterUrlField = (helpCenterUrl: string | null) =>
-      UpdateAppearanceSettingsSchema.shape.helpCenterUrl.safeParse(
-        helpCenterUrl,
-      );
+  describe("chatLinks validation (via UpdateAppearanceSettingsSchema)", () => {
+    const parseChatLinksField = (
+      chatLinks:
+        | {
+            label: string;
+            url: string;
+          }[]
+        | null,
+    ) => UpdateAppearanceSettingsSchema.shape.chatLinks.safeParse(chatLinks);
 
     test("should accept null", () => {
-      const result = parseHelpCenterUrlField(null);
+      const result = parseChatLinksField(null);
 
       expect(result.success).toBe(true);
     });
 
-    test("should accept valid https URL", () => {
-      const result = parseHelpCenterUrlField(
-        "https://teams.microsoft.com/l/channel/123",
-      );
+    test("should accept up to 3 valid links", () => {
+      const result = parseChatLinksField([
+        {
+          label: "Docs",
+          url: "https://docs.example.com",
+        },
+        {
+          label: "Status",
+          url: "https://status.example.com",
+        },
+        {
+          label: "Support",
+          url: "https://support.example.com",
+        },
+      ]);
 
       expect(result.success).toBe(true);
     });
 
-    test("should reject invalid URL", () => {
-      const result = parseHelpCenterUrlField("not-a-url");
+    test("should reject invalid URLs", () => {
+      const result = parseChatLinksField([
+        {
+          label: "Docs",
+          url: "not-a-url",
+        },
+      ]);
 
       expect(result.success).toBe(false);
       if (!result.success) {
@@ -547,38 +586,36 @@ describe("OrganizationModel", () => {
       }
     });
 
-    test("should reject non-http protocol", () => {
-      const result = parseHelpCenterUrlField("ftp://example.com/help");
+    test("should reject labels longer than 25 characters", () => {
+      const result = parseChatLinksField([
+        {
+          label: "A".repeat(26),
+          url: "https://docs.example.com",
+        },
+      ]);
 
       expect(result.success).toBe(false);
-      if (!result.success) {
-        expect(result.error.issues[0]?.message).toContain(
-          "valid HTTP or HTTPS URL",
-        );
-      }
-    });
-  });
-
-  describe("helpCenterLabel validation (via UpdateAppearanceSettingsSchema)", () => {
-    const parseHelpCenterLabelField = (helpCenterLabel: string | null) =>
-      UpdateAppearanceSettingsSchema.shape.helpCenterLabel.safeParse(
-        helpCenterLabel,
-      );
-
-    test("should accept null", () => {
-      const result = parseHelpCenterLabelField(null);
-
-      expect(result.success).toBe(true);
     });
 
-    test("should accept a custom label", () => {
-      const result = parseHelpCenterLabelField("Docs & Support");
-
-      expect(result.success).toBe(true);
-    });
-
-    test("should reject labels longer than 80 characters", () => {
-      const result = parseHelpCenterLabelField("A".repeat(81));
+    test("should reject more than 3 links", () => {
+      const result = parseChatLinksField([
+        {
+          label: "One",
+          url: "https://one.example.com",
+        },
+        {
+          label: "Two",
+          url: "https://two.example.com",
+        },
+        {
+          label: "Three",
+          url: "https://three.example.com",
+        },
+        {
+          label: "Four",
+          url: "https://four.example.com",
+        },
+      ]);
 
       expect(result.success).toBe(false);
     });

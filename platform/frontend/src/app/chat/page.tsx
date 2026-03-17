@@ -36,7 +36,7 @@ import { Suggestion } from "@/components/ai-elements/suggestion";
 import { AppLogo } from "@/components/app-logo";
 import { ButtonWithTooltip } from "@/components/button-with-tooltip";
 import { BrowserPanel } from "@/components/chat/browser-panel";
-import { ChatHelpLink } from "@/components/chat/chat-help-link";
+import { ChatLinkButton } from "@/components/chat/chat-help-link";
 import { ChatMessages } from "@/components/chat/chat-messages";
 import { ConversationArtifactPanel } from "@/components/chat/conversation-artifact";
 import {
@@ -1793,14 +1793,18 @@ export default function ChatPage() {
                   }
                 }}
               >
-                {organization?.helpCenterUrl && (
-                  <div className="absolute top-4 right-4 z-10">
-                    <ChatHelpLink
-                      url={organization.helpCenterUrl}
-                      label={organization.helpCenterLabel}
-                    />
-                  </div>
-                )}
+                {organization?.chatLinks &&
+                  organization.chatLinks.length > 0 && (
+                    <div className="absolute top-4 right-4 z-10 flex flex-wrap justify-end gap-2 max-w-[min(100%,36rem)]">
+                      {organization.chatLinks.map((link, index) => (
+                        <ChatLinkButton
+                          key={`${index}-${link.label}-${link.url}`}
+                          url={link.url}
+                          label={link.label}
+                        />
+                      ))}
+                    </div>
+                  )}
                 {isPlaywrightSetupRequired && (
                   <PlaywrightInstallDialog
                     agentId={playwrightSetupAgentId}

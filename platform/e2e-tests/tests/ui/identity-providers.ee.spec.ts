@@ -451,6 +451,8 @@ test.describe("Identity Provider Team Sync E2E", () => {
 });
 
 test.describe("Identity Provider OIDC E2E Flow with Keycloak", () => {
+  // TODO: Fix flaky Keycloak OIDC test - external service timing issues in CI
+  test.skip();
   test("should configure OIDC provider, login via SSO, update, and delete", async ({
     page,
     browser,

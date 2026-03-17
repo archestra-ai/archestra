@@ -6,7 +6,7 @@ import { schema } from "@/database";
 const DATA_URI_PREFIX = "data:image/png;base64,";
 const MAX_LOGO_SIZE_BYTES = 2 * 1024 * 1024; // 2 MB decoded
 const PNG_MAGIC_BYTES = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
-const MAX_HELP_CENTER_URL_LENGTH = 2000;
+const MAX_CHAT_LINK_URL_LENGTH = 2000;
 
 /**
  * Validates a Base64-encoded PNG data URI.
@@ -66,7 +66,7 @@ const Base64PngSchema = z
 const ChatLinkUrlSchema = z
   .string()
   .trim()
-  .max(MAX_HELP_CENTER_URL_LENGTH)
+  .max(MAX_CHAT_LINK_URL_LENGTH)
   .refine((value) => isValidHttpUrl(value), {
     message: "Chat link URL must be a valid HTTP or HTTPS URL",
   });

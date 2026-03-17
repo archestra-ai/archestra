@@ -344,6 +344,20 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             };
           }
 
+          // Persist user's new messages immediately so they're visible on page reload.
+          // Without this, a reload during streaming shows no messages because
+          // onFinish hasn't fired yet. persistNewMessages is idempotent — it only
+          // saves messages beyond the existing count, so onFinish will only save
+          // the assistant response.
+          try {
+            await persistNewMessages(conversationId, messages, "earlyUserMsg");
+          } catch (error) {
+            logger.warn(
+              { error, conversationId },
+              "Failed to persist user messages early (will retry in onFinish)",
+            );
+          }
+
           // Create stream with token usage data support
           const response = createUIMessageStreamResponse({
             headers: {

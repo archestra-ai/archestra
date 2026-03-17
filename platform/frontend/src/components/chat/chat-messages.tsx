@@ -53,6 +53,7 @@ import { useOrganization } from "@/lib/organization.query";
 import { hasThinkingTags, parseThinkingTags } from "@/lib/parse-thinking";
 import { cn } from "@/lib/utils";
 import { AuthRequiredTool } from "./auth-required-tool";
+import { McpApp } from "@/components/ai-elements/mcp-app";
 import { extractFileAttachments, hasTextPart } from "./chat-messages.utils";
 import { CompactToolGroup } from "./compact-tool-call";
 import { EditableAssistantMessage } from "./editable-assistant-message";
@@ -891,9 +892,19 @@ function MessageTool({
   onInstallMcp?: (catalogId: string) => void;
   onReauthMcp?: (catalogId: string, serverId: string) => void;
 }) {
-  const outputError = toolResultPart
-    ? tryToExtractErrorFromOutput(toolResultPart.output)
-    : tryToExtractErrorFromOutput(part.output);
+  const output = toolResultPart?.output ?? part.output;
+  const isMcpAppResult =
+    typeof output === "object" &&
+    output !== null &&
+    "content" in output &&
+    "_meta" in output;
+
+  const mcpServerId = isMcpAppResult ? (output as any).mcpServerId : undefined;
+  const resourceUri = isMcpAppResult
+    ? (output as any)._meta?.ui?.resourceUri
+    : undefined;
+
+  const outputError = tryToExtractErrorFromOutput(output);
   const errorText = toolResultPart
     ? (toolResultPart.errorText ?? outputError)
     : (part.errorText ?? outputError);
@@ -950,7 +961,7 @@ function MessageTool({
 
   // Also check tool output for auth-related patterns (tool errors returned as
   // successful results to avoid crashing the AI SDK stream still need the UI)
-  const rawOutput = toolResultPart?.output ?? part.output;
+  const rawOutput = isMcpAppResult ? (output as any).content : output;
   if (typeof rawOutput === "string") {
     const expiredAuth = parseExpiredAuth(rawOutput);
     if (expiredAuth) {
@@ -1028,80 +1039,93 @@ function MessageTool({
     hasContent && (canExpandToolCalls || isApprovalRequested);
 
   return (
-    <Tool
-      className={isExpandable ? "cursor-pointer" : ""}
-      defaultOpen={isApprovalRequested}
-    >
-      <ToolHeader
-        type={`tool-${toolName}`}
-        state={getHeaderState({
-          state: part.state || "input-available",
-          toolResultPart,
-          errorText,
-        })}
-        isCollapsible={isExpandable}
-        actionButton={logsButton}
-      />
-      <ToolContent>
-        {hasInput ? <ToolInput input={part.input} /> : null}
-        {isApprovalRequested &&
-          onToolApprovalResponse &&
-          "approval" in part &&
-          part.approval?.id && (
-            <div className="flex items-center gap-2 px-4 pb-4">
-              <Button
-                size="sm"
-                variant="default"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onToolApprovalResponse({
-                    id: (part as { approval: { id: string } }).approval.id,
-                    approved: true,
-                  });
-                }}
-              >
-                Approve
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onToolApprovalResponse({
-                    id: (part as { approval: { id: string } }).approval.id,
-                    approved: false,
-                    reason: "User denied",
-                  });
-                }}
-              >
-                Deny
-              </Button>
-            </div>
+    <div className="flex flex-col gap-2 w-full">
+      <Tool
+        className={isExpandable ? "cursor-pointer" : ""}
+        defaultOpen={isApprovalRequested}
+      >
+        <ToolHeader
+          type={`tool-${toolName}`}
+          state={getHeaderState({
+            state: part.state || "input-available",
+            toolResultPart,
+            errorText,
+          })}
+          isCollapsible={isExpandable}
+          actionButton={logsButton}
+        />
+        <ToolContent>
+          {hasInput ? <ToolInput input={part.input} /> : null}
+          {isApprovalRequested &&
+            onToolApprovalResponse &&
+            "approval" in part &&
+            part.approval?.id && (
+              <div className="flex items-center gap-2 px-4 pb-4">
+                <Button
+                  size="sm"
+                  variant="default"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onToolApprovalResponse({
+                      id: (part as { approval: { id: string } }).approval.id,
+                      approved: true,
+                    });
+                  }}
+                >
+                  Approve
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onToolApprovalResponse({
+                      id: (part as { approval: { id: string } }).approval.id,
+                      approved: false,
+                      reason: "User denied",
+                    });
+                  }}
+                >
+                  Deny
+                </Button>
+              </div>
+            )}
+          {errorText ? <ToolErrorDetails errorText={errorText} /> : null}
+          {toolResultPart && (
+            <ToolOutput
+              label={errorText ? "Error" : "Result"}
+              output={toolResultPart.output}
+              errorText={errorText}
+            />
           )}
-        {errorText ? <ToolErrorDetails errorText={errorText} /> : null}
-        {toolResultPart && (
-          <ToolOutput
-            label={errorText ? "Error" : "Result"}
-            output={toolResultPart.output}
-            errorText={errorText}
-          />
-        )}
-        {!toolResultPart && Boolean(part.output) && (
-          <ToolOutput
-            label={errorText ? "Error" : "Result"}
-            output={part.output}
-            errorText={errorText}
-          />
-        )}
-      </ToolContent>
-    </Tool>
+          {!toolResultPart && Boolean(part.output) && (
+            <ToolOutput
+              label={errorText ? "Error" : "Result"}
+              output={part.output}
+              errorText={errorText}
+            />
+          )}
+        </ToolContent>
+      </Tool>
+      {mcpServerId && resourceUri && (
+        <McpApp
+          serverId={mcpServerId}
+          resourceUri={resourceUri}
+          className="mx-0"
+        />
+      )}
+    </div>
   );
 }
 
 const tryToExtractErrorFromOutput = (output: unknown) => {
   try {
-    if (typeof output !== "string") return undefined;
-    const json = JSON.parse(output);
+    const rawOutput =
+      typeof output === "object" && output !== null && "content" in output
+        ? (output as { content: string }).content
+        : output;
+    if (typeof rawOutput !== "string") return undefined;
+    const json = JSON.parse(rawOutput);
     return typeof json.error === "string" ? json.error : undefined;
   } catch (_error) {
     return undefined;

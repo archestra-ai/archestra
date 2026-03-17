@@ -1173,6 +1173,124 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
+  fastify.get(
+    "/api/mcp_server/:id/resources",
+    {
+      schema: {
+        operationId: RouteId.GetMcpServerResources,
+        description: "Get all resources for an MCP server",
+        tags: ["MCP Server"],
+        params: z.object({
+          id: UuidIdSchema,
+        }),
+        response: constructResponseSchema(z.any()),
+      },
+    },
+    async ({ params: { id } }, reply) => {
+      const mcpServer = await McpServerModel.findById(id);
+      if (!mcpServer) {
+        throw new ApiError(404, "MCP server not found");
+      }
+
+      const catalogItem = mcpServer.catalogId
+        ? await InternalMcpCatalogModel.findById(mcpServer.catalogId)
+        : null;
+      if (!catalogItem) {
+        throw new ApiError(400, "No catalog item found for this MCP server");
+      }
+
+      let secrets: Record<string, unknown> = {};
+      if (mcpServer.secretId) {
+        const secretRecord = await secretManager().getSecret(
+          mcpServer.secretId,
+        );
+        if (secretRecord) {
+          secrets = secretRecord.secret;
+        }
+      }
+
+      try {
+        const result = await mcpClient.listResources({
+          catalogItem,
+          mcpServerId: mcpServer.id,
+          secrets,
+        });
+
+        return reply.send(result);
+      } catch (error) {
+        logger.error(
+          { err: error },
+          `Failed to list resources for MCP server ${mcpServer.name}`,
+        );
+        throw new ApiError(
+          502,
+          `Failed to list resources: ${error instanceof Error ? error.message : "Unknown error"}`,
+        );
+      }
+    },
+  );
+
+  fastify.get(
+    "/api/mcp_server/:id/resources/read",
+    {
+      schema: {
+        operationId: RouteId.ReadMcpServerResource,
+        description: "Read a resource from an MCP server",
+        tags: ["MCP Server"],
+        params: z.object({
+          id: UuidIdSchema,
+        }),
+        querystring: z.object({
+          uri: z.string(),
+        }),
+        response: constructResponseSchema(z.any()),
+      },
+    },
+    async ({ params: { id }, query: { uri } }, reply) => {
+      const mcpServer = await McpServerModel.findById(id);
+      if (!mcpServer) {
+        throw new ApiError(404, "MCP server not found");
+      }
+
+      const catalogItem = mcpServer.catalogId
+        ? await InternalMcpCatalogModel.findById(mcpServer.catalogId)
+        : null;
+      if (!catalogItem) {
+        throw new ApiError(400, "No catalog item found for this MCP server");
+      }
+
+      let secrets: Record<string, unknown> = {};
+      if (mcpServer.secretId) {
+        const secretRecord = await secretManager().getSecret(
+          mcpServer.secretId,
+        );
+        if (secretRecord) {
+          secrets = secretRecord.secret;
+        }
+      }
+
+      try {
+        const result = await mcpClient.readResource({
+          catalogItem,
+          mcpServerId: mcpServer.id,
+          secrets,
+          uri,
+        });
+
+        return reply.send(result);
+      } catch (error) {
+        logger.error(
+          { err: error },
+          `Failed to read resource for MCP server ${mcpServer.name}`,
+        );
+        throw new ApiError(
+          502,
+          `Failed to read resource: ${error instanceof Error ? error.message : "Unknown error"}`,
+        );
+      }
+    },
+  );
+
   fastify.post(
     "/api/mcp_server/:id/inspect",
     {

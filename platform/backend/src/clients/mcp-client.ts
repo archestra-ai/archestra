@@ -311,6 +311,8 @@ class McpClient {
           result.content,
           !!result.isError,
           authInfo,
+          targetMcpServerId,
+          result._meta,
         );
       } catch (error) {
         // Handle stale HTTP session.  The MCP SDK skips the `initialize`
@@ -1285,12 +1287,16 @@ class McpClient {
       userId?: string;
       authMethod?: MCPGatewayAuthMethod;
     },
+    mcpServerId?: string,
+    _meta?: Record<string, unknown>,
   ): Promise<CommonToolResult> {
     const toolResult: CommonToolResult = {
       id: toolCall.id,
       name: toolCall.name,
       content,
       isError,
+      mcpServerId,
+      _meta,
     };
 
     await this.persistToolCall(
@@ -1557,6 +1563,77 @@ class McpClient {
     return new Promise((_, reject) => {
       setTimeout(() => reject(new Error(message)), ms);
     });
+  }
+
+  /**
+   * List resources from a specific MCP server instance
+   */
+  async listResources(params: {
+    catalogItem: InternalMcpCatalog;
+    mcpServerId: string;
+    secrets: Record<string, unknown>;
+  }): Promise<unknown> {
+    const { catalogItem, mcpServerId, secrets } = params;
+    const transport = await this.getTransport(
+      catalogItem,
+      mcpServerId,
+      secrets,
+    );
+
+    const client = new Client(
+      { name: "archestra-resource-lister", version: "1.0.0" },
+      { capabilities: { resources: {} } },
+    );
+
+    try {
+      await Promise.race([
+        client.connect(transport),
+        this.createTimeout(30000, "Connection timeout after 30 seconds"),
+      ]);
+
+      return await Promise.race([
+        client.listResources(),
+        this.createTimeout(30000, "List resources timeout"),
+      ]);
+    } finally {
+      await client.close().catch(() => {});
+    }
+  }
+
+  /**
+   * Read a resource from a specific MCP server instance
+   */
+  async readResource(params: {
+    catalogItem: InternalMcpCatalog;
+    mcpServerId: string;
+    secrets: Record<string, unknown>;
+    uri: string;
+  }): Promise<unknown> {
+    const { catalogItem, mcpServerId, secrets, uri } = params;
+    const transport = await this.getTransport(
+      catalogItem,
+      mcpServerId,
+      secrets,
+    );
+
+    const client = new Client(
+      { name: "archestra-resource-reader", version: "1.0.0" },
+      { capabilities: { resources: {} } },
+    );
+
+    try {
+      await Promise.race([
+        client.connect(transport),
+        this.createTimeout(30000, "Connection timeout after 30 seconds"),
+      ]);
+
+      return await Promise.race([
+        client.readResource({ uri }),
+        this.createTimeout(30000, "Read resource timeout"),
+      ]);
+    } finally {
+      await client.close().catch(() => {});
+    }
   }
 
   /**

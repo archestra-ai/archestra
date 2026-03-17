@@ -814,19 +814,23 @@ export async function getChatMcpTools({
                       throw new Error(errorText);
                     }
 
-                    // Convert MCP content to string for AI SDK
-                    return (
-                      archestraResponse.content as Array<{
-                        type: string;
-                        text?: string;
-                      }>
-                    )
-                      .map((item) =>
-                        item.type === "text" && item.text
-                          ? item.text
-                          : JSON.stringify(item),
+                    // Convert MCP content to string for AI SDK and include metadata
+                    return {
+                      content: (
+                        archestraResponse.content as Array<{
+                          type: string;
+                          text?: string;
+                        }>
                       )
-                      .join("\n");
+                        .map((item) =>
+                          item.type === "text" && item.text
+                            ? item.text
+                            : JSON.stringify(item),
+                        )
+                        .join("\n"),
+                      mcpServerId: undefined, // Built-in tools don't have a server ID
+                      _meta: archestraResponse._meta,
+                    };
                   }
 
                   // Execute non-Archestra tools via shared helper with browser sync
@@ -998,18 +1002,23 @@ export async function getChatMcpTools({
                       throw new Error(errorText);
                     }
 
-                    return (
-                      response.content as Array<{
-                        type: string;
-                        text?: string;
-                      }>
-                    )
-                      .map((item) =>
-                        item.type === "text" && item.text
-                          ? item.text
-                          : JSON.stringify(item),
+                    // Convert MCP content to string for AI SDK and include metadata
+                    return {
+                      content: (
+                        response.content as Array<{
+                          type: string;
+                          text?: string;
+                        }>
                       )
-                      .join("\n");
+                        .map((item) =>
+                          item.type === "text" && item.text
+                            ? item.text
+                            : JSON.stringify(item),
+                        )
+                        .join("\n"),
+                      mcpServerId: undefined, // Agent tools are proxied and don't have a single server ID
+                      _meta: response._meta,
+                    };
                   } catch (error) {
                     reportToolMetrics({
                       toolName: agentTool.name,
@@ -1240,15 +1249,19 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<string> {
     }
   }
 
-  // Convert MCP content to string for AI SDK
-  return (result.content as Array<{ type: string; text?: string }>)
-    .map((item: { type: string; text?: string }) => {
-      if (item.type === "text" && item.text) {
-        return item.text;
-      }
-      return JSON.stringify(item);
-    })
-    .join("\n");
+  // Convert MCP content to string for AI SDK and include metadata
+  return {
+    content: (result.content as Array<{ type: string; text?: string }>)
+      .map((item: { type: string; text?: string }) => {
+        if (item.type === "text" && item.text) {
+          return item.text;
+        }
+        return JSON.stringify(item);
+      })
+      .join("\n"),
+    mcpServerId: result.mcpServerId,
+    _meta: result._meta,
+  };
 }
 
 /**

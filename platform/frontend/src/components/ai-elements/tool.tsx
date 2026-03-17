@@ -268,13 +268,22 @@ export const ToolOutput = ({
   }
 
   let Output: ReactNode;
+  const isMcpAppResult =
+    typeof output === "object" &&
+    output !== null &&
+    "content" in output &&
+    "_meta" in output;
 
-  if (typeof output === "object" || typeof output === "string") {
+  const displayOutput = isMcpAppResult
+    ? (output as { content: string }).content
+    : output;
+
+  if (typeof displayOutput === "object" || typeof displayOutput === "string") {
     // If output is a string, try to parse it as JSON for proper formatting
-    let formattedOutput = output;
-    if (typeof output === "string") {
+    let formattedOutput = displayOutput;
+    if (typeof displayOutput === "string") {
       try {
-        formattedOutput = JSON.parse(output);
+        formattedOutput = JSON.parse(displayOutput);
       } catch {
         // Not valid JSON, use as-is
       }
@@ -333,7 +342,7 @@ export const ToolOutput = ({
       </div>
     );
   } else {
-    Output = <div>{String(output)}</div>;
+    Output = <div>{String(displayOutput)}</div>;
   }
 
   return (

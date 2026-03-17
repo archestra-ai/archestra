@@ -29,6 +29,8 @@ export type CommonToolResult = {
   content: unknown;
   isError: boolean;
   error?: string;
+  mcpServerId?: string;
+  _meta?: Record<string, unknown>;
 };
 
 /**

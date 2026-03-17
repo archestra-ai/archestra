@@ -823,24 +823,13 @@ jobs:
             echo "tag=scan-target:${GIT_SHA}" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Scan image for CVEs (critical - blocking)
+      - name: Scan image for CVEs
         if: ${{ github.event_name == 'merge_group' && !inputs.is-fork-pr }}
         uses: ./.github/actions/scan-docker-image
         with:
           image: ${{ steps.image-tag.outputs.tag }}
           dockerhub-user: ${{ secrets.DOCKER_USERNAME }}
           dockerhub-password: ${{ secrets.DOCKER_PASSWORD }}
-          only-severities: critical
-
-      - name: Scan image for CVEs (high - warning only)
-        if: ${{ github.event_name == 'merge_group' && !inputs.is-fork-pr }}
-        uses: ./.github/actions/scan-docker-image
-        continue-on-error: true
-        with:
-          image: ${{ steps.image-tag.outputs.tag }}
-          dockerhub-user: ${{ secrets.DOCKER_USERNAME }}
-          dockerhub-password: ${{ secrets.DOCKER_PASSWORD }}
-          only-severities: high
 
   helm-chart-linting-and-tests:
     name: Helm Chart Linting and Tests

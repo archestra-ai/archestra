@@ -9,8 +9,8 @@ import {
 import type { ArchestraContext } from "./types";
 
 const WhoAmIOutputSchema = z.object({
-  agentId: z.string(),
-  agentName: z.string(),
+  agentId: z.string().describe("The ID of the current agent."),
+  agentName: z.string().describe("The display name of the current agent."),
 });
 
 const registry = defineArchestraTools([

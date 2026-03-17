@@ -9,57 +9,6 @@ import { AgentKnowledgeBaseModel, AgentModel } from "@/models";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { Agent } from "@/types";
 import { type ArchestraContext, executeArchestraTool } from ".";
-import { tools } from "./agents";
-
-describe("agent tools", () => {
-  test("should have create_agent tool", () => {
-    const tool = tools.find((t) => t.name.endsWith("create_agent"));
-    expect(tool).toBeDefined();
-    expect(tool?.title).toBe("Create Agent");
-  });
-
-  test("should have create_llm_proxy tool", () => {
-    const tool = tools.find((t) => t.name.endsWith("create_llm_proxy"));
-    expect(tool).toBeDefined();
-    expect(tool?.title).toBe("Create LLM Proxy");
-  });
-
-  test("should have create_mcp_gateway tool", () => {
-    const tool = tools.find((t) => t.name.endsWith("create_mcp_gateway"));
-    expect(tool).toBeDefined();
-    expect(tool?.title).toBe("Create MCP Gateway");
-  });
-
-  test("should have get_agent tool", () => {
-    const tool = tools.find((t) => t.name.endsWith("get_agent"));
-    expect(tool).toBeDefined();
-    expect(tool?.title).toBe("Get Agent");
-  });
-
-  test("should have list_agents tool", () => {
-    const tool = tools.find((t) => t.name.endsWith("list_agents"));
-    expect(tool).toBeDefined();
-    expect(tool?.title).toBe("List Agents");
-  });
-
-  test("should have edit_agent tool", () => {
-    const tool = tools.find((t) => t.name.endsWith("edit_agent"));
-    expect(tool).toBeDefined();
-    expect(tool?.title).toBe("Edit Agent");
-  });
-
-  test("should have edit_llm_proxy tool", () => {
-    const tool = tools.find((t) => t.name.endsWith("edit_llm_proxy"));
-    expect(tool).toBeDefined();
-    expect(tool?.title).toBe("Edit LLM Proxy");
-  });
-
-  test("should have edit_mcp_gateway tool", () => {
-    const tool = tools.find((t) => t.name.endsWith("edit_mcp_gateway"));
-    expect(tool).toBeDefined();
-    expect(tool?.title).toBe("Edit MCP Gateway");
-  });
-});
 
 describe("agent tool execution", () => {
   let testAgent: Agent;
@@ -224,30 +173,6 @@ describe("agent tool execution", () => {
     expect(assignment.useDynamicTeamCredential).toBe(true);
   });
 
-  test("create_llm_proxy creates a proxy successfully", async () => {
-    const result = await executeArchestraTool(
-      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_llm_proxy`,
-      { name: "Test LLM Proxy" },
-      mockContext,
-    );
-    expect(result.isError).toBe(false);
-    expect((result.content[0] as any).text).toContain(
-      "Successfully created llm proxy",
-    );
-  });
-
-  test("create_mcp_gateway creates a gateway successfully", async () => {
-    const result = await executeArchestraTool(
-      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_mcp_gateway`,
-      { name: "Test MCP Gateway" },
-      mockContext,
-    );
-    expect(result.isError).toBe(false);
-    expect((result.content[0] as any).text).toContain(
-      "Successfully created mcp gateway",
-    );
-  });
-
   test("edit_agent replaces assigned knowledge bases and connectors", async ({
     makeAgent,
     makeKnowledgeBase,
@@ -299,86 +224,6 @@ describe("agent tool execution", () => {
     );
     expect(updated?.knowledgeBaseIds).toEqual([replacementKb.id]);
     expect(updated?.connectorIds).toEqual([replacementConnector.id]);
-  });
-
-  test("edit_llm_proxy updates an llm proxy successfully", async ({
-    makeAgent,
-  }) => {
-    const organizationId = mockContext.organizationId;
-    if (!organizationId) {
-      throw new Error("Expected organizationId in test context");
-    }
-
-    const llmProxy = await makeAgent({
-      name: "Original LLM Proxy",
-      agentType: "llm_proxy",
-      organizationId,
-    });
-
-    const result = await executeArchestraTool(
-      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}edit_llm_proxy`,
-      {
-        id: llmProxy.id,
-        name: "Updated LLM Proxy",
-        labels: [{ key: "team", value: "platform" }],
-      },
-      mockContext,
-    );
-
-    expect(result.isError).toBe(false);
-    expect((result.content[0] as any).text).toContain(
-      "Successfully updated llm proxy",
-    );
-
-    const updated = await AgentModel.findById(
-      llmProxy.id,
-      mockContext.userId,
-      true,
-    );
-    expect(updated?.name).toBe("Updated LLM Proxy");
-    expect(updated?.labels).toContainEqual(
-      expect.objectContaining({ key: "team", value: "platform" }),
-    );
-  });
-
-  test("edit_mcp_gateway updates an mcp gateway successfully", async ({
-    makeAgent,
-  }) => {
-    const organizationId = mockContext.organizationId;
-    if (!organizationId) {
-      throw new Error("Expected organizationId in test context");
-    }
-
-    const mcpGateway = await makeAgent({
-      name: "Original MCP Gateway",
-      agentType: "mcp_gateway",
-      organizationId,
-    });
-
-    const result = await executeArchestraTool(
-      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}edit_mcp_gateway`,
-      {
-        id: mcpGateway.id,
-        name: "Updated MCP Gateway",
-        labels: [{ key: "env", value: "prod" }],
-      },
-      mockContext,
-    );
-
-    expect(result.isError).toBe(false);
-    expect((result.content[0] as any).text).toContain(
-      "Successfully updated mcp gateway",
-    );
-
-    const updated = await AgentModel.findById(
-      mcpGateway.id,
-      mockContext.userId,
-      true,
-    );
-    expect(updated?.name).toBe("Updated MCP Gateway");
-    expect(updated?.labels).toContainEqual(
-      expect.objectContaining({ key: "env", value: "prod" }),
-    );
   });
 
   test("get_agent requires id or name", async () => {

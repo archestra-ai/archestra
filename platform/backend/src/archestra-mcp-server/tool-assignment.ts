@@ -12,7 +12,7 @@ import {
   catchError,
   defineArchestraTools,
   errorResult,
-  successResult,
+  structuredSuccessResult,
 } from "./helpers";
 import type { ArchestraContext } from "./types";
 
@@ -58,6 +58,46 @@ const McpGatewayAssignmentSchema = AgentToolAssignmentInputSchema.extend({
   ),
 }).strict();
 
+const BulkAgentAssignmentResultSchema = z
+  .object({
+    agentId: UuidIdSchema.describe("The target agent ID."),
+    toolId: UuidIdSchema.describe("The tool ID."),
+    error: z.string().optional().describe("Validation or assignment error."),
+  })
+  .strict();
+
+const BulkMcpGatewayAssignmentResultSchema = z
+  .object({
+    mcpGatewayId: UuidIdSchema.describe("The target MCP gateway ID."),
+    toolId: UuidIdSchema.describe("The tool ID."),
+    error: z.string().optional().describe("Validation or assignment error."),
+  })
+  .strict();
+
+const BulkAssignAgentsOutputSchema = z.object({
+  succeeded: z
+    .array(BulkAgentAssignmentResultSchema)
+    .describe("Assignments that succeeded."),
+  failed: z
+    .array(BulkAgentAssignmentResultSchema)
+    .describe("Assignments that failed."),
+  duplicates: z
+    .array(BulkAgentAssignmentResultSchema)
+    .describe("Assignments skipped because they already existed."),
+});
+
+const BulkAssignMcpGatewaysOutputSchema = z.object({
+  succeeded: z
+    .array(BulkMcpGatewayAssignmentResultSchema)
+    .describe("Assignments that succeeded."),
+  failed: z
+    .array(BulkMcpGatewayAssignmentResultSchema)
+    .describe("Assignments that failed."),
+  duplicates: z
+    .array(BulkMcpGatewayAssignmentResultSchema)
+    .describe("Assignments skipped because they already existed."),
+});
+
 const registry = defineArchestraTools([
   {
     shortName: "bulk_assign_tools_to_agents",
@@ -71,6 +111,7 @@ const registry = defineArchestraTools([
           .describe("Assignments to create or update for agents."),
       })
       .strict(),
+    outputSchema: BulkAssignAgentsOutputSchema,
   },
   {
     shortName: "bulk_assign_tools_to_mcp_gateways",
@@ -84,6 +125,7 @@ const registry = defineArchestraTools([
           .describe("Assignments to create or update for MCP gateways."),
       })
       .strict(),
+    outputSchema: BulkAssignMcpGatewaysOutputSchema,
   },
 ] as const);
 
@@ -207,9 +249,8 @@ export async function handleTool(
       }
     });
 
-    return successResult(
-      JSON.stringify({ succeeded, failed, duplicates }, null, 2),
-    );
+    const output = { succeeded, failed, duplicates };
+    return structuredSuccessResult(output, JSON.stringify(output, null, 2));
   } catch (error) {
     return catchError(error, `bulk assigning tools to ${bulkAssignLabel}`);
   }

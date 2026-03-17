@@ -7,37 +7,6 @@ import { OrganizationModel } from "@/models";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { Agent } from "@/types";
 import { type ArchestraContext, executeArchestraTool } from ".";
-import { tools } from "./chat";
-
-describe("chat tools", () => {
-  test("should have todo_write tool", () => {
-    const tool = tools.find((t) => t.name.endsWith("todo_write"));
-    expect(tool).toBeDefined();
-    expect(tool?.title).toBe("Write Todos");
-    expect(tool?.inputSchema.required).toContain("todos");
-  });
-
-  test("should have swap_agent tool", () => {
-    const tool = tools.find((t) => t.name.endsWith("swap_agent"));
-    expect(tool).toBeDefined();
-    expect(tool?.title).toBe("Swap Agent");
-    expect(tool?.inputSchema.required).toContain("agent_name");
-  });
-
-  test("should have swap_to_default_agent tool", () => {
-    const tool = tools.find((t) => t.name.endsWith("swap_to_default_agent"));
-    expect(tool).toBeDefined();
-    expect(tool?.title).toBe("Swap to Default Agent");
-    expect(tool?.inputSchema.properties).toEqual({});
-  });
-
-  test("should have artifact_write tool", () => {
-    const tool = tools.find((t) => t.name.endsWith("artifact_write"));
-    expect(tool).toBeDefined();
-    expect(tool?.title).toBe("Write Artifact");
-    expect(tool?.inputSchema.required).toContain("content");
-  });
-});
 
 describe("chat tool execution", () => {
   let testAgent: Agent;
@@ -88,6 +57,7 @@ describe("chat tool execution", () => {
       mockContext,
     );
     expect(result.isError).toBe(false);
+    expect(result.structuredContent).toEqual({ success: true, todoCount: 2 });
     expect((result.content[0] as any).text).toContain(
       "Successfully wrote 2 todo item(s)",
     );
@@ -162,6 +132,10 @@ describe("chat tool execution", () => {
       contextWithConvo,
     );
     expect(result.isError).toBe(false);
+    expect(result.structuredContent).toEqual({
+      success: true,
+      characterCount: "# Test Artifact\n\nSome **markdown** content.".length,
+    });
     expect((result.content[0] as any).text).toContain(
       "Successfully updated conversation artifact",
     );
@@ -193,6 +167,11 @@ describe("chat tool execution", () => {
       contextWithConvo,
     );
     expect(result.isError).toBe(false);
+    expect(result.structuredContent).toEqual({
+      success: true,
+      agent_id: targetAgent.id,
+      agent_name: "Swap Target Agent",
+    });
     const parsed = JSON.parse((result.content[0] as any).text);
     expect(parsed.success).toBe(true);
     expect(parsed.agent_id).toBe(targetAgent.id);

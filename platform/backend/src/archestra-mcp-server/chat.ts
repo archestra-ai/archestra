@@ -18,7 +18,7 @@ import {
   defineArchestraTools,
   EmptyToolArgsSchema,
   errorResult,
-  successResult,
+  structuredSuccessResult,
 } from "./helpers";
 import type { ArchestraContext } from "./types";
 
@@ -36,6 +36,30 @@ const TodoItemSchema = z
   })
   .strict();
 
+const TodoWriteOutputSchema = z.object({
+  success: z.literal(true).describe("Whether the write succeeded."),
+  todoCount: z
+    .number()
+    .int()
+    .nonnegative()
+    .describe("How many todo items were written."),
+});
+
+const SwapAgentOutputSchema = z.object({
+  success: z.literal(true).describe("Whether the swap succeeded."),
+  agent_id: z.string().describe("The agent ID the conversation now uses."),
+  agent_name: z.string().describe("The agent name the conversation now uses."),
+});
+
+const ArtifactWriteOutputSchema = z.object({
+  success: z.literal(true).describe("Whether the artifact write succeeded."),
+  characterCount: z
+    .number()
+    .int()
+    .nonnegative()
+    .describe("The number of characters written to the artifact."),
+});
+
 const registry = defineArchestraTools([
   {
     shortName: "todo_write",
@@ -49,6 +73,7 @@ const registry = defineArchestraTools([
           .describe("Array of todo items to write to the conversation."),
       })
       .strict(),
+    outputSchema: TodoWriteOutputSchema,
   },
   {
     shortName: "swap_agent",
@@ -64,6 +89,7 @@ const registry = defineArchestraTools([
           .describe("The name of the agent to switch to."),
       })
       .strict(),
+    outputSchema: SwapAgentOutputSchema,
   },
   {
     shortName: "swap_to_default_agent",
@@ -71,6 +97,7 @@ const registry = defineArchestraTools([
     description:
       "Return to the default agent. You MUST call this — without asking the user — when you don't have the right tools to fulfill a request, when you are stuck and cannot help further, when you are done with your task, or when the user wants to go back. Always write a brief message before calling this tool summarizing why you are switching back (e.g. what you accomplished, what tool is missing, or why you cannot continue).",
     schema: EmptyToolArgsSchema,
+    outputSchema: SwapAgentOutputSchema,
   },
   {
     shortName: "artifact_write",
@@ -89,6 +116,7 @@ const registry = defineArchestraTools([
           ),
       })
       .strict(),
+    outputSchema: ArtifactWriteOutputSchema,
   },
 ] as const);
 
@@ -130,7 +158,8 @@ export async function handleTool(
 
       // For now, just return a success message
       // In the future, this could persist todos to database
-      return successResult(
+      return structuredSuccessResult(
+        { success: true, todoCount: todos.length },
         `Successfully wrote ${todos.length} todo item(s) to the conversation`,
       );
     } catch (error) {
@@ -217,7 +246,12 @@ export async function handleTool(
         return errorResult("Failed to update conversation agent.");
       }
 
-      return successResult(
+      return structuredSuccessResult(
+        {
+          success: true,
+          agent_id: targetAgent.id,
+          agent_name: targetAgent.name,
+        },
         JSON.stringify({
           success: true,
           agent_id: targetAgent.id,
@@ -280,7 +314,12 @@ export async function handleTool(
         return errorResult("Failed to update conversation agent.");
       }
 
-      return successResult(
+      return structuredSuccessResult(
+        {
+          success: true,
+          agent_id: targetAgent.id,
+          agent_name: targetAgent.name,
+        },
         JSON.stringify({
           success: true,
           agent_id: targetAgent.id,
@@ -335,7 +374,8 @@ export async function handleTool(
         );
       }
 
-      return successResult(
+      return structuredSuccessResult(
+        { success: true, characterCount: content.length },
         `Successfully updated conversation artifact (${content.length} characters)`,
       );
     } catch (error) {

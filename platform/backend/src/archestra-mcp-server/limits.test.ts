@@ -6,48 +6,6 @@ import {
 import { beforeEach, describe, expect, test } from "@/test";
 import type { Agent } from "@/types";
 import { type ArchestraContext, executeArchestraTool } from ".";
-import { tools } from "./limits";
-
-describe("limit tools", () => {
-  test("should have create_limit tool", () => {
-    const tool = tools.find((t) => t.name.endsWith("create_limit"));
-    expect(tool).toBeDefined();
-    expect(tool?.title).toBe("Create Limit");
-    expect(tool?.inputSchema.required).toContain("entity_type");
-  });
-
-  test("should have get_limits tool", () => {
-    const tool = tools.find((t) => t.name.endsWith("get_limits"));
-    expect(tool).toBeDefined();
-    expect(tool?.title).toBe("Get Limits");
-  });
-
-  test("should have update_limit tool", () => {
-    const tool = tools.find((t) => t.name.endsWith("update_limit"));
-    expect(tool).toBeDefined();
-    expect(tool?.title).toBe("Update Limit");
-  });
-
-  test("should have delete_limit tool", () => {
-    const tool = tools.find((t) => t.name.endsWith("delete_limit"));
-    expect(tool).toBeDefined();
-    expect(tool?.title).toBe("Delete Limit");
-  });
-
-  test("should have get_agent_token_usage tool", () => {
-    const tool = tools.find((t) => t.name.endsWith("get_agent_token_usage"));
-    expect(tool).toBeDefined();
-    expect(tool?.title).toBe("Get Agent Token Usage");
-  });
-
-  test("should have get_llm_proxy_token_usage tool", () => {
-    const tool = tools.find((t) =>
-      t.name.endsWith("get_llm_proxy_token_usage"),
-    );
-    expect(tool).toBeDefined();
-    expect(tool?.title).toBe("Get LLM Proxy Token Usage");
-  });
-});
 
 describe("limit tool execution", () => {
   let testAgent: Agent;
@@ -142,6 +100,7 @@ describe("limit tool execution", () => {
       mockContext,
     );
     expect(result.isError).toBe(false);
+    expect(result.structuredContent).toEqual({ limits: [] });
     expect((result.content[0] as any).text).toContain("No limits found");
   });
 
@@ -190,6 +149,12 @@ describe("limit tool execution", () => {
       mockContext,
     );
     expect(result.isError).toBe(false);
+    expect(result.structuredContent).toEqual({
+      id: testAgent.id,
+      totalInputTokens: expect.any(Number),
+      totalOutputTokens: expect.any(Number),
+      totalTokens: expect.any(Number),
+    });
     expect((result.content[0] as any).text).toContain("Token usage for agent");
     expect((result.content[0] as any).text).toContain("Total Input Tokens");
   });

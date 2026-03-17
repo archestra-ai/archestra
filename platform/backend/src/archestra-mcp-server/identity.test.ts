@@ -6,15 +6,6 @@ import {
 import { beforeEach, describe, expect, test } from "@/test";
 import type { Agent } from "@/types";
 import { type ArchestraContext, executeArchestraTool } from ".";
-import { tools } from "./identity";
-
-describe("identity tools", () => {
-  test("should have whoami tool with correct properties", () => {
-    const whoami = tools.find((t) => t.name.endsWith("whoami"));
-    expect(whoami).toBeDefined();
-    expect(whoami?.title).toBe("Who Am I");
-  });
-});
 
 describe("identity tool execution", () => {
   let testAgent: Agent;

@@ -36,6 +36,13 @@ However, **RBAC (role-based access control) is still enforced**. Every tool is m
 
 This tool takes no arguments.
 
+##### Output
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `agentId` | `string` | Yes | The ID of the current agent. |
+| `agentName` | `string` | Yes | The display name of the current agent. |
+
 ### Agents
 
 | Tool | Description |
@@ -46,6 +53,8 @@ This tool takes no arguments.
 | `edit_agent` | Edit an existing agent. |
 
 #### create_agent
+
+##### Input
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
@@ -71,14 +80,47 @@ This tool takes no arguments.
 | `toolAssignments[].executionSourceMcpServerId` | `any` | No | For local MCP tools, the deployed MCP server ID that should execute the tool. |
 | `toolAssignments[].useDynamicTeamCredential` | `boolean` | No | When true, resolve credentials dynamically from the invoking team instead of pinning a deployment. |
 
+
 #### get_agent
+
+##### Input
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `id` | `string` | No | The ID of the agent to fetch. Prefer the ID when you already have it. |
 | `name` | `string` | No | The exact name of the agent to fetch when you do not already have the ID. |
 
+##### Output
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `id` | `string` | Yes | The resource ID. |
+| `name` | `string` | Yes | The resource name. |
+| `description` | `any` | Yes | The resource description, if any. |
+| `icon` | `any` | Yes | The emoji icon, if configured. |
+| `scope` | `"personal" \| "team" \| "org"` | Yes | The visibility scope. |
+| `agentType` | `"agent" \| "llm_proxy" \| "mcp_gateway" \| "profile"` | Yes | The resource type. |
+| `systemPrompt` | `any` | No |  |
+| `teams` | `object[]` | Yes | The teams attached to it. |
+| `teams[].id` | `string` | Yes | The team ID. |
+| `teams[].name` | `string` | Yes | The team name. |
+| `labels` | `object[]` | Yes | Assigned labels. |
+| `labels[].key` | `string` | Yes | The label key. |
+| `labels[].value` | `string` | Yes | The label value. |
+| `tools` | `object[]` | Yes | Assigned tools. |
+| `tools[].id` | `string` | Yes | The assigned tool ID. |
+| `tools[].name` | `string` | Yes | The tool name. |
+| `tools[].description` | `any` | Yes | The tool description, if any. |
+| `tools[].catalogId` | `any` | Yes | The MCP catalog ID the tool comes from, if any. |
+| `knowledgeBaseIds` | `string[]` | Yes | Assigned knowledge base IDs. |
+| `connectorIds` | `string[]` | Yes | Assigned knowledge connector IDs. |
+| `suggestedPrompts` | `object[]` | Yes | Configured suggested prompts. |
+| `suggestedPrompts[].summaryTitle` | `string` | Yes | The short title shown in the chat UI. |
+| `suggestedPrompts[].prompt` | `string` | Yes | The suggested prompt text. |
+
 #### list_agents
+
+##### Input
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
@@ -86,7 +128,33 @@ This tool takes no arguments.
 | `name` | `string` | No | Optional agent name filter. Use this when the user names an agent but you still need to look up the ID. |
 | `scope` | `"personal" \| "team" \| "org"` | No | Optional scope filter: personal, team, or org. |
 
+##### Output
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `total` | `number` | Yes | The total number of matching agents. |
+| `agents` | `object[]` | Yes |  |
+| `agents[].id` | `string` | Yes | The agent ID. |
+| `agents[].name` | `string` | Yes | The agent name. |
+| `agents[].scope` | `"personal" \| "team" \| "org"` | Yes | The agent scope. |
+| `agents[].description` | `any` | Yes | The agent description, if any. |
+| `agents[].teams` | `object[]` | Yes | Teams attached to it. |
+| `agents[].teams[].id` | `string` | Yes | The team ID. |
+| `agents[].teams[].name` | `string` | Yes | The team name. |
+| `agents[].labels` | `object[]` | Yes | Assigned labels. |
+| `agents[].labels[].key` | `string` | Yes | The label key. |
+| `agents[].labels[].value` | `string` | Yes | The label value. |
+| `agents[].tools` | `object[]` | Yes |  |
+| `agents[].tools[].name` | `string` | Yes | The tool name. |
+| `agents[].tools[].description` | `any` | Yes | The tool description, if any. |
+| `agents[].knowledgeSources` | `object[]` | Yes | Assigned knowledge bases and connectors. |
+| `agents[].knowledgeSources[].name` | `string` | Yes | The knowledge source name. |
+| `agents[].knowledgeSources[].description` | `any` | Yes | The knowledge source description, if any. |
+| `agents[].knowledgeSources[].type` | `"knowledge_base" \| "knowledge_connector"` | Yes | Whether this source is a knowledge base or connector. |
+
 #### edit_agent
+
+##### Input
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
@@ -113,6 +181,7 @@ This tool takes no arguments.
 | `systemPrompt` | `any` | No | New system prompt for the agent. |
 | `teams` | `string[]` | No | Replace the teams attached to a team-scoped agent. |
 
+
 ### LLM Proxies
 
 | Tool | Description |
@@ -123,6 +192,8 @@ This tool takes no arguments.
 
 #### create_llm_proxy
 
+##### Input
+
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `name` | `string` | Yes | Name for the new resource. |
@@ -132,36 +203,72 @@ This tool takes no arguments.
 | `labels[].value` | `string` | Yes |  |
 | `teams` | `string[]` | No | Team IDs to attach when creating a team-scoped resource. |
 
+
 #### get_llm_proxy
+
+##### Input
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `id` | `string` | No | The ID of the LLM proxy to fetch. Prefer the ID when you already have it. |
 | `name` | `string` | No | The exact name of the LLM proxy to fetch when you do not already have the ID. |
 
+##### Output
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `id` | `string` | Yes | The resource ID. |
+| `name` | `string` | Yes | The resource name. |
+| `description` | `any` | Yes | The resource description, if any. |
+| `icon` | `any` | Yes | The emoji icon, if configured. |
+| `scope` | `"personal" \| "team" \| "org"` | Yes | The visibility scope. |
+| `agentType` | `"agent" \| "llm_proxy" \| "mcp_gateway" \| "profile"` | Yes | The resource type. |
+| `systemPrompt` | `any` | No |  |
+| `teams` | `object[]` | Yes | The teams attached to it. |
+| `teams[].id` | `string` | Yes | The team ID. |
+| `teams[].name` | `string` | Yes | The team name. |
+| `labels` | `object[]` | Yes | Assigned labels. |
+| `labels[].key` | `string` | Yes | The label key. |
+| `labels[].value` | `string` | Yes | The label value. |
+| `tools` | `object[]` | Yes | Assigned tools. |
+| `tools[].id` | `string` | Yes | The assigned tool ID. |
+| `tools[].name` | `string` | Yes | The tool name. |
+| `tools[].description` | `any` | Yes | The tool description, if any. |
+| `tools[].catalogId` | `any` | Yes | The MCP catalog ID the tool comes from, if any. |
+| `knowledgeBaseIds` | `string[]` | Yes | Assigned knowledge base IDs. |
+| `connectorIds` | `string[]` | Yes | Assigned knowledge connector IDs. |
+| `suggestedPrompts` | `object[]` | Yes | Configured suggested prompts. |
+| `suggestedPrompts[].summaryTitle` | `string` | Yes | The short title shown in the chat UI. |
+| `suggestedPrompts[].prompt` | `string` | Yes | The suggested prompt text. |
+
 #### edit_llm_proxy
+
+##### Input
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `id` | `string` | Yes | The ID of the LLM proxy to edit. Use get_llm_proxy to look it up by name first if needed. |
-| `description` | `any` | No | New description for the resource. |
-| `icon` | `any` | No | New emoji icon for the resource. |
-| `labels` | `object[]` | No | Replace the resource's labels with this set. |
+| `description` | `any` | No | New description for the LLM proxy. |
+| `icon` | `any` | No | New emoji icon for the LLM proxy. |
+| `labels` | `object[]` | No | Replace the LLM proxy's labels with this set. |
 | `labels[].key` | `string` | Yes |  |
 | `labels[].value` | `string` | Yes |  |
-| `name` | `string` | No | New name for the resource. |
-| `scope` | `"personal" \| "team" \| "org"` | No | Updated visibility scope for the resource. |
-| `teams` | `string[]` | No | Replace the teams attached to a team-scoped resource. |
+| `name` | `string` | No | New name for the LLM proxy. |
+| `scope` | `"personal" \| "team" \| "org"` | No | Updated visibility scope for the LLM proxy. |
+| `teams` | `string[]` | No | Replace the teams attached to a team-scoped LLM proxy. |
+
 
 ### MCP Gateways
 
 | Tool | Description |
 |------|-------------|
-| `create_mcp_gateway` | Create a new MCP gateway with the specified name and optional labels. |
+| `create_mcp_gateway` | Create a new MCP gateway with the specified name, optional labels, and optional assigned knowledge bases or knowledge connectors. |
 | `get_mcp_gateway` | Get a specific MCP gateway by ID or name. |
 | `edit_mcp_gateway` | Edit an existing MCP gateway. |
 
 #### create_mcp_gateway
+
+##### Input
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
@@ -171,27 +278,65 @@ This tool takes no arguments.
 | `labels[].key` | `string` | Yes |  |
 | `labels[].value` | `string` | Yes |  |
 | `teams` | `string[]` | No | Team IDs to attach when creating a team-scoped resource. |
+| `knowledgeBaseIds` | `string[]` | No | Knowledge base IDs to assign to the agent. Use get_knowledge_bases first when you need to look up IDs by name. |
+| `connectorIds` | `string[]` | No | Knowledge connector IDs to assign directly to the agent. Use get_knowledge_connectors first when you need to look up IDs by name. |
+
 
 #### get_mcp_gateway
+
+##### Input
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `id` | `string` | No | The ID of the MCP gateway to fetch. Prefer the ID when you already have it. |
 | `name` | `string` | No | The exact name of the MCP gateway to fetch when you do not already have the ID. |
 
+##### Output
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `id` | `string` | Yes | The resource ID. |
+| `name` | `string` | Yes | The resource name. |
+| `description` | `any` | Yes | The resource description, if any. |
+| `icon` | `any` | Yes | The emoji icon, if configured. |
+| `scope` | `"personal" \| "team" \| "org"` | Yes | The visibility scope. |
+| `agentType` | `"agent" \| "llm_proxy" \| "mcp_gateway" \| "profile"` | Yes | The resource type. |
+| `systemPrompt` | `any` | No |  |
+| `teams` | `object[]` | Yes | The teams attached to it. |
+| `teams[].id` | `string` | Yes | The team ID. |
+| `teams[].name` | `string` | Yes | The team name. |
+| `labels` | `object[]` | Yes | Assigned labels. |
+| `labels[].key` | `string` | Yes | The label key. |
+| `labels[].value` | `string` | Yes | The label value. |
+| `tools` | `object[]` | Yes | Assigned tools. |
+| `tools[].id` | `string` | Yes | The assigned tool ID. |
+| `tools[].name` | `string` | Yes | The tool name. |
+| `tools[].description` | `any` | Yes | The tool description, if any. |
+| `tools[].catalogId` | `any` | Yes | The MCP catalog ID the tool comes from, if any. |
+| `knowledgeBaseIds` | `string[]` | Yes | Assigned knowledge base IDs. |
+| `connectorIds` | `string[]` | Yes | Assigned knowledge connector IDs. |
+| `suggestedPrompts` | `object[]` | Yes | Configured suggested prompts. |
+| `suggestedPrompts[].summaryTitle` | `string` | Yes | The short title shown in the chat UI. |
+| `suggestedPrompts[].prompt` | `string` | Yes | The suggested prompt text. |
+
 #### edit_mcp_gateway
+
+##### Input
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `id` | `string` | Yes | The ID of the MCP gateway to edit. Use get_mcp_gateway to look it up by name first if needed. |
-| `description` | `any` | No | New description for the resource. |
-| `icon` | `any` | No | New emoji icon for the resource. |
-| `labels` | `object[]` | No | Replace the resource's labels with this set. |
+| `description` | `any` | No | New description for the MCP gateway. |
+| `icon` | `any` | No | New emoji icon for the MCP gateway. |
+| `labels` | `object[]` | No | Replace the MCP gateway's labels with this set. |
 | `labels[].key` | `string` | Yes |  |
 | `labels[].value` | `string` | Yes |  |
-| `name` | `string` | No | New name for the resource. |
-| `scope` | `"personal" \| "team" \| "org"` | No | Updated visibility scope for the resource. |
-| `teams` | `string[]` | No | Replace the teams attached to a team-scoped resource. |
+| `name` | `string` | No | New name for the MCP gateway. |
+| `scope` | `"personal" \| "team" \| "org"` | No | Updated visibility scope for the MCP gateway. |
+| `teams` | `string[]` | No | Replace the teams attached to a team-scoped MCP gateway. |
+| `knowledgeBaseIds` | `string[]` | No | Replace the MCP gateway's assigned knowledge bases with this set. |
+| `connectorIds` | `string[]` | No | Replace the MCP gateway's directly assigned knowledge connectors with this set. |
+
 
 ### MCP Servers
 
@@ -210,21 +355,64 @@ This tool takes no arguments.
 
 #### search_private_mcp_registry
 
+##### Input
+
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `query` | `string` | No | Optional search query to filter MCP servers by name or description. |
+
+##### Output
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `items` | `object[]` | Yes | Catalog items matching the search. |
+| `items[].id` | `string` | Yes | The catalog item ID. |
+| `items[].name` | `string` | Yes | The MCP server name. |
+| `items[].version` | `any` | Yes | The version, if provided. |
+| `items[].description` | `any` | Yes | The server description, if any. |
+| `items[].serverType` | `"local" \| "remote" \| "builtin"` | Yes | Whether the server is local, remote, or builtin. |
+| `items[].serverUrl` | `any` | Yes | The remote server URL, if applicable. |
+| `items[].repository` | `any` | Yes | The repository URL, if available. |
 
 #### get_mcp_servers
 
 This tool takes no arguments.
 
+##### Output
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `items` | `object[]` | Yes | Available MCP servers. |
+| `items[].id` | `string` | Yes | The catalog item ID. |
+| `items[].name` | `string` | Yes | The MCP server name. |
+| `items[].icon` | `any` | Yes | The emoji icon, if any. |
+| `items[].description` | `any` | Yes | The server description, if any. |
+| `items[].scope` | `"personal" \| "team" \| "org"` | No | The visibility scope of the server. |
+| `items[].teams` | `object[]` | Yes | Teams attached to a team-scoped server. |
+| `items[].teams[].id` | `string` | Yes | The team ID. |
+| `items[].teams[].name` | `string` | Yes | The team name. |
+
 #### get_mcp_server_tools
+
+##### Input
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `mcpServerId` | `string` | Yes | The catalog ID of the MCP server. |
 
+##### Output
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `tools` | `object[]` | Yes | Tools exposed by the selected MCP server. |
+| `tools[].id` | `string` | Yes | The tool ID. |
+| `tools[].name` | `string` | Yes | The tool name. |
+| `tools[].description` | `any` | No | The tool description, if any. |
+| `tools[].catalogId` | `any` | No | The MCP catalog ID this tool belongs to. |
+
 #### edit_mcp_description
+
+##### Input
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
@@ -242,7 +430,10 @@ This tool takes no arguments.
 | `labels[].value` | `string` | Yes | Label value. |
 | `teams` | `string[]` | No | Team IDs for team-scoped access control. |
 
+
 #### edit_mcp_config
+
+##### Input
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
@@ -285,7 +476,10 @@ This tool takes no arguments.
 | `installationCommand` | `string` | No | [Local] Command to install the MCP server package. |
 | `userConfig` | `object` | No | User-configurable fields shown during installation. |
 
+
 #### create_mcp_server
+
+##### Input
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
@@ -339,7 +533,10 @@ This tool takes no arguments.
 | `installationCommand` | `string` | No | [Local] Command to install the MCP server package. |
 | `userConfig` | `object` | No | User-configurable fields shown during installation. |
 
+
 #### deploy_mcp_server
+
+##### Input
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
@@ -347,20 +544,26 @@ This tool takes no arguments.
 | `teamId` | `string` | No | Optional team ID for a team-scoped deployment. |
 | `agentIds` | `string[]` | No | Optional agent IDs to assign the server's tools to after deployment. |
 
+
 #### list_mcp_server_deployments
 
 This tool takes no arguments.
 
+
 #### get_mcp_server_logs
+
+##### Input
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `serverId` | `string` | Yes | The deployment ID of the MCP server. |
 | `lines` | `integer` | No | Number of log lines to retrieve. |
 
+
 #### create_mcp_server_installation_request
 
 This tool takes no arguments.
+
 
 ### Limits
 
@@ -375,6 +578,8 @@ This tool takes no arguments.
 
 #### create_limit
 
+##### Input
+
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `entity_type` | `"organization" \| "team" \| "agent"` | Yes | The type of entity to apply the limit to. |
@@ -385,37 +590,114 @@ This tool takes no arguments.
 | `mcp_server_name` | `string` | No | MCP server name. Required for mcp_server_calls and tool_calls limits. |
 | `tool_name` | `string` | No | Tool name. Required for tool_calls limits. |
 
+##### Output
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `limit` | `object` | Yes |  |
+| `limit.id` | `string` | Yes | The limit ID. |
+| `limit.entityType` | `"organization" \| "team" \| "agent"` | Yes | The limited entity type. |
+| `limit.entityId` | `string` | Yes | The limited entity ID. |
+| `limit.limitType` | `"token_cost" \| "mcp_server_calls" \| "tool_calls"` | Yes | The kind of limit. |
+| `limit.limitValue` | `number` | Yes | The configured limit value. |
+| `limit.model` | `any` | No | Models targeted by a token_cost limit, if any. |
+| `limit.mcpServerName` | `any` | No | MCP server name for MCP-specific limits, if any. |
+| `limit.toolName` | `any` | No | Tool name for tool-specific limits, if any. |
+
 #### get_limits
+
+##### Input
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `entity_type` | `"organization" \| "team" \| "agent"` | No | Optional filter by entity type. |
 | `entity_id` | `string` | No | Optional filter by entity ID. |
 
+##### Output
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `limits` | `object[]` | Yes |  |
+| `limits[].id` | `string` | Yes | The limit ID. |
+| `limits[].entityType` | `"organization" \| "team" \| "agent"` | Yes | The limited entity type. |
+| `limits[].entityId` | `string` | Yes | The limited entity ID. |
+| `limits[].limitType` | `"token_cost" \| "mcp_server_calls" \| "tool_calls"` | Yes | The kind of limit. |
+| `limits[].limitValue` | `number` | Yes | The configured limit value. |
+| `limits[].model` | `any` | No | Models targeted by a token_cost limit, if any. |
+| `limits[].mcpServerName` | `any` | No | MCP server name for MCP-specific limits, if any. |
+| `limits[].toolName` | `any` | No | Tool name for tool-specific limits, if any. |
+
 #### update_limit
+
+##### Input
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `id` | `string` | Yes | The ID of the limit to update. |
 | `limit_value` | `number` | No | Optional new limit value. |
 
+##### Output
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `limit` | `object` | Yes |  |
+| `limit.id` | `string` | Yes | The limit ID. |
+| `limit.entityType` | `"organization" \| "team" \| "agent"` | Yes | The limited entity type. |
+| `limit.entityId` | `string` | Yes | The limited entity ID. |
+| `limit.limitType` | `"token_cost" \| "mcp_server_calls" \| "tool_calls"` | Yes | The kind of limit. |
+| `limit.limitValue` | `number` | Yes | The configured limit value. |
+| `limit.model` | `any` | No | Models targeted by a token_cost limit, if any. |
+| `limit.mcpServerName` | `any` | No | MCP server name for MCP-specific limits, if any. |
+| `limit.toolName` | `any` | No | Tool name for tool-specific limits, if any. |
+
 #### delete_limit
+
+##### Input
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `id` | `string` | Yes | The ID of the limit to delete. |
 
+##### Output
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `success` | `boolean` | Yes |  |
+| `id` | `string` | Yes |  |
+
 #### get_agent_token_usage
+
+##### Input
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `id` | `string` | No | Optional agent ID. Defaults to the current agent. |
 
+##### Output
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `id` | `string` | Yes |  |
+| `totalInputTokens` | `number` | Yes |  |
+| `totalOutputTokens` | `number` | Yes |  |
+| `totalTokens` | `number` | Yes |  |
+
 #### get_llm_proxy_token_usage
+
+##### Input
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `id` | `string` | No | Optional LLM proxy ID. Defaults to the current agent. |
+
+##### Output
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `id` | `string` | Yes |  |
+| `totalInputTokens` | `number` | Yes |  |
+| `totalOutputTokens` | `number` | Yes |  |
+| `totalTokens` | `number` | Yes |  |
 
 ### Policies
 
@@ -437,11 +719,35 @@ This tool takes no arguments.
 
 This tool takes no arguments.
 
+##### Output
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `operators` | `object[]` | Yes | Supported autonomy policy operators. |
+| `operators[].value` | `"equal" \| "notEqual" \| "contains" \| "notContains" \| "startsWith" \| "endsWith" \| "regex"` | Yes | The operator enum value. |
+| `operators[].label` | `string` | Yes | The human-readable label. |
+
 #### get_tool_invocation_policies
 
 This tool takes no arguments.
 
+##### Output
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `policies` | `object[]` | Yes | Tool invocation policies. |
+| `policies[].id` | `string` | Yes | The policy ID. |
+| `policies[].toolId` | `string` | Yes | The tool ID this policy targets. |
+| `policies[].conditions` | `object[]` | Yes | Conditions evaluated for the policy. |
+| `policies[].conditions[].key` | `string` | Yes | The evaluated argument or context key. |
+| `policies[].conditions[].operator` | `"equal" \| "notEqual" \| "contains" \| "notContains" \| "startsWith" \| "endsWith" \| "regex"` | Yes | The comparison operator. |
+| `policies[].conditions[].value` | `string` | Yes | The comparison value. |
+| `policies[].action` | `"allow_when_context_is_untrusted" \| "block_when_context_is_untrusted" \| "block_always" \| "require_approval"` | Yes | The policy action. |
+| `policies[].reason` | `any` | Yes | The policy reason, if any. |
+
 #### create_tool_invocation_policy
+
+##### Input
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
@@ -453,13 +759,45 @@ This tool takes no arguments.
 | `action` | `"allow_when_context_is_untrusted" \| "block_when_context_is_untrusted" \| "block_always" \| "require_approval"` | Yes | The action to take when the policy matches. |
 | `reason` | `string` | No | Human-readable explanation for why this policy exists. |
 
+##### Output
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `policy` | `object` | Yes | The requested tool invocation policy. |
+| `policy.id` | `string` | Yes | The policy ID. |
+| `policy.toolId` | `string` | Yes | The tool ID this policy targets. |
+| `policy.conditions` | `object[]` | Yes | Conditions evaluated for the policy. |
+| `policy.conditions[].key` | `string` | Yes | The evaluated argument or context key. |
+| `policy.conditions[].operator` | `"equal" \| "notEqual" \| "contains" \| "notContains" \| "startsWith" \| "endsWith" \| "regex"` | Yes | The comparison operator. |
+| `policy.conditions[].value` | `string` | Yes | The comparison value. |
+| `policy.action` | `"allow_when_context_is_untrusted" \| "block_when_context_is_untrusted" \| "block_always" \| "require_approval"` | Yes | The policy action. |
+| `policy.reason` | `any` | Yes | The policy reason, if any. |
+
 #### get_tool_invocation_policy
+
+##### Input
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `id` | `string` | Yes | The ID of the tool invocation policy. |
 
+##### Output
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `policy` | `object` | Yes | The requested tool invocation policy. |
+| `policy.id` | `string` | Yes | The policy ID. |
+| `policy.toolId` | `string` | Yes | The tool ID this policy targets. |
+| `policy.conditions` | `object[]` | Yes | Conditions evaluated for the policy. |
+| `policy.conditions[].key` | `string` | Yes | The evaluated argument or context key. |
+| `policy.conditions[].operator` | `"equal" \| "notEqual" \| "contains" \| "notContains" \| "startsWith" \| "endsWith" \| "regex"` | Yes | The comparison operator. |
+| `policy.conditions[].value` | `string` | Yes | The comparison value. |
+| `policy.action` | `"allow_when_context_is_untrusted" \| "block_when_context_is_untrusted" \| "block_always" \| "require_approval"` | Yes | The policy action. |
+| `policy.reason` | `any` | Yes | The policy reason, if any. |
+
 #### update_tool_invocation_policy
+
+##### Input
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
@@ -472,17 +810,55 @@ This tool takes no arguments.
 | `action` | `"allow_when_context_is_untrusted" \| "block_when_context_is_untrusted" \| "block_always" \| "require_approval"` | No | Updated action to take when the policy matches. |
 | `reason` | `any` | No | Updated human-readable explanation for why this policy exists. |
 
+##### Output
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `policy` | `object` | Yes | The requested tool invocation policy. |
+| `policy.id` | `string` | Yes | The policy ID. |
+| `policy.toolId` | `string` | Yes | The tool ID this policy targets. |
+| `policy.conditions` | `object[]` | Yes | Conditions evaluated for the policy. |
+| `policy.conditions[].key` | `string` | Yes | The evaluated argument or context key. |
+| `policy.conditions[].operator` | `"equal" \| "notEqual" \| "contains" \| "notContains" \| "startsWith" \| "endsWith" \| "regex"` | Yes | The comparison operator. |
+| `policy.conditions[].value` | `string` | Yes | The comparison value. |
+| `policy.action` | `"allow_when_context_is_untrusted" \| "block_when_context_is_untrusted" \| "block_always" \| "require_approval"` | Yes | The policy action. |
+| `policy.reason` | `any` | Yes | The policy reason, if any. |
+
 #### delete_tool_invocation_policy
+
+##### Input
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `id` | `string` | Yes | The ID of the tool invocation policy. |
 
+##### Output
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `success` | `boolean` | Yes | Whether the delete succeeded. |
+
 #### get_trusted_data_policies
 
 This tool takes no arguments.
 
+##### Output
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `policies` | `object[]` | Yes | Trusted data policies. |
+| `policies[].id` | `string` | Yes | The policy ID. |
+| `policies[].toolId` | `string` | Yes | The tool ID this policy targets. |
+| `policies[].conditions` | `object[]` | Yes | Conditions evaluated for the policy. |
+| `policies[].conditions[].key` | `string` | Yes | The evaluated result key or path. |
+| `policies[].conditions[].operator` | `"equal" \| "notEqual" \| "contains" \| "notContains" \| "startsWith" \| "endsWith" \| "regex"` | Yes | The comparison operator. |
+| `policies[].conditions[].value` | `string` | Yes | The comparison value. |
+| `policies[].action` | `"block_always" \| "mark_as_trusted" \| "mark_as_untrusted" \| "sanitize_with_dual_llm"` | Yes | The policy action. |
+| `policies[].description` | `any` | Yes | The policy description, if any. |
+
 #### create_trusted_data_policy
+
+##### Input
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
@@ -494,13 +870,45 @@ This tool takes no arguments.
 | `action` | `"block_always" \| "mark_as_trusted" \| "mark_as_untrusted" \| "sanitize_with_dual_llm"` | Yes | The action to take when the policy matches. |
 | `description` | `string` | No | Human-readable explanation for why this policy exists. |
 
+##### Output
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `policy` | `object` | Yes | The requested trusted data policy. |
+| `policy.id` | `string` | Yes | The policy ID. |
+| `policy.toolId` | `string` | Yes | The tool ID this policy targets. |
+| `policy.conditions` | `object[]` | Yes | Conditions evaluated for the policy. |
+| `policy.conditions[].key` | `string` | Yes | The evaluated result key or path. |
+| `policy.conditions[].operator` | `"equal" \| "notEqual" \| "contains" \| "notContains" \| "startsWith" \| "endsWith" \| "regex"` | Yes | The comparison operator. |
+| `policy.conditions[].value` | `string` | Yes | The comparison value. |
+| `policy.action` | `"block_always" \| "mark_as_trusted" \| "mark_as_untrusted" \| "sanitize_with_dual_llm"` | Yes | The policy action. |
+| `policy.description` | `any` | Yes | The policy description, if any. |
+
 #### get_trusted_data_policy
+
+##### Input
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `id` | `string` | Yes | The ID of the trusted data policy. |
 
+##### Output
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `policy` | `object` | Yes | The requested trusted data policy. |
+| `policy.id` | `string` | Yes | The policy ID. |
+| `policy.toolId` | `string` | Yes | The tool ID this policy targets. |
+| `policy.conditions` | `object[]` | Yes | Conditions evaluated for the policy. |
+| `policy.conditions[].key` | `string` | Yes | The evaluated result key or path. |
+| `policy.conditions[].operator` | `"equal" \| "notEqual" \| "contains" \| "notContains" \| "startsWith" \| "endsWith" \| "regex"` | Yes | The comparison operator. |
+| `policy.conditions[].value` | `string` | Yes | The comparison value. |
+| `policy.action` | `"block_always" \| "mark_as_trusted" \| "mark_as_untrusted" \| "sanitize_with_dual_llm"` | Yes | The policy action. |
+| `policy.description` | `any` | Yes | The policy description, if any. |
+
 #### update_trusted_data_policy
+
+##### Input
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
@@ -513,11 +921,33 @@ This tool takes no arguments.
 | `action` | `"block_always" \| "mark_as_trusted" \| "mark_as_untrusted" \| "sanitize_with_dual_llm"` | No | Updated action to take when the policy matches. |
 | `description` | `any` | No | Updated human-readable explanation for why this policy exists. |
 
+##### Output
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `policy` | `object` | Yes | The requested trusted data policy. |
+| `policy.id` | `string` | Yes | The policy ID. |
+| `policy.toolId` | `string` | Yes | The tool ID this policy targets. |
+| `policy.conditions` | `object[]` | Yes | Conditions evaluated for the policy. |
+| `policy.conditions[].key` | `string` | Yes | The evaluated result key or path. |
+| `policy.conditions[].operator` | `"equal" \| "notEqual" \| "contains" \| "notContains" \| "startsWith" \| "endsWith" \| "regex"` | Yes | The comparison operator. |
+| `policy.conditions[].value` | `string` | Yes | The comparison value. |
+| `policy.action` | `"block_always" \| "mark_as_trusted" \| "mark_as_untrusted" \| "sanitize_with_dual_llm"` | Yes | The policy action. |
+| `policy.description` | `any` | Yes | The policy description, if any. |
+
 #### delete_trusted_data_policy
+
+##### Input
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `id` | `string` | Yes | The ID of the trusted data policy. |
+
+##### Output
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `success` | `boolean` | Yes | Whether the delete succeeded. |
 
 ### Tool Assignment
 
@@ -528,6 +958,8 @@ This tool takes no arguments.
 
 #### bulk_assign_tools_to_agents
 
+##### Input
+
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `assignments` | `object[]` | Yes | Assignments to create or update for agents. |
@@ -537,7 +969,26 @@ This tool takes no arguments.
 | `assignments[].useDynamicTeamCredential` | `boolean` | No | When true, resolve credentials dynamically from the invoking team instead of pinning a deployment. |
 | `assignments[].agentId` | `string` | Yes | The agent ID to assign the tool to. |
 
+##### Output
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `succeeded` | `object[]` | Yes | Assignments that succeeded. |
+| `succeeded[].agentId` | `string` | Yes | The target agent ID. |
+| `succeeded[].toolId` | `string` | Yes | The tool ID. |
+| `succeeded[].error` | `string` | No | Validation or assignment error. |
+| `failed` | `object[]` | Yes | Assignments that failed. |
+| `failed[].agentId` | `string` | Yes | The target agent ID. |
+| `failed[].toolId` | `string` | Yes | The tool ID. |
+| `failed[].error` | `string` | No | Validation or assignment error. |
+| `duplicates` | `object[]` | Yes | Assignments skipped because they already existed. |
+| `duplicates[].agentId` | `string` | Yes | The target agent ID. |
+| `duplicates[].toolId` | `string` | Yes | The tool ID. |
+| `duplicates[].error` | `string` | No | Validation or assignment error. |
+
 #### bulk_assign_tools_to_mcp_gateways
+
+##### Input
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
@@ -547,6 +998,23 @@ This tool takes no arguments.
 | `assignments[].executionSourceMcpServerId` | `any` | No | For local MCP tools, the deployed MCP server ID that should execute the tool. |
 | `assignments[].useDynamicTeamCredential` | `boolean` | No | When true, resolve credentials dynamically from the invoking team instead of pinning a deployment. |
 | `assignments[].mcpGatewayId` | `string` | Yes | The MCP gateway ID to assign the tool to. |
+
+##### Output
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `succeeded` | `object[]` | Yes | Assignments that succeeded. |
+| `succeeded[].mcpGatewayId` | `string` | Yes | The target MCP gateway ID. |
+| `succeeded[].toolId` | `string` | Yes | The tool ID. |
+| `succeeded[].error` | `string` | No | Validation or assignment error. |
+| `failed` | `object[]` | Yes | Assignments that failed. |
+| `failed[].mcpGatewayId` | `string` | Yes | The target MCP gateway ID. |
+| `failed[].toolId` | `string` | Yes | The tool ID. |
+| `failed[].error` | `string` | No | Validation or assignment error. |
+| `duplicates` | `object[]` | Yes | Assignments skipped because they already existed. |
+| `duplicates[].mcpGatewayId` | `string` | Yes | The target MCP gateway ID. |
+| `duplicates[].toolId` | `string` | Yes | The tool ID. |
+| `duplicates[].error` | `string` | No | Validation or assignment error. |
 
 ### Knowledge Management
 
@@ -572,28 +1040,82 @@ This tool takes no arguments.
 
 #### query_knowledge_sources
 
+##### Input
+
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `query` | `string` | Yes | The user's original query, passed verbatim without rephrasing or expansion. |
 
+##### Output
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `results` | `any[]` | Yes | Retrieved knowledge results. |
+| `totalChunks` | `number` | Yes | The number of result chunks returned. |
+
 #### create_knowledge_base
+
+##### Input
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `name` | `string` | Yes | Name of the knowledge base. |
 | `description` | `any` | No | Description of the knowledge base. |
 
+##### Output
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `knowledgeBase` | `object` | Yes | The requested knowledge base. |
+| `knowledgeBase.id` | `string` | Yes | The knowledge base ID. |
+| `knowledgeBase.organizationId` | `string` | Yes | The organization ID. |
+| `knowledgeBase.name` | `string` | Yes | The knowledge base name. |
+| `knowledgeBase.description` | `any` | Yes | The knowledge base description, if any. |
+| `knowledgeBase.status` | `string` | Yes | The knowledge base status. |
+| `knowledgeBase.visibility` | `string` | Yes | The knowledge base visibility. |
+| `knowledgeBase.teamIds` | `string[]` | Yes | Team IDs with access. |
+
 #### get_knowledge_bases
 
 This tool takes no arguments.
 
+##### Output
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `knowledgeBases` | `object[]` | Yes | Knowledge bases in the organization. |
+| `knowledgeBases[].id` | `string` | Yes | The knowledge base ID. |
+| `knowledgeBases[].organizationId` | `string` | Yes | The organization ID. |
+| `knowledgeBases[].name` | `string` | Yes | The knowledge base name. |
+| `knowledgeBases[].description` | `any` | Yes | The knowledge base description, if any. |
+| `knowledgeBases[].status` | `string` | Yes | The knowledge base status. |
+| `knowledgeBases[].visibility` | `string` | Yes | The knowledge base visibility. |
+| `knowledgeBases[].teamIds` | `string[]` | Yes | Team IDs with access. |
+
 #### get_knowledge_base
+
+##### Input
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `id` | `string` | Yes | Knowledge base ID. |
 
+##### Output
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `knowledgeBase` | `object` | Yes | The requested knowledge base. |
+| `knowledgeBase.id` | `string` | Yes | The knowledge base ID. |
+| `knowledgeBase.organizationId` | `string` | Yes | The organization ID. |
+| `knowledgeBase.name` | `string` | Yes | The knowledge base name. |
+| `knowledgeBase.description` | `any` | Yes | The knowledge base description, if any. |
+| `knowledgeBase.status` | `string` | Yes | The knowledge base status. |
+| `knowledgeBase.visibility` | `string` | Yes | The knowledge base visibility. |
+| `knowledgeBase.teamIds` | `string[]` | Yes | Team IDs with access. |
+
 #### update_knowledge_base
+
+##### Input
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
@@ -601,13 +1123,31 @@ This tool takes no arguments.
 | `name` | `string` | No | New knowledge base name. |
 | `description` | `any` | No | New knowledge base description. |
 
+##### Output
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `knowledgeBase` | `object` | Yes | The requested knowledge base. |
+| `knowledgeBase.id` | `string` | Yes | The knowledge base ID. |
+| `knowledgeBase.organizationId` | `string` | Yes | The organization ID. |
+| `knowledgeBase.name` | `string` | Yes | The knowledge base name. |
+| `knowledgeBase.description` | `any` | Yes | The knowledge base description, if any. |
+| `knowledgeBase.status` | `string` | Yes | The knowledge base status. |
+| `knowledgeBase.visibility` | `string` | Yes | The knowledge base visibility. |
+| `knowledgeBase.teamIds` | `string[]` | Yes | Team IDs with access. |
+
 #### delete_knowledge_base
+
+##### Input
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `id` | `string` | Yes | Knowledge base ID. |
 
+
 #### create_knowledge_connector
+
+##### Input
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
@@ -616,17 +1156,63 @@ This tool takes no arguments.
 | `config` | `object` | Yes | Provider-specific configuration object. |
 | `description` | `any` | No | Description of the knowledge connector. |
 
+##### Output
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `knowledgeConnector` | `object` | Yes | The requested knowledge connector. |
+| `knowledgeConnector.id` | `string` | Yes | The knowledge connector ID. |
+| `knowledgeConnector.organizationId` | `string` | Yes | The organization ID. |
+| `knowledgeConnector.knowledgeBaseId` | `any` | No |  |
+| `knowledgeConnector.name` | `string` | Yes | The connector name. |
+| `knowledgeConnector.connectorType` | `string` | Yes | The connector type. |
+| `knowledgeConnector.description` | `any` | Yes | The connector description, if any. |
+| `knowledgeConnector.enabled` | `boolean` | No |  |
+| `knowledgeConnector.config` | `any` | Yes | The provider-specific connector configuration. |
+
 #### get_knowledge_connectors
 
 This tool takes no arguments.
 
+##### Output
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `knowledgeConnectors` | `object[]` | Yes | Knowledge connectors in the organization. |
+| `knowledgeConnectors[].id` | `string` | Yes | The knowledge connector ID. |
+| `knowledgeConnectors[].organizationId` | `string` | Yes | The organization ID. |
+| `knowledgeConnectors[].knowledgeBaseId` | `any` | No |  |
+| `knowledgeConnectors[].name` | `string` | Yes | The connector name. |
+| `knowledgeConnectors[].connectorType` | `string` | Yes | The connector type. |
+| `knowledgeConnectors[].description` | `any` | Yes | The connector description, if any. |
+| `knowledgeConnectors[].enabled` | `boolean` | No |  |
+| `knowledgeConnectors[].config` | `any` | Yes | The provider-specific connector configuration. |
+
 #### get_knowledge_connector
+
+##### Input
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `id` | `string` | Yes | Knowledge connector ID. |
 
+##### Output
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `knowledgeConnector` | `object` | Yes | The requested knowledge connector. |
+| `knowledgeConnector.id` | `string` | Yes | The knowledge connector ID. |
+| `knowledgeConnector.organizationId` | `string` | Yes | The organization ID. |
+| `knowledgeConnector.knowledgeBaseId` | `any` | No |  |
+| `knowledgeConnector.name` | `string` | Yes | The connector name. |
+| `knowledgeConnector.connectorType` | `string` | Yes | The connector type. |
+| `knowledgeConnector.description` | `any` | Yes | The connector description, if any. |
+| `knowledgeConnector.enabled` | `boolean` | No |  |
+| `knowledgeConnector.config` | `any` | Yes | The provider-specific connector configuration. |
+
 #### update_knowledge_connector
+
+##### Input
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
@@ -636,53 +1222,88 @@ This tool takes no arguments.
 | `enabled` | `boolean` | No | Whether the connector is enabled. |
 | `config` | `object` | No | Updated connector configuration (provider-specific settings). |
 
+##### Output
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `knowledgeConnector` | `object` | Yes | The requested knowledge connector. |
+| `knowledgeConnector.id` | `string` | Yes | The knowledge connector ID. |
+| `knowledgeConnector.organizationId` | `string` | Yes | The organization ID. |
+| `knowledgeConnector.knowledgeBaseId` | `any` | No |  |
+| `knowledgeConnector.name` | `string` | Yes | The connector name. |
+| `knowledgeConnector.connectorType` | `string` | Yes | The connector type. |
+| `knowledgeConnector.description` | `any` | Yes | The connector description, if any. |
+| `knowledgeConnector.enabled` | `boolean` | No |  |
+| `knowledgeConnector.config` | `any` | Yes | The provider-specific connector configuration. |
+
 #### delete_knowledge_connector
+
+##### Input
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `id` | `string` | Yes | Knowledge connector ID. |
 
+
 #### assign_knowledge_connector_to_knowledge_base
+
+##### Input
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `connector_id` | `string` | Yes | Knowledge connector ID. |
 | `knowledge_base_id` | `string` | Yes | Knowledge base ID. |
+
 
 #### unassign_knowledge_connector_from_knowledge_base
 
+##### Input
+
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `connector_id` | `string` | Yes | Knowledge connector ID. |
 | `knowledge_base_id` | `string` | Yes | Knowledge base ID. |
+
 
 #### assign_knowledge_base_to_agent
 
+##### Input
+
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `knowledge_base_id` | `string` | Yes | Knowledge base ID. |
 | `agent_id` | `string` | Yes | Agent ID. |
+
 
 #### unassign_knowledge_base_from_agent
 
+##### Input
+
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `knowledge_base_id` | `string` | Yes | Knowledge base ID. |
 | `agent_id` | `string` | Yes | Agent ID. |
 
+
 #### assign_knowledge_connector_to_agent
+
+##### Input
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `connector_id` | `string` | Yes | Knowledge connector ID. |
 | `agent_id` | `string` | Yes | Agent ID. |
+
 
 #### unassign_knowledge_connector_from_agent
 
+##### Input
+
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `connector_id` | `string` | Yes | Knowledge connector ID. |
 | `agent_id` | `string` | Yes | Agent ID. |
+
 
 ### Chat
 
@@ -695,6 +1316,8 @@ This tool takes no arguments.
 
 #### todo_write
 
+##### Input
+
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `todos` | `object[]` | Yes | Array of todo items to write to the conversation. |
@@ -702,18 +1325,52 @@ This tool takes no arguments.
 | `todos[].content` | `string` | Yes | The content or description of the todo item. |
 | `todos[].status` | `"pending" \| "in_progress" \| "completed"` | Yes | The current status of the todo item. |
 
+##### Output
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `success` | `boolean` | Yes | Whether the write succeeded. |
+| `todoCount` | `integer` | Yes | How many todo items were written. |
+
 #### swap_agent
+
+##### Input
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `agent_name` | `string` | Yes | The name of the agent to switch to. |
 
+##### Output
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `success` | `boolean` | Yes | Whether the swap succeeded. |
+| `agent_id` | `string` | Yes | The agent ID the conversation now uses. |
+| `agent_name` | `string` | Yes | The agent name the conversation now uses. |
+
 #### swap_to_default_agent
 
 This tool takes no arguments.
 
+##### Output
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `success` | `boolean` | Yes | Whether the swap succeeded. |
+| `agent_id` | `string` | Yes | The agent ID the conversation now uses. |
+| `agent_name` | `string` | Yes | The agent name the conversation now uses. |
+
 #### artifact_write
+
+##### Input
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `content` | `string` | Yes | The markdown content to write to the conversation artifact. This completely replaces any existing artifact content. |
+
+##### Output
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `success` | `boolean` | Yes | Whether the artifact write succeeded. |
+| `characterCount` | `integer` | Yes | The number of characters written to the artifact. |

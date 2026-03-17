@@ -24,6 +24,7 @@ import {
   defineArchestraTools,
   EmptyToolArgsSchema,
   errorResult,
+  structuredSuccessResult,
   successResult,
 } from "./helpers";
 import type { ArchestraContext } from "./types";
@@ -115,6 +116,64 @@ const ConnectorAgentAssignmentSchema = z
   })
   .strict();
 
+const QueryKnowledgeSourcesOutputSchema = z.object({
+  results: z.array(z.unknown()).describe("Retrieved knowledge results."),
+  totalChunks: z.number().describe("The number of result chunks returned."),
+});
+
+const KnowledgeBaseOutputItemSchema = z.object({
+  id: z.string().describe("The knowledge base ID."),
+  organizationId: z.string().describe("The organization ID."),
+  name: z.string().describe("The knowledge base name."),
+  description: z
+    .string()
+    .nullable()
+    .describe("The knowledge base description, if any."),
+  status: z.string().describe("The knowledge base status."),
+  visibility: z.string().describe("The knowledge base visibility."),
+  teamIds: z.array(z.string()).describe("Team IDs with access."),
+});
+
+const KnowledgeBasesOutputSchema = z.object({
+  knowledgeBases: z
+    .array(KnowledgeBaseOutputItemSchema)
+    .describe("Knowledge bases in the organization."),
+});
+
+const KnowledgeBaseOutputSchema = z.object({
+  knowledgeBase: KnowledgeBaseOutputItemSchema.describe(
+    "The requested knowledge base.",
+  ),
+});
+
+const KnowledgeConnectorOutputItemSchema = z.object({
+  id: z.string().describe("The knowledge connector ID."),
+  organizationId: z.string().describe("The organization ID."),
+  knowledgeBaseId: z.string().nullable().optional(),
+  name: z.string().describe("The connector name."),
+  connectorType: z.string().describe("The connector type."),
+  description: z
+    .string()
+    .nullable()
+    .describe("The connector description, if any."),
+  enabled: z.boolean().optional(),
+  config: z
+    .unknown()
+    .describe("The provider-specific connector configuration."),
+});
+
+const KnowledgeConnectorsOutputSchema = z.object({
+  knowledgeConnectors: z
+    .array(KnowledgeConnectorOutputItemSchema)
+    .describe("Knowledge connectors in the organization."),
+});
+
+const KnowledgeConnectorOutputSchema = z.object({
+  knowledgeConnector: KnowledgeConnectorOutputItemSchema.describe(
+    "The requested knowledge connector.",
+  ),
+});
+
 const registry = defineArchestraTools([
   {
     shortName: "query_knowledge_sources",
@@ -132,6 +191,7 @@ const registry = defineArchestraTools([
           ),
       })
       .strict(),
+    outputSchema: QueryKnowledgeSourcesOutputSchema,
   },
   // --- Knowledge Base CRUD ---
   {
@@ -140,12 +200,14 @@ const registry = defineArchestraTools([
     description:
       "Create a new knowledge base for organizing knowledge connectors.",
     schema: KnowledgeBaseCreateToolArgsSchema,
+    outputSchema: KnowledgeBaseOutputSchema,
   },
   {
     shortName: "get_knowledge_bases",
     title: "Get Knowledge Bases",
     description: "List all knowledge bases in the organization.",
     schema: EmptyToolArgsSchema,
+    outputSchema: KnowledgeBasesOutputSchema,
   },
   {
     shortName: "get_knowledge_base",
@@ -156,12 +218,14 @@ const registry = defineArchestraTools([
         id: UuidIdSchema.describe("Knowledge base ID."),
       })
       .strict(),
+    outputSchema: KnowledgeBaseOutputSchema,
   },
   {
     shortName: "update_knowledge_base",
     title: "Update Knowledge Base",
     description: "Update an existing knowledge base.",
     schema: KnowledgeBaseUpdateToolArgsSchema,
+    outputSchema: KnowledgeBaseOutputSchema,
   },
   {
     shortName: "delete_knowledge_base",
@@ -180,12 +244,14 @@ const registry = defineArchestraTools([
     description:
       "Create a new knowledge connector for ingesting data from external sources.",
     schema: ConnectorCreateToolArgsSchema,
+    outputSchema: KnowledgeConnectorOutputSchema,
   },
   {
     shortName: "get_knowledge_connectors",
     title: "Get Knowledge Connectors",
     description: "List all knowledge connectors in the organization.",
     schema: EmptyToolArgsSchema,
+    outputSchema: KnowledgeConnectorsOutputSchema,
   },
   {
     shortName: "get_knowledge_connector",
@@ -196,12 +262,14 @@ const registry = defineArchestraTools([
         id: UuidIdSchema.describe("Knowledge connector ID."),
       })
       .strict(),
+    outputSchema: KnowledgeConnectorOutputSchema,
   },
   {
     shortName: "update_knowledge_connector",
     title: "Update Knowledge Connector",
     description: "Update an existing knowledge connector.",
     schema: ConnectorUpdateToolArgsSchema,
+    outputSchema: KnowledgeConnectorOutputSchema,
   },
   {
     shortName: "delete_knowledge_connector",
@@ -402,12 +470,11 @@ export async function handleTool(
         limit: 10,
       });
 
-      return successResult(
-        JSON.stringify({
-          results,
-          totalChunks: results.length,
-        }),
-      );
+      const output = {
+        results,
+        totalChunks: results.length,
+      };
+      return structuredSuccessResult(output, JSON.stringify(output));
     } catch (error) {
       return catchError(error, "querying knowledge base");
     }
@@ -427,7 +494,8 @@ export async function handleTool(
         description: (args?.description as string) || null,
       });
       const kb = await KnowledgeBaseModel.create(parsed);
-      return successResult(
+      return structuredSuccessResult(
+        { knowledgeBase: kb },
         `Knowledge base created successfully.\n\n${JSON.stringify(kb, null, 2)}`,
       );
     } catch (error) {
@@ -440,8 +508,16 @@ export async function handleTool(
       const kbs = await KnowledgeBaseModel.findByOrganization({
         organizationId,
       });
-      if (kbs.length === 0) return successResult("No knowledge bases found.");
-      return successResult(JSON.stringify(kbs, null, 2));
+      if (kbs.length === 0) {
+        return structuredSuccessResult(
+          { knowledgeBases: [] },
+          "No knowledge bases found.",
+        );
+      }
+      return structuredSuccessResult(
+        { knowledgeBases: kbs },
+        JSON.stringify(kbs, null, 2),
+      );
     } catch (error) {
       return catchError(error, "listing knowledge bases");
     }
@@ -454,7 +530,10 @@ export async function handleTool(
       const kb = await KnowledgeBaseModel.findById(id);
       if (!kb || kb.organizationId !== organizationId)
         return errorResult(`Knowledge base not found: ${id}`);
-      return successResult(JSON.stringify(kb, null, 2));
+      return structuredSuccessResult(
+        { knowledgeBase: kb },
+        JSON.stringify(kb, null, 2),
+      );
     } catch (error) {
       return catchError(error, "getting knowledge base");
     }
@@ -475,7 +554,8 @@ export async function handleTool(
         return errorResult(`Knowledge base not found: ${id}`);
       const kb = await KnowledgeBaseModel.update(id, updates);
       if (!kb) return errorResult(`Knowledge base not found: ${id}`);
-      return successResult(
+      return structuredSuccessResult(
+        { knowledgeBase: kb },
         `Knowledge base updated successfully.\n\n${JSON.stringify(kb, null, 2)}`,
       );
     } catch (error) {
@@ -516,7 +596,8 @@ export async function handleTool(
         description: (args?.description as string) || null,
       });
       const connector = await KnowledgeBaseConnectorModel.create(parsed);
-      return successResult(
+      return structuredSuccessResult(
+        { knowledgeConnector: connector },
         `Knowledge connector created successfully.\n\n${JSON.stringify(connector, null, 2)}`,
       );
     } catch (error) {
@@ -529,9 +610,16 @@ export async function handleTool(
       const connectors = await KnowledgeBaseConnectorModel.findByOrganization({
         organizationId,
       });
-      if (connectors.length === 0)
-        return successResult("No knowledge connectors found.");
-      return successResult(JSON.stringify(connectors, null, 2));
+      if (connectors.length === 0) {
+        return structuredSuccessResult(
+          { knowledgeConnectors: [] },
+          "No knowledge connectors found.",
+        );
+      }
+      return structuredSuccessResult(
+        { knowledgeConnectors: connectors },
+        JSON.stringify(connectors, null, 2),
+      );
     } catch (error) {
       return catchError(error, "listing knowledge connectors");
     }
@@ -544,7 +632,10 @@ export async function handleTool(
       const connector = await KnowledgeBaseConnectorModel.findById(id);
       if (!connector || connector.organizationId !== organizationId)
         return errorResult(`Knowledge connector not found: ${id}`);
-      return successResult(JSON.stringify(connector, null, 2));
+      return structuredSuccessResult(
+        { knowledgeConnector: connector },
+        JSON.stringify(connector, null, 2),
+      );
     } catch (error) {
       return catchError(error, "getting knowledge connector");
     }
@@ -573,7 +664,8 @@ export async function handleTool(
       const connector = await KnowledgeBaseConnectorModel.update(id, updates);
       if (!connector)
         return errorResult(`Knowledge connector not found: ${id}`);
-      return successResult(
+      return structuredSuccessResult(
+        { knowledgeConnector: connector },
         `Knowledge connector updated successfully.\n\n${JSON.stringify(connector, null, 2)}`,
       );
     } catch (error) {

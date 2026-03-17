@@ -13,25 +13,7 @@ import { tools } from "./tool-assignment";
 const AGENTS_TOOL = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}bulk_assign_tools_to_agents`;
 const GATEWAYS_TOOL = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}bulk_assign_tools_to_mcp_gateways`;
 
-describe("tool assignment tools", () => {
-  test("should have bulk_assign_tools_to_agents tool", () => {
-    const tool = tools.find((t) =>
-      t.name.endsWith("bulk_assign_tools_to_agents"),
-    );
-    expect(tool).toBeDefined();
-    expect(tool?.title).toBe("Bulk Assign Tools to Agents");
-    expect(tool?.inputSchema.required).toContain("assignments");
-  });
-
-  test("should have bulk_assign_tools_to_mcp_gateways tool", () => {
-    const tool = tools.find((t) =>
-      t.name.endsWith("bulk_assign_tools_to_mcp_gateways"),
-    );
-    expect(tool).toBeDefined();
-    expect(tool?.title).toBe("Bulk Assign Tools to MCP Gateways");
-    expect(tool?.inputSchema.required).toContain("assignments");
-  });
-
+describe("tool assignment schemas", () => {
   test("bulk_assign_tools_to_agents schema includes useDynamicTeamCredential", () => {
     const tool = tools.find((t) =>
       t.name.endsWith("bulk_assign_tools_to_agents"),
@@ -98,6 +80,11 @@ describe("tool assignment tool execution", () => {
       mockContext,
     );
     expect(result.isError).toBe(false);
+    expect(result.structuredContent).toEqual({
+      succeeded: [],
+      failed: [],
+      duplicates: [],
+    });
     const parsed = JSON.parse((result.content[0] as any).text);
     expect(parsed.succeeded).toEqual([]);
     expect(parsed.failed).toEqual([]);

@@ -13,7 +13,7 @@ import {
   defineArchestraTools,
   EmptyToolArgsSchema,
   errorResult,
-  successResult,
+  structuredSuccessResult,
 } from "./helpers";
 import type { ArchestraContext } from "./types";
 
@@ -140,6 +140,92 @@ const updateTrustedDataPolicySchema = z
   })
   .strict();
 
+const AutonomyPolicyOperatorOutputSchema = z.object({
+  value: AutonomyPolicyOperator.SupportedOperatorSchema.describe(
+    "The operator enum value.",
+  ),
+  label: z.string().describe("The human-readable label."),
+});
+
+const OperatorsOutputSchema = z.object({
+  operators: z
+    .array(AutonomyPolicyOperatorOutputSchema)
+    .describe("Supported autonomy policy operators."),
+});
+
+const ToolInvocationPolicyConditionOutputSchema = z.object({
+  key: z.string().describe("The evaluated argument or context key."),
+  operator: AutonomyPolicyOperator.SupportedOperatorSchema.describe(
+    "The comparison operator.",
+  ),
+  value: z.string().describe("The comparison value."),
+});
+
+const ToolInvocationPolicyOutputItemSchema = z.object({
+  id: z.string().describe("The policy ID."),
+  toolId: z.string().describe("The tool ID this policy targets."),
+  conditions: z
+    .array(ToolInvocationPolicyConditionOutputSchema)
+    .describe("Conditions evaluated for the policy."),
+  action:
+    ToolInvocation.InsertToolInvocationPolicySchema.shape.action.describe(
+      "The policy action.",
+    ),
+  reason: z.string().nullable().describe("The policy reason, if any."),
+});
+
+const ToolInvocationPoliciesOutputSchema = z.object({
+  policies: z
+    .array(ToolInvocationPolicyOutputItemSchema)
+    .describe("Tool invocation policies."),
+});
+
+const ToolInvocationPolicyOutputSchema = z.object({
+  policy: ToolInvocationPolicyOutputItemSchema.describe(
+    "The requested tool invocation policy.",
+  ),
+});
+
+const TrustedDataPolicyConditionOutputSchema = z.object({
+  key: z.string().describe("The evaluated result key or path."),
+  operator: AutonomyPolicyOperator.SupportedOperatorSchema.describe(
+    "The comparison operator.",
+  ),
+  value: z.string().describe("The comparison value."),
+});
+
+const TrustedDataPolicyOutputItemSchema = z.object({
+  id: z.string().describe("The policy ID."),
+  toolId: z.string().describe("The tool ID this policy targets."),
+  conditions: z
+    .array(TrustedDataPolicyConditionOutputSchema)
+    .describe("Conditions evaluated for the policy."),
+  action:
+    TrustedData.InsertTrustedDataPolicySchema.shape.action.describe(
+      "The policy action.",
+    ),
+  description: z
+    .string()
+    .nullable()
+    .describe("The policy description, if any."),
+});
+
+const TrustedDataPoliciesOutputSchema = z.object({
+  policies: z
+    .array(TrustedDataPolicyOutputItemSchema)
+    .describe("Trusted data policies."),
+});
+
+const TrustedDataPolicyOutputSchema = z.object({
+  policy: TrustedDataPolicyOutputItemSchema.describe(
+    "The requested trusted data policy.",
+  ),
+});
+
+const DeletePolicyOutputSchema = z.object({
+  success: z.literal(true).describe("Whether the delete succeeded."),
+});
+
 const registry = defineArchestraTools([
   {
     shortName: "get_autonomy_policy_operators",
@@ -147,18 +233,21 @@ const registry = defineArchestraTools([
     description:
       "Get all supported policy operators with their human-readable labels",
     schema: EmptyToolArgsSchema,
+    outputSchema: OperatorsOutputSchema,
   },
   {
     shortName: "get_tool_invocation_policies",
     title: "Get Tool Invocation Policies",
     description: "Get all tool invocation policies",
     schema: EmptyToolArgsSchema,
+    outputSchema: ToolInvocationPoliciesOutputSchema,
   },
   {
     shortName: "create_tool_invocation_policy",
     title: "Create Tool Invocation Policy",
     description: "Create a new tool invocation policy",
     schema: createToolInvocationPolicySchema,
+    outputSchema: ToolInvocationPolicyOutputSchema,
   },
   {
     shortName: "get_tool_invocation_policy",
@@ -169,12 +258,14 @@ const registry = defineArchestraTools([
         id: UuidIdSchema.describe("The ID of the tool invocation policy."),
       })
       .strict(),
+    outputSchema: ToolInvocationPolicyOutputSchema,
   },
   {
     shortName: "update_tool_invocation_policy",
     title: "Update Tool Invocation Policy",
     description: "Update a tool invocation policy",
     schema: updateToolInvocationPolicySchema,
+    outputSchema: ToolInvocationPolicyOutputSchema,
   },
   {
     shortName: "delete_tool_invocation_policy",
@@ -185,18 +276,21 @@ const registry = defineArchestraTools([
         id: UuidIdSchema.describe("The ID of the tool invocation policy."),
       })
       .strict(),
+    outputSchema: DeletePolicyOutputSchema,
   },
   {
     shortName: "get_trusted_data_policies",
     title: "Get Trusted Data Policies",
     description: "Get all trusted data policies",
     schema: EmptyToolArgsSchema,
+    outputSchema: TrustedDataPoliciesOutputSchema,
   },
   {
     shortName: "create_trusted_data_policy",
     title: "Create Trusted Data Policy",
     description: "Create a new trusted data policy",
     schema: createTrustedDataPolicySchema,
+    outputSchema: TrustedDataPolicyOutputSchema,
   },
   {
     shortName: "get_trusted_data_policy",
@@ -207,12 +301,14 @@ const registry = defineArchestraTools([
         id: UuidIdSchema.describe("The ID of the trusted data policy."),
       })
       .strict(),
+    outputSchema: TrustedDataPolicyOutputSchema,
   },
   {
     shortName: "update_trusted_data_policy",
     title: "Update Trusted Data Policy",
     description: "Update a trusted data policy",
     schema: updateTrustedDataPolicySchema,
+    outputSchema: TrustedDataPolicyOutputSchema,
   },
   {
     shortName: "delete_trusted_data_policy",
@@ -223,6 +319,7 @@ const registry = defineArchestraTools([
         id: UuidIdSchema.describe("The ID of the trusted data policy."),
       })
       .strict(),
+    outputSchema: DeletePolicyOutputSchema,
   },
 ] as const);
 
@@ -274,7 +371,10 @@ export async function handleTool(
         return { value, label };
       });
 
-      return successResult(JSON.stringify(supportedOperators, null, 2));
+      return structuredSuccessResult(
+        { operators: supportedOperators },
+        JSON.stringify(supportedOperators, null, 2),
+      );
     } catch (error) {
       return catchError(error, "getting autonomy policy operators");
     }
@@ -288,7 +388,10 @@ export async function handleTool(
 
     try {
       const policies = await ToolInvocationPolicyModel.findAll();
-      return successResult(JSON.stringify(policies, null, 2));
+      return structuredSuccessResult(
+        { policies },
+        JSON.stringify(policies, null, 2),
+      );
     } catch (error) {
       return catchError(error, "getting tool invocation policies");
     }
@@ -309,7 +412,10 @@ export async function handleTool(
         reason: a.reason ?? null,
       });
       const policy = await ToolInvocationPolicyModel.create(validated);
-      return successResult(JSON.stringify(policy, null, 2));
+      return structuredSuccessResult(
+        { policy },
+        JSON.stringify(policy, null, 2),
+      );
     } catch (error) {
       return catchError(error, "creating tool invocation policy");
     }
@@ -332,7 +438,10 @@ export async function handleTool(
         return errorResult("Tool invocation policy not found");
       }
 
-      return successResult(JSON.stringify(policy, null, 2));
+      return structuredSuccessResult(
+        { policy },
+        JSON.stringify(policy, null, 2),
+      );
     } catch (error) {
       return catchError(error, "getting tool invocation policy");
     }
@@ -367,7 +476,10 @@ export async function handleTool(
         return errorResult("Tool invocation policy not found");
       }
 
-      return successResult(JSON.stringify(policy, null, 2));
+      return structuredSuccessResult(
+        { policy },
+        JSON.stringify(policy, null, 2),
+      );
     } catch (error) {
       return catchError(error, "updating tool invocation policy");
     }
@@ -390,7 +502,10 @@ export async function handleTool(
         return errorResult("Tool invocation policy not found");
       }
 
-      return successResult(JSON.stringify({ success: true }, null, 2));
+      return structuredSuccessResult(
+        { success: true },
+        JSON.stringify({ success: true }, null, 2),
+      );
     } catch (error) {
       return catchError(error, "deleting tool invocation policy");
     }
@@ -404,7 +519,10 @@ export async function handleTool(
 
     try {
       const policies = await TrustedDataPolicyModel.findAll();
-      return successResult(JSON.stringify(policies, null, 2));
+      return structuredSuccessResult(
+        { policies },
+        JSON.stringify(policies, null, 2),
+      );
     } catch (error) {
       return catchError(error, "getting trusted data policies");
     }
@@ -425,7 +543,10 @@ export async function handleTool(
         description: a.description ?? null,
       });
       const policy = await TrustedDataPolicyModel.create(validated);
-      return successResult(JSON.stringify(policy, null, 2));
+      return structuredSuccessResult(
+        { policy },
+        JSON.stringify(policy, null, 2),
+      );
     } catch (error) {
       return catchError(error, "creating trusted data policy");
     }
@@ -448,7 +569,10 @@ export async function handleTool(
         return errorResult("Trusted data policy not found");
       }
 
-      return successResult(JSON.stringify(policy, null, 2));
+      return structuredSuccessResult(
+        { policy },
+        JSON.stringify(policy, null, 2),
+      );
     } catch (error) {
       return catchError(error, "getting trusted data policy");
     }
@@ -482,7 +606,10 @@ export async function handleTool(
         return errorResult("Trusted data policy not found");
       }
 
-      return successResult(JSON.stringify(policy, null, 2));
+      return structuredSuccessResult(
+        { policy },
+        JSON.stringify(policy, null, 2),
+      );
     } catch (error) {
       return catchError(error, "updating trusted data policy");
     }
@@ -505,7 +632,10 @@ export async function handleTool(
         return errorResult("Trusted data policy not found");
       }
 
-      return successResult(JSON.stringify({ success: true }, null, 2));
+      return structuredSuccessResult(
+        { success: true },
+        JSON.stringify({ success: true }, null, 2),
+      );
     } catch (error) {
       return catchError(error, "deleting trusted data policy");
     }

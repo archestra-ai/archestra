@@ -44,6 +44,20 @@ import {
   tools as limitTools,
 } from "./limits";
 import {
+  handleTool as handleLlmProxies,
+  toolArgsSchemas as llmProxyToolArgsSchemas,
+  toolShortNames as llmProxyToolNames,
+  toolOutputSchemas as llmProxyToolOutputSchemas,
+  tools as llmProxyTools,
+} from "./llm-proxies";
+import {
+  handleTool as handleMcpGateways,
+  toolArgsSchemas as mcpGatewayToolArgsSchemas,
+  toolShortNames as mcpGatewayToolNames,
+  toolOutputSchemas as mcpGatewayToolOutputSchemas,
+  tools as mcpGatewayTools,
+} from "./mcp-gateways";
+import {
   handleTool as handleMcpServers,
   toolArgsSchemas as mcpServerToolArgsSchemas,
   toolShortNames as mcpServerToolNames,
@@ -74,6 +88,8 @@ export type { ArchestraContext } from "./types";
 export const ALL_TOOL_SHORT_NAMES = [
   ...identityToolNames,
   ...agentToolNames,
+  ...llmProxyToolNames,
+  ...mcpGatewayToolNames,
   ...mcpServerToolNames,
   ...limitToolNames,
   ...policyToolNames,
@@ -89,6 +105,8 @@ export type ArchestraToolFullName =
 const handlers = [
   handleIdentity,
   handleAgents,
+  handleLlmProxies,
+  handleMcpGateways,
   handleMcpServers,
   handleLimits,
   handlePolicies,
@@ -100,6 +118,8 @@ const handlers = [
 const toolArgsSchemas: Partial<Record<ArchestraToolFullName, ZodType>> = {
   ...identityToolArgsSchemas,
   ...agentToolArgsSchemas,
+  ...llmProxyToolArgsSchemas,
+  ...mcpGatewayToolArgsSchemas,
   ...mcpServerToolArgsSchemas,
   ...limitToolArgsSchemas,
   ...policyToolArgsSchemas,
@@ -111,6 +131,8 @@ const toolArgsSchemas: Partial<Record<ArchestraToolFullName, ZodType>> = {
 const toolOutputSchemas: Partial<Record<ArchestraToolFullName, ZodType>> = {
   ...identityToolOutputSchemas,
   ...agentToolOutputSchemas,
+  ...llmProxyToolOutputSchemas,
+  ...mcpGatewayToolOutputSchemas,
   ...mcpServerToolOutputSchemas,
   ...limitToolOutputSchemas,
   ...policyToolOutputSchemas,
@@ -123,6 +145,8 @@ export function getArchestraMcpTools() {
   return [
     ...identityTools,
     ...agentTools,
+    ...llmProxyTools,
+    ...mcpGatewayTools,
     ...mcpServerTools,
     ...limitTools,
     ...policyTools,

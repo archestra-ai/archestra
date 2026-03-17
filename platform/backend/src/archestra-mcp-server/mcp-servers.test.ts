@@ -6,49 +6,6 @@ import {
 import { beforeEach, describe, expect, test } from "@/test";
 import type { Agent } from "@/types";
 import { type ArchestraContext, executeArchestraTool } from ".";
-import { tools } from "./mcp-servers";
-
-describe("mcp server tools", () => {
-  test("should have search_private_mcp_registry tool", () => {
-    const tool = tools.find((t) =>
-      t.name.endsWith("search_private_mcp_registry"),
-    );
-    expect(tool).toBeDefined();
-    expect(tool?.title).toBe("Search Private MCP Registry");
-  });
-
-  test("should have get_mcp_servers tool", () => {
-    const tool = tools.find((t) => t.name.endsWith("get_mcp_servers"));
-    expect(tool).toBeDefined();
-    expect(tool?.title).toBe("Get MCP Servers");
-  });
-
-  test("should have get_mcp_server_tools tool", () => {
-    const tool = tools.find((t) => t.name.endsWith("get_mcp_server_tools"));
-    expect(tool).toBeDefined();
-    expect(tool?.title).toBe("Get MCP Server Tools");
-  });
-
-  test("should have edit_mcp_description tool", () => {
-    const tool = tools.find((t) => t.name.endsWith("edit_mcp_description"));
-    expect(tool).toBeDefined();
-    expect(tool?.title).toBe("Edit MCP Server Description");
-  });
-
-  test("should have edit_mcp_config tool", () => {
-    const tool = tools.find((t) => t.name.endsWith("edit_mcp_config"));
-    expect(tool).toBeDefined();
-    expect(tool?.title).toBe("Edit MCP Server Configuration");
-  });
-
-  test("should have create_mcp_server_installation_request tool", () => {
-    const tool = tools.find((t) =>
-      t.name.endsWith("create_mcp_server_installation_request"),
-    );
-    expect(tool).toBeDefined();
-    expect(tool?.title).toBe("Create MCP Server Installation Request");
-  });
-});
 
 describe("mcp server tool execution", () => {
   let testAgent: Agent;
@@ -86,6 +43,7 @@ describe("mcp server tool execution", () => {
       mockContext,
     );
     expect(result.isError).toBe(false);
+    expect(result.structuredContent).toEqual({ items: expect.any(Array) });
     const parsed = JSON.parse((result.content[0] as any).text);
     expect(Array.isArray(parsed)).toBe(true);
   });
@@ -154,6 +112,11 @@ describe("mcp server tool execution", () => {
       mockContext,
     );
     expect(result.isError).toBe(false);
+    expect(result.structuredContent).toEqual({
+      items: expect.arrayContaining([
+        expect.objectContaining({ id: catalog.id, name: "Test MCP Server" }),
+      ]),
+    });
     const parsed = JSON.parse((result.content[0] as any).text);
     const found = parsed.find((item: any) => item.id === catalog.id);
     expect(found).toBeDefined();

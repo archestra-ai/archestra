@@ -13,11 +13,34 @@ import {
   catchError,
   defineArchestraTools,
   errorResult,
-  successResult,
+  structuredSuccessResult,
 } from "./helpers";
 import type { ArchestraContext } from "./types";
 
 // === Constants ===
+
+const LimitOutputItemSchema = z.object({
+  id: z.string().describe("The limit ID."),
+  entityType: LimitEntityTypeSchema.describe("The limited entity type."),
+  entityId: z.string().describe("The limited entity ID."),
+  limitType: LimitTypeSchema.describe("The kind of limit."),
+  limitValue: z.number().describe("The configured limit value."),
+  model: z
+    .array(z.string())
+    .nullable()
+    .optional()
+    .describe("Models targeted by a token_cost limit, if any."),
+  mcpServerName: z
+    .string()
+    .nullable()
+    .optional()
+    .describe("MCP server name for MCP-specific limits, if any."),
+  toolName: z
+    .string()
+    .nullable()
+    .optional()
+    .describe("Tool name for tool-specific limits, if any."),
+});
 
 const CreateLimitToolArgsSchema = z
   .object({
@@ -88,6 +111,9 @@ const registry = defineArchestraTools([
     description:
       "Create a new cost or usage limit for an organization, team, agent, LLM proxy, or MCP gateway. Supports token_cost, mcp_server_calls, and tool_calls limit types.",
     schema: CreateLimitToolArgsSchema,
+    outputSchema: z.object({
+      limit: LimitOutputItemSchema,
+    }),
   },
   {
     shortName: "get_limits",
@@ -104,6 +130,9 @@ const registry = defineArchestraTools([
         ),
       })
       .strict(),
+    outputSchema: z.object({
+      limits: z.array(LimitOutputItemSchema),
+    }),
   },
   {
     shortName: "update_limit",
@@ -119,6 +148,9 @@ const registry = defineArchestraTools([
           .describe("Optional new limit value."),
       })
       .strict(),
+    outputSchema: z.object({
+      limit: LimitOutputItemSchema,
+    }),
   },
   {
     shortName: "delete_limit",
@@ -129,6 +161,10 @@ const registry = defineArchestraTools([
         id: UuidIdSchema.describe("The ID of the limit to delete."),
       })
       .strict(),
+    outputSchema: z.object({
+      success: z.literal(true),
+      id: z.string(),
+    }),
   },
   {
     shortName: "get_agent_token_usage",
@@ -142,6 +178,12 @@ const registry = defineArchestraTools([
         ),
       })
       .strict(),
+    outputSchema: z.object({
+      id: z.string(),
+      totalInputTokens: z.number(),
+      totalOutputTokens: z.number(),
+      totalTokens: z.number(),
+    }),
   },
   {
     shortName: "get_llm_proxy_token_usage",
@@ -155,6 +197,12 @@ const registry = defineArchestraTools([
         ),
       })
       .strict(),
+    outputSchema: z.object({
+      id: z.string(),
+      totalInputTokens: z.number(),
+      totalOutputTokens: z.number(),
+      totalTokens: z.number(),
+    }),
   },
 ] as const);
 
@@ -238,7 +286,8 @@ export async function handleTool(
         toolName: limitToolName,
       });
 
-      return successResult(
+      return structuredSuccessResult(
+        { limit },
         `Successfully created limit.\n\nLimit ID: ${
           limit.id
         }\nEntity Type: ${limit.entityType}\nEntity ID: ${
@@ -268,7 +317,8 @@ export async function handleTool(
       const limits = await LimitModel.findAll(entityType, entityId);
 
       if (limits.length === 0) {
-        return successResult(
+        return structuredSuccessResult(
+          { limits: [] },
           entityType || entityId
             ? `No limits found${
                 entityType ? ` for entity type: ${entityType}` : ""
@@ -294,7 +344,8 @@ export async function handleTool(
         })
         .join("\n\n");
 
-      return successResult(
+      return structuredSuccessResult(
+        { limits },
         `Found ${limits.length} limit(s):\n\n${formattedLimits}`,
       );
     } catch (error) {
@@ -331,7 +382,8 @@ export async function handleTool(
         return errorResult(`Limit with ID ${id} not found.`);
       }
 
-      return successResult(
+      return structuredSuccessResult(
+        { limit },
         `Successfully updated limit.\n\nLimit ID: ${limit.id}\nEntity Type: ${limit.entityType}\nEntity ID: ${limit.entityId}\nLimit Type: ${limit.limitType}\nLimit Value: ${limit.limitValue}`,
       );
     } catch (error) {
@@ -358,7 +410,10 @@ export async function handleTool(
         return errorResult(`Limit with ID ${id} not found.`);
       }
 
-      return successResult(`Successfully deleted limit with ID: ${id}`);
+      return structuredSuccessResult(
+        { success: true, id },
+        `Successfully deleted limit with ID: ${id}`,
+      );
     } catch (error) {
       return catchError(error, "deleting limit");
     }
@@ -388,7 +443,13 @@ export async function handleTool(
       const targetId = (args?.id as string) || contextAgent.id;
       const usage = await LimitModel.getAgentTokenUsage(targetId);
 
-      return successResult(
+      return structuredSuccessResult(
+        {
+          id: targetId,
+          totalInputTokens: usage.totalInputTokens,
+          totalOutputTokens: usage.totalOutputTokens,
+          totalTokens: usage.totalTokens,
+        },
         `Token usage for ${tokenUsageLabel} ${targetId}:\n\nTotal Input Tokens: ${usage.totalInputTokens.toLocaleString()}\nTotal Output Tokens: ${usage.totalOutputTokens.toLocaleString()}\nTotal Tokens: ${usage.totalTokens.toLocaleString()}`,
       );
     } catch (error) {

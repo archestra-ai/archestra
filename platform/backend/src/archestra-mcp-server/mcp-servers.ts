@@ -22,6 +22,7 @@ import {
   defineArchestraTools,
   EmptyToolArgsSchema,
   errorResult,
+  structuredSuccessResult,
   successResult,
 } from "./helpers";
 import type { ArchestraContext } from "./types";
@@ -207,6 +208,81 @@ const McpConfigToolSchema = z
   })
   .strict();
 
+const SearchPrivateMcpRegistryOutputSchema = z.object({
+  items: z
+    .array(
+      z.object({
+        id: z.string().describe("The catalog item ID."),
+        name: z.string().describe("The MCP server name."),
+        version: z.string().nullable().describe("The version, if provided."),
+        description: z
+          .string()
+          .nullable()
+          .describe("The server description, if any."),
+        serverType: InsertInternalMcpCatalogSchema.shape.serverType.describe(
+          "Whether the server is local, remote, or builtin.",
+        ),
+        serverUrl: z
+          .string()
+          .nullable()
+          .describe("The remote server URL, if applicable."),
+        repository: z
+          .string()
+          .nullable()
+          .describe("The repository URL, if available."),
+      }),
+    )
+    .describe("Catalog items matching the search."),
+});
+
+const McpServerListItemOutputSchema = z.object({
+  id: z.string().describe("The catalog item ID."),
+  name: z.string().describe("The MCP server name."),
+  icon: z.string().nullable().describe("The emoji icon, if any."),
+  description: z
+    .string()
+    .nullable()
+    .describe("The server description, if any."),
+  scope: InsertInternalMcpCatalogSchema.shape.scope.describe(
+    "The visibility scope of the server.",
+  ),
+  teams: z
+    .array(
+      z.object({
+        id: z.string().describe("The team ID."),
+        name: z.string().describe("The team name."),
+      }),
+    )
+    .describe("Teams attached to a team-scoped server."),
+});
+
+const GetMcpServersOutputSchema = z.object({
+  items: z
+    .array(McpServerListItemOutputSchema)
+    .describe("Available MCP servers."),
+});
+
+const McpServerToolOutputSchema = z.object({
+  id: z.string().describe("The tool ID."),
+  name: z.string().describe("The tool name."),
+  description: z
+    .string()
+    .nullable()
+    .optional()
+    .describe("The tool description, if any."),
+  catalogId: z
+    .string()
+    .nullable()
+    .optional()
+    .describe("The MCP catalog ID this tool belongs to."),
+});
+
+const GetMcpServerToolsOutputSchema = z.object({
+  tools: z
+    .array(McpServerToolOutputSchema)
+    .describe("Tools exposed by the selected MCP server."),
+});
+
 const registry = defineArchestraTools([
   {
     shortName: "search_private_mcp_registry",
@@ -225,6 +301,7 @@ const registry = defineArchestraTools([
           ),
       })
       .strict(),
+    outputSchema: SearchPrivateMcpRegistryOutputSchema,
   },
   {
     shortName: "get_mcp_servers",
@@ -232,6 +309,7 @@ const registry = defineArchestraTools([
     description:
       "List all MCP servers from the catalog. Returns catalog item IDs that can be used with mcpServerIds in create_agent/edit_agent.",
     schema: EmptyToolArgsSchema,
+    outputSchema: GetMcpServersOutputSchema,
   },
   {
     shortName: "get_mcp_server_tools",
@@ -243,6 +321,7 @@ const registry = defineArchestraTools([
         mcpServerId: UuidIdSchema.describe("The catalog ID of the MCP server."),
       })
       .strict(),
+    outputSchema: GetMcpServerToolsOutputSchema,
   },
   {
     shortName: "edit_mcp_description",
@@ -391,7 +470,8 @@ export async function handleTool(
       }
 
       if (catalogItems.length === 0) {
-        return successResult(
+        return structuredSuccessResult(
+          { items: [] },
           query
             ? `No MCP servers found matching query: "${query}"`
             : "No MCP servers found in the private registry.",
@@ -411,7 +491,20 @@ export async function handleTool(
         })
         .join("\n\n");
 
-      return successResult(
+      const output = {
+        items: catalogItems.map((item) => ({
+          id: item.id,
+          name: item.name,
+          version: item.version ?? null,
+          description: item.description ?? null,
+          serverType: item.serverType,
+          serverUrl: item.serverUrl ?? null,
+          repository: item.repository ?? null,
+        })),
+      };
+
+      return structuredSuccessResult(
+        output,
         `Found ${catalogItems.length} MCP server(s):\n\n${formattedResults}`,
       );
     } catch (error) {
@@ -439,7 +532,7 @@ export async function handleTool(
         teams: c.teams?.map((t) => ({ id: t.id, name: t.name })) ?? [],
       }));
 
-      return successResult(JSON.stringify(items, null, 2));
+      return structuredSuccessResult({ items }, JSON.stringify(items, null, 2));
     } catch (error) {
       return catchError(error, "getting MCP servers");
     }
@@ -460,7 +553,7 @@ export async function handleTool(
 
       const tools = await ToolModel.findByCatalogId(mcpServerId);
 
-      return successResult(JSON.stringify(tools, null, 2));
+      return structuredSuccessResult({ tools }, JSON.stringify(tools, null, 2));
     } catch (error) {
       return catchError(error, "getting MCP server tools");
     }

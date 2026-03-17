@@ -337,6 +337,7 @@ export function useUpdateAppearanceSettings(
         ogDescription: updatedOrganization.ogDescription,
         footerText: updatedOrganization.footerText,
         chatLinks: updatedOrganization.chatLinks,
+        chatErrorSupportMessage: updatedOrganization.chatErrorSupportMessage,
         animateChatPlaceholders: updatedOrganization.animateChatPlaceholders,
       });
       toast.success(onSuccessMessage);

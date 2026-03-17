@@ -26,6 +26,7 @@ describe("OrganizationModel", () => {
         ogDescription: null,
         footerText: null,
         chatLinks: null,
+        chatErrorSupportMessage: null,
         animateChatPlaceholders: true,
       });
     });
@@ -48,6 +49,7 @@ describe("OrganizationModel", () => {
         ogDescription: null,
         footerText: null,
         chatLinks: null,
+        chatErrorSupportMessage: null,
         animateChatPlaceholders: true,
       });
     });
@@ -140,6 +142,7 @@ describe("OrganizationModel", () => {
       expect(Object.keys(appearance).sort()).toEqual([
         "animateChatPlaceholders",
         "appName",
+        "chatErrorSupportMessage",
         "chatLinks",
         "customFont",
         "favicon",
@@ -320,6 +323,20 @@ describe("OrganizationModel", () => {
           url: "https://status.example.com",
         },
       ]);
+    });
+
+    test("should update chatErrorSupportMessage", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+
+      const updated = await OrganizationModel.patch(org.id, {
+        chatErrorSupportMessage: "Contact support@example.com for help.",
+      });
+
+      expect(updated?.chatErrorSupportMessage).toBe(
+        "Contact support@example.com for help.",
+      );
     });
 
     test("should set default LLM model and provider", async ({

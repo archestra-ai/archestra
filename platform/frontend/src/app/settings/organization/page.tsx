@@ -18,15 +18,13 @@ import {
   useOrganization,
   useUpdateAppearanceSettings,
 } from "@/lib/organization.query";
+import { useOrgTheme } from "@/lib/theme.hook";
+import { ChatLinksEditor } from "./_components/chat-links-editor";
 import {
-  ChatLinksEditor,
-} from "./_components/chat-links-editor";
-import {
-  sanitizeChatLinks,
   type ChatLinkEditorValue,
+  sanitizeChatLinks,
   validateChatLink,
 } from "./_components/chat-links-editor.utils";
-import { useOrgTheme } from "@/lib/theme.hook";
 import { ChatPlaceholdersEditor } from "./_components/chat-placeholders-editor";
 import { FaviconUpload } from "./_components/favicon-upload";
 import { IconLogoUpload } from "./_components/icon-logo-upload";
@@ -77,6 +75,9 @@ export default function OrganizationSettingsPage() {
   const [chatLinks, setChatLinks] = useState<ChatLinkEditorValue[] | null>(
     null,
   );
+  const [chatErrorSupportMessage, setChatErrorSupportMessage] = useState<
+    string | null
+  >(null);
   const [chatPlaceholders, setChatPlaceholders] = useState<string[] | null>(
     null,
   );
@@ -91,6 +92,8 @@ export default function OrganizationSettingsPage() {
     ogDescription ?? organization?.ogDescription ?? "";
   const effectiveFooterText = footerText ?? organization?.footerText ?? "";
   const effectiveChatLinks = chatLinks ?? organization?.chatLinks ?? [];
+  const effectiveChatErrorSupportMessage =
+    chatErrorSupportMessage ?? organization?.chatErrorSupportMessage ?? "";
   const effectiveChatPlaceholders =
     chatPlaceholders ?? organization?.chatPlaceholders ?? [];
   const effectiveAnimateChatPlaceholders =
@@ -107,6 +110,7 @@ export default function OrganizationSettingsPage() {
     ogDescription !== null ||
     footerText !== null ||
     chatLinks !== null ||
+    chatErrorSupportMessage !== null ||
     chatPlaceholders !== null ||
     animateChatPlaceholders !== null ||
     showTwoFactor !== null;
@@ -118,7 +122,11 @@ export default function OrganizationSettingsPage() {
     if (footerText !== null) data.footerText = footerText || null;
     if (chatLinks !== null) {
       const sanitizedChatLinks = sanitizeChatLinks(chatLinks);
-      data.chatLinks = sanitizedChatLinks.length > 0 ? sanitizedChatLinks : null;
+      data.chatLinks =
+        sanitizedChatLinks.length > 0 ? sanitizedChatLinks : null;
+    }
+    if (chatErrorSupportMessage !== null) {
+      data.chatErrorSupportMessage = chatErrorSupportMessage.trim() || null;
     }
     if (chatPlaceholders !== null)
       data.chatPlaceholders =
@@ -138,6 +146,7 @@ export default function OrganizationSettingsPage() {
     setOgDescription(null);
     setFooterText(null);
     setChatLinks(null);
+    setChatErrorSupportMessage(null);
     setChatPlaceholders(null);
     setAnimateChatPlaceholders(null);
     setShowTwoFactor(null);
@@ -230,6 +239,22 @@ export default function OrganizationSettingsPage() {
                 validationErrors={chatLinkValidationErrors}
                 onChange={setChatLinks}
               />
+              <div className="space-y-2">
+                <Label htmlFor="chatErrorSupportMessage">
+                  Support Contact Message
+                </Label>
+                <Input
+                  id="chatErrorSupportMessage"
+                  placeholder="e.g. Contact support@company.com for assistance and send us the information below"
+                  value={effectiveChatErrorSupportMessage}
+                  onChange={(e) => setChatErrorSupportMessage(e.target.value)}
+                  maxLength={500}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Shown alongside errors in chat. Use this to direct users to
+                  your support team.
+                </p>
+              </div>
               <div className="flex items-start justify-between gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="animateChatPlaceholders">
@@ -303,6 +328,7 @@ export default function OrganizationSettingsPage() {
           setOgDescription(null);
           setFooterText(null);
           setChatLinks(null);
+          setChatErrorSupportMessage(null);
           setChatPlaceholders(null);
           setAnimateChatPlaceholders(null);
           setShowTwoFactor(null);

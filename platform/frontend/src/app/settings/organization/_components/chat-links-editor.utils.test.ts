@@ -1,8 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  sanitizeChatLinks,
-  validateChatLink,
-} from "./chat-links-editor.utils";
+import { sanitizeChatLinks, validateChatLink } from "./chat-links-editor.utils";
 
 describe("chat-links-editor utils", () => {
   describe("sanitizeChatLinks", () => {

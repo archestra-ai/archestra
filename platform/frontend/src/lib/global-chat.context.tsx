@@ -5,6 +5,7 @@ import {
   EXTERNAL_AGENT_ID_HEADER,
   isChatErrorResponse,
   makeSwapAgentPokeText,
+  SWAP_AGENT_FAILED_POKE_TEXT,
   SWAP_TO_DEFAULT_AGENT_POKE_TEXT,
   TOOL_ARTIFACT_WRITE_FULL_NAME,
   TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_FULL_NAME,
@@ -290,7 +291,7 @@ function ChatSessionHook({
       },
     }),
     id: conversationId,
-    onFinish: () => {
+    onFinish: ({ message }) => {
       queryClient.invalidateQueries({
         queryKey: ["conversation", conversationId],
       });
@@ -299,7 +300,12 @@ function ChatSessionHook({
       // The new /api/chat POST re-reads the conversation from DB and
       // loads the swapped agent's system prompt + tools.
       if (swapAgentPendingRef.current) {
-        const pokeText = swapAgentPendingRef.current;
+        // Check if the swap tool errored — if so, poke with a "swap failed" message
+        // instead of the normal swap poke, so the current agent can inform the user
+        const swapToolErrored = hasSwapToolError(message);
+        const pokeText = swapToolErrored
+          ? SWAP_AGENT_FAILED_POKE_TEXT
+          : swapAgentPendingRef.current;
         swapAgentPendingRef.current = null;
         setTimeout(() => {
           sendMessageRef.current?.({
@@ -477,6 +483,32 @@ function ChatSessionHook({
   ]);
 
   return null;
+}
+
+const SWAP_TOOL_TYPES = new Set([
+  TOOL_SWAP_AGENT_FULL_NAME,
+  `tool-${TOOL_SWAP_AGENT_FULL_NAME}`,
+  TOOL_SWAP_TO_DEFAULT_AGENT_FULL_NAME,
+  `tool-${TOOL_SWAP_TO_DEFAULT_AGENT_FULL_NAME}`,
+]);
+
+function hasSwapToolError(message: UIMessage): boolean {
+  return (message.parts ?? []).some((part) => {
+    if (typeof part !== "object" || !part || !("type" in part)) return false;
+    const type = part.type as string;
+    if (!SWAP_TOOL_TYPES.has(type)) return false;
+    const toolPart = part as Record<string, unknown>;
+    if (toolPart.errorText) return true;
+    if (typeof toolPart.output === "string") {
+      try {
+        const parsed = JSON.parse(toolPart.output as string);
+        if (typeof parsed?.error === "string") return true;
+      } catch {
+        // ignore
+      }
+    }
+    return false;
+  });
 }
 
 export function useGlobalChat() {

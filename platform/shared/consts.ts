@@ -191,6 +191,8 @@ export const SWAP_AGENT_POKE_PREFIX = "(Switched to ";
 export function makeSwapAgentPokeText(agentName: string): string {
   return `${SWAP_AGENT_POKE_PREFIX}${agentName}. Please continue the conversation. If you have the swap_to_default_agent tool and you don't have the right tools to fulfill the request, use it immediately — write a brief message explaining why you are switching back, then call swap_to_default_agent.)`;
 }
+export const SWAP_AGENT_FAILED_POKE_TEXT =
+  "(The agent swap failed — you are still the same agent. Briefly explain to the user that the switch did not happen and continue the conversation.)";
 export const SWAP_TO_DEFAULT_AGENT_POKE_TEXT =
   "(Switched back to the default agent. Briefly explain why you switched back and continue the conversation.)";
 

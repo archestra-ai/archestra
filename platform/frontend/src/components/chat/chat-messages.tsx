@@ -1,5 +1,6 @@
 import type { UIMessage } from "@ai-sdk/react";
 import {
+  SWAP_AGENT_FAILED_POKE_TEXT,
   SWAP_AGENT_POKE_PREFIX,
   SWAP_AGENT_POKE_TEXT,
   SWAP_TO_DEFAULT_AGENT_POKE_TEXT,
@@ -1381,6 +1382,7 @@ function isSwapAgentPokeMessage(message: UIMessage): boolean {
   if (typeof text !== "string") return false;
   return (
     text === SWAP_AGENT_POKE_TEXT ||
+    text === SWAP_AGENT_FAILED_POKE_TEXT ||
     text === SWAP_TO_DEFAULT_AGENT_POKE_TEXT ||
     text.startsWith(SWAP_AGENT_POKE_PREFIX)
   );
@@ -1400,6 +1402,9 @@ function SwapAgentDivider({ message }: { message: UIMessage }) {
     if (!isToolPart(part)) continue;
     const type = part.type as string;
     if (!SWAP_TOOL_NAMES.has(type)) continue;
+
+    // Don't show divider if the swap tool errored
+    if (hasSwapToolError(part, message.parts ?? [])) return null;
 
     // Try tool call args first (always available), then fall back to output
     let agentName = "another agent";
@@ -1432,4 +1437,25 @@ function SwapAgentDivider({ message }: { message: UIMessage }) {
   }
 
   return null;
+}
+
+// biome-ignore lint/suspicious/noExplicitAny: Tool parts have dynamic structure
+function hasSwapToolError(part: any, allParts: any[]): boolean {
+  // Check the part itself for errors
+  if (part.errorText || tryToExtractErrorFromOutput(part.output)) return true;
+
+  // Check the paired result part (same toolCallId, different instance)
+  if (part.toolCallId) {
+    const resultPart = allParts.find(
+      (p) => p !== part && isToolPart(p) && p.toolCallId === part.toolCallId,
+    );
+    if (resultPart) {
+      if (
+        resultPart.errorText ||
+        tryToExtractErrorFromOutput(resultPart.output)
+      )
+        return true;
+    }
+  }
+  return false;
 }

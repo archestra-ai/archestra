@@ -23,13 +23,5 @@ export default defineConfig({
     testTimeout: 10_000,
     // Keep concurrency moderate to avoid suite-level timeouts from React/Radix-heavy tests.
     maxConcurrency: isCI ? 6 : 3,
-    onConsoleLog(log) {
-      if (
-        log.includes("Failed to extract citations from tool result") ||
-        log.includes("not wrapped in act(...)")
-      ) {
-        return false;
-      }
-    },
   },
 });

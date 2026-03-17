@@ -6,18 +6,45 @@ import { vi } from "vitest";
 process.env.NEXT_PUBLIC_ARCHESTRA_SENTRY_FRONTEND_DSN = "";
 
 const originalConsoleError = console.error;
+const originalConsoleWarn = console.warn;
+// biome-ignore lint/suspicious/noConsole: test setup intentionally intercepts console output.
+const originalConsoleLog = console.log;
+
+function shouldSuppressTestConsole(message: string) {
+  return (
+    message.includes("Failed to extract citations from tool result") ||
+    message.includes("not wrapped in act(...)")
+  );
+}
 
 console.error = (...args: unknown[]) => {
   const message = args.map(String).join(" ");
 
-  if (
-    message.includes("Failed to extract citations from tool result") ||
-    message.includes("not wrapped in act(...)")
-  ) {
+  if (shouldSuppressTestConsole(message)) {
     return;
   }
 
   originalConsoleError(...args);
+};
+
+console.warn = (...args: unknown[]) => {
+  const message = args.map(String).join(" ");
+
+  if (shouldSuppressTestConsole(message)) {
+    return;
+  }
+
+  originalConsoleWarn(...args);
+};
+
+console.log = (...args: unknown[]) => {
+  const message = args.map(String).join(" ");
+
+  if (shouldSuppressTestConsole(message)) {
+    return;
+  }
+
+  originalConsoleLog(...args);
 };
 
 const mockCanvasContext = new Proxy(

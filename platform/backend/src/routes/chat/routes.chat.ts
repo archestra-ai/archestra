@@ -68,7 +68,11 @@ import {
   parseMaxInputTokens,
   trimMessagesToTokenLimit,
 } from "./context-trimming";
-import { mapProviderError, ProviderError } from "./errors";
+import {
+  getActiveTraceContext,
+  mapProviderError,
+  ProviderError,
+} from "./errors";
 import {
   stripImagesFromMessages,
   type UiMessage,
@@ -340,6 +344,20 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             };
           }
 
+          // Persist user's new messages immediately so they're visible on page reload.
+          // Without this, a reload during streaming shows no messages because
+          // onFinish hasn't fired yet. persistNewMessages is idempotent — it only
+          // saves messages beyond the existing count, so onFinish will only save
+          // the assistant response.
+          try {
+            await persistNewMessages(conversationId, messages, "earlyUserMsg");
+          } catch (error) {
+            logger.warn(
+              { error, conversationId },
+              "Failed to persist user messages early (will retry in onFinish)",
+            );
+          }
+
           // Create stream with token usage data support
           const response = createUIMessageStreamResponse({
             headers: {
@@ -379,13 +397,15 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 });
 
                 const mapped = mapProviderError(error, provider);
+                const traceCtx = getActiveTraceContext();
                 try {
-                  return JSON.stringify(mapped);
+                  return JSON.stringify({ ...mapped, ...traceCtx });
                 } catch {
                   return JSON.stringify({
                     code: mapped.code,
                     message: mapped.message,
                     isRetryable: mapped.isRetryable,
+                    ...traceCtx,
                   });
                 }
               },
@@ -522,6 +542,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                         error instanceof ProviderError
                           ? error.chatErrorResponse
                           : mapProviderError(error, provider);
+                      const traceCtx = getActiveTraceContext();
 
                       logger.info(
                         {
@@ -535,7 +556,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
                       // mapProviderError safely serializes raw errors, but add defensive try-catch
                       try {
-                        return JSON.stringify(mappedError);
+                        return JSON.stringify({ ...mappedError, ...traceCtx });
                       } catch (stringifyError) {
                         logger.error(
                           { stringifyError, errorCode: mappedError.code },
@@ -546,6 +567,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                           code: mappedError.code,
                           message: mappedError.message,
                           isRetryable: mappedError.isRetryable,
+                          ...traceCtx,
                         });
                       }
                     },

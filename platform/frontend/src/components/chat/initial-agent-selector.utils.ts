@@ -32,6 +32,9 @@ export function filterAndSortInitialAgents(params: {
   }
 
   return [...result].sort((a, b) => {
+    if (a.id === currentAgentId) return -1;
+    if (b.id === currentAgentId) return 1;
+
     const aIsMyPersonalAgent =
       a.scope === "personal" && a.authorId === userId ? 1 : 0;
     const bIsMyPersonalAgent =
@@ -40,8 +43,6 @@ export function filterAndSortInitialAgents(params: {
     if (aIsMyPersonalAgent !== bIsMyPersonalAgent) {
       return bIsMyPersonalAgent - aIsMyPersonalAgent;
     }
-    if (a.id === currentAgentId) return -1;
-    if (b.id === currentAgentId) return 1;
     if (getScopeOrder(a.scope) !== getScopeOrder(b.scope)) {
       return getScopeOrder(a.scope) - getScopeOrder(b.scope);
     }

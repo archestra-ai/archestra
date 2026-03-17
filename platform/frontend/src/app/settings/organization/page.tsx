@@ -72,6 +72,9 @@ export default function OrganizationSettingsPage() {
   const [chatPlaceholders, setChatPlaceholders] = useState<string[] | null>(
     null,
   );
+  const [chatErrorSupportMessage, setChatErrorSupportMessage] = useState<
+    string | null
+  >(null);
   const [animateChatPlaceholders, setAnimateChatPlaceholders] = useState<
     boolean | null
   >(null);
@@ -88,6 +91,8 @@ export default function OrganizationSettingsPage() {
     helpCenterLabel ?? organization?.helpCenterLabel ?? "";
   const effectiveChatPlaceholders =
     chatPlaceholders ?? organization?.chatPlaceholders ?? [];
+  const effectiveChatErrorSupportMessage =
+    chatErrorSupportMessage ?? organization?.chatErrorSupportMessage ?? "";
   const effectiveAnimateChatPlaceholders =
     animateChatPlaceholders ?? organization?.animateChatPlaceholders ?? true;
   const effectiveShowTwoFactor =
@@ -105,6 +110,7 @@ export default function OrganizationSettingsPage() {
     footerText !== null ||
     helpCenterUrl !== null ||
     helpCenterLabel !== null ||
+    chatErrorSupportMessage !== null ||
     chatPlaceholders !== null ||
     animateChatPlaceholders !== null ||
     showTwoFactor !== null;
@@ -119,6 +125,9 @@ export default function OrganizationSettingsPage() {
     }
     if (helpCenterLabel !== null) {
       data.helpCenterLabel = helpCenterLabel.trim() || null;
+    }
+    if (chatErrorSupportMessage !== null) {
+      data.chatErrorSupportMessage = chatErrorSupportMessage.trim() || null;
     }
     if (chatPlaceholders !== null)
       data.chatPlaceholders =
@@ -139,6 +148,7 @@ export default function OrganizationSettingsPage() {
     setFooterText(null);
     setHelpCenterUrl(null);
     setHelpCenterLabel(null);
+    setChatErrorSupportMessage(null);
     setChatPlaceholders(null);
     setAnimateChatPlaceholders(null);
     setShowTwoFactor(null);
@@ -263,6 +273,22 @@ export default function OrganizationSettingsPage() {
                   </p>
                 </div>
               </div>
+              <div className="space-y-2">
+                <Label htmlFor="chatErrorSupportMessage">
+                  Support Contact Message
+                </Label>
+                <Input
+                  id="chatErrorSupportMessage"
+                  placeholder="e.g. Contact support@company.com for assistance and send us the information below"
+                  value={effectiveChatErrorSupportMessage}
+                  onChange={(e) => setChatErrorSupportMessage(e.target.value)}
+                  maxLength={500}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Shown alongside errors in chat. Use this to direct users to
+                  your support team.
+                </p>
+              </div>
               <div className="flex items-start justify-between gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="animateChatPlaceholders">
@@ -337,6 +363,7 @@ export default function OrganizationSettingsPage() {
           setFooterText(null);
           setHelpCenterUrl(null);
           setHelpCenterLabel(null);
+          setChatErrorSupportMessage(null);
           setChatPlaceholders(null);
           setAnimateChatPlaceholders(null);
           setShowTwoFactor(null);

@@ -33154,6 +33154,7 @@ export type GetOrganizationResponses = {
         chatPlaceholders: Array<string> | null;
         animateChatPlaceholders: boolean;
         iconLogo: string | null;
+        chatErrorSupportMessage: string | null;
         showTwoFactor: boolean;
     };
 };
@@ -33242,6 +33243,7 @@ export type GetAppearanceSettingsResponses = {
         footerText: string | null;
         helpCenterUrl: string | null;
         helpCenterLabel: string | null;
+        chatErrorSupportMessage: string | null;
         animateChatPlaceholders: boolean;
     };
 };
@@ -33261,6 +33263,7 @@ export type UpdateAppearanceSettingsData = {
         footerText?: string | null;
         helpCenterUrl?: string | null;
         helpCenterLabel?: string | null;
+        chatErrorSupportMessage?: string | null;
         chatPlaceholders?: Array<string> | null;
         animateChatPlaceholders?: boolean;
         showTwoFactor?: boolean;
@@ -33367,6 +33370,7 @@ export type UpdateAppearanceSettingsResponses = {
         chatPlaceholders: Array<string> | null;
         animateChatPlaceholders: boolean;
         iconLogo: string | null;
+        chatErrorSupportMessage: string | null;
         showTwoFactor: boolean;
     };
 };
@@ -33480,6 +33484,7 @@ export type UpdateSecuritySettingsResponses = {
         chatPlaceholders: Array<string> | null;
         animateChatPlaceholders: boolean;
         iconLogo: string | null;
+        chatErrorSupportMessage: string | null;
         showTwoFactor: boolean;
     };
 };
@@ -33594,6 +33599,7 @@ export type UpdateLlmSettingsResponses = {
         chatPlaceholders: Array<string> | null;
         animateChatPlaceholders: boolean;
         iconLogo: string | null;
+        chatErrorSupportMessage: string | null;
         showTwoFactor: boolean;
     };
 };
@@ -33709,6 +33715,7 @@ export type UpdateAgentSettingsResponses = {
         chatPlaceholders: Array<string> | null;
         animateChatPlaceholders: boolean;
         iconLogo: string | null;
+        chatErrorSupportMessage: string | null;
         showTwoFactor: boolean;
     };
 };
@@ -33825,6 +33832,7 @@ export type UpdateKnowledgeSettingsResponses = {
         chatPlaceholders: Array<string> | null;
         animateChatPlaceholders: boolean;
         iconLogo: string | null;
+        chatErrorSupportMessage: string | null;
         showTwoFactor: boolean;
     };
 };
@@ -33935,6 +33943,7 @@ export type DropEmbeddingConfigResponses = {
         chatPlaceholders: Array<string> | null;
         animateChatPlaceholders: boolean;
         iconLogo: string | null;
+        chatErrorSupportMessage: string | null;
         showTwoFactor: boolean;
     };
 };
@@ -34128,6 +34137,7 @@ export type CompleteOnboardingResponses = {
         chatPlaceholders: Array<string> | null;
         animateChatPlaceholders: boolean;
         iconLogo: string | null;
+        chatErrorSupportMessage: string | null;
         showTwoFactor: boolean;
     };
 };

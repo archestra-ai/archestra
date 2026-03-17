@@ -686,6 +686,9 @@ const config = {
         "true",
       k8sNodeHost:
         process.env.ARCHESTRA_ORCHESTRATOR_K8S_NODE_HOST || undefined,
+      clusterDomain:
+        process.env.ARCHESTRA_ORCHESTRATOR_K8S_CLUSTER_DOMAIN ||
+        "cluster.local",
     },
   },
   vault: {

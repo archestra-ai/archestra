@@ -53,7 +53,7 @@ describe("filterAndSortInitialAgents", () => {
     expect(result.map((agent) => agent.id)).toEqual(["mine", "shared"]);
   });
 
-  it("prioritizes the current user's personal agent over the selected shared agent", () => {
+  it("puts the current agent first even if it is a shared agent", () => {
     const agents = [
       makeAgent({
         id: "shared",
@@ -75,7 +75,7 @@ describe("filterAndSortInitialAgents", () => {
       userId,
     });
 
-    expect(result.map((agent) => agent.id)).toEqual(["personal", "shared"]);
+    expect(result.map((agent) => agent.id)).toEqual(["shared", "personal"]);
   });
 
   it("keeps the selected non-personal agent first after the personal-agent priority", () => {

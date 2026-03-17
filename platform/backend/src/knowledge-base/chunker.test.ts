@@ -1,11 +1,11 @@
-import { get_encoding } from "tiktoken";
 import { describe, expect, test } from "vitest";
 import { chunkDocument } from "./chunker";
+import { countTokens, getEncoding } from "./tokenizer";
 
-const encoding = get_encoding("cl100k_base");
+const encoding = getEncoding();
 
-function countTokens(text: string): number {
-  return encoding.encode(text).length;
+function countTokensHelper(text: string): number {
+  return countTokens(encoding, text);
 }
 
 describe("chunkDocument", () => {
@@ -130,7 +130,7 @@ describe("chunkDocument", () => {
     });
 
     for (const chunk of chunks) {
-      const actual = countTokens(chunk.content);
+      const actual = countTokensHelper(chunk.content);
       expect(chunk.tokenCount).toBe(actual);
     }
   });
@@ -173,5 +173,90 @@ describe("chunkDocument", () => {
     expect(chunks[0].content).toBe(
       "TITLE: One Chunk\n\nA single small paragraph of text.",
     );
+  });
+
+  test("no metadata returns null suffixes", async () => {
+    const chunks = await chunkDocument({
+      title: "No Meta",
+      content: "Some content here.",
+    });
+
+    expect(chunks).toHaveLength(1);
+    expect(chunks[0].metadataSuffixSemantic).toBeNull();
+    expect(chunks[0].metadataSuffixKeyword).toBeNull();
+  });
+
+  test("empty metadata returns null suffixes", async () => {
+    const chunks = await chunkDocument({
+      title: "Empty Meta",
+      content: "Some content here.",
+      metadata: {},
+    });
+
+    expect(chunks).toHaveLength(1);
+    expect(chunks[0].metadataSuffixSemantic).toBeNull();
+    expect(chunks[0].metadataSuffixKeyword).toBeNull();
+  });
+
+  test("metadata produces separate suffix fields", async () => {
+    const chunks = await chunkDocument({
+      title: "With Meta",
+      content: "Some content here.",
+      metadata: { status: "Open", priority: "High" },
+    });
+
+    expect(chunks).toHaveLength(1);
+    // Content should NOT contain metadata
+    expect(chunks[0].content).toBe("TITLE: With Meta\n\nSome content here.");
+    // Suffixes should be separate
+    expect(chunks[0].metadataSuffixSemantic).toContain("status - Open");
+    expect(chunks[0].metadataSuffixSemantic).toContain("priority - High");
+    expect(chunks[0].metadataSuffixKeyword).toContain("Open");
+    expect(chunks[0].metadataSuffixKeyword).toContain("High");
+  });
+
+  test("metadata suffixes are identical across all chunks of a document", async () => {
+    const sentences = Array.from(
+      { length: 200 },
+      (_, i) =>
+        `Sentence number ${i + 1} contains important information about the topic at hand.`,
+    );
+    const content = sentences.join(" ");
+
+    const chunks = await chunkDocument({
+      title: "Multi Chunk",
+      content,
+      metadata: { type: "Bug" },
+    });
+
+    expect(chunks.length).toBeGreaterThan(1);
+    for (const chunk of chunks) {
+      expect(chunk.metadataSuffixSemantic).toBe(
+        chunks[0].metadataSuffixSemantic,
+      );
+      expect(chunk.metadataSuffixKeyword).toBe(chunks[0].metadataSuffixKeyword);
+    }
+  });
+
+  test("metadata reduces content budget so chunks stay within max tokens", async () => {
+    const sentences = Array.from(
+      { length: 200 },
+      (_, i) =>
+        `Sentence number ${i + 1} contains important information about the topic at hand.`,
+    );
+    const content = sentences.join(" ");
+
+    const chunks = await chunkDocument({
+      title: "Budget Test",
+      content,
+      metadata: { status: "In Progress", priority: "High", type: "Bug" },
+    });
+
+    for (const chunk of chunks) {
+      // Content + semantic suffix should fit within MAX_TOKENS
+      const fullText = chunk.content + (chunk.metadataSuffixSemantic ?? "");
+      const tokens = countTokensHelper(fullText);
+      expect(tokens).toBeLessThanOrEqual(512);
+    }
   });
 });

@@ -28,6 +28,7 @@ describe("OrganizationModel", () => {
         helpCenterUrl: null,
         helpCenterLabel: null,
         animateChatPlaceholders: true,
+        chatErrorSupportMessage: null,
       });
     });
 
@@ -51,6 +52,7 @@ describe("OrganizationModel", () => {
         helpCenterUrl: null,
         helpCenterLabel: null,
         animateChatPlaceholders: true,
+        chatErrorSupportMessage: null,
       });
     });
 
@@ -142,6 +144,7 @@ describe("OrganizationModel", () => {
       expect(Object.keys(appearance).sort()).toEqual([
         "animateChatPlaceholders",
         "appName",
+        "chatErrorSupportMessage",
         "customFont",
         "favicon",
         "footerText",

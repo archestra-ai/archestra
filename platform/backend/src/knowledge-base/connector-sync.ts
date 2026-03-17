@@ -351,7 +351,12 @@ class ConnectorSyncService {
   }): Promise<{ ingested: boolean; documentId: string | null }> {
     const { doc, connectorId, connectorType, organizationId, log } = params;
 
-    const contentHash = createHash("sha256").update(doc.content).digest("hex");
+    const hashInput = doc.metadata
+      ? doc.content +
+        "\n" +
+        JSON.stringify(doc.metadata, Object.keys(doc.metadata).sort())
+      : doc.content;
+    const contentHash = createHash("sha256").update(hashInput).digest("hex");
 
     // Lookup existing document by connector + source ID
     const existing = await KbDocumentModel.findBySourceId({
@@ -378,10 +383,7 @@ class ConnectorSyncService {
         content: doc.content,
         contentHash,
         sourceUrl: doc.sourceUrl ?? null,
-        metadata: {
-          ...doc.metadata,
-          connectorType,
-        },
+        metadata: doc.metadata,
         embeddingStatus: "pending",
       });
 
@@ -391,6 +393,7 @@ class ConnectorSyncService {
         documentId: existing.id,
         title: doc.title,
         content: doc.content,
+        metadata: doc.metadata,
         connectorType,
         acl: existing.acl as AclEntry[],
         log,
@@ -416,16 +419,14 @@ class ConnectorSyncService {
       contentHash,
       sourceUrl: doc.sourceUrl,
       acl: [],
-      metadata: {
-        ...doc.metadata,
-        connectorType,
-      },
+      metadata: doc.metadata,
     });
 
     await this.chunkAndStore({
       documentId: created.id,
       title: doc.title,
       content: doc.content,
+      metadata: doc.metadata,
       connectorType,
       acl: [],
       log,
@@ -444,13 +445,15 @@ class ConnectorSyncService {
     documentId: string;
     title: string;
     content: string;
+    metadata?: Record<string, unknown>;
     connectorType: string;
     acl: AclEntry[];
     log: pino.Logger;
   }): Promise<void> {
-    const { documentId, title, content, connectorType, acl, log } = params;
+    const { documentId, title, content, metadata, connectorType, acl, log } =
+      params;
 
-    const chunks = await chunkDocument({ title, content });
+    const chunks = await chunkDocument({ title, content, metadata });
 
     if (chunks.length === 0) return;
 
@@ -459,6 +462,8 @@ class ConnectorSyncService {
         documentId,
         content: chunk.content,
         chunkIndex: chunk.chunkIndex,
+        metadataSuffixSemantic: chunk.metadataSuffixSemantic,
+        metadataSuffixKeyword: chunk.metadataSuffixKeyword,
         acl,
       })),
     );

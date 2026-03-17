@@ -128,6 +128,7 @@ The Helm chart provides extensive configuration options through values. For the 
 - `archestra.imagePullPolicy` - Image pull policy for the Archestra container (default: IfNotPresent). Options: Always, IfNotPresent, Never
 - `archestra.replicaCount` - Number of pod replicas (default: 1). Ignored when HPA is enabled
 - `archestra.env` - Environment variables to pass to the container (see Environment Variables section for available options). Supports Kubernetes `$(VAR_NAME)` expansion syntax.
+- `archestra.authSecret.extraData` - Additional key/value pairs to add to the Helm-managed `<release>-auth` Secret, useful when mounting extra secret-backed files via `archestra.extraVolumes`
 - `archestra.envWithValueFrom` - Environment variables with `valueFrom` for Kubernetes downward API (`fieldRef`, `resourceFieldRef`) or other sources. Required for defining variables like `NODE_IP` that can be referenced via `$(NODE_IP)` in other env vars.
 - `archestra.envFromSecrets` - Environment variables from Kubernetes Secrets (inject sensitive data from secrets)
 - `archestra.envFrom` - Import all key-value pairs from Secrets or ConfigMaps as environment variables

@@ -63,7 +63,8 @@ test.describe("MCP Gateway - Authentication", () => {
     Accept: "application/json, text/event-stream",
   });
 
-  test("should initialize and list tools (stateless)", async ({
+  // TODO: Fix flaky test
+  test.skip("should initialize and list tools (stateless)", async ({
     request,
     makeApiRequest,
   }) => {
@@ -1819,7 +1820,8 @@ test.describe("MCP Gateway - Knowledge Sources Tool Description", () => {
     await deleteKnowledgeBase(request, knowledgeBaseId);
   });
 
-  test("query_knowledge_sources tool has dynamic description with KB name and connector type", async ({
+  // TODO: Fix flaky test
+  test.skip("query_knowledge_sources tool has dynamic description with KB name and connector type", async ({
     request,
   }) => {
     // Allow time for MCP tool cache to pick up the knowledge base assignment

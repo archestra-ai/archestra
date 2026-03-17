@@ -1,4 +1,4 @@
-import { get_encoding, type Tiktoken } from "tiktoken";
+import { countTokens, getEncoding } from "./tokenizer";
 
 export interface MetadataSuffixes {
   /** Structured key-value format for embeddings. null if over 25% token budget or min content rule. */
@@ -79,17 +79,4 @@ function buildSemanticSuffix(entries: Entry[]): string {
 function buildKeywordSuffix(entries: Entry[]): string {
   const values = entries.map((e) => e.value);
   return `\n${values.join(" ")}`;
-}
-
-let cachedEncoding: Tiktoken | null = null;
-
-function getEncoding(): Tiktoken {
-  if (!cachedEncoding) {
-    cachedEncoding = get_encoding("cl100k_base");
-  }
-  return cachedEncoding;
-}
-
-function countTokens(encoding: Tiktoken, text: string): number {
-  return encoding.encode(text).length;
 }

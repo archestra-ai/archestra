@@ -343,11 +343,11 @@ describe("ConnectorSyncService", () => {
 
     await connectorSyncService.executeSync(connector.id);
 
-    // Verify chunkDocument was called with metadata including connectorType
+    // Verify chunkDocument was called with document metadata (no connectorType)
     expect(mockChunkDocument).toHaveBeenCalledWith({
       title: "Doc 1",
       content: "Content for chunking",
-      metadata: { connectorType: "jira" },
+      metadata: undefined,
     });
 
     // Verify chunks were stored

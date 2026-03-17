@@ -1,11 +1,11 @@
-import { get_encoding } from "tiktoken";
 import { describe, expect, test } from "vitest";
 import { chunkDocument } from "./chunker";
+import { countTokens, getEncoding } from "./tokenizer";
 
-const encoding = get_encoding("cl100k_base");
+const encoding = getEncoding();
 
-function countTokens(text: string): number {
-  return encoding.encode(text).length;
+function countTokensHelper(text: string): number {
+  return countTokens(encoding, text);
 }
 
 describe("chunkDocument", () => {
@@ -130,7 +130,7 @@ describe("chunkDocument", () => {
     });
 
     for (const chunk of chunks) {
-      const actual = countTokens(chunk.content);
+      const actual = countTokensHelper(chunk.content);
       expect(chunk.tokenCount).toBe(actual);
     }
   });
@@ -255,7 +255,7 @@ describe("chunkDocument", () => {
     for (const chunk of chunks) {
       // Content + semantic suffix should fit within MAX_TOKENS
       const fullText = chunk.content + (chunk.metadataSuffixSemantic ?? "");
-      const tokens = countTokens(fullText);
+      const tokens = countTokensHelper(fullText);
       expect(tokens).toBeLessThanOrEqual(512);
     }
   });

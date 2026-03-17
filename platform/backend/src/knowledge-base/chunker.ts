@@ -1,6 +1,7 @@
 import { RecursiveChunker, Tokenizer } from "@chonkiejs/core";
-import { get_encoding, type Tiktoken } from "tiktoken";
+import type { Tiktoken } from "tiktoken";
 import { buildMetadataSuffixes } from "./metadata-suffix";
+import { countTokens, getEncoding } from "./tokenizer";
 
 export interface Chunk {
   content: string;
@@ -81,19 +82,6 @@ export async function chunkDocument(document: DocumentInput): Promise<Chunk[]> {
 }
 
 // --- Internal helpers ---
-
-let cachedEncoding: Tiktoken | null = null;
-
-function getEncoding(): Tiktoken {
-  if (!cachedEncoding) {
-    cachedEncoding = get_encoding("cl100k_base");
-  }
-  return cachedEncoding;
-}
-
-function countTokens(encoding: Tiktoken, text: string): number {
-  return encoding.encode(text).length;
-}
 
 function buildTitlePrefix(title: string): string {
   if (!title.trim()) return "";

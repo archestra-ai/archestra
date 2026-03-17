@@ -352,7 +352,9 @@ class ConnectorSyncService {
     const { doc, connectorId, connectorType, organizationId, log } = params;
 
     const hashInput = doc.metadata
-      ? doc.content + "\n" + JSON.stringify(doc.metadata)
+      ? doc.content +
+        "\n" +
+        JSON.stringify(doc.metadata, Object.keys(doc.metadata).sort())
       : doc.content;
     const contentHash = createHash("sha256").update(hashInput).digest("hex");
 
@@ -381,10 +383,7 @@ class ConnectorSyncService {
         content: doc.content,
         contentHash,
         sourceUrl: doc.sourceUrl ?? null,
-        metadata: {
-          ...doc.metadata,
-          connectorType,
-        },
+        metadata: doc.metadata,
         embeddingStatus: "pending",
       });
 
@@ -394,7 +393,7 @@ class ConnectorSyncService {
         documentId: existing.id,
         title: doc.title,
         content: doc.content,
-        metadata: { ...doc.metadata, connectorType },
+        metadata: doc.metadata,
         connectorType,
         acl: existing.acl as AclEntry[],
         log,
@@ -420,17 +419,14 @@ class ConnectorSyncService {
       contentHash,
       sourceUrl: doc.sourceUrl,
       acl: [],
-      metadata: {
-        ...doc.metadata,
-        connectorType,
-      },
+      metadata: doc.metadata,
     });
 
     await this.chunkAndStore({
       documentId: created.id,
       title: doc.title,
       content: doc.content,
-      metadata: { ...doc.metadata, connectorType },
+      metadata: doc.metadata,
       connectorType,
       acl: [],
       log,

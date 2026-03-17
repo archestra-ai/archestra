@@ -32,6 +32,12 @@ const SEARCH_FIELDS = [
   "labels",
   "issuetype",
   "updated",
+  "project",
+  "parent",
+  "resolution",
+  "resolutiondate",
+  "created",
+  "duedate",
 ];
 
 export class JiraConnector extends BaseConnector {
@@ -571,6 +577,10 @@ function formatJiraDate(isoDate: string): string {
   return `${year}/${month}/${day} ${hours}:${minutes}`;
 }
 
+function toDateOnly(iso: string | undefined): string | undefined {
+  return iso?.slice(0, 10);
+}
+
 function issueToDocument(params: {
   // biome-ignore lint/suspicious/noExplicitAny: SDK issue types vary between v2/v3
   issue: any;
@@ -614,8 +624,18 @@ function issueToDocument(params: {
       status: fields.status?.name,
       priority: fields.priority?.name,
       reporter: fields.reporter?.displayName,
+      reporterEmail: fields.reporter?.emailAddress,
       assignee: fields.assignee?.displayName,
+      assigneeEmail: fields.assignee?.emailAddress,
       labels: fields.labels,
+      project: fields.project?.key,
+      projectName: fields.project?.name,
+      resolution: fields.resolution?.name,
+      resolutionDate: toDateOnly(fields.resolutiondate),
+      parent: fields.parent?.key,
+      created: toDateOnly(fields.created),
+      updated: toDateOnly(fields.updated),
+      dueDate: toDateOnly(fields.duedate),
     },
     updatedAt: fields.updated ? new Date(fields.updated) : undefined,
   };

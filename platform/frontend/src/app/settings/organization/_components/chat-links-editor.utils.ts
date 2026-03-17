@@ -50,7 +50,7 @@ export function validateChatLink(
           ? "Enter a valid HTTP or HTTPS URL."
           : undefined
         : !isValidChatLinkUrl(trimmedUrl)
-        ? "Enter a valid HTTP or HTTPS URL."
-        : undefined,
+          ? "Enter a valid HTTP or HTTPS URL."
+          : undefined,
   };
 }

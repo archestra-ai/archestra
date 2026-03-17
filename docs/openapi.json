@@ -121371,10 +121371,6 @@
                         "additionalProperties": false
                       }
                     },
-                    "chatErrorSupportMessage": {
-                      "nullable": true,
-                      "type": "string"
-                    },
                     "chatPlaceholders": {
                       "nullable": true,
                       "type": "array",
@@ -121386,6 +121382,10 @@
                       "type": "boolean"
                     },
                     "iconLogo": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "chatErrorSupportMessage": {
                       "nullable": true,
                       "type": "string"
                     },
@@ -121423,10 +121423,10 @@
                     "ogDescription",
                     "footerText",
                     "chatLinks",
-                    "chatErrorSupportMessage",
                     "chatPlaceholders",
                     "animateChatPlaceholders",
                     "iconLogo",
+                    "chatErrorSupportMessage",
                     "showTwoFactor"
                   ],
                   "additionalProperties": false
@@ -121757,7 +121757,8 @@
                   },
                   "chatErrorSupportMessage": {
                     "nullable": true,
-                    "type": "string"
+                    "type": "string",
+                    "maxLength": 500
                   },
                   "chatPlaceholders": {
                     "nullable": true,
@@ -121969,10 +121970,6 @@
                         "additionalProperties": false
                       }
                     },
-                    "chatErrorSupportMessage": {
-                      "nullable": true,
-                      "type": "string"
-                    },
                     "chatPlaceholders": {
                       "nullable": true,
                       "type": "array",
@@ -121984,6 +121981,10 @@
                       "type": "boolean"
                     },
                     "iconLogo": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "chatErrorSupportMessage": {
                       "nullable": true,
                       "type": "string"
                     },
@@ -122021,10 +122022,10 @@
                     "ogDescription",
                     "footerText",
                     "chatLinks",
-                    "chatErrorSupportMessage",
                     "chatPlaceholders",
                     "animateChatPlaceholders",
                     "iconLogo",
+                    "chatErrorSupportMessage",
                     "showTwoFactor"
                   ],
                   "additionalProperties": false
@@ -122808,10 +122809,6 @@
                         "additionalProperties": false
                       }
                     },
-                    "chatErrorSupportMessage": {
-                      "nullable": true,
-                      "type": "string"
-                    },
                     "chatPlaceholders": {
                       "nullable": true,
                       "type": "array",
@@ -122823,6 +122820,10 @@
                       "type": "boolean"
                     },
                     "iconLogo": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "chatErrorSupportMessage": {
                       "nullable": true,
                       "type": "string"
                     },
@@ -122860,10 +122861,10 @@
                     "ogDescription",
                     "footerText",
                     "chatLinks",
-                    "chatErrorSupportMessage",
                     "chatPlaceholders",
                     "animateChatPlaceholders",
                     "iconLogo",
+                    "chatErrorSupportMessage",
                     "showTwoFactor"
                   ],
                   "additionalProperties": false
@@ -123314,10 +123315,6 @@
                         "additionalProperties": false
                       }
                     },
-                    "chatErrorSupportMessage": {
-                      "nullable": true,
-                      "type": "string"
-                    },
                     "chatPlaceholders": {
                       "nullable": true,
                       "type": "array",
@@ -123329,6 +123326,10 @@
                       "type": "boolean"
                     },
                     "iconLogo": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "chatErrorSupportMessage": {
                       "nullable": true,
                       "type": "string"
                     },
@@ -123366,10 +123367,10 @@
                     "ogDescription",
                     "footerText",
                     "chatLinks",
-                    "chatErrorSupportMessage",
                     "chatPlaceholders",
                     "animateChatPlaceholders",
                     "iconLogo",
+                    "chatErrorSupportMessage",
                     "showTwoFactor"
                   ],
                   "additionalProperties": false
@@ -123819,10 +123820,6 @@
                         "additionalProperties": false
                       }
                     },
-                    "chatErrorSupportMessage": {
-                      "nullable": true,
-                      "type": "string"
-                    },
                     "chatPlaceholders": {
                       "nullable": true,
                       "type": "array",
@@ -123834,6 +123831,10 @@
                       "type": "boolean"
                     },
                     "iconLogo": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "chatErrorSupportMessage": {
                       "nullable": true,
                       "type": "string"
                     },
@@ -123871,10 +123872,10 @@
                     "ogDescription",
                     "footerText",
                     "chatLinks",
-                    "chatErrorSupportMessage",
                     "chatPlaceholders",
                     "animateChatPlaceholders",
                     "iconLogo",
+                    "chatErrorSupportMessage",
                     "showTwoFactor"
                   ],
                   "additionalProperties": false
@@ -124340,10 +124341,6 @@
                         "additionalProperties": false
                       }
                     },
-                    "chatErrorSupportMessage": {
-                      "nullable": true,
-                      "type": "string"
-                    },
                     "chatPlaceholders": {
                       "nullable": true,
                       "type": "array",
@@ -124355,6 +124352,10 @@
                       "type": "boolean"
                     },
                     "iconLogo": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "chatErrorSupportMessage": {
                       "nullable": true,
                       "type": "string"
                     },
@@ -124392,10 +124393,10 @@
                     "ogDescription",
                     "footerText",
                     "chatLinks",
-                    "chatErrorSupportMessage",
                     "chatPlaceholders",
                     "animateChatPlaceholders",
                     "iconLogo",
+                    "chatErrorSupportMessage",
                     "showTwoFactor"
                   ],
                   "additionalProperties": false
@@ -124813,10 +124814,6 @@
                         "additionalProperties": false
                       }
                     },
-                    "chatErrorSupportMessage": {
-                      "nullable": true,
-                      "type": "string"
-                    },
                     "chatPlaceholders": {
                       "nullable": true,
                       "type": "array",
@@ -124828,6 +124825,10 @@
                       "type": "boolean"
                     },
                     "iconLogo": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "chatErrorSupportMessage": {
                       "nullable": true,
                       "type": "string"
                     },
@@ -124865,10 +124866,10 @@
                     "ogDescription",
                     "footerText",
                     "chatLinks",
-                    "chatErrorSupportMessage",
                     "chatPlaceholders",
                     "animateChatPlaceholders",
                     "iconLogo",
+                    "chatErrorSupportMessage",
                     "showTwoFactor"
                   ],
                   "additionalProperties": false
@@ -125575,10 +125576,6 @@
                         "additionalProperties": false
                       }
                     },
-                    "chatErrorSupportMessage": {
-                      "nullable": true,
-                      "type": "string"
-                    },
                     "chatPlaceholders": {
                       "nullable": true,
                       "type": "array",
@@ -125590,6 +125587,10 @@
                       "type": "boolean"
                     },
                     "iconLogo": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "chatErrorSupportMessage": {
                       "nullable": true,
                       "type": "string"
                     },
@@ -125627,10 +125628,10 @@
                     "ogDescription",
                     "footerText",
                     "chatLinks",
-                    "chatErrorSupportMessage",
                     "chatPlaceholders",
                     "animateChatPlaceholders",
                     "iconLogo",
+                    "chatErrorSupportMessage",
                     "showTwoFactor"
                   ],
                   "additionalProperties": false

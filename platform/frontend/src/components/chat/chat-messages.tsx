@@ -1406,21 +1406,30 @@ function SwapAgentDivider({ message }: { message: UIMessage }) {
     // Don't show divider if the swap tool errored
     if (hasSwapToolError(part, message.parts ?? [])) return null;
 
-    // Try tool call args first (always available), then fall back to output
+    // Determine agent name for the divider
     let agentName = "another agent";
-    const args = (part as Record<string, unknown>).args as
-      | Record<string, unknown>
-      | undefined;
-    if (args?.agent_name && typeof args.agent_name === "string") {
-      agentName = args.agent_name;
+    const isSwapToDefault =
+      type === TOOL_SWAP_TO_DEFAULT_AGENT_FULL_NAME ||
+      type === `tool-${TOOL_SWAP_TO_DEFAULT_AGENT_FULL_NAME}`;
+
+    if (isSwapToDefault) {
+      agentName = "default agent";
     } else {
-      const output = part.output ?? part.state;
-      if (typeof output === "string") {
-        try {
-          const parsed = JSON.parse(output);
-          if (parsed?.agent_name) agentName = parsed.agent_name;
-        } catch {
-          // ignore
+      // Try tool call input first (always available), then fall back to output
+      const input = (part as Record<string, unknown>).input as
+        | Record<string, unknown>
+        | undefined;
+      if (input?.agent_name && typeof input.agent_name === "string") {
+        agentName = input.agent_name;
+      } else {
+        const output = part.output ?? part.state;
+        if (typeof output === "string") {
+          try {
+            const parsed = JSON.parse(output);
+            if (parsed?.agent_name) agentName = parsed.agent_name;
+          } catch {
+            // ignore
+          }
         }
       }
     }

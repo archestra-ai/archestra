@@ -108,6 +108,9 @@ export default function OrganizationSettingsPage() {
   const saveChatLinkValidationErrors = effectiveChatLinks.map((link) =>
     validateChatLink(link, { requireComplete: true }),
   );
+  const hasLiveChatLinkValidationErrors = liveChatLinkValidationErrors.some(
+    (errors) => !!errors.label || !!errors.url,
+  );
   const displayedChatLinkValidationErrors = showChatLinkValidationErrors
     ? saveChatLinkValidationErrors
     : liveChatLinkValidationErrors;
@@ -350,6 +353,7 @@ export default function OrganizationSettingsPage() {
           setAnimateChatPlaceholders(null);
           setShowTwoFactor(null);
         }}
+        disabledSave={hasLiveChatLinkValidationErrors}
       />
     </SettingsSectionStack>
   );

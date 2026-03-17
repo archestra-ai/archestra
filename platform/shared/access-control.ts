@@ -211,8 +211,8 @@ export const permissionDescriptions: Record<string, string> = {
   "agent:admin":
     "Full administrative control over all agents, bypassing team restrictions",
   "agentTrigger:read":
-    "View agent trigger configurations (Slack, MS Teams, email)",
-  "agentTrigger:create": "Set up new agent triggers",
+    "View agent trigger configurations (Slack, MS Teams, email, schedules)",
+  "agentTrigger:create": "Set up new agent triggers (including schedule triggers)",
   "agentTrigger:update": "Modify agent trigger configurations",
   "agentTrigger:delete": "Remove agent triggers",
 
@@ -943,6 +943,33 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.RefreshChatOpsChannelDiscovery]: {
     agentTrigger: ["read"],
   },
+
+  // Schedule Trigger Routes
+  [RouteId.CreateScheduleTrigger]: {
+    agentTrigger: ["create"],
+  },
+  [RouteId.GetScheduleTriggers]: {
+    agentTrigger: ["read"],
+  },
+  [RouteId.GetScheduleTrigger]: {
+    agentTrigger: ["read"],
+  },
+  [RouteId.UpdateScheduleTrigger]: {
+    agentTrigger: ["update"],
+  },
+  [RouteId.DeleteScheduleTrigger]: {
+    agentTrigger: ["delete"],
+  },
+  [RouteId.EnableScheduleTrigger]: {
+    agentTrigger: ["update"],
+  },
+  [RouteId.DisableScheduleTrigger]: {
+    agentTrigger: ["update"],
+  },
+  [RouteId.ExecuteScheduleTrigger]: {
+    agentTrigger: ["update"],
+  },
+
   // Knowledge Base Routes
   [RouteId.GetKnowledgeBases]: { knowledgeBase: ["read"] },
   [RouteId.CreateKnowledgeBase]: { knowledgeBase: ["create"] },
@@ -989,6 +1016,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/agents/triggers/slack": { agentTrigger: ["read"] },
   "/agents/triggers/ms-teams": { agentTrigger: ["read"] },
   "/agents/triggers/email": { agentTrigger: ["read"] },
+  "/agents/triggers/schedule": { agentTrigger: ["read"] },
 
   // LLM
   "/llm/proxies": { llmProxy: ["read"] },

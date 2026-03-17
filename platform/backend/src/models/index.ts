@@ -5,6 +5,7 @@ export { default as AgentKnowledgeBaseModel } from "./agent-knowledge-base";
 export { default as AgentLabelModel } from "./agent-label";
 export { default as AgentSuggestedPromptModel } from "./agent-suggested-prompt";
 export { default as AgentTeamModel } from "./agent-team";
+export { default as AgentScheduleTriggerModel } from "./agent-schedule-trigger";
 export { default as AgentToolModel } from "./agent-tool";
 export { default as ApiKeyModel } from "./api-key";
 export { default as ApiKeyModelModel } from "./api-key-model";

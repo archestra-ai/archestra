@@ -113,7 +113,7 @@ export const resourceDescriptions: Record<Resource, string> = {
   toolPolicy: "Tools, tool invocation policies, and trusted data policies",
   log: "LLM proxy and MCP tool call logs",
   chat: "Chat conversations",
-  agentTrigger: "Agent triggers (Slack, MS Teams, incoming emails)",
+  agentTrigger: "Agent triggers (Slack, MS Teams, incoming emails, schedules)",
   llmProvider: "LLM provider API keys, virtual keys, and models",
   llmLimit: "LLM usage limits",
   llmSettings: "LLM settings (compression, cleanup interval)",

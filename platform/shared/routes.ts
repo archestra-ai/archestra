@@ -368,6 +368,16 @@ export const RouteId = {
   UpdateSlackChatOpsConfig: "updateSlackChatOpsConfig",
   RefreshChatOpsChannelDiscovery: "refreshChatOpsChannelDiscovery",
 
+  // Schedule Trigger Routes
+  CreateScheduleTrigger: "createScheduleTrigger",
+  GetScheduleTriggers: "getScheduleTriggers",
+  GetScheduleTrigger: "getScheduleTrigger",
+  UpdateScheduleTrigger: "updateScheduleTrigger",
+  DeleteScheduleTrigger: "deleteScheduleTrigger",
+  EnableScheduleTrigger: "enableScheduleTrigger",
+  DisableScheduleTrigger: "disableScheduleTrigger",
+  ExecuteScheduleTrigger: "executeScheduleTrigger",
+
   // Knowledge Base Routes
   GetKnowledgeBases: "getKnowledgeBases",
   CreateKnowledgeBase: "createKnowledgeBase",

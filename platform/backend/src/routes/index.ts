@@ -27,6 +27,7 @@ export { default as chatRoutes } from "./chat/routes.chat";
 export { default as chatModelsRoutes } from "./chat/routes.models";
 export { default as chatShareRoutes } from "./chat/routes.share";
 export { default as virtualApiKeysRoutes } from "./chat/routes.virtual-api-keys";
+export { default as agentScheduleTriggerRoutes } from "./agent-schedule-trigger";
 export { default as chatopsRoutes } from "./chatops";
 export { default as configRoutes } from "./config";
 export { default as dualLlmConfigRoutes } from "./dual-llm-config";

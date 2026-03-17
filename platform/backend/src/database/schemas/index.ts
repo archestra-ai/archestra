@@ -5,6 +5,7 @@ export { default as agentKnowledgeBasesTable } from "./agent-knowledge-base";
 export { default as agentLabelsTable } from "./agent-label";
 export { default as agentSuggestedPromptsTable } from "./agent-suggested-prompt";
 export { default as agentTeamsTable } from "./agent-team";
+export { default as agentScheduleTriggersTable } from "./agent-schedule-trigger";
 export { default as agentToolsTable } from "./agent-tool";
 export { default as apikeysTable } from "./api-key";
 export { default as apiKeyModelsTable } from "./api-key-model";

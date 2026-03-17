@@ -1,12 +1,12 @@
 import { CircleHelp, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-interface ChatHelpLinkProps {
+interface ChatLinkButtonProps {
   label?: string | null | undefined;
   url: string | null | undefined;
 }
 
-export function ChatLinkButton({ label, url }: ChatHelpLinkProps) {
+export function ChatLinkButton({ label, url }: ChatLinkButtonProps) {
   if (!url) {
     return null;
   }
@@ -21,5 +21,3 @@ export function ChatLinkButton({ label, url }: ChatHelpLinkProps) {
     </Button>
   );
 }
-
-export const ChatHelpLink = ChatLinkButton;

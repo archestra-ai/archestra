@@ -1,3 +1,4 @@
+import * as cheerio from "cheerio";
 import { ConfluenceClient } from "confluence.js";
 import type pino from "pino";
 import type {
@@ -435,32 +436,46 @@ function pageToDocument(
 }
 
 /**
- * Strip HTML tags to produce plain text.
+ * Strip HTML tags from Confluence storage format to produce clean plain text.
+ *
+ * Uses cheerio (DOM parser) instead of regex to correctly handle:
+ *  - Confluence structured macros (status lozenges, panels, etc.)
+ *  - Decorative parameters (colour, icon) that should not appear in text
+ *  - Table structure (cells separated by tabs, rows by newlines)
+ *  - Proper spacing between adjacent inline elements
  */
 export function stripHtmlTags(html: string): string {
-  let text = html;
-  text = text.replace(/<\/(p|div|h[1-6]|li|tr|br\s*\/?)>/gi, "\n");
-  text = text.replace(/<br\s*\/?>/gi, "\n");
-  // Loop to handle nested/broken tags like <scr<script>ipt>
-  let prev: string;
-  do {
-    prev = text;
-    text = text.replace(/<[^>]+>/g, "");
-  } while (text !== prev);
-  // Decode entities in a single pass to avoid double-unescaping
-  text = text.replace(
-    /&(amp|lt|gt|quot|#39|nbsp);/g,
-    (_match, entity: string) => HTML_ENTITY_MAP[entity] ?? _match,
-  );
+  if (!html) return "";
+
+  const $ = cheerio.load(html, { xml: true });
+
+  // Remove decorative ac:parameter elements so values like "Red" from
+  // status lozenges don't leak into indexed text
+  $(
+    'ac\\:parameter[ac\\:name="colour"], ac\\:parameter[ac\\:name="color"], ac\\:parameter[ac\\:name="subtle"], ac\\:parameter[ac\\:name="icon"], ac\\:parameter[ac\\:name="style"], ac\\:parameter[ac\\:name="class"]',
+  ).remove();
+
+  // Process tables: add structural separators before extracting text
+  $("td, th").each((_i, el) => {
+    $(el).prepend("\t");
+  });
+  $("tr").each((_i, el) => {
+    $(el).append("\n");
+  });
+
+  // Block elements → newlines
+  $("p, div, h1, h2, h3, h4, h5, h6, li, br").each((_i, el) => {
+    $(el).after("\n");
+  });
+
+  let text = $.text();
+
+  // Decode HTML entities that cheerio's XML mode doesn't handle
+  text = text.replace(/&nbsp;/g, " ");
+
+  // Collapse whitespace
+  text = text.replace(/ {2,}/g, " ");
   text = text.replace(/\n{3,}/g, "\n\n");
+
   return text.trim();
 }
-
-const HTML_ENTITY_MAP: Record<string, string> = {
-  amp: "&",
-  lt: "<",
-  gt: ">",
-  quot: '"',
-  "#39": "'",
-  nbsp: " ",
-};

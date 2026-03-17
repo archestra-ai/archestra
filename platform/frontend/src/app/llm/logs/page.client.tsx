@@ -382,7 +382,12 @@ function SessionsTable({
       {
         id: "source",
         header: "Source",
-        cell: ({ row }) => <SourceBadge source={row.original.source} />,
+        cell: ({ row }) => (
+          <SourceBadge
+            source={row.original.source}
+            className="max-w-[12.5rem]"
+          />
+        ),
       },
       {
         id: "time",

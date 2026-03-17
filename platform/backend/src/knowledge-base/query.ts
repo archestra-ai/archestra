@@ -1,4 +1,4 @@
-import { addNomicTaskPrefix, getEmbeddingColumnName } from "@shared";
+import { addNomicTaskPrefix } from "@shared";
 import config from "@/config";
 import logger from "@/logging";
 import { KbChunkModel } from "@/models";
@@ -10,6 +10,10 @@ import {
   withKbObservability,
 } from "./kb-interaction";
 import { resolveEmbeddingConfig } from "./kb-llm-client";
+import {
+  expandQuery,
+  KEYWORD_QUERY_HYBRID_ALPHA_WEIGHT,
+} from "./query-expansion";
 import rerank from "./reranker";
 import reciprocalRankFusion from "./rrf";
 
@@ -23,6 +27,13 @@ interface ChunkResult {
     documentId: string;
     connectorType: string | null;
   };
+}
+
+interface EmbeddingConfig {
+  // biome-ignore lint/suspicious/noExplicitAny: OpenAI client type
+  client: any;
+  model: string;
+  dimensions: number;
 }
 
 class QueryService {
@@ -49,7 +60,88 @@ class QueryService {
       return [];
     }
 
-    const embeddingPromise = withKbObservability({
+    const expandedQueries = await expandQuery({ queryText, organizationId });
+
+    const perQueryResults = await Promise.all(
+      expandedQueries.map((eq) =>
+        this.searchSingleQuery({
+          queryText: eq.queryText,
+          embeddingConfig,
+          connectorIds,
+          limit: overFetchLimit,
+          type: eq.type,
+          hybridEnabled,
+        }),
+      ),
+    );
+
+    const weights = expandedQueries.map((eq) => eq.weight);
+
+    const merged = reciprocalRankFusion<VectorSearchResult>({
+      rankings: perQueryResults,
+      idExtractor: (row) => row.id,
+      weights,
+      k: 50,
+    });
+
+    let topResults = merged.slice(0, overFetchLimit);
+
+    const preRerankCount = topResults.length;
+    topResults = await rerank({
+      queryText,
+      chunks: topResults,
+      organizationId,
+    });
+    topResults = topResults.slice(0, limit);
+
+    logger.info(
+      {
+        preRerankCount,
+        postRerankCount: topResults.length,
+        expandedQueryCount: expandedQueries.length,
+        results: topResults.map((r) => ({
+          id: r.id,
+          score: r.score,
+          title: r.title,
+          contentPreview: r.content.slice(0, 80),
+        })),
+      },
+      "[QueryService] Final results (after rerank)",
+    );
+
+    const searchType = hybridEnabled ? "hybrid" : "vector";
+    metrics.rag.reportQuery({
+      searchType,
+      durationSeconds: (Date.now() - queryStartTime) / 1000,
+      resultCount: topResults.length,
+    });
+
+    return this.mapResults(topResults);
+  }
+
+  private async searchSingleQuery(params: {
+    queryText: string;
+    embeddingConfig: EmbeddingConfig;
+    connectorIds: string[];
+    limit: number;
+    type: "semantic" | "keyword";
+    hybridEnabled: boolean;
+  }): Promise<VectorSearchResult[]> {
+    const {
+      queryText,
+      embeddingConfig,
+      connectorIds,
+      limit,
+      type,
+      hybridEnabled,
+    } = params;
+
+    logger.info(
+      { queryText, type, hybridEnabled },
+      "[QueryService] Searching expanded query",
+    );
+
+    const embeddingResponse = await withKbObservability({
       operationName: "embedding",
       provider: "openai",
       model: embeddingConfig.model,
@@ -67,7 +159,9 @@ class QueryService {
             ? {}
             : { dimensions: embeddingConfig.dimensions }),
         }),
-      buildInteraction: (response) =>
+      buildInteraction: (
+        response: Parameters<typeof buildEmbeddingInteraction>[0]["response"],
+      ) =>
         buildEmbeddingInteraction({
           model: embeddingConfig.model,
           input: queryText,
@@ -76,103 +170,52 @@ class QueryService {
         }),
     });
 
+    const queryEmbedding = embeddingResponse.data[0].embedding;
+
     const fullTextPromise = hybridEnabled
       ? KbChunkModel.fullTextSearch({
           connectorIds,
           queryText,
-          limit: overFetchLimit,
+          limit,
         })
       : Promise.resolve([] as VectorSearchResult[]);
 
-    const [embeddingResponse, fullTextRows] = await Promise.all([
-      embeddingPromise,
+    const [vectorRows, fullTextRows] = await Promise.all([
+      KbChunkModel.vectorSearch({
+        connectorIds,
+        queryEmbedding,
+        dimensions: embeddingConfig.dimensions,
+        limit,
+      }),
       fullTextPromise,
     ]);
-
-    const queryEmbedding = embeddingResponse.data[0].embedding;
-    const embeddingColumn = getEmbeddingColumnName(embeddingConfig.dimensions);
 
     logger.info(
       {
         queryText,
-        model: embeddingConfig.model,
-        dimensions: embeddingConfig.dimensions,
-        embeddingColumn,
-        hybridEnabled,
-      },
-      "[QueryService] Starting search",
-    );
-
-    const vectorRows = await KbChunkModel.vectorSearch({
-      connectorIds,
-      queryEmbedding,
-      dimensions: embeddingConfig.dimensions,
-      limit: overFetchLimit,
-    });
-
-    const vectorIds = new Set(vectorRows.map((r) => r.id));
-    const fullTextIds = new Set(fullTextRows.map((r) => r.id));
-
-    logger.info(
-      {
+        type,
         vectorCount: vectorRows.length,
         fullTextCount: fullTextRows.length,
-        vectorOnlyCount: vectorRows.filter((r) => !fullTextIds.has(r.id))
-          .length,
-        fullTextOnlyCount: fullTextRows.filter((r) => !vectorIds.has(r.id))
-          .length,
-        bothCount: vectorRows.filter((r) => fullTextIds.has(r.id)).length,
       },
-      "[QueryService] Search candidates retrieved",
+      "[QueryService] Expanded query search results",
     );
 
-    let topResults: VectorSearchResult[];
-    if (hybridEnabled) {
-      const fused = reciprocalRankFusion<VectorSearchResult>({
-        rankings: [vectorRows, fullTextRows],
-        idExtractor: (row) => row.id,
-      });
-      topResults = fused.slice(0, overFetchLimit);
-    } else {
-      topResults = vectorRows;
+    if (!hybridEnabled) {
+      return vectorRows;
     }
 
-    const preRerankCount = topResults.length;
-    topResults = await rerank({
-      queryText,
-      chunks: topResults,
-      organizationId,
-    });
-    topResults = topResults.slice(0, limit);
+    // Inner RRF: for keyword queries, favor BM25 (full-text)
+    const innerWeights =
+      type === "keyword" ? [1.0, KEYWORD_QUERY_HYBRID_ALPHA_WEIGHT] : undefined;
 
-    logger.info(
-      {
-        preRerankCount,
-        postRerankCount: topResults.length,
-        results: topResults.map((r) => ({
-          id: r.id,
-          score: r.score,
-          title: r.title,
-          source:
-            vectorIds.has(r.id) && fullTextIds.has(r.id)
-              ? "vector+fulltext"
-              : vectorIds.has(r.id)
-                ? "vector"
-                : "fulltext",
-          contentPreview: r.content.slice(0, 80),
-        })),
-      },
-      "[QueryService] Final results (after rerank)",
-    );
-
-    const searchType = hybridEnabled ? "hybrid" : "vector";
-    metrics.rag.reportQuery({
-      searchType,
-      durationSeconds: (Date.now() - queryStartTime) / 1000,
-      resultCount: topResults.length,
+    const fused = reciprocalRankFusion<VectorSearchResult>({
+      rankings: [vectorRows, fullTextRows],
+      idExtractor: (row) => row.id,
+      k: 60,
+      weights: innerWeights,
     });
 
-    return this.mapResults(topResults);
+    return fused.slice(0, limit);
   }
 
   private mapResults(rows: VectorSearchResult[]): ChunkResult[] {

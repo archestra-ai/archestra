@@ -289,6 +289,10 @@ export interface ChatErrorResponse {
   message: string;
   /** Whether the operation can be retried */
   isRetryable: boolean;
+  /** OpenTelemetry trace ID for correlating with backend logs */
+  traceId?: string;
+  /** OpenTelemetry span ID for correlating with backend logs */
+  spanId?: string;
   /** Original error details for debugging (provider-specific) */
   originalError?: {
     /** Provider name (anthropic, openai, gemini) */

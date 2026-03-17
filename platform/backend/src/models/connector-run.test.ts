@@ -305,6 +305,63 @@ describe("ConnectorRunModel", () => {
     });
   });
 
+  describe("deleteByConnector", () => {
+    test("deletes all runs for a connector", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+      makeConnectorRun,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+      await makeConnectorRun(connector.id);
+      await makeConnectorRun(connector.id);
+      await makeConnectorRun(connector.id);
+
+      await ConnectorRunModel.deleteByConnector(connector.id);
+
+      const count = await ConnectorRunModel.countByConnector(connector.id);
+      expect(count).toBe(0);
+    });
+
+    test("does not delete runs from other connectors", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+      makeConnectorRun,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const connector1 = await makeKnowledgeBaseConnector(kb.id, org.id);
+      const connector2 = await makeKnowledgeBaseConnector(kb.id, org.id);
+      await makeConnectorRun(connector1.id);
+      await makeConnectorRun(connector2.id);
+      await makeConnectorRun(connector2.id);
+
+      await ConnectorRunModel.deleteByConnector(connector1.id);
+
+      const count1 = await ConnectorRunModel.countByConnector(connector1.id);
+      const count2 = await ConnectorRunModel.countByConnector(connector2.id);
+      expect(count1).toBe(0);
+      expect(count2).toBe(2);
+    });
+
+    test("returns 0 when connector has no runs", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+
+      const count = await ConnectorRunModel.deleteByConnector(connector.id);
+
+      expect(count).toBe(0);
+    });
+  });
+
   describe("hasActiveRun", () => {
     test("returns true when connector has a running run", async ({
       makeOrganization,

@@ -93,17 +93,19 @@ class KbChunkModel {
       sql`, `,
     );
 
+    const orQuery = queryText.split(/\s+/).filter(Boolean).join(" OR ");
+
     const rows = await db.execute(sql`
       SELECT
         c.id, c.content, c.chunk_index AS "chunkIndex", c.document_id AS "documentId",
         d.title, d.source_url AS "sourceUrl", d.metadata,
         kbc.connector_type AS "connectorType",
-        ts_rank(c.search_vector, plainto_tsquery('english', ${queryText})) AS score
+        ts_rank(c.search_vector, websearch_to_tsquery('english', ${orQuery})) AS score
       FROM kb_chunks c
       JOIN kb_documents d ON d.id = c.document_id
       LEFT JOIN knowledge_base_connectors kbc ON kbc.id = d.connector_id
       WHERE d.connector_id IN (${ids})
-        AND c.search_vector @@ plainto_tsquery('english', ${queryText})
+        AND c.search_vector @@ websearch_to_tsquery('english', ${orQuery})
       ORDER BY score DESC
       LIMIT ${limit}
     `);

@@ -31,10 +31,10 @@ export function DeleteCatalogDialog({
   };
 
   const ConfirmationContent = ({ name }: { name: string }) => (
-    <div>
+    <span>
       Are you sure you want to delete{" "}
       <span className="font-semibold break-all">"{name}"</span>?
-    </div>
+    </span>
   );
 
   return (
@@ -46,14 +46,14 @@ export function DeleteCatalogDialog({
             {item &&
               (() => {
                 return installationCount > 0 ? (
-                  <div className="space-y-3">
+                  <span className="space-y-3 block">
                     <ConfirmationContent name={item.name} />
-                    <div className="text-sm">
+                    <span className="text-sm block">
                       There are currently <strong>{installationCount}</strong>{" "}
                       installation(s) of this server. Deleting this catalog
                       entry will also uninstall all associated servers.
-                    </div>
-                  </div>
+                    </span>
+                  </span>
                 ) : (
                   <ConfirmationContent name={item.name} />
                 );

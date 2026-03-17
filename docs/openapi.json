@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "1.1.22"
+    "version": "1.1.25"
   },
   "components": {
     "schemas": {
@@ -36316,6 +36316,7 @@
         ],
         "description": "Execute A2A JSON-RPC message on an internal agent (must be agentType='agent')",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -36379,8 +36380,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "parameters": [
           {
@@ -37272,6 +37272,7 @@
         ],
         "description": "Create a new agent",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -37451,8 +37452,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -40312,6 +40312,7 @@
         ],
         "description": "Update an agent",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -42518,6 +42519,7 @@
         ],
         "description": "Assign a tool to an agent",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -43067,6 +43069,7 @@
         ],
         "description": "Assign multiple tools to multiple agents in bulk",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -43115,8 +43118,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -43419,6 +43421,7 @@
         ],
         "description": "Automatically configure security policies for tools using LLM analysis",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -43439,8 +43442,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -44067,6 +44069,7 @@
         ],
         "description": "Update an agent-tool relationship",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -44646,6 +44649,7 @@
         ],
         "description": "Sync delegation targets for an agent. Replaces all existing delegations with the new list. Not applicable to LLM proxies.",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -44665,8 +44669,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "parameters": [
           {
@@ -45499,6 +45502,7 @@
         ],
         "description": "Send a message to Anthropic using the default agent",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -45784,6 +45788,7 @@
         ],
         "description": "Send a message to Anthropic using a specific agent (n8n URL format)",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -46383,6 +46388,7 @@
         ],
         "description": "Create an Archestra API key for the authenticated user",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -47399,6 +47405,7 @@
         ],
         "description": "Submit OAuth consent decision (accept or deny)",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -47421,8 +47428,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -47453,6 +47459,7 @@
           "auth"
         ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -48082,6 +48089,7 @@
         ],
         "description": "Create a new tool invocation policy",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -48144,8 +48152,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -48770,6 +48777,7 @@
         ],
         "description": "Update a tool invocation policy",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -49705,6 +49713,7 @@
         ],
         "description": "Create a new trusted data policy",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -49767,8 +49776,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -50393,6 +50401,7 @@
         ],
         "description": "Update a trusted data policy",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -51021,6 +51030,7 @@
         ],
         "description": "Bulk upsert default tool invocation policies (empty conditions) for multiple tools",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -51050,8 +51060,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -51298,6 +51307,7 @@
         ],
         "description": "Bulk upsert default trusted data policies (empty conditions) for multiple tools",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -51327,8 +51337,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -51575,6 +51584,7 @@
         ],
         "description": "Send a message to Amazon Bedrock using the default agent",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -52276,8 +52286,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "parameters": [
           {
@@ -52741,6 +52750,7 @@
         ],
         "description": "Send a message to Amazon Bedrock for a specific agent",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -53442,8 +53452,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "parameters": [
           {
@@ -53917,6 +53926,7 @@
         ],
         "description": "Stream a message response from Amazon Bedrock using the default agent",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -54618,8 +54628,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "parameters": [
           {
@@ -54656,6 +54665,7 @@
         ],
         "description": "Stream a message response from Amazon Bedrock for a specific agent",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -55357,8 +55367,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "parameters": [
           {
@@ -55405,6 +55414,7 @@
         ],
         "description": "Send a message to Amazon Bedrock for a specific agent (AI SDK format)",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -56585,6 +56595,7 @@
         ],
         "description": "Stream a message response from Amazon Bedrock for a specific agent (AI SDK format)",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -57338,6 +57349,7 @@
         ],
         "description": "Create a chat completion with Cerebras (uses default agent)",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -57598,6 +57610,7 @@
         ],
         "description": "Create a chat completion with Cerebras for a specific agent",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -58259,6 +58272,7 @@
         ],
         "description": "Create a new chat API key with specified scope",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -58328,8 +58342,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -59410,6 +59423,7 @@
         ],
         "description": "Update a chat API key (name, API key value, scope, or team)",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -61142,6 +61156,7 @@
         ],
         "description": "Update model details including custom pricing and modalities.",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -61557,6 +61572,7 @@
         ],
         "description": "Stream chat response with MCP tools (useChat format)",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -61585,8 +61601,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "400": {
@@ -62471,6 +62486,7 @@
         ],
         "description": "Create a new conversation with an agent",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -62521,8 +62537,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -63331,6 +63346,7 @@
         ],
         "description": "Update conversation title, model, agent, or API key",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -64316,6 +64332,7 @@
         ],
         "description": "Generate a title for the conversation based on the first user message and assistant response",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -64741,6 +64758,7 @@
         ],
         "description": "Update a specific text part in a message",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -64765,8 +64783,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "parameters": [
           {
@@ -65436,6 +65453,7 @@
         ],
         "description": "Set enabled tools for a conversation. Replaces all existing selections.",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -65453,8 +65471,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "parameters": [
           {
@@ -66245,6 +66262,7 @@
         ],
         "description": "Share a conversation with your organization",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -66262,8 +66280,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "parameters": [
           {
@@ -67210,6 +67227,7 @@
         ],
         "description": "Create a new conversation from a shared conversation's messages",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -67226,8 +67244,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "parameters": [
           {
@@ -67639,6 +67656,7 @@
         ],
         "description": "MS Teams Bot Framework webhook endpoint",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {}
@@ -67787,6 +67805,7 @@
         ],
         "description": "Slack Events API webhook endpoint",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {}
@@ -67935,6 +67954,7 @@
         ],
         "description": "Slack interactive components endpoint",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {}
@@ -68035,6 +68055,7 @@
         ],
         "description": "Slack slash commands endpoint",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {}
@@ -68922,6 +68943,7 @@
         ],
         "description": "Bulk-update agent assignment for multiple channel bindings",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -68950,8 +68972,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -69513,6 +69534,7 @@
         ],
         "description": "Update a chatops channel binding",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -69848,6 +69870,7 @@
         ],
         "description": "Create a pending DM binding so an agent can be pre-assigned before the first DM interaction",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -69873,8 +69896,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -70183,6 +70205,7 @@
         ],
         "description": "Update MS Teams chatops configuration",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -70452,6 +70475,7 @@
         ],
         "description": "Update Slack chatops configuration",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -70729,6 +70753,7 @@
         ],
         "description": "Refresh channel discovery cache for a chatops provider",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -70747,8 +70772,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -70991,6 +71015,7 @@
         ],
         "description": "Send a chat request to Cohere using the default agent",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -71251,6 +71276,7 @@
         ],
         "description": "Send a chat request to Cohere using a specific agent",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -71677,6 +71703,7 @@
         ],
         "description": "Create a chat completion with DeepSeek (uses default agent)",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -71937,6 +71964,7 @@
         ],
         "description": "Create a chat completion with DeepSeek for a specific agent",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -72756,6 +72784,7 @@
         ],
         "description": "Create a new dual LLM configuration",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -72786,8 +72815,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -73348,6 +73376,7 @@
         ],
         "description": "Update a dual LLM configuration",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -74526,6 +74555,7 @@
         ],
         "description": "Generate content using Gemini (default agent)",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -74795,6 +74825,7 @@
         ],
         "description": "Stream generated content using Gemini (default agent)",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -75054,6 +75085,7 @@
         ],
         "description": "Generate content using Gemini with specific agent",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -75333,6 +75365,7 @@
         ],
         "description": "Stream generated content using Gemini with specific agent",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -75602,6 +75635,7 @@
         ],
         "description": "Create a chat completion with Groq (uses default agent)",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -75862,6 +75896,7 @@
         ],
         "description": "Create a chat completion with Groq for a specific agent",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -76238,6 +76273,7 @@
         ],
         "description": "Webhook endpoint for incoming email notifications",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {}
@@ -76892,6 +76928,7 @@
         ],
         "description": "Setup or renew incoming email webhook subscription",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -76907,8 +76944,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -77820,7 +77856,8 @@
                                   "chatops:ms-teams",
                                   "email",
                                   "knowledge:embedding",
-                                  "knowledge:reranker"
+                                  "knowledge:reranker",
+                                  "knowledge:query-expansion"
                                 ]
                               },
                               "request": {
@@ -77980,7 +78017,8 @@
                                   "chatops:ms-teams",
                                   "email",
                                   "knowledge:embedding",
-                                  "knowledge:reranker"
+                                  "knowledge:reranker",
+                                  "knowledge:query-expansion"
                                 ]
                               },
                               "request": {
@@ -78254,7 +78292,8 @@
                                   "chatops:ms-teams",
                                   "email",
                                   "knowledge:embedding",
-                                  "knowledge:reranker"
+                                  "knowledge:reranker",
+                                  "knowledge:query-expansion"
                                 ]
                               },
                               "request": {
@@ -78414,7 +78453,8 @@
                                   "chatops:ms-teams",
                                   "email",
                                   "knowledge:embedding",
-                                  "knowledge:reranker"
+                                  "knowledge:reranker",
+                                  "knowledge:query-expansion"
                                 ]
                               },
                               "request": {
@@ -78574,7 +78614,8 @@
                                   "chatops:ms-teams",
                                   "email",
                                   "knowledge:embedding",
-                                  "knowledge:reranker"
+                                  "knowledge:reranker",
+                                  "knowledge:query-expansion"
                                 ]
                               },
                               "request": {
@@ -80434,7 +80475,8 @@
                                   "chatops:ms-teams",
                                   "email",
                                   "knowledge:embedding",
-                                  "knowledge:reranker"
+                                  "knowledge:reranker",
+                                  "knowledge:query-expansion"
                                 ]
                               },
                               "request": {
@@ -80594,7 +80636,8 @@
                                   "chatops:ms-teams",
                                   "email",
                                   "knowledge:embedding",
-                                  "knowledge:reranker"
+                                  "knowledge:reranker",
+                                  "knowledge:query-expansion"
                                 ]
                               },
                               "request": {
@@ -80754,7 +80797,8 @@
                                   "chatops:ms-teams",
                                   "email",
                                   "knowledge:embedding",
-                                  "knowledge:reranker"
+                                  "knowledge:reranker",
+                                  "knowledge:query-expansion"
                                 ]
                               },
                               "request": {
@@ -80914,7 +80958,8 @@
                                   "chatops:ms-teams",
                                   "email",
                                   "knowledge:embedding",
-                                  "knowledge:reranker"
+                                  "knowledge:reranker",
+                                  "knowledge:query-expansion"
                                 ]
                               },
                               "request": {
@@ -81074,7 +81119,8 @@
                                   "chatops:ms-teams",
                                   "email",
                                   "knowledge:embedding",
-                                  "knowledge:reranker"
+                                  "knowledge:reranker",
+                                  "knowledge:query-expansion"
                                 ]
                               },
                               "request": {
@@ -81234,7 +81280,8 @@
                                   "chatops:ms-teams",
                                   "email",
                                   "knowledge:embedding",
-                                  "knowledge:reranker"
+                                  "knowledge:reranker",
+                                  "knowledge:query-expansion"
                                 ]
                               },
                               "request": {
@@ -81394,7 +81441,8 @@
                                   "chatops:ms-teams",
                                   "email",
                                   "knowledge:embedding",
-                                  "knowledge:reranker"
+                                  "knowledge:reranker",
+                                  "knowledge:query-expansion"
                                 ]
                               },
                               "request": {
@@ -81543,7 +81591,8 @@
                                   "chatops:ms-teams",
                                   "email",
                                   "knowledge:embedding",
-                                  "knowledge:reranker"
+                                  "knowledge:reranker",
+                                  "knowledge:query-expansion"
                                 ]
                               },
                               "request": {
@@ -81692,7 +81741,8 @@
                                   "chatops:ms-teams",
                                   "email",
                                   "knowledge:embedding",
-                                  "knowledge:reranker"
+                                  "knowledge:reranker",
+                                  "knowledge:query-expansion"
                                 ]
                               },
                               "request": {
@@ -81852,7 +81902,8 @@
                                   "chatops:ms-teams",
                                   "email",
                                   "knowledge:embedding",
-                                  "knowledge:reranker"
+                                  "knowledge:reranker",
+                                  "knowledge:query-expansion"
                                 ]
                               },
                               "request": {
@@ -82012,7 +82063,8 @@
                                   "chatops:ms-teams",
                                   "email",
                                   "knowledge:embedding",
-                                  "knowledge:reranker"
+                                  "knowledge:reranker",
+                                  "knowledge:query-expansion"
                                 ]
                               },
                               "request": {
@@ -82172,7 +82224,8 @@
                                   "chatops:ms-teams",
                                   "email",
                                   "knowledge:embedding",
-                                  "knowledge:reranker"
+                                  "knowledge:reranker",
+                                  "knowledge:query-expansion"
                                 ]
                               },
                               "request": {
@@ -82592,7 +82645,8 @@
                 "chatops:ms-teams",
                 "email",
                 "knowledge:embedding",
-                "knowledge:reranker"
+                "knowledge:reranker",
+                "knowledge:query-expansion"
               ]
             },
             "in": "query",
@@ -82694,7 +82748,8 @@
                               "chatops:ms-teams",
                               "email",
                               "knowledge:embedding",
-                              "knowledge:reranker"
+                              "knowledge:reranker",
+                              "knowledge:query-expansion"
                             ]
                           },
                           "interactionId": {
@@ -83658,7 +83713,8 @@
                             "chatops:ms-teams",
                             "email",
                             "knowledge:embedding",
-                            "knowledge:reranker"
+                            "knowledge:reranker",
+                            "knowledge:query-expansion"
                           ]
                         },
                         "request": {
@@ -83818,7 +83874,8 @@
                             "chatops:ms-teams",
                             "email",
                             "knowledge:embedding",
-                            "knowledge:reranker"
+                            "knowledge:reranker",
+                            "knowledge:query-expansion"
                           ]
                         },
                         "request": {
@@ -84092,7 +84149,8 @@
                             "chatops:ms-teams",
                             "email",
                             "knowledge:embedding",
-                            "knowledge:reranker"
+                            "knowledge:reranker",
+                            "knowledge:query-expansion"
                           ]
                         },
                         "request": {
@@ -84252,7 +84310,8 @@
                             "chatops:ms-teams",
                             "email",
                             "knowledge:embedding",
-                            "knowledge:reranker"
+                            "knowledge:reranker",
+                            "knowledge:query-expansion"
                           ]
                         },
                         "request": {
@@ -84412,7 +84471,8 @@
                             "chatops:ms-teams",
                             "email",
                             "knowledge:embedding",
-                            "knowledge:reranker"
+                            "knowledge:reranker",
+                            "knowledge:query-expansion"
                           ]
                         },
                         "request": {
@@ -86272,7 +86332,8 @@
                             "chatops:ms-teams",
                             "email",
                             "knowledge:embedding",
-                            "knowledge:reranker"
+                            "knowledge:reranker",
+                            "knowledge:query-expansion"
                           ]
                         },
                         "request": {
@@ -86432,7 +86493,8 @@
                             "chatops:ms-teams",
                             "email",
                             "knowledge:embedding",
-                            "knowledge:reranker"
+                            "knowledge:reranker",
+                            "knowledge:query-expansion"
                           ]
                         },
                         "request": {
@@ -86592,7 +86654,8 @@
                             "chatops:ms-teams",
                             "email",
                             "knowledge:embedding",
-                            "knowledge:reranker"
+                            "knowledge:reranker",
+                            "knowledge:query-expansion"
                           ]
                         },
                         "request": {
@@ -86752,7 +86815,8 @@
                             "chatops:ms-teams",
                             "email",
                             "knowledge:embedding",
-                            "knowledge:reranker"
+                            "knowledge:reranker",
+                            "knowledge:query-expansion"
                           ]
                         },
                         "request": {
@@ -86912,7 +86976,8 @@
                             "chatops:ms-teams",
                             "email",
                             "knowledge:embedding",
-                            "knowledge:reranker"
+                            "knowledge:reranker",
+                            "knowledge:query-expansion"
                           ]
                         },
                         "request": {
@@ -87072,7 +87137,8 @@
                             "chatops:ms-teams",
                             "email",
                             "knowledge:embedding",
-                            "knowledge:reranker"
+                            "knowledge:reranker",
+                            "knowledge:query-expansion"
                           ]
                         },
                         "request": {
@@ -87232,7 +87298,8 @@
                             "chatops:ms-teams",
                             "email",
                             "knowledge:embedding",
-                            "knowledge:reranker"
+                            "knowledge:reranker",
+                            "knowledge:query-expansion"
                           ]
                         },
                         "request": {
@@ -87381,7 +87448,8 @@
                             "chatops:ms-teams",
                             "email",
                             "knowledge:embedding",
-                            "knowledge:reranker"
+                            "knowledge:reranker",
+                            "knowledge:query-expansion"
                           ]
                         },
                         "request": {
@@ -87530,7 +87598,8 @@
                             "chatops:ms-teams",
                             "email",
                             "knowledge:embedding",
-                            "knowledge:reranker"
+                            "knowledge:reranker",
+                            "knowledge:query-expansion"
                           ]
                         },
                         "request": {
@@ -87690,7 +87759,8 @@
                             "chatops:ms-teams",
                             "email",
                             "knowledge:embedding",
-                            "knowledge:reranker"
+                            "knowledge:reranker",
+                            "knowledge:query-expansion"
                           ]
                         },
                         "request": {
@@ -87850,7 +87920,8 @@
                             "chatops:ms-teams",
                             "email",
                             "knowledge:embedding",
-                            "knowledge:reranker"
+                            "knowledge:reranker",
+                            "knowledge:query-expansion"
                           ]
                         },
                         "request": {
@@ -88010,7 +88081,8 @@
                             "chatops:ms-teams",
                             "email",
                             "knowledge:embedding",
-                            "knowledge:reranker"
+                            "knowledge:reranker",
+                            "knowledge:query-expansion"
                           ]
                         },
                         "request": {
@@ -89121,6 +89193,7 @@
         ],
         "description": "Create a new Internal MCP catalog item",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -89603,8 +89676,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -91153,6 +91225,7 @@
         ],
         "description": "Update an Internal MCP catalog item",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -93460,6 +93533,7 @@
         ],
         "description": "Validate a deployment YAML template",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -93475,8 +93549,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -95440,6 +95513,7 @@
         ],
         "description": "Create a new knowledge base",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -95472,8 +95546,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -96054,6 +96127,7 @@
         ],
         "description": "Update a knowledge base",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -97637,6 +97711,7 @@
         ],
         "description": "Create a new connector",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -97947,8 +98022,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -99155,6 +99229,7 @@
         ],
         "description": "Update a connector",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -100522,6 +100597,260 @@
         }
       }
     },
+    "/api/connectors/{id}/force-resync": {
+      "post": {
+        "operationId": "forceResyncConnector",
+        "tags": [
+          "Connectors"
+        ],
+        "description": "Force a full re-sync: deletes all documents, chunks, run history, and resets the checkpoint",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "taskId": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "taskId",
+                    "status"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/connectors/{id}/test": {
       "post": {
         "operationId": "testConnectorConnection",
@@ -100783,6 +101112,7 @@
         ],
         "description": "Assign a connector to one or more knowledge bases",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -100801,8 +101131,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "parameters": [
           {
@@ -102807,6 +103136,7 @@
         ],
         "description": "Create a new limit",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -102865,8 +103195,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -103489,6 +103818,7 @@
         ],
         "description": "Update a limit",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -104222,6 +104552,7 @@
           "mcp-gateway"
         ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -104941,6 +105272,7 @@
         ],
         "description": "Create a new MCP server installation request",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -105293,8 +105625,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -106639,6 +106970,7 @@
         ],
         "description": "Update an MCP server installation request",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -107965,6 +108297,7 @@
         ],
         "description": "Approve an MCP server installation request",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -108657,6 +108990,7 @@
         ],
         "description": "Decline an MCP server installation request",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -109349,6 +109683,7 @@
         ],
         "description": "Add a note to an MCP server installation request",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -109364,8 +109699,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "parameters": [
           {
@@ -110449,6 +110783,7 @@
         ],
         "description": "Install an MCP server (from catalog or custom)",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -110542,8 +110877,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -111592,6 +111926,7 @@
         ],
         "description": "Update MCP server secret after re-authentication (clears OAuth refresh errors)",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -112592,6 +112927,7 @@
         ],
         "description": "Inspect a running MCP server (list tools or call a tool)",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -112617,8 +112953,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "parameters": [
           {
@@ -112865,6 +113200,7 @@
         ],
         "description": "Reinstall an MCP server without losing tool assignments and policies",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -114440,6 +114776,7 @@
         ],
         "description": "Create a chat completion with MiniMax (uses default agent)",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -114690,6 +115027,7 @@
         ],
         "description": "Create a chat completion with MiniMax for a specific agent",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -114950,6 +115288,7 @@
         ],
         "description": "Create a chat completion with Mistral (uses default agent)",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -115210,6 +115549,7 @@
         ],
         "description": "Create a chat completion with Mistral for a specific agent",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -115480,6 +115820,7 @@
         ],
         "description": "Initiate OAuth flow for MCP server installation",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -115501,8 +115842,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -115750,6 +116090,7 @@
         ],
         "description": "Handle OAuth callback and exchange code for tokens",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -115768,8 +116109,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -116180,6 +116520,7 @@
         ],
         "description": "Create a chat completion with Ollama (uses default agent)",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -116440,6 +116781,7 @@
         ],
         "description": "Create a chat completion with Ollama for a specific agent",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -116710,6 +117052,7 @@
         ],
         "description": "Create a chat completion with OpenAI (uses default agent)",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -116970,6 +117313,7 @@
         ],
         "description": "Create a chat completion with OpenAI for a specific agent",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -117240,6 +117584,7 @@
         ],
         "description": "Create a chat completion with OpenRouter (uses default agent)",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -117500,6 +117845,7 @@
         ],
         "description": "Create a chat completion with OpenRouter for a specific agent",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -118100,6 +118446,7 @@
         ],
         "description": "Create a new optimization rule for the organization",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -118191,8 +118538,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -118524,6 +118870,7 @@
         ],
         "description": "Update an optimization rule",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -119577,6 +119924,7 @@
         ],
         "description": "Create a new custom role",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -119617,8 +119965,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -120228,6 +120575,7 @@
         ],
         "description": "Update a custom role",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -121000,6 +121348,14 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "helpCenterUrl": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "helpCenterLabel": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "chatPlaceholders": {
                       "nullable": true,
                       "type": "array",
@@ -121007,7 +121363,14 @@
                         "type": "string"
                       }
                     },
+                    "animateChatPlaceholders": {
+                      "type": "boolean"
+                    },
                     "iconLogo": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "chatErrorSupportMessage": {
                       "nullable": true,
                       "type": "string"
                     },
@@ -121044,8 +121407,12 @@
                     "appName",
                     "ogDescription",
                     "footerText",
+                    "helpCenterUrl",
+                    "helpCenterLabel",
                     "chatPlaceholders",
+                    "animateChatPlaceholders",
                     "iconLogo",
+                    "chatErrorSupportMessage",
                     "showTwoFactor"
                   ],
                   "additionalProperties": false
@@ -121274,6 +121641,7 @@
         ],
         "description": "Update appearance settings",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -121350,6 +121718,21 @@
                     "type": "string",
                     "maxLength": 500
                   },
+                  "helpCenterUrl": {
+                    "nullable": true,
+                    "type": "string",
+                    "maxLength": 2000
+                  },
+                  "helpCenterLabel": {
+                    "nullable": true,
+                    "type": "string",
+                    "maxLength": 80
+                  },
+                  "chatErrorSupportMessage": {
+                    "nullable": true,
+                    "type": "string",
+                    "maxLength": 500
+                  },
                   "chatPlaceholders": {
                     "nullable": true,
                     "maxItems": 20,
@@ -121358,6 +121741,9 @@
                       "type": "string",
                       "maxLength": 80
                     }
+                  },
+                  "animateChatPlaceholders": {
+                    "type": "boolean"
                   },
                   "showTwoFactor": {
                     "type": "boolean"
@@ -121534,6 +121920,14 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "helpCenterUrl": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "helpCenterLabel": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "chatPlaceholders": {
                       "nullable": true,
                       "type": "array",
@@ -121541,7 +121935,14 @@
                         "type": "string"
                       }
                     },
+                    "animateChatPlaceholders": {
+                      "type": "boolean"
+                    },
                     "iconLogo": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "chatErrorSupportMessage": {
                       "nullable": true,
                       "type": "string"
                     },
@@ -121578,8 +121979,12 @@
                     "appName",
                     "ogDescription",
                     "footerText",
+                    "helpCenterUrl",
+                    "helpCenterLabel",
                     "chatPlaceholders",
+                    "animateChatPlaceholders",
                     "iconLogo",
+                    "chatErrorSupportMessage",
                     "showTwoFactor"
                   ],
                   "additionalProperties": false
@@ -121880,6 +122285,21 @@
                     "footerText": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "helpCenterUrl": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "helpCenterLabel": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "chatErrorSupportMessage": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "animateChatPlaceholders": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -121891,7 +122311,11 @@
                     "iconLogo",
                     "appName",
                     "ogDescription",
-                    "footerText"
+                    "footerText",
+                    "helpCenterUrl",
+                    "helpCenterLabel",
+                    "chatErrorSupportMessage",
+                    "animateChatPlaceholders"
                   ],
                   "additionalProperties": false
                 }
@@ -122119,6 +122543,7 @@
         ],
         "description": "Update security settings (global tool policy, chat file uploads)",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -122306,6 +122731,14 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "helpCenterUrl": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "helpCenterLabel": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "chatPlaceholders": {
                       "nullable": true,
                       "type": "array",
@@ -122313,7 +122746,14 @@
                         "type": "string"
                       }
                     },
+                    "animateChatPlaceholders": {
+                      "type": "boolean"
+                    },
                     "iconLogo": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "chatErrorSupportMessage": {
                       "nullable": true,
                       "type": "string"
                     },
@@ -122350,8 +122790,12 @@
                     "appName",
                     "ogDescription",
                     "footerText",
+                    "helpCenterUrl",
+                    "helpCenterLabel",
                     "chatPlaceholders",
+                    "animateChatPlaceholders",
                     "iconLogo",
+                    "chatErrorSupportMessage",
                     "showTwoFactor"
                   ],
                   "additionalProperties": false
@@ -122580,6 +123024,7 @@
         ],
         "description": "Update LLM settings (TOON compression, compression scope, limit cleanup interval)",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -122778,6 +123223,14 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "helpCenterUrl": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "helpCenterLabel": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "chatPlaceholders": {
                       "nullable": true,
                       "type": "array",
@@ -122785,7 +123238,14 @@
                         "type": "string"
                       }
                     },
+                    "animateChatPlaceholders": {
+                      "type": "boolean"
+                    },
                     "iconLogo": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "chatErrorSupportMessage": {
                       "nullable": true,
                       "type": "string"
                     },
@@ -122822,8 +123282,12 @@
                     "appName",
                     "ogDescription",
                     "footerText",
+                    "helpCenterUrl",
+                    "helpCenterLabel",
                     "chatPlaceholders",
+                    "animateChatPlaceholders",
                     "iconLogo",
+                    "chatErrorSupportMessage",
                     "showTwoFactor"
                   ],
                   "additionalProperties": false
@@ -123052,6 +123516,7 @@
         ],
         "description": "Update agent settings (default model, default agent)",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -123249,6 +123714,14 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "helpCenterUrl": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "helpCenterLabel": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "chatPlaceholders": {
                       "nullable": true,
                       "type": "array",
@@ -123256,7 +123729,14 @@
                         "type": "string"
                       }
                     },
+                    "animateChatPlaceholders": {
+                      "type": "boolean"
+                    },
                     "iconLogo": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "chatErrorSupportMessage": {
                       "nullable": true,
                       "type": "string"
                     },
@@ -123293,8 +123773,12 @@
                     "appName",
                     "ogDescription",
                     "footerText",
+                    "helpCenterUrl",
+                    "helpCenterLabel",
                     "chatPlaceholders",
+                    "animateChatPlaceholders",
                     "iconLogo",
+                    "chatErrorSupportMessage",
                     "showTwoFactor"
                   ],
                   "additionalProperties": false
@@ -123523,6 +124007,7 @@
         ],
         "description": "Update knowledge settings (embedding model)",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -123736,6 +124221,14 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "helpCenterUrl": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "helpCenterLabel": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "chatPlaceholders": {
                       "nullable": true,
                       "type": "array",
@@ -123743,7 +124236,14 @@
                         "type": "string"
                       }
                     },
+                    "animateChatPlaceholders": {
+                      "type": "boolean"
+                    },
                     "iconLogo": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "chatErrorSupportMessage": {
                       "nullable": true,
                       "type": "string"
                     },
@@ -123780,8 +124280,12 @@
                     "appName",
                     "ogDescription",
                     "footerText",
+                    "helpCenterUrl",
+                    "helpCenterLabel",
                     "chatPlaceholders",
+                    "animateChatPlaceholders",
                     "iconLogo",
+                    "chatErrorSupportMessage",
                     "showTwoFactor"
                   ],
                   "additionalProperties": false
@@ -124176,6 +124680,14 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "helpCenterUrl": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "helpCenterLabel": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "chatPlaceholders": {
                       "nullable": true,
                       "type": "array",
@@ -124183,7 +124695,14 @@
                         "type": "string"
                       }
                     },
+                    "animateChatPlaceholders": {
+                      "type": "boolean"
+                    },
                     "iconLogo": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "chatErrorSupportMessage": {
                       "nullable": true,
                       "type": "string"
                     },
@@ -124220,8 +124739,12 @@
                     "appName",
                     "ogDescription",
                     "footerText",
+                    "helpCenterUrl",
+                    "helpCenterLabel",
                     "chatPlaceholders",
+                    "animateChatPlaceholders",
                     "iconLogo",
+                    "chatErrorSupportMessage",
                     "showTwoFactor"
                   ],
                   "additionalProperties": false
@@ -124450,6 +124973,7 @@
         ],
         "description": "Test the embedding connection by embedding a sample text",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -124471,8 +124995,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -124718,6 +125241,7 @@
         ],
         "description": "Mark organization onboarding as complete",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -124735,8 +125259,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -124905,6 +125428,14 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "helpCenterUrl": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "helpCenterLabel": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "chatPlaceholders": {
                       "nullable": true,
                       "type": "array",
@@ -124912,7 +125443,14 @@
                         "type": "string"
                       }
                     },
+                    "animateChatPlaceholders": {
+                      "type": "boolean"
+                    },
                     "iconLogo": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "chatErrorSupportMessage": {
                       "nullable": true,
                       "type": "string"
                     },
@@ -124949,8 +125487,12 @@
                     "appName",
                     "ogDescription",
                     "footerText",
+                    "helpCenterUrl",
+                    "helpCenterLabel",
                     "chatPlaceholders",
+                    "animateChatPlaceholders",
                     "iconLogo",
+                    "chatErrorSupportMessage",
                     "showTwoFactor"
                   ],
                   "additionalProperties": false
@@ -126468,6 +127010,7 @@
         ],
         "description": "Create a chat completion with Perplexity (uses default agent). Note: Perplexity does not support external tool calling.",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -126728,6 +127271,7 @@
         ],
         "description": "Create a chat completion with Perplexity for a specific agent. Note: Perplexity does not support external tool calling.",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -129735,6 +130279,7 @@
         ],
         "description": "Create a new team",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -129753,8 +130298,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -130379,6 +130923,7 @@
         ],
         "description": "Update a team",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -131237,6 +131782,7 @@
         ],
         "description": "Add a member to a team",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -131255,8 +131801,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "parameters": [
           {
@@ -132052,6 +132597,7 @@
         ],
         "description": "Add an external group mapping to a team for SSO team sync",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -132067,8 +132613,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "parameters": [
           {
@@ -136242,6 +136787,7 @@
         ],
         "description": "Create a new virtual API key. Returns the full token value once.",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -136261,8 +136807,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "parameters": [
           {
@@ -136824,6 +137369,7 @@
         ],
         "description": "Create a chat completion with vLLM (uses default agent)",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -137084,6 +137630,7 @@
         ],
         "description": "Create a chat completion with vLLM for a specific agent",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -137354,6 +137901,7 @@
         ],
         "description": "Create a chat completion with xAI (uses default agent)",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -137614,6 +138162,7 @@
         ],
         "description": "Create a chat completion with xAI for a specific agent",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -137884,6 +138433,7 @@
         ],
         "description": "Create a chat completion with Zhipu AI (uses default agent)",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -138152,6 +138702,7 @@
         ],
         "description": "Create a chat completion with Zhipu AI for a specific agent",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -139245,6 +139796,7 @@
         ],
         "description": "Create a new identity provider",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -139565,8 +140117,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -140952,6 +141503,7 @@
         ],
         "description": "Update identity provider",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -142360,6 +142912,7 @@
         ],
         "description": "Set or update a team's Vault folder path",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -142375,8 +142928,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "parameters": [
           {
@@ -142897,6 +143449,7 @@
         ],
         "description": "Check connectivity to a team's Vault folder",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -143427,6 +143980,7 @@
         ],
         "description": "Get the keys of a specific secret in a team's Vault folder",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -143442,8 +143996,7 @@
                 ]
               }
             }
-          },
-          "required": true
+          }
         },
         "parameters": [
           {

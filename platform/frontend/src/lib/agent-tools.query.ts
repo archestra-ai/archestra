@@ -121,20 +121,22 @@ export function useAssignTool() {
       useDynamicTeamCredential?: boolean;
       skipInvalidation?: boolean;
     }) => {
+      const body =
+        credentialSourceMcpServerId ||
+        executionSourceMcpServerId ||
+        useDynamicTeamCredential !== undefined
+          ? {
+              credentialSourceMcpServerId:
+                credentialSourceMcpServerId || undefined,
+              executionSourceMcpServerId:
+                executionSourceMcpServerId || undefined,
+              useDynamicTeamCredential,
+            }
+          : null;
+
       const { data } = await assignToolToAgent({
         path: { agentId, toolId },
-        body:
-          credentialSourceMcpServerId ||
-          executionSourceMcpServerId ||
-          useDynamicTeamCredential !== undefined
-            ? {
-                credentialSourceMcpServerId:
-                  credentialSourceMcpServerId || undefined,
-                executionSourceMcpServerId:
-                  executionSourceMcpServerId || undefined,
-                useDynamicTeamCredential,
-              }
-            : undefined,
+        body,
       });
       return { success: data?.success ?? false, agentId, skipInvalidation };
     },

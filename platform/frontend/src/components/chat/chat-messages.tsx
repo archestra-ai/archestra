@@ -345,16 +345,22 @@ export function ChatMessages({
                   const { groupMap, consumedIndices } = identifyCompactGroups(
                     message.parts,
                   );
+                  const partKeyTracker = new Map<string, number>();
                   return message.parts?.map((part, i) => {
+                    const partKey = getMessagePartKey(
+                      message.id,
+                      part,
+                      partKeyTracker,
+                    );
                     // Render compact group at its start index
                     if (groupMap.has(i)) {
                       const group = groupMap.get(i);
                       if (!group) return null;
                       return (
                         <CompactToolGroup
-                          key={`compact-${message.id}-${i}`}
+                          key={getCompactGroupKey(message.id, group.entries)}
                           tools={group.entries.map((entry) => ({
-                            key: `${message.id}-${entry.partIndex}`,
+                            key: getToolEntryKey(message.id, entry),
                             toolName: entry.toolName,
                             part: entry.part,
                             toolResultPart: entry.toolResultPart,
@@ -397,8 +403,6 @@ export function ChatMessages({
                           return null;
                         }
 
-                        const partKey = `${message.id}-${i}`;
-
                         // Anthropic sends policy denials as text blocks (see MessageTool for OpenAI path)
                         const policyDenied = parsePolicyDenied(part.text);
                         if (policyDenied) {
@@ -430,10 +434,17 @@ export function ChatMessages({
                           }
 
                           const isLastTextPart = i === lastTextPartIndex;
+                          // Only show streaming animation if this text part is
+                          // actually the last part in the message. When tool
+                          // parts follow the text, the text is already complete
+                          // even though status is still "streaming".
+                          const isLastPartInMessage =
+                            i === message.parts.length - 1;
                           const isStreamingThisPart =
                             status === "streaming" &&
                             idx === messages.length - 1 &&
-                            isLastTextPart;
+                            isLastTextPart &&
+                            isLastPartInMessage;
                           const showActions =
                             isLastAssistantInSequence &&
                             isLastTextPart &&
@@ -574,7 +585,7 @@ export function ChatMessages({
 
                         // Regular rendering for system messages
                         return (
-                          <Fragment key={`${message.id}-${i}`}>
+                          <Fragment key={partKey}>
                             <Message from={message.role}>
                               <MessageContent>
                                 {message.role === "system" && (
@@ -591,10 +602,7 @@ export function ChatMessages({
 
                       case "reasoning":
                         return (
-                          <Reasoning
-                            key={`${message.id}-${i}`}
-                            className="w-full"
-                          >
+                          <Reasoning key={partKey} className="w-full">
                             <ReasoningTrigger />
                             <ReasoningContent>{part.text}</ReasoningContent>
                           </Reasoning>
@@ -656,7 +664,7 @@ export function ChatMessages({
 
                         return (
                           <div
-                            key={`${message.id}-${i}`}
+                            key={partKey}
                             className="py-1 -mt-2 flex justify-start"
                           >
                             <div className="max-w-sm">
@@ -737,7 +745,7 @@ export function ChatMessages({
                         return (
                           <MessageTool
                             part={part}
-                            key={`${message.id}-${i}`}
+                            key={partKey}
                             toolResultPart={toolResultPart}
                             toolName={toolName}
                             agentId={agentId}
@@ -779,7 +787,7 @@ export function ChatMessages({
                           return (
                             <MessageTool
                               part={part}
-                              key={`${message.id}-${i}`}
+                              key={partKey}
                               toolResultPart={toolResultPart}
                               toolName={toolName}
                               agentId={agentId}
@@ -806,7 +814,13 @@ export function ChatMessages({
             );
           })}
           {/* Inline error display */}
-          {error && <InlineChatError error={error} />}
+          {error && (
+            <InlineChatError
+              error={error}
+              conversationId={conversationId}
+              supportMessage={organization?.chatErrorSupportMessage}
+            />
+          )}
           {(status === "submitted" ||
             (status === "streaming" && isStreamingStalled)) && (
             <div className="absolute bottom-[-10] left-0">
@@ -825,6 +839,57 @@ export function ChatMessages({
       <McpInstallDialogs orchestrator={orchestrator} />
     </Conversation>
   );
+}
+
+function getCompactGroupKey(
+  messageId: string,
+  entries: Array<{
+    toolName: string;
+    part: DynamicToolUIPart | ToolUIPart;
+  }>,
+): string {
+  const signature = entries
+    .map((entry) => entry.part.toolCallId ?? entry.toolName)
+    .join(":");
+  return `${messageId}-compact-${signature}`;
+}
+
+function getToolEntryKey(
+  messageId: string,
+  entry: {
+    toolName: string;
+    part: DynamicToolUIPart | ToolUIPart;
+  },
+): string {
+  return `${messageId}-${entry.part.toolCallId ?? entry.toolName}`;
+}
+
+function getMessagePartKey(
+  messageId: string,
+  part: UIMessage["parts"][number],
+  keyTracker: Map<string, number>,
+): string {
+  const signature = getMessagePartSignature(part);
+  const occurrence = keyTracker.get(signature) ?? 0;
+  keyTracker.set(signature, occurrence + 1);
+  return `${messageId}-${signature}-${occurrence}`;
+}
+
+function getMessagePartSignature(part: UIMessage["parts"][number]): string {
+  if (isToolPart(part)) {
+    return `tool:${part.toolCallId ?? part.type}`;
+  }
+
+  switch (part.type) {
+    case "text":
+      return `text:${part.text}`;
+    case "reasoning":
+      return `reasoning:${part.text}`;
+    case "file":
+      return `file:${part.url}:${part.mediaType}:${part.filename ?? ""}`;
+    default:
+      return `part:${JSON.stringify(part)}`;
+  }
 }
 
 // Custom hook to detect when streaming has stalled (>500ms without updates)

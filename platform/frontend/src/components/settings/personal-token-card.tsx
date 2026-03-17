@@ -5,15 +5,10 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Check, Copy, RefreshCw } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { SettingsCardHeader } from "@/components/settings/settings-block";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -65,16 +60,16 @@ export function PersonalTokenCard() {
     }
   };
 
+  const description =
+    "Your personal token to authenticate with the MCP Gateway for profiles you have access to through your team memberships.";
+
   if (isLoading) {
     return (
       <Card>
-        <CardHeader>
-          <CardTitle>MCP Gateway/A2A Gateway Token</CardTitle>
-          <CardDescription>
-            Your personal token to authenticate with the MCP Gateway for
-            profiles you have access to through your team memberships.
-          </CardDescription>
-        </CardHeader>
+        <SettingsCardHeader
+          title="MCP Gateway/A2A Gateway Token"
+          description={description}
+        />
         <CardContent className="space-y-4">
           <div className="space-y-2">
             <Skeleton className="h-4 w-16" />
@@ -89,13 +84,10 @@ export function PersonalTokenCard() {
   if (error) {
     return (
       <Card>
-        <CardHeader>
-          <CardTitle>MCP Gateway/A2A Gateway Token</CardTitle>
-          <CardDescription>
-            Your personal token to authenticate with the MCP Gateway for
-            profiles you have access to through your team memberships.
-          </CardDescription>
-        </CardHeader>
+        <SettingsCardHeader
+          title="MCP Gateway/A2A Gateway Token"
+          description={description}
+        />
         <CardContent>
           <Alert variant="destructive">
             <AlertDescription>
@@ -109,12 +101,10 @@ export function PersonalTokenCard() {
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>MCP Gateway/A2A Gateway Token</CardTitle>
-        <CardDescription>
-          Your personal token to authenticate with Agents / MCP Gateways.
-        </CardDescription>
-      </CardHeader>
+      <SettingsCardHeader
+        title="MCP Gateway/A2A Gateway Token"
+        description="Your personal token to authenticate with Agents / MCP Gateways."
+      />
       <CardContent className="space-y-4">
         <div className="space-y-2">
           <Label>Token</Label>

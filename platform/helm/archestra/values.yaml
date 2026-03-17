@@ -9,7 +9,7 @@ archestra:
   # We use the "generic" updater with inline annotation to preserve YAML comments throughout the file.
   # See: https://github.com/googleapis/release-please/blob/main/docs/customizing.md#updating-arbitrary-files
   # See: https://github.com/googleapis/release-please/issues/2195
-  imageTag: "1.1.22" # x-release-please-version
+  imageTag: "1.1.25" # x-release-please-version
 
   # Image pull policy for the Archestra container
   # Options: Always, IfNotPresent, Never
@@ -150,6 +150,26 @@ archestra:
   #         name: another-secret
   #         optional: true
   envFrom: []
+
+  # Additional volumes to mount into the platform and worker pods
+  # Useful for mounting credential files such as a Vertex AI service account key
+  # Example:
+  #   extraVolumes:
+  #     - name: vertex-ai-credentials
+  #       secret:
+  #         secretName: vertex-ai-credentials
+  #         items:
+  #           - key: service-account.json
+  #             path: vertex-ai-key.json
+  extraVolumes: []
+
+  # Additional volume mounts for the platform and worker containers
+  # Example:
+  #   extraVolumeMounts:
+  #     - name: vertex-ai-credentials
+  #       mountPath: /var/run/gcp
+  #       readOnly: true
+  extraVolumeMounts: []
 
   # Init containers configuration
   initContainers:

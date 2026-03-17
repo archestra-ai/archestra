@@ -255,4 +255,205 @@ test.describe("Chat message persistence on provider error", () => {
       await deleteAgent(request, agent.id);
     }
   });
+
+  /**
+   * Bug reproduction: Mid-stream error causes duplicate messages.
+   *
+   * When the provider errors DURING streaming (after some tokens are emitted),
+   * both `toUIMessageStream.onError` and `toUIMessageStream.onFinish` fire.
+   * Because `onError` sets `messagesPersisted = true` inside an async IIFE,
+   * `onFinish` can check the flag before the IIFE has completed, causing
+   * both callbacks to persist the same messages — resulting in duplicates.
+   *
+   * After the fix: `messagesPersisted` is set synchronously in `onError`,
+   * so `onFinish` correctly skips persistence.
+   */
+  test("does not duplicate messages when provider errors mid-stream", async ({
+    request,
+    makeApiRequest,
+    createAgent,
+    deleteAgent,
+  }) => {
+    const agentResponse = await createAgent(
+      request,
+      "Chat Midstream Error Agent",
+      "personal",
+    );
+    const agent = await agentResponse.json();
+
+    try {
+      const convResponse = await makeApiRequest({
+        request,
+        method: "post",
+        urlSuffix: "/api/chat/conversations",
+        data: {
+          agentId: agent.id,
+          title: "Midstream Error Duplicate Test",
+          selectedModel: "claude-3-5-sonnet-20241022",
+          selectedProvider: "anthropic",
+        },
+      });
+      const conversation = await convResponse.json();
+
+      // Send a message that triggers a mid-stream error via WireMock.
+      // The stub returns some SSE events then an overloaded_error event.
+      const tempMessageId = randomUUID();
+      const messageText = `Hello chat-midstream-error-test ${tempMessageId}`;
+
+      const chatResponse = await request.post(`${API_BASE_URL}/api/chat`, {
+        headers: {
+          "Content-Type": "application/json",
+          Origin: UI_BASE_URL,
+        },
+        data: {
+          id: conversation.id,
+          messages: [
+            {
+              id: tempMessageId,
+              role: "user",
+              parts: [{ type: "text", text: messageText }],
+            },
+          ],
+        },
+      });
+
+      expect(chatResponse.status()).toBe(200);
+      await chatResponse.text();
+
+      // Wait for async persistence to complete
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+
+      // Verify: there should be exactly 1 user message (not duplicated)
+      const getConvResponse = await makeApiRequest({
+        request,
+        method: "get",
+        urlSuffix: `/api/chat/conversations/${conversation.id}`,
+      });
+      const updatedConversation = await getConvResponse.json();
+
+      const userMessages = updatedConversation.messages.filter(
+        (m: { role: string }) => m.role === "user",
+      );
+
+      // BUG: Without the fix, this may be 2 (or more) due to the race condition
+      // between onError and onFinish both persisting the same messages.
+      expect(userMessages.length).toBe(1);
+
+      // Also check total message count - should be at most 2 (user + partial assistant)
+      // not 4+ (user + assistant duplicated by both onError and onFinish)
+      expect(updatedConversation.messages.length).toBeLessThanOrEqual(2);
+    } finally {
+      await deleteAgent(request, agent.id);
+    }
+  });
+
+  /**
+   * Bug reproduction: Sending a second message after error causes duplicates.
+   *
+   * When the first message errors and messages are persisted (possibly duplicated),
+   * sending a retry/second message causes the `persistNewMessages` slice logic to
+   * be off because the DB has unexpected duplicate rows from the first error.
+   * After refresh, messages appear multiple times.
+   */
+  test("retry after error does not accumulate duplicate messages", async ({
+    request,
+    makeApiRequest,
+    createAgent,
+    deleteAgent,
+  }) => {
+    const agentResponse = await createAgent(
+      request,
+      "Chat Retry Duplicate Agent",
+      "personal",
+    );
+    const agent = await agentResponse.json();
+
+    try {
+      const convResponse = await makeApiRequest({
+        request,
+        method: "post",
+        urlSuffix: "/api/chat/conversations",
+        data: {
+          agentId: agent.id,
+          title: "Retry Duplicate Test",
+          selectedModel: "claude-3-5-sonnet-20241022",
+          selectedProvider: "anthropic",
+        },
+      });
+      const conversation = await convResponse.json();
+
+      // 1. Send first message that errors (mid-stream error)
+      const msg1Id = randomUUID();
+      const msg1Text = `First chat-midstream-error-test ${msg1Id}`;
+
+      const chat1 = await request.post(`${API_BASE_URL}/api/chat`, {
+        headers: {
+          "Content-Type": "application/json",
+          Origin: UI_BASE_URL,
+        },
+        data: {
+          id: conversation.id,
+          messages: [
+            {
+              id: msg1Id,
+              role: "user",
+              parts: [{ type: "text", text: msg1Text }],
+            },
+          ],
+        },
+      });
+      await chat1.text();
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+
+      // Check messages after first error
+      const afterFirst = await makeApiRequest({
+        request,
+        method: "get",
+        urlSuffix: `/api/chat/conversations/${conversation.id}`,
+      });
+      const conv1 = await afterFirst.json();
+      const firstCount = conv1.messages.length;
+
+      // 2. "Retry" — send the same conversation with the same user message
+      // (simulating the frontend resending after the error)
+      const chat2 = await request.post(`${API_BASE_URL}/api/chat`, {
+        headers: {
+          "Content-Type": "application/json",
+          Origin: UI_BASE_URL,
+        },
+        data: {
+          id: conversation.id,
+          messages: [
+            {
+              id: msg1Id,
+              role: "user",
+              parts: [{ type: "text", text: msg1Text }],
+            },
+          ],
+        },
+      });
+      await chat2.text();
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+
+      // Check messages after retry
+      const afterRetry = await makeApiRequest({
+        request,
+        method: "get",
+        urlSuffix: `/api/chat/conversations/${conversation.id}`,
+      });
+      const conv2 = await afterRetry.json();
+
+      const userMessages = conv2.messages.filter(
+        (m: { role: string }) => m.role === "user",
+      );
+
+      // There should be exactly 1 user message across all retries
+      expect(userMessages.length).toBe(1);
+
+      // Message count should not grow after retry (same messages, just re-attempted)
+      expect(conv2.messages.length).toBeLessThanOrEqual(firstCount + 2);
+    } finally {
+      await deleteAgent(request, agent.id);
+    }
+  });
 });

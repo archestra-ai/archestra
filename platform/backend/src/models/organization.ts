@@ -122,6 +122,12 @@ class OrganizationModel {
         appName: schema.organizationsTable.appName,
         ogDescription: schema.organizationsTable.ogDescription,
         footerText: schema.organizationsTable.footerText,
+        helpCenterUrl: schema.organizationsTable.helpCenterUrl,
+        helpCenterLabel: schema.organizationsTable.helpCenterLabel,
+        chatErrorSupportMessage:
+          schema.organizationsTable.chatErrorSupportMessage,
+        animateChatPlaceholders:
+          schema.organizationsTable.animateChatPlaceholders,
       })
       .from(schema.organizationsTable)
       .limit(1);
@@ -138,6 +144,10 @@ class OrganizationModel {
         appName: null,
         ogDescription: null,
         footerText: null,
+        helpCenterUrl: null,
+        helpCenterLabel: null,
+        chatErrorSupportMessage: null,
+        animateChatPlaceholders: true,
       };
     }
 

@@ -25,6 +25,15 @@ interface TeamMembersDialogProps {
   team: Team;
 }
 
+type OrganizationMemberOption = {
+  id?: string;
+  userId: string;
+  role?: string;
+  name?: string | null;
+  email?: string | null;
+  user?: { name?: string | null; email?: string | null } | null;
+};
+
 function getMemberDisplayName(member: unknown): string {
   const record = member as {
     userId?: string;
@@ -79,10 +88,12 @@ export function TeamMembersDialog({
   });
 
   // Get organization members to show in dropdown
-  const orgMembers = activeOrg?.members || [];
+  const orgMembers = (activeOrg?.members ?? []) as OrganizationMemberOption[];
   const memberUserIds = new Set(teamMembers?.map((m) => m.userId) || []);
-  const availableMembers = (membersResponse?.data ?? orgMembers).filter(
-    (member) => !memberUserIds.has(member.userId),
+  const availableMembers = (
+    (membersResponse?.data ?? orgMembers) as OrganizationMemberOption[]
+  ).filter(
+    (member: OrganizationMemberOption) => !memberUserIds.has(member.userId),
   );
 
   const addMutation = useMutation({
@@ -171,7 +182,7 @@ export function TeamMembersDialog({
             <div className="space-y-2">
               {teamMembers.map((member) => {
                 const orgMember = orgMembers.find(
-                  (m) => m.userId === member.userId,
+                  (m: OrganizationMemberOption) => m.userId === member.userId,
                 );
                 return (
                   <div

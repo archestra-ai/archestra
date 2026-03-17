@@ -1,4 +1,9 @@
 import {
+  isSpanContextValid,
+  context as otelContext,
+  trace,
+} from "@opentelemetry/api";
+import {
   AnthropicErrorTypes,
   BedrockErrorTypes,
   ChatErrorCode,
@@ -1511,4 +1516,24 @@ export function mapProviderError(
         : undefined,
     },
   );
+}
+
+/**
+ * Extract the active OpenTelemetry trace/span IDs from the current context.
+ * Returns an object with traceId and spanId if available.
+ */
+export function getActiveTraceContext(): {
+  traceId?: string;
+  spanId?: string;
+} {
+  const span = trace.getSpan(otelContext.active());
+  if (!span) return {};
+
+  const spanContext = span.spanContext();
+  if (!isSpanContextValid(spanContext)) return {};
+
+  return {
+    traceId: spanContext.traceId,
+    spanId: spanContext.spanId,
+  };
 }

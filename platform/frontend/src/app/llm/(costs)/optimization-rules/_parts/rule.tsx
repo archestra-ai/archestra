@@ -438,7 +438,7 @@ export function OptimizationRuleForm({
         <div className="space-y-2">
           {formData.conditions.map((condition, index, allConditions) => (
             <Condition
-              key={`${index}-${"maxLength" in condition ? "length" : "tools"}`}
+              key={"maxLength" in condition ? "max-length" : "has-tools"}
               condition={condition}
               editable
               removable={allConditions.length > 1}

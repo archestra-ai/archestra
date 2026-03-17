@@ -2,7 +2,17 @@
 
 import type { archestraApiTypes } from "@shared";
 import type { ColumnDef } from "@tanstack/react-table";
-import { ArrowLeft, Database, Pencil, Play, Plug, Plus, X } from "lucide-react";
+import {
+  ArrowLeft,
+  Database,
+  MoreHorizontal,
+  Pencil,
+  Play,
+  Plug,
+  Plus,
+  RotateCcw,
+  X,
+} from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useState } from "react";
@@ -15,6 +25,17 @@ import { EditConnectorDialog } from "@/app/knowledge/knowledge-bases/_parts/edit
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { MetadataItem } from "@/components/metadata-card";
 import { PageLayout } from "@/components/page-layout";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
@@ -27,6 +48,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Select,
   SelectContent,
@@ -44,6 +72,7 @@ import {
   useConnector,
   useConnectorKnowledgeBases,
   useConnectorRuns,
+  useForceResyncConnector,
   useSyncConnector,
   useTestConnectorConnection,
   useUnassignConnectorFromKnowledgeBase,
@@ -83,6 +112,7 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
 
   const { data: connector, isPending } = useConnector(connectorId);
   const syncConnector = useSyncConnector();
+  const forceResync = useForceResyncConnector();
   const testConnection = useTestConnectorConnection();
   const [isEditOpen, setIsEditOpen] = useState(false);
 
@@ -253,23 +283,59 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
               <TooltipContent>Sync run in progress</TooltipContent>
             )}
           </Tooltip>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleTestConnection}
-            disabled={testConnection.isPending}
-          >
-            <Plug className="mr-2 h-4 w-4" />
-            {testConnection.isPending ? "Testing..." : "Test Connection"}
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setIsEditOpen(true)}
-          >
-            <Pencil className="mr-2 h-4 w-4" />
-            Edit
-          </Button>
+          <AlertDialog>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="icon" className="h-8 w-8">
+                  <MoreHorizontal className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  onClick={handleTestConnection}
+                  disabled={testConnection.isPending}
+                >
+                  <Plug className="h-4 w-4" />
+                  {testConnection.isPending ? "Testing..." : "Test Connection"}
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setIsEditOpen(true)}>
+                  <Pencil className="h-4 w-4" />
+                  Edit
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <AlertDialogTrigger asChild>
+                  <DropdownMenuItem
+                    variant="destructive"
+                    disabled={
+                      forceResync.isPending ||
+                      connector.lastSyncStatus === "running"
+                    }
+                  >
+                    <RotateCcw className="h-4 w-4" />
+                    {forceResync.isPending ? "Starting..." : "Force Re-sync"}
+                  </DropdownMenuItem>
+                </AlertDialogTrigger>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Force Re-sync</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This will delete all documents, chunks, and sync history for
+                  this connector, then start a fresh sync from scratch. This
+                  action cannot be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={() => forceResync.mutate(connectorId)}
+                >
+                  Force Re-sync
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </div>
       }
     >

@@ -334,7 +334,7 @@
           },
           "disableTextWrap": false,
           "editorMode": "code",
-          "expr": "(sum(\n  increase(\n    llm_cost_total{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\", source=~\"$source\"}[$__range]\n  )\n)\n/\nsum(\n  increase(\n    llm_request_duration_seconds_count{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\", source=~\"$source\"}[$__range]\n  )\n)) / 10000",
+          "expr": "(sum(\n  increase(\n    llm_cost_total{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\", source=~\"$source\"}[$__range]\n  )\n)\n/\nsum(\n  increase(\n    llm_request_duration_seconds_count{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\", source=~\"$source\"}[$__range]\n  )\n))",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "instant": false,
@@ -411,7 +411,7 @@
           },
           "disableTextWrap": false,
           "editorMode": "code",
-          "expr": "sum(increase(llm_cost_total{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\", source=~\"$source\"}[$__range])) / 10000",
+          "expr": "sum(increase(llm_cost_total{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\", source=~\"$source\"}[$__range]))",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "instant": false,
@@ -619,7 +619,7 @@
             "uid": "${metrics_datasource}"
           },
           "editorMode": "code",
-          "expr": "increase(llm_cost_total{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\", source=~\"$source\"}[1h]) / 1000",
+          "expr": "increase(llm_cost_total{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\", source=~\"$source\"}[1h])",
           "legendFormat": "{{provider}}",
           "range": true,
           "refId": "A",
@@ -1830,7 +1830,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 50
+        "y": 66
       },
       "id": 29,
       "options": {
@@ -1856,7 +1856,7 @@
             "uid": "${metrics_datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(increase(llm_cost_total{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\", source=~\"$source\"} [$__rate_interval])) / 1000",
+          "expr": "sum(increase(llm_cost_total{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\", source=~\"$source\"} [$__rate_interval]))",
           "legendFormat": "Total Cost",
           "range": true,
           "refId": "A",
@@ -1868,7 +1868,7 @@
             "uid": "${metrics_datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(increase(llm_cost_total{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\", source=~\"$source\"}[$__rate_interval])) by(provider) / 1000",
+          "expr": "sum(increase(llm_cost_total{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\", source=~\"$source\"}[$__rate_interval])) by(provider)",
           "instant": false,
           "legendFormat": "Cost by {{provider}}",
           "range": true,
@@ -1876,7 +1876,7 @@
           "exemplar": true
         }
       ],
-      "title": "Total Cost By Provider",
+      "title": "Cost Trend By Provider",
       "transparent": true,
       "type": "timeseries"
     },
@@ -1951,7 +1951,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 50
+        "y": 66
       },
       "id": 32,
       "options": {
@@ -1977,14 +1977,14 @@
             "uid": "${metrics_datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(increase(llm_cost_total{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\", source=~\"$source\"}[$__rate_interval])) by(model) / 1000",
+          "expr": "sum(increase(llm_cost_total{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\", source=~\"$source\"}[$__rate_interval])) by(model)",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A",
           "exemplar": true
         }
       ],
-      "title": "Total Cost By Model",
+      "title": "Cost Trend By Model",
       "transparent": true,
       "type": "timeseries"
     },
@@ -2060,7 +2060,7 @@
           "disableTextWrap": false,
           "editorMode": "code",
           "exemplar": false,
-          "expr": "sum(increase(llm_cost_total{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\", source=~\"$source\"}[$__range])) by(provider) / 10000",
+          "expr": "sum(increase(llm_cost_total{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\", source=~\"$source\"}[$__range])) by(provider)",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "instant": true,
@@ -2164,7 +2164,7 @@
           "disableTextWrap": false,
           "editorMode": "code",
           "exemplar": false,
-          "expr": "sum(increase(llm_cost_total{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\", source=~\"$source\"}[$__range])) by(model) / 10000",
+          "expr": "sum(increase(llm_cost_total{agent_name=~\"$agent_name\", provider=~\"$provider\", model=~\"$model\", source=~\"$source\"}[$__range])) by(model)",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "instant": true,
@@ -2224,7 +2224,7 @@
         "h": 5,
         "w": 8,
         "x": 8,
-        "y": 66
+        "y": 74
       },
       "id": 16,
       "options": {
@@ -2277,7 +2277,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 71
+        "y": 79
       },
       "id": 64,
       "panels": [],
@@ -2310,10 +2310,10 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 6,
-        "w": 24,
+        "h": 8,
+        "w": 12,
         "x": 0,
-        "y": 72
+        "y": 80
       },
       "id": 65,
       "options": {
@@ -2409,9 +2409,9 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 12,
+        "w": 24,
         "x": 0,
-        "y": 78
+        "y": 50
       },
       "id": 66,
       "options": {
@@ -2511,7 +2511,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 78
+        "y": 80
       },
       "id": 67,
       "options": {
@@ -2554,7 +2554,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 86
+        "y": 88
       },
       "id": 46,
       "panels": [],

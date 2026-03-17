@@ -190,14 +190,23 @@ export class Authnz {
       | RouteId
       | undefined;
 
-    logger.trace({ routeId }, "[Authnz] Checking authorization for route");
+    logger.info({ routeId }, "[Authnz] Checking authorization for route");
 
     const requiredPermissions = routeId
       ? requiredEndpointPermissionsMap[routeId]
       : undefined;
 
+    logger.info(
+      {
+        routeId,
+        requiredPermissions,
+        hasPermissions: requiredPermissions !== undefined,
+      },
+      "[Authnz] DEBUG: permissions lookup result",
+    );
+
     if (requiredPermissions === undefined) {
-      logger.trace(
+      logger.info(
         { routeId },
         "[Authnz] Route not configured in permissions map, denying by default",
       );
@@ -211,18 +220,24 @@ export class Authnz {
 
     // If no specific permissions are required (empty object), allow any authenticated user
     if (Object.keys(requiredPermissions).length === 0) {
-      logger.trace(
+      logger.info(
         { routeId },
         "[Authnz] No specific permissions required, allowing access",
       );
       return { success: true, error: null };
     }
 
-    logger.trace(
-      { routeId, permissionCount: Object.keys(requiredPermissions).length },
+    logger.info(
+      {
+        routeId,
+        requiredPermissions,
+        permissionCount: Object.keys(requiredPermissions).length,
+      },
       "[Authnz] Checking required permissions",
     );
-    return await hasPermission(requiredPermissions, request.headers);
+    const result = await hasPermission(requiredPermissions, request.headers);
+    logger.info({ routeId, result }, "[Authnz] DEBUG: hasPermission result");
+    return result;
   };
 
   private populateUserInfo = async (request: FastifyRequest): Promise<void> => {

@@ -175,32 +175,29 @@ export function EditIdentityProviderDialog({
               )}
             </div>
 
-            <DialogStickyFooter>
-              <div className="flex w-full justify-between">
-                <PermissionButton
-                  type="button"
-                  variant="destructive"
-                  permissions={{ identityProvider: ["delete"] }}
-                  onClick={() => setShowDeleteConfirm(true)}
-                >
-                  <Trash2 className="mr-2 h-4 w-4" />
-                  Delete
-                </PermissionButton>
-                <div className="flex gap-2">
-                  <Button type="button" variant="outline" onClick={handleClose}>
-                    Cancel
-                  </Button>
-                  <PermissionButton
-                    type="submit"
-                    permissions={{ identityProvider: ["update"] }}
-                    disabled={updateIdentityProvider.isPending}
-                  >
-                    {updateIdentityProvider.isPending
-                      ? "Updating..."
-                      : "Update Provider"}
-                  </PermissionButton>
-                </div>
-              </div>
+            <DialogStickyFooter className="sm:justify-between">
+              <PermissionButton
+                type="button"
+                variant="destructive"
+                permissions={{ identityProvider: ["delete"] }}
+                className="sm:mr-auto"
+                onClick={() => setShowDeleteConfirm(true)}
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                Delete
+              </PermissionButton>
+              <Button type="button" variant="outline" onClick={handleClose}>
+                Cancel
+              </Button>
+              <PermissionButton
+                type="submit"
+                permissions={{ identityProvider: ["update"] }}
+                disabled={updateIdentityProvider.isPending}
+              >
+                {updateIdentityProvider.isPending
+                  ? "Updating..."
+                  : "Update Provider"}
+              </PermissionButton>
             </DialogStickyFooter>
           </DialogForm>
         </Form>

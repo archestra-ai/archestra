@@ -995,8 +995,8 @@ export function AgentDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-5xl h-[90vh] flex flex-col overflow-hidden">
-        <DialogHeader>
-          <div className="flex items-center justify-between pr-6">
+        <DialogHeader className="space-y-2">
+          <div className="flex items-start justify-between gap-4 pr-6">
             <DialogTitle className="flex items-center gap-2">
               {isBuiltIn
                 ? `Edit ${agent?.name ?? "Built-In Agent"}`
@@ -1022,7 +1022,7 @@ export function AgentDialog({
               })()}
           </div>
           {isBuiltIn && agent?.description && (
-            <p className="text-sm text-muted-foreground">
+            <p className="pr-24 pt-1 text-sm text-muted-foreground md:pr-48">
               {agent.description}.{" "}
               <a
                 href={getDocsUrl(DocsPage.PlatformBuiltInAgentsPolicyConfig)}

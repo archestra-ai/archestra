@@ -151,6 +151,26 @@ archestra:
   #         optional: true
   envFrom: []
 
+  # Additional volumes to mount into the platform and worker pods
+  # Useful for mounting credential files such as a Vertex AI service account key
+  # Example:
+  #   extraVolumes:
+  #     - name: vertex-ai-credentials
+  #       secret:
+  #         secretName: vertex-ai-credentials
+  #         items:
+  #           - key: service-account.json
+  #             path: vertex-ai-key.json
+  extraVolumes: []
+
+  # Additional volume mounts for the platform and worker containers
+  # Example:
+  #   extraVolumeMounts:
+  #     - name: vertex-ai-credentials
+  #       mountPath: /var/run/gcp
+  #       readOnly: true
+  extraVolumeMounts: []
+
   # Init containers configuration
   initContainers:
     # Wait for PostgreSQL to be ready before starting the application

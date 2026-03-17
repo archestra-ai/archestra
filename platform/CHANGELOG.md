@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.1.27](https://github.com/archestra-ai/archestra/compare/platform-v1.1.26...platform-v1.1.27) (2026-03-17)
+
+
+### Features
+
+* **helm:** extra data support for Helm-managed auth Secret ([#3414](https://github.com/archestra-ai/archestra/issues/3414)) ([a032b28](https://github.com/archestra-ai/archestra/commit/a032b28c72e4640c143e40a4131aa851545515ec))
+* support multiple organization chat links ([#3412](https://github.com/archestra-ai/archestra/issues/3412)) ([e9b2ecb](https://github.com/archestra-ai/archestra/commit/e9b2ecb4ab1d04f5694158f9c7b53dbbe15e8232))
+
+
+### Bug Fixes
+
+* N+1 query in available chat API keys ([#3410](https://github.com/archestra-ai/archestra/issues/3410)) ([588d07d](https://github.com/archestra-ai/archestra/commit/588d07df1a97fea8faf392dd8ff350b396a6a921))
+
+
+### Miscellaneous Chores
+
+* harden Archestra MCP tool schemas and typed registry ([#3381](https://github.com/archestra-ai/archestra/issues/3381)) ([0363cf9](https://github.com/archestra-ai/archestra/commit/0363cf99abf5ed203783f1e7f2e5ba10ce22aa9b))
+
 ## [1.1.26](https://github.com/archestra-ai/archestra/compare/platform-v1.1.25...platform-v1.1.26) (2026-03-17)
 
 

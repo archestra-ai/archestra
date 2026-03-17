@@ -160,7 +160,7 @@ export function EditIdentityProviderDialog({
         title="Edit Identity Provider"
         description={`Update the configuration for "${provider.providerId}".`}
         size="large"
-        className="max-w-4xl"
+        className="max-w-4xl h-auto"
       >
         <Form {...form}>
           <DialogForm

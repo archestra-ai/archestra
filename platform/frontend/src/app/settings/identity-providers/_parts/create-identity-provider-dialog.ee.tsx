@@ -111,7 +111,7 @@ export function CreateIdentityProviderDialog({
           : "Configure a new Single Sign-On provider for your organization."
       }
       size="large"
-      className="max-w-4xl"
+      className="max-w-4xl h-auto"
     >
       <Form {...form}>
         <DialogForm

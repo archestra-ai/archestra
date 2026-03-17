@@ -595,11 +595,6 @@ function AgentSettingsView({
   const [isEditingName, setIsEditingName] = useState(false);
   const [editedName, setEditedName] = useState(agent?.name ?? "");
   const nameInputRef = useRef<HTMLInputElement | null>(null);
-  const [isEditingDescription, setIsEditingDescription] = useState(false);
-  const [editedDescription, setEditedDescription] = useState(
-    agent?.description ?? "",
-  );
-  const descInputRef = useRef<HTMLInputElement | null>(null);
   const [isEditingIcon, setIsEditingIcon] = useState(false);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: agent?.id ensures reset when switching agents
@@ -607,10 +602,8 @@ function AgentSettingsView({
     setInstructions(agent?.systemPrompt ?? "");
     setEditedName(agent?.name ?? "");
     setIsEditingName(false);
-    setEditedDescription(agent?.description ?? "");
-    setIsEditingDescription(false);
     setIsEditingIcon(false);
-  }, [agent?.id, agent?.systemPrompt, agent?.name, agent?.description]);
+  }, [agent?.id, agent?.systemPrompt, agent?.name]);
 
   const instructionsChanged =
     (instructions.trim() || null) !== (agent?.systemPrompt ?? null);
@@ -641,24 +634,6 @@ function AgentSettingsView({
         { onSettled: () => setIsSaving(false) },
       );
       setIsEditingName(false);
-    },
-    [agent, updateProfile],
-  );
-
-  const saveDescription = useCallback(
-    (value: string) => {
-      const trimmed = value.trim();
-      if (!agent || trimmed === (agent.description ?? "")) {
-        setEditedDescription(agent?.description ?? "");
-        setIsEditingDescription(false);
-        return;
-      }
-      setIsSaving(true);
-      updateProfile.mutateAsync(
-        { id: agent.id, data: { description: trimmed || null } },
-        { onSettled: () => setIsSaving(false) },
-      );
-      setIsEditingDescription(false);
     },
     [agent, updateProfile],
   );
@@ -704,13 +679,6 @@ function AgentSettingsView({
       nameInputRef.current?.select();
     }
   }, [isEditingName]);
-
-  useEffect(() => {
-    if (isEditingDescription) {
-      descInputRef.current?.focus();
-      descInputRef.current?.select();
-    }
-  }, [isEditingDescription]);
 
   if (!agent) {
     return (
@@ -770,28 +738,11 @@ function AgentSettingsView({
                 />
               </div>
             )}
-            {!isEditingName &&
-              (isEditingDescription ? (
-                <Input
-                  ref={descInputRef}
-                  value={editedDescription}
-                  onChange={(e) => setEditedDescription(e.target.value)}
-                  onBlur={() => saveDescription(editedDescription)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") saveDescription(editedDescription);
-                    if (e.key === "Escape") {
-                      setEditedDescription(agent.description ?? "");
-                      setIsEditingDescription(false);
-                    }
-                  }}
-                  placeholder="Add a description..."
-                  className="h-6 text-xs px-1.5 -ml-1.5 mt-0.5 text-muted-foreground"
-                />
-              ) : (
-                <p className="mt-1 text-left text-xs text-muted-foreground">
-                  {truncateAgentDescription(agent.description)}
-                </p>
-              ))}
+            {!isEditingName && (
+              <p className="mt-1 text-left text-xs text-muted-foreground">
+                {truncateAgentDescription(agent.description)}
+              </p>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-4 shrink-0">
@@ -2138,5 +2089,12 @@ function truncateAgentDescription(description?: string | null) {
     return description;
   }
 
-  return `${description.slice(0, maxLength).trimEnd()}...`;
+  const truncated = description.slice(0, maxLength).trimEnd();
+  const lastSpaceIndex = truncated.lastIndexOf(" ");
+  const safeTruncation =
+    lastSpaceIndex >= maxLength - 15
+      ? truncated.slice(0, lastSpaceIndex)
+      : truncated;
+
+  return `${safeTruncation.trimEnd()}...`;
 }

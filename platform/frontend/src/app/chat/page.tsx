@@ -1796,9 +1796,9 @@ export default function ChatPage() {
                 {organization?.chatLinks &&
                   organization.chatLinks.length > 0 && (
                     <div className="absolute top-4 right-4 z-10 flex flex-wrap justify-end gap-2 max-w-[min(100%,36rem)]">
-                      {organization.chatLinks.map((link, index) => (
+                      {organization.chatLinks.map((link) => (
                         <ChatLinkButton
-                          key={`${index}-${link.label}-${link.url}`}
+                          key={`${link.label}-${link.url}`}
                           url={link.url}
                           label={link.label}
                         />

@@ -143,8 +143,16 @@ export function useInvitationsList(organizationId: string | undefined) {
       if (!response.data) return [];
 
       const now = new Date();
+      type InvitationListItem = {
+        id: string;
+        email: string;
+        role: Invitation["role"];
+        expiresAt: Invitation["expiresAt"] | null;
+        isExpired: boolean;
+        status: Invitation["status"];
+      };
       return response.data
-        .filter((inv) => inv.status === "pending")
+        .filter((inv: Invitation) => inv.status === "pending")
         .map((inv: Invitation) => {
           const expiresAt = inv.expiresAt || null;
           const isExpired = expiresAt ? new Date(expiresAt) < now : false;
@@ -158,7 +166,7 @@ export function useInvitationsList(organizationId: string | undefined) {
             status: inv.status,
           };
         })
-        .sort((a, b) => {
+        .sort((a: InvitationListItem, b: InvitationListItem) => {
           // Sort by status first (pending > accepted > rejected)
           const statusOrder: Record<string, number> = {
             pending: 0,

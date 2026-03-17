@@ -32,15 +32,19 @@
     "cleanup:dev:k8s": "kubectl delete namespace archestra-dev"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.3.14",
+    "@biomejs/biome": "2.4.6",
     "concurrently": "^9.2.1",
     "husky": "^9.1.7",
     "tsx": "^4.21.0",
-    "turbo": "^2.8.7",
+    "turbo": "^2.8.13",
     "typescript": "^5.9.2"
   },
   "pnpm": {
     "overrides": {
+      "better-auth": "1.4.19",
+      "@better-auth/core": "1.4.19",
+      "@better-auth/oauth-provider": "1.4.19",
+      "@better-auth/sso": "1.4.19",
       "@fastify/reply-from": "12.5.0",
       "body-parser": "2.2.1",
       "glob": "11.1.0",

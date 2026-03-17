@@ -226,12 +226,12 @@ export const getApiKeys = <ThrowOnError extends boolean = false>(options?: Optio
 /**
  * Create an Archestra API key for the authenticated user
  */
-export const createApiKey = <ThrowOnError extends boolean = false>(options?: Options<CreateApiKeyData, ThrowOnError>) => (options?.client ?? client).post<CreateApiKeyResponses, CreateApiKeyErrors, ThrowOnError>({
+export const createApiKey = <ThrowOnError extends boolean = false>(options: Options<CreateApiKeyData, ThrowOnError>) => (options.client ?? client).post<CreateApiKeyResponses, CreateApiKeyErrors, ThrowOnError>({
     url: '/api/api-keys',
     ...options,
     headers: {
         'Content-Type': 'application/json',
-        ...options?.headers
+        ...options.headers
     }
 });
 
@@ -273,12 +273,12 @@ export const submitOAuthConsent = <ThrowOnError extends boolean = false>(options
     }
 });
 
-export const postApiAuthOauth2Register = <ThrowOnError extends boolean = false>(options?: Options<PostApiAuthOauth2RegisterData, ThrowOnError>) => (options?.client ?? client).post<PostApiAuthOauth2RegisterResponses, unknown, ThrowOnError>({
+export const postApiAuthOauth2Register = <ThrowOnError extends boolean = false>(options: Options<PostApiAuthOauth2RegisterData, ThrowOnError>) => (options.client ?? client).post<PostApiAuthOauth2RegisterResponses, unknown, ThrowOnError>({
     url: '/api/auth/oauth2/register',
     ...options,
     headers: {
         'Content-Type': 'application/json',
-        ...options?.headers
+        ...options.headers
     }
 });
 
@@ -709,48 +709,48 @@ export const forkSharedConversation = <ThrowOnError extends boolean = false>(opt
 /**
  * MS Teams Bot Framework webhook endpoint
  */
-export const postApiWebhooksChatopsMsTeams = <ThrowOnError extends boolean = false>(options?: Options<PostApiWebhooksChatopsMsTeamsData, ThrowOnError>) => (options?.client ?? client).post<PostApiWebhooksChatopsMsTeamsResponses, PostApiWebhooksChatopsMsTeamsErrors, ThrowOnError>({
+export const postApiWebhooksChatopsMsTeams = <ThrowOnError extends boolean = false>(options: Options<PostApiWebhooksChatopsMsTeamsData, ThrowOnError>) => (options.client ?? client).post<PostApiWebhooksChatopsMsTeamsResponses, PostApiWebhooksChatopsMsTeamsErrors, ThrowOnError>({
     url: '/api/webhooks/chatops/ms-teams',
     ...options,
     headers: {
         'Content-Type': 'application/json',
-        ...options?.headers
+        ...options.headers
     }
 });
 
 /**
  * Slack Events API webhook endpoint
  */
-export const postApiWebhooksChatopsSlack = <ThrowOnError extends boolean = false>(options?: Options<PostApiWebhooksChatopsSlackData, ThrowOnError>) => (options?.client ?? client).post<PostApiWebhooksChatopsSlackResponses, PostApiWebhooksChatopsSlackErrors, ThrowOnError>({
+export const postApiWebhooksChatopsSlack = <ThrowOnError extends boolean = false>(options: Options<PostApiWebhooksChatopsSlackData, ThrowOnError>) => (options.client ?? client).post<PostApiWebhooksChatopsSlackResponses, PostApiWebhooksChatopsSlackErrors, ThrowOnError>({
     url: '/api/webhooks/chatops/slack',
     ...options,
     headers: {
         'Content-Type': 'application/json',
-        ...options?.headers
+        ...options.headers
     }
 });
 
 /**
  * Slack interactive components endpoint
  */
-export const postApiWebhooksChatopsSlackInteractive = <ThrowOnError extends boolean = false>(options?: Options<PostApiWebhooksChatopsSlackInteractiveData, ThrowOnError>) => (options?.client ?? client).post<PostApiWebhooksChatopsSlackInteractiveResponses, PostApiWebhooksChatopsSlackInteractiveErrors, ThrowOnError>({
+export const postApiWebhooksChatopsSlackInteractive = <ThrowOnError extends boolean = false>(options: Options<PostApiWebhooksChatopsSlackInteractiveData, ThrowOnError>) => (options.client ?? client).post<PostApiWebhooksChatopsSlackInteractiveResponses, PostApiWebhooksChatopsSlackInteractiveErrors, ThrowOnError>({
     url: '/api/webhooks/chatops/slack/interactive',
     ...options,
     headers: {
         'Content-Type': 'application/json',
-        ...options?.headers
+        ...options.headers
     }
 });
 
 /**
  * Slack slash commands endpoint
  */
-export const postApiWebhooksChatopsSlackSlashCommand = <ThrowOnError extends boolean = false>(options?: Options<PostApiWebhooksChatopsSlackSlashCommandData, ThrowOnError>) => (options?.client ?? client).post<PostApiWebhooksChatopsSlackSlashCommandResponses, PostApiWebhooksChatopsSlackSlashCommandErrors, ThrowOnError>({
+export const postApiWebhooksChatopsSlackSlashCommand = <ThrowOnError extends boolean = false>(options: Options<PostApiWebhooksChatopsSlackSlashCommandData, ThrowOnError>) => (options.client ?? client).post<PostApiWebhooksChatopsSlackSlashCommandResponses, PostApiWebhooksChatopsSlackSlashCommandErrors, ThrowOnError>({
     url: '/api/webhooks/chatops/slack/slash-command',
     ...options,
     headers: {
         'Content-Type': 'application/json',
-        ...options?.headers
+        ...options.headers
     }
 });
 
@@ -808,24 +808,24 @@ export const createChatOpsDmBinding = <ThrowOnError extends boolean = false>(opt
 /**
  * Update MS Teams chatops configuration
  */
-export const updateChatOpsConfigInQuickstart = <ThrowOnError extends boolean = false>(options?: Options<UpdateChatOpsConfigInQuickstartData, ThrowOnError>) => (options?.client ?? client).put<UpdateChatOpsConfigInQuickstartResponses, UpdateChatOpsConfigInQuickstartErrors, ThrowOnError>({
+export const updateChatOpsConfigInQuickstart = <ThrowOnError extends boolean = false>(options: Options<UpdateChatOpsConfigInQuickstartData, ThrowOnError>) => (options.client ?? client).put<UpdateChatOpsConfigInQuickstartResponses, UpdateChatOpsConfigInQuickstartErrors, ThrowOnError>({
     url: '/api/chatops/config/ms-teams',
     ...options,
     headers: {
         'Content-Type': 'application/json',
-        ...options?.headers
+        ...options.headers
     }
 });
 
 /**
  * Update Slack chatops configuration
  */
-export const updateSlackChatOpsConfig = <ThrowOnError extends boolean = false>(options?: Options<UpdateSlackChatOpsConfigData, ThrowOnError>) => (options?.client ?? client).put<UpdateSlackChatOpsConfigResponses, UpdateSlackChatOpsConfigErrors, ThrowOnError>({
+export const updateSlackChatOpsConfig = <ThrowOnError extends boolean = false>(options: Options<UpdateSlackChatOpsConfigData, ThrowOnError>) => (options.client ?? client).put<UpdateSlackChatOpsConfigResponses, UpdateSlackChatOpsConfigErrors, ThrowOnError>({
     url: '/api/chatops/config/slack',
     ...options,
     headers: {
         'Content-Type': 'application/json',
-        ...options?.headers
+        ...options.headers
     }
 });
 
@@ -844,12 +844,12 @@ export const refreshChatOpsChannelDiscovery = <ThrowOnError extends boolean = fa
 /**
  * Send a chat request to Cohere using the default agent
  */
-export const cohereChatWithDefaultAgent = <ThrowOnError extends boolean = false>(options?: Options<CohereChatWithDefaultAgentData, ThrowOnError>) => (options?.client ?? client).post<CohereChatWithDefaultAgentResponses, CohereChatWithDefaultAgentErrors, ThrowOnError>({
+export const cohereChatWithDefaultAgent = <ThrowOnError extends boolean = false>(options: Options<CohereChatWithDefaultAgentData, ThrowOnError>) => (options.client ?? client).post<CohereChatWithDefaultAgentResponses, CohereChatWithDefaultAgentErrors, ThrowOnError>({
     url: '/v1/cohere/chat',
     ...options,
     headers: {
         'Content-Type': 'application/json',
-        ...options?.headers
+        ...options.headers
     }
 });
 
@@ -1035,12 +1035,12 @@ export const getReady = <ThrowOnError extends boolean = false>(options?: Options
 /**
  * Webhook endpoint for incoming email notifications
  */
-export const postApiWebhooksIncomingEmail = <ThrowOnError extends boolean = false>(options?: Options<PostApiWebhooksIncomingEmailData, ThrowOnError>) => (options?.client ?? client).post<PostApiWebhooksIncomingEmailResponses, PostApiWebhooksIncomingEmailErrors, ThrowOnError>({
+export const postApiWebhooksIncomingEmail = <ThrowOnError extends boolean = false>(options: Options<PostApiWebhooksIncomingEmailData, ThrowOnError>) => (options.client ?? client).post<PostApiWebhooksIncomingEmailResponses, PostApiWebhooksIncomingEmailErrors, ThrowOnError>({
     url: '/api/webhooks/incoming-email',
     ...options,
     headers: {
         'Content-Type': 'application/json',
-        ...options?.headers
+        ...options.headers
     }
 });
 
@@ -1538,12 +1538,12 @@ export const getMembers = <ThrowOnError extends boolean = false>(options?: Optio
 /**
  * Create a chat completion with MiniMax (uses default agent)
  */
-export const minimaxChatCompletionsWithDefaultAgent = <ThrowOnError extends boolean = false>(options?: Options<MinimaxChatCompletionsWithDefaultAgentData, ThrowOnError>) => (options?.client ?? client).post<MinimaxChatCompletionsWithDefaultAgentResponses, MinimaxChatCompletionsWithDefaultAgentErrors, ThrowOnError>({
+export const minimaxChatCompletionsWithDefaultAgent = <ThrowOnError extends boolean = false>(options: Options<MinimaxChatCompletionsWithDefaultAgentData, ThrowOnError>) => (options.client ?? client).post<MinimaxChatCompletionsWithDefaultAgentResponses, MinimaxChatCompletionsWithDefaultAgentErrors, ThrowOnError>({
     url: '/v1/minimax/chat/completions',
     ...options,
     headers: {
         'Content-Type': 'application/json',
-        ...options?.headers
+        ...options.headers
     }
 });
 
@@ -1614,12 +1614,12 @@ export const getWellKnownOauthAuthorizationServer = <ThrowOnError extends boolea
 /**
  * Create a chat completion with Ollama (uses default agent)
  */
-export const ollamaChatCompletionsWithDefaultAgent = <ThrowOnError extends boolean = false>(options?: Options<OllamaChatCompletionsWithDefaultAgentData, ThrowOnError>) => (options?.client ?? client).post<OllamaChatCompletionsWithDefaultAgentResponses, OllamaChatCompletionsWithDefaultAgentErrors, ThrowOnError>({
+export const ollamaChatCompletionsWithDefaultAgent = <ThrowOnError extends boolean = false>(options: Options<OllamaChatCompletionsWithDefaultAgentData, ThrowOnError>) => (options.client ?? client).post<OllamaChatCompletionsWithDefaultAgentResponses, OllamaChatCompletionsWithDefaultAgentErrors, ThrowOnError>({
     url: '/v1/ollama/chat/completions',
     ...options,
     headers: {
         'Content-Type': 'application/json',
-        ...options?.headers
+        ...options.headers
     }
 });
 
@@ -1769,60 +1769,60 @@ export const getAppearanceSettings = <ThrowOnError extends boolean = false>(opti
 /**
  * Update appearance settings
  */
-export const updateAppearanceSettings = <ThrowOnError extends boolean = false>(options?: Options<UpdateAppearanceSettingsData, ThrowOnError>) => (options?.client ?? client).patch<UpdateAppearanceSettingsResponses, UpdateAppearanceSettingsErrors, ThrowOnError>({
+export const updateAppearanceSettings = <ThrowOnError extends boolean = false>(options: Options<UpdateAppearanceSettingsData, ThrowOnError>) => (options.client ?? client).patch<UpdateAppearanceSettingsResponses, UpdateAppearanceSettingsErrors, ThrowOnError>({
     url: '/api/organization/appearance-settings',
     ...options,
     headers: {
         'Content-Type': 'application/json',
-        ...options?.headers
+        ...options.headers
     }
 });
 
 /**
  * Update security settings (global tool policy, chat file uploads)
  */
-export const updateSecuritySettings = <ThrowOnError extends boolean = false>(options?: Options<UpdateSecuritySettingsData, ThrowOnError>) => (options?.client ?? client).patch<UpdateSecuritySettingsResponses, UpdateSecuritySettingsErrors, ThrowOnError>({
+export const updateSecuritySettings = <ThrowOnError extends boolean = false>(options: Options<UpdateSecuritySettingsData, ThrowOnError>) => (options.client ?? client).patch<UpdateSecuritySettingsResponses, UpdateSecuritySettingsErrors, ThrowOnError>({
     url: '/api/organization/security-settings',
     ...options,
     headers: {
         'Content-Type': 'application/json',
-        ...options?.headers
+        ...options.headers
     }
 });
 
 /**
  * Update LLM settings (TOON compression, compression scope, limit cleanup interval)
  */
-export const updateLlmSettings = <ThrowOnError extends boolean = false>(options?: Options<UpdateLlmSettingsData, ThrowOnError>) => (options?.client ?? client).patch<UpdateLlmSettingsResponses, UpdateLlmSettingsErrors, ThrowOnError>({
+export const updateLlmSettings = <ThrowOnError extends boolean = false>(options: Options<UpdateLlmSettingsData, ThrowOnError>) => (options.client ?? client).patch<UpdateLlmSettingsResponses, UpdateLlmSettingsErrors, ThrowOnError>({
     url: '/api/organization/llm-settings',
     ...options,
     headers: {
         'Content-Type': 'application/json',
-        ...options?.headers
+        ...options.headers
     }
 });
 
 /**
  * Update agent settings (default model, default agent)
  */
-export const updateAgentSettings = <ThrowOnError extends boolean = false>(options?: Options<UpdateAgentSettingsData, ThrowOnError>) => (options?.client ?? client).patch<UpdateAgentSettingsResponses, UpdateAgentSettingsErrors, ThrowOnError>({
+export const updateAgentSettings = <ThrowOnError extends boolean = false>(options: Options<UpdateAgentSettingsData, ThrowOnError>) => (options.client ?? client).patch<UpdateAgentSettingsResponses, UpdateAgentSettingsErrors, ThrowOnError>({
     url: '/api/organization/agent-settings',
     ...options,
     headers: {
         'Content-Type': 'application/json',
-        ...options?.headers
+        ...options.headers
     }
 });
 
 /**
  * Update knowledge settings (embedding model)
  */
-export const updateKnowledgeSettings = <ThrowOnError extends boolean = false>(options?: Options<UpdateKnowledgeSettingsData, ThrowOnError>) => (options?.client ?? client).patch<UpdateKnowledgeSettingsResponses, UpdateKnowledgeSettingsErrors, ThrowOnError>({
+export const updateKnowledgeSettings = <ThrowOnError extends boolean = false>(options: Options<UpdateKnowledgeSettingsData, ThrowOnError>) => (options.client ?? client).patch<UpdateKnowledgeSettingsResponses, UpdateKnowledgeSettingsErrors, ThrowOnError>({
     url: '/api/organization/knowledge-settings',
     ...options,
     headers: {
         'Content-Type': 'application/json',
-        ...options?.headers
+        ...options.headers
     }
 });
 
@@ -2107,12 +2107,12 @@ export const deleteVirtualApiKey = <ThrowOnError extends boolean = false>(option
 /**
  * Create a chat completion with vLLM (uses default agent)
  */
-export const vllmChatCompletionsWithDefaultAgent = <ThrowOnError extends boolean = false>(options?: Options<VllmChatCompletionsWithDefaultAgentData, ThrowOnError>) => (options?.client ?? client).post<VllmChatCompletionsWithDefaultAgentResponses, VllmChatCompletionsWithDefaultAgentErrors, ThrowOnError>({
+export const vllmChatCompletionsWithDefaultAgent = <ThrowOnError extends boolean = false>(options: Options<VllmChatCompletionsWithDefaultAgentData, ThrowOnError>) => (options.client ?? client).post<VllmChatCompletionsWithDefaultAgentResponses, VllmChatCompletionsWithDefaultAgentErrors, ThrowOnError>({
     url: '/v1/vllm/chat/completions',
     ...options,
     headers: {
         'Content-Type': 'application/json',
-        ...options?.headers
+        ...options.headers
     }
 });
 

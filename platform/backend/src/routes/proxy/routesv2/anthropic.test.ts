@@ -171,82 +171,81 @@ describe("Anthropic V2 streaming mode", () => {
     expect(typeof interaction.baselineCost).toBe("string");
   });
 
-  test(
-    "streaming mode interrupted still records interaction",
-    { timeout: 10000 },
-    async ({ makeAgent }) => {
-      const app = Fastify().withTypeProvider<ZodTypeProvider>();
-      app.setValidatorCompiler(validatorCompiler);
-      app.setSerializerCompiler(serializerCompiler);
+  test("streaming mode interrupted still records interaction", {
+    timeout: 10000,
+  }, async ({ makeAgent }) => {
+    const app = Fastify().withTypeProvider<ZodTypeProvider>();
+    app.setValidatorCompiler(validatorCompiler);
+    app.setSerializerCompiler(serializerCompiler);
 
-      config.benchmark.mockMode = true;
+    config.benchmark.mockMode = true;
 
-      // Configure mock to interrupt at chunk 3 (after message_start, content_block_start, content_block_delta)
-      MockAnthropicClient.setStreamOptions({ interruptAtChunk: 3 });
+    // Configure mock to interrupt at chunk 3 (after message_start, content_block_start, content_block_delta)
+    MockAnthropicClient.setStreamOptions({ interruptAtChunk: 3 });
 
-      try {
-        await app.register(anthropicProxyRoutesV2);
+    try {
+      await app.register(anthropicProxyRoutesV2);
 
-        await ModelModel.upsert({
-          externalId: "anthropic/claude-opus-4-20250514",
-          provider: "anthropic",
-          modelId: "claude-opus-4-20250514",
-          inputModalities: null,
-          outputModalities: null,
-          customPricePerMillionInput: "15.00",
-          customPricePerMillionOutput: "75.00",
-          lastSyncedAt: new Date(),
-        });
+      await ModelModel.upsert({
+        externalId: "anthropic/claude-opus-4-20250514",
+        provider: "anthropic",
+        modelId: "claude-opus-4-20250514",
+        inputModalities: null,
+        outputModalities: null,
+        customPricePerMillionInput: "15.00",
+        customPricePerMillionOutput: "75.00",
+        lastSyncedAt: new Date(),
+      });
 
-        const agent = await makeAgent({
-          name: "Test Interrupted Streaming Agent",
-        });
+      const agent = await makeAgent({
+        name: "Test Interrupted Streaming Agent",
+      });
 
-        const { InteractionModel } = await import("@/models");
+      const { InteractionModel } = await import("@/models");
 
-        const initialInteractions =
-          await InteractionModel.getAllInteractionsForProfile(agent.id);
-        const initialCount = initialInteractions.length;
+      const initialInteractions =
+        await InteractionModel.getAllInteractionsForProfile(agent.id);
+      const initialCount = initialInteractions.length;
 
-        const response = await app.inject({
-          method: "POST",
-          url: `/v1/anthropic/${agent.id}/v1/messages`,
-          headers: {
-            "content-type": "application/json",
-            authorization: "Bearer test-key",
-            "user-agent": "test-client",
-            "anthropic-version": "2023-06-01",
-            "x-api-key": "test-anthropic-key",
-          },
-          payload: {
-            model: "claude-opus-4-20250514",
-            messages: [{ role: "user", content: "Hello!" }],
-            max_tokens: 1024,
-            stream: true,
-          },
-        });
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/anthropic/${agent.id}/v1/messages`,
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer test-key",
+          "user-agent": "test-client",
+          "anthropic-version": "2023-06-01",
+          "x-api-key": "test-anthropic-key",
+        },
+        payload: {
+          model: "claude-opus-4-20250514",
+          messages: [{ role: "user", content: "Hello!" }],
+          max_tokens: 1024,
+          stream: true,
+        },
+      });
 
-        expect(response.statusCode).toBe(200);
+      expect(response.statusCode).toBe(200);
 
-        await new Promise((resolve) => setTimeout(resolve, 200));
+      await new Promise((resolve) => setTimeout(resolve, 200));
 
-        const interactions =
-          await InteractionModel.getAllInteractionsForProfile(agent.id);
-        expect(interactions.length).toBe(initialCount + 1);
+      const interactions = await InteractionModel.getAllInteractionsForProfile(
+        agent.id,
+      );
+      expect(interactions.length).toBe(initialCount + 1);
 
-        const interaction = interactions[interactions.length - 1];
+      const interaction = interactions[interactions.length - 1];
 
-        expect(interaction.type).toBe("anthropic:messages");
-        expect(interaction.model).toBe("claude-opus-4-20250514");
-        expect(interaction.inputTokens).toBe(12);
-        expect(interaction.outputTokens).toBe(10); // Usage from message_start event
-        expect(interaction.cost).toBeTruthy();
-        expect(interaction.baselineCost).toBeTruthy();
-      } finally {
-        MockAnthropicClient.resetStreamOptions();
-      }
-    },
-  );
+      expect(interaction.type).toBe("anthropic:messages");
+      expect(interaction.model).toBe("claude-opus-4-20250514");
+      expect(interaction.inputTokens).toBe(12);
+      expect(interaction.outputTokens).toBe(10); // Usage from message_start event
+      expect(interaction.cost).toBeTruthy();
+      expect(interaction.baselineCost).toBeTruthy();
+    } finally {
+      MockAnthropicClient.resetStreamOptions();
+    }
+  });
 });
 
 describe("Anthropic V2 tool call accumulation", () => {

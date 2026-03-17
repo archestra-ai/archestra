@@ -1789,9 +1789,9 @@ export default function ChatPage() {
                     if (!prompts || prompts.length === 0) return null;
                     return (
                       <div className="flex flex-wrap items-center justify-center gap-2 max-w-2xl">
-                        {prompts.map((sp, idx) => (
+                        {prompts.map((sp) => (
                           <Suggestion
-                            key={`${idx}-${sp.summaryTitle}`}
+                            key={`${sp.summaryTitle}-${sp.prompt}`}
                             suggestion={sp.summaryTitle}
                             onClick={() =>
                               submitInitialMessage({

@@ -11,8 +11,7 @@ import {
   KnowledgeBaseIdsToolInputSchema,
   LabelInputSchema,
 } from "./agent-resources";
-import { defineArchestraTools, type successResult } from "./helpers";
-import type { ArchestraContext } from "./types";
+import { defineArchestraTool, defineArchestraTools } from "./helpers";
 
 const CreateMcpGatewayToolArgsSchema = CreateBaseToolArgsSchema.extend({
   knowledgeBaseIds: KnowledgeBaseIdsToolInputSchema.optional(),
@@ -69,74 +68,54 @@ const EditMcpGatewayToolArgsSchema = z
   .strict();
 
 const registry = defineArchestraTools([
-  {
+  defineArchestraTool({
     shortName: "create_mcp_gateway",
     title: "Create MCP Gateway",
     description:
       "Create a new MCP gateway with the specified name, optional labels, and optional assigned knowledge bases or knowledge connectors.",
     schema: CreateMcpGatewayToolArgsSchema,
-  },
-  {
+    async handler({ args, context }) {
+      return handleCreateResource({
+        args,
+        context,
+        targetAgentType: "mcp_gateway",
+      });
+    },
+  }),
+  defineArchestraTool({
     shortName: "get_mcp_gateway",
     title: "Get MCP Gateway",
     description:
       "Get a specific MCP gateway by ID or name. When searching by name, only your personal gateways are matched.",
     schema: GetMcpGatewayToolArgsSchema,
     outputSchema: AgentDetailOutputSchema,
-  },
-  {
+    async handler({ args, context }) {
+      return handleGetResource({
+        args,
+        context,
+        expectedType: "mcp_gateway",
+        getLabel: "mcp gateway",
+      });
+    },
+  }),
+  defineArchestraTool({
     shortName: "edit_mcp_gateway",
     title: "Edit MCP Gateway",
     description:
       "Edit an existing MCP gateway. All fields are optional except id. Only provided fields are updated, and the tool respects the calling user's access level, including knowledge source assignments.",
     schema: EditMcpGatewayToolArgsSchema,
-  },
+    async handler({ args, context }) {
+      return handleEditResource({
+        args,
+        context,
+        expectedType: "mcp_gateway",
+      });
+    },
+  }),
 ] as const);
-
-const {
-  create_mcp_gateway: TOOL_CREATE_MCP_GATEWAY_FULL_NAME,
-  get_mcp_gateway: TOOL_GET_MCP_GATEWAY_FULL_NAME,
-  edit_mcp_gateway: TOOL_EDIT_MCP_GATEWAY_FULL_NAME,
-} = registry.toolFullNames;
 
 export const toolShortNames = registry.toolShortNames;
 export const toolArgsSchemas = registry.toolArgsSchemas;
 export const toolOutputSchemas = registry.toolOutputSchemas;
+export const toolEntries = registry.toolEntries;
 export const tools = registry.tools;
-
-export async function handleTool(
-  toolName: string,
-  args: Record<string, unknown> | undefined,
-  context: ArchestraContext,
-): Promise<ReturnType<typeof successResult> | null> {
-  if (toolName === TOOL_CREATE_MCP_GATEWAY_FULL_NAME) {
-    return handleCreateResource({
-      args: args as CreateMcpGatewayArgs,
-      context,
-      targetAgentType: "mcp_gateway",
-    });
-  }
-
-  if (toolName === TOOL_GET_MCP_GATEWAY_FULL_NAME) {
-    return handleGetResource({
-      args: args as GetMcpGatewayArgs,
-      context,
-      expectedType: "mcp_gateway",
-      getLabel: "mcp gateway",
-    });
-  }
-
-  if (toolName === TOOL_EDIT_MCP_GATEWAY_FULL_NAME) {
-    return handleEditResource({
-      args: args as EditMcpGatewayArgs,
-      context,
-      expectedType: "mcp_gateway",
-    });
-  }
-
-  return null;
-}
-
-type CreateMcpGatewayArgs = z.infer<typeof CreateMcpGatewayToolArgsSchema>;
-type GetMcpGatewayArgs = z.infer<typeof GetMcpGatewayToolArgsSchema>;
-type EditMcpGatewayArgs = z.infer<typeof EditMcpGatewayToolArgsSchema>;

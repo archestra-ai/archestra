@@ -9,8 +9,7 @@ import {
   handleGetResource,
   LabelInputSchema,
 } from "./agent-resources";
-import { defineArchestraTools, type successResult } from "./helpers";
-import type { ArchestraContext } from "./types";
+import { defineArchestraTool, defineArchestraTools } from "./helpers";
 
 const CreateLlmProxyToolArgsSchema = CreateBaseToolArgsSchema;
 
@@ -54,74 +53,54 @@ const EditLlmProxyToolArgsSchema = z
   .strict();
 
 const registry = defineArchestraTools([
-  {
+  defineArchestraTool({
     shortName: "create_llm_proxy",
     title: "Create LLM Proxy",
     description:
       "Create a new LLM proxy with the specified name and optional labels.",
     schema: CreateLlmProxyToolArgsSchema,
-  },
-  {
+    async handler({ args, context }) {
+      return handleCreateResource({
+        args,
+        context,
+        targetAgentType: "llm_proxy",
+      });
+    },
+  }),
+  defineArchestraTool({
     shortName: "get_llm_proxy",
     title: "Get LLM Proxy",
     description:
       "Get a specific LLM proxy by ID or name. When searching by name, only your personal proxies are matched.",
     schema: GetLlmProxyToolArgsSchema,
     outputSchema: AgentDetailOutputSchema,
-  },
-  {
+    async handler({ args, context }) {
+      return handleGetResource({
+        args,
+        context,
+        expectedType: "llm_proxy",
+        getLabel: "llm proxy",
+      });
+    },
+  }),
+  defineArchestraTool({
     shortName: "edit_llm_proxy",
     title: "Edit LLM Proxy",
     description:
       "Edit an existing LLM proxy. All fields are optional except id. Only provided fields are updated, and the tool respects the calling user's access level.",
     schema: EditLlmProxyToolArgsSchema,
-  },
+    async handler({ args, context }) {
+      return handleEditResource({
+        args,
+        context,
+        expectedType: "llm_proxy",
+      });
+    },
+  }),
 ] as const);
-
-const {
-  create_llm_proxy: TOOL_CREATE_LLM_PROXY_FULL_NAME,
-  get_llm_proxy: TOOL_GET_LLM_PROXY_FULL_NAME,
-  edit_llm_proxy: TOOL_EDIT_LLM_PROXY_FULL_NAME,
-} = registry.toolFullNames;
 
 export const toolShortNames = registry.toolShortNames;
 export const toolArgsSchemas = registry.toolArgsSchemas;
 export const toolOutputSchemas = registry.toolOutputSchemas;
+export const toolEntries = registry.toolEntries;
 export const tools = registry.tools;
-
-export async function handleTool(
-  toolName: string,
-  args: Record<string, unknown> | undefined,
-  context: ArchestraContext,
-): Promise<ReturnType<typeof successResult> | null> {
-  if (toolName === TOOL_CREATE_LLM_PROXY_FULL_NAME) {
-    return handleCreateResource({
-      args: args as CreateLlmProxyArgs,
-      context,
-      targetAgentType: "llm_proxy",
-    });
-  }
-
-  if (toolName === TOOL_GET_LLM_PROXY_FULL_NAME) {
-    return handleGetResource({
-      args: args as GetLlmProxyArgs,
-      context,
-      expectedType: "llm_proxy",
-      getLabel: "llm proxy",
-    });
-  }
-
-  if (toolName === TOOL_EDIT_LLM_PROXY_FULL_NAME) {
-    return handleEditResource({
-      args: args as EditLlmProxyArgs,
-      context,
-      expectedType: "llm_proxy",
-    });
-  }
-
-  return null;
-}
-
-type CreateLlmProxyArgs = z.infer<typeof CreateLlmProxyToolArgsSchema>;
-type GetLlmProxyArgs = z.infer<typeof GetLlmProxyToolArgsSchema>;
-type EditLlmProxyArgs = z.infer<typeof EditLlmProxyToolArgsSchema>;

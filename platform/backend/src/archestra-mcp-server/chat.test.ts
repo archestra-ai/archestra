@@ -172,7 +172,11 @@ describe("chat tool execution", () => {
       agent_id: targetAgent.id,
       agent_name: "Swap Target Agent",
     });
-    const parsed = JSON.parse((result.content[0] as any).text);
+    const parsed = result.structuredContent as {
+      success: boolean;
+      agent_id: string;
+      agent_name: string;
+    };
     expect(parsed.success).toBe(true);
     expect(parsed.agent_id).toBe(targetAgent.id);
     expect(parsed.agent_name).toBe("Swap Target Agent");
@@ -272,7 +276,11 @@ describe("chat tool execution", () => {
       contextWithConvo,
     );
     expect(result.isError).toBe(false);
-    const parsed = JSON.parse((result.content[0] as any).text);
+    const parsed = result.structuredContent as {
+      success: boolean;
+      agent_id: string;
+      agent_name: string;
+    };
     expect(parsed.success).toBe(true);
     expect(parsed.agent_id).toBe(defaultAgent.id);
     expect(parsed.agent_name).toBe("Default Router Agent");

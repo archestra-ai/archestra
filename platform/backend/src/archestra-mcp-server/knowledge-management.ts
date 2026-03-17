@@ -21,9 +21,11 @@ import {
 } from "@/types";
 import {
   catchError,
+  defineArchestraTool,
   defineArchestraTools,
   EmptyToolArgsSchema,
   errorResult,
+  getArchestraToolFullName,
   structuredSuccessResult,
   successResult,
 } from "./helpers";
@@ -174,154 +176,287 @@ const KnowledgeConnectorOutputSchema = z.object({
   ),
 });
 
+const QueryKnowledgeSourcesToolArgsSchema = z
+  .object({
+    query: z
+      .string()
+      .trim()
+      .min(1)
+      .describe(
+        "The user's original query, passed verbatim without rephrasing or expansion.",
+      ),
+  })
+  .strict();
+
+const GetKnowledgeBaseToolArgsSchema = z
+  .object({
+    id: UuidIdSchema.describe("Knowledge base ID."),
+  })
+  .strict();
+
+const DeleteKnowledgeBaseToolArgsSchema = z
+  .object({
+    id: UuidIdSchema.describe("Knowledge base ID."),
+  })
+  .strict();
+
+const GetKnowledgeConnectorToolArgsSchema = z
+  .object({
+    id: UuidIdSchema.describe("Knowledge connector ID."),
+  })
+  .strict();
+
+const DeleteKnowledgeConnectorToolArgsSchema = z
+  .object({
+    id: UuidIdSchema.describe("Knowledge connector ID."),
+  })
+  .strict();
+
 const registry = defineArchestraTools([
-  {
+  defineArchestraTool({
     shortName: "query_knowledge_sources",
     title: "Query Knowledge Sources",
     description:
       "Query the organization's knowledge sources to retrieve relevant information. Use this tool when the user asks a question you cannot answer from your training data alone, or when they explicitly ask you to search internal documents and data sources. Pass the user's original query as-is — do not rephrase, summarize, or expand it. The system performs its own query optimization internally.",
-    schema: z
-      .object({
-        query: z
-          .string()
-          .trim()
-          .min(1)
-          .describe(
-            "The user's original query, passed verbatim without rephrasing or expansion.",
-          ),
-      })
-      .strict(),
+    schema: QueryKnowledgeSourcesToolArgsSchema,
     outputSchema: QueryKnowledgeSourcesOutputSchema,
-  },
+    async handler({ args, context }) {
+      return callKnownTool(
+        TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
+        args,
+        context,
+      );
+    },
+  }),
   // --- Knowledge Base CRUD ---
-  {
+  defineArchestraTool({
     shortName: "create_knowledge_base",
     title: "Create Knowledge Base",
     description:
       "Create a new knowledge base for organizing knowledge connectors.",
     schema: KnowledgeBaseCreateToolArgsSchema,
     outputSchema: KnowledgeBaseOutputSchema,
-  },
-  {
+    async handler({ args, context }) {
+      return callKnownTool(
+        getArchestraToolFullName("create_knowledge_base"),
+        args,
+        context,
+      );
+    },
+  }),
+  defineArchestraTool({
     shortName: "get_knowledge_bases",
     title: "Get Knowledge Bases",
     description: "List all knowledge bases in the organization.",
     schema: EmptyToolArgsSchema,
     outputSchema: KnowledgeBasesOutputSchema,
-  },
-  {
+    async handler({ args, context }) {
+      return callKnownTool(
+        getArchestraToolFullName("get_knowledge_bases"),
+        args,
+        context,
+      );
+    },
+  }),
+  defineArchestraTool({
     shortName: "get_knowledge_base",
     title: "Get Knowledge Base",
     description: "Get details of a specific knowledge base by ID.",
-    schema: z
-      .object({
-        id: UuidIdSchema.describe("Knowledge base ID."),
-      })
-      .strict(),
+    schema: GetKnowledgeBaseToolArgsSchema,
     outputSchema: KnowledgeBaseOutputSchema,
-  },
-  {
+    async handler({ args, context }) {
+      return callKnownTool(
+        getArchestraToolFullName("get_knowledge_base"),
+        args,
+        context,
+      );
+    },
+  }),
+  defineArchestraTool({
     shortName: "update_knowledge_base",
     title: "Update Knowledge Base",
     description: "Update an existing knowledge base.",
     schema: KnowledgeBaseUpdateToolArgsSchema,
     outputSchema: KnowledgeBaseOutputSchema,
-  },
-  {
+    async handler({ args, context }) {
+      return callKnownTool(
+        getArchestraToolFullName("update_knowledge_base"),
+        args,
+        context,
+      );
+    },
+  }),
+  defineArchestraTool({
     shortName: "delete_knowledge_base",
     title: "Delete Knowledge Base",
     description: "Delete a knowledge base by ID.",
-    schema: z
-      .object({
-        id: UuidIdSchema.describe("Knowledge base ID."),
-      })
-      .strict(),
-  },
+    schema: DeleteKnowledgeBaseToolArgsSchema,
+    async handler({ args, context }) {
+      return callKnownTool(
+        getArchestraToolFullName("delete_knowledge_base"),
+        args,
+        context,
+      );
+    },
+  }),
   // --- Knowledge Connector CRUD ---
-  {
+  defineArchestraTool({
     shortName: "create_knowledge_connector",
     title: "Create Knowledge Connector",
     description:
       "Create a new knowledge connector for ingesting data from external sources.",
     schema: ConnectorCreateToolArgsSchema,
     outputSchema: KnowledgeConnectorOutputSchema,
-  },
-  {
+    async handler({ args, context }) {
+      return callKnownTool(
+        getArchestraToolFullName("create_knowledge_connector"),
+        args,
+        context,
+      );
+    },
+  }),
+  defineArchestraTool({
     shortName: "get_knowledge_connectors",
     title: "Get Knowledge Connectors",
     description: "List all knowledge connectors in the organization.",
     schema: EmptyToolArgsSchema,
     outputSchema: KnowledgeConnectorsOutputSchema,
-  },
-  {
+    async handler({ args, context }) {
+      return callKnownTool(
+        getArchestraToolFullName("get_knowledge_connectors"),
+        args,
+        context,
+      );
+    },
+  }),
+  defineArchestraTool({
     shortName: "get_knowledge_connector",
     title: "Get Knowledge Connector",
     description: "Get details of a specific knowledge connector by ID.",
-    schema: z
-      .object({
-        id: UuidIdSchema.describe("Knowledge connector ID."),
-      })
-      .strict(),
+    schema: GetKnowledgeConnectorToolArgsSchema,
     outputSchema: KnowledgeConnectorOutputSchema,
-  },
-  {
+    async handler({ args, context }) {
+      return callKnownTool(
+        getArchestraToolFullName("get_knowledge_connector"),
+        args,
+        context,
+      );
+    },
+  }),
+  defineArchestraTool({
     shortName: "update_knowledge_connector",
     title: "Update Knowledge Connector",
     description: "Update an existing knowledge connector.",
     schema: ConnectorUpdateToolArgsSchema,
     outputSchema: KnowledgeConnectorOutputSchema,
-  },
-  {
+    async handler({ args, context }) {
+      return callKnownTool(
+        getArchestraToolFullName("update_knowledge_connector"),
+        args,
+        context,
+      );
+    },
+  }),
+  defineArchestraTool({
     shortName: "delete_knowledge_connector",
     title: "Delete Knowledge Connector",
     description: "Delete a knowledge connector by ID.",
-    schema: z
-      .object({
-        id: UuidIdSchema.describe("Knowledge connector ID."),
-      })
-      .strict(),
-  },
+    schema: DeleteKnowledgeConnectorToolArgsSchema,
+    async handler({ args, context }) {
+      return callKnownTool(
+        getArchestraToolFullName("delete_knowledge_connector"),
+        args,
+        context,
+      );
+    },
+  }),
   // --- Connector <-> Knowledge Base Assignments ---
-  {
+  defineArchestraTool({
     shortName: "assign_knowledge_connector_to_knowledge_base",
     title: "Assign Knowledge Connector to Knowledge Base",
     description: "Assign a knowledge connector to a knowledge base.",
     schema: ConnectorKnowledgeBaseAssignmentSchema,
-  },
-  {
+    async handler({ args, context }) {
+      return callKnownTool(
+        getArchestraToolFullName(
+          "assign_knowledge_connector_to_knowledge_base",
+        ),
+        args,
+        context,
+      );
+    },
+  }),
+  defineArchestraTool({
     shortName: "unassign_knowledge_connector_from_knowledge_base",
     title: "Unassign Knowledge Connector from Knowledge Base",
     description: "Remove a knowledge connector from a knowledge base.",
     schema: ConnectorKnowledgeBaseAssignmentSchema,
-  },
+    async handler({ args, context }) {
+      return callKnownTool(
+        getArchestraToolFullName(
+          "unassign_knowledge_connector_from_knowledge_base",
+        ),
+        args,
+        context,
+      );
+    },
+  }),
   // --- Knowledge Base <-> Agent Assignments ---
-  {
+  defineArchestraTool({
     shortName: "assign_knowledge_base_to_agent",
     title: "Assign Knowledge Base to Agent",
     description: "Assign a knowledge base to an agent.",
     schema: KnowledgeBaseAgentAssignmentSchema,
-  },
-  {
+    async handler({ args, context }) {
+      return callKnownTool(
+        getArchestraToolFullName("assign_knowledge_base_to_agent"),
+        args,
+        context,
+      );
+    },
+  }),
+  defineArchestraTool({
     shortName: "unassign_knowledge_base_from_agent",
     title: "Unassign Knowledge Base from Agent",
     description: "Remove a knowledge base from an agent.",
     schema: KnowledgeBaseAgentAssignmentSchema,
-  },
+    async handler({ args, context }) {
+      return callKnownTool(
+        getArchestraToolFullName("unassign_knowledge_base_from_agent"),
+        args,
+        context,
+      );
+    },
+  }),
   // --- Knowledge Connector <-> Agent Assignments ---
-  {
+  defineArchestraTool({
     shortName: "assign_knowledge_connector_to_agent",
     title: "Assign Knowledge Connector to Agent",
     description:
       "Directly assign a knowledge connector to an agent (bypassing knowledge base).",
     schema: ConnectorAgentAssignmentSchema,
-  },
-  {
+    async handler({ args, context }) {
+      return callKnownTool(
+        getArchestraToolFullName("assign_knowledge_connector_to_agent"),
+        args,
+        context,
+      );
+    },
+  }),
+  defineArchestraTool({
     shortName: "unassign_knowledge_connector_from_agent",
     title: "Unassign Knowledge Connector from Agent",
     description:
       "Remove a directly-assigned knowledge connector from an agent.",
     schema: ConnectorAgentAssignmentSchema,
-  },
+    async handler({ args, context }) {
+      return callKnownTool(
+        getArchestraToolFullName("unassign_knowledge_connector_from_agent"),
+        args,
+        context,
+      );
+    },
+  }),
 ] as const);
 
 const {
@@ -367,6 +502,7 @@ const ALL_FULL_NAMES = new Set<string>([
 export const toolShortNames = registry.toolShortNames;
 export const toolArgsSchemas = registry.toolArgsSchemas;
 export const toolOutputSchemas = registry.toolOutputSchemas;
+export const toolEntries = registry.toolEntries;
 export const tools = registry.tools;
 
 export async function handleTool(
@@ -813,4 +949,20 @@ export async function handleTool(
   }
 
   return null;
+}
+
+async function callKnownTool(
+  toolName: string,
+  args: object | undefined,
+  context: ArchestraContext,
+): Promise<ReturnType<typeof successResult>> {
+  const result = await handleTool(
+    toolName,
+    args as Record<string, unknown> | undefined,
+    context,
+  );
+  if (!result) {
+    throw new Error(`Tool not handled: ${toolName}`);
+  }
+  return result;
 }

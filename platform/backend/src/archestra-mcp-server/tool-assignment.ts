@@ -10,6 +10,7 @@ import { assignToolToAgent } from "@/routes/agent-tool";
 import { AgentToolAssignmentInputSchema, UuidIdSchema } from "@/types";
 import {
   catchError,
+  defineArchestraTool,
   defineArchestraTools,
   errorResult,
   structuredSuccessResult,
@@ -99,7 +100,7 @@ const BulkAssignMcpGatewaysOutputSchema = z.object({
 });
 
 const registry = defineArchestraTools([
-  {
+  defineArchestraTool({
     shortName: "bulk_assign_tools_to_agents",
     title: "Bulk Assign Tools to Agents",
     description:
@@ -112,8 +113,15 @@ const registry = defineArchestraTools([
       })
       .strict(),
     outputSchema: BulkAssignAgentsOutputSchema,
-  },
-  {
+    async handler({ args, context }) {
+      return handleBulkAssignTool({
+        assignments: args.assignments,
+        context,
+        bulkAssignType: "agent",
+      });
+    },
+  }),
+  defineArchestraTool({
     shortName: "bulk_assign_tools_to_mcp_gateways",
     title: "Bulk Assign Tools to MCP Gateways",
     description:
@@ -126,42 +134,32 @@ const registry = defineArchestraTools([
       })
       .strict(),
     outputSchema: BulkAssignMcpGatewaysOutputSchema,
-  },
+    async handler({ args, context }) {
+      return handleBulkAssignTool({
+        assignments: args.assignments,
+        context,
+        bulkAssignType: "mcp_gateway",
+      });
+    },
+  }),
 ] as const);
-
-const {
-  bulk_assign_tools_to_agents: TOOL_BULK_ASSIGN_TOOLS_TO_AGENTS_FULL_NAME,
-  bulk_assign_tools_to_mcp_gateways:
-    TOOL_BULK_ASSIGN_TOOLS_TO_MCP_GATEWAYS_FULL_NAME,
-} = registry.toolFullNames;
 
 export const toolShortNames = registry.toolShortNames;
 export const toolArgsSchemas = registry.toolArgsSchemas;
 export const toolOutputSchemas = registry.toolOutputSchemas;
+export const toolEntries = registry.toolEntries;
 
 // === Exports ===
 
 export const tools = registry.tools;
 
-export async function handleTool(
-  toolName: string,
-  args: Record<string, unknown> | undefined,
-  context: ArchestraContext,
-): Promise<CallToolResult | null> {
-  if (
-    toolName !== TOOL_BULK_ASSIGN_TOOLS_TO_AGENTS_FULL_NAME &&
-    toolName !== TOOL_BULK_ASSIGN_TOOLS_TO_MCP_GATEWAYS_FULL_NAME
-  ) {
-    return null;
-  }
-
+async function handleBulkAssignTool(params: {
+  assignments: Array<Record<string, unknown>>;
+  context: ArchestraContext;
+  bulkAssignType: "agent" | "mcp_gateway";
+}): Promise<CallToolResult> {
+  const { assignments, context, bulkAssignType } = params;
   const { agent: contextAgent } = context;
-
-  const bulkAssignTypeMap: Record<string, string> = {
-    [TOOL_BULK_ASSIGN_TOOLS_TO_AGENTS_FULL_NAME]: "agent",
-    [TOOL_BULK_ASSIGN_TOOLS_TO_MCP_GATEWAYS_FULL_NAME]: "mcp_gateway",
-  };
-  const bulkAssignType = bulkAssignTypeMap[toolName];
   const idField = bulkAssignType === "agent" ? "agentId" : "mcpGatewayId";
   const bulkAssignLabel =
     bulkAssignType === "agent" ? "agents" : "MCP gateways";
@@ -169,7 +167,7 @@ export async function handleTool(
   logger.info(
     {
       agentId: contextAgent.id,
-      assignments: args?.assignments,
+      assignments,
       type: bulkAssignType,
     },
     `bulk_assign_tools_to_${bulkAssignType === "agent" ? "agents" : "mcp_gateways"} tool called`,
@@ -181,10 +179,9 @@ export async function handleTool(
     }
     const { organizationId, userId } = context;
 
-    // biome-ignore lint/suspicious/noExplicitAny: dynamic property access by idField
-    const assignments = args?.assignments as Array<Record<string, any>>;
-
-    const uniqueTargetIds = [...new Set(assignments.map((a) => a[idField]))];
+    const uniqueTargetIds = [
+      ...new Set(assignments.map((assignment) => String(assignment[idField]))),
+    ];
     const [targetAgents, checker] = await Promise.all([
       AgentModel.findByIdsForPermissionCheck(uniqueTargetIds),
       getAgentTypePermissionChecker({
@@ -193,33 +190,42 @@ export async function handleTool(
       }),
     ]);
 
-    let userTeamIds: string[] | null = null;
+    const requiresTeamIds = [...targetAgents.values()].some(
+      (target) => target && !checker.isAdmin(target.agentType),
+    );
+    const userTeamIds = requiresTeamIds
+      ? await TeamModel.getUserTeamIds(userId)
+      : [];
     const results = await Promise.allSettled(
       assignments.map(async (assignment) => {
-        const target = targetAgents.get(assignment[idField]);
+        const targetId = String(assignment[idField]);
+        const target = targetAgents.get(targetId);
         if (target) {
           checker.require(target.agentType, "update");
-          if (!checker.isAdmin(target.agentType) && userTeamIds === null) {
-            userTeamIds = await TeamModel.getUserTeamIds(userId);
-          }
           requireAgentModifyPermission({
             checker,
             agentType: target.agentType,
             agentScope: target.scope,
             agentAuthorId: target.authorId,
             agentTeamIds: target.teamIds,
-            userTeamIds: userTeamIds ?? [],
+            userTeamIds,
             userId,
           });
         }
 
         return assignToolToAgent(
-          assignment[idField],
-          assignment.toolId,
-          assignment.credentialSourceMcpServerId,
-          assignment.executionSourceMcpServerId,
+          targetId,
+          String(assignment.toolId),
+          (assignment.credentialSourceMcpServerId as
+            | string
+            | null
+            | undefined) ?? undefined,
+          (assignment.executionSourceMcpServerId as
+            | string
+            | null
+            | undefined) ?? undefined,
           undefined,
-          assignment.useDynamicTeamCredential,
+          assignment.useDynamicTeamCredential as boolean | undefined,
         );
       }),
     );
@@ -229,8 +235,8 @@ export async function handleTool(
     const duplicates: { [key: string]: string }[] = [];
 
     results.forEach((result, index) => {
-      const entityId = assignments[index][idField];
-      const { toolId } = assignments[index];
+      const entityId = String(assignments[index][idField]);
+      const toolId = String(assignments[index].toolId);
       if (result.status === "fulfilled") {
         if (result.value === null || result.value === "updated") {
           succeeded.push({ [idField]: entityId, toolId });

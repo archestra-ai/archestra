@@ -7,6 +7,7 @@ import { ZodError, type ZodType, z } from "zod";
 import logger from "@/logging";
 import { AgentModel, AgentToolModel, ToolModel } from "@/models";
 import { assignToolToAgent } from "@/routes/agent-tool";
+import type { ArchestraContext } from "./types";
 
 /**
  * Convert a name to a URL-safe slug for tool naming
@@ -50,13 +51,39 @@ export type ToolAssignmentResult = {
   status: string;
   error?: string;
 };
-export type ArchestraToolDefinition<ShortName extends string = string> = {
+export type ArchestraToolHandler<TSchema extends ZodType = ZodType> = (params: {
+  args: z.infer<TSchema>;
+  context: ArchestraContext;
+  toolName: string;
+}) => Promise<CallToolResult>;
+
+export type ArchestraToolDefinition<
+  ShortName extends string = string,
+  TSchema extends ZodType = ZodType,
+> = {
   shortName: ShortName;
   title: string;
   description: string;
-  schema: ZodType;
+  schema: TSchema;
   outputSchema?: ZodType;
+  handler: ArchestraToolHandler<TSchema>;
+  invoke: ArchestraToolHandler;
 };
+
+export type ArchestraRuntimeToolEntry = {
+  schema: ZodType;
+  outputSchema?: ZodType | undefined;
+  invoke: (params: {
+    args: unknown;
+    context: ArchestraContext;
+    toolName: string;
+  }) => Promise<CallToolResult>;
+};
+
+type ArchestraToolDefinitionInput<
+  ShortName extends string = string,
+  TSchema extends ZodType = ZodType,
+> = Omit<ArchestraToolDefinition<ShortName, TSchema>, "invoke">;
 
 export const EmptyToolArgsSchema = z.strictObject({});
 
@@ -280,8 +307,32 @@ export function createToolDefinition(params: {
   };
 }
 
+export function getArchestraToolFullName(shortName: string): string {
+  return `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${shortName}`;
+}
+
+export function defineArchestraTool<
+  const ShortName extends string,
+  const TSchema extends ZodType,
+  const TOutputSchema extends ZodType | undefined = undefined,
+>(definition: {
+  shortName: ShortName;
+  title: string;
+  description: string;
+  schema: TSchema;
+  outputSchema?: TOutputSchema;
+  handler: ArchestraToolHandler<TSchema>;
+}): ArchestraToolDefinition<ShortName, TSchema> & {
+  outputSchema?: TOutputSchema;
+} {
+  return {
+    ...definition,
+    invoke: definition.handler as unknown as ArchestraToolHandler,
+  };
+}
+
 export function defineArchestraTools<
-  const Definitions extends readonly ArchestraToolDefinition[],
+  const Definitions extends readonly ArchestraToolDefinitionInput[],
 >(definitions: Definitions) {
   type ShortName = Definitions[number]["shortName"];
   type FullName<Name extends string> =
@@ -296,6 +347,7 @@ export function defineArchestraTools<
   const toolFullNames: Record<string, string> = {};
   const toolArgsSchemas: Record<string, ZodType> = {};
   const toolOutputSchemas: Record<string, ZodType> = {};
+  const toolEntries: Record<string, ArchestraRuntimeToolEntry> = {};
 
   for (const definition of definitions) {
     const shortName = definition.shortName as ShortName;
@@ -307,6 +359,13 @@ export function defineArchestraTools<
     if (definition.outputSchema) {
       toolOutputSchemas[fullName] = definition.outputSchema;
     }
+    toolEntries[fullName] = {
+      schema: definition.schema,
+      outputSchema: definition.outputSchema,
+      invoke:
+        (definition as Partial<ArchestraToolDefinition>).invoke ??
+        (definition.handler as unknown as ArchestraToolHandler),
+    };
   }
 
   const tools = definitions.map((definition) =>
@@ -334,6 +393,15 @@ export function defineArchestraTools<
     toolOutputSchemas: toolOutputSchemas as Partial<
       Record<FullName<ShortName>, ZodType>
     >,
+    toolEntries: toolEntries as {
+      [Definition in Definitions[number] as FullName<
+        Definition["shortName"]
+      >]: {
+        schema: Definition["schema"];
+        outputSchema: Definition["outputSchema"];
+        invoke: ArchestraRuntimeToolEntry["invoke"];
+      };
+    },
     tools,
   };
 }

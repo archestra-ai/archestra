@@ -19,9 +19,11 @@ import {
 import {
   catchError,
   deduplicateLabels,
+  defineArchestraTool,
   defineArchestraTools,
   EmptyToolArgsSchema,
   errorResult,
+  getArchestraToolFullName,
   structuredSuccessResult,
   successResult,
 } from "./helpers";
@@ -283,140 +285,224 @@ const GetMcpServerToolsOutputSchema = z.object({
     .describe("Tools exposed by the selected MCP server."),
 });
 
+const SearchPrivateMcpRegistryToolArgsSchema = z
+  .object({
+    query: z
+      .string()
+      .trim()
+      .min(1)
+      .optional()
+      .describe(
+        "Optional search query to filter MCP servers by name or description.",
+      ),
+  })
+  .strict();
+
+const GetMcpServerToolsToolArgsSchema = z
+  .object({
+    mcpServerId: UuidIdSchema.describe("The catalog ID of the MCP server."),
+  })
+  .strict();
+
+const EditMcpDescriptionToolArgsSchema = z
+  .object({
+    id: UuidIdSchema.describe(
+      "The catalog ID of the MCP server to edit. Use get_mcp_servers to look it up by name.",
+    ),
+  })
+  .merge(CatalogMetadataToolSchema.partial())
+  .strict();
+
+const EditMcpConfigToolArgsSchema = z
+  .object({
+    id: UuidIdSchema.describe(
+      "The catalog ID of the MCP server to edit. Use get_mcp_servers to look it up by name.",
+    ),
+  })
+  .merge(McpConfigToolSchema.partial())
+  .strict();
+
+const CreateMcpServerToolArgsSchema = CatalogMetadataToolSchema.extend({
+  serverType: InsertInternalMcpCatalogSchema.shape.serverType
+    .optional()
+    .describe("Server type: local, remote, or builtin."),
+})
+  .merge(McpConfigToolSchema.partial())
+  .strict();
+
+const DeployMcpServerToolArgsSchema = z
+  .object({
+    catalogId: UuidIdSchema.describe(
+      "The catalog ID of the MCP server to deploy.",
+    ),
+    teamId: UuidIdSchema.optional().describe(
+      "Optional team ID for a team-scoped deployment.",
+    ),
+    agentIds: z
+      .array(UuidIdSchema)
+      .optional()
+      .describe(
+        "Optional agent IDs to assign the server's tools to after deployment.",
+      ),
+  })
+  .strict();
+
+const GetMcpServerLogsToolArgsSchema = z
+  .object({
+    serverId: UuidIdSchema.describe("The deployment ID of the MCP server."),
+    lines: z
+      .number()
+      .int()
+      .positive()
+      .optional()
+      .describe("Number of log lines to retrieve."),
+  })
+  .strict();
+
 const registry = defineArchestraTools([
-  {
+  defineArchestraTool({
     shortName: "search_private_mcp_registry",
     title: "Search Private MCP Registry",
     description:
       "Search the private MCP registry for available MCP servers. Optionally provide a search query to filter results by name or description.",
-    schema: z
-      .object({
-        query: z
-          .string()
-          .trim()
-          .min(1)
-          .optional()
-          .describe(
-            "Optional search query to filter MCP servers by name or description.",
-          ),
-      })
-      .strict(),
+    schema: SearchPrivateMcpRegistryToolArgsSchema,
     outputSchema: SearchPrivateMcpRegistryOutputSchema,
-  },
-  {
+    async handler({ args, context }) {
+      return callKnownTool(
+        getArchestraToolFullName("search_private_mcp_registry"),
+        args,
+        context,
+      );
+    },
+  }),
+  defineArchestraTool({
     shortName: "get_mcp_servers",
     title: "Get MCP Servers",
     description:
       "List all MCP servers from the catalog. Returns catalog item IDs that can be used with mcpServerIds in create_agent/edit_agent.",
     schema: EmptyToolArgsSchema,
     outputSchema: GetMcpServersOutputSchema,
-  },
-  {
+    async handler({ args, context }) {
+      return callKnownTool(
+        getArchestraToolFullName("get_mcp_servers"),
+        args,
+        context,
+      );
+    },
+  }),
+  defineArchestraTool({
     shortName: "get_mcp_server_tools",
     title: "Get MCP Server Tools",
     description:
       "Get all tools available for a specific MCP server by its catalog ID (from get_mcp_servers).",
-    schema: z
-      .object({
-        mcpServerId: UuidIdSchema.describe("The catalog ID of the MCP server."),
-      })
-      .strict(),
+    schema: GetMcpServerToolsToolArgsSchema,
     outputSchema: GetMcpServerToolsOutputSchema,
-  },
-  {
+    async handler({ args, context }) {
+      return callKnownTool(
+        getArchestraToolFullName("get_mcp_server_tools"),
+        args,
+        context,
+      );
+    },
+  }),
+  defineArchestraTool({
     shortName: "edit_mcp_description",
     title: "Edit MCP Server Description",
     description:
       "Edit an MCP server's display information and metadata. Use get_mcp_servers to look up IDs by name. Changing scope requires admin permissions.",
-    schema: z
-      .object({
-        id: UuidIdSchema.describe(
-          "The catalog ID of the MCP server to edit. Use get_mcp_servers to look it up by name.",
-        ),
-      })
-      .merge(CatalogMetadataToolSchema.partial())
-      .strict(),
-  },
-  {
+    schema: EditMcpDescriptionToolArgsSchema,
+    async handler({ args, context }) {
+      return callKnownTool(
+        getArchestraToolFullName("edit_mcp_description"),
+        args,
+        context,
+      );
+    },
+  }),
+  defineArchestraTool({
     shortName: "edit_mcp_config",
     title: "Edit MCP Server Configuration",
     description:
       "Edit an MCP server's technical configuration. For remote servers: use serverUrl, auth, and OAuth fields. For local (K8s) servers: use command, arguments, environment, Docker, and transport fields. Local config fields are merged into the existing configuration — only specified fields are overwritten. Use get_mcp_servers to look up IDs by name.",
-    schema: z
-      .object({
-        id: UuidIdSchema.describe(
-          "The catalog ID of the MCP server to edit. Use get_mcp_servers to look it up by name.",
-        ),
-      })
-      .merge(McpConfigToolSchema.partial())
-      .strict(),
-  },
-  {
+    schema: EditMcpConfigToolArgsSchema,
+    async handler({ args, context }) {
+      return callKnownTool(
+        getArchestraToolFullName("edit_mcp_config"),
+        args,
+        context,
+      );
+    },
+  }),
+  defineArchestraTool({
     shortName: "create_mcp_server",
     title: "Create MCP Server",
     description:
       "Create a new MCP server in the private registry. Specify serverType to choose between local (K8s pod) or remote (HTTP URL). For local servers, provide command/arguments/environment. For remote servers, provide serverUrl and auth configuration. Defaults to personal scope.",
-    schema: CatalogMetadataToolSchema.extend({
-      serverType: InsertInternalMcpCatalogSchema.shape.serverType
-        .optional()
-        .describe("Server type: local, remote, or builtin."),
-    })
-      .merge(McpConfigToolSchema.partial())
-      .strict(),
-  },
-  {
+    schema: CreateMcpServerToolArgsSchema,
+    async handler({ args, context }) {
+      return callKnownTool(
+        getArchestraToolFullName("create_mcp_server"),
+        args,
+        context,
+      );
+    },
+  }),
+  defineArchestraTool({
     shortName: "deploy_mcp_server",
     title: "Deploy MCP Server",
     description:
       "Deploy (install) an MCP server from the catalog. Creates a running instance. Only works for servers that do not require authentication — if auth is needed, tells the user to install via the UI. Use get_mcp_servers to find the catalog ID. Optionally assign the server's tools to agents.",
-    schema: z
-      .object({
-        catalogId: UuidIdSchema.describe(
-          "The catalog ID of the MCP server to deploy.",
-        ),
-        teamId: UuidIdSchema.optional().describe(
-          "Optional team ID for a team-scoped deployment.",
-        ),
-        agentIds: z
-          .array(UuidIdSchema)
-          .optional()
-          .describe(
-            "Optional agent IDs to assign the server's tools to after deployment.",
-          ),
-      })
-      .strict(),
-  },
-  {
+    schema: DeployMcpServerToolArgsSchema,
+    async handler({ args, context }) {
+      return callKnownTool(
+        getArchestraToolFullName("deploy_mcp_server"),
+        args,
+        context,
+      );
+    },
+  }),
+  defineArchestraTool({
     shortName: "list_mcp_server_deployments",
     title: "List MCP Server Deployments",
     description:
       "List all deployed (installed) MCP server instances accessible to the current user. Shows deployment status, server type, catalog info, team, and owner.",
     schema: EmptyToolArgsSchema,
-  },
-  {
+    async handler({ args, context }) {
+      return callKnownTool(
+        getArchestraToolFullName("list_mcp_server_deployments"),
+        args,
+        context,
+      );
+    },
+  }),
+  defineArchestraTool({
     shortName: "get_mcp_server_logs",
     title: "Get MCP Server Logs",
     description:
       "Get recent container logs from a deployed local (K8s) MCP server. Use list_mcp_server_deployments to find the server ID. Only works for local servers with K8s runtime enabled.",
-    schema: z
-      .object({
-        serverId: UuidIdSchema.describe("The deployment ID of the MCP server."),
-        lines: z
-          .number()
-          .int()
-          .positive()
-          .optional()
-          .describe("Number of log lines to retrieve."),
-      })
-      .strict(),
-  },
-  {
+    schema: GetMcpServerLogsToolArgsSchema,
+    async handler({ args, context }) {
+      return callKnownTool(
+        getArchestraToolFullName("get_mcp_server_logs"),
+        args,
+        context,
+      );
+    },
+  }),
+  defineArchestraTool({
     shortName: "create_mcp_server_installation_request",
     title: "Create MCP Server Installation Request",
     description:
       "Allows users from within the Archestra Platform chat UI to submit a request for an MCP server to be added to their Archestra Platform's internal MCP server registry. This will open a dialog for the user to submit an installation request. When you trigger this tool, just tell the user to go through the dialog to submit the request. Do not provider any additional information",
     schema: EmptyToolArgsSchema,
-  },
+    async handler({ args, context }) {
+      return callKnownTool(
+        TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_FULL_NAME,
+        args,
+        context,
+      );
+    },
+  }),
 ] as const);
 
 const {
@@ -436,6 +522,7 @@ const {
 export const toolShortNames = registry.toolShortNames;
 export const toolArgsSchemas = registry.toolArgsSchemas;
 export const toolOutputSchemas = registry.toolOutputSchemas;
+export const toolEntries = registry.toolEntries;
 
 // === Exports ===
 
@@ -1277,4 +1364,20 @@ export async function handleTool(
   }
 
   return null;
+}
+
+async function callKnownTool(
+  toolName: string,
+  args: object | undefined,
+  context: ArchestraContext,
+): Promise<ReturnType<typeof successResult>> {
+  const result = await handleTool(
+    toolName,
+    args as Record<string, unknown> | undefined,
+    context,
+  );
+  if (!result) {
+    throw new Error(`Tool not handled: ${toolName}`);
+  }
+  return result;
 }

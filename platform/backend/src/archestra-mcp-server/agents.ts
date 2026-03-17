@@ -5,7 +5,6 @@ import {
   KnowledgeBaseConnectorModel,
   KnowledgeBaseModel,
 } from "@/models";
-import type { AgentScope } from "@/types";
 import {
   AgentScopeSchema,
   InsertAgentSchemaBase,
@@ -30,11 +29,10 @@ import {
 } from "./agent-resources";
 import {
   catchError,
+  defineArchestraTool,
   defineArchestraTools,
   structuredSuccessResult,
-  type successResult,
 } from "./helpers";
-import type { ArchestraContext } from "./types";
 
 // === Constants ===
 
@@ -201,190 +199,168 @@ const ListAgentsOutputSchema = z.object({
 });
 
 const registry = defineArchestraTools([
-  {
+  defineArchestraTool({
     shortName: "create_agent",
     title: "Create Agent",
     description:
       "Create a new agent with the specified name, optional description, labels, prompts, icon emoji, MCP server tool assignments, and sub-agent delegations. Defaults to personal scope. IMPORTANT: When the user mentions MCP servers or sub-agents by name, you MUST first look up their IDs using get_mcp_servers / list_agents / get_agent, then pass the IDs via mcpServerIds / subAgentIds.",
     schema: AgentCreateToolArgsSchema,
-  },
-  {
+    async handler({ args, context }) {
+      return handleCreateResource({
+        args,
+        context,
+        targetAgentType: "agent",
+      });
+    },
+  }),
+  defineArchestraTool({
     shortName: "get_agent",
     title: "Get Agent",
     description: "Get a specific agent by ID or name.",
     schema: GetAgentToolArgsSchema,
     outputSchema: AgentDetailOutputSchema,
-  },
-  {
+    async handler({ args, context }) {
+      return handleGetResource({
+        args,
+        context,
+        expectedType: "agent",
+        getLabel: "agent",
+      });
+    },
+  }),
+  defineArchestraTool({
     shortName: "list_agents",
     title: "List Agents",
     description:
       "List agents with optional filtering by name and scope. Returns each agent's assigned tools and knowledge sources for discoverability.",
     schema: ListAgentsToolArgsSchema,
     outputSchema: ListAgentsOutputSchema,
-  },
-  {
+    async handler({ args, context }) {
+      const { agent: contextAgent } = context;
+
+      logger.info(
+        { agentId: contextAgent.id, listArgs: args },
+        "list_agents tool called",
+      );
+
+      try {
+        const limit = Math.min(args.limit ?? 20, 100);
+
+        const results = await AgentModel.findAllPaginated(
+          { limit, offset: 0 },
+          undefined,
+          {
+            agentType: "agent",
+            ...(args.name ? { name: args.name } : {}),
+            ...(args.scope ? { scope: args.scope } : {}),
+          },
+          context.userId,
+          true,
+        );
+
+        const allKbIds = [
+          ...new Set(results.data.flatMap((a) => a.knowledgeBaseIds)),
+        ];
+        const allConnectorIds = [
+          ...new Set(results.data.flatMap((a) => a.connectorIds)),
+        ];
+        const knowledgeBases =
+          allKbIds.length > 0
+            ? await KnowledgeBaseModel.findByIds(allKbIds)
+            : [];
+        const connectors =
+          allConnectorIds.length > 0
+            ? await KnowledgeBaseConnectorModel.findByIds(allConnectorIds)
+            : [];
+        const kbMap = new Map(knowledgeBases.map((kb) => [kb.id, kb]));
+        const connectorMap = new Map(connectors.map((c) => [c.id, c]));
+
+        const agents = results.data.map((agent) => ({
+          id: agent.id,
+          name: agent.name,
+          scope: agent.scope,
+          description: agent.description,
+          teams: agent.teams.map((team) => ({ id: team.id, name: team.name })),
+          labels: agent.labels.map((label) => ({
+            key: label.key,
+            value: label.value,
+          })),
+          tools: agent.tools.map((tool) => ({
+            name: tool.name,
+            description: tool.description,
+          })),
+          knowledgeSources: [
+            ...agent.knowledgeBaseIds
+              .map((knowledgeBaseId) => {
+                const knowledgeBase = kbMap.get(knowledgeBaseId);
+                if (!knowledgeBase) return null;
+                return {
+                  name: knowledgeBase.name,
+                  description: knowledgeBase.description,
+                  type: "knowledge_base" as const,
+                };
+              })
+              .filter(
+                (
+                  knowledgeBase,
+                ): knowledgeBase is {
+                  name: string;
+                  description: string | null;
+                  type: "knowledge_base";
+                } => knowledgeBase !== null,
+              ),
+            ...agent.connectorIds
+              .map((connectorId) => {
+                const connector = connectorMap.get(connectorId);
+                if (!connector) return null;
+                return {
+                  name: connector.name,
+                  description: connector.description,
+                  type: "knowledge_connector" as const,
+                };
+              })
+              .filter(
+                (
+                  connector,
+                ): connector is {
+                  name: string;
+                  description: string | null;
+                  type: "knowledge_connector";
+                } => connector !== null,
+              ),
+          ],
+        }));
+
+        return structuredSuccessResult(
+          { total: results.pagination.total, agents },
+          JSON.stringify({ total: results.pagination.total, agents }, null, 2),
+        );
+      } catch (error) {
+        return catchError(error, "listing agents");
+      }
+    },
+  }),
+  defineArchestraTool({
     shortName: "edit_agent",
     title: "Edit Agent",
     description:
       "Edit an existing agent. All fields are optional except id. Only provided fields are updated. MCP server and sub-agent assignments are additive. Respects the calling user's access level. IMPORTANT: When the user mentions MCP servers or sub-agents by name, you MUST first look up their IDs using get_mcp_servers / list_agents / get_agent, then pass the IDs via mcpServerIds / subAgentIds.",
     schema: EditAgentToolArgsSchema,
-  },
+    async handler({ args, context }) {
+      return handleEditResource({
+        args,
+        context,
+        expectedType: "agent",
+      });
+    },
+  }),
 ] as const);
-
-const {
-  create_agent: TOOL_CREATE_AGENT_FULL_NAME,
-  get_agent: TOOL_GET_AGENT_FULL_NAME,
-  list_agents: TOOL_LIST_AGENTS_FULL_NAME,
-  edit_agent: TOOL_EDIT_AGENT_FULL_NAME,
-} = registry.toolFullNames;
 
 export const toolShortNames = registry.toolShortNames;
 export const toolArgsSchemas = registry.toolArgsSchemas;
 export const toolOutputSchemas = registry.toolOutputSchemas;
+export const toolEntries = registry.toolEntries;
 
 // === Exports ===
 
 export const tools = registry.tools;
-
-export async function handleTool(
-  toolName: string,
-  args: Record<string, unknown> | undefined,
-  context: ArchestraContext,
-): Promise<ReturnType<typeof successResult> | null> {
-  const { agent: contextAgent } = context;
-
-  if (toolName === TOOL_CREATE_AGENT_FULL_NAME) {
-    return handleCreateResource({
-      args: args as CreateAgentArgs,
-      context,
-      targetAgentType: "agent",
-    });
-  }
-
-  if (toolName === TOOL_GET_AGENT_FULL_NAME) {
-    return handleGetResource({
-      args: args as GetAgentArgs,
-      context,
-      expectedType: "agent",
-      getLabel: "agent",
-    });
-  }
-
-  if (toolName === TOOL_LIST_AGENTS_FULL_NAME) {
-    logger.info(
-      { agentId: contextAgent.id, listArgs: args },
-      "list_agents tool called",
-    );
-
-    try {
-      const name = args?.name as string | undefined;
-      const scope = args?.scope as AgentScope | undefined;
-      const limit = Math.min((args?.limit as number) ?? 20, 100);
-
-      const results = await AgentModel.findAllPaginated(
-        { limit, offset: 0 },
-        undefined,
-        {
-          agentType: "agent",
-          ...(name ? { name } : {}),
-          ...(scope ? { scope } : {}),
-        },
-        context.userId,
-        true,
-      );
-
-      // Batch fetch knowledge base and connector details for all agents
-      const allKbIds = [
-        ...new Set(results.data.flatMap((a) => a.knowledgeBaseIds)),
-      ];
-      const allConnectorIds = [
-        ...new Set(results.data.flatMap((a) => a.connectorIds)),
-      ];
-      const knowledgeBases =
-        allKbIds.length > 0 ? await KnowledgeBaseModel.findByIds(allKbIds) : [];
-      const connectors =
-        allConnectorIds.length > 0
-          ? await KnowledgeBaseConnectorModel.findByIds(allConnectorIds)
-          : [];
-      const kbMap = new Map(knowledgeBases.map((kb) => [kb.id, kb]));
-      const connectorMap = new Map(connectors.map((c) => [c.id, c]));
-
-      const agents = results.data.map((a) => ({
-        id: a.id,
-        name: a.name,
-        scope: a.scope,
-        description: a.description,
-        teams: a.teams.map((t) => ({ id: t.id, name: t.name })),
-        labels: a.labels.map((l) => ({ key: l.key, value: l.value })),
-        tools: a.tools.map((t) => ({
-          name: t.name,
-          description: t.description,
-        })),
-        knowledgeSources: [
-          ...a.knowledgeBaseIds
-            .map((kbId) => {
-              const kb = kbMap.get(kbId);
-              if (!kb) return null;
-              return {
-                name: kb.name,
-                description: kb.description,
-                type: "knowledge_base" as const,
-              };
-            })
-            .filter(
-              (
-                kb,
-              ): kb is {
-                name: string;
-                description: string | null;
-                type: "knowledge_base";
-              } => kb !== null,
-            ),
-          ...a.connectorIds
-            .map((connectorId) => {
-              const connector = connectorMap.get(connectorId);
-              if (!connector) return null;
-              return {
-                name: connector.name,
-                description: connector.description,
-                type: "knowledge_connector" as const,
-              };
-            })
-            .filter(
-              (
-                connector,
-              ): connector is {
-                name: string;
-                description: string | null;
-                type: "knowledge_connector";
-              } => connector !== null,
-            ),
-        ],
-      }));
-
-      return structuredSuccessResult(
-        { total: results.pagination.total, agents },
-        JSON.stringify({ total: results.pagination.total, agents }, null, 2),
-      );
-    } catch (error) {
-      return catchError(error, "listing agents");
-    }
-  }
-
-  if (toolName === TOOL_EDIT_AGENT_FULL_NAME) {
-    return handleEditResource({
-      args: args as EditAgentArgs,
-      context,
-      expectedType: "agent",
-    });
-  }
-
-  return null;
-}
-
-// === Internal helpers ===
-
-type CreateAgentArgs = z.infer<typeof AgentCreateToolArgsSchema>;
-type GetAgentArgs = z.infer<typeof GetAgentToolArgsSchema>;
-type EditAgentArgs = z.infer<typeof EditAgentToolArgsSchema>;

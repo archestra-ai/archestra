@@ -35,6 +35,8 @@ type OrganizationMemberOption = {
 };
 
 function getMemberDisplayName(member: unknown): string {
+  if (!member) return "Unknown user";
+
   const record = member as {
     userId?: string;
     name?: string | null;
@@ -53,6 +55,8 @@ function getMemberDisplayName(member: unknown): string {
 }
 
 function getMemberEmail(member: unknown): string | null {
+  if (!member) return null;
+
   const record = member as {
     email?: string | null;
     user?: { email?: string | null } | null;

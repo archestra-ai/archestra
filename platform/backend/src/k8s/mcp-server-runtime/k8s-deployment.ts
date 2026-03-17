@@ -764,6 +764,8 @@ export default class K8sDeployment {
     const podSpec: k8s.V1PodSpec = {
       // Fast shutdown for stateless MCP servers (default is 30s)
       terminationGracePeriodSeconds: 5,
+      // Disable automatic Service env var injection to keep MCP pod environments minimal.
+      enableServiceLinks: false,
       // Use dedicated service account if specified (value used directly from catalog)
       ...(localConfig.serviceAccount
         ? {

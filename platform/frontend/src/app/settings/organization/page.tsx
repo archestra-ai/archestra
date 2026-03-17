@@ -325,16 +325,16 @@ export default function OrganizationSettingsPage() {
         isSaving={updateMutation.isPending}
         permissions={{ organizationSettings: ["update"] }}
         onSave={async () => {
+          if (hasFieldChanges && hasChatLinkValidationErrors) {
+            setShowChatLinkValidationErrors(true);
+            return;
+          }
+
           if (hasThemeChanges) {
             await saveAppearance?.(currentUITheme || DEFAULT_THEME);
             setHasThemeChanges(false);
           }
           if (hasFieldChanges) {
-            if (hasChatLinkValidationErrors) {
-              setShowChatLinkValidationErrors(true);
-              return;
-            }
-
             await handleSaveFields();
           }
         }}

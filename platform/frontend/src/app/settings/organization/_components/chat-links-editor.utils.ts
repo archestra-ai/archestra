@@ -37,20 +37,21 @@ export function validateChatLink(
     return {};
   }
 
-  return {
-    label:
-      trimmedLabel.length === 0
-        ? "Enter a label."
-        : trimmedLabel.length > 25
-          ? "Label must be 25 characters or fewer."
-          : undefined,
-    url:
-      trimmedUrl.length === 0
-        ? requireComplete
-          ? "Enter a valid HTTP or HTTPS URL."
-          : undefined
-        : !isValidChatLinkUrl(trimmedUrl)
-          ? "Enter a valid HTTP or HTTPS URL."
-          : undefined,
-  };
+  const validationErrors: ChatLinkValidationError = {};
+
+  if (trimmedLabel.length === 0) {
+    validationErrors.label = "Enter a label.";
+  } else if (trimmedLabel.length > 25) {
+    validationErrors.label = "Label must be 25 characters or fewer.";
+  }
+
+  if (trimmedUrl.length === 0) {
+    if (requireComplete) {
+      validationErrors.url = "Enter a valid HTTP or HTTPS URL.";
+    }
+  } else if (!isValidChatLinkUrl(trimmedUrl)) {
+    validationErrors.url = "Enter a valid HTTP or HTTPS URL.";
+  }
+
+  return validationErrors;
 }

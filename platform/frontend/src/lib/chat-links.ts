@@ -1,5 +1,3 @@
-"use client";
-
 export function isValidChatLinkUrl(value: string): boolean {
   try {
     const url = new URL(value);

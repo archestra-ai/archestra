@@ -42,7 +42,6 @@ describe("chat-links-editor utils", () => {
         }),
       ).toEqual({
         label: "Enter a label.",
-        url: undefined,
       });
     });
 
@@ -54,7 +53,6 @@ describe("chat-links-editor utils", () => {
         }),
       ).toEqual({
         label: undefined,
-        url: undefined,
       });
     });
 
@@ -68,7 +66,6 @@ describe("chat-links-editor utils", () => {
           { requireComplete: true },
         ),
       ).toEqual({
-        label: undefined,
         url: "Enter a valid HTTP or HTTPS URL.",
       });
     });
@@ -81,7 +78,6 @@ describe("chat-links-editor utils", () => {
         }),
       ).toEqual({
         label: "Label must be 25 characters or fewer.",
-        url: undefined,
       });
     });
 
@@ -92,7 +88,6 @@ describe("chat-links-editor utils", () => {
           url: "not-a-url",
         }),
       ).toEqual({
-        label: undefined,
         url: "Enter a valid HTTP or HTTPS URL.",
       });
     });

@@ -788,13 +788,12 @@ function AgentSettingsView({
                   className="h-6 text-xs px-1.5 -ml-1.5 mt-0.5 text-muted-foreground"
                 />
               ) : (
-                <button
-                  type="button"
-                  className="text-xs text-muted-foreground line-clamp-1 cursor-pointer"
+                <p
+                  className="mt-1 text-left text-xs text-muted-foreground"
                   onDoubleClick={() => setIsEditingDescription(true)}
                 >
-                  {agent.description || "Add a description..."}
-                </button>
+                  {truncateAgentDescription(agent.description)}
+                </p>
               ))}
           </div>
         </div>
@@ -2130,4 +2129,17 @@ function ToolServerAvatarGroup({
       )}
     </div>
   );
+}
+
+function truncateAgentDescription(description?: string | null) {
+  if (!description) {
+    return "Add a description...";
+  }
+
+  const maxLength = 50;
+  if (description.length <= maxLength) {
+    return description;
+  }
+
+  return `${description.slice(0, maxLength).trimEnd()}...`;
 }

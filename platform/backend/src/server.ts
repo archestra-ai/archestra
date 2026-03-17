@@ -547,7 +547,7 @@ const startWebServer = async () => {
     // Sync system API keys for keyless providers (Vertex AI, vLLM, Ollama, Bedrock)
     const defaultOrg = await OrganizationModel.getFirst();
     if (defaultOrg) {
-      systemKeyManager.syncSystemKeys(defaultOrg.id).catch((error) => {
+      await systemKeyManager.syncSystemKeys(defaultOrg.id).catch((error) => {
         logger.error(
           { error: error instanceof Error ? error.message : String(error) },
           "Failed to sync system API keys on startup",

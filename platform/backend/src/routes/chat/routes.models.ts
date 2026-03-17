@@ -883,52 +883,29 @@ export async function fetchGeminiModelsViaVertexAi(): Promise<ModelInfo[]> {
   const ai = createGoogleGenAIClient(undefined, "[ChatModels]");
 
   const pager = await ai.models.list({ config: { pageSize: 100 } });
-
-  const models: ModelInfo[] = [];
-
-  // Patterns to exclude non-chat models
-  const excludePatterns = ["embedding", "imagen", "text-bison", "code-bison"];
+  const discoveredModels: ModelInfo[] = [];
 
   for await (const model of pager) {
-    const modelName = model.name ?? "";
-
-    // Only include Gemini models that are chat-capable
-    // Vertex AI returns names like "publishers/google/models/gemini-2.0-flash-001"
-    if (!modelName.includes("gemini")) {
-      continue;
+    const modelInfo = extractVertexGeminiModel(model);
+    if (modelInfo) {
+      discoveredModels.push(modelInfo);
     }
-
-    // Exclude embedding and other non-chat models
-    const isExcluded = excludePatterns.some((pattern) =>
-      modelName.toLowerCase().includes(pattern),
-    );
-    if (isExcluded) {
-      continue;
-    }
-
-    // Extract model ID from "publishers/google/models/gemini-xxx" format
-    const modelId = modelName.replace("publishers/google/models/", "");
-
-    // Generate a readable display name from the model ID
-    // e.g., "gemini-2.0-flash-001" -> "Gemini 2.0 Flash 001"
-    const displayName = modelId
-      .split("-")
-      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-      .join(" ");
-
-    models.push({
-      id: modelId,
-      displayName,
-      provider: "gemini" as const,
-    });
   }
 
   logger.debug(
-    { modelCount: models.length },
+    { modelCount: discoveredModels.length },
     "Fetched Gemini models via Vertex AI SDK",
   );
 
-  return models;
+  const fallbackModels = await fetchVertexGeminiFallbackModels({
+    ai,
+    existingModelIds: new Set(discoveredModels.map((model) => model.id)),
+    shouldRunFallback:
+      discoveredModels.length === 0 ||
+      !discoveredModels.some((model) => isPrimaryVertexGeminiModel(model.id)),
+  });
+
+  return dedupeModelsById([...discoveredModels, ...fallbackModels]);
 }
 
 /**
@@ -1345,5 +1322,126 @@ const chatModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 };
+
+const VERTEX_GEMINI_EXCLUDE_PATTERNS = [
+  "embedding",
+  "imagen",
+  "text-bison",
+  "code-bison",
+];
+
+const VERTEX_GEMINI_FALLBACK_MODEL_IDS = [
+  "gemini-2.5-pro",
+  "gemini-2.5-flash",
+  "gemini-2.5-flash-lite",
+  "gemini-2.0-flash-001",
+  "gemini-2.0-flash-lite-001",
+  "gemini-1.5-pro-002",
+  "gemini-1.5-flash-002",
+];
+
+function extractVertexGeminiModel(model: {
+  name?: string | null;
+  displayName?: string | null;
+}): ModelInfo | null {
+  const modelName = model.name ?? "";
+  if (!modelName.includes("gemini")) {
+    return null;
+  }
+
+  const lowerModelName = modelName.toLowerCase();
+  const isExcluded = VERTEX_GEMINI_EXCLUDE_PATTERNS.some((pattern) =>
+    lowerModelName.includes(pattern),
+  );
+  if (isExcluded) {
+    return null;
+  }
+
+  const modelId = modelName.replace("publishers/google/models/", "");
+  return {
+    id: modelId,
+    displayName: model.displayName ?? formatVertexGeminiDisplayName(modelId),
+    provider: "gemini",
+  };
+}
+
+async function fetchVertexGeminiFallbackModels(params: {
+  ai: ReturnType<typeof createGoogleGenAIClient>;
+  existingModelIds: Set<string>;
+  shouldRunFallback: boolean;
+}): Promise<ModelInfo[]> {
+  const { ai, existingModelIds, shouldRunFallback } = params;
+  if (!shouldRunFallback) {
+    return [];
+  }
+
+  const candidateModelIds = VERTEX_GEMINI_FALLBACK_MODEL_IDS.filter(
+    (modelId) => !existingModelIds.has(modelId),
+  );
+
+  logger.info(
+    { candidateCount: candidateModelIds.length },
+    "Vertex AI model list returned incomplete Gemini results, probing fallback model IDs",
+  );
+
+  const results = await Promise.allSettled(
+    candidateModelIds.map(async (modelId) => {
+      const model = await ai.models.get({ model: modelId });
+      return extractVertexGeminiModel({
+        name: model.name,
+        displayName: model.displayName,
+      });
+    }),
+  );
+
+  const validatedModels: ModelInfo[] = [];
+  for (const [index, result] of results.entries()) {
+    const modelId = candidateModelIds[index];
+
+    if (result.status === "fulfilled") {
+      if (result.value) {
+        validatedModels.push(result.value);
+      }
+      continue;
+    }
+
+    logger.debug(
+      {
+        modelId,
+        errorMessage:
+          result.reason instanceof Error
+            ? result.reason.message
+            : String(result.reason),
+      },
+      "Vertex AI Gemini fallback candidate unavailable",
+    );
+  }
+
+  logger.info(
+    { validatedCount: validatedModels.length },
+    "Validated Vertex AI Gemini fallback models",
+  );
+
+  return validatedModels;
+}
+
+function dedupeModelsById(models: ModelInfo[]): ModelInfo[] {
+  const deduped = new Map<string, ModelInfo>();
+  for (const model of models) {
+    deduped.set(model.id, model);
+  }
+  return [...deduped.values()];
+}
+
+function formatVertexGeminiDisplayName(modelId: string): string {
+  return modelId
+    .split("-")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function isPrimaryVertexGeminiModel(modelId: string): boolean {
+  return modelId.includes("flash") || modelId.includes("pro");
+}
 
 export default chatModelsRoutes;

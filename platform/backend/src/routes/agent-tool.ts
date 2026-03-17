@@ -28,9 +28,11 @@ import {
 } from "@/models";
 import type { InternalMcpCatalog, Tool } from "@/types";
 import {
+  AgentToolAssignmentBodySchema,
   AgentToolFilterSchema,
   AgentToolSortBy,
   ApiError,
+  BulkAgentToolAssignmentSchema,
   constructResponseSchema,
   createSortingQuerySchema,
   DeleteObjectResponseSchema,
@@ -114,13 +116,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
           agentId: UuidIdSchema,
           toolId: UuidIdSchema,
         }),
-        body: z
-          .object({
-            credentialSourceMcpServerId: UuidIdSchema.nullable().optional(),
-            executionSourceMcpServerId: UuidIdSchema.nullable().optional(),
-            useDynamicTeamCredential: z.boolean().optional(),
-          })
-          .nullish(),
+        body: AgentToolAssignmentBodySchema,
         response: constructResponseSchema(z.object({ success: z.boolean() })),
       },
     },
@@ -184,15 +180,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "Assign multiple tools to multiple agents in bulk",
         tags: ["Agent Tools"],
         body: z.object({
-          assignments: z.array(
-            z.object({
-              agentId: UuidIdSchema,
-              toolId: UuidIdSchema,
-              credentialSourceMcpServerId: UuidIdSchema.nullable().optional(),
-              executionSourceMcpServerId: UuidIdSchema.nullable().optional(),
-              useDynamicTeamCredential: z.boolean().optional(),
-            }),
-          ),
+          assignments: z.array(BulkAgentToolAssignmentSchema),
         }),
         response: constructResponseSchema(
           z.object({

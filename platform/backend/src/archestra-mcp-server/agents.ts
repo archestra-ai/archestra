@@ -31,6 +31,7 @@ import {
   defineArchestraTools,
   errorResult,
   formatAssignmentSummary,
+  structuredSuccessResult,
   successResult,
 } from "./helpers";
 import type { ArchestraContext } from "./types";
@@ -311,6 +312,71 @@ const EditNonAgentToolArgsSchema = z
   })
   .strict();
 
+const AgentToolOutputSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  description: z.string().nullable(),
+  catalogId: z.string().nullable(),
+});
+
+const AgentTeamOutputSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+});
+
+const AgentLabelOutputSchema = z.object({
+  key: z.string(),
+  value: z.string(),
+});
+
+const AgentSuggestedPromptOutputSchema = z.object({
+  summaryTitle: z.string(),
+  prompt: z.string(),
+});
+
+const AgentDetailOutputSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  description: z.string().nullable(),
+  icon: z.string().nullable(),
+  scope: AgentScopeSchema,
+  agentType: z.enum(["agent", "llm_proxy", "mcp_gateway", "profile"]),
+  systemPrompt: z.string().nullable().optional(),
+  teams: z.array(AgentTeamOutputSchema),
+  labels: z.array(AgentLabelOutputSchema),
+  tools: z.array(AgentToolOutputSchema),
+  knowledgeBaseIds: z.array(z.string()),
+  connectorIds: z.array(z.string()),
+  suggestedPrompts: z.array(AgentSuggestedPromptOutputSchema),
+});
+
+const KnowledgeSourceOutputSchema = z.object({
+  name: z.string(),
+  description: z.string().nullable(),
+  type: z.enum(["knowledge_base", "knowledge_connector"]),
+});
+
+const ListAgentsOutputSchema = z.object({
+  total: z.number(),
+  agents: z.array(
+    z.object({
+      id: z.string(),
+      name: z.string(),
+      scope: AgentScopeSchema,
+      description: z.string().nullable(),
+      teams: z.array(AgentTeamOutputSchema),
+      labels: z.array(AgentLabelOutputSchema),
+      tools: z.array(
+        z.object({
+          name: z.string(),
+          description: z.string().nullable(),
+        }),
+      ),
+      knowledgeSources: z.array(KnowledgeSourceOutputSchema),
+    }),
+  ),
+});
+
 const registry = defineArchestraTools([
   {
     shortName: "create_agent",
@@ -338,6 +404,7 @@ const registry = defineArchestraTools([
     title: "Get Agent",
     description: "Get a specific agent by ID or name.",
     schema: GetAgentToolArgsSchema,
+    outputSchema: AgentDetailOutputSchema,
   },
   {
     shortName: "get_llm_proxy",
@@ -345,6 +412,7 @@ const registry = defineArchestraTools([
     description:
       "Get a specific LLM proxy by ID or name. When searching by name, only your personal proxies are matched.",
     schema: GetLlmProxyToolArgsSchema,
+    outputSchema: AgentDetailOutputSchema,
   },
   {
     shortName: "get_mcp_gateway",
@@ -352,6 +420,7 @@ const registry = defineArchestraTools([
     description:
       "Get a specific MCP gateway by ID or name. When searching by name, only your personal gateways are matched.",
     schema: GetMcpGatewayToolArgsSchema,
+    outputSchema: AgentDetailOutputSchema,
   },
   {
     shortName: "list_agents",
@@ -359,6 +428,7 @@ const registry = defineArchestraTools([
     description:
       "List agents with optional filtering by name and scope. Returns each agent's assigned tools and knowledge sources for discoverability.",
     schema: ListAgentsToolArgsSchema,
+    outputSchema: ListAgentsOutputSchema,
   },
   {
     shortName: "edit_agent",
@@ -406,6 +476,7 @@ const {
 
 export const toolShortNames = registry.toolShortNames;
 export const toolArgsSchemas = registry.toolArgsSchemas;
+export const toolOutputSchemas = registry.toolOutputSchemas;
 
 // === Exports ===
 
@@ -555,7 +626,8 @@ export async function handleTool(
         ],
       }));
 
-      return successResult(
+      return structuredSuccessResult(
+        { total: results.pagination.total, agents },
         JSON.stringify({ total: results.pagination.total, agents }, null, 2),
       );
     } catch (error) {
@@ -787,7 +859,7 @@ async function handleGetResource(
       );
     }
 
-    return successResult(JSON.stringify(record, null, 2));
+    return structuredSuccessResult(record, JSON.stringify(record, null, 2));
   } catch (error) {
     return catchError(error, `getting ${getLabel}`);
   }

@@ -96,6 +96,7 @@ const { swap_agent: TOOL_SWAP_AGENT_FULL_NAME } = registry.toolFullNames;
 
 export const toolShortNames = registry.toolShortNames;
 export const toolArgsSchemas = registry.toolArgsSchemas;
+export const toolOutputSchemas = registry.toolOutputSchemas;
 
 // === Exports ===
 

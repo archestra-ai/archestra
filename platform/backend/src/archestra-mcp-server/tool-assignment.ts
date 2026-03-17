@@ -95,6 +95,7 @@ const {
 
 export const toolShortNames = registry.toolShortNames;
 export const toolArgsSchemas = registry.toolArgsSchemas;
+export const toolOutputSchemas = registry.toolOutputSchemas;
 
 // === Exports ===
 

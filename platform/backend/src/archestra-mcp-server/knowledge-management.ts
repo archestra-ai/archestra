@@ -298,6 +298,7 @@ const ALL_FULL_NAMES = new Set<string>([
 
 export const toolShortNames = registry.toolShortNames;
 export const toolArgsSchemas = registry.toolArgsSchemas;
+export const toolOutputSchemas = registry.toolOutputSchemas;
 export const tools = registry.tools;
 
 export async function handleTool(

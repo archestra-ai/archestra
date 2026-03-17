@@ -38,6 +38,16 @@ export const AgentToolAssignmentInputSchema = z.object({
   useDynamicTeamCredential: z.boolean().optional(),
 });
 
+export const AgentToolAssignmentBodySchema =
+  AgentToolAssignmentInputSchema.omit({
+    toolId: true,
+  }).nullish();
+
+export const BulkAgentToolAssignmentSchema =
+  AgentToolAssignmentInputSchema.extend({
+    agentId: UuidIdSchema,
+  });
+
 export const AgentToolFilterSchema = z.object({
   search: z.string().optional(),
   agentId: UuidIdSchema.optional(),

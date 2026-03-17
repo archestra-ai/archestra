@@ -12198,11 +12198,11 @@ export type AssignToolToAgentResponse = AssignToolToAgentResponses[keyof AssignT
 export type BulkAssignToolsData = {
     body: {
         assignments: Array<{
-            agentId: string;
             toolId: string;
             credentialSourceMcpServerId?: string | null;
             executionSourceMcpServerId?: string | null;
             useDynamicTeamCredential?: boolean;
+            agentId: string;
         }>;
     };
     path?: never;

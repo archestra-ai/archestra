@@ -55,6 +55,7 @@ export type ArchestraToolDefinition<ShortName extends string = string> = {
   title: string;
   description: string;
   schema: ZodType;
+  outputSchema?: ZodType;
 };
 
 export const EmptyToolArgsSchema = z.strictObject({});
@@ -242,11 +243,23 @@ export function successResult(text: string): CallToolResult {
   };
 }
 
+export function structuredSuccessResult(
+  structuredContent: Record<string, unknown>,
+  text = JSON.stringify(structuredContent, null, 2),
+): CallToolResult {
+  return {
+    content: [{ type: "text" as const, text }],
+    structuredContent,
+    isError: false,
+  };
+}
+
 export function createToolDefinition(params: {
   name: string;
   title: string;
   description: string;
   schema: ZodType;
+  outputSchema?: ZodType;
 }): Tool {
   return {
     name: params.name,
@@ -255,6 +268,13 @@ export function createToolDefinition(params: {
     inputSchema: z.toJSONSchema(params.schema, {
       io: "input",
     }) as Tool["inputSchema"],
+    ...(params.outputSchema
+      ? {
+          outputSchema: z.toJSONSchema(params.outputSchema, {
+            io: "output",
+          }) as Tool["outputSchema"],
+        }
+      : {}),
     annotations: {},
     _meta: {},
   };
@@ -275,6 +295,7 @@ export function defineArchestraTools<
 
   const toolFullNames: Record<string, string> = {};
   const toolArgsSchemas: Record<string, ZodType> = {};
+  const toolOutputSchemas: Record<string, ZodType> = {};
 
   for (const definition of definitions) {
     const shortName = definition.shortName as ShortName;
@@ -283,6 +304,9 @@ export function defineArchestraTools<
 
     toolFullNames[shortName] = fullName;
     toolArgsSchemas[fullName] = definition.schema;
+    if (definition.outputSchema) {
+      toolOutputSchemas[fullName] = definition.outputSchema;
+    }
   }
 
   const tools = definitions.map((definition) =>
@@ -291,6 +315,7 @@ export function defineArchestraTools<
       title: definition.title,
       description: definition.description,
       schema: definition.schema,
+      outputSchema: definition.outputSchema,
     }),
   );
 
@@ -306,6 +331,9 @@ export function defineArchestraTools<
         Definition["shortName"]
       >]: Definition["schema"];
     },
+    toolOutputSchemas: toolOutputSchemas as Partial<
+      Record<FullName<ShortName>, ZodType>
+    >,
     tools,
   };
 }

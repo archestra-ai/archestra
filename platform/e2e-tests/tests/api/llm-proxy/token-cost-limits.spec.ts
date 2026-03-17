@@ -364,294 +364,288 @@ const testConfigsMap = {
 const testConfigs = Object.values(testConfigsMap);
 
 for (const config of testConfigs) {
-  test.describe(
-    `LLMProxy-TokenCostLimits-${config.providerName}`,
-    { tag: ["@flaky"] },
-    () => {
-      // Retry to handle async usage tracking race conditions in CI.
-      // Use a generous timeout because polling for usage tracking can exceed default.
-      // the default 60s limit under CI resource contention.
-      test.describe.configure({ retries: 2, timeout: 120_000 });
-      let profileId: string;
-      let limitId: string;
-      let modelUuid: string;
+  test.describe(`LLMProxy-TokenCostLimits-${config.providerName}`, {
+    tag: ["@flaky"],
+  }, () => {
+    // Retry to handle async usage tracking race conditions in CI.
+    // Use a generous timeout because polling for usage tracking can exceed default.
+    // the default 60s limit under CI resource contention.
+    test.describe.configure({ retries: 2, timeout: 120_000 });
+    let profileId: string;
+    let limitId: string;
+    let modelUuid: string;
 
-      const wiremockStub = `${config.providerName.toLowerCase()}-token-cost-limit-test`;
+    const wiremockStub = `${config.providerName.toLowerCase()}-token-cost-limit-test`;
 
-      test("blocks request when profile token cost limit is exceeded", async ({
+    test("blocks request when profile token cost limit is exceeded", async ({
+      request,
+      createAgent,
+      createLimit,
+      syncModels,
+      getModels,
+      updateModelPricing,
+      makeApiRequest,
+    }) => {
+      // 1. Create a test profile
+      const createResponse = await createAgent(
         request,
-        createAgent,
-        createLimit,
-        syncModels,
-        getModels,
-        updateModelPricing,
-        makeApiRequest,
-      }) => {
-        // 1. Create a test profile
-        const createResponse = await createAgent(
-          request,
-          `${config.providerName} Token Limit Test Profile`,
-          "personal",
-        );
-        const profile = await createResponse.json();
-        profileId = profile.id;
+        `${config.providerName} Token Limit Test Profile`,
+        "personal",
+      );
+      const profile = await createResponse.json();
+      profileId = profile.id;
 
-        // 2. Make a setup request to trigger model creation via ensureModelExists.
-        //    This also exercises the proxy path so the model entry is created in the DB.
-        //    Cost is tracked at default pricing (~$0.006), well below the $2 limit.
-        const setupResponse = await makeApiRequest({
+      // 2. Make a setup request to trigger model creation via ensureModelExists.
+      //    This also exercises the proxy path so the model entry is created in the DB.
+      //    Cost is tracked at default pricing (~$0.006), well below the $2 limit.
+      const setupResponse = await makeApiRequest({
+        request,
+        method: "post",
+        urlSuffix: config.endpoint(profileId),
+        headers: config.headers(wiremockStub),
+        data: config.buildRequest("Setup request to create model entry"),
+      });
+
+      if (!setupResponse.ok()) {
+        const errorText = await setupResponse.text();
+        throw new Error(
+          `Setup ${config.providerName} request failed: ${setupResponse.status()} ${errorText}`,
+        );
+      }
+
+      // 3. Sync models from providers to ensure WireMock-backed providers are linked.
+      //    On CI, the backend seed may run before WireMock is ready, causing some
+      //    providers (e.g. bedrock) to have zero linked models. This sync ensures
+      //    the provider appears in configuredProviders so GET /api/models returns
+      //    unlinked models created by ensureModelExists.
+      await syncModels(request);
+
+      // 4. Find the model by modelId via GET /api/models and set custom pricing
+      const modelsResponse = await getModels(request);
+      const allModels = await modelsResponse.json();
+      const targetModel = allModels.find(
+        (m: { modelId: string }) => m.modelId === config.modelName,
+      );
+
+      if (!targetModel) {
+        throw new Error(
+          `Model '${config.modelName}' not found after setup request`,
+        );
+      }
+      modelUuid = targetModel.id;
+
+      // Reset any existing custom pricing first, then set our test values
+      await updateModelPricing(request, modelUuid, {
+        customPricePerMillionInput: config.customPricing.pricePerMillionInput,
+        customPricePerMillionOutput: config.customPricing.pricePerMillionOutput,
+      });
+
+      // 5. Create profile-level limit with $2 value (each request costs $2.60, so usage exceeds limit after next request)
+      const limitResponse = await createLimit(request, {
+        entityType: "agent",
+        entityId: profileId,
+        limitType: "token_cost",
+        limitValue: 2,
+        model: [config.modelName],
+      });
+      const limit = await limitResponse.json();
+      limitId = limit.id;
+
+      // 6. Make first tracked request with custom pricing (with long content to bypass optimization rules)
+      const longContent =
+        "This is a very long message to bypass optimization rules that typically only apply to short content under 1000 tokens. ".repeat(
+          100,
+        );
+
+      const initialResponse = await makeApiRequest({
+        request,
+        method: "post",
+        urlSuffix: config.endpoint(profileId),
+        headers: config.headers(wiremockStub),
+        data: config.buildRequest(longContent),
+      });
+
+      if (!initialResponse.ok()) {
+        const errorText = await initialResponse.text();
+        throw new Error(
+          `Initial ${config.providerName} request failed: ${initialResponse.status()} ${errorText}`,
+        );
+      }
+
+      // Poll for async usage tracking to complete
+      // Usage tracking happens asynchronously after the response is sent
+      // We need to wait until the usage is actually recorded before the next request
+      // The limits endpoint returns modelUsage array with { model, tokensIn, tokensOut, cost }
+      // Use generous timeouts - in CI, async tracking can be very slow due to resource contention
+      // across parallel test suites and multiple providers running concurrently
+      const maxPollingAttempts = 120;
+      const pollingIntervalMs = 1000;
+      let usageTracked = false;
+
+      for (let attempt = 0; attempt < maxPollingAttempts; attempt++) {
+        const limitsResponse = await makeApiRequest({
           request,
-          method: "post",
-          urlSuffix: config.endpoint(profileId),
-          headers: config.headers(wiremockStub),
-          data: config.buildRequest("Setup request to create model entry"),
+          method: "get",
+          urlSuffix: `/api/limits?entityType=agent&entityId=${profileId}`,
+          ignoreStatusCheck: true,
         });
 
-        if (!setupResponse.ok()) {
-          const errorText = await setupResponse.text();
-          throw new Error(
-            `Setup ${config.providerName} request failed: ${setupResponse.status()} ${errorText}`,
+        if (limitsResponse.ok()) {
+          const limits = await limitsResponse.json();
+          const targetLimit = limits.find(
+            (l: {
+              id: string;
+              modelUsage?: Array<{ model: string; cost: number }>;
+            }) => l.id === limitId,
           );
+          // Check if usage cost has reached the limit value.
+          // Polling for cost > 0 is insufficient because the usage may be partially
+          // tracked (e.g. only input tokens recorded) before the full cost is computed.
+          // We need to wait until the tracked cost actually exceeds the limit ($2)
+          // so the next request will be blocked with 429.
+          const totalCost =
+            targetLimit?.modelUsage?.reduce(
+              (sum: number, m: { cost: number }) => sum + m.cost,
+              0,
+            ) ?? 0;
+          if (totalCost >= 2) {
+            usageTracked = true;
+            break;
+          }
         }
 
-        // 3. Sync models from providers to ensure WireMock-backed providers are linked.
-        //    On CI, the backend seed may run before WireMock is ready, causing some
-        //    providers (e.g. bedrock) to have zero linked models. This sync ensures
-        //    the provider appears in configuredProviders so GET /api/models returns
-        //    unlinked models created by ensureModelExists.
-        await syncModels(request);
+        await new Promise((resolve) => setTimeout(resolve, pollingIntervalMs));
+      }
 
-        // 4. Find the model by modelId via GET /api/models and set custom pricing
-        const modelsResponse = await getModels(request);
-        const allModels = await modelsResponse.json();
-        const targetModel = allModels.find(
-          (m: { modelId: string }) => m.modelId === config.modelName,
+      if (!usageTracked) {
+        throw new Error(
+          `Usage was not tracked after ${maxPollingAttempts * pollingIntervalMs}ms`,
         );
+      }
 
-        if (!targetModel) {
-          throw new Error(
-            `Model '${config.modelName}' not found after setup request`,
-          );
-        }
+      // 7. Next request should be blocked (limit exceeded)
+      const blockedResponse = await makeApiRequest({
+        request,
+        method: "post",
+        urlSuffix: config.endpoint(profileId),
+        headers: config.headers(wiremockStub),
+        data: config.buildRequest(
+          "This should be blocked because we exceeded the limit",
+        ),
+        ignoreStatusCheck: true,
+      });
+
+      // 8. Verify 429 response with token_cost_limit_exceeded code
+      expect(blockedResponse.status()).toBe(429);
+      const errorBody = await blockedResponse.json();
+      expect(errorBody.error.code).toBe("token_cost_limit_exceeded");
+      expect(errorBody.error.type).toBe("rate_limit_exceeded");
+    });
+
+    test("allows request when under limit", async ({
+      request,
+      createAgent,
+      createLimit,
+      syncModels,
+      getModels,
+      updateModelPricing,
+      makeApiRequest,
+    }) => {
+      // 1. Create a test profile
+      const createResponse = await createAgent(
+        request,
+        `${config.providerName} Token Limit OK Test Profile`,
+        "personal",
+      );
+      const profile = await createResponse.json();
+      profileId = profile.id;
+
+      // 2. Make a setup request to trigger model creation
+      const setupResponse = await makeApiRequest({
+        request,
+        method: "post",
+        urlSuffix: config.endpoint(profileId),
+        headers: config.headers(wiremockStub),
+        data: config.buildRequest("Setup request to create model entry"),
+      });
+
+      if (!setupResponse.ok()) {
+        const errorText = await setupResponse.text();
+        throw new Error(
+          `Setup ${config.providerName} request failed: ${setupResponse.status()} ${errorText}`,
+        );
+      }
+
+      // 3. Sync models from providers (see comment in "blocks request" test)
+      await syncModels(request);
+
+      // 4. Find the model and set custom pricing
+      const modelsResponse = await getModels(request);
+      const allModels = await modelsResponse.json();
+      const targetModel = allModels.find(
+        (m: { modelId: string }) => m.modelId === config.modelName,
+      );
+
+      if (targetModel) {
         modelUuid = targetModel.id;
-
-        // Reset any existing custom pricing first, then set our test values
         await updateModelPricing(request, modelUuid, {
           customPricePerMillionInput: config.customPricing.pricePerMillionInput,
           customPricePerMillionOutput:
             config.customPricing.pricePerMillionOutput,
         });
+      }
 
-        // 5. Create profile-level limit with $2 value (each request costs $2.60, so usage exceeds limit after next request)
-        const limitResponse = await createLimit(request, {
-          entityType: "agent",
-          entityId: profileId,
-          limitType: "token_cost",
-          limitValue: 2,
-          model: [config.modelName],
-        });
-        const limit = await limitResponse.json();
-        limitId = limit.id;
-
-        // 6. Make first tracked request with custom pricing (with long content to bypass optimization rules)
-        const longContent =
-          "This is a very long message to bypass optimization rules that typically only apply to short content under 1000 tokens. ".repeat(
-            100,
-          );
-
-        const initialResponse = await makeApiRequest({
-          request,
-          method: "post",
-          urlSuffix: config.endpoint(profileId),
-          headers: config.headers(wiremockStub),
-          data: config.buildRequest(longContent),
-        });
-
-        if (!initialResponse.ok()) {
-          const errorText = await initialResponse.text();
-          throw new Error(
-            `Initial ${config.providerName} request failed: ${initialResponse.status()} ${errorText}`,
-          );
-        }
-
-        // Poll for async usage tracking to complete
-        // Usage tracking happens asynchronously after the response is sent
-        // We need to wait until the usage is actually recorded before the next request
-        // The limits endpoint returns modelUsage array with { model, tokensIn, tokensOut, cost }
-        // Use generous timeouts - in CI, async tracking can be very slow due to resource contention
-        // across parallel test suites and multiple providers running concurrently
-        const maxPollingAttempts = 120;
-        const pollingIntervalMs = 1000;
-        let usageTracked = false;
-
-        for (let attempt = 0; attempt < maxPollingAttempts; attempt++) {
-          const limitsResponse = await makeApiRequest({
-            request,
-            method: "get",
-            urlSuffix: `/api/limits?entityType=agent&entityId=${profileId}`,
-            ignoreStatusCheck: true,
-          });
-
-          if (limitsResponse.ok()) {
-            const limits = await limitsResponse.json();
-            const targetLimit = limits.find(
-              (l: {
-                id: string;
-                modelUsage?: Array<{ model: string; cost: number }>;
-              }) => l.id === limitId,
-            );
-            // Check if usage cost has reached the limit value.
-            // Polling for cost > 0 is insufficient because the usage may be partially
-            // tracked (e.g. only input tokens recorded) before the full cost is computed.
-            // We need to wait until the tracked cost actually exceeds the limit ($2)
-            // so the next request will be blocked with 429.
-            const totalCost =
-              targetLimit?.modelUsage?.reduce(
-                (sum: number, m: { cost: number }) => sum + m.cost,
-                0,
-              ) ?? 0;
-            if (totalCost >= 2) {
-              usageTracked = true;
-              break;
-            }
-          }
-
-          await new Promise((resolve) =>
-            setTimeout(resolve, pollingIntervalMs),
-          );
-        }
-
-        if (!usageTracked) {
-          throw new Error(
-            `Usage was not tracked after ${maxPollingAttempts * pollingIntervalMs}ms`,
-          );
-        }
-
-        // 7. Next request should be blocked (limit exceeded)
-        const blockedResponse = await makeApiRequest({
-          request,
-          method: "post",
-          urlSuffix: config.endpoint(profileId),
-          headers: config.headers(wiremockStub),
-          data: config.buildRequest(
-            "This should be blocked because we exceeded the limit",
-          ),
-          ignoreStatusCheck: true,
-        });
-
-        // 8. Verify 429 response with token_cost_limit_exceeded code
-        expect(blockedResponse.status()).toBe(429);
-        const errorBody = await blockedResponse.json();
-        expect(errorBody.error.code).toBe("token_cost_limit_exceeded");
-        expect(errorBody.error.type).toBe("rate_limit_exceeded");
+      // 5. Create profile-level limit with high value
+      const limitResponse = await createLimit(request, {
+        entityType: "agent",
+        entityId: profileId,
+        limitType: "token_cost",
+        limitValue: 1000,
+        model: [config.modelName],
       });
+      const limit = await limitResponse.json();
+      limitId = limit.id;
 
-      test("allows request when under limit", async ({
+      // 6. First request should succeed
+      const response1 = await makeApiRequest({
         request,
-        createAgent,
-        createLimit,
-        syncModels,
-        getModels,
-        updateModelPricing,
-        makeApiRequest,
-      }) => {
-        // 1. Create a test profile
-        const createResponse = await createAgent(
-          request,
-          `${config.providerName} Token Limit OK Test Profile`,
-          "personal",
-        );
-        const profile = await createResponse.json();
-        profileId = profile.id;
-
-        // 2. Make a setup request to trigger model creation
-        const setupResponse = await makeApiRequest({
-          request,
-          method: "post",
-          urlSuffix: config.endpoint(profileId),
-          headers: config.headers(wiremockStub),
-          data: config.buildRequest("Setup request to create model entry"),
-        });
-
-        if (!setupResponse.ok()) {
-          const errorText = await setupResponse.text();
-          throw new Error(
-            `Setup ${config.providerName} request failed: ${setupResponse.status()} ${errorText}`,
-          );
-        }
-
-        // 3. Sync models from providers (see comment in "blocks request" test)
-        await syncModels(request);
-
-        // 4. Find the model and set custom pricing
-        const modelsResponse = await getModels(request);
-        const allModels = await modelsResponse.json();
-        const targetModel = allModels.find(
-          (m: { modelId: string }) => m.modelId === config.modelName,
-        );
-
-        if (targetModel) {
-          modelUuid = targetModel.id;
-          await updateModelPricing(request, modelUuid, {
-            customPricePerMillionInput:
-              config.customPricing.pricePerMillionInput,
-            customPricePerMillionOutput:
-              config.customPricing.pricePerMillionOutput,
-          });
-        }
-
-        // 5. Create profile-level limit with high value
-        const limitResponse = await createLimit(request, {
-          entityType: "agent",
-          entityId: profileId,
-          limitType: "token_cost",
-          limitValue: 1000,
-          model: [config.modelName],
-        });
-        const limit = await limitResponse.json();
-        limitId = limit.id;
-
-        // 6. First request should succeed
-        const response1 = await makeApiRequest({
-          request,
-          method: "post",
-          urlSuffix: config.endpoint(profileId),
-          headers: config.headers(wiremockStub),
-          data: config.buildRequest("Hello"),
-        });
-        expect(response1.ok()).toBeTruthy();
-
-        // 7. Second request should also succeed (still under limit)
-        const response2 = await makeApiRequest({
-          request,
-          method: "post",
-          urlSuffix: config.endpoint(profileId),
-          headers: config.headers(wiremockStub),
-          data: config.buildRequest("Hello again"),
-        });
-        expect(response2.ok()).toBeTruthy();
+        method: "post",
+        urlSuffix: config.endpoint(profileId),
+        headers: config.headers(wiremockStub),
+        data: config.buildRequest("Hello"),
       });
+      expect(response1.ok()).toBeTruthy();
 
-      test.afterEach(
-        async ({ request, deleteLimit, deleteAgent, updateModelPricing }) => {
-          if (limitId) {
-            await deleteLimit(request, limitId).catch(() => {});
-            limitId = "";
-          }
-          if (profileId) {
-            await deleteAgent(request, profileId).catch(() => {});
-            profileId = "";
-          }
-          // Reset custom pricing back to null so other tests use default pricing
-          if (modelUuid) {
-            await updateModelPricing(request, modelUuid, {
-              customPricePerMillionInput: null,
-              customPricePerMillionOutput: null,
-            }).catch(() => {});
-            modelUuid = "";
-          }
-        },
-      );
-    },
-  );
+      // 7. Second request should also succeed (still under limit)
+      const response2 = await makeApiRequest({
+        request,
+        method: "post",
+        urlSuffix: config.endpoint(profileId),
+        headers: config.headers(wiremockStub),
+        data: config.buildRequest("Hello again"),
+      });
+      expect(response2.ok()).toBeTruthy();
+    });
+
+    test.afterEach(
+      async ({ request, deleteLimit, deleteAgent, updateModelPricing }) => {
+        if (limitId) {
+          await deleteLimit(request, limitId).catch(() => {});
+          limitId = "";
+        }
+        if (profileId) {
+          await deleteAgent(request, profileId).catch(() => {});
+          profileId = "";
+        }
+        // Reset custom pricing back to null so other tests use default pricing
+        if (modelUuid) {
+          await updateModelPricing(request, modelUuid, {
+            customPricePerMillionInput: null,
+            customPricePerMillionOutput: null,
+          }).catch(() => {});
+          modelUuid = "";
+        }
+      },
+    );
+  });
 }

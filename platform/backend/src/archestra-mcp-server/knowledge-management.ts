@@ -119,14 +119,14 @@ export const tools: Tool[] = [
     name: TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
     title: "Query Knowledge Sources",
     description:
-      "Query the organization's knowledge sources to retrieve relevant information. Use this tool when the user asks a question you cannot answer from your training data alone, or when they explicitly ask you to search internal documents and data sources. Formulate queries about the actual content you are looking for — ask about topics, concepts, or information rather than about source systems.",
+      "Query the organization's knowledge sources to retrieve relevant information. Use this tool when the user asks a question you cannot answer from your training data alone, or when they explicitly ask you to search internal documents and data sources. Pass the user's original query as-is — do not rephrase, summarize, or expand it. The system performs its own query optimization internally.",
     inputSchema: {
       type: "object",
       properties: {
         query: {
           type: "string",
           description:
-            "A natural language query about the content you are looking for. Ask about topics, concepts, or information rather than about source systems.",
+            "The user's original query, passed verbatim without rephrasing or expansion. The system handles query optimization internally.",
         },
       },
       required: ["query"],

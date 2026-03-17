@@ -19,7 +19,7 @@ export function AppLogo({ centered = true }: AppLogoProps) {
   const effectiveLogo = resolvedTheme === "dark" && logoDark ? logoDark : logo;
 
   if (isLoadingAppearance) {
-    return <div className="h-[47px]" />;
+    return <div className="h-[47px]" aria-hidden="true" />;
   }
 
   if (effectiveLogo) {

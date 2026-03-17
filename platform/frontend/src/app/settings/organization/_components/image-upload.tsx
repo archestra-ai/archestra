@@ -4,13 +4,8 @@ import { Upload, X } from "lucide-react";
 import Image from "next/image";
 import { useCallback, useRef, useState } from "react";
 import { toast } from "sonner";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { SettingsCardHeader } from "@/components/settings/settings-block";
+import { Card, CardContent } from "@/components/ui/card";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { useUpdateAppearanceSettings } from "@/lib/organization.query";
 
@@ -31,14 +26,16 @@ export function ImageUpload({
 }: ImageUploadProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [preview, setPreview] = useState<string | null>(currentImage || null);
-  const uploadMutation = useUpdateAppearanceSettings(
-    `${title} uploaded successfully`,
-    `Failed to upload ${title.toLowerCase()}`,
-  );
-  const removeMutation = useUpdateAppearanceSettings(
-    `${title} removed successfully`,
-    `Failed to remove ${title.toLowerCase()}`,
-  );
+  const { mutateAsync: uploadImage, isPending: isUploadPending } =
+    useUpdateAppearanceSettings(
+      `${title} uploaded successfully`,
+      `Failed to upload ${title.toLowerCase()}`,
+    );
+  const { mutateAsync: removeImage, isPending: isRemovePending } =
+    useUpdateAppearanceSettings(
+      `${title} removed successfully`,
+      `Failed to remove ${title.toLowerCase()}`,
+    );
 
   const handleFileSelect = useCallback(
     async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -61,7 +58,7 @@ export function ImageUpload({
         setPreview(base64);
 
         try {
-          const result = await uploadMutation.mutateAsync({
+          const result = await uploadImage({
             [fieldName]: base64,
           });
           if (!result) throw new Error("Upload failed");
@@ -72,34 +69,25 @@ export function ImageUpload({
       };
       reader.readAsDataURL(file);
     },
-    [
-      currentImage,
-      onImageChange,
-      uploadMutation.mutateAsync,
-      fieldName,
-      uploadMutation,
-    ],
+    [currentImage, onImageChange, uploadImage, fieldName],
   );
 
   const handleRemove = useCallback(async () => {
     try {
-      const result = await removeMutation.mutateAsync({ [fieldName]: null });
+      const result = await removeImage({ [fieldName]: null });
       if (!result) throw new Error("Removal failed");
       setPreview(null);
       onImageChange?.();
     } catch {
       // error handled by mutation
     }
-  }, [onImageChange, removeMutation.mutateAsync, fieldName, removeMutation]);
+  }, [onImageChange, removeImage, fieldName]);
 
   const hasPreview = preview || currentImage;
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>{title}</CardTitle>
-        <CardDescription>{description}</CardDescription>
-      </CardHeader>
+      <SettingsCardHeader title={title} description={description} />
       <CardContent className="space-y-4">
         <div className="flex items-center gap-4">
           <div className="relative h-10 w-10 rounded-md border border-border bg-muted flex items-center justify-center overflow-hidden shrink-0">
@@ -120,7 +108,7 @@ export function ImageUpload({
               variant="outline"
               size="sm"
               onClick={() => fileInputRef.current?.click()}
-              disabled={uploadMutation.isPending}
+              disabled={isUploadPending}
             >
               <Upload className="h-4 w-4 mr-2" />
               {hasPreview ? "Change" : "Upload"}
@@ -131,7 +119,7 @@ export function ImageUpload({
                 variant="outline"
                 size="sm"
                 onClick={handleRemove}
-                disabled={removeMutation.isPending}
+                disabled={isRemovePending}
               >
                 <X className="h-4 w-4 mr-2" />
                 Remove

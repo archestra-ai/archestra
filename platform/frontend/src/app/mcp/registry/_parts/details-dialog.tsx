@@ -440,9 +440,9 @@ export function DetailsDialog({ server, onClose }: DetailsDialogProps) {
                     Tools ({server.tools.length})
                   </h3>
                   <div className="space-y-2">
-                    {server.tools.map((tool, index) => (
+                    {server.tools.map((tool) => (
                       <div
-                        key={`${tool.name}-${index}`}
+                        key={tool.name}
                         className="border rounded-lg p-3 text-sm"
                       >
                         <div className="font-semibold font-mono">
@@ -469,9 +469,9 @@ export function DetailsDialog({ server, onClose }: DetailsDialogProps) {
                     Prompts ({server.prompts.length})
                   </h3>
                   <div className="space-y-2">
-                    {server.prompts.map((prompt, index) => (
+                    {server.prompts.map((prompt) => (
                       <div
-                        key={`${prompt.name}-${index}`}
+                        key={`${prompt.name}-${prompt.text}`}
                         className="border rounded-lg p-3 text-sm"
                       >
                         <div className="font-semibold font-mono">

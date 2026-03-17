@@ -349,6 +349,35 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             },
             stream: createUIMessageStream({
               onError: (error) => {
+                // Persist messages on stream-level errors (e.g. errors thrown
+                // in execute before writer.merge() is reached). Without this,
+                // user messages are lost on refresh after an error.
+                const shouldPersist = !messagesPersisted && !!conversationId;
+                if (shouldPersist) {
+                  messagesPersisted = true;
+                }
+                (async () => {
+                  if (shouldPersist) {
+                    try {
+                      await persistNewMessages(
+                        conversationId,
+                        messages,
+                        "onStreamError",
+                      );
+                    } catch (persistError) {
+                      logger.error(
+                        { persistError, conversationId },
+                        "Failed to persist messages during stream error",
+                      );
+                    }
+                  }
+                })().catch((err) => {
+                  logger.error(
+                    { err },
+                    "Unexpected error in onError async persist handler",
+                  );
+                });
+
                 const mapped = mapProviderError(error, provider);
                 try {
                   return JSON.stringify(mapped);
@@ -361,6 +390,24 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 }
               },
               execute: async ({ writer }) => {
+                // ⚠️ TEMPORARY: Error injection for testing retries. Remove after testing.
+                const lastMsg = (
+                  messages as { parts?: { type: string; text?: string }[] }[]
+                ).at(-1);
+                const lastText =
+                  lastMsg?.parts?.find((p) => p.type === "text")?.text ?? "";
+                if (lastText.includes("__test_500")) {
+                  throw new Error("Simulated server error (500)");
+                }
+                if (lastText.includes("__test_network")) {
+                  throw new TypeError("Failed to fetch");
+                }
+                if (lastText.includes("__test_no_output")) {
+                  throw new Error(
+                    "No output generated. Check the stream for errors.",
+                  );
+                }
+
                 // Stream tokens to the client in real-time while also
                 // handling context-length errors from vLLM/LiteLLM.
                 //
@@ -401,6 +448,23 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                       messages: trimmed,
                     });
                   } else {
+                    // Save messages before throwing — this error path runs before
+                    // writer.merge(), so onError/onFinish callbacks won't fire.
+                    if (!messagesPersisted && conversationId) {
+                      messagesPersisted = true;
+                      try {
+                        await persistNewMessages(
+                          conversationId,
+                          messages,
+                          "onExecuteError",
+                        );
+                      } catch (persistError) {
+                        logger.error(
+                          { persistError, conversationId },
+                          "Failed to persist messages during execute error",
+                        );
+                      }
+                    }
                     throw error;
                   }
                 }
@@ -410,7 +474,14 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   result.toUIMessageStream({
                     originalMessages: messages as UIMessage[],
                     onError: (error) => {
-                      // Use an async IIFE to handle async operations within the sync onError handler
+                      // Claim persistence before the async work below starts,
+                      // otherwise onFinish can race and also persist (duplicates).
+                      const shouldPersist =
+                        !messagesPersisted && !!conversationId;
+                      if (shouldPersist) {
+                        messagesPersisted = true;
+                      }
+
                       (async () => {
                         logger.error(
                           {
@@ -422,15 +493,13 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                         );
 
                         // Persist messages despite error so they have a valid ID for editing
-                        // Only persist if not already persisted by onFinish
-                        if (!messagesPersisted && conversationId) {
+                        if (shouldPersist) {
                           try {
                             await persistNewMessages(
                               conversationId,
                               messages,
                               "onError",
                             );
-                            messagesPersisted = true;
                           } catch (persistError) {
                             // Log persistence error but don't prevent the error response
                             logger.error(

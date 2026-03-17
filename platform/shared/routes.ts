@@ -383,6 +383,7 @@ export const RouteId = {
   UpdateConnector: "updateConnector",
   DeleteConnector: "deleteConnector",
   SyncConnector: "syncConnector",
+  ForceResyncConnector: "forceResyncConnector",
   TestConnectorConnection: "testConnectorConnection",
 
   // Connector Knowledge Base Assignment Routes

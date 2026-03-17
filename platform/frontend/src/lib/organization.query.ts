@@ -2,8 +2,6 @@ import {
   type AnyRoleName,
   archestraApiSdk,
   type archestraApiTypes,
-  DEFAULT_THEME_ID,
-  type OrganizationTheme,
 } from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Invitation } from "better-auth/plugins/organization";
@@ -11,20 +9,6 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import { handleApiError } from "./utils";
-
-type AppearanceSettings = archestraApiTypes.GetAppearanceSettingsResponse;
-
-const DEFAULT_APPEARANCE: AppearanceSettings = {
-  theme: DEFAULT_THEME_ID as OrganizationTheme,
-  customFont: "lato",
-  logo: null,
-  logoDark: null,
-  favicon: null,
-  iconLogo: null,
-  appName: null,
-  ogDescription: null,
-  footerText: null,
-};
 
 export const appearanceKeys = {
   all: ["appearance"] as const,
@@ -53,7 +37,6 @@ export function useAppearanceSettings(enabled = true) {
     staleTime: 5 * 60 * 1000,
     retry: false,
     throwOnError: false,
-    placeholderData: DEFAULT_APPEARANCE,
   });
 }
 
@@ -160,8 +143,16 @@ export function useInvitationsList(organizationId: string | undefined) {
       if (!response.data) return [];
 
       const now = new Date();
+      type InvitationListItem = {
+        id: string;
+        email: string;
+        role: Invitation["role"];
+        expiresAt: Invitation["expiresAt"] | null;
+        isExpired: boolean;
+        status: Invitation["status"];
+      };
       return response.data
-        .filter((inv) => inv.status === "pending")
+        .filter((inv: Invitation) => inv.status === "pending")
         .map((inv: Invitation) => {
           const expiresAt = inv.expiresAt || null;
           const isExpired = expiresAt ? new Date(expiresAt) < now : false;
@@ -175,7 +166,7 @@ export function useInvitationsList(organizationId: string | undefined) {
             status: inv.status,
           };
         })
-        .sort((a, b) => {
+        .sort((a: InvitationListItem, b: InvitationListItem) => {
           // Sort by status first (pending > accepted > rejected)
           const statusOrder: Record<string, number> = {
             pending: 0,
@@ -345,6 +336,9 @@ export function useUpdateAppearanceSettings(
         appName: updatedOrganization.appName,
         ogDescription: updatedOrganization.ogDescription,
         footerText: updatedOrganization.footerText,
+        helpCenterUrl: updatedOrganization.helpCenterUrl,
+        helpCenterLabel: updatedOrganization.helpCenterLabel,
+        animateChatPlaceholders: updatedOrganization.animateChatPlaceholders,
       });
       toast.success(onSuccessMessage);
     },

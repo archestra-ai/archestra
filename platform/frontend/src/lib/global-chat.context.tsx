@@ -3,6 +3,7 @@
 import { type UIMessage, useChat } from "@ai-sdk/react";
 import {
   EXTERNAL_AGENT_ID_HEADER,
+  isChatErrorResponse,
   makeSwapAgentPokeText,
   SWAP_TO_DEFAULT_AGENT_POKE_TEXT,
   TOOL_ARTIFACT_WRITE_FULL_NAME,
@@ -29,6 +30,30 @@ import {
 import { useGenerateConversationTitle } from "@/lib/chat.query";
 
 const SESSION_CLEANUP_TIMEOUT = 10 * 60 * 1000; // 10 min
+const MAX_AUTO_RETRIES = 2;
+const AUTO_RETRY_DELAY_MS = 1500;
+
+/** Network-level errors that never reach the backend */
+const RETRYABLE_CLIENT_ERRORS = [
+  "Failed to fetch",
+  "NetworkError",
+  "No output generated",
+  "network",
+];
+
+function isRetryableError(error: Error): boolean {
+  const msg = error.message;
+  // Check client-side patterns
+  if (RETRYABLE_CLIENT_ERRORS.some((p) => msg.includes(p))) return true;
+  // Check structured backend error
+  try {
+    const parsed = JSON.parse(msg);
+    if (isChatErrorResponse(parsed)) return parsed.isRetryable;
+  } catch {
+    // not JSON
+  }
+  return false;
+}
 
 interface ChatSession {
   conversationId: string;
@@ -241,10 +266,15 @@ function ChatSessionHook({
       ) => void)
     | null
   >(null);
+  // Auto-retry state for transient errors
+  const retryCountRef = useRef(0);
+  const retryTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const prevMessagesLenRef = useRef(0);
 
   const {
     messages,
     sendMessage,
+    regenerate,
     status,
     setMessages,
     stop,
@@ -287,7 +317,22 @@ function ChatSessionHook({
         conversationId,
         error: chatError,
         message: chatError.message,
+        retryCount: retryCountRef.current,
       });
+
+      // Auto-retry transient errors (network failures, server errors)
+      if (
+        isRetryableError(chatError) &&
+        retryCountRef.current < MAX_AUTO_RETRIES
+      ) {
+        retryCountRef.current++;
+        console.info(
+          `[ChatSession] Auto-retrying (${retryCountRef.current}/${MAX_AUTO_RETRIES})...`,
+        );
+        retryTimerRef.current = setTimeout(() => {
+          regenerate();
+        }, AUTO_RETRY_DELAY_MS);
+      }
     },
     onToolCall: ({ toolCall }) => {
       if (
@@ -348,6 +393,13 @@ function ChatSessionHook({
 
   // Keep sendMessageRef up-to-date for onFinish callback
   sendMessageRef.current = sendMessage;
+
+  // Reset retry counter when a new user message is sent (messages array grows).
+  // regenerate() doesn't add messages, so this won't reset during retries.
+  if (messages.length > prevMessagesLenRef.current) {
+    retryCountRef.current = 0;
+  }
+  prevMessagesLenRef.current = messages.length;
 
   // Auto-generate title after first assistant response
   useEffect(() => {

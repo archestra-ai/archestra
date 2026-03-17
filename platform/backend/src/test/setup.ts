@@ -24,6 +24,8 @@ import { afterAll, afterEach, beforeAll, beforeEach, vi } from "vitest";
 // Disable Sentry for tests - set BEFORE any config modules are loaded
 process.env.ARCHESTRA_SENTRY_BACKEND_DSN = "";
 process.env.ARCHESTRA_SENTRY_ENVIRONMENT = "test";
+// Silence backend pino output during unit tests while preserving logger calls for spies/assertions.
+process.env.ARCHESTRA_LOGGING_LEVEL = "silent";
 
 // Set auth secret for tests
 process.env.ARCHESTRA_AUTH_SECRET = "auth-secret-unit-tests-32-chars!";
@@ -34,6 +36,24 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 let pgliteClient: PGlite | null = null;
 let testDb: ReturnType<typeof drizzle> | null = null;
 let migrationsSql: string[] | null = null;
+const originalConsoleWarn = console.warn;
+
+console.warn = (...args: unknown[]) => {
+  const message = args.map(String).join(" ");
+
+  if (
+    message.includes(
+      "[Better Auth]: Please ensure '/.well-known/oauth-authorization-server' exists",
+    ) ||
+    message.includes(
+      "[Better Auth]: Please ensure '/.well-known/openid-configuration' exists",
+    )
+  ) {
+    return;
+  }
+
+  originalConsoleWarn(...args);
+};
 
 /**
  * Read and cache migration files - done once per worker
@@ -124,6 +144,8 @@ afterEach(() => {
  * Clean up the PGlite client after all tests in the file complete
  */
 afterAll(async () => {
+  console.warn = originalConsoleWarn;
+
   if (pgliteClient) {
     await pgliteClient.close();
     pgliteClient = null;

@@ -3,8 +3,12 @@
 import { RefreshCw, Server } from "lucide-react";
 import { useCallback, useEffect } from "react";
 import { useSetSettingsAction } from "@/app/settings/layout";
+import {
+  SettingsCardHeader,
+  SettingsSectionStack,
+} from "@/components/settings/settings-block";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { PermissionButton } from "@/components/ui/permission-button";
 import {
   useCheckSecretsConnectivity,
@@ -61,14 +65,16 @@ export default function SecretsSettingsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <SettingsSectionStack>
       <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Server className="h-5 w-5" />
-            Secrets Storage
-          </CardTitle>
-        </CardHeader>
+        <SettingsCardHeader
+          title={
+            <span className="flex items-center gap-2">
+              <Server className="h-5 w-5" />
+              Secrets Storage
+            </span>
+          }
+        />
         <CardContent className="space-y-4">
           <div className="text-sm font-mono bg-muted p-3 rounded space-y-1">
             {Object.entries(secretsType.meta).map(([key, value]) => (
@@ -100,6 +106,6 @@ export default function SecretsSettingsPage() {
             )}
         </CardContent>
       </Card>
-    </div>
+    </SettingsSectionStack>
   );
 }

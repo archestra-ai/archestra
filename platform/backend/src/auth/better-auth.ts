@@ -30,6 +30,7 @@ import { z } from "zod";
 import config from "@/config";
 import db, { schema } from "@/database";
 import logger from "@/logging";
+import { LOG_LEVEL } from "@/logging/log-level";
 // Import directly from files to avoid circular dependency through barrel export
 import AgentModel from "@/models/agent";
 import InvitationModel from "@/models/invitation";
@@ -68,6 +69,26 @@ export const auth: any = betterAuth({
   appName: APP_NAME,
   baseURL: frontendBaseUrl,
   secret,
+  logger: {
+    disabled: LOG_LEVEL === "silent",
+    level: getBetterAuthLogLevel(LOG_LEVEL),
+    log(level, message, ...args) {
+      const formattedMessage = `[Better Auth] ${message}`;
+      const payload = args.length > 0 ? { args } : {};
+
+      if (level === "error") {
+        logger.error(payload, formattedMessage);
+        return;
+      }
+
+      if (level === "warn") {
+        logger.warn(payload, formattedMessage);
+        return;
+      }
+
+      logger.info(payload, formattedMessage);
+    },
+  },
   // Prevent JWT plugin's /token endpoint from conflicting with OAuth provider's /oauth2/token
   disabledPaths: ["/token"],
   ...(config.authRateLimitDisabled ? { rateLimit: { enabled: false } } : {}),
@@ -175,6 +196,10 @@ export const auth: any = betterAuth({
       allowDynamicClientRegistration: true,
       allowUnauthenticatedClientRegistration: true,
       scopes: [...OAUTH_SCOPES],
+      silenceWarnings: {
+        oauthAuthServerConfig: true,
+        openidConfig: true,
+      },
     }),
   ],
 
@@ -360,6 +385,29 @@ export const auth: any = betterAuth({
     after: createAuthMiddleware(async (ctx) => handleAfterHook(ctx)),
   },
 });
+
+function getBetterAuthLogLevel(
+  logLevel: string,
+): "debug" | "info" | "warn" | "error" | undefined {
+  if (logLevel === "trace") {
+    return "debug";
+  }
+
+  if (logLevel === "fatal") {
+    return "error";
+  }
+
+  if (
+    logLevel === "debug" ||
+    logLevel === "info" ||
+    logLevel === "warn" ||
+    logLevel === "error"
+  ) {
+    return logLevel;
+  }
+
+  return undefined;
+}
 
 export type BetterAuth = typeof auth;
 

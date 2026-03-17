@@ -31,6 +31,7 @@ import { WithPermissions } from "@/components/roles/with-permissions";
 import {
   SettingsBlock,
   SettingsSaveBar,
+  SettingsSectionStack,
 } from "@/components/settings/settings-block";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -583,7 +584,7 @@ function KnowledgeSettingsContent() {
       isPending={isInitialLoading}
       loadingFallback={<LoadingSpinner />}
     >
-      <div className="space-y-8">
+      <SettingsSectionStack>
         {!isInitialLoading && !isFullyConfigured && (
           <Alert variant="warning">
             <AlertTriangle className="h-4 w-4" />
@@ -836,7 +837,7 @@ function KnowledgeSettingsContent() {
           onSave={handleSave}
           onCancel={handleCancel}
         />
-      </div>
+      </SettingsSectionStack>
     </LoadingWrapper>
   );
 }

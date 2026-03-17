@@ -958,6 +958,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateConnector]: { knowledgeBase: ["update"] },
   [RouteId.DeleteConnector]: { knowledgeBase: ["delete"] },
   [RouteId.SyncConnector]: { knowledgeBase: ["update"] },
+  [RouteId.ForceResyncConnector]: { knowledgeBase: ["update"] },
   [RouteId.TestConnectorConnection]: { knowledgeBase: ["read"] },
 
   // Connector Knowledge Base Assignment Routes

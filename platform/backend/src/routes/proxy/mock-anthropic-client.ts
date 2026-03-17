@@ -10,6 +10,7 @@ import type Anthropic from "@anthropic-ai/sdk";
 const MOCK_RESPONSE: Anthropic.Message = {
   id: "msg-mock123",
   type: "message",
+  container: null,
   role: "assistant",
   content: [
     {
@@ -75,6 +76,7 @@ export class MockAnthropicClient {
                 message: {
                   id: "msg-mock123",
                   type: "message",
+                  container: null,
                   role: "assistant",
                   content: [],
                   model: params.model,
@@ -116,7 +118,11 @@ export class MockAnthropicClient {
               },
               {
                 type: "message_delta",
-                delta: { stop_reason: "end_turn", stop_sequence: null },
+                delta: {
+                  container: null,
+                  stop_reason: "end_turn",
+                  stop_sequence: null,
+                },
                 usage: {
                   output_tokens: 10,
                   cache_creation_input_tokens: 0,
@@ -155,6 +161,7 @@ export class MockAnthropicClient {
           message: {
             id: "msg-mock123",
             type: "message",
+            container: null,
             role: "assistant",
             content: [],
             model: params.model,
@@ -179,6 +186,7 @@ export class MockAnthropicClient {
             content_block: {
               type: "tool_use",
               id: "toolu_mock123",
+              caller: { type: "direct" },
               name: "get_weather",
               input: {}, // This empty object is what causes the bug if not handled
             },
@@ -246,7 +254,11 @@ export class MockAnthropicClient {
       baseChunks.push(
         {
           type: "message_delta",
-          delta: { stop_reason: "end_turn", stop_sequence: null },
+          delta: {
+            container: null,
+            stop_reason: "end_turn",
+            stop_sequence: null,
+          },
           usage: {
             output_tokens: 10,
             cache_creation_input_tokens: 0,

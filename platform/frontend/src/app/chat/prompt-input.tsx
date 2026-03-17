@@ -9,9 +9,9 @@ import {
   supportsFileUploads,
 } from "@shared";
 import type { ChatStatus } from "ai";
-import { MoreVerticalIcon, PaperclipIcon } from "lucide-react";
+import { MoreVerticalIcon, PaperclipIcon, RotateCcwIcon } from "lucide-react";
 import type { FormEvent } from "react";
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { ModelSelectorLogo } from "@/components/ai-elements/model-selector";
 import {
   PromptInput,
@@ -51,9 +51,10 @@ import {
 } from "@/components/ui/tooltip";
 import { useProfile } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth.query";
+import { useChatPlaceholder } from "@/lib/chat-placeholder.hook";
 import { conversationStorageKeys } from "@/lib/chat-utils";
 import { useOrganization } from "@/lib/organization.query";
-import { useTypingAnimation } from "@/lib/typing-animation.hook";
+import type { ModelSource } from "@/lib/use-chat-preferences";
 import { useIsMobile } from "@/lib/use-mobile.hook";
 import { useModelSelectorDisplay } from "@/lib/use-model-selector-display.hook";
 
@@ -103,6 +104,10 @@ interface ArchestraPromptInputProps {
   onAgentChange?: (agentId: string) => void;
   /** Callback when model selector opens/closes */
   onModelSelectorOpenChange?: (open: boolean) => void;
+  /** Source of the currently selected model (agent, organization, user, or null for fallback) */
+  modelSource?: ModelSource | null;
+  /** Callback to reset user model override back to agent/org default */
+  onResetModelOverride?: () => void;
 }
 
 // Inner component that has access to the controller context
@@ -131,6 +136,8 @@ const PromptInputContent = ({
   selectorAgentId,
   onAgentChange,
   onModelSelectorOpenChange,
+  modelSource,
+  onResetModelOverride,
 }: Omit<ArchestraPromptInputProps, "onSubmit"> & {
   onSubmit: ArchestraPromptInputProps["onSubmit"];
 }) => {
@@ -163,13 +170,10 @@ const PromptInputContent = ({
 
   // Chat placeholders from organization settings
   const { data: orgData } = useOrganization();
-  const chatPlaceholders = useMemo(
-    () => orgData?.chatPlaceholders,
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [orgData?.chatPlaceholders],
-  );
-  const { text: animatedPlaceholder, isAnimating } =
-    useTypingAnimation(chatPlaceholders);
+  const { placeholder: chatPlaceholder } = useChatPlaceholder({
+    animate: orgData?.animateChatPlaceholders ?? true,
+    placeholders: orgData?.chatPlaceholders,
+  });
 
   // RBAC: check if user can see agent picker and provider settings in chat
   const { data: canSeeAgentPicker } = useHasPermissions({
@@ -186,7 +190,6 @@ const PromptInputContent = ({
   const isRestored = useRef(false);
 
   // Restore draft on mount or conversation change
-  // biome-ignore lint/correctness/useExhaustiveDependencies: controller.textInput is a new object every render (recreated in useMemo when textInput state changes), so using it as a dependency causes the effect to fire on every keystroke, clearing the input. Use the stable setInput function reference instead.
   useEffect(() => {
     isRestored.current = false;
     const savedDraft = localStorage.getItem(storageKey);
@@ -270,9 +273,7 @@ const PromptInputContent = ({
             placeholder={
               conversationId
                 ? "Ask a follow-up..."
-                : isAnimating
-                  ? animatedPlaceholder
-                  : "What would you like to get done?"
+                : (chatPlaceholder ?? "What would you like to get done?")
             }
             ref={textareaRef}
             className="px-4"
@@ -287,7 +288,9 @@ const PromptInputContent = ({
         <PromptInputTools className="gap-0.5">
           {/* Mobile: vertical three-dots menu for collapsed toolbar items */}
           {isMobile &&
-            (showDefaultLogo && logoProvider ? (
+            (showDefaultLogo &&
+            logoProvider &&
+            (modelSource === "agent" || modelSource === "organization") ? (
               <Button
                 type="button"
                 variant="ghost"
@@ -316,7 +319,7 @@ const PromptInputContent = ({
                       selectorAgentId !== undefined &&
                       onAgentChange && (
                         <div>
-                          <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">
                             Agent
                           </p>
                           <InitialAgentSelector
@@ -327,9 +330,30 @@ const PromptInputContent = ({
                       )}
                     {canSeeProviderSettings && (
                       <>
+                        {modelSource && (
+                          <div className="flex items-center gap-1.5">
+                            <p className="text-xs font-medium text-muted-foreground">
+                              {modelSource === "agent"
+                                ? "Agent default"
+                                : modelSource === "organization"
+                                  ? "Org default"
+                                  : "User override"}
+                            </p>
+                            {modelSource === "user" && onResetModelOverride && (
+                              <button
+                                type="button"
+                                onClick={onResetModelOverride}
+                                className="text-muted-foreground hover:text-foreground transition-colors"
+                                title="Reset to default"
+                              >
+                                <RotateCcwIcon className="size-3" />
+                              </button>
+                            )}
+                          </div>
+                        )}
                         {(conversationId || onApiKeyChange) && (
                           <div>
-                            <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1">
+                            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">
                               Provider API Key
                             </p>
                             <ChatApiKeySelector
@@ -349,7 +373,7 @@ const PromptInputContent = ({
                           </div>
                         )}
                         <div>
-                          <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">
                             Model
                           </p>
                           <ModelSelector
@@ -367,7 +391,7 @@ const PromptInputContent = ({
                     )}
                     {tokensUsed > 0 && maxContextLength && (
                       <div>
-                        <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1">
+                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">
                           Context
                         </p>
                         <ContextIndicator
@@ -451,7 +475,8 @@ const PromptInputContent = ({
                   />
                 )}
               {!canSeeProviderSettings ? null : showDefaultLogo &&
-                logoProvider ? (
+                logoProvider &&
+                (modelSource === "agent" || modelSource === "organization") ? (
                 <Button
                   type="button"
                   variant="ghost"
@@ -465,7 +490,7 @@ const PromptInputContent = ({
                   />
                 </Button>
               ) : (
-                <>
+                <div className="flex items-center h-8 rounded-full border border-border bg-muted/50 overflow-hidden">
                   {(conversationId || onApiKeyChange) && (
                     <ChatApiKeySelector
                       conversationId={conversationId}
@@ -506,7 +531,28 @@ const PromptInputContent = ({
                         : initialApiKeyId
                     }
                   />
-                </>
+                  {modelSource && (
+                    <span className="pr-2.5 pl-0.5 text-xs text-muted-foreground whitespace-nowrap inline-flex items-center gap-1">
+                      {"("}
+                      {modelSource === "agent"
+                        ? "agent"
+                        : modelSource === "organization"
+                          ? "org"
+                          : "user override"}
+                      {modelSource === "user" && onResetModelOverride && (
+                        <button
+                          type="button"
+                          onClick={onResetModelOverride}
+                          className="ml-0.5 text-muted-foreground hover:text-foreground transition-colors"
+                          title="Reset to default"
+                        >
+                          <RotateCcwIcon className="size-3" />
+                        </button>
+                      )}
+                      {")"}
+                    </span>
+                  )}
+                </div>
               )}
               {tokensUsed > 0 && maxContextLength && (
                 <ContextIndicator
@@ -563,6 +609,8 @@ const ArchestraPromptInput = ({
   selectorAgentId,
   onAgentChange,
   onModelSelectorOpenChange,
+  modelSource,
+  onResetModelOverride,
 }: ArchestraPromptInputProps) => {
   return (
     <div className="flex size-full flex-col justify-end">
@@ -592,6 +640,8 @@ const ArchestraPromptInput = ({
           selectorAgentId={selectorAgentId}
           onAgentChange={onAgentChange}
           onModelSelectorOpenChange={onModelSelectorOpenChange}
+          modelSource={modelSource}
+          onResetModelOverride={onResetModelOverride}
         />
       </PromptInputProvider>
     </div>

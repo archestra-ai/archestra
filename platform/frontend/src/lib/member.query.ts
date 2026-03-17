@@ -50,6 +50,9 @@ type PaginatedInvitationsResponse = {
     hasPrev: boolean;
   };
 };
+type RawInvitation = NonNullable<
+  Awaited<ReturnType<typeof authClient.organization.listInvitations>>["data"]
+>[number];
 
 /**
  * Paginated members hook with search and role filter support
@@ -102,8 +105,10 @@ export function useInvitationsPaginated(
       });
       const allInvitations: Invitation[] =
         response.data
-          ?.filter((invitation) => invitation.status === "pending")
-          .map((invitation) => ({
+          ?.filter(
+            (invitation: RawInvitation) => invitation.status === "pending",
+          )
+          .map((invitation: RawInvitation) => ({
             id: invitation.id,
             email: invitation.email,
             role: invitation.role ?? null,

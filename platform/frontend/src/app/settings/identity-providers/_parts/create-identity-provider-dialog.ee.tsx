@@ -117,8 +117,11 @@ export function CreateIdentityProviderDialog({
       size="large"
     >
       <Form {...form}>
-        <DialogForm onSubmit={form.handleSubmit(onSubmit)}>
-          <DialogBody>
+        <DialogForm
+          className="flex min-h-0 flex-1 flex-col"
+          onSubmit={form.handleSubmit(onSubmit)}
+        >
+          <DialogBody className="pb-4">
             {currentProviderType === "saml" ? (
               <SamlConfigForm form={form} hideProviderId={hideProviderId} />
             ) : (

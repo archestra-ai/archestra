@@ -131,17 +131,8 @@ The Helm chart provides extensive configuration options through values. For the 
 - `archestra.envWithValueFrom` - Environment variables with `valueFrom` for Kubernetes downward API (`fieldRef`, `resourceFieldRef`) or other sources. Required for defining variables like `NODE_IP` that can be referenced via `$(NODE_IP)` in other env vars.
 - `archestra.envFromSecrets` - Environment variables from Kubernetes Secrets (inject sensitive data from secrets)
 - `archestra.envFrom` - Import all key-value pairs from Secrets or ConfigMaps as environment variables
-
-**Example**:
-
-```bash
-helm upgrade archestra-platform \
-  oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts/archestra-platform \
-  --install \
-  --namespace archestra \
-  --create-namespace \
-  --wait
-```
+- `archestra.extraVolumes` - Additional volumes for mounting extra files into the platform and worker pods
+- `archestra.extraVolumeMounts` - Additional volume mounts for the platform and worker containers (for example, a Vertex AI service account key file)
 
 **Auth secret configuration**: `ARCHESTRA_AUTH_SECRET` is optional. If you do not configure it, the Helm chart creates a `<release>-auth` Secret and auto-generates a 64-character `auth-secret` value on first install.
 
@@ -248,19 +239,6 @@ archestra:
 
 Apply via Helm (replace `RELEASE_NAME` with your actual release name, e.g., `archestra-platform`):
 
-```bash
-helm upgrade archestra-platform \
-  oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts/archestra-platform \
-  --install \
-  --namespace archestra \
-  --create-namespace \
-  --set archestra.gkeBackendConfig.enabled=true \
-  --set archestra.gkeBackendConfig.backend.timeoutSec=600 \
-  --set archestra.gkeBackendConfig.frontend.timeoutSec=600 \
-  --set-string archestra.service.annotations."cloud\.google\.com/backend-config"='{"ports": {"9000":"archestra-platform-archestra-platform-backend-config", "3000":"archestra-platform-archestra-platform-frontend-config"}}' \
-  --wait
-```
-
 The Helm chart creates two BackendConfig resources with health checks tuned for deployments:
 
 - `<release>-archestra-platform-backend-config` - For the API backend (port 9000)
@@ -278,19 +256,6 @@ archestra:
       service.beta.kubernetes.io/aws-load-balancer-connection-idle-timeout: "600"
 ```
 
-Apply via Helm:
-
-```bash
-helm upgrade archestra-platform \
-  oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts/archestra-platform \
-  --install \
-  --namespace archestra \
-  --create-namespace \
-  --set-string archestra.service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-backend-protocol"=http \
-  --set-string archestra.service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-connection-idle-timeout"="600" \
-  --wait
-```
-
 ##### Microsoft Azure (AKS)
 
 For Azure AKS with Application Gateway Ingress Controller (AGIC), configure timeout annotations on the Ingress:
@@ -302,20 +267,6 @@ archestra:
     annotations:
       appgw.ingress.kubernetes.io/request-timeout: "600"
       appgw.ingress.kubernetes.io/connection-draining-timeout: "60"
-```
-
-Apply via Helm:
-
-```bash
-helm upgrade archestra-platform \
-  oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts/archestra-platform \
-  --install \
-  --namespace archestra \
-  --create-namespace \
-  --set archestra.ingress.enabled=true \
-  --set-string archestra.ingress.annotations."appgw\.ingress\.kubernetes\.io/request-timeout"="600" \
-  --set-string archestra.ingress.annotations."appgw\.ingress\.kubernetes\.io/connection-draining-timeout"="60" \
-  --wait
 ```
 
 ##### Other Ingress Controllers (nginx, Traefik, etc.)
@@ -352,36 +303,6 @@ archestra:
 - `archestra.horizontalPodAutoscaler.metrics` - Metrics configuration for scaling decisions
 - `archestra.horizontalPodAutoscaler.behavior` - Scaling behavior configuration
 
-**Example with CPU-based autoscaling**:
-
-```yaml
-archestra:
-  horizontalPodAutoscaler:
-    enabled: true
-    minReplicas: 2
-    maxReplicas: 10
-    metrics:
-      - type: Resource
-        resource:
-          name: cpu
-          target:
-            type: Utilization
-            averageUtilization: 80
-    behavior:
-      scaleDown:
-        stabilizationWindowSeconds: 300
-        policies:
-          - type: Percent
-            value: 10
-            periodSeconds: 60
-      scaleUp:
-        stabilizationWindowSeconds: 0
-        policies:
-          - type: Percent
-            value: 100
-            periodSeconds: 15
-```
-
 **PodDisruptionBudget Settings**:
 
 - `archestra.podDisruptionBudget.enabled` - Enable or disable PodDisruptionBudget creation (default: false)
@@ -390,25 +311,6 @@ archestra:
 - `archestra.podDisruptionBudget.unhealthyPodEvictionPolicy` - Policy for evicting unhealthy pods (IfHealthyBudget or AlwaysAllow)
 
 **Note**: Only one of `minAvailable` or `maxUnavailable` can be set.
-
-**Example with minAvailable**:
-
-```yaml
-archestra:
-  podDisruptionBudget:
-    enabled: true
-    minAvailable: 1
-    unhealthyPodEvictionPolicy: IfHealthyBudget
-```
-
-**Example with maxUnavailable percentage**:
-
-```yaml
-archestra:
-  podDisruptionBudget:
-    enabled: true
-    maxUnavailable: "25%"
-```
 
 See the Kubernetes documentation for more details:
 

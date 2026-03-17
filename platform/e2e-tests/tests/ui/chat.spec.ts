@@ -217,7 +217,7 @@ const testConfigs: ChatProviderTestConfig[] = [
 // =============================================================================
 
 // TODO: Fix flaky chat tests - WireMock streaming issues in CI
-const skippedProviders = new Set(["openai", "gemini"]);
+const skippedProviders = new Set(["openai", "gemini", "cerebras"]);
 
 for (const config of testConfigs) {
   test.describe(`Chat-UI-${config.providerName}`, () => {

@@ -1,6 +1,6 @@
 "use client";
 
-export function isValidHelpCenterUrl(value: string): boolean {
+export function isValidChatLinkUrl(value: string): boolean {
   try {
     const url = new URL(value);
     return url.protocol === "http:" || url.protocol === "https:";

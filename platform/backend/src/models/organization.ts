@@ -122,10 +122,7 @@ class OrganizationModel {
         appName: schema.organizationsTable.appName,
         ogDescription: schema.organizationsTable.ogDescription,
         footerText: schema.organizationsTable.footerText,
-        helpCenterUrl: schema.organizationsTable.helpCenterUrl,
-        helpCenterLabel: schema.organizationsTable.helpCenterLabel,
-        chatErrorSupportMessage:
-          schema.organizationsTable.chatErrorSupportMessage,
+        chatLinks: schema.organizationsTable.chatLinks,
         animateChatPlaceholders:
           schema.organizationsTable.animateChatPlaceholders,
       })
@@ -144,9 +141,7 @@ class OrganizationModel {
         appName: null,
         ogDescription: null,
         footerText: null,
-        helpCenterUrl: null,
-        helpCenterLabel: null,
-        chatErrorSupportMessage: null,
+        chatLinks: null,
         animateChatPlaceholders: true,
       };
     }

@@ -63,12 +63,18 @@ const Base64PngSchema = z
     }
   });
 
-const HelpCenterUrlSchema = z
+const ChatLinkUrlSchema = z
   .string()
+  .trim()
   .max(MAX_HELP_CENTER_URL_LENGTH)
   .refine((value) => isValidHttpUrl(value), {
-    message: "Help Center URL must be a valid HTTP or HTTPS URL",
+    message: "Chat link URL must be a valid HTTP or HTTPS URL",
   });
+
+export const OrganizationChatLinkSchema = z.object({
+  label: z.string().trim().min(1).max(25),
+  url: ChatLinkUrlSchema,
+});
 
 /**
  * Appearance settings schema - used for unauthenticated access to branding settings.
@@ -84,9 +90,7 @@ export const AppearanceSettingsSchema = z.object({
   appName: z.string().nullable(),
   ogDescription: z.string().nullable(),
   footerText: z.string().nullable(),
-  helpCenterUrl: z.string().nullable(),
-  helpCenterLabel: z.string().nullable(),
-  chatErrorSupportMessage: z.string().nullable(),
+  chatLinks: z.array(OrganizationChatLinkSchema).nullable(),
   animateChatPlaceholders: z.boolean(),
 });
 
@@ -117,9 +121,7 @@ const extendedFields = {
   appName: z.string().nullable(),
   ogDescription: z.string().nullable(),
   footerText: z.string().nullable(),
-  helpCenterUrl: z.string().nullable(),
-  helpCenterLabel: z.string().nullable(),
-  chatErrorSupportMessage: z.string().nullable(),
+  chatLinks: z.array(OrganizationChatLinkSchema).nullable(),
   chatPlaceholders: z.array(z.string()).nullable(),
   animateChatPlaceholders: z.boolean(),
   showTwoFactor: z.boolean(),
@@ -143,9 +145,7 @@ export const UpdateAppearanceSettingsSchema = z.object({
   appName: z.string().max(100).nullable().optional(),
   ogDescription: z.string().max(500).nullable().optional(),
   footerText: z.string().max(500).nullable().optional(),
-  helpCenterUrl: HelpCenterUrlSchema.nullable().optional(),
-  helpCenterLabel: z.string().max(80).nullable().optional(),
-  chatErrorSupportMessage: z.string().max(500).nullable().optional(),
+  chatLinks: z.array(OrganizationChatLinkSchema).max(3).nullable().optional(),
   chatPlaceholders: z.array(z.string().max(80)).max(20).nullable().optional(),
   animateChatPlaceholders: z.boolean().optional(),
   showTwoFactor: z.boolean().optional(),
@@ -191,6 +191,7 @@ export type GlobalToolPolicy = z.infer<typeof GlobalToolPolicySchema>;
 export type Organization = z.infer<typeof SelectOrganizationSchema>;
 export type InsertOrganization = z.infer<typeof InsertOrganizationSchema>;
 export type AppearanceSettings = z.infer<typeof AppearanceSettingsSchema>;
+export type OrganizationChatLink = z.infer<typeof OrganizationChatLinkSchema>;
 
 function isValidHttpUrl(value: string): boolean {
   try {

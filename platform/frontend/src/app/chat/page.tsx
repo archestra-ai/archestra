@@ -36,7 +36,7 @@ import { Suggestion } from "@/components/ai-elements/suggestion";
 import { AppLogo } from "@/components/app-logo";
 import { ButtonWithTooltip } from "@/components/button-with-tooltip";
 import { BrowserPanel } from "@/components/chat/browser-panel";
-import { ChatHelpLink } from "@/components/chat/chat-help-link";
+import { ChatLinkButton } from "@/components/chat/chat-help-link";
 import { ChatMessages } from "@/components/chat/chat-messages";
 import { ConversationArtifactPanel } from "@/components/chat/conversation-artifact";
 import {
@@ -910,36 +910,6 @@ export default function ChatPage() {
     messages.length,
   ]);
 
-  // Poll for the assistant response when the page was reloaded mid-stream.
-  // After reload the DB may only contain the user message (persisted early by
-  // the backend). The assistant response arrives once the backend stream
-  // finishes. We poll until the last message is no longer a user message.
-  useEffect(() => {
-    if (!conversationId || status === "streaming" || status === "submitted") {
-      return;
-    }
-
-    const lastMsg = conversation?.messages?.at(-1) as UIMessage | undefined;
-    const isWaitingForAssistant =
-      lastMsg?.role === "user" && messages.length > 0;
-
-    if (!isWaitingForAssistant) return;
-
-    const interval = setInterval(() => {
-      queryClient.invalidateQueries({
-        queryKey: ["conversation", conversationId],
-      });
-    }, 3000);
-
-    return () => clearInterval(interval);
-  }, [
-    conversationId,
-    conversation?.messages,
-    messages.length,
-    status,
-    queryClient,
-  ]);
-
   // Merge database UUIDs from backend into local message state
   // This runs after streaming completes and backend query has fetched
   useEffect(() => {
@@ -1793,12 +1763,15 @@ export default function ChatPage() {
                   }
                 }}
               >
-                {organization?.helpCenterUrl && (
-                  <div className="absolute top-4 right-4 z-10">
-                    <ChatHelpLink
-                      url={organization.helpCenterUrl}
-                      label={organization.helpCenterLabel}
-                    />
+                {organization?.chatLinks && organization.chatLinks.length > 0 && (
+                  <div className="absolute top-4 right-4 z-10 flex flex-wrap justify-end gap-2 max-w-[min(100%,36rem)]">
+                    {organization.chatLinks.map((link) => (
+                      <ChatLinkButton
+                        key={`${link.label}-${link.url}`}
+                        url={link.url}
+                        label={link.label}
+                      />
+                    ))}
                   </div>
                 )}
                 {isPlaywrightSetupRequired && (

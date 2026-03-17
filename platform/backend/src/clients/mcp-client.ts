@@ -310,6 +310,7 @@ class McpClient {
           mcpServerName,
           result.content,
           !!result.isError,
+          result._meta,
           authInfo,
         );
       } catch (error) {
@@ -1281,6 +1282,7 @@ class McpClient {
     mcpServerName: string,
     content: unknown,
     isError: boolean,
+    _meta?: unknown,
     authInfo?: {
       userId?: string;
       authMethod?: MCPGatewayAuthMethod;
@@ -1291,6 +1293,7 @@ class McpClient {
       name: toolCall.name,
       content,
       isError,
+      _meta,
     };
 
     await this.persistToolCall(

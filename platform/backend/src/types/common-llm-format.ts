@@ -29,6 +29,7 @@ export type CommonToolResult = {
   content: unknown;
   isError: boolean;
   error?: string;
+  _meta?: unknown;
 };
 
 /**

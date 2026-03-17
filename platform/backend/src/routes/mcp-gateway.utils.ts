@@ -362,6 +362,7 @@ export async function createAgentServer(
             ? result.content
             : [{ type: "text", text: JSON.stringify(result.content) }],
           isError: result.isError,
+          _meta: result._meta,
         };
       } catch (error) {
         const durationSeconds = (Date.now() - startTime) / 1000;

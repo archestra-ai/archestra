@@ -1,4 +1,5 @@
 import type { UIMessage } from "@ai-sdk/react";
+import { AppRenderer } from "@mcp-ui/client";
 import {
   SWAP_AGENT_POKE_PREFIX,
   SWAP_AGENT_POKE_TEXT,
@@ -1080,19 +1081,41 @@ function MessageTool({
           )}
         {errorText ? <ToolErrorDetails errorText={errorText} /> : null}
         {toolResultPart && (
-          <ToolOutput
-            label={errorText ? "Error" : "Result"}
-            output={toolResultPart.output}
-            errorText={errorText}
-          />
+          (toolResultPart.output as any)?._meta?.ui?.resourceUri ? (
+            <div className="px-4 pb-4">
+              <AppRenderer
+                resourceUri={
+                  (toolResultPart.output as any)._meta.ui.resourceUri
+                }
+                toolInput={part.input}
+                toolResult={toolResultPart.output}
+              />
+            </div>
+          ) : (
+            <ToolOutput
+              label={errorText ? "Error" : "Result"}
+              output={toolResultPart.output}
+              errorText={errorText}
+            />
+          )
         )}
-        {!toolResultPart && Boolean(part.output) && (
-          <ToolOutput
-            label={errorText ? "Error" : "Result"}
-            output={part.output}
-            errorText={errorText}
-          />
-        )}
+        {!toolResultPart &&
+          Boolean(part.output) &&
+          ((part.output as any)?._meta?.ui?.resourceUri ? (
+            <div className="px-4 pb-4">
+              <AppRenderer
+                resourceUri={(part.output as any)._meta.ui.resourceUri}
+                toolInput={part.input}
+                toolResult={part.output}
+              />
+            </div>
+          ) : (
+            <ToolOutput
+              label={errorText ? "Error" : "Result"}
+              output={part.output}
+              errorText={errorText}
+            />
+          ))}
       </ToolContent>
     </Tool>
   );

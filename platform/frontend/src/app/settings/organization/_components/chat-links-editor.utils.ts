@@ -10,6 +10,10 @@ export interface ChatLinkValidationError {
   url?: string;
 }
 
+interface ValidateChatLinkOptions {
+  requireComplete?: boolean;
+}
+
 export function sanitizeChatLinks(
   links: ChatLinkEditorValue[],
 ): ChatLinkEditorValue[] {
@@ -23,9 +27,11 @@ export function sanitizeChatLinks(
 
 export function validateChatLink(
   link: ChatLinkEditorValue,
+  options?: ValidateChatLinkOptions,
 ): ChatLinkValidationError {
   const trimmedLabel = link.label.trim();
   const trimmedUrl = link.url.trim();
+  const requireComplete = options?.requireComplete ?? false;
 
   if (trimmedLabel.length === 0 && trimmedUrl.length === 0) {
     return {};
@@ -40,9 +46,11 @@ export function validateChatLink(
           : undefined,
     url:
       trimmedUrl.length === 0
-        ? "Enter a valid HTTP or HTTPS URL."
-        : !isValidChatLinkUrl(trimmedUrl)
+        ? requireComplete
           ? "Enter a valid HTTP or HTTPS URL."
-          : undefined,
+          : undefined
+        : !isValidChatLinkUrl(trimmedUrl)
+        ? "Enter a valid HTTP or HTTPS URL."
+        : undefined,
   };
 }

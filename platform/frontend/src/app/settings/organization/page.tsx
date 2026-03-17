@@ -75,6 +75,8 @@ export default function OrganizationSettingsPage() {
   const [chatLinks, setChatLinks] = useState<ChatLinkEditorValue[] | null>(
     null,
   );
+  const [showChatLinkValidationErrors, setShowChatLinkValidationErrors] =
+    useState(false);
   const [chatErrorSupportMessage, setChatErrorSupportMessage] = useState<
     string | null
   >(null);
@@ -100,8 +102,16 @@ export default function OrganizationSettingsPage() {
     animateChatPlaceholders ?? organization?.animateChatPlaceholders ?? true;
   const effectiveShowTwoFactor =
     showTwoFactor ?? organization?.showTwoFactor ?? false;
-  const chatLinkValidationErrors = effectiveChatLinks.map(validateChatLink);
-  const hasChatLinkValidationErrors = chatLinkValidationErrors.some(
+  const liveChatLinkValidationErrors = effectiveChatLinks.map((link) =>
+    validateChatLink(link),
+  );
+  const saveChatLinkValidationErrors = effectiveChatLinks.map((link) =>
+    validateChatLink(link, { requireComplete: true }),
+  );
+  const displayedChatLinkValidationErrors = showChatLinkValidationErrors
+    ? saveChatLinkValidationErrors
+    : liveChatLinkValidationErrors;
+  const hasChatLinkValidationErrors = saveChatLinkValidationErrors.some(
     (errors) => !!errors.label || !!errors.url,
   );
 
@@ -146,6 +156,7 @@ export default function OrganizationSettingsPage() {
     setOgDescription(null);
     setFooterText(null);
     setChatLinks(null);
+    setShowChatLinkValidationErrors(false);
     setChatErrorSupportMessage(null);
     setChatPlaceholders(null);
     setAnimateChatPlaceholders(null);
@@ -236,7 +247,7 @@ export default function OrganizationSettingsPage() {
               </div>
               <ChatLinksEditor
                 links={effectiveChatLinks}
-                validationErrors={chatLinkValidationErrors}
+                validationErrors={displayedChatLinkValidationErrors}
                 onChange={setChatLinks}
               />
               <div className="space-y-2">
@@ -315,7 +326,12 @@ export default function OrganizationSettingsPage() {
             await saveAppearance?.(currentUITheme || DEFAULT_THEME);
             setHasThemeChanges(false);
           }
-          if (hasFieldChanges && !hasChatLinkValidationErrors) {
+          if (hasFieldChanges) {
+            if (hasChatLinkValidationErrors) {
+              setShowChatLinkValidationErrors(true);
+              return;
+            }
+
             await handleSaveFields();
           }
         }}
@@ -328,12 +344,12 @@ export default function OrganizationSettingsPage() {
           setOgDescription(null);
           setFooterText(null);
           setChatLinks(null);
+          setShowChatLinkValidationErrors(false);
           setChatErrorSupportMessage(null);
           setChatPlaceholders(null);
           setAnimateChatPlaceholders(null);
           setShowTwoFactor(null);
         }}
-        disabledSave={hasChatLinkValidationErrors}
       />
     </SettingsSectionStack>
   );

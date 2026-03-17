@@ -46,6 +46,33 @@ describe("chat-links-editor utils", () => {
       });
     });
 
+    it("does not require a URL during live validation when only the label is filled", () => {
+      expect(
+        validateChatLink({
+          label: "Docs",
+          url: "",
+        }),
+      ).toEqual({
+        label: undefined,
+        url: undefined,
+      });
+    });
+
+    it("requires a URL during save validation when only the label is filled", () => {
+      expect(
+        validateChatLink(
+          {
+            label: "Docs",
+            url: "",
+          },
+          { requireComplete: true },
+        ),
+      ).toEqual({
+        label: undefined,
+        url: "Enter a valid HTTP or HTTPS URL.",
+      });
+    });
+
     it("rejects labels longer than 25 characters", () => {
       expect(
         validateChatLink({

@@ -4,6 +4,12 @@ import ModelModel from "./model";
 
 describe("ApiKeyModelModel", () => {
   describe("getBestModelsForApiKeys", () => {
+    test("returns an empty map for empty input", async () => {
+      const bestModels = await ApiKeyModelModel.getBestModelsForApiKeys([]);
+
+      expect(bestModels).toEqual(new Map());
+    });
+
     test("returns best-marked models and falls back to the first linked model", async ({
       makeOrganization,
       makeSecret,

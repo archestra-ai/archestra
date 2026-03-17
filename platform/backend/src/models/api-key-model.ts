@@ -372,6 +372,10 @@ class ApiKeyModelModel {
           inArray(schema.apiKeyModelsTable.apiKeyId, apiKeyIds),
           eq(schema.apiKeyModelsTable.isBest, true),
         ),
+      )
+      .orderBy(
+        asc(schema.apiKeyModelsTable.apiKeyId),
+        asc(schema.modelsTable.modelId),
       );
 
     const modelsByApiKeyId = new Map<string, Model>();

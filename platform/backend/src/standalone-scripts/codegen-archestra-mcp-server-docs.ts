@@ -345,7 +345,7 @@ function renderInputSchema(
 ): string | null {
   const properties = schema.properties;
   if (!properties || Object.keys(properties).length === 0) {
-    return `#### ${toolName}\n\nThis tool takes no arguments.`;
+    return `#### ${toolName}\n\nThis tool takes no arguments.\n`;
   }
 
   const requiredSet = new Set(schema.required ?? []);

@@ -35,6 +35,7 @@ However, **RBAC (role-based access control) is still enforced**. Every tool is m
 #### whoami
 
 This tool takes no arguments.
+
 ### Agents
 
 | Tool | Description |
@@ -216,6 +217,7 @@ This tool takes no arguments.
 #### get_mcp_servers
 
 This tool takes no arguments.
+
 #### get_mcp_server_tools
 
 | Parameter | Type | Required | Description |
@@ -348,6 +350,7 @@ This tool takes no arguments.
 #### list_mcp_server_deployments
 
 This tool takes no arguments.
+
 #### get_mcp_server_logs
 
 | Parameter | Type | Required | Description |
@@ -358,6 +361,7 @@ This tool takes no arguments.
 #### create_mcp_server_installation_request
 
 This tool takes no arguments.
+
 ### Limits
 
 | Tool | Description |
@@ -432,9 +436,11 @@ This tool takes no arguments.
 #### get_autonomy_policy_operators
 
 This tool takes no arguments.
+
 #### get_tool_invocation_policies
 
 This tool takes no arguments.
+
 #### create_tool_invocation_policy
 
 | Parameter | Type | Required | Description |
@@ -475,6 +481,7 @@ This tool takes no arguments.
 #### get_trusted_data_policies
 
 This tool takes no arguments.
+
 #### create_trusted_data_policy
 
 | Parameter | Type | Required | Description |
@@ -579,6 +586,7 @@ This tool takes no arguments.
 #### get_knowledge_bases
 
 This tool takes no arguments.
+
 #### get_knowledge_base
 
 | Parameter | Type | Required | Description |
@@ -611,6 +619,7 @@ This tool takes no arguments.
 #### get_knowledge_connectors
 
 This tool takes no arguments.
+
 #### get_knowledge_connector
 
 | Parameter | Type | Required | Description |
@@ -702,6 +711,7 @@ This tool takes no arguments.
 #### swap_to_default_agent
 
 This tool takes no arguments.
+
 #### artifact_write
 
 | Parameter | Type | Required | Description |

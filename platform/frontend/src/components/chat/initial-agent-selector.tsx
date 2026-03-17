@@ -788,10 +788,7 @@ function AgentSettingsView({
                   className="h-6 text-xs px-1.5 -ml-1.5 mt-0.5 text-muted-foreground"
                 />
               ) : (
-                <p
-                  className="mt-1 text-left text-xs text-muted-foreground"
-                  onDoubleClick={() => setIsEditingDescription(true)}
-                >
+                <p className="mt-1 text-left text-xs text-muted-foreground">
                   {truncateAgentDescription(agent.description)}
                 </p>
               ))}

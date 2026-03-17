@@ -351,7 +351,10 @@ class ConnectorSyncService {
   }): Promise<{ ingested: boolean; documentId: string | null }> {
     const { doc, connectorId, connectorType, organizationId, log } = params;
 
-    const contentHash = createHash("sha256").update(doc.content).digest("hex");
+    const hashInput = doc.metadata
+      ? doc.content + "\n" + JSON.stringify(doc.metadata)
+      : doc.content;
+    const contentHash = createHash("sha256").update(hashInput).digest("hex");
 
     // Lookup existing document by connector + source ID
     const existing = await KbDocumentModel.findBySourceId({

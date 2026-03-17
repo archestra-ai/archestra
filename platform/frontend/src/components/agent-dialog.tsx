@@ -995,16 +995,33 @@ export function AgentDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-5xl h-[90vh] flex flex-col overflow-hidden">
-        <DialogHeader className="space-y-2">
+        <DialogHeader>
           <div className="flex items-start justify-between gap-4 pr-6">
-            <DialogTitle className="flex items-center gap-2">
-              {isBuiltIn
-                ? `Edit ${agent?.name ?? "Built-In Agent"}`
-                : getDialogTitle(agentType, !!agent)}
-              {!isBuiltIn && (
-                <AgentBadge type={scope} className="font-normal" />
+            <div className="min-w-0 flex-1">
+              <DialogTitle className="flex items-center gap-2">
+                {isBuiltIn
+                  ? `Edit ${agent?.name ?? "Built-In Agent"}`
+                  : getDialogTitle(agentType, !!agent)}
+                {!isBuiltIn && (
+                  <AgentBadge type={scope} className="font-normal" />
+                )}
+              </DialogTitle>
+              {isBuiltIn && agent?.description && (
+                <p className="pt-2 text-sm text-muted-foreground">
+                  {agent.description}.{" "}
+                  <a
+                    href={getDocsUrl(
+                      DocsPage.PlatformBuiltInAgentsPolicyConfig,
+                    )}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline"
+                  >
+                    Learn more
+                  </a>
+                </p>
               )}
-            </DialogTitle>
+            </div>
             {agent?.createdAt &&
               (() => {
                 const createdBy = agent.authorName ?? appName;
@@ -1021,19 +1038,6 @@ export function AgentDialog({
                 );
               })()}
           </div>
-          {isBuiltIn && agent?.description && (
-            <p className="pr-24 pt-1 text-sm text-muted-foreground md:pr-48">
-              {agent.description}.{" "}
-              <a
-                href={getDocsUrl(DocsPage.PlatformBuiltInAgentsPolicyConfig)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="underline"
-              >
-                Learn more
-              </a>
-            </p>
-          )}
         </DialogHeader>
 
         <DialogForm

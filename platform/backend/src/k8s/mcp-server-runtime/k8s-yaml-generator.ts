@@ -173,6 +173,7 @@ export function generateDeploymentYamlTemplate(
         },
         spec: {
           terminationGracePeriodSeconds: 5,
+          enableServiceLinks: false,
           serviceAccountName: placeholder("archestra", "service_account"),
           ...(imagePullSecrets?.length ? { imagePullSecrets } : {}),
           containers: [containerSpec],

@@ -163,6 +163,7 @@ describe("Internal MCP Catalog - Environment Variables", () => {
       expect(catalog.deploymentSpecYaml).toContain("value: ${env.LOG_LEVEL}");
       expect(catalog.deploymentSpecYaml).toContain("name: API_KEY");
       expect(catalog.deploymentSpecYaml).toContain("secretKeyRef");
+      expect(catalog.deploymentSpecYaml).toContain("enableServiceLinks: false");
     });
 
     test("1.5 creates catalog with mounted secret", async () => {

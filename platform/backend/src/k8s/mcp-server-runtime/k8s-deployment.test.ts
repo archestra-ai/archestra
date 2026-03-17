@@ -531,6 +531,7 @@ describe("K8sDeployment.generateDeploymentSpec", () => {
     expect(container?.stdin).toBe(true);
     expect(container?.tty).toBe(false);
     expect(container?.ports).toBeUndefined();
+    expect(templateSpec?.enableServiceLinks).toBe(false);
     expect(templateSpec?.restartPolicy).toBe("Always");
   });
 

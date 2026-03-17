@@ -145,6 +145,23 @@ archestra:
     existingSecretKey: auth-secret
 ```
 
+If you use the Helm-managed `<release>-auth` Secret, you can also add extra keys to it and mount them as files from `archestra.extraVolumes`:
+
+```yaml
+archestra:
+  authSecret:
+    extraData:
+      service-account.json: |
+        {"type":"service_account"}
+  extraVolumes:
+    - name: platform-auth-secret
+      secret:
+        secretName: <release>-auth
+        items:
+          - key: service-account.json
+            path: service-account.json
+```
+
 ```bash
 # Generate a secure secret
 openssl rand -base64 32

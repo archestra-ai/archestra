@@ -30,6 +30,8 @@ process.env.ARCHESTRA_LOGGING_LEVEL = "silent";
 // Set auth secret for tests
 process.env.ARCHESTRA_AUTH_SECRET = "auth-secret-unit-tests-32-chars!";
 
+process.setMaxListeners(20);
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Module-level variables to persist across tests within a file

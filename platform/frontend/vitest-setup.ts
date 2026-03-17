@@ -5,6 +5,21 @@ import { vi } from "vitest";
 // Disable Sentry for tests - prevent sending test data to Sentry
 process.env.NEXT_PUBLIC_ARCHESTRA_SENTRY_FRONTEND_DSN = "";
 
+const originalConsoleError = console.error;
+
+console.error = (...args: unknown[]) => {
+  const message = args.map(String).join(" ");
+
+  if (
+    message.includes("Failed to extract citations from tool result") ||
+    message.includes("not wrapped in act(...)")
+  ) {
+    return;
+  }
+
+  originalConsoleError(...args);
+};
+
 const mockCanvasContext = new Proxy(
   {
     clearRect: vi.fn(),

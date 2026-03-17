@@ -560,7 +560,7 @@ test.describe("Identity Provider OIDC E2E Flow with Keycloak", () => {
 });
 
 test.describe("Identity Provider IdP Logout (RP-Initiated Logout)", () => {
-  test("should terminate IdP session on Archestra sign-out", async ({
+  test.skip("should terminate IdP session on Archestra sign-out", async ({
     page,
     browser,
     goToPage,

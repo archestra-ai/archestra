@@ -11,7 +11,11 @@ import { useForm } from "react-hook-form";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { FormDialog } from "@/components/form-dialog";
 import { Button } from "@/components/ui/button";
-import { DialogForm, DialogStickyFooter } from "@/components/ui/dialog";
+import {
+  DialogBody,
+  DialogForm,
+  DialogStickyFooter,
+} from "@/components/ui/dialog";
 import { Form } from "@/components/ui/form";
 import { PermissionButton } from "@/components/ui/permission-button";
 import {
@@ -160,22 +164,18 @@ export function EditIdentityProviderDialog({
         title="Edit Identity Provider"
         description={`Update the configuration for "${provider.providerId}".`}
         size="large"
-        className="max-w-4xl h-auto"
       >
         <Form {...form}>
-          <DialogForm
-            className="flex min-h-0 flex-1 flex-col"
-            onSubmit={form.handleSubmit(onSubmit)}
-          >
-            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+          <DialogForm onSubmit={form.handleSubmit(onSubmit)}>
+            <DialogBody>
               {providerType === "saml" ? (
                 <SamlConfigForm form={form} />
               ) : (
                 <OidcConfigForm form={form} />
               )}
-            </div>
+            </DialogBody>
 
-            <DialogStickyFooter className="sm:justify-between">
+            <DialogStickyFooter className="mt-0 sm:justify-between">
               <PermissionButton
                 type="button"
                 variant="destructive"

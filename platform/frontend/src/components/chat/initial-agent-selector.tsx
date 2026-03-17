@@ -2133,7 +2133,7 @@ function truncateAgentDescription(description?: string | null) {
     return "Add a description...";
   }
 
-  const maxLength = 50;
+  const maxLength = 80;
   if (description.length <= maxLength) {
     return description;
   }

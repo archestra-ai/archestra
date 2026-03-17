@@ -55,7 +55,11 @@ class EmbeddingService {
       for (let i = 0; i < chunks.length; i += EMBEDDING_BATCH_SIZE) {
         const batch = chunks.slice(i, i + EMBEDDING_BATCH_SIZE);
         const texts = batch.map((c) =>
-          addNomicTaskPrefix(ctx.model, c.content, "search_document"),
+          addNomicTaskPrefix(
+            ctx.model,
+            c.content + (c.metadataSuffixSemantic ?? ""),
+            "search_document",
+          ),
         );
 
         const response = await this.callEmbeddingApiWithRetry(ctx, texts);
@@ -153,7 +157,10 @@ class EmbeddingService {
       docChunkMap.push({ documentId, chunkIds, chunkCount: chunks.length });
 
       for (const chunk of chunks) {
-        allChunks.push({ chunkId: chunk.id, text: chunk.content });
+        allChunks.push({
+          chunkId: chunk.id,
+          text: chunk.content + (chunk.metadataSuffixSemantic ?? ""),
+        });
       }
     }
 

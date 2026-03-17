@@ -391,6 +391,7 @@ class ConnectorSyncService {
         documentId: existing.id,
         title: doc.title,
         content: doc.content,
+        metadata: { ...doc.metadata, connectorType },
         connectorType,
         acl: existing.acl as AclEntry[],
         log,
@@ -426,6 +427,7 @@ class ConnectorSyncService {
       documentId: created.id,
       title: doc.title,
       content: doc.content,
+      metadata: { ...doc.metadata, connectorType },
       connectorType,
       acl: [],
       log,
@@ -444,13 +446,15 @@ class ConnectorSyncService {
     documentId: string;
     title: string;
     content: string;
+    metadata?: Record<string, unknown>;
     connectorType: string;
     acl: AclEntry[];
     log: pino.Logger;
   }): Promise<void> {
-    const { documentId, title, content, connectorType, acl, log } = params;
+    const { documentId, title, content, metadata, connectorType, acl, log } =
+      params;
 
-    const chunks = await chunkDocument({ title, content });
+    const chunks = await chunkDocument({ title, content, metadata });
 
     if (chunks.length === 0) return;
 
@@ -459,6 +463,8 @@ class ConnectorSyncService {
         documentId,
         content: chunk.content,
         chunkIndex: chunk.chunkIndex,
+        metadataSuffixSemantic: chunk.metadataSuffixSemantic,
+        metadataSuffixKeyword: chunk.metadataSuffixKeyword,
         acl,
       })),
     );

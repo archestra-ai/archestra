@@ -910,6 +910,36 @@ export default function ChatPage() {
     messages.length,
   ]);
 
+  // Poll for the assistant response when the page was reloaded mid-stream.
+  // After reload the DB may only contain the user message (persisted early by
+  // the backend). The assistant response arrives once the backend stream
+  // finishes. We poll until the last message is no longer a user message.
+  useEffect(() => {
+    if (!conversationId || status === "streaming" || status === "submitted") {
+      return;
+    }
+
+    const lastMsg = conversation?.messages?.at(-1) as UIMessage | undefined;
+    const isWaitingForAssistant =
+      lastMsg?.role === "user" && messages.length > 0;
+
+    if (!isWaitingForAssistant) return;
+
+    const interval = setInterval(() => {
+      queryClient.invalidateQueries({
+        queryKey: ["conversation", conversationId],
+      });
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [
+    conversationId,
+    conversation?.messages,
+    messages.length,
+    status,
+    queryClient,
+  ]);
+
   // Merge database UUIDs from backend into local message state
   // This runs after streaming completes and backend query has fetched
   useEffect(() => {

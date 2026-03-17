@@ -347,6 +347,76 @@ class ApiKeyModelModel {
   }
 
   /**
+   * Get the "best" model for multiple API keys in two batched queries.
+   * Returns the model marked with is_best=true, or falls back to the first model.
+   */
+  static async getBestModelsForApiKeys(
+    apiKeyIds: string[],
+  ): Promise<Map<string, Model>> {
+    if (apiKeyIds.length === 0) {
+      return new Map();
+    }
+
+    const bestModels = await db
+      .select({
+        apiKeyId: schema.apiKeyModelsTable.apiKeyId,
+        model: schema.modelsTable,
+      })
+      .from(schema.apiKeyModelsTable)
+      .innerJoin(
+        schema.modelsTable,
+        eq(schema.apiKeyModelsTable.modelId, schema.modelsTable.id),
+      )
+      .where(
+        and(
+          inArray(schema.apiKeyModelsTable.apiKeyId, apiKeyIds),
+          eq(schema.apiKeyModelsTable.isBest, true),
+        ),
+      )
+      .orderBy(
+        asc(schema.apiKeyModelsTable.apiKeyId),
+        asc(schema.modelsTable.modelId),
+      );
+
+    const modelsByApiKeyId = new Map<string, Model>();
+    for (const result of bestModels) {
+      modelsByApiKeyId.set(result.apiKeyId, result.model);
+    }
+
+    const missingApiKeyIds = apiKeyIds.filter(
+      (apiKeyId) => !modelsByApiKeyId.has(apiKeyId),
+    );
+
+    if (missingApiKeyIds.length === 0) {
+      return modelsByApiKeyId;
+    }
+
+    const fallbackModels = await db
+      .select({
+        apiKeyId: schema.apiKeyModelsTable.apiKeyId,
+        model: schema.modelsTable,
+      })
+      .from(schema.apiKeyModelsTable)
+      .innerJoin(
+        schema.modelsTable,
+        eq(schema.apiKeyModelsTable.modelId, schema.modelsTable.id),
+      )
+      .where(inArray(schema.apiKeyModelsTable.apiKeyId, missingApiKeyIds))
+      .orderBy(
+        asc(schema.apiKeyModelsTable.apiKeyId),
+        asc(schema.modelsTable.modelId),
+      );
+
+    for (const result of fallbackModels) {
+      if (!modelsByApiKeyId.has(result.apiKeyId)) {
+        modelsByApiKeyId.set(result.apiKeyId, result.model);
+      }
+    }
+
+    return modelsByApiKeyId;
+  }
+
+  /**
    * Get the "fastest" model for a specific API key.
    * Returns the model marked with is_fastest=true, or falls back to the first model.
    */

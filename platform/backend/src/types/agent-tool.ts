@@ -31,6 +31,22 @@ export const SelectAgentToolSchema = createSelectSchema(schema.agentToolsTable)
 
 export const InsertAgentToolSchema = createInsertSchema(schema.agentToolsTable);
 export const UpdateAgentToolSchema = createUpdateSchema(schema.agentToolsTable);
+export const AgentToolAssignmentInputSchema = z.object({
+  toolId: UuidIdSchema,
+  credentialSourceMcpServerId: UuidIdSchema.nullable().optional(),
+  executionSourceMcpServerId: UuidIdSchema.nullable().optional(),
+  useDynamicTeamCredential: z.boolean().optional(),
+});
+
+export const AgentToolAssignmentBodySchema =
+  AgentToolAssignmentInputSchema.omit({
+    toolId: true,
+  }).nullish();
+
+export const BulkAgentToolAssignmentSchema =
+  AgentToolAssignmentInputSchema.extend({
+    agentId: UuidIdSchema,
+  });
 
 export const AgentToolFilterSchema = z.object({
   search: z.string().optional(),

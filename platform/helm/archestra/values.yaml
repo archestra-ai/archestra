@@ -9,7 +9,7 @@ archestra:
   # We use the "generic" updater with inline annotation to preserve YAML comments throughout the file.
   # See: https://github.com/googleapis/release-please/blob/main/docs/customizing.md#updating-arbitrary-files
   # See: https://github.com/googleapis/release-please/issues/2195
-  imageTag: "1.1.25" # x-release-please-version
+  imageTag: "1.1.26" # x-release-please-version
 
   # Image pull policy for the Archestra container
   # Options: Always, IfNotPresent, Never
@@ -97,6 +97,11 @@ archestra:
     existingSecretName: ""
     # Key within existingSecretName containing the auth secret value.
     existingSecretKey: auth-secret
+    # Extra key/value pairs to add to the Helm-managed <release>-auth Secret.
+    # This is useful when you want to mount additional secret-backed files from
+    # the same Secret via archestra.extraVolumes, without creating a second Secret.
+    # Values should be plain strings and will be base64-encoded by Helm.
+    extraData: {}
 
   # Environment variables with valueFrom (for fieldRef, resourceFieldRef, configMapKeyRef)
   # Use this for Kubernetes downward API or other valueFrom sources

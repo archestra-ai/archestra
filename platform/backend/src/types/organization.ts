@@ -6,7 +6,7 @@ import { schema } from "@/database";
 const DATA_URI_PREFIX = "data:image/png;base64,";
 const MAX_LOGO_SIZE_BYTES = 2 * 1024 * 1024; // 2 MB decoded
 const PNG_MAGIC_BYTES = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
-const MAX_HELP_CENTER_URL_LENGTH = 2000;
+const MAX_CHAT_LINK_URL_LENGTH = 2000;
 
 /**
  * Validates a Base64-encoded PNG data URI.
@@ -63,12 +63,18 @@ const Base64PngSchema = z
     }
   });
 
-const HelpCenterUrlSchema = z
+const ChatLinkUrlSchema = z
   .string()
-  .max(MAX_HELP_CENTER_URL_LENGTH)
+  .trim()
+  .max(MAX_CHAT_LINK_URL_LENGTH)
   .refine((value) => isValidHttpUrl(value), {
-    message: "Help Center URL must be a valid HTTP or HTTPS URL",
+    message: "Chat link URL must be a valid HTTP or HTTPS URL",
   });
+
+export const OrganizationChatLinkSchema = z.object({
+  label: z.string().trim().min(1).max(25),
+  url: ChatLinkUrlSchema,
+});
 
 /**
  * Appearance settings schema - used for unauthenticated access to branding settings.
@@ -84,8 +90,7 @@ export const AppearanceSettingsSchema = z.object({
   appName: z.string().nullable(),
   ogDescription: z.string().nullable(),
   footerText: z.string().nullable(),
-  helpCenterUrl: z.string().nullable(),
-  helpCenterLabel: z.string().nullable(),
+  chatLinks: z.array(OrganizationChatLinkSchema).nullable(),
   chatErrorSupportMessage: z.string().nullable(),
   animateChatPlaceholders: z.boolean(),
 });
@@ -117,8 +122,7 @@ const extendedFields = {
   appName: z.string().nullable(),
   ogDescription: z.string().nullable(),
   footerText: z.string().nullable(),
-  helpCenterUrl: z.string().nullable(),
-  helpCenterLabel: z.string().nullable(),
+  chatLinks: z.array(OrganizationChatLinkSchema).nullable(),
   chatErrorSupportMessage: z.string().nullable(),
   chatPlaceholders: z.array(z.string()).nullable(),
   animateChatPlaceholders: z.boolean(),
@@ -143,8 +147,7 @@ export const UpdateAppearanceSettingsSchema = z.object({
   appName: z.string().max(100).nullable().optional(),
   ogDescription: z.string().max(500).nullable().optional(),
   footerText: z.string().max(500).nullable().optional(),
-  helpCenterUrl: HelpCenterUrlSchema.nullable().optional(),
-  helpCenterLabel: z.string().max(80).nullable().optional(),
+  chatLinks: z.array(OrganizationChatLinkSchema).max(3).nullable().optional(),
   chatErrorSupportMessage: z.string().max(500).nullable().optional(),
   chatPlaceholders: z.array(z.string().max(80)).max(20).nullable().optional(),
   animateChatPlaceholders: z.boolean().optional(),
@@ -191,6 +194,7 @@ export type GlobalToolPolicy = z.infer<typeof GlobalToolPolicySchema>;
 export type Organization = z.infer<typeof SelectOrganizationSchema>;
 export type InsertOrganization = z.infer<typeof InsertOrganizationSchema>;
 export type AppearanceSettings = z.infer<typeof AppearanceSettingsSchema>;
+export type OrganizationChatLink = z.infer<typeof OrganizationChatLinkSchema>;
 
 function isValidHttpUrl(value: string): boolean {
   try {

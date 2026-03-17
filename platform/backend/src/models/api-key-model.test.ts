@@ -3,6 +3,91 @@ import ApiKeyModelModel from "./api-key-model";
 import ModelModel from "./model";
 
 describe("ApiKeyModelModel", () => {
+  describe("getBestModelsForApiKeys", () => {
+    test("returns an empty map for empty input", async () => {
+      const bestModels = await ApiKeyModelModel.getBestModelsForApiKeys([]);
+
+      expect(bestModels).toEqual(new Map());
+    });
+
+    test("returns best-marked models and falls back to the first linked model", async ({
+      makeOrganization,
+      makeSecret,
+      makeChatApiKey,
+    }) => {
+      const org = await makeOrganization();
+      const secret = await makeSecret();
+
+      const bestMarkedKey = await makeChatApiKey(org.id, secret.id, {
+        provider: "openai",
+      });
+      const fallbackKey = await makeChatApiKey(org.id, secret.id, {
+        provider: "openai",
+      });
+
+      const fallbackFirstModel = await ModelModel.create({
+        externalId: "openai/gpt-4.1-mini",
+        provider: "openai",
+        modelId: "gpt-4.1-mini",
+        description: "GPT-4.1 Mini",
+        contextLength: 128000,
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        supportsToolCalling: true,
+        promptPricePerToken: "0.000001",
+        completionPricePerToken: "0.000002",
+        lastSyncedAt: new Date(),
+      });
+      const fallbackSecondModel = await ModelModel.create({
+        externalId: "openai/o3",
+        provider: "openai",
+        modelId: "o3",
+        description: "o3",
+        contextLength: 200000,
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        supportsToolCalling: true,
+        promptPricePerToken: "0.000002",
+        completionPricePerToken: "0.000006",
+        lastSyncedAt: new Date(),
+      });
+      const bestCandidateModel = await ModelModel.create({
+        externalId: "openai/gpt-4.1",
+        provider: "openai",
+        modelId: "gpt-4.1",
+        description: "GPT-4.1",
+        contextLength: 128000,
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        supportsToolCalling: true,
+        promptPricePerToken: "0.000002",
+        completionPricePerToken: "0.000008",
+        lastSyncedAt: new Date(),
+      });
+
+      await ApiKeyModelModel.syncModelsForApiKey(
+        bestMarkedKey.id,
+        [
+          { id: fallbackFirstModel.id, modelId: fallbackFirstModel.modelId },
+          { id: bestCandidateModel.id, modelId: bestCandidateModel.modelId },
+        ],
+        "openai",
+      );
+      await ApiKeyModelModel.linkModelsToApiKey(fallbackKey.id, [
+        fallbackSecondModel.id,
+        fallbackFirstModel.id,
+      ]);
+
+      const bestModels = await ApiKeyModelModel.getBestModelsForApiKeys([
+        bestMarkedKey.id,
+        fallbackKey.id,
+      ]);
+
+      expect(bestModels.get(bestMarkedKey.id)?.id).toBe(bestCandidateModel.id);
+      expect(bestModels.get(fallbackKey.id)?.id).toBe(fallbackFirstModel.id);
+    });
+  });
+
   describe("getAllModelsWithApiKeys", () => {
     test("returns empty array when no models exist", async ({
       makeOrganization,

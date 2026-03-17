@@ -1,49 +1,45 @@
-import type { CallToolResult, Tool } from "@modelcontextprotocol/sdk/types.js";
-import {
-  ARCHESTRA_MCP_SERVER_NAME,
-  MCP_SERVER_TOOL_NAME_SEPARATOR,
-} from "@shared";
+import { z } from "zod";
 import logger from "@/logging";
-import { successResult } from "./helpers";
-import type { ArchestraContext } from "./types";
+import {
+  defineArchestraTool,
+  defineArchestraTools,
+  EmptyToolArgsSchema,
+  structuredSuccessResult,
+} from "./helpers";
 
-const TOOL_WHOAMI_NAME = "whoami";
-const TOOL_WHOAMI_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_WHOAMI_NAME}`;
+const WhoAmIOutputSchema = z.object({
+  agentId: z.string().describe("The ID of the current agent."),
+  agentName: z.string().describe("The display name of the current agent."),
+});
 
-export const toolShortNames = ["whoami"] as const;
-
-export const tools: Tool[] = [
-  {
-    name: TOOL_WHOAMI_FULL_NAME,
+const registry = defineArchestraTools([
+  defineArchestraTool({
+    shortName: "whoami",
     title: "Who Am I",
-    description: "Returns the name and ID of the current agent",
-    inputSchema: {
-      type: "object",
-      properties: {},
-      required: [],
+    description: "Returns the name and ID of the current agent.",
+    schema: EmptyToolArgsSchema,
+    outputSchema: WhoAmIOutputSchema,
+    async handler({ context }) {
+      const { agent: contextAgent } = context;
+
+      logger.info(
+        { agentId: contextAgent.id, agentName: contextAgent.name },
+        "whoami tool called",
+      );
+
+      return structuredSuccessResult(
+        {
+          agentId: contextAgent.id,
+          agentName: contextAgent.name,
+        },
+        `Agent Name: ${contextAgent.name}\nAgent ID: ${contextAgent.id}`,
+      );
     },
-    annotations: {},
-    _meta: {},
-  },
-];
+  }),
+] as const);
 
-export async function handleTool(
-  toolName: string,
-  _args: Record<string, unknown> | undefined,
-  context: ArchestraContext,
-): Promise<CallToolResult | null> {
-  if (toolName === TOOL_WHOAMI_FULL_NAME) {
-    const { agent: contextAgent } = context;
-
-    logger.info(
-      { agentId: contextAgent.id, agentName: contextAgent.name },
-      "whoami tool called",
-    );
-
-    return successResult(
-      `Agent Name: ${contextAgent.name}\nAgent ID: ${contextAgent.id}`,
-    );
-  }
-
-  return null;
-}
+export const toolShortNames = registry.toolShortNames;
+export const toolArgsSchemas = registry.toolArgsSchemas;
+export const toolOutputSchemas = registry.toolOutputSchemas;
+export const toolEntries = registry.toolEntries;
+export const tools = registry.tools;

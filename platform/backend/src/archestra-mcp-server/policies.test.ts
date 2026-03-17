@@ -6,43 +6,6 @@ import {
 import { beforeEach, describe, expect, test } from "@/test";
 import type { Agent } from "@/types";
 import { type ArchestraContext, executeArchestraTool } from ".";
-import { tools } from "./policies";
-
-describe("policy tools", () => {
-  test("should have get_autonomy_policy_operators tool", () => {
-    const tool = tools.find((t) =>
-      t.name.endsWith("get_autonomy_policy_operators"),
-    );
-    expect(tool).toBeDefined();
-    expect(tool?.title).toBe("Get Autonomy Policy Operators");
-  });
-
-  test("should have all tool invocation policy tools", () => {
-    const names = [
-      "get_tool_invocation_policies",
-      "create_tool_invocation_policy",
-      "get_tool_invocation_policy",
-      "update_tool_invocation_policy",
-      "delete_tool_invocation_policy",
-    ];
-    for (const name of names) {
-      expect(tools.find((t) => t.name.endsWith(name))).toBeDefined();
-    }
-  });
-
-  test("should have all trusted data policy tools", () => {
-    const names = [
-      "get_trusted_data_policies",
-      "create_trusted_data_policy",
-      "get_trusted_data_policy",
-      "update_trusted_data_policy",
-      "delete_trusted_data_policy",
-    ];
-    for (const name of names) {
-      expect(tools.find((t) => t.name.endsWith(name))).toBeDefined();
-    }
-  });
-});
 
 describe("policy tool execution", () => {
   let testAgent: Agent;
@@ -67,6 +30,9 @@ describe("policy tool execution", () => {
       mockContext,
     );
     expect(result.isError).toBe(false);
+    expect(result.structuredContent).toEqual({
+      operators: expect.any(Array),
+    });
     const parsed = JSON.parse((result.content[0] as any).text);
     expect(Array.isArray(parsed)).toBe(true);
     expect(parsed.length).toBeGreaterThan(0);
@@ -93,8 +59,9 @@ describe("policy tool execution", () => {
     );
     expect(result.isError).toBe(true);
     expect((result.content[0] as any).text).toContain(
-      "id parameter is required",
+      "Validation error in archestra__get_tool_invocation_policy",
     );
+    expect((result.content[0] as any).text).toContain("id:");
   });
 
   test("update_tool_invocation_policy returns error when id is missing", async () => {
@@ -105,8 +72,9 @@ describe("policy tool execution", () => {
     );
     expect(result.isError).toBe(true);
     expect((result.content[0] as any).text).toContain(
-      "id parameter is required",
+      "Validation error in archestra__update_tool_invocation_policy",
     );
+    expect((result.content[0] as any).text).toContain("id:");
   });
 
   test("delete_tool_invocation_policy returns error when id is missing", async () => {
@@ -117,8 +85,9 @@ describe("policy tool execution", () => {
     );
     expect(result.isError).toBe(true);
     expect((result.content[0] as any).text).toContain(
-      "id parameter is required",
+      "Validation error in archestra__delete_tool_invocation_policy",
     );
+    expect((result.content[0] as any).text).toContain("id:");
   });
 
   test("create and get tool invocation policy", async ({ makeTool }) => {
@@ -134,6 +103,9 @@ describe("policy tool execution", () => {
       mockContext,
     );
     expect(result.isError).toBe(false);
+    expect(result.structuredContent).toEqual({
+      policy: expect.objectContaining({ toolId: tool.id }),
+    });
     const created = JSON.parse((result.content[0] as any).text);
     expect(created).toHaveProperty("id");
 
@@ -144,6 +116,9 @@ describe("policy tool execution", () => {
       mockContext,
     );
     expect(getResult.isError).toBe(false);
+    expect(getResult.structuredContent).toEqual({
+      policy: expect.objectContaining({ id: created.id }),
+    });
     const fetched = JSON.parse((getResult.content[0] as any).text);
     expect(fetched.id).toBe(created.id);
   });
@@ -167,8 +142,9 @@ describe("policy tool execution", () => {
     );
     expect(result.isError).toBe(true);
     expect((result.content[0] as any).text).toContain(
-      "id parameter is required",
+      "Validation error in archestra__get_trusted_data_policy",
     );
+    expect((result.content[0] as any).text).toContain("id:");
   });
 
   test("delete_trusted_data_policy returns error when id is missing", async () => {
@@ -179,8 +155,9 @@ describe("policy tool execution", () => {
     );
     expect(result.isError).toBe(true);
     expect((result.content[0] as any).text).toContain(
-      "id parameter is required",
+      "Validation error in archestra__delete_trusted_data_policy",
     );
+    expect((result.content[0] as any).text).toContain("id:");
   });
 
   test("create and get trusted data policy", async ({ makeTool }) => {

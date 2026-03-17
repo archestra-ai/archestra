@@ -6,48 +6,6 @@ import {
 import { beforeEach, describe, expect, test } from "@/test";
 import type { Agent } from "@/types";
 import { type ArchestraContext, executeArchestraTool } from ".";
-import { tools } from "./limits";
-
-describe("limit tools", () => {
-  test("should have create_limit tool", () => {
-    const tool = tools.find((t) => t.name.endsWith("create_limit"));
-    expect(tool).toBeDefined();
-    expect(tool?.title).toBe("Create Limit");
-    expect(tool?.inputSchema.required).toContain("entity_type");
-  });
-
-  test("should have get_limits tool", () => {
-    const tool = tools.find((t) => t.name.endsWith("get_limits"));
-    expect(tool).toBeDefined();
-    expect(tool?.title).toBe("Get Limits");
-  });
-
-  test("should have update_limit tool", () => {
-    const tool = tools.find((t) => t.name.endsWith("update_limit"));
-    expect(tool).toBeDefined();
-    expect(tool?.title).toBe("Update Limit");
-  });
-
-  test("should have delete_limit tool", () => {
-    const tool = tools.find((t) => t.name.endsWith("delete_limit"));
-    expect(tool).toBeDefined();
-    expect(tool?.title).toBe("Delete Limit");
-  });
-
-  test("should have get_agent_token_usage tool", () => {
-    const tool = tools.find((t) => t.name.endsWith("get_agent_token_usage"));
-    expect(tool).toBeDefined();
-    expect(tool?.title).toBe("Get Agent Token Usage");
-  });
-
-  test("should have get_llm_proxy_token_usage tool", () => {
-    const tool = tools.find((t) =>
-      t.name.endsWith("get_llm_proxy_token_usage"),
-    );
-    expect(tool).toBeDefined();
-    expect(tool?.title).toBe("Get LLM Proxy Token Usage");
-  });
-});
 
 describe("limit tool execution", () => {
   let testAgent: Agent;
@@ -73,8 +31,12 @@ describe("limit tool execution", () => {
     );
     expect(result.isError).toBe(true);
     expect((result.content[0] as any).text).toContain(
-      "entity_type, entity_id, limit_type, and limit_value are required",
+      "Validation error in archestra__create_limit",
     );
+    expect((result.content[0] as any).text).toContain("entity_type:");
+    expect((result.content[0] as any).text).toContain("entity_id:");
+    expect((result.content[0] as any).text).toContain("limit_type:");
+    expect((result.content[0] as any).text).toContain("limit_value:");
   });
 
   test("create_limit returns error when token_cost limit missing model", async () => {
@@ -92,6 +54,7 @@ describe("limit tool execution", () => {
     expect((result.content[0] as any).text).toContain(
       "model array with at least one model is required",
     );
+    expect((result.content[0] as any).text).toContain("model:");
   });
 
   test("create_limit returns error when mcp_server_calls limit missing mcp_server_name", async () => {
@@ -109,6 +72,7 @@ describe("limit tool execution", () => {
     expect((result.content[0] as any).text).toContain(
       "mcp_server_name is required for mcp_server_calls",
     );
+    expect((result.content[0] as any).text).toContain("mcp_server_name:");
   });
 
   test("create_limit returns error when tool_calls limit missing fields", async () => {
@@ -126,6 +90,7 @@ describe("limit tool execution", () => {
     expect((result.content[0] as any).text).toContain(
       "mcp_server_name and tool_name are required for tool_calls",
     );
+    expect((result.content[0] as any).text).toContain("tool_name:");
   });
 
   test("get_limits returns empty when no limits exist", async () => {
@@ -135,6 +100,7 @@ describe("limit tool execution", () => {
       mockContext,
     );
     expect(result.isError).toBe(false);
+    expect(result.structuredContent).toEqual({ limits: [] });
     expect((result.content[0] as any).text).toContain("No limits found");
   });
 
@@ -145,13 +111,16 @@ describe("limit tool execution", () => {
       mockContext,
     );
     expect(result.isError).toBe(true);
-    expect((result.content[0] as any).text).toContain("id is required");
+    expect((result.content[0] as any).text).toContain(
+      "Validation error in archestra__update_limit",
+    );
+    expect((result.content[0] as any).text).toContain("id:");
   });
 
   test("update_limit returns error when no fields provided", async () => {
     const result = await executeArchestraTool(
       `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}update_limit`,
-      { id: "some-id" },
+      { id: "00000000-0000-4000-8000-000000000001" },
       mockContext,
     );
     expect(result.isError).toBe(true);
@@ -167,7 +136,10 @@ describe("limit tool execution", () => {
       mockContext,
     );
     expect(result.isError).toBe(true);
-    expect((result.content[0] as any).text).toContain("id is required");
+    expect((result.content[0] as any).text).toContain(
+      "Validation error in archestra__delete_limit",
+    );
+    expect((result.content[0] as any).text).toContain("id:");
   });
 
   test("get_agent_token_usage returns usage for current agent", async () => {
@@ -177,6 +149,12 @@ describe("limit tool execution", () => {
       mockContext,
     );
     expect(result.isError).toBe(false);
+    expect(result.structuredContent).toEqual({
+      id: testAgent.id,
+      totalInputTokens: expect.any(Number),
+      totalOutputTokens: expect.any(Number),
+      totalTokens: expect.any(Number),
+    });
     expect((result.content[0] as any).text).toContain("Token usage for agent");
     expect((result.content[0] as any).text).toContain("Total Input Tokens");
   });

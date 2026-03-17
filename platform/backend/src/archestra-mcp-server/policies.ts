@@ -1,421 +1,437 @@
-import type { CallToolResult, Tool } from "@modelcontextprotocol/sdk/types.js";
-import {
-  ARCHESTRA_MCP_SERVER_NAME,
-  MCP_SERVER_TOOL_NAME_SEPARATOR,
-} from "@shared";
+import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import { z } from "zod";
 import logger from "@/logging";
 import { ToolInvocationPolicyModel, TrustedDataPolicyModel } from "@/models";
-import { AutonomyPolicyOperator, ToolInvocation, TrustedData } from "@/types";
-import { catchError, errorResult, successResult } from "./helpers";
+import {
+  AutonomyPolicyOperator,
+  ToolInvocation,
+  TrustedData,
+  UuidIdSchema,
+} from "@/types";
+import {
+  catchError,
+  defineArchestraTool,
+  defineArchestraTools,
+  EmptyToolArgsSchema,
+  errorResult,
+  getArchestraToolFullName,
+  structuredSuccessResult,
+} from "./helpers";
 import type { ArchestraContext } from "./types";
 
 // === Constants ===
 
-const TOOL_GET_AUTONOMY_POLICY_OPERATORS_NAME = "get_autonomy_policy_operators";
-const TOOL_GET_TOOL_INVOCATION_POLICIES_NAME = "get_tool_invocation_policies";
-const TOOL_CREATE_TOOL_INVOCATION_POLICY_NAME = "create_tool_invocation_policy";
-const TOOL_GET_TOOL_INVOCATION_POLICY_NAME = "get_tool_invocation_policy";
-const TOOL_UPDATE_TOOL_INVOCATION_POLICY_NAME = "update_tool_invocation_policy";
-const TOOL_DELETE_TOOL_INVOCATION_POLICY_NAME = "delete_tool_invocation_policy";
-const TOOL_GET_TRUSTED_DATA_POLICIES_NAME = "get_trusted_data_policies";
-const TOOL_CREATE_TRUSTED_DATA_POLICY_NAME = "create_trusted_data_policy";
-const TOOL_GET_TRUSTED_DATA_POLICY_NAME = "get_trusted_data_policy";
-const TOOL_UPDATE_TRUSTED_DATA_POLICY_NAME = "update_trusted_data_policy";
-const TOOL_DELETE_TRUSTED_DATA_POLICY_NAME = "delete_trusted_data_policy";
+const ToolInvocationConditionSchema = z
+  .object({
+    key: z
+      .string()
+      .describe(
+        "The argument name or context path to evaluate (for example `url` or `context.externalAgentId`).",
+      ),
+    operator: AutonomyPolicyOperator.SupportedOperatorSchema.describe(
+      "The comparison operator.",
+    ),
+    value: z.string().describe("The value to compare against."),
+  })
+  .strict();
 
-const TOOL_GET_AUTONOMY_POLICY_OPERATORS_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_GET_AUTONOMY_POLICY_OPERATORS_NAME}`;
-const TOOL_GET_TOOL_INVOCATION_POLICIES_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_GET_TOOL_INVOCATION_POLICIES_NAME}`;
-const TOOL_CREATE_TOOL_INVOCATION_POLICY_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_CREATE_TOOL_INVOCATION_POLICY_NAME}`;
-const TOOL_GET_TOOL_INVOCATION_POLICY_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_GET_TOOL_INVOCATION_POLICY_NAME}`;
-const TOOL_UPDATE_TOOL_INVOCATION_POLICY_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_UPDATE_TOOL_INVOCATION_POLICY_NAME}`;
-const TOOL_DELETE_TOOL_INVOCATION_POLICY_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_DELETE_TOOL_INVOCATION_POLICY_NAME}`;
-const TOOL_GET_TRUSTED_DATA_POLICIES_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_GET_TRUSTED_DATA_POLICIES_NAME}`;
-const TOOL_CREATE_TRUSTED_DATA_POLICY_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_CREATE_TRUSTED_DATA_POLICY_NAME}`;
-const TOOL_GET_TRUSTED_DATA_POLICY_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_GET_TRUSTED_DATA_POLICY_NAME}`;
-const TOOL_UPDATE_TRUSTED_DATA_POLICY_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_UPDATE_TRUSTED_DATA_POLICY_NAME}`;
-const TOOL_DELETE_TRUSTED_DATA_POLICY_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_DELETE_TRUSTED_DATA_POLICY_NAME}`;
+const TrustedDataConditionSchema = z
+  .object({
+    key: z
+      .string()
+      .describe(
+        "The attribute key or path in the tool result to evaluate (for example `emails[*].from` or `source`).",
+      ),
+    operator: AutonomyPolicyOperator.SupportedOperatorSchema.describe(
+      "The comparison operator.",
+    ),
+    value: z.string().describe("The value to compare against."),
+  })
+  .strict();
 
-export const toolShortNames = [
-  "get_autonomy_policy_operators",
-  "get_tool_invocation_policies",
-  "create_tool_invocation_policy",
-  "get_tool_invocation_policy",
-  "update_tool_invocation_policy",
-  "delete_tool_invocation_policy",
-  "get_trusted_data_policies",
-  "create_trusted_data_policy",
-  "get_trusted_data_policy",
-  "update_trusted_data_policy",
-  "delete_trusted_data_policy",
-] as const;
+const createToolInvocationPolicySchema = z
+  .object({
+    toolId: UuidIdSchema.describe(
+      "The ID of the tool (UUID from the tools table).",
+    ),
+    conditions: z
+      .array(ToolInvocationConditionSchema)
+      .describe(
+        "Array of conditions that must all match. Empty array means unconditional.",
+      ),
+    action:
+      ToolInvocation.InsertToolInvocationPolicySchema.shape.action.describe(
+        "The action to take when the policy matches.",
+      ),
+    reason: z
+      .string()
+      .optional()
+      .describe("Human-readable explanation for why this policy exists."),
+  })
+  .strict();
 
-// === Exports ===
+const updateToolInvocationPolicySchema = z
+  .object({
+    id: UuidIdSchema.describe(
+      "The ID of the tool invocation policy to update.",
+    ),
+    toolId: UuidIdSchema.optional().describe(
+      "The ID of the tool (UUID from the tools table).",
+    ),
+    conditions: z
+      .array(ToolInvocationConditionSchema)
+      .optional()
+      .describe(
+        "Updated array of conditions that must all match. Empty array means unconditional.",
+      ),
+    action: ToolInvocation.InsertToolInvocationPolicySchema.shape.action
+      .optional()
+      .describe("Updated action to take when the policy matches."),
+    reason: z
+      .string()
+      .nullable()
+      .optional()
+      .describe(
+        "Updated human-readable explanation for why this policy exists.",
+      ),
+  })
+  .strict();
 
-export const tools: Tool[] = [
-  {
-    name: TOOL_GET_AUTONOMY_POLICY_OPERATORS_FULL_NAME,
+const createTrustedDataPolicySchema = z
+  .object({
+    toolId: UuidIdSchema.describe(
+      "The ID of the tool (UUID from the tools table).",
+    ),
+    conditions: z
+      .array(TrustedDataConditionSchema)
+      .describe(
+        "Array of conditions that must all match. Empty array means unconditional.",
+      ),
+    action: TrustedData.InsertTrustedDataPolicySchema.shape.action.describe(
+      "The action to take when the policy matches.",
+    ),
+    description: z
+      .string()
+      .optional()
+      .describe("Human-readable explanation for why this policy exists."),
+  })
+  .strict();
+
+const updateTrustedDataPolicySchema = z
+  .object({
+    id: UuidIdSchema.describe("The ID of the trusted data policy to update."),
+    toolId: UuidIdSchema.optional().describe(
+      "The ID of the tool (UUID from the tools table).",
+    ),
+    conditions: z
+      .array(TrustedDataConditionSchema)
+      .optional()
+      .describe(
+        "Updated array of conditions that must all match. Empty array means unconditional.",
+      ),
+    action: TrustedData.InsertTrustedDataPolicySchema.shape.action
+      .optional()
+      .describe("Updated action to take when the policy matches."),
+    description: z
+      .string()
+      .nullable()
+      .optional()
+      .describe(
+        "Updated human-readable explanation for why this policy exists.",
+      ),
+  })
+  .strict();
+
+const AutonomyPolicyOperatorOutputSchema = z.object({
+  value: AutonomyPolicyOperator.SupportedOperatorSchema.describe(
+    "The operator enum value.",
+  ),
+  label: z.string().describe("The human-readable label."),
+});
+
+const OperatorsOutputSchema = z.object({
+  operators: z
+    .array(AutonomyPolicyOperatorOutputSchema)
+    .describe("Supported autonomy policy operators."),
+});
+
+const ToolInvocationPolicyConditionOutputSchema = z.object({
+  key: z.string().describe("The evaluated argument or context key."),
+  operator: AutonomyPolicyOperator.SupportedOperatorSchema.describe(
+    "The comparison operator.",
+  ),
+  value: z.string().describe("The comparison value."),
+});
+
+const ToolInvocationPolicyOutputItemSchema = z.object({
+  id: z.string().describe("The policy ID."),
+  toolId: z.string().describe("The tool ID this policy targets."),
+  conditions: z
+    .array(ToolInvocationPolicyConditionOutputSchema)
+    .describe("Conditions evaluated for the policy."),
+  action:
+    ToolInvocation.InsertToolInvocationPolicySchema.shape.action.describe(
+      "The policy action.",
+    ),
+  reason: z.string().nullable().describe("The policy reason, if any."),
+});
+
+const ToolInvocationPoliciesOutputSchema = z.object({
+  policies: z
+    .array(ToolInvocationPolicyOutputItemSchema)
+    .describe("Tool invocation policies."),
+});
+
+const ToolInvocationPolicyOutputSchema = z.object({
+  policy: ToolInvocationPolicyOutputItemSchema.describe(
+    "The requested tool invocation policy.",
+  ),
+});
+
+const TrustedDataPolicyConditionOutputSchema = z.object({
+  key: z.string().describe("The evaluated result key or path."),
+  operator: AutonomyPolicyOperator.SupportedOperatorSchema.describe(
+    "The comparison operator.",
+  ),
+  value: z.string().describe("The comparison value."),
+});
+
+const TrustedDataPolicyOutputItemSchema = z.object({
+  id: z.string().describe("The policy ID."),
+  toolId: z.string().describe("The tool ID this policy targets."),
+  conditions: z
+    .array(TrustedDataPolicyConditionOutputSchema)
+    .describe("Conditions evaluated for the policy."),
+  action:
+    TrustedData.InsertTrustedDataPolicySchema.shape.action.describe(
+      "The policy action.",
+    ),
+  description: z
+    .string()
+    .nullable()
+    .describe("The policy description, if any."),
+});
+
+const TrustedDataPoliciesOutputSchema = z.object({
+  policies: z
+    .array(TrustedDataPolicyOutputItemSchema)
+    .describe("Trusted data policies."),
+});
+
+const TrustedDataPolicyOutputSchema = z.object({
+  policy: TrustedDataPolicyOutputItemSchema.describe(
+    "The requested trusted data policy.",
+  ),
+});
+
+const DeletePolicyOutputSchema = z.object({
+  success: z.literal(true).describe("Whether the delete succeeded."),
+});
+
+const GetToolInvocationPolicyToolArgsSchema = z
+  .object({
+    id: UuidIdSchema.describe("The ID of the tool invocation policy."),
+  })
+  .strict();
+
+const DeleteToolInvocationPolicyToolArgsSchema = z
+  .object({
+    id: UuidIdSchema.describe("The ID of the tool invocation policy."),
+  })
+  .strict();
+
+const GetTrustedDataPolicyToolArgsSchema = z
+  .object({
+    id: UuidIdSchema.describe("The ID of the trusted data policy."),
+  })
+  .strict();
+
+const DeleteTrustedDataPolicyToolArgsSchema = z
+  .object({
+    id: UuidIdSchema.describe("The ID of the trusted data policy."),
+  })
+  .strict();
+
+const registry = defineArchestraTools([
+  defineArchestraTool({
+    shortName: "get_autonomy_policy_operators",
     title: "Get Autonomy Policy Operators",
     description:
       "Get all supported policy operators with their human-readable labels",
-    inputSchema: {
-      type: "object",
-      properties: {},
-      required: [],
+    schema: EmptyToolArgsSchema,
+    outputSchema: OperatorsOutputSchema,
+    async handler({ args, context }) {
+      return callKnownTool(
+        getArchestraToolFullName("get_autonomy_policy_operators"),
+        args,
+        context,
+      );
     },
-    annotations: {},
-    _meta: {},
-  },
-  {
-    name: TOOL_GET_TOOL_INVOCATION_POLICIES_FULL_NAME,
+  }),
+  defineArchestraTool({
+    shortName: "get_tool_invocation_policies",
     title: "Get Tool Invocation Policies",
     description: "Get all tool invocation policies",
-    inputSchema: {
-      type: "object",
-      properties: {},
-      required: [],
+    schema: EmptyToolArgsSchema,
+    outputSchema: ToolInvocationPoliciesOutputSchema,
+    async handler({ args, context }) {
+      return callKnownTool(
+        getArchestraToolFullName("get_tool_invocation_policies"),
+        args,
+        context,
+      );
     },
-    annotations: {},
-    _meta: {},
-  },
-  {
-    name: TOOL_CREATE_TOOL_INVOCATION_POLICY_FULL_NAME,
+  }),
+  defineArchestraTool({
+    shortName: "create_tool_invocation_policy",
     title: "Create Tool Invocation Policy",
     description: "Create a new tool invocation policy",
-    inputSchema: {
-      type: "object",
-      properties: {
-        toolId: {
-          type: "string",
-          description: "The ID of the tool (UUID from the tools table)",
-        },
-        conditions: {
-          type: "array",
-          description:
-            "Array of conditions that must all match (AND logic). Empty array means unconditional.",
-          items: {
-            type: "object",
-            properties: {
-              key: {
-                type: "string",
-                description:
-                  "The argument name or context path to evaluate (e.g., 'url', 'context.externalAgentId')",
-              },
-              operator: {
-                type: "string",
-                enum: [
-                  "equal",
-                  "notEqual",
-                  "contains",
-                  "notContains",
-                  "startsWith",
-                  "endsWith",
-                  "regex",
-                ],
-              },
-              value: {
-                type: "string",
-                description: "The value to compare against",
-              },
-            },
-            required: ["key", "operator", "value"],
-          },
-        },
-        action: {
-          type: "string",
-          enum: [
-            "allow_when_context_is_untrusted",
-            "block_when_context_is_untrusted",
-            "block_always",
-          ],
-          description: "The action to take when the policy matches",
-        },
-        reason: {
-          type: "string",
-          description: "Human-readable explanation for why this policy exists",
-        },
-      },
-      required: ["toolId", "conditions", "action"],
+    schema: createToolInvocationPolicySchema,
+    outputSchema: ToolInvocationPolicyOutputSchema,
+    async handler({ args, context }) {
+      return callKnownTool(
+        getArchestraToolFullName("create_tool_invocation_policy"),
+        args,
+        context,
+      );
     },
-    annotations: {},
-    _meta: {},
-  },
-  {
-    name: TOOL_GET_TOOL_INVOCATION_POLICY_FULL_NAME,
+  }),
+  defineArchestraTool({
+    shortName: "get_tool_invocation_policy",
     title: "Get Tool Invocation Policy",
     description: "Get a specific tool invocation policy by ID",
-    inputSchema: {
-      type: "object",
-      properties: {
-        id: {
-          type: "string",
-          description: "The ID of the tool invocation policy",
-        },
-      },
-      required: ["id"],
+    schema: GetToolInvocationPolicyToolArgsSchema,
+    outputSchema: ToolInvocationPolicyOutputSchema,
+    async handler({ args, context }) {
+      return callKnownTool(
+        getArchestraToolFullName("get_tool_invocation_policy"),
+        args,
+        context,
+      );
     },
-    annotations: {},
-    _meta: {},
-  },
-  {
-    name: TOOL_UPDATE_TOOL_INVOCATION_POLICY_FULL_NAME,
+  }),
+  defineArchestraTool({
+    shortName: "update_tool_invocation_policy",
     title: "Update Tool Invocation Policy",
     description: "Update a tool invocation policy",
-    inputSchema: {
-      type: "object",
-      properties: {
-        id: {
-          type: "string",
-          description: "The ID of the tool invocation policy to update",
-        },
-        toolId: {
-          type: "string",
-          description: "The ID of the tool (UUID from the tools table)",
-        },
-        conditions: {
-          type: "array",
-          description:
-            "Array of conditions that must all match (AND logic). Empty array means unconditional.",
-          items: {
-            type: "object",
-            properties: {
-              key: {
-                type: "string",
-                description:
-                  "The argument name or context path to evaluate (e.g., 'url', 'context.externalAgentId')",
-              },
-              operator: {
-                type: "string",
-                enum: [
-                  "equal",
-                  "notEqual",
-                  "contains",
-                  "notContains",
-                  "startsWith",
-                  "endsWith",
-                  "regex",
-                ],
-              },
-              value: {
-                type: "string",
-                description: "The value to compare against",
-              },
-            },
-            required: ["key", "operator", "value"],
-          },
-        },
-        action: {
-          type: "string",
-          enum: [
-            "allow_when_context_is_untrusted",
-            "block_when_context_is_untrusted",
-            "block_always",
-          ],
-          description: "The action to take when the policy matches",
-        },
-        reason: {
-          type: "string",
-          description: "Human-readable explanation for why this policy exists",
-        },
-      },
-      required: ["id"],
+    schema: updateToolInvocationPolicySchema,
+    outputSchema: ToolInvocationPolicyOutputSchema,
+    async handler({ args, context }) {
+      return callKnownTool(
+        getArchestraToolFullName("update_tool_invocation_policy"),
+        args,
+        context,
+      );
     },
-    annotations: {},
-    _meta: {},
-  },
-  {
-    name: TOOL_DELETE_TOOL_INVOCATION_POLICY_FULL_NAME,
+  }),
+  defineArchestraTool({
+    shortName: "delete_tool_invocation_policy",
     title: "Delete Tool Invocation Policy",
     description: "Delete a tool invocation policy by ID",
-    inputSchema: {
-      type: "object",
-      properties: {
-        id: {
-          type: "string",
-          description: "The ID of the tool invocation policy",
-        },
-      },
-      required: ["id"],
+    schema: DeleteToolInvocationPolicyToolArgsSchema,
+    outputSchema: DeletePolicyOutputSchema,
+    async handler({ args, context }) {
+      return callKnownTool(
+        getArchestraToolFullName("delete_tool_invocation_policy"),
+        args,
+        context,
+      );
     },
-    annotations: {},
-    _meta: {},
-  },
-  {
-    name: TOOL_GET_TRUSTED_DATA_POLICIES_FULL_NAME,
+  }),
+  defineArchestraTool({
+    shortName: "get_trusted_data_policies",
     title: "Get Trusted Data Policies",
     description: "Get all trusted data policies",
-    inputSchema: {
-      type: "object",
-      properties: {},
-      required: [],
+    schema: EmptyToolArgsSchema,
+    outputSchema: TrustedDataPoliciesOutputSchema,
+    async handler({ args, context }) {
+      return callKnownTool(
+        getArchestraToolFullName("get_trusted_data_policies"),
+        args,
+        context,
+      );
     },
-    annotations: {},
-    _meta: {},
-  },
-  {
-    name: TOOL_CREATE_TRUSTED_DATA_POLICY_FULL_NAME,
+  }),
+  defineArchestraTool({
+    shortName: "create_trusted_data_policy",
     title: "Create Trusted Data Policy",
     description: "Create a new trusted data policy",
-    inputSchema: {
-      type: "object",
-      properties: {
-        toolId: {
-          type: "string",
-          description: "The ID of the tool (UUID from the tools table)",
-        },
-        conditions: {
-          type: "array",
-          description:
-            "Array of conditions that must all match (AND logic). Empty array means unconditional.",
-          items: {
-            type: "object",
-            properties: {
-              key: {
-                type: "string",
-                description:
-                  "The attribute key or path in the tool result to evaluate (e.g., 'emails[*].from', 'source')",
-              },
-              operator: {
-                type: "string",
-                enum: [
-                  "equal",
-                  "notEqual",
-                  "contains",
-                  "notContains",
-                  "startsWith",
-                  "endsWith",
-                  "regex",
-                ],
-              },
-              value: {
-                type: "string",
-                description: "The value to compare against",
-              },
-            },
-            required: ["key", "operator", "value"],
-          },
-        },
-        action: {
-          type: "string",
-          enum: [
-            "block_always",
-            "mark_as_trusted",
-            "mark_as_untrusted",
-            "sanitize_with_dual_llm",
-          ],
-          description: "The action to take when the policy matches",
-        },
-        description: {
-          type: "string",
-          description: "Human-readable explanation for why this policy exists",
-        },
-      },
-      required: ["toolId", "conditions", "action"],
+    schema: createTrustedDataPolicySchema,
+    outputSchema: TrustedDataPolicyOutputSchema,
+    async handler({ args, context }) {
+      return callKnownTool(
+        getArchestraToolFullName("create_trusted_data_policy"),
+        args,
+        context,
+      );
     },
-    annotations: {},
-    _meta: {},
-  },
-  {
-    name: TOOL_GET_TRUSTED_DATA_POLICY_FULL_NAME,
+  }),
+  defineArchestraTool({
+    shortName: "get_trusted_data_policy",
     title: "Get Trusted Data Policy",
     description: "Get a specific trusted data policy by ID",
-    inputSchema: {
-      type: "object",
-      properties: {
-        id: {
-          type: "string",
-          description: "The ID of the trusted data policy",
-        },
-      },
-      required: ["id"],
+    schema: GetTrustedDataPolicyToolArgsSchema,
+    outputSchema: TrustedDataPolicyOutputSchema,
+    async handler({ args, context }) {
+      return callKnownTool(
+        getArchestraToolFullName("get_trusted_data_policy"),
+        args,
+        context,
+      );
     },
-    annotations: {},
-    _meta: {},
-  },
-  {
-    name: TOOL_UPDATE_TRUSTED_DATA_POLICY_FULL_NAME,
+  }),
+  defineArchestraTool({
+    shortName: "update_trusted_data_policy",
     title: "Update Trusted Data Policy",
     description: "Update a trusted data policy",
-    inputSchema: {
-      type: "object",
-      properties: {
-        id: {
-          type: "string",
-          description: "The ID of the trusted data policy to update",
-        },
-        toolId: {
-          type: "string",
-          description: "The ID of the tool (UUID from the tools table)",
-        },
-        conditions: {
-          type: "array",
-          description:
-            "Array of conditions that must all match (AND logic). Empty array means unconditional.",
-          items: {
-            type: "object",
-            properties: {
-              key: {
-                type: "string",
-                description:
-                  "The attribute key or path in the tool result to evaluate (e.g., 'emails[*].from', 'source')",
-              },
-              operator: {
-                type: "string",
-                enum: [
-                  "equal",
-                  "notEqual",
-                  "contains",
-                  "notContains",
-                  "startsWith",
-                  "endsWith",
-                  "regex",
-                ],
-              },
-              value: {
-                type: "string",
-                description: "The value to compare against",
-              },
-            },
-            required: ["key", "operator", "value"],
-          },
-        },
-        action: {
-          type: "string",
-          enum: [
-            "block_always",
-            "mark_as_trusted",
-            "mark_as_untrusted",
-            "sanitize_with_dual_llm",
-          ],
-          description: "The action to take when the policy matches",
-        },
-        description: {
-          type: "string",
-          description: "Human-readable explanation for why this policy exists",
-        },
-      },
-      required: ["id"],
+    schema: updateTrustedDataPolicySchema,
+    outputSchema: TrustedDataPolicyOutputSchema,
+    async handler({ args, context }) {
+      return callKnownTool(
+        getArchestraToolFullName("update_trusted_data_policy"),
+        args,
+        context,
+      );
     },
-    annotations: {},
-    _meta: {},
-  },
-  {
-    name: TOOL_DELETE_TRUSTED_DATA_POLICY_FULL_NAME,
+  }),
+  defineArchestraTool({
+    shortName: "delete_trusted_data_policy",
     title: "Delete Trusted Data Policy",
     description: "Delete a trusted data policy by ID",
-    inputSchema: {
-      type: "object",
-      properties: {
-        id: {
-          type: "string",
-          description: "The ID of the trusted data policy",
-        },
-      },
-      required: ["id"],
+    schema: DeleteTrustedDataPolicyToolArgsSchema,
+    outputSchema: DeletePolicyOutputSchema,
+    async handler({ args, context }) {
+      return callKnownTool(
+        getArchestraToolFullName("delete_trusted_data_policy"),
+        args,
+        context,
+      );
     },
-    annotations: {},
-    _meta: {},
-  },
-];
+  }),
+] as const);
+
+const {
+  get_autonomy_policy_operators: TOOL_GET_AUTONOMY_POLICY_OPERATORS_FULL_NAME,
+  get_tool_invocation_policies: TOOL_GET_TOOL_INVOCATION_POLICIES_FULL_NAME,
+  create_tool_invocation_policy: TOOL_CREATE_TOOL_INVOCATION_POLICY_FULL_NAME,
+  get_tool_invocation_policy: TOOL_GET_TOOL_INVOCATION_POLICY_FULL_NAME,
+  update_tool_invocation_policy: TOOL_UPDATE_TOOL_INVOCATION_POLICY_FULL_NAME,
+  delete_tool_invocation_policy: TOOL_DELETE_TOOL_INVOCATION_POLICY_FULL_NAME,
+  get_trusted_data_policies: TOOL_GET_TRUSTED_DATA_POLICIES_FULL_NAME,
+  create_trusted_data_policy: TOOL_CREATE_TRUSTED_DATA_POLICY_FULL_NAME,
+  get_trusted_data_policy: TOOL_GET_TRUSTED_DATA_POLICY_FULL_NAME,
+  update_trusted_data_policy: TOOL_UPDATE_TRUSTED_DATA_POLICY_FULL_NAME,
+  delete_trusted_data_policy: TOOL_DELETE_TRUSTED_DATA_POLICY_FULL_NAME,
+} = registry.toolFullNames;
+
+export const toolShortNames = registry.toolShortNames;
+export const toolArgsSchemas = registry.toolArgsSchemas;
+export const toolOutputSchemas = registry.toolOutputSchemas;
+export const toolEntries = registry.toolEntries;
+
+// === Exports ===
+
+export const tools = registry.tools;
 
 export async function handleTool(
   toolName: string,
@@ -443,7 +459,10 @@ export async function handleTool(
         return { value, label };
       });
 
-      return successResult(JSON.stringify(supportedOperators, null, 2));
+      return structuredSuccessResult(
+        { operators: supportedOperators },
+        JSON.stringify(supportedOperators, null, 2),
+      );
     } catch (error) {
       return catchError(error, "getting autonomy policy operators");
     }
@@ -457,7 +476,10 @@ export async function handleTool(
 
     try {
       const policies = await ToolInvocationPolicyModel.findAll();
-      return successResult(JSON.stringify(policies, null, 2));
+      return structuredSuccessResult(
+        { policies },
+        JSON.stringify(policies, null, 2),
+      );
     } catch (error) {
       return catchError(error, "getting tool invocation policies");
     }
@@ -478,7 +500,10 @@ export async function handleTool(
         reason: a.reason ?? null,
       });
       const policy = await ToolInvocationPolicyModel.create(validated);
-      return successResult(JSON.stringify(policy, null, 2));
+      return structuredSuccessResult(
+        { policy },
+        JSON.stringify(policy, null, 2),
+      );
     } catch (error) {
       return catchError(error, "creating tool invocation policy");
     }
@@ -501,7 +526,10 @@ export async function handleTool(
         return errorResult("Tool invocation policy not found");
       }
 
-      return successResult(JSON.stringify(policy, null, 2));
+      return structuredSuccessResult(
+        { policy },
+        JSON.stringify(policy, null, 2),
+      );
     } catch (error) {
       return catchError(error, "getting tool invocation policy");
     }
@@ -536,7 +564,10 @@ export async function handleTool(
         return errorResult("Tool invocation policy not found");
       }
 
-      return successResult(JSON.stringify(policy, null, 2));
+      return structuredSuccessResult(
+        { policy },
+        JSON.stringify(policy, null, 2),
+      );
     } catch (error) {
       return catchError(error, "updating tool invocation policy");
     }
@@ -559,7 +590,10 @@ export async function handleTool(
         return errorResult("Tool invocation policy not found");
       }
 
-      return successResult(JSON.stringify({ success: true }, null, 2));
+      return structuredSuccessResult(
+        { success: true },
+        JSON.stringify({ success: true }, null, 2),
+      );
     } catch (error) {
       return catchError(error, "deleting tool invocation policy");
     }
@@ -573,7 +607,10 @@ export async function handleTool(
 
     try {
       const policies = await TrustedDataPolicyModel.findAll();
-      return successResult(JSON.stringify(policies, null, 2));
+      return structuredSuccessResult(
+        { policies },
+        JSON.stringify(policies, null, 2),
+      );
     } catch (error) {
       return catchError(error, "getting trusted data policies");
     }
@@ -594,7 +631,10 @@ export async function handleTool(
         description: a.description ?? null,
       });
       const policy = await TrustedDataPolicyModel.create(validated);
-      return successResult(JSON.stringify(policy, null, 2));
+      return structuredSuccessResult(
+        { policy },
+        JSON.stringify(policy, null, 2),
+      );
     } catch (error) {
       return catchError(error, "creating trusted data policy");
     }
@@ -617,7 +657,10 @@ export async function handleTool(
         return errorResult("Trusted data policy not found");
       }
 
-      return successResult(JSON.stringify(policy, null, 2));
+      return structuredSuccessResult(
+        { policy },
+        JSON.stringify(policy, null, 2),
+      );
     } catch (error) {
       return catchError(error, "getting trusted data policy");
     }
@@ -651,7 +694,10 @@ export async function handleTool(
         return errorResult("Trusted data policy not found");
       }
 
-      return successResult(JSON.stringify(policy, null, 2));
+      return structuredSuccessResult(
+        { policy },
+        JSON.stringify(policy, null, 2),
+      );
     } catch (error) {
       return catchError(error, "updating trusted data policy");
     }
@@ -674,11 +720,30 @@ export async function handleTool(
         return errorResult("Trusted data policy not found");
       }
 
-      return successResult(JSON.stringify({ success: true }, null, 2));
+      return structuredSuccessResult(
+        { success: true },
+        JSON.stringify({ success: true }, null, 2),
+      );
     } catch (error) {
       return catchError(error, "deleting trusted data policy");
     }
   }
 
   return null;
+}
+
+async function callKnownTool(
+  toolName: string,
+  args: object | undefined,
+  context: ArchestraContext,
+): Promise<CallToolResult> {
+  const result = await handleTool(
+    toolName,
+    args as Record<string, unknown> | undefined,
+    context,
+  );
+  if (!result) {
+    throw new Error(`Tool not handled: ${toolName}`);
+  }
+  return result;
 }

@@ -30,6 +30,10 @@ process.env.ARCHESTRA_LOGGING_LEVEL = "silent";
 // Set auth secret for tests
 process.env.ARCHESTRA_AUTH_SECRET = "auth-secret-unit-tests-32-chars!";
 
+// Vitest file workers can stack multiple process-level exit listeners during
+// backend test setup/teardown; raise the cap slightly to avoid noisy warnings.
+process.setMaxListeners(20);
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Module-level variables to persist across tests within a file

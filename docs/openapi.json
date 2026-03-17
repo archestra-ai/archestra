@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "1.1.25"
+    "version": "1.1.26"
   },
   "components": {
     "schemas": {
@@ -43080,11 +43080,6 @@
                     "items": {
                       "type": "object",
                       "properties": {
-                        "agentId": {
-                          "type": "string",
-                          "format": "uuid",
-                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
-                        },
                         "toolId": {
                           "type": "string",
                           "format": "uuid",
@@ -43104,11 +43099,16 @@
                         },
                         "useDynamicTeamCredential": {
                           "type": "boolean"
+                        },
+                        "agentId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
                         }
                       },
                       "required": [
-                        "agentId",
-                        "toolId"
+                        "toolId",
+                        "agentId"
                       ]
                     }
                   }
@@ -121348,13 +121348,28 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "helpCenterUrl": {
+                    "chatLinks": {
                       "nullable": true,
-                      "type": "string"
-                    },
-                    "helpCenterLabel": {
-                      "nullable": true,
-                      "type": "string"
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "label": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 25
+                          },
+                          "url": {
+                            "type": "string",
+                            "maxLength": 2000
+                          }
+                        },
+                        "required": [
+                          "label",
+                          "url"
+                        ],
+                        "additionalProperties": false
+                      }
                     },
                     "chatPlaceholders": {
                       "nullable": true,
@@ -121407,8 +121422,7 @@
                     "appName",
                     "ogDescription",
                     "footerText",
-                    "helpCenterUrl",
-                    "helpCenterLabel",
+                    "chatLinks",
                     "chatPlaceholders",
                     "animateChatPlaceholders",
                     "iconLogo",
@@ -121718,15 +121732,28 @@
                     "type": "string",
                     "maxLength": 500
                   },
-                  "helpCenterUrl": {
+                  "chatLinks": {
                     "nullable": true,
-                    "type": "string",
-                    "maxLength": 2000
-                  },
-                  "helpCenterLabel": {
-                    "nullable": true,
-                    "type": "string",
-                    "maxLength": 80
+                    "maxItems": 3,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "label": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 25
+                        },
+                        "url": {
+                          "type": "string",
+                          "maxLength": 2000
+                        }
+                      },
+                      "required": [
+                        "label",
+                        "url"
+                      ]
+                    }
                   },
                   "chatErrorSupportMessage": {
                     "nullable": true,
@@ -121920,13 +121947,28 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "helpCenterUrl": {
+                    "chatLinks": {
                       "nullable": true,
-                      "type": "string"
-                    },
-                    "helpCenterLabel": {
-                      "nullable": true,
-                      "type": "string"
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "label": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 25
+                          },
+                          "url": {
+                            "type": "string",
+                            "maxLength": 2000
+                          }
+                        },
+                        "required": [
+                          "label",
+                          "url"
+                        ],
+                        "additionalProperties": false
+                      }
                     },
                     "chatPlaceholders": {
                       "nullable": true,
@@ -121979,8 +122021,7 @@
                     "appName",
                     "ogDescription",
                     "footerText",
-                    "helpCenterUrl",
-                    "helpCenterLabel",
+                    "chatLinks",
                     "chatPlaceholders",
                     "animateChatPlaceholders",
                     "iconLogo",
@@ -122286,13 +122327,28 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "helpCenterUrl": {
+                    "chatLinks": {
                       "nullable": true,
-                      "type": "string"
-                    },
-                    "helpCenterLabel": {
-                      "nullable": true,
-                      "type": "string"
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "label": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 25
+                          },
+                          "url": {
+                            "type": "string",
+                            "maxLength": 2000
+                          }
+                        },
+                        "required": [
+                          "label",
+                          "url"
+                        ],
+                        "additionalProperties": false
+                      }
                     },
                     "chatErrorSupportMessage": {
                       "nullable": true,
@@ -122312,8 +122368,7 @@
                     "appName",
                     "ogDescription",
                     "footerText",
-                    "helpCenterUrl",
-                    "helpCenterLabel",
+                    "chatLinks",
                     "chatErrorSupportMessage",
                     "animateChatPlaceholders"
                   ],
@@ -122731,13 +122786,28 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "helpCenterUrl": {
+                    "chatLinks": {
                       "nullable": true,
-                      "type": "string"
-                    },
-                    "helpCenterLabel": {
-                      "nullable": true,
-                      "type": "string"
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "label": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 25
+                          },
+                          "url": {
+                            "type": "string",
+                            "maxLength": 2000
+                          }
+                        },
+                        "required": [
+                          "label",
+                          "url"
+                        ],
+                        "additionalProperties": false
+                      }
                     },
                     "chatPlaceholders": {
                       "nullable": true,
@@ -122790,8 +122860,7 @@
                     "appName",
                     "ogDescription",
                     "footerText",
-                    "helpCenterUrl",
-                    "helpCenterLabel",
+                    "chatLinks",
                     "chatPlaceholders",
                     "animateChatPlaceholders",
                     "iconLogo",
@@ -123223,13 +123292,28 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "helpCenterUrl": {
+                    "chatLinks": {
                       "nullable": true,
-                      "type": "string"
-                    },
-                    "helpCenterLabel": {
-                      "nullable": true,
-                      "type": "string"
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "label": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 25
+                          },
+                          "url": {
+                            "type": "string",
+                            "maxLength": 2000
+                          }
+                        },
+                        "required": [
+                          "label",
+                          "url"
+                        ],
+                        "additionalProperties": false
+                      }
                     },
                     "chatPlaceholders": {
                       "nullable": true,
@@ -123282,8 +123366,7 @@
                     "appName",
                     "ogDescription",
                     "footerText",
-                    "helpCenterUrl",
-                    "helpCenterLabel",
+                    "chatLinks",
                     "chatPlaceholders",
                     "animateChatPlaceholders",
                     "iconLogo",
@@ -123714,13 +123797,28 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "helpCenterUrl": {
+                    "chatLinks": {
                       "nullable": true,
-                      "type": "string"
-                    },
-                    "helpCenterLabel": {
-                      "nullable": true,
-                      "type": "string"
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "label": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 25
+                          },
+                          "url": {
+                            "type": "string",
+                            "maxLength": 2000
+                          }
+                        },
+                        "required": [
+                          "label",
+                          "url"
+                        ],
+                        "additionalProperties": false
+                      }
                     },
                     "chatPlaceholders": {
                       "nullable": true,
@@ -123773,8 +123871,7 @@
                     "appName",
                     "ogDescription",
                     "footerText",
-                    "helpCenterUrl",
-                    "helpCenterLabel",
+                    "chatLinks",
                     "chatPlaceholders",
                     "animateChatPlaceholders",
                     "iconLogo",
@@ -124221,13 +124318,28 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "helpCenterUrl": {
+                    "chatLinks": {
                       "nullable": true,
-                      "type": "string"
-                    },
-                    "helpCenterLabel": {
-                      "nullable": true,
-                      "type": "string"
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "label": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 25
+                          },
+                          "url": {
+                            "type": "string",
+                            "maxLength": 2000
+                          }
+                        },
+                        "required": [
+                          "label",
+                          "url"
+                        ],
+                        "additionalProperties": false
+                      }
                     },
                     "chatPlaceholders": {
                       "nullable": true,
@@ -124280,8 +124392,7 @@
                     "appName",
                     "ogDescription",
                     "footerText",
-                    "helpCenterUrl",
-                    "helpCenterLabel",
+                    "chatLinks",
                     "chatPlaceholders",
                     "animateChatPlaceholders",
                     "iconLogo",
@@ -124680,13 +124791,28 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "helpCenterUrl": {
+                    "chatLinks": {
                       "nullable": true,
-                      "type": "string"
-                    },
-                    "helpCenterLabel": {
-                      "nullable": true,
-                      "type": "string"
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "label": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 25
+                          },
+                          "url": {
+                            "type": "string",
+                            "maxLength": 2000
+                          }
+                        },
+                        "required": [
+                          "label",
+                          "url"
+                        ],
+                        "additionalProperties": false
+                      }
                     },
                     "chatPlaceholders": {
                       "nullable": true,
@@ -124739,8 +124865,7 @@
                     "appName",
                     "ogDescription",
                     "footerText",
-                    "helpCenterUrl",
-                    "helpCenterLabel",
+                    "chatLinks",
                     "chatPlaceholders",
                     "animateChatPlaceholders",
                     "iconLogo",
@@ -125428,13 +125553,28 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "helpCenterUrl": {
+                    "chatLinks": {
                       "nullable": true,
-                      "type": "string"
-                    },
-                    "helpCenterLabel": {
-                      "nullable": true,
-                      "type": "string"
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "label": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 25
+                          },
+                          "url": {
+                            "type": "string",
+                            "maxLength": 2000
+                          }
+                        },
+                        "required": [
+                          "label",
+                          "url"
+                        ],
+                        "additionalProperties": false
+                      }
                     },
                     "chatPlaceholders": {
                       "nullable": true,
@@ -125487,8 +125627,7 @@
                     "appName",
                     "ogDescription",
                     "footerText",
-                    "helpCenterUrl",
-                    "helpCenterLabel",
+                    "chatLinks",
                     "chatPlaceholders",
                     "animateChatPlaceholders",
                     "iconLogo",

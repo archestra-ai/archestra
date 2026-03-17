@@ -61,9 +61,11 @@ const toolGroups: Record<ArchestraToolShortName, ToolGroup> = {
 
   create_llm_proxy: ToolGroup.LLMProxies,
   get_llm_proxy: ToolGroup.LLMProxies,
+  edit_llm_proxy: ToolGroup.LLMProxies,
 
   create_mcp_gateway: ToolGroup.MCPGateways,
   get_mcp_gateway: ToolGroup.MCPGateways,
+  edit_mcp_gateway: ToolGroup.MCPGateways,
 
   search_private_mcp_registry: ToolGroup.MCPServers,
   get_mcp_servers: ToolGroup.MCPServers,
@@ -190,7 +192,12 @@ function generateMarkdownBody(): string {
   // Group tools
   const grouped = new Map<
     ToolGroup,
-    { shortName: string; description: string; inputSchema: JsonSchema }[]
+    {
+      shortName: string;
+      description: string;
+      inputSchema: JsonSchema;
+      outputSchema?: JsonSchema;
+    }[]
   >();
 
   for (const tool of tools) {
@@ -213,6 +220,7 @@ function generateMarkdownBody(): string {
       shortName,
       description: truncateDescription(tool.description ?? ""),
       inputSchema: tool.inputSchema as JsonSchema,
+      outputSchema: tool.outputSchema as JsonSchema | undefined,
     });
   }
 
@@ -234,9 +242,10 @@ function generateMarkdownBody(): string {
 
     // Add detailed input schemas for each tool in this group
     for (const tool of groupTools) {
-      const schemaMarkdown = renderInputSchema(
+      const schemaMarkdown = renderToolSchemas(
         tool.shortName,
         tool.inputSchema,
+        tool.outputSchema,
       );
       if (schemaMarkdown) {
         section += `\n${schemaMarkdown}`;
@@ -268,7 +277,7 @@ All Archestra tools are prefixed with \`archestra__\` and are always trusted —
 
 Archestra tools are **trusted**, meaning they bypass [tool invocation policies](/platform-tool-invocation-policies) and [trusted data policies](/platform-trusted-data-policies) — the tool will always execute without policy evaluation.
 
-However, **RBAC (role-based access control) is still enforced**. Every tool is mapped to a required permission (resource + action). The \`tools/list\` endpoint dynamically filters tools so users only see tools they have permission to use. Additionally, \`executeArchestraTool\` performs a centralized RBAC check before executing any tool. For example, a user without \`knowledgeBase:create\` permission will not see \`create_knowledge_base\` in their tool list and cannot execute it.
+However, **RBAC (role-based access control) is still enforced**. Every tool is mapped to a required permission (resource + action). The \`tools/list\` endpoint dynamically filters tools so users only see tools they have permission to use. For example, a user without \`knowledgeBase:create\` permission will not see \`create_knowledge_base\` in their tool list and cannot execute it.
 
 ## Tools Reference
 
@@ -337,26 +346,69 @@ interface JsonSchema {
   enum?: string[];
 }
 
-function renderInputSchema(
+function renderToolSchemas(
   toolName: string,
-  schema: JsonSchema,
+  inputSchema: JsonSchema,
+  outputSchema?: JsonSchema,
 ): string | null {
-  const properties = schema.properties;
-  if (!properties || Object.keys(properties).length === 0) {
-    return null;
+  let md = `#### ${toolName}\n\n`;
+
+  const inputRows = renderSchemaRows(inputSchema);
+  if (inputRows.length === 0) {
+    md += "This tool takes no arguments.\n\n";
+  } else {
+    md += "##### Input\n\n";
+    md += "| Parameter | Type | Required | Description |\n";
+    md += "|-----------|------|----------|-------------|\n";
+    for (const row of inputRows) {
+      md += `| ${row.name} | ${row.type} | ${row.required} | ${escapeTableCell(row.description)} |\n`;
+    }
+    md += "\n";
   }
 
-  const requiredSet = new Set(schema.required ?? []);
-  const rows = renderProperties(properties, requiredSet);
-
-  let md = `#### ${toolName}\n\n`;
-  md += "| Parameter | Type | Required | Description |\n";
-  md += "|-----------|------|----------|-------------|\n";
-  for (const row of rows) {
-    md += `| ${row.name} | ${row.type} | ${row.required} | ${escapeTableCell(row.description)} |\n`;
+  if (outputSchema) {
+    const outputRows = renderSchemaRows(outputSchema);
+    if (outputRows.length === 0) {
+      md +=
+        "##### Output\n\nThis tool returns structured output with no documented fields.\n";
+    } else {
+      md += "##### Output\n\n";
+      md += "| Field | Type | Required | Description |\n";
+      md += "|-------|------|----------|-------------|\n";
+      for (const row of outputRows) {
+        md += `| ${row.name} | ${row.type} | ${row.required} | ${escapeTableCell(row.description)} |\n`;
+      }
+    }
   }
 
   return md;
+}
+
+function renderSchemaRows(
+  schema: JsonSchema,
+  rootPrefix = "",
+): { name: string; type: string; required: string; description: string }[] {
+  if (schema.type === "object" && schema.properties) {
+    return renderProperties(
+      schema.properties,
+      new Set(schema.required ?? []),
+      rootPrefix,
+    );
+  }
+
+  if (
+    schema.type === "array" &&
+    schema.items?.type === "object" &&
+    schema.items.properties
+  ) {
+    return renderProperties(
+      schema.items.properties,
+      new Set(schema.items.required ?? []),
+      rootPrefix ? `${rootPrefix}[]` : "[]",
+    );
+  }
+
+  return [];
 }
 
 function renderProperties(

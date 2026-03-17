@@ -138,16 +138,15 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
-      // Compute bestModelId for each key
-      const apiKeysWithBestModel = await Promise.all(
-        apiKeys.map(async (key) => {
-          const bestModel = await ApiKeyModelModel.getBestModel(key.id);
-          return {
-            ...key,
-            bestModelId: bestModel?.modelId ?? null,
-          };
-        }),
-      );
+      const bestModelsByApiKeyId =
+        await ApiKeyModelModel.getBestModelsForApiKeys(
+          apiKeys.map((key) => key.id),
+        );
+
+      const apiKeysWithBestModel = apiKeys.map((key) => ({
+        ...key,
+        bestModelId: bestModelsByApiKeyId.get(key.id)?.modelId ?? null,
+      }));
 
       return reply.send(apiKeysWithBestModel);
     },

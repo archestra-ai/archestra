@@ -240,6 +240,12 @@ describe("JiraConnector", () => {
           labels: [] as string[],
           issuetype: { name: "Task" },
           updated: "2024-01-15T10:00:00.000Z",
+          project: { key: "PROJ", name: "Project" },
+          parent: { key: "PROJ-0" },
+          resolution: { name: "Done" },
+          resolutiondate: "2024-01-20T10:00:00.000Z",
+          created: "2024-01-01T10:00:00.000Z",
+          duedate: "2024-02-01T10:00:00.000Z",
         },
       };
     }
@@ -493,8 +499,18 @@ describe("JiraConnector", () => {
       expect(metadata.status).toBe("Open");
       expect(metadata.priority).toBe("Medium");
       expect(metadata.reporter).toBe("Reporter");
+      expect(metadata.reporterEmail).toBe("reporter@example.com");
       expect(metadata.assignee).toBe("Assignee");
+      expect(metadata.assigneeEmail).toBe("assignee@example.com");
       expect(metadata.issueType).toBe("Task");
+      expect(metadata.project).toBe("PROJ");
+      expect(metadata.projectName).toBe("Project");
+      expect(metadata.resolution).toBe("Done");
+      expect(metadata.resolutionDate).toBe("2024-01-20");
+      expect(metadata.parent).toBe("PROJ-0");
+      expect(metadata.created).toBe("2024-01-01");
+      expect(metadata.updated).toBe("2024-01-15");
+      expect(metadata.dueDate).toBe("2024-02-01");
     });
 
     test("checkpoint stores lastRawUpdatedAt and lastIssueKey from last issue", async () => {

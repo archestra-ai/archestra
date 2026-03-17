@@ -33,10 +33,12 @@ export const TOOL_PERMISSIONS: Record<
   // LLM Proxies
   create_llm_proxy: { resource: "llmProxy", action: "create" },
   get_llm_proxy: { resource: "llmProxy", action: "read" },
+  edit_llm_proxy: { resource: "llmProxy", action: "update" },
 
   // MCP Gateways
   create_mcp_gateway: { resource: "mcpGateway", action: "create" },
   get_mcp_gateway: { resource: "mcpGateway", action: "read" },
+  edit_mcp_gateway: { resource: "mcpGateway", action: "update" },
 
   // MCP Servers
   search_private_mcp_registry: { resource: "mcpRegistry", action: "read" },

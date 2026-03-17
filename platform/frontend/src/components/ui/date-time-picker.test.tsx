@@ -46,19 +46,18 @@ describe("DateTimePicker", () => {
   });
 
   describe("time selection", () => {
-    it("calls onChange with updated hours when clicking an hour button", async () => {
-      const user = userEvent.setup();
+    it("calls onChange with updated hours when clicking an hour button", () => {
       const onChange = vi.fn();
       const date = new Date(2025, 5, 15, 10, 30); // June 15, 2025 10:30
 
       render(<DateTimePicker value={date} onChange={onChange} />);
 
       // Open the popover
-      await user.click(screen.getByRole("button", { name: /06\/15\/2025/ }));
+      fireEvent.click(screen.getByRole("button", { name: /06\/15\/2025/ }));
 
       // Click the "14" hour button
       const hourButton = screen.getByRole("button", { name: "14" });
-      await user.click(hourButton);
+      fireEvent.click(hourButton);
 
       expect(onChange).toHaveBeenCalledTimes(1);
       const newDate = onChange.mock.calls[0][0] as Date;
@@ -67,19 +66,18 @@ describe("DateTimePicker", () => {
       expect(newDate.getMinutes()).toBe(30);
     });
 
-    it("calls onChange with updated minutes when clicking a minute button", async () => {
-      const user = userEvent.setup();
+    it("calls onChange with updated minutes when clicking a minute button", () => {
       const onChange = vi.fn();
       const date = new Date(2025, 5, 15, 10, 30); // June 15, 2025 10:30
 
       render(<DateTimePicker value={date} onChange={onChange} />);
 
       // Open the popover
-      await user.click(screen.getByRole("button", { name: /06\/15\/2025/ }));
+      fireEvent.click(screen.getByRole("button", { name: /06\/15\/2025/ }));
 
       // Click the "45" minute button
       const minuteButton = screen.getByRole("button", { name: "45" });
-      await user.click(minuteButton);
+      fireEvent.click(minuteButton);
 
       expect(onChange).toHaveBeenCalledTimes(1);
       const newDate = onChange.mock.calls[0][0] as Date;

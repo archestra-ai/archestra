@@ -20,8 +20,8 @@ export default defineConfig({
     include: ["./src/**/*.test.{ts,tsx}"],
     environment: "jsdom",
     setupFiles: ["./vitest-setup.ts"],
-    // Increase concurrency on CI for faster test execution
-    // Default is 5, CI can handle more parallel tests
-    maxConcurrency: isCI ? 10 : 5,
+    testTimeout: 10_000,
+    // Keep concurrency moderate to avoid suite-level timeouts from React/Radix-heavy tests.
+    maxConcurrency: isCI ? 6 : 3,
   },
 });

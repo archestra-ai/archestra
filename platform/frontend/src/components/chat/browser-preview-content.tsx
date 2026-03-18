@@ -21,6 +21,16 @@ import {
   useRef,
   useState,
 } from "react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -29,6 +39,8 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
+import { useProfile } from "@/lib/agent.query";
+import { useHasPermissions } from "@/lib/auth.query";
 import { useBrowserStream } from "@/lib/browser-stream.hook";
 import { useConversation, useHasPlaywrightMcpTools } from "@/lib/chat.query";
 import { cn } from "@/lib/utils";
@@ -67,9 +79,16 @@ export function BrowserPreviewContent({
   initialNavigateUrl,
   onInitialNavigateComplete,
 }: BrowserPreviewContentProps) {
+  const { data: canUpdateAgent } = useHasPermissions({ agent: ["team-admin"] });
+
   // Resolve agentId: prefer conversation's agentId, fall back to prop
   const { data: conversation } = useConversation(conversationId);
   const resolvedAgentId = conversation?.agentId ?? agentIdProp;
+
+  const { data: agent } = useProfile(resolvedAgentId);
+  const isSharedAgent = agent?.scope !== "personal";
+
+  const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
 
   const {
     hasPlaywrightMcpTools,
@@ -82,7 +101,9 @@ export function BrowserPreviewContent({
     installBrowser,
     reinstallBrowser,
     assignToolsToAgent,
-  } = useHasPlaywrightMcpTools(resolvedAgentId, conversationId);
+  } = useHasPlaywrightMcpTools(resolvedAgentId, conversationId, {
+    autoAssignAfterInstall: !!canUpdateAgent,
+  });
   const [typeText, setTypeText] = useState("");
   const imageRef = useRef<HTMLImageElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -502,14 +523,20 @@ export function BrowserPreviewContent({
                 // Installed but tools not assigned to current agent
                 <>
                   <Button
-                    onClick={() =>
-                      resolvedAgentId &&
-                      assignToolsToAgent({
-                        agentId: resolvedAgentId,
-                        conversationId,
-                      })
-                    }
-                    disabled={!resolvedAgentId}
+                    onClick={() => {
+                      if (!resolvedAgentId) return;
+                      const action = () =>
+                        assignToolsToAgent({
+                          agentId: resolvedAgentId,
+                          conversationId,
+                        });
+                      if (isSharedAgent) {
+                        setPendingAction(() => action);
+                      } else {
+                        action();
+                      }
+                    }}
+                    disabled={!resolvedAgentId || !canUpdateAgent}
                     className="mt-10"
                   >
                     Assign tools to agent
@@ -564,6 +591,35 @@ export function BrowserPreviewContent({
           </div>
         )}
       </div>
+
+      <AlertDialog
+        open={!!pendingAction}
+        onOpenChange={(open) => {
+          if (!open) setPendingAction(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Modify shared agent?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This agent is shared across your{" "}
+              {agent?.scope === "team" ? "team" : "organization"}. Adding
+              browser tools will affect all users of this agent.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                pendingAction?.();
+                setPendingAction(null);
+              }}
+            >
+              Confirm
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

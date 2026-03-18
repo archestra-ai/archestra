@@ -93,6 +93,7 @@ import {
   fetchConversationEnabledTools,
   useConversation,
   useCreateConversation,
+  useHasPlaywrightMcpTools,
   useStopChatStream,
   useUpdateConversation,
   useUpdateConversationEnabledTools,
@@ -195,6 +196,9 @@ export default function ChatPage() {
   });
   const { data: canReadTeams } = useHasPermissions({
     team: ["read"],
+  });
+  const { data: canUpdateAgent } = useHasPermissions({
+    agent: ["team-admin"],
   });
   const { data: teams } = useTeams({ enabled: !!canReadTeams });
 
@@ -713,15 +717,27 @@ export default function ChatPage() {
   const playwrightSetupAgentId = conversationId
     ? (conversation?.agentId ?? undefined)
     : (initialAgentId ?? undefined);
+
+  const { hasPlaywrightMcpTools, isLoading: isLoadingBrowserTools } =
+    useHasPlaywrightMcpTools(browserToolsAgentId, conversationId);
+  // Show while loading so it doesn't flash hidden for members whose agent already has playwright
+  // tools. Once loading is done, hides only if the user lacks permission AND agent has no tools.
+  const showBrowserButton =
+    canUpdateAgent ||
+    hasPlaywrightMcpTools ||
+    (!!conversationId && isLoadingConversation) ||
+    (!!browserToolsAgentId && isLoadingBrowserTools);
+
   const {
     isLoading: isPlaywrightCheckLoading,
     isRequired: isPlaywrightSetupRequired,
   } = usePlaywrightSetupRequired(playwrightSetupAgentId, conversationId, {
-    enabled: hasChatAccess,
+    enabled: hasChatAccess && canUpdateAgent !== false,
   });
   // Treat both loading and required as "visible" for disabling submit, hiding arrow, etc.
+  // Only applies to users who can actually perform the installation.
   const isPlaywrightSetupVisible =
-    isPlaywrightSetupRequired || isPlaywrightCheckLoading;
+    !!canUpdateAgent && (isPlaywrightSetupRequired || isPlaywrightCheckLoading);
 
   // Create conversation mutation (requires agentId)
   const createConversationMutation = useCreateConversation();
@@ -1543,21 +1559,25 @@ export default function ChatPage() {
                   Artifact
                 </Button>
 
-                <div className="w-px h-4 bg-border" />
-                <Button
-                  variant={
-                    isBrowserPanelOpen && !isPlaywrightSetupVisible
-                      ? "secondary"
-                      : "ghost"
-                  }
-                  size="sm"
-                  onClick={toggleBrowserPanel}
-                  className="text-xs"
-                  disabled={isPlaywrightSetupVisible}
-                >
-                  <Globe className="h-3 w-3 mr-1" />
-                  Browser
-                </Button>
+                {showBrowserButton && (
+                  <>
+                    <div className="w-px h-4 bg-border" />
+                    <Button
+                      variant={
+                        isBrowserPanelOpen && !isPlaywrightSetupVisible
+                          ? "secondary"
+                          : "ghost"
+                      }
+                      size="sm"
+                      onClick={toggleBrowserPanel}
+                      className="text-xs"
+                      disabled={isPlaywrightSetupVisible}
+                    >
+                      <Globe className="h-3 w-3 mr-1" />
+                      Browser
+                    </Button>
+                  </>
+                )}
               </div>
               {/* Right side - mobile: 3-dot dropdown */}
               <div className="flex md:hidden items-center gap-2 flex-shrink-0">
@@ -1595,15 +1615,17 @@ export default function ChatPage() {
                       <FileText className="h-4 w-4" />
                       {isArtifactOpen ? "Hide Artifact" : "Show Artifact"}
                     </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onSelect={toggleBrowserPanel}
-                      disabled={isPlaywrightSetupVisible}
-                    >
-                      <Globe className="h-4 w-4" />
-                      {isBrowserPanelOpen && !isPlaywrightSetupVisible
-                        ? "Hide Browser"
-                        : "Show Browser"}
-                    </DropdownMenuItem>
+                    {showBrowserButton && (
+                      <DropdownMenuItem
+                        onSelect={toggleBrowserPanel}
+                        disabled={isPlaywrightSetupVisible}
+                      >
+                        <Globe className="h-4 w-4" />
+                        {isBrowserPanelOpen && !isPlaywrightSetupVisible
+                          ? "Hide Browser"
+                          : "Show Browser"}
+                      </DropdownMenuItem>
+                    )}
                   </DropdownMenuContent>
                 </DropdownMenu>
               </div>
@@ -1805,7 +1827,7 @@ export default function ChatPage() {
                       ))}
                     </div>
                   )}
-                {isPlaywrightSetupRequired && (
+                {isPlaywrightSetupRequired && canUpdateAgent && (
                   <PlaywrightInstallDialog
                     agentId={playwrightSetupAgentId}
                     conversationId={conversationId}

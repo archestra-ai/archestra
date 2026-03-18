@@ -616,6 +616,7 @@ function useBrowserInstallation(onInstallComplete?: (agentId: string) => void) {
 export function useHasPlaywrightMcpTools(
   agentId: string | undefined,
   conversationId?: string,
+  options?: { autoAssignAfterInstall?: boolean },
 ) {
   const toolsQuery = useProfileToolsWithIds(agentId);
   const queryClient = useQueryClient();
@@ -675,11 +676,14 @@ export function useHasPlaywrightMcpTools(
   });
 
   // After browser install completes, automatically assign tools to the agent
+  // (unless autoAssignAfterInstall is explicitly set to false)
   const browserInstall = useBrowserInstallation((installedAgentId) => {
-    assignToolsMutation.mutate({
-      agentId: installedAgentId,
-      conversationId: conversationIdRef.current,
-    });
+    if (options?.autoAssignAfterInstall !== false) {
+      assignToolsMutation.mutate({
+        agentId: installedAgentId,
+        conversationId: conversationIdRef.current,
+      });
+    }
   });
 
   // Fetch user's Playwright server to check reinstallRequired

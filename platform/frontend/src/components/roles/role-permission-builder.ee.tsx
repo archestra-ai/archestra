@@ -281,6 +281,7 @@ export function RolePermissionBuilder({
                   )}
                 </button>
                 <Checkbox
+                  aria-label={`${category} permissions`}
                   id={`category-${category}`}
                   checked={categoryCheckState}
                   disabled={readOnly}
@@ -324,6 +325,9 @@ export function RolePermissionBuilder({
                           <div className="flex items-center justify-between mb-2">
                             <div className="flex items-center gap-2">
                               <Checkbox
+                                aria-label={`${
+                                  resourceLabels[resource] || resource
+                                } permissions`}
                                 id={`${resource}-all`}
                                 checked={resourceCheckState}
                                 disabled={readOnly}

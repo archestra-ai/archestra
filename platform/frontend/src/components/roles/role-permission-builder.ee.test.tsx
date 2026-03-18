@@ -16,7 +16,7 @@ describe("RolePermissionBuilder", () => {
       knowledgeSettings: ["read", "update"],
     };
 
-    const { container, rerender } = render(
+    const { rerender } = render(
       <RolePermissionBuilder
         permission={permission}
         onChange={onChange}
@@ -26,15 +26,13 @@ describe("RolePermissionBuilder", () => {
 
     await user.click(screen.getByRole("button", { name: "Knowledge" }));
 
-    expect(container.querySelector("#category-Knowledge")).toHaveAttribute(
-      "data-state",
-      "indeterminate",
-    );
-    expect(container.querySelector("#knowledgeBase-all")).toHaveAttribute(
-      "data-state",
-      "indeterminate",
-    );
-    expect(container.querySelector("#knowledgeBase-query")).toHaveAttribute(
+    expect(
+      screen.getByRole("checkbox", { name: "Knowledge permissions" }),
+    ).toHaveAttribute("data-state", "indeterminate");
+    expect(
+      screen.getByRole("checkbox", { name: "Knowledge Bases permissions" }),
+    ).toHaveAttribute("data-state", "indeterminate");
+    expect(screen.getByLabelText("Query")).toHaveAttribute(
       "data-state",
       "checked",
     );
@@ -47,13 +45,14 @@ describe("RolePermissionBuilder", () => {
       />,
     );
 
-    expect(container.querySelector("#knowledgeBase-query")).toHaveAttribute(
+    expect(screen.getByLabelText("Query")).toHaveAttribute(
       "data-state",
       "unchecked",
     );
-    expect(container.querySelector("#knowledgeSettings-all")).toHaveAttribute(
-      "data-state",
-      "indeterminate",
-    );
+    expect(
+      screen.getByRole("checkbox", {
+        name: "Knowledge Settings permissions",
+      }),
+    ).toHaveAttribute("data-state", "indeterminate");
   });
 });

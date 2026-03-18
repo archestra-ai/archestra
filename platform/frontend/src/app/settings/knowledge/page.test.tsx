@@ -2,6 +2,7 @@
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // Radix Popper / floating-ui needs ResizeObserver
@@ -272,6 +273,70 @@ describe("KnowledgeSettingsPage", () => {
       renderPage();
 
       expect(screen.getByText("text-embedding-3-large")).toBeInTheDocument();
+    });
+
+    it("shows embedding model descriptions in the dropdown", async () => {
+      const user = userEvent.setup();
+
+      mockOrganization = {
+        embeddingChatApiKeyId: "key-1",
+        embeddingModel: null,
+        rerankerChatApiKeyId: null,
+        rerankerModel: null,
+      };
+      mockApiKeys = [
+        {
+          id: "key-1",
+          name: "OpenAI Key",
+          provider: "openai",
+          scope: "org_wide",
+        },
+      ];
+      renderPage();
+
+      const modelTrigger = screen
+        .getAllByRole("combobox")
+        .find((el) => el.textContent?.includes("Select embedding model"));
+
+      expect(modelTrigger).toBeDefined();
+      await user.click(modelTrigger!);
+
+      expect(
+        screen.getByText("Best cost/quality ratio (1536 dims)"),
+      ).toBeInTheDocument();
+    });
+
+    it("allows entering a custom embedding model name", async () => {
+      const user = userEvent.setup();
+
+      mockOrganization = {
+        embeddingChatApiKeyId: "key-1",
+        embeddingModel: null,
+        rerankerChatApiKeyId: null,
+        rerankerModel: null,
+      };
+      mockApiKeys = [
+        {
+          id: "key-1",
+          name: "OpenAI Key",
+          provider: "openai",
+          scope: "org_wide",
+        },
+      ];
+      renderPage();
+
+      const modelTrigger = screen
+        .getAllByRole("combobox")
+        .find((el) => el.textContent?.includes("Select embedding model"));
+
+      expect(modelTrigger).toBeDefined();
+      await user.click(modelTrigger!);
+      await user.type(
+        screen.getByPlaceholderText("Search or type model name..."),
+        "custom-embedding-model{enter}",
+      );
+
+      expect(screen.getByText("custom-embedding-model")).toBeInTheDocument();
     });
   });
 

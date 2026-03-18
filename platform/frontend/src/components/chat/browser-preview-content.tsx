@@ -21,17 +21,9 @@ import {
   useRef,
   useState,
 } from "react";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { FormDialog } from "@/components/form-dialog";
 import { Button } from "@/components/ui/button";
+import { DialogStickyFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import {
   Popover,
@@ -592,34 +584,40 @@ export function BrowserPreviewContent({
         )}
       </div>
 
-      <AlertDialog
+      <FormDialog
         open={!!pendingAction}
         onOpenChange={(open) => {
           if (!open) setPendingAction(null);
         }}
+        title="Modify shared agent?"
+        description={
+          <>
+            This agent is shared across your{" "}
+            {agent?.scope === "team" ? "team" : "organization"}. Adding browser
+            tools will affect all users of this agent.
+          </>
+        }
+        size="small"
       >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Modify shared agent?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This agent is shared across your{" "}
-              {agent?.scope === "team" ? "team" : "organization"}. Adding
-              browser tools will affect all users of this agent.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => {
-                pendingAction?.();
-                setPendingAction(null);
-              }}
-            >
-              Confirm
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+        <DialogStickyFooter className="mt-0">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setPendingAction(null)}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            onClick={() => {
+              pendingAction?.();
+              setPendingAction(null);
+            }}
+          >
+            Confirm
+          </Button>
+        </DialogStickyFooter>
+      </FormDialog>
     </div>
   );
 }

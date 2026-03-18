@@ -118,31 +118,6 @@ vi.mock("@/components/ui/tooltip", () => ({
   ),
 }));
 
-vi.mock("@/components/ui/alert-dialog", () => ({
-  AlertDialog: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-  AlertDialogContent: ({ children }: { children: React.ReactNode }) => (
-    <>{children}</>
-  ),
-  AlertDialogHeader: ({ children }: { children: React.ReactNode }) => (
-    <>{children}</>
-  ),
-  AlertDialogTitle: ({ children }: { children: React.ReactNode }) => (
-    <>{children}</>
-  ),
-  AlertDialogDescription: ({ children }: { children: React.ReactNode }) => (
-    <>{children}</>
-  ),
-  AlertDialogFooter: ({ children }: { children: React.ReactNode }) => (
-    <>{children}</>
-  ),
-  AlertDialogCancel: ({ children }: { children: React.ReactNode }) => (
-    <>{children}</>
-  ),
-  AlertDialogAction: ({ children }: { children: React.ReactNode }) => (
-    <>{children}</>
-  ),
-}));
-
 vi.mock("@/components/ui/dropdown-menu", () => ({
   DropdownMenu: ({ children }: { children: React.ReactNode }) => (
     <>{children}</>

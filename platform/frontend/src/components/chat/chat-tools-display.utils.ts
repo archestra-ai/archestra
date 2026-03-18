@@ -1,3 +1,10 @@
+import { TOOL_SWAP_AGENT_FULL_NAME, TOOL_TODO_WRITE_FULL_NAME } from "@shared";
+import type { DynamicToolUIPart, ToolUIPart } from "ai";
+import {
+  parseAuthRequired,
+  parseExpiredAuth,
+  parsePolicyDenied,
+} from "@/lib/llmProviders/common";
 import {
   applyPendingActions,
   type PendingToolAction,
@@ -46,4 +53,103 @@ export function getCurrentEnabledToolIds({
   }
 
   return baseIds;
+}
+
+export function tryToExtractErrorFromOutput(output: unknown) {
+  try {
+    if (typeof output !== "string") return undefined;
+    const json = JSON.parse(output);
+    return typeof json.error === "string" ? json.error : undefined;
+  } catch (_error) {
+    return undefined;
+  }
+}
+
+export function getToolErrorText({
+  part,
+  toolResultPart,
+}: {
+  part: ToolUIPart | DynamicToolUIPart;
+  toolResultPart: ToolUIPart | DynamicToolUIPart | null;
+}): string | undefined {
+  const outputError = toolResultPart
+    ? tryToExtractErrorFromOutput(toolResultPart.output)
+    : tryToExtractErrorFromOutput(part.output);
+
+  return toolResultPart
+    ? (toolResultPart.errorText ?? outputError)
+    : (part.errorText ?? outputError);
+}
+
+export function getToolHeaderState({
+  state,
+  toolResultPart,
+  errorText,
+}: {
+  state: ToolUIPart["state"] | DynamicToolUIPart["state"];
+  toolResultPart: ToolUIPart | DynamicToolUIPart | null;
+  errorText: string | undefined;
+}) {
+  if (errorText) return "output-error" as const;
+  if (toolResultPart) return "output-available" as const;
+  return state;
+}
+
+export function getCompactToolState({
+  part,
+  toolResultPart,
+}: {
+  part: ToolUIPart | DynamicToolUIPart;
+  toolResultPart: ToolUIPart | DynamicToolUIPart | null;
+}): "running" | "completed" | "error" {
+  if (getToolErrorText({ part, toolResultPart })) {
+    return "error";
+  }
+
+  if (toolResultPart || part.state === "output-available") {
+    return "completed";
+  }
+
+  return "running";
+}
+
+export function isCompactEligible(params: {
+  part: ToolUIPart | DynamicToolUIPart;
+  toolResultPart: ToolUIPart | DynamicToolUIPart | null;
+  toolName: string;
+}): boolean {
+  const { part, toolResultPart, toolName } = params;
+
+  if (
+    toolName === TOOL_SWAP_AGENT_FULL_NAME ||
+    toolName === TOOL_TODO_WRITE_FULL_NAME
+  ) {
+    return false;
+  }
+
+  if (part.state === "approval-requested") {
+    return false;
+  }
+
+  const errorText = getToolErrorText({ part, toolResultPart });
+  if (errorText) {
+    if (
+      parsePolicyDenied(errorText) ||
+      parseExpiredAuth(errorText) ||
+      parseAuthRequired(errorText)
+    ) {
+      return false;
+    }
+
+    return true;
+  }
+
+  const rawOutput = toolResultPart?.output ?? part.output;
+  if (typeof rawOutput === "string") {
+    if (parseExpiredAuth(rawOutput) || parseAuthRequired(rawOutput)) {
+      return false;
+    }
+  }
+
+  return true;
 }

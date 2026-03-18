@@ -1,7 +1,12 @@
+import { TOOL_TODO_WRITE_FULL_NAME } from "@shared";
 import { describe, expect, it } from "vitest";
 import {
+  getCompactToolState,
   getCurrentEnabledToolIds,
   getDefaultEnabledToolIds,
+  getToolErrorText,
+  isCompactEligible,
+  tryToExtractErrorFromOutput,
 } from "./chat-tools-display.utils";
 
 function tool(id: string) {
@@ -130,5 +135,109 @@ describe("getCurrentEnabledToolIds", () => {
       pendingActions: [{ type: "enable", toolId: "t3" }],
     });
     expect(result).toEqual(["t2"]);
+  });
+});
+
+describe("tool display helpers", () => {
+  it("extracts error strings from JSON output", () => {
+    expect(tryToExtractErrorFromOutput(JSON.stringify({ error: "boom" }))).toBe(
+      "boom",
+    );
+  });
+
+  it("falls back to parsing JSON output errors", () => {
+    expect(
+      getToolErrorText({
+        part: {
+          type: "tool-github__create_issue",
+          state: "input-available",
+          output: JSON.stringify({ error: "output error" }),
+        } as never,
+        toolResultPart: null,
+      }),
+    ).toBe("output error");
+  });
+
+  it("marks generic tool failures as compact-eligible", () => {
+    expect(
+      isCompactEligible({
+        toolName: "github__create_issue",
+        part: {
+          type: "tool-github__create_issue",
+          state: "input-available",
+          errorText: "Request failed",
+        } as never,
+        toolResultPart: null,
+      }),
+    ).toBe(true);
+  });
+
+  it("keeps policy denials as full cards", () => {
+    expect(
+      isCompactEligible({
+        toolName: "linear__create_issue",
+        part: {
+          type: "tool-linear__create_issue",
+          state: "input-available",
+          errorText:
+            'I tried to invoke the linear__create_issue tool with the following arguments: {"title":"Blocked"}.\n\nHowever, I was denied by a tool invocation policy:\n\nTool invocation blocked: untrusted data detected',
+        } as never,
+        toolResultPart: null,
+      }),
+    ).toBe(false);
+  });
+
+  it("keeps auth-required responses as full cards", () => {
+    expect(
+      isCompactEligible({
+        toolName: "jira__create_issue",
+        part: {
+          type: "tool-jira__create_issue",
+          state: "input-available",
+          errorText:
+            'Authentication required for "jira-atlassian-remote".\n\nNo credentials found for this MCP server. To continue, visit this URL: http://localhost:3000/mcp/registry?install=cat_demo',
+        } as never,
+        toolResultPart: null,
+      }),
+    ).toBe(false);
+  });
+
+  it("keeps approval-requested tools as full cards", () => {
+    expect(
+      isCompactEligible({
+        toolName: "github__delete_branch",
+        part: {
+          type: "tool-github__delete_branch",
+          state: "approval-requested",
+        } as never,
+        toolResultPart: null,
+      }),
+    ).toBe(false);
+  });
+
+  it("keeps todo-write tools out of compact groups", () => {
+    expect(
+      isCompactEligible({
+        toolName: TOOL_TODO_WRITE_FULL_NAME,
+        part: {
+          type: `tool-${TOOL_TODO_WRITE_FULL_NAME}`,
+          state: "output-available",
+        } as never,
+        toolResultPart: null,
+      }),
+    ).toBe(false);
+  });
+
+  it("reports compact error state for generic tool failures", () => {
+    expect(
+      getCompactToolState({
+        part: {
+          type: "tool-notion__create_page",
+          state: "input-available",
+          errorText: "Notion failed",
+        } as never,
+        toolResultPart: null,
+      }),
+    ).toBe("error");
   });
 });

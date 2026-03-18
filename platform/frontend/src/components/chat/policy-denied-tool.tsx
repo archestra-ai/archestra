@@ -1,6 +1,6 @@
 "use client";
 
-import { X } from "lucide-react";
+import { ShieldX } from "lucide-react";
 import { useState } from "react";
 import {
   Tool,
@@ -9,8 +9,8 @@ import {
   ToolInput,
 } from "@/components/ai-elements/tool";
 import type { PolicyDeniedPart } from "@/components/message-thread";
-import { PermissionButton } from "@/components/ui/permission-button";
 import { EditPolicyDialog } from "./edit-policy-dialog";
+import { ToolStatusRow } from "./tool-status-row";
 
 // Re-export for backward compatibility
 export type { PolicyDeniedPart as PolicyDeniedResult };
@@ -51,23 +51,24 @@ export function PolicyDeniedTool({
         />
         <ToolContent>
           {hasInput ? <ToolInput input={policyDenied.input} /> : null}
-          <div className="p-4 pt-0">
-            <div className="flex items-start gap-2 text-sm">
-              <X className="flex-none size-4 h-[1.43em] text-destructive" />
-              <span className="text-destructive">Rejected: {reason}</span>
-              {editable && (
-                <PermissionButton
-                  size="sm"
-                  variant="secondary"
-                  className="mt-[-0.45em]"
-                  permissions={{ toolPolicy: ["update"] }}
-                  onClick={() => setIsModalOpen(true)}
-                >
-                  Edit policy
-                </PermissionButton>
-              )}
-            </div>
-          </div>
+          <ToolStatusRow
+            icon={
+              <ShieldX className="mt-0.5 size-4 flex-none text-destructive" />
+            }
+            title="Rejected"
+            description={reason}
+            actions={
+              editable
+                ? [
+                    {
+                      label: "Edit policy",
+                      onClick: () => setIsModalOpen(true),
+                      variant: "secondary" as const,
+                    },
+                  ]
+                : []
+            }
+          />
         </ToolContent>
       </Tool>
       {editable && (

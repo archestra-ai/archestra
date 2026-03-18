@@ -1,0 +1,162 @@
+"use client";
+
+import { PROVIDERS_WITH_OPTIONAL_API_KEY } from "@shared";
+import { Loader2 } from "lucide-react";
+import { useEffect } from "react";
+import { useForm } from "react-hook-form";
+import {
+  ChatApiKeyForm,
+  type ChatApiKeyFormValues,
+  PLACEHOLDER_KEY,
+} from "@/components/chat-api-key-form";
+import { FormDialog } from "@/components/form-dialog";
+import { Button } from "@/components/ui/button";
+import {
+  DialogBody,
+  DialogForm,
+  DialogStickyFooter,
+} from "@/components/ui/dialog";
+import { useChatApiKeys, useCreateChatApiKey } from "@/lib/chat-settings.query";
+import { useFeature } from "@/lib/config.query";
+
+export type CreateChatApiKeyDialogProps = {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  title: string;
+  description: string;
+  defaultValues?: Partial<ChatApiKeyFormValues>;
+  showConsoleLink?: boolean;
+  onSuccess?: () => void;
+};
+
+export function CreateChatApiKeyDialog({
+  open,
+  onOpenChange,
+  title,
+  description,
+  defaultValues,
+  showConsoleLink = false,
+  onSuccess,
+}: CreateChatApiKeyDialogProps) {
+  const createMutation = useCreateChatApiKey();
+  const { data: existingKeys = [] } = useChatApiKeys({ enabled: open });
+  const byosEnabled = useFeature("byosEnabled");
+  const geminiVertexAiEnabled = useFeature("geminiVertexAiEnabled");
+
+  const form = useForm<ChatApiKeyFormValues>({
+    defaultValues: getDefaultFormValues(defaultValues),
+  });
+
+  useEffect(() => {
+    if (!open) return;
+    form.reset(getDefaultFormValues(defaultValues));
+  }, [defaultValues, form, open]);
+
+  const formValues = form.watch();
+  const isValid = getIsCreateFormValid({
+    byosEnabled: Boolean(byosEnabled),
+    values: formValues,
+  });
+
+  const handleCreate = form.handleSubmit(async (values) => {
+    try {
+      await createMutation.mutateAsync({
+        name: values.name,
+        provider: values.provider,
+        apiKey: values.apiKey || undefined,
+        baseUrl: values.baseUrl || undefined,
+        scope: values.scope,
+        teamId:
+          values.scope === "team" && values.teamId ? values.teamId : undefined,
+        isPrimary: values.isPrimary,
+        vaultSecretPath:
+          byosEnabled && values.vaultSecretPath
+            ? values.vaultSecretPath
+            : undefined,
+        vaultSecretKey:
+          byosEnabled && values.vaultSecretKey
+            ? values.vaultSecretKey
+            : undefined,
+      });
+      onOpenChange(false);
+      onSuccess?.();
+    } catch {
+      // Error handled by mutation
+    }
+  });
+
+  return (
+    <FormDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title={title}
+      description={description}
+      size="small"
+    >
+      <DialogForm
+        onSubmit={handleCreate}
+        className="flex min-h-0 flex-1 flex-col"
+      >
+        <DialogBody>
+          <ChatApiKeyForm
+            mode="full"
+            showConsoleLink={showConsoleLink}
+            form={form}
+            existingKeys={existingKeys}
+            isPending={createMutation.isPending}
+            geminiVertexAiEnabled={geminiVertexAiEnabled}
+          />
+        </DialogBody>
+        <DialogStickyFooter className="mt-0">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+          >
+            Cancel
+          </Button>
+          <Button type="submit" disabled={!isValid || createMutation.isPending}>
+            {createMutation.isPending && (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            )}
+            Test & Create
+          </Button>
+        </DialogStickyFooter>
+      </DialogForm>
+    </FormDialog>
+  );
+}
+
+function getDefaultFormValues(
+  defaultValues?: Partial<ChatApiKeyFormValues>,
+): ChatApiKeyFormValues {
+  return {
+    name: "",
+    provider: "anthropic",
+    apiKey: null,
+    baseUrl: null,
+    scope: "personal",
+    teamId: null,
+    vaultSecretPath: null,
+    vaultSecretKey: null,
+    isPrimary: false,
+    ...defaultValues,
+  };
+}
+
+function getIsCreateFormValid(params: {
+  byosEnabled: boolean;
+  values: ChatApiKeyFormValues;
+}) {
+  const { byosEnabled, values } = params;
+
+  return Boolean(
+    values.apiKey !== PLACEHOLDER_KEY &&
+      values.name &&
+      (values.scope !== "team" || values.teamId) &&
+      (byosEnabled
+        ? values.vaultSecretPath && values.vaultSecretKey
+        : PROVIDERS_WITH_OPTIONAL_API_KEY.has(values.provider) ||
+          values.apiKey),
+  );
+}

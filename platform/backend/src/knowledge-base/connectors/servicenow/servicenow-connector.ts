@@ -277,6 +277,10 @@ const INCIDENT_FIELDS = [
   "sys_updated_on",
   "sys_created_on",
   "active",
+  "severity",
+  "company",
+  "business_service",
+  "problem_id",
 ].join(",");
 
 const CHANGE_REQUEST_FIELDS = [
@@ -532,6 +536,14 @@ function recordToDocument(
 
   if (table === "incident") {
     metadata.caller = dv(record.caller_id);
+    const severity = dv(record.severity);
+    if (severity) metadata.severity = severity;
+    const company = dv(record.company);
+    if (company) metadata.company = company;
+    const businessService = dv(record.business_service);
+    if (businessService) metadata.businessService = businessService;
+    const problem = dv(record.problem_id);
+    if (problem) metadata.problem = problem;
   }
 
   if (table === "change_request") {

@@ -9,6 +9,7 @@ import {
   TOOL_TODO_WRITE_FULL_NAME,
 } from "@shared";
 import type { ChatStatus, DynamicToolUIPart, ToolUIPart } from "ai";
+import { CheckCircleIcon, ClockIcon } from "lucide-react";
 import {
   Fragment,
   useEffect,
@@ -37,7 +38,6 @@ import {
   ToolInput,
   ToolOutput,
 } from "@/components/ai-elements/tool";
-import { Button } from "@/components/ui/button";
 import { useHasPermissions, useSession } from "@/lib/auth.query";
 import { useProfileToolsWithIds } from "@/lib/chat.query";
 import { useUpdateChatMessage } from "@/lib/chat-message.query";
@@ -55,6 +55,11 @@ import { hasThinkingTags, parseThinkingTags } from "@/lib/parse-thinking";
 import { cn } from "@/lib/utils";
 import { AuthRequiredTool } from "./auth-required-tool";
 import { extractFileAttachments, hasTextPart } from "./chat-messages.utils";
+import {
+  getToolErrorText,
+  getToolHeaderState,
+  isCompactEligible,
+} from "./chat-tools-display.utils";
 import { CompactToolGroup } from "./compact-tool-call";
 import { EditableAssistantMessage } from "./editable-assistant-message";
 import { EditableUserMessage } from "./editable-user-message";
@@ -65,6 +70,7 @@ import { McpInstallDialogs } from "./mcp-install-dialogs";
 import { PolicyDeniedTool } from "./policy-denied-tool";
 import { TodoWriteTool } from "./todo-write-tool";
 import { ToolErrorLogsButton } from "./tool-error-logs-button";
+import { ToolStatusRow } from "./tool-status-row";
 
 interface ChatMessagesProps {
   conversationId: string | undefined;
@@ -79,10 +85,6 @@ interface ChatMessagesProps {
     editedPartIndex: number,
   ) => void;
   error?: Error | null;
-  // Empty state customization
-  agentName?: string;
-  suggestedPrompt?: string | null;
-  onSuggestedPromptClick?: () => void;
   /** Callback for tool approval responses (approve/deny) */
   onToolApprovalResponse?: (params: {
     id: string;
@@ -114,9 +116,6 @@ function isToolPart(part: any): part is {
 export function ChatMessages({
   conversationId,
   agentId,
-  agentName,
-  suggestedPrompt,
-  onSuggestedPromptClick,
   messages,
   status,
   isLoadingConversation = false,
@@ -132,9 +131,6 @@ export function ChatMessages({
   // Track editing by messageId-partIndex to support multiple text parts per message
   const [editingPartKey, setEditingPartKey] = useState<string | null>(null);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
-  const { data: userCanCreateAgent } = useHasPermissions({
-    agent: ["create"],
-  });
   const { data: canExpandToolCalls } = useHasPermissions({
     chatExpandToolCalls: ["enable"],
   });
@@ -247,55 +243,7 @@ export function ChatMessages({
     if (isLoadingConversation) {
       return null;
     }
-
-    // Unified empty state for both new chat and existing chat with no messages
-    if (agentName) {
-      return (
-        <div className="flex items-center justify-center h-full relative">
-          <div className="text-center space-y-6 max-w-2xl px-4 relative">
-            <p className="text-lg text-muted-foreground relative">
-              Chat with{" "}
-              <span className="font-medium text-foreground truncate inline-block max-w-sm align-bottom">
-                {agentName}
-              </span>{" "}
-              agent,
-              <br />
-              {userCanCreateAgent && (
-                <>
-                  or{" "}
-                  <a
-                    href="/agents?create=true"
-                    className="text-primary hover:underline"
-                  >
-                    create a new one
-                  </a>
-                </>
-              )}
-            </p>
-            {suggestedPrompt && onSuggestedPromptClick && (
-              <button
-                type="button"
-                onClick={onSuggestedPromptClick}
-                className="w-full text-left cursor-pointer hover:opacity-80 transition-opacity"
-              >
-                <Message from="assistant" className="max-w-none justify-center">
-                  <MessageContent className="max-w-none text-left">
-                    <Response>{suggestedPrompt}</Response>
-                  </MessageContent>
-                </Message>
-              </button>
-            )}
-          </div>
-        </div>
-      );
-    }
-
-    // Fallback for when no agent name is provided
-    return (
-      <div className="flex-1 flex h-full items-center justify-center text-center text-muted-foreground">
-        <p className="text-sm">Start a conversation by sending a message</p>
-      </div>
-    );
+    return null;
   }
 
   // Find the index of the message being edited
@@ -793,6 +741,7 @@ export function ChatMessages({
                               toolName={toolName}
                               agentId={agentId}
                               isDebugging={isDebugging}
+                              canExpandToolCalls={canExpandToolCalls}
                               onToolApprovalResponse={onToolApprovalResponse}
                               onInstallMcp={
                                 orchestrator.triggerInstallByCatalogId
@@ -957,12 +906,7 @@ function MessageTool({
   onInstallMcp?: (catalogId: string) => void;
   onReauthMcp?: (catalogId: string, serverId: string) => void;
 }) {
-  const outputError = toolResultPart
-    ? tryToExtractErrorFromOutput(toolResultPart.output)
-    : tryToExtractErrorFromOutput(part.output);
-  const errorText = toolResultPart
-    ? (toolResultPart.errorText ?? outputError)
-    : (part.errorText ?? outputError);
+  const errorText = getToolErrorText({ part, toolResultPart });
 
   // OpenAI sends policy denials as tool errors (see case "text" above for Anthropic path)
   if (errorText) {
@@ -1114,35 +1058,35 @@ function MessageTool({
           onToolApprovalResponse &&
           "approval" in part &&
           part.approval?.id && (
-            <div className="flex items-center gap-2 px-4 pb-4">
-              <Button
-                size="sm"
-                variant="default"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onToolApprovalResponse({
-                    id: (part as { approval: { id: string } }).approval.id,
-                    approved: true,
-                  });
-                }}
-              >
-                Approve
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onToolApprovalResponse({
-                    id: (part as { approval: { id: string } }).approval.id,
-                    approved: false,
-                    reason: "User denied",
-                  });
-                }}
-              >
-                Deny
-              </Button>
-            </div>
+            <ToolStatusRow
+              icon={
+                <ClockIcon className="mt-0.5 size-4 flex-none text-amber-600" />
+              }
+              title="Approval required"
+              description="Review this tool call before it can continue."
+              actions={[
+                {
+                  label: "Approve",
+                  variant: "secondary",
+                  icon: <CheckCircleIcon className="size-4" />,
+                  onClick: () =>
+                    onToolApprovalResponse({
+                      id: (part as { approval: { id: string } }).approval.id,
+                      approved: true,
+                    }),
+                },
+                {
+                  label: "Decline",
+                  variant: "outline",
+                  onClick: () =>
+                    onToolApprovalResponse({
+                      id: (part as { approval: { id: string } }).approval.id,
+                      approved: false,
+                      reason: "User denied",
+                    }),
+                },
+              ]}
+            />
           )}
         {errorText ? <ToolErrorDetails errorText={errorText} /> : null}
         {toolResultPart && (
@@ -1164,15 +1108,6 @@ function MessageTool({
   );
 }
 
-const tryToExtractErrorFromOutput = (output: unknown) => {
-  try {
-    if (typeof output !== "string") return undefined;
-    const json = JSON.parse(output);
-    return typeof json.error === "string" ? json.error : undefined;
-  } catch (_error) {
-    return undefined;
-  }
-};
 const getHeaderState = ({
   state,
   toolResultPart,
@@ -1182,68 +1117,8 @@ const getHeaderState = ({
   toolResultPart: ToolUIPart | DynamicToolUIPart | null;
   errorText: string | undefined;
 }) => {
-  if (errorText) return "output-error";
-  if (toolResultPart) return "output-available";
-  return state;
+  return getToolHeaderState({ state, toolResultPart, errorText });
 };
-
-/**
- * Determines if a tool part should render as a compact circle rather than a full card.
- * Returns false for errors, special tools, and approval-requested states.
- */
-function isCompactEligible(params: {
-  // biome-ignore lint/suspicious/noExplicitAny: Tool parts have dynamic structure from AI SDK
-  part: any;
-  // biome-ignore lint/suspicious/noExplicitAny: Tool result parts have dynamic structure from AI SDK
-  toolResultPart: any;
-  toolName: string;
-}): boolean {
-  const { part, toolResultPart, toolName } = params;
-
-  // Special tools always render as full cards or are hidden
-  if (
-    toolName === TOOL_SWAP_AGENT_FULL_NAME ||
-    toolName === TOOL_TODO_WRITE_FULL_NAME
-  ) {
-    return false;
-  }
-
-  // Approval states need full card for approve/deny buttons
-  if (part.state === "approval-requested") {
-    return false;
-  }
-
-  // Check for errors
-  const outputError = toolResultPart
-    ? tryToExtractErrorFromOutput(toolResultPart.output)
-    : tryToExtractErrorFromOutput(part.output);
-  const errorText = toolResultPart
-    ? (toolResultPart.errorText ?? outputError)
-    : (part.errorText ?? outputError);
-
-  if (errorText) {
-    // Check for policy denied, expired auth, auth required patterns
-    if (
-      parsePolicyDenied(errorText) ||
-      parseExpiredAuth(errorText) ||
-      parseAuthRequired(errorText)
-    ) {
-      return false;
-    }
-    // Any error = full card
-    return false;
-  }
-
-  // Check output for auth patterns
-  const rawOutput = toolResultPart?.output ?? part.output;
-  if (typeof rawOutput === "string") {
-    if (parseExpiredAuth(rawOutput) || parseAuthRequired(rawOutput)) {
-      return false;
-    }
-  }
-
-  return true;
-}
 
 type CompactGroup = {
   startIndex: number;
@@ -1331,12 +1206,7 @@ function identifyCompactGroups(
       : undefined;
     const toolResultPart = resultIdx !== undefined ? parts[resultIdx] : null;
 
-    const outputError = toolResultPart
-      ? tryToExtractErrorFromOutput(toolResultPart.output)
-      : tryToExtractErrorFromOutput(rawPart.output);
-    const errorText = toolResultPart
-      ? (toolResultPart.errorText ?? outputError)
-      : (rawPart.errorText ?? outputError);
+    const errorText = getToolErrorText({ part: rawPart, toolResultPart });
 
     if (isCompactEligible({ part: rawPart, toolResultPart, toolName })) {
       if (!currentGroup) {
@@ -1451,7 +1321,7 @@ function SwapAgentDivider({ message }: { message: UIMessage }) {
 // biome-ignore lint/suspicious/noExplicitAny: Tool parts have dynamic structure
 function hasSwapToolError(part: any, allParts: any[]): boolean {
   // Check the part itself for errors
-  if (part.errorText || tryToExtractErrorFromOutput(part.output)) return true;
+  if (getToolErrorText({ part, toolResultPart: null })) return true;
 
   // Check the paired result part (same toolCallId, different instance)
   if (part.toolCallId) {
@@ -1459,11 +1329,9 @@ function hasSwapToolError(part: any, allParts: any[]): boolean {
       (p) => p !== part && isToolPart(p) && p.toolCallId === part.toolCallId,
     );
     if (resultPart) {
-      if (
-        resultPart.errorText ||
-        tryToExtractErrorFromOutput(resultPart.output)
-      )
+      if (getToolErrorText({ part: resultPart, toolResultPart: null })) {
         return true;
+      }
     }
   }
   return false;

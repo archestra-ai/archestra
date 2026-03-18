@@ -2,13 +2,8 @@
 
 import { ToolCallPolicies } from "@/app/mcp/tool-policies/_parts/tool-call-policies";
 import { ToolResultPolicies } from "@/app/mcp/tool-policies/_parts/tool-result-policies";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { FormDialog } from "@/components/form-dialog";
+import { DialogBody } from "@/components/ui/dialog";
 import { useAllProfileTools } from "@/lib/agent-tools.query";
 
 interface EditPolicyDialogProps {
@@ -37,27 +32,25 @@ export function EditPolicyDialog({
   const agentTool = data?.data?.find((t) => t.tool.name === toolName);
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Edit Policies</DialogTitle>
-          <DialogDescription>
-            Configure policies for {toolName}
-          </DialogDescription>
-        </DialogHeader>
-        <div className="mt-2 space-y-4">
-          {agentTool ? (
-            <>
-              <ToolCallPolicies tool={agentTool.tool} />
-              <ToolResultPolicies tool={agentTool.tool} />
-            </>
-          ) : (
-            <p className="text-muted-foreground text-sm">
-              Tool not found or not assigned to this profile.
-            </p>
-          )}
-        </div>
-      </DialogContent>
-    </Dialog>
+    <FormDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Edit Policies"
+      description={`Configure policies for ${toolName}`}
+      size="medium"
+    >
+      <DialogBody className="space-y-4">
+        {agentTool ? (
+          <>
+            <ToolCallPolicies tool={agentTool.tool} />
+            <ToolResultPolicies tool={agentTool.tool} />
+          </>
+        ) : (
+          <p className="text-muted-foreground text-sm">
+            Tool not found or not assigned to this Agent.
+          </p>
+        )}
+      </DialogBody>
+    </FormDialog>
   );
 }

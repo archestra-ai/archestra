@@ -1690,47 +1690,50 @@ export default function ChatPage() {
                     "hidden md:block",
                 )}
               >
-                <ChatMessages
-                  conversationId={conversationId}
-                  agentId={currentProfileId || initialAgentId || undefined}
-                  agentName={
-                    _conversationInternalAgent?.name ||
-                    internalAgents.find((a) => a.id === initialAgentId)?.name
-                  }
-                  messages={messages}
-                  status={status}
-                  isLoadingConversation={isLoadingConversation}
-                  onMessagesUpdate={setMessages}
-                  onUserMessageEdit={(
-                    editedMessage,
-                    updatedMessages,
-                    editedPartIndex,
-                  ) => {
-                    if (setMessages && sendMessage) {
-                      userMessageJustEdited.current = true;
-                      const messagesWithoutEditedMessage =
-                        updatedMessages.slice(0, -1);
-                      setMessages(messagesWithoutEditedMessage);
-                      const editedPart = editedMessage.parts?.[editedPartIndex];
-                      const editedText =
-                        editedPart?.type === "text" ? editedPart.text : "";
-                      if (editedText?.trim()) {
-                        sendMessage({
-                          role: "user",
-                          parts: [{ type: "text", text: editedText }],
-                        });
-                      }
+                <div className="max-w-4xl mx-auto w-full">
+                  <ChatMessages
+                    conversationId={conversationId}
+                    agentId={currentProfileId || initialAgentId || undefined}
+                    agentName={
+                      _conversationInternalAgent?.name ||
+                      internalAgents.find((a) => a.id === initialAgentId)?.name
                     }
-                  }}
-                  error={error}
-                  onToolApprovalResponse={
-                    addToolApprovalResponse
-                      ? ({ id, approved, reason }) => {
-                          addToolApprovalResponse({ id, approved, reason });
+                    messages={messages}
+                    status={status}
+                    isLoadingConversation={isLoadingConversation}
+                    onMessagesUpdate={setMessages}
+                    onUserMessageEdit={(
+                      editedMessage,
+                      updatedMessages,
+                      editedPartIndex,
+                    ) => {
+                      if (setMessages && sendMessage) {
+                        userMessageJustEdited.current = true;
+                        const messagesWithoutEditedMessage =
+                          updatedMessages.slice(0, -1);
+                        setMessages(messagesWithoutEditedMessage);
+                        const editedPart =
+                          editedMessage.parts?.[editedPartIndex];
+                        const editedText =
+                          editedPart?.type === "text" ? editedPart.text : "";
+                        if (editedText?.trim()) {
+                          sendMessage({
+                            role: "user",
+                            parts: [{ type: "text", text: editedText }],
+                          });
                         }
-                      : undefined
-                  }
-                />
+                      }
+                    }}
+                    error={error}
+                    onToolApprovalResponse={
+                      addToolApprovalResponse
+                        ? ({ id, approved, reason }) => {
+                            addToolApprovalResponse({ id, approved, reason });
+                          }
+                        : undefined
+                    }
+                  />
+                </div>
               </div>
 
               {isAgentDeleted ? (

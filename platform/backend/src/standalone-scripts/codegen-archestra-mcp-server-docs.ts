@@ -19,6 +19,8 @@ const __dirname = path.dirname(__filename);
 
 const TOOL_PREFIX = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}`;
 
+type ToolPermissionDisplay = string;
+
 // === Tool group definitions ===
 
 enum ToolGroup {
@@ -197,7 +199,7 @@ function generateMarkdownBody(): string {
     {
       shortName: string;
       description: string;
-      requiredPermission: string;
+      requiredPermission: ToolPermissionDisplay;
       inputSchema: JsonSchema;
       outputSchema?: JsonSchema;
     }[]
@@ -346,7 +348,7 @@ function escapeTableCell(text: string): string {
 
 export function formatToolPermission(
   toolShortName: ArchestraToolShortName,
-): string {
+): ToolPermissionDisplay {
   const permission = TOOL_PERMISSIONS[toolShortName];
   if (!permission) {
     return "None (no additional RBAC permission required)";
@@ -378,7 +380,7 @@ interface JsonSchema {
 
 function renderToolSchemas(
   toolName: string,
-  requiredPermission: string,
+  requiredPermission: ToolPermissionDisplay,
   inputSchema: JsonSchema,
   outputSchema?: JsonSchema,
 ): string | null {

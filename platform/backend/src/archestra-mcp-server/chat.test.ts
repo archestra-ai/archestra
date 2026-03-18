@@ -361,6 +361,77 @@ describe("chat tool execution", () => {
     expect(updatedConversation?.chatApiKeyId).toBe(defaultApiKey.id);
   });
 
+  test("swap_agent cannot swap to inaccessible team-scoped agent", async ({
+    makeAgent,
+    makeConversation,
+    makeUser,
+    makeOrganization,
+    makeMember,
+    makeTeam,
+    makeTeamMember,
+    makeSecret,
+    makeChatApiKey,
+  }) => {
+    // Create a separate non-admin member for this test
+    const memberOrg = await makeOrganization();
+    const memberUser = await makeUser();
+    await makeMember(memberUser.id, memberOrg.id, { role: "member" });
+
+    const secret = await makeSecret();
+    const apiKey = await makeChatApiKey(memberOrg.id, secret.id, {
+      provider: "openai",
+    });
+    vi.spyOn(ChatApiKeyModel, "findById").mockImplementation(async (id) => {
+      if (id === apiKey.id) return apiKey;
+      return null;
+    });
+
+    const teamA = await makeTeam(memberOrg.id, memberUser.id, {
+      name: "Team A",
+    });
+    const teamB = await makeTeam(memberOrg.id, memberUser.id, {
+      name: "Team B",
+    });
+    await makeTeamMember(teamA.id, memberUser.id);
+    // memberUser is NOT a member of teamB
+
+    const accessibleAgent = await makeAgent({
+      name: "Accessible Agent",
+      agentType: "agent",
+      organizationId: memberOrg.id,
+      scope: "team",
+      teams: [teamA.id],
+    });
+
+    await makeAgent({
+      name: "Inaccessible Agent",
+      agentType: "agent",
+      organizationId: memberOrg.id,
+      scope: "team",
+      teams: [teamB.id],
+    });
+
+    const conversation = await makeConversation(accessibleAgent.id, {
+      userId: memberUser.id,
+      organizationId: memberOrg.id,
+    });
+
+    const memberContext: ArchestraContext = {
+      agent: { id: accessibleAgent.id, name: accessibleAgent.name },
+      userId: memberUser.id,
+      organizationId: memberOrg.id,
+      conversationId: conversation.id,
+    };
+
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}swap_agent`,
+      { agent_name: "Inaccessible Agent" },
+      memberContext,
+    );
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain("No agent found");
+  });
+
   test("swap_to_default_agent returns error when already on default agent", async ({
     makeConversation,
   }) => {

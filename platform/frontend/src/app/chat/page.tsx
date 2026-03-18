@@ -332,9 +332,9 @@ export default function ChatPage() {
       chatApiKeys,
       organization: organization
         ? {
-            defaultLlmModel: organization.defaultLlmModel,
-            defaultLlmApiKeyId: organization.defaultLlmApiKeyId,
-          }
+          defaultLlmModel: organization.defaultLlmModel,
+          defaultLlmApiKeyId: organization.defaultLlmApiKeyId,
+        }
         : null,
     });
 
@@ -406,9 +406,9 @@ export default function ChatPage() {
       chatApiKeys,
       organization: organization
         ? {
-            defaultLlmModel: organization.defaultLlmModel,
-            defaultLlmApiKeyId: organization.defaultLlmApiKeyId,
-          }
+          defaultLlmModel: organization.defaultLlmModel,
+          defaultLlmApiKeyId: organization.defaultLlmApiKeyId,
+        }
         : null,
     });
 
@@ -666,11 +666,11 @@ export default function ChatPage() {
 
     const agent = conversation.agentId
       ? (internalAgents.find((a) => a.id === conversation.agentId) as
-          | (Record<string, unknown> & {
-              llmModel?: string;
-              llmApiKeyId?: string;
-            })
-          | undefined)
+        | (Record<string, unknown> & {
+          llmModel?: string;
+          llmApiKeyId?: string;
+        })
+        | undefined)
       : null;
 
     const resolved = resolveInitialModel({
@@ -679,9 +679,9 @@ export default function ChatPage() {
       chatApiKeys,
       organization: organization
         ? {
-            defaultLlmModel: organization.defaultLlmModel,
-            defaultLlmApiKeyId: organization.defaultLlmApiKeyId,
-          }
+          defaultLlmModel: organization.defaultLlmModel,
+          defaultLlmApiKeyId: organization.defaultLlmApiKeyId,
+        }
         : null,
     });
 
@@ -1067,11 +1067,11 @@ export default function ChatPage() {
             parts: msg.parts.map((part) =>
               "state" in part && part.state === "approval-requested"
                 ? {
-                    ...part,
-                    state: "output-denied" as const,
-                    output:
-                      "Tool approval was skipped because the user sent a new message",
-                  }
+                  ...part,
+                  state: "output-denied" as const,
+                  output:
+                    "Tool approval was skipped because the user sent a new message",
+                }
                 : part,
             ),
           })) as UIMessage[],
@@ -1185,9 +1185,9 @@ export default function ChatPage() {
             chatApiKeys,
             organization: organization
               ? {
-                  defaultLlmModel: organization.defaultLlmModel,
-                  defaultLlmApiKeyId: organization.defaultLlmApiKeyId,
-                }
+                defaultLlmModel: organization.defaultLlmModel,
+                defaultLlmApiKeyId: organization.defaultLlmApiKeyId,
+              }
               : null,
           },
         });
@@ -1635,49 +1635,49 @@ export default function ChatPage() {
           {/* Mobile: Inline artifact/browser panels below header */}
           {(isArtifactOpen ||
             (isBrowserPanelOpen && !isPlaywrightSetupVisible)) && (
-            <div className="flex-1 flex flex-col min-h-0 overflow-hidden md:hidden">
-              {isArtifactOpen && (
-                <div
-                  className={cn(
-                    "min-h-0 overflow-auto",
-                    isBrowserPanelOpen && !isPlaywrightSetupVisible
-                      ? "h-1/2 border-b"
-                      : "flex-1",
-                  )}
-                >
-                  <ConversationArtifactPanel
-                    artifact={conversation?.artifact}
-                    isOpen={isArtifactOpen}
-                    onToggle={toggleArtifactPanel}
-                    embedded
-                  />
-                </div>
-              )}
-              {isBrowserPanelOpen && !isPlaywrightSetupVisible && (
-                <div
-                  className={cn(
-                    "min-h-0 overflow-auto",
-                    isArtifactOpen ? "h-1/2" : "flex-1",
-                  )}
-                >
-                  <BrowserPanel
-                    isOpen={true}
-                    onClose={closeBrowserPanel}
-                    conversationId={conversationId}
-                    agentId={browserToolsAgentId}
-                    onCreateConversationWithUrl={
-                      handleCreateConversationWithUrl
-                    }
-                    isCreatingConversation={
-                      createConversationMutation.isPending
-                    }
-                    initialNavigateUrl={pendingBrowserUrl}
-                    onInitialNavigateComplete={handleInitialNavigateComplete}
-                  />
-                </div>
-              )}
-            </div>
-          )}
+              <div className="flex-1 flex flex-col min-h-0 overflow-hidden md:hidden">
+                {isArtifactOpen && (
+                  <div
+                    className={cn(
+                      "min-h-0 overflow-auto",
+                      isBrowserPanelOpen && !isPlaywrightSetupVisible
+                        ? "h-1/2 border-b"
+                        : "flex-1",
+                    )}
+                  >
+                    <ConversationArtifactPanel
+                      artifact={conversation?.artifact}
+                      isOpen={isArtifactOpen}
+                      onToggle={toggleArtifactPanel}
+                      embedded
+                    />
+                  </div>
+                )}
+                {isBrowserPanelOpen && !isPlaywrightSetupVisible && (
+                  <div
+                    className={cn(
+                      "min-h-0 overflow-auto",
+                      isArtifactOpen ? "h-1/2" : "flex-1",
+                    )}
+                  >
+                    <BrowserPanel
+                      isOpen={true}
+                      onClose={closeBrowserPanel}
+                      conversationId={conversationId}
+                      agentId={browserToolsAgentId}
+                      onCreateConversationWithUrl={
+                        handleCreateConversationWithUrl
+                      }
+                      isCreatingConversation={
+                        createConversationMutation.isPending
+                      }
+                      initialNavigateUrl={pendingBrowserUrl}
+                      onInitialNavigateComplete={handleInitialNavigateComplete}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
 
           {conversationId ? (
             <>
@@ -1687,7 +1687,7 @@ export default function ChatPage() {
                   "flex-1 overflow-y-auto relative",
                   (isArtifactOpen ||
                     (isBrowserPanelOpen && !isPlaywrightSetupVisible)) &&
-                    "hidden md:block",
+                  "hidden md:block",
                 )}
               >
                 <ChatMessages
@@ -1726,8 +1726,8 @@ export default function ChatPage() {
                   onToolApprovalResponse={
                     addToolApprovalResponse
                       ? ({ id, approved, reason }) => {
-                          addToolApprovalResponse({ id, approved, reason });
-                        }
+                        addToolApprovalResponse({ id, approved, reason });
+                      }
                       : undefined
                   }
                 />
@@ -1886,8 +1886,8 @@ export default function ChatPage() {
                       agentLlmApiKeyId={
                         (
                           internalAgents.find((a) => a.id === initialAgentId) as
-                            | Record<string, unknown>
-                            | undefined
+                          | Record<string, unknown>
+                          | undefined
                         )?.llmApiKeyId as string | null
                       }
                       submitDisabled={isPlaywrightSetupVisible}
@@ -2001,7 +2001,7 @@ function NoApiKeySetup() {
     (byosEnabled
       ? formValues.vaultSecretPath && formValues.vaultSecretKey
       : PROVIDERS_WITH_OPTIONAL_API_KEY.has(formValues.provider) ||
-        formValues.apiKey);
+      formValues.apiKey);
 
   const handleCreate = form.handleSubmit(async (values) => {
     try {

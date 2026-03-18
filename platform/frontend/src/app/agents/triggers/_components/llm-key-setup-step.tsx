@@ -62,7 +62,7 @@ export function LlmKeySetupStep() {
     (byosEnabled
       ? formValues.vaultSecretPath && formValues.vaultSecretKey
       : PROVIDERS_WITH_OPTIONAL_API_KEY.has(formValues.provider) ||
-        formValues.apiKey);
+      formValues.apiKey);
 
   const handleCreate = form.handleSubmit(async (values) => {
     try {

@@ -1760,7 +1760,6 @@ export default function ChatPage() {
                         status={status}
                         selectedModel={conversation?.selectedModel ?? ""}
                         onModelChange={handleModelChange}
-                        messageCount={messages.length}
                         agentId={conversation?.agent?.id ?? activeAgentId}
                         conversationId={conversationId}
                         currentConversationChatApiKeyId={

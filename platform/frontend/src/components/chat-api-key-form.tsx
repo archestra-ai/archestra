@@ -240,6 +240,11 @@ interface ChatApiKeyFormProps {
    */
   geminiVertexAiEnabled?: boolean;
   /**
+   * Whether Bedrock IAM auth mode is enabled.
+   * When true, Bedrock provider is disabled (uses AWS IAM instead of API key).
+   */
+  bedrockIamAuthEnabled?: boolean;
+  /**
    * Force-disable the provider selector (e.g. when only one provider is valid).
    */
   disableProvider?: boolean;
@@ -266,6 +271,7 @@ export function ChatApiKeyForm({
   form,
   isPending = false,
   geminiVertexAiEnabled = false,
+  bedrockIamAuthEnabled = false,
   disableProvider = false,
   allowedProviders,
   hideScopeAndPrimary = false,
@@ -403,6 +409,8 @@ export function ChatApiKeyForm({
                         key as CreateChatApiKeyBody["provider"];
                       const isGeminiDisabledByVertexAi =
                         providerKey === "gemini" && geminiVertexAiEnabled;
+                      const isBedrockDisabledByIamAuth =
+                        providerKey === "bedrock" && bedrockIamAuthEnabled;
                       const isAllowedProvider =
                         allowedProviderSet.has(providerKey);
 
@@ -413,9 +421,11 @@ export function ChatApiKeyForm({
                         disabled:
                           !isAllowedProvider ||
                           !config.enabled ||
-                          isGeminiDisabledByVertexAi,
+                          isGeminiDisabledByVertexAi ||
+                          isBedrockDisabledByIamAuth,
                         showComingSoon: !config.enabled,
                         showGeminiVertexAiBadge: isGeminiDisabledByVertexAi,
+                        showBedrockIamBadge: isBedrockDisabledByIamAuth,
                       };
                     })}
                 />

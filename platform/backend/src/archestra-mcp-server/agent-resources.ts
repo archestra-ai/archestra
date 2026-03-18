@@ -386,7 +386,7 @@ export async function handleGetResource<
           agentType: expectedType,
         },
         context.userId,
-        true,
+        isAdmin,
       );
 
       if (results.data.length > 0) {

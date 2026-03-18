@@ -1,5 +1,25 @@
 # Changelog
 
+## [1.1.29](https://github.com/archestra-ai/archestra/compare/platform-v1.1.28...platform-v1.1.29) (2026-03-18)
+
+
+### Bug Fixes
+
+* chat agent switch model and key sync ([#3428](https://github.com/archestra-ai/archestra/issues/3428)) ([decfb92](https://github.com/archestra-ai/archestra/commit/decfb92055702ac0d5a89029d18b8a1070fc7ec7))
+* chat blinking ([#3434](https://github.com/archestra-ai/archestra/issues/3434)) ([19eafff](https://github.com/archestra-ai/archestra/commit/19eafffc0901abcdbd385315f798f321f12cb948))
+* prevent members add playwright tools to shared agents and add co… ([#3429](https://github.com/archestra-ai/archestra/issues/3429)) ([3d7dc67](https://github.com/archestra-ai/archestra/commit/3d7dc678d581a44fdaf5e6b599f192ac38b2d89d))
+* regenerate button sends vercel-ai nanoid if message is not reloaded ([#3426](https://github.com/archestra-ai/archestra/issues/3426)) ([025c97c](https://github.com/archestra-ai/archestra/commit/025c97cffb522872d355a8eb24f1fb5f4ed9e12f))
+* show agent name when switching agents ([#3424](https://github.com/archestra-ai/archestra/issues/3424)) ([fe1db85](https://github.com/archestra-ai/archestra/commit/fe1db85e5e991d4b0f82073c85b2d2c5a6142486))
+* tighten MCP pod env injection and polish agent and install dialogs ([#3422](https://github.com/archestra-ai/archestra/issues/3422)) ([6b0f88a](https://github.com/archestra-ai/archestra/commit/6b0f88ac9b30d9d3c47bfdcb9005824879c39639))
+
+
+### Miscellaneous Chores
+
+* block drag and drop files ([#3433](https://github.com/archestra-ai/archestra/issues/3433)) ([3e13785](https://github.com/archestra-ai/archestra/commit/3e13785eb2d342da05ca268ce4acee26b00239d8))
+* polish snow metadata ([#3435](https://github.com/archestra-ai/archestra/issues/3435)) ([d9902eb](https://github.com/archestra-ai/archestra/commit/d9902eb6820d4d31b9b9e88c21729ccc2a79cddd))
+* refine chat tool status UI ([#3437](https://github.com/archestra-ai/archestra/issues/3437)) ([1467422](https://github.com/archestra-ai/archestra/commit/14674223842a55e08b1796284a8bfe88d2122386))
+* standardize frontend dialog patterns and chat settings UI ([#3430](https://github.com/archestra-ai/archestra/issues/3430)) ([64b6836](https://github.com/archestra-ai/archestra/commit/64b6836f53b9fb0b678d5c02a9752c44d1ff3091))
+
 ## [1.1.28](https://github.com/archestra-ai/archestra/compare/platform-v1.1.27...platform-v1.1.28) (2026-03-17)
 
 

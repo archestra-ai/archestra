@@ -883,9 +883,9 @@ function getMessagePartSignature(part: UIMessage["parts"][number]): string {
 
   switch (part.type) {
     case "text":
-      return `text:${part.text}`;
+      return "text";
     case "reasoning":
-      return `reasoning:${part.text}`;
+      return "reasoning";
     case "file":
       return `file:${part.url}:${part.mediaType}:${part.filename ?? ""}`;
     default:

@@ -121,7 +121,7 @@ export function SearchableSelect({
           />
         </div>
         {hint && (
-          <div className="px-3 pb-1.5 text-xs text-muted-foreground">
+          <div className="mt-2 px-3 pb-1.5 text-xs text-muted-foreground">
             {hint}
           </div>
         )}

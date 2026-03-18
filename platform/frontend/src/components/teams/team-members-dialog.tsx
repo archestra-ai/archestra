@@ -2,6 +2,7 @@
 
 import { archestraApiSdk, type archestraApiTypes } from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useDebounce } from "@uidotdev/usehooks";
 import { Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -60,6 +61,7 @@ export function TeamMembersDialog({
   const queryClient = useQueryClient();
   const { data: activeOrg } = useActiveOrganization();
   const [memberSearch, setMemberSearch] = useState("");
+  const debouncedMemberSearch = useDebounce(memberSearch, 300);
 
   const { data: teamMembers } = useQuery({
     queryKey: ["teamMembers", team.id],
@@ -72,11 +74,12 @@ export function TeamMembersDialog({
     enabled: open,
   });
 
-  const { data: membersResponse } = useMembersPaginated({
-    limit: 20,
-    offset: 0,
-    name: memberSearch || undefined,
-  });
+  const { data: membersResponse, isPending: isMembersPending } =
+    useMembersPaginated({
+      limit: 20,
+      offset: 0,
+      name: debouncedMemberSearch || undefined,
+    });
 
   const orgMembers = (activeOrg?.members ?? []) as ActiveOrganizationMember[];
   const memberUserIds = new Set(teamMembers?.map((m) => m.userId) || []);
@@ -167,7 +170,7 @@ export function TeamMembersDialog({
             items={memberOptions}
             emptyMessage="No matching users found."
             hint={
-              canAddAnyMember
+              canAddAnyMember || isMembersPending
                 ? undefined
                 : "All users in the current result set are already members of this team."
             }

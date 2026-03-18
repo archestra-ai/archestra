@@ -52263,6 +52263,24 @@
                         {
                           "type": "object",
                           "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "text"
+                              ]
+                            },
+                            "text": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "text"
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
                             "text": {
                               "type": "string"
                             }
@@ -53426,6 +53444,24 @@
                     "type": "array",
                     "items": {
                       "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "text"
+                              ]
+                            },
+                            "text": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "text"
+                          ]
+                        },
                         {
                           "type": "object",
                           "properties": {
@@ -54605,6 +54641,24 @@
                         {
                           "type": "object",
                           "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "text"
+                              ]
+                            },
+                            "text": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "text"
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
                             "text": {
                               "type": "string"
                             }
@@ -55341,6 +55395,24 @@
                     "type": "array",
                     "items": {
                       "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "text"
+                              ]
+                            },
+                            "text": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "text"
+                          ]
+                        },
                         {
                           "type": "object",
                           "properties": {
@@ -56090,6 +56162,24 @@
                     "type": "array",
                     "items": {
                       "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "text"
+                              ]
+                            },
+                            "text": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "text"
+                          ]
+                        },
                         {
                           "type": "object",
                           "properties": {
@@ -57271,6 +57361,24 @@
                     "type": "array",
                     "items": {
                       "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "text"
+                              ]
+                            },
+                            "text": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "text"
+                          ]
+                        },
                         {
                           "type": "object",
                           "properties": {
@@ -133083,6 +133191,17 @@
                       "createdAt": {
                         "type": "string",
                         "format": "date-time"
+                      },
+                      "name": {
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      "email": {
+                        "type": "string"
+                      },
+                      "image": {
+                        "nullable": true,
+                        "type": "string"
                       }
                     },
                     "required": [
@@ -133091,7 +133210,10 @@
                       "userId",
                       "role",
                       "syncedFromSso",
-                      "createdAt"
+                      "createdAt",
+                      "name",
+                      "email",
+                      "image"
                     ],
                     "additionalProperties": false
                   }

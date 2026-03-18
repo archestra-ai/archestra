@@ -1,7 +1,8 @@
 "use client";
 
-import { archestraApiSdk } from "@shared";
+import { archestraApiSdk, type archestraApiTypes } from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useDebounce } from "@uidotdev/usehooks";
 import { Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -25,44 +26,31 @@ interface TeamMembersDialogProps {
   team: Team;
 }
 
-type OrganizationMemberOption = {
-  id?: string;
+type PaginatedMember =
+  archestraApiTypes.GetMembersResponses["200"]["data"][number];
+type TeamMember = archestraApiTypes.GetTeamMembersResponses["200"][number];
+type ActiveOrganizationMember = {
   userId: string;
-  role?: string;
   name?: string | null;
   email?: string | null;
-  user?: { name?: string | null; email?: string | null } | null;
 };
 
-function getMemberDisplayName(member: unknown): string {
-  if (!member) return "Unknown user";
-
-  const record = member as {
-    userId?: string;
-    name?: string | null;
-    email?: string | null;
-    user?: { name?: string | null; email?: string | null } | null;
-  };
-
-  return (
-    record.user?.name ||
-    record.name ||
-    record.user?.email ||
-    record.email ||
-    record.userId ||
-    "Unknown user"
-  );
+function getMemberDisplayName(
+  member: Pick<
+    PaginatedMember | TeamMember | ActiveOrganizationMember,
+    "userId" | "name" | "email"
+  >,
+): string {
+  return member.name || member.email || member.userId;
 }
 
-function getMemberEmail(member: unknown): string | null {
-  if (!member) return null;
-
-  const record = member as {
-    email?: string | null;
-    user?: { email?: string | null } | null;
-  };
-
-  return record.user?.email || record.email || null;
+function getMemberEmail(
+  member: Pick<
+    PaginatedMember | TeamMember | ActiveOrganizationMember,
+    "email"
+  >,
+): string | null {
+  return member.email || null;
 }
 
 export function TeamMembersDialog({
@@ -73,6 +61,7 @@ export function TeamMembersDialog({
   const queryClient = useQueryClient();
   const { data: activeOrg } = useActiveOrganization();
   const [memberSearch, setMemberSearch] = useState("");
+  const debouncedMemberSearch = useDebounce(memberSearch, 300);
 
   const { data: teamMembers } = useQuery({
     queryKey: ["teamMembers", team.id],
@@ -85,20 +74,31 @@ export function TeamMembersDialog({
     enabled: open,
   });
 
-  const { data: membersResponse } = useMembersPaginated({
-    limit: 20,
-    offset: 0,
-    name: memberSearch || undefined,
-  });
+  const { data: membersResponse, isPending: isMembersPending } =
+    useMembersPaginated({
+      limit: 20,
+      offset: 0,
+      name: debouncedMemberSearch || undefined,
+    });
 
-  // Get organization members to show in dropdown
-  const orgMembers = (activeOrg?.members ?? []) as OrganizationMemberOption[];
+  const orgMembers = (activeOrg?.members ?? []) as ActiveOrganizationMember[];
   const memberUserIds = new Set(teamMembers?.map((m) => m.userId) || []);
-  const availableMembers = (
-    (membersResponse?.data ?? orgMembers) as OrganizationMemberOption[]
-  ).filter(
-    (member: OrganizationMemberOption) => !memberUserIds.has(member.userId),
+  const memberOptions = (membersResponse?.data ?? []).map(
+    (member: PaginatedMember) => {
+      const isAlreadyAdded = memberUserIds.has(member.userId);
+
+      return {
+        value: member.userId,
+        label: getMemberDisplayName(member),
+        description: isAlreadyAdded
+          ? `${getMemberEmail(member) || "No email"} • Already in team`
+          : (getMemberEmail(member) ?? undefined),
+        disabled: isAlreadyAdded,
+        checked: isAlreadyAdded,
+      };
+    },
   );
+  const canAddAnyMember = memberOptions.some((member) => !member.disabled);
 
   const addMutation = useMutation({
     mutationFn: async (userId: string) => {
@@ -154,25 +154,28 @@ export function TeamMembersDialog({
       size="medium"
     >
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 space-y-4">
-        {availableMembers.length > 0 && (
-          <div className="space-y-2">
-            <Label>Add User</Label>
-            <SearchableSelect
-              value=""
-              onValueChange={handleAddMember}
-              placeholder="Select a user"
-              searchPlaceholder="Search users by name or email"
-              className="w-full"
-              onSearchQueryChange={setMemberSearch}
-              items={availableMembers.map((member) => ({
-                value: member.userId,
-                label: getMemberDisplayName(member),
-                description: getMemberEmail(member) || undefined,
-              }))}
-              emptyMessage="No matching users found."
-            />
-          </div>
-        )}
+        <div className="space-y-2">
+          <Label>Add User</Label>
+          <SearchableSelect
+            value=""
+            onValueChange={handleAddMember}
+            placeholder={
+              canAddAnyMember
+                ? "Select a user"
+                : "All listed users already added"
+            }
+            searchPlaceholder="Search users by name or email"
+            className="w-full"
+            onSearchQueryChange={setMemberSearch}
+            items={memberOptions}
+            emptyMessage="No matching users found."
+            hint={
+              canAddAnyMember || isMembersPending
+                ? undefined
+                : "All users in the current result set are already members of this team."
+            }
+          />
+        </div>
 
         <div className="space-y-2">
           <Label>Current Members ({teamMembers?.length || 0})</Label>
@@ -186,7 +189,7 @@ export function TeamMembersDialog({
             <div className="space-y-2">
               {teamMembers.map((member) => {
                 const orgMember = orgMembers.find(
-                  (m: OrganizationMemberOption) => m.userId === member.userId,
+                  (m: ActiveOrganizationMember) => m.userId === member.userId,
                 );
                 return (
                   <div
@@ -195,7 +198,8 @@ export function TeamMembersDialog({
                   >
                     <div>
                       <p className="text-sm font-medium">
-                        {getMemberEmail(orgMember) ||
+                        {member.email ||
+                          orgMember?.email ||
                           getMemberDisplayName(member)}
                       </p>
                       <p className="text-xs text-muted-foreground">

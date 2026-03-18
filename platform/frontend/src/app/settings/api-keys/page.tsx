@@ -2,7 +2,7 @@
 
 import type { ColumnDef } from "@tanstack/react-table";
 import { KeyRound, Plus, Trash2 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { CopyButton } from "@/components/copy-button";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
@@ -33,6 +33,7 @@ import {
 import { useDataTableQueryParams } from "@/lib/use-data-table-query-params";
 import { formatDate } from "@/lib/utils";
 import { useSetSettingsAction } from "../layout";
+import { shouldSkipCreateApiKeySubmit } from "./page.utils";
 
 type CreateApiKeyFormValues = {
   name: string;
@@ -59,6 +60,7 @@ export default function ApiKeysSettingsPage() {
   const [createdApiKeyValue, setCreatedApiKeyValue] = useState<string | null>(
     null,
   );
+  const hasSubmittedCreateDialogRef = useRef(false);
   const search = searchParams.get("search") || "";
 
   const form = useForm<CreateApiKeyFormValues>({
@@ -159,6 +161,17 @@ export default function ApiKeysSettingsPage() {
   }, [canDeleteApiKeys]);
 
   const handleCreate = form.handleSubmit(async (values) => {
+    if (
+      shouldSkipCreateApiKeySubmit({
+        hasSubmittedForCurrentDialogOpen: hasSubmittedCreateDialogRef.current,
+        isCreatePending: createApiKeyMutation.isPending,
+        createdApiKeyValue,
+      })
+    ) {
+      return;
+    }
+
+    hasSubmittedCreateDialogRef.current = true;
     const expiresIn = values.expiresAt
       ? Math.max(
           1,
@@ -172,6 +185,7 @@ export default function ApiKeysSettingsPage() {
     });
 
     if (!createdApiKey) {
+      hasSubmittedCreateDialogRef.current = false;
       return;
     }
 
@@ -223,6 +237,7 @@ export default function ApiKeysSettingsPage() {
         onOpenChange={(open) => {
           setIsCreateDialogOpen(open);
           if (!open) {
+            hasSubmittedCreateDialogRef.current = false;
             setCreatedApiKeyValue(null);
             form.reset(DEFAULT_FORM_VALUES);
           }
@@ -284,6 +299,7 @@ export default function ApiKeysSettingsPage() {
               type="button"
               variant="outline"
               onClick={() => {
+                hasSubmittedCreateDialogRef.current = false;
                 setIsCreateDialogOpen(false);
                 setCreatedApiKeyValue(null);
                 form.reset(DEFAULT_FORM_VALUES);

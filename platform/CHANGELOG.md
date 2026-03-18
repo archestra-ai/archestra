@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.1.30](https://github.com/archestra-ai/archestra/compare/platform-v1.1.29...platform-v1.1.30) (2026-03-18)
+
+
+### Miscellaneous Chores
+
+* kb query permission ([#3442](https://github.com/archestra-ai/archestra/issues/3442)) ([8399dc9](https://github.com/archestra-ai/archestra/commit/8399dc917c2c318159662bfa408379911908554c))
+* reuse shared llm selectors in agent and knowledge settings ([#3441](https://github.com/archestra-ai/archestra/issues/3441)) ([13ca86a](https://github.com/archestra-ai/archestra/commit/13ca86aab55f965096fd210c87926ff233c78fb7))
+* reuse the shared chat API key dialog ([#3439](https://github.com/archestra-ai/archestra/issues/3439)) ([f6e46e3](https://github.com/archestra-ai/archestra/commit/f6e46e393e3b85a1a363e36f9dd0b7197858d468))
+
 ## [1.1.29](https://github.com/archestra-ai/archestra/compare/platform-v1.1.28...platform-v1.1.29) (2026-03-18)
 
 

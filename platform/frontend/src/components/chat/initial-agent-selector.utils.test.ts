@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { filterAndSortInitialAgents } from "./initial-agent-selector.utils";
+import {
+  filterAndSortInitialAgents,
+  truncateAgentDescription,
+} from "./initial-agent-selector.utils";
 
 const userId = "user-1";
 
@@ -159,5 +162,29 @@ describe("filterAndSortInitialAgents", () => {
     });
 
     expect(result.map((agent) => agent.id)).toEqual(["a", "m", "z"]);
+  });
+});
+
+describe("truncateAgentDescription", () => {
+  it("returns null for missing descriptions", () => {
+    expect(truncateAgentDescription(null)).toBeNull();
+    expect(truncateAgentDescription(undefined)).toBeNull();
+    expect(truncateAgentDescription("")).toBeNull();
+  });
+
+  it("preserves short descriptions", () => {
+    expect(truncateAgentDescription("Short description")).toBe(
+      "Short description",
+    );
+  });
+
+  it("truncates long descriptions without splitting the last word when possible", () => {
+    expect(
+      truncateAgentDescription(
+        "This description is intentionally long enough to trigger truncation before the final word boundary appears in the preview output.",
+      ),
+    ).toBe(
+      "This description is intentionally long enough to trigger truncation before the...",
+    );
   });
 });

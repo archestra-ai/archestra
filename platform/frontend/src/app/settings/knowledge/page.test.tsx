@@ -216,6 +216,7 @@ describe("KnowledgeSettingsPage", () => {
       mockOrganization = {
         embeddingChatApiKeyId: "key-1",
         embeddingModel: "text-embedding-3-small",
+        embeddingDimensions: 1536,
         rerankerChatApiKeyId: "key-1",
         rerankerModel: "gpt-4o",
       };
@@ -429,6 +430,7 @@ describe("KnowledgeSettingsPage", () => {
       mockOrganization = {
         embeddingChatApiKeyId: "key-1",
         embeddingModel: "text-embedding-3-small",
+        embeddingDimensions: 1536,
         rerankerChatApiKeyId: "key-1",
         rerankerModel: "gpt-4o",
       };

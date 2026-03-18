@@ -51,6 +51,26 @@ export function filterAndSortInitialAgents(params: {
   });
 }
 
+export function truncateAgentDescription(description?: string | null) {
+  if (!description) {
+    return null;
+  }
+
+  const maxLength = 80;
+  if (description.length <= maxLength) {
+    return description;
+  }
+
+  const truncated = description.slice(0, maxLength).trimEnd();
+  const lastSpaceIndex = truncated.lastIndexOf(" ");
+  const safeTruncation =
+    lastSpaceIndex >= maxLength - 15
+      ? truncated.slice(0, lastSpaceIndex)
+      : truncated;
+
+  return `${safeTruncation.trimEnd()}...`;
+}
+
 function getScopeOrder(scope: InitialAgentListItem["scope"]) {
   switch (scope) {
     case "personal":

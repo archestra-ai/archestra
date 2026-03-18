@@ -87,7 +87,10 @@ import {
 } from "@/lib/mcp-server.query";
 import { useAppName } from "@/lib/use-app-name";
 import { cn } from "@/lib/utils";
-import { filterAndSortInitialAgents } from "./initial-agent-selector.utils";
+import {
+  filterAndSortInitialAgents,
+  truncateAgentDescription,
+} from "./initial-agent-selector.utils";
 
 type CatalogItem =
   archestraApiTypes.GetInternalMcpCatalogResponses["200"][number];
@@ -596,6 +599,7 @@ function AgentSettingsView({
   const [editedName, setEditedName] = useState(agent?.name ?? "");
   const nameInputRef = useRef<HTMLInputElement | null>(null);
   const [isEditingIcon, setIsEditingIcon] = useState(false);
+  const truncatedDescription = truncateAgentDescription(agent?.description);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: agent?.id ensures reset when switching agents
   useEffect(() => {
@@ -738,9 +742,9 @@ function AgentSettingsView({
                 />
               </div>
             )}
-            {!isEditingName && (
+            {!isEditingName && truncatedDescription && (
               <p className="mt-1 text-left text-xs text-muted-foreground">
-                {truncateAgentDescription(agent.description)}
+                {truncatedDescription}
               </p>
             )}
           </div>
@@ -2077,24 +2081,4 @@ function ToolServerAvatarGroup({
       )}
     </div>
   );
-}
-
-function truncateAgentDescription(description?: string | null) {
-  if (!description) {
-    return null;
-  }
-
-  const maxLength = 80;
-  if (description.length <= maxLength) {
-    return description;
-  }
-
-  const truncated = description.slice(0, maxLength).trimEnd();
-  const lastSpaceIndex = truncated.lastIndexOf(" ");
-  const safeTruncation =
-    lastSpaceIndex >= maxLength - 15
-      ? truncated.slice(0, lastSpaceIndex)
-      : truncated;
-
-  return `${safeTruncation.trimEnd()}...`;
 }

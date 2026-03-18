@@ -431,10 +431,7 @@ function useSetupStep({
   if (!hasSelectableKeys) return "add-key";
   if (!selectedKeyId) return "select-key";
   if (!selectedModel) return "select-model";
-  if (
-    selectedDimensions !== undefined &&
-    (selectedDimensions === null || selectedDimensions === undefined)
-  ) {
+  if (selectedDimensions !== undefined && selectedDimensions === null) {
     return "select-dimensions";
   }
   return null;

@@ -285,6 +285,9 @@ export function RolePermissionBuilder({
                   id={`category-${category}`}
                   checked={categoryCheckState}
                   disabled={readOnly}
+                  className={
+                    categoryCheckState === "indeterminate" ? "opacity-50" : ""
+                  }
                   onCheckedChange={(checked) => {
                     if (checked) {
                       selectAllForCategory(category);

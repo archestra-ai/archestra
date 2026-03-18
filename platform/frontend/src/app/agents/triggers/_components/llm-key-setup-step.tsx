@@ -37,7 +37,7 @@ export function LlmKeySetupStep() {
         open={isDialogOpen}
         onOpenChange={setIsDialogOpen}
         title="Add API Key"
-        description="Add a new LLM provider API key for use in Chat and LLM Proxy"
+        description="Add an LLM provider API key to start chatting"
         defaultValues={DEFAULT_FORM_VALUES}
         showConsoleLink
       />

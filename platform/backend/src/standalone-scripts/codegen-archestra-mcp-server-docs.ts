@@ -207,7 +207,8 @@ function generateMarkdownBody(): string {
       ? tool.name.slice(TOOL_PREFIX.length)
       : tool.name;
 
-    const group = toolGroups[shortName as ArchestraToolShortName];
+    const typedShortName = shortName as ArchestraToolShortName;
+    const group = toolGroups[typedShortName];
     if (!group) {
       throw new Error(
         `Tool "${shortName}" has no group mapping in toolGroups. ` +
@@ -221,7 +222,7 @@ function generateMarkdownBody(): string {
     grouped.get(group)?.push({
       shortName,
       description: truncateDescription(tool.description ?? ""),
-      requiredPermission: formatToolPermission(shortName),
+      requiredPermission: formatToolPermission(typedShortName),
       inputSchema: tool.inputSchema as JsonSchema,
       outputSchema: tool.outputSchema as JsonSchema | undefined,
     });
@@ -342,8 +343,10 @@ function escapeTableCell(text: string): string {
   return text.replace(/\|/g, "\\|");
 }
 
-export function formatToolPermission(toolShortName: string): string {
-  const permission = TOOL_PERMISSIONS[toolShortName as ArchestraToolShortName];
+export function formatToolPermission(
+  toolShortName: ArchestraToolShortName,
+): string {
+  const permission = TOOL_PERMISSIONS[toolShortName];
   if (!permission) {
     return "None (no additional RBAC permission required)";
   }

@@ -39,7 +39,6 @@ import {
   estimateToolResultContentLength,
   previewToolResultContent,
 } from "@/utils/tool-result-preview";
-import { MockOpenAIClient } from "../mock-openai-client";
 import {
   doesModelSupportImages,
   hasImageContent,
@@ -1095,10 +1094,6 @@ export const cerebrasAdapterFactory: LLMProvider<
     apiKey: string | undefined,
     options: CreateClientOptions,
   ): OpenAIProvider {
-    if (options.mockMode) {
-      return new MockOpenAIClient() as unknown as OpenAIProvider;
-    }
-
     // Use observable fetch for request duration metrics if agent is provided
     const customFetch = options.agent
       ? metrics.llm.getObservableFetch(

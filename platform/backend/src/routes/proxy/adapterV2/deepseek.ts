@@ -26,7 +26,6 @@ import type {
   LLMResponseAdapter,
   LLMStreamAdapter,
 } from "@/types";
-import { MockOpenAIClient } from "../mock-openai-client";
 import {
   OpenAIRequestAdapter,
   OpenAIResponseAdapter,
@@ -225,10 +224,6 @@ export const deepseekAdapterFactory: LLMProvider<
     apiKey: string | undefined,
     options: CreateClientOptions,
   ): OpenAIProvider {
-    if (options.mockMode) {
-      return new MockOpenAIClient() as unknown as OpenAIProvider;
-    }
-
     const customFetch = options.agent
       ? metrics.llm.getObservableFetch(
           "deepseek",

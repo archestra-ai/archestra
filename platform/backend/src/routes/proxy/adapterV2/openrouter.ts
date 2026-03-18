@@ -20,7 +20,6 @@ import type {
   LLMStreamAdapter,
   Openrouter,
 } from "@/types";
-import { MockOpenAIClient } from "../mock-openai-client";
 import {
   OpenAIRequestAdapter,
   OpenAIResponseAdapter,
@@ -225,10 +224,6 @@ export const openrouterAdapterFactory: LLMProvider<
     apiKey: string | undefined,
     options: CreateClientOptions,
   ): OpenAIProvider {
-    if (options.mockMode) {
-      return new MockOpenAIClient() as unknown as OpenAIProvider;
-    }
-
     if (!apiKey) {
       throw new Error("API key required for OpenRouter");
     }

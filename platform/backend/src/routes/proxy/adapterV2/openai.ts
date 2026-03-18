@@ -31,7 +31,6 @@ import {
   estimateToolResultContentLength,
   previewToolResultContent,
 } from "@/utils/tool-result-preview";
-import { MockOpenAIClient } from "../mock-openai-client";
 import {
   doesModelSupportImages,
   hasImageContent,
@@ -1168,10 +1167,6 @@ export const openaiAdapterFactory: LLMProvider<
     apiKey: string | undefined,
     options: CreateClientOptions,
   ): OpenAIProvider {
-    if (options.mockMode) {
-      return new MockOpenAIClient() as unknown as OpenAIProvider;
-    }
-
     // Use observable fetch for request duration metrics if agent is provided
     const baseFetch = options.agent
       ? metrics.llm.getObservableFetch(

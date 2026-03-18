@@ -22,7 +22,6 @@ import type {
   ToolCompressionStats,
   UsageView,
 } from "@/types";
-import { MockAnthropicClient } from "../mock-anthropic-client";
 import {
   hasImageContent,
   isImageTooLarge,
@@ -1137,10 +1136,6 @@ export const anthropicAdapterFactory: LLMProvider<
     apiKey: string | undefined,
     options: CreateClientOptions,
   ): AnthropicProvider {
-    if (options.mockMode) {
-      return new MockAnthropicClient() as unknown as AnthropicProvider;
-    }
-
     // Use observable fetch for request duration metrics if agent is provided
     const customFetch = options.agent
       ? metrics.llm.getObservableFetch(

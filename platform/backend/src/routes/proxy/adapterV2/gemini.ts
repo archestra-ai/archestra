@@ -33,7 +33,6 @@ import type {
   ToolCompressionStats,
   UsageView,
 } from "@/types";
-import { MockGeminiClient } from "../mock-gemini-client";
 import {
   hasImageContent,
   isImageTooLarge,
@@ -1327,9 +1326,6 @@ export const geminiAdapterFactory: LLMProvider<
     apiKey: string | undefined,
     options: CreateClientOptions,
   ): GoogleGenAI {
-    if (options.mockMode) {
-      return new MockGeminiClient() as unknown as GoogleGenAI;
-    }
     const client = createGoogleGenAIClient(apiKey, "[GeminiProxyV2]");
 
     // Wrap with observability for request duration metrics

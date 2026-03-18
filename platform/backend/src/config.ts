@@ -746,9 +746,6 @@ const config = {
       process.env.ARCHESTRA_LLM_PROXY_VIRTUAL_KEYS_DEFAULT_EXPIRATION_SECONDS,
     ),
   },
-  benchmark: {
-    mockMode: process.env.BENCHMARK_MOCK_MODE === "true",
-  },
   kb: {
     hybridSearchEnabled:
       process.env.ARCHESTRA_KNOWLEDGE_BASE_HYBRID_SEARCH_ENABLED !== "false",

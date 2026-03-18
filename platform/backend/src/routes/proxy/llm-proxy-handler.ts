@@ -510,7 +510,6 @@ export async function handleLLMProxy<
     // Create client with observability (each provider handles metrics internally)
     const client = provider.createClient(apiKey, {
       baseUrl: effectiveBaseUrl,
-      mockMode: config.benchmark.mockMode,
       agent: resolvedAgent,
       externalAgentId,
       source,

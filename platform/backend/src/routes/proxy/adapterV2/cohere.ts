@@ -944,9 +944,6 @@ export const cohereAdapterFactory: LLMProvider<
   interactionType: "cohere:chat",
 
   createClient(apiKey: string, options: CreateClientOptions) {
-    if (options.mockMode) {
-      throw new Error("Mock mode not yet implemented for Cohere");
-    }
     return createCohereClient(apiKey, options);
   },
 

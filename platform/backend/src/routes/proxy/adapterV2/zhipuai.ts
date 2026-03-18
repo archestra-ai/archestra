@@ -5,7 +5,6 @@ import config from "@/config";
 import logger from "@/logging";
 import { ModelModel } from "@/models";
 import { metrics } from "@/observability";
-import { MockZhipuaiClient } from "@/routes/proxy/mock-zhipuai-client";
 import { getTokenizer } from "@/tokenizers";
 import type {
   ChunkProcessingResult,
@@ -993,12 +992,7 @@ export const zhipuaiAdapterFactory: LLMProvider<
   createClient(
     apiKey: string | undefined,
     options: CreateClientOptions,
-  ): ZhipuaiClient | MockZhipuaiClient {
-    // Return mock client if mock mode is enabled
-    if (options.mockMode) {
-      return new MockZhipuaiClient() as unknown as ZhipuaiClient;
-    }
-
+  ): ZhipuaiClient {
     const customFetch = options.agent
       ? metrics.llm.getObservableFetch(
           "zhipuai",

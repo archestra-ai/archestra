@@ -1,9 +1,15 @@
 // biome-ignore-all lint/suspicious/noExplicitAny: test
+
 import {
   ARCHESTRA_MCP_SERVER_NAME,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
 } from "@shared";
-import { OrganizationModel } from "@/models";
+import { vi } from "vitest";
+import {
+  ChatApiKeyModel,
+  ConversationModel,
+  OrganizationModel,
+} from "@/models";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { Agent } from "@/types";
 import { type ArchestraContext, executeArchestraTool } from ".";
@@ -14,23 +20,42 @@ describe("chat tool execution", () => {
   let userId: string;
   let organizationId: string;
 
-  beforeEach(async ({ makeAgent, makeUser, makeOrganization, makeMember }) => {
-    const org = await makeOrganization();
-    const user = await makeUser();
-    await makeMember(user.id, org.id, { role: "admin" });
-    userId = user.id;
-    organizationId = org.id;
-    testAgent = await makeAgent({
-      name: "Test Agent",
-      agentType: "agent",
-      organizationId,
-    });
-    mockContext = {
-      agent: { id: testAgent.id, name: testAgent.name },
-      userId,
-      organizationId,
-    };
-  });
+  beforeEach(
+    async ({
+      makeAgent,
+      makeUser,
+      makeOrganization,
+      makeMember,
+      makeSecret,
+      makeChatApiKey,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      await makeMember(user.id, org.id, { role: "admin" });
+      userId = user.id;
+      organizationId = org.id;
+      const secret = await makeSecret();
+      const orgWideApiKey = await makeChatApiKey(organizationId, secret.id, {
+        provider: "openai",
+      });
+      vi.spyOn(ChatApiKeyModel, "findById").mockImplementation(async (id) => {
+        if (id === orgWideApiKey.id) {
+          return orgWideApiKey;
+        }
+        return null;
+      });
+      testAgent = await makeAgent({
+        name: "Test Agent",
+        agentType: "agent",
+        organizationId,
+      });
+      mockContext = {
+        agent: { id: testAgent.id, name: testAgent.name },
+        userId,
+        organizationId,
+      };
+    },
+  );
 
   test("todo_write returns error when todos is missing", async () => {
     const result = await executeArchestraTool(
@@ -144,11 +169,26 @@ describe("chat tool execution", () => {
   test("swap_agent succeeds with real conversation and target agent", async ({
     makeAgent,
     makeConversation,
+    makeSecret,
+    makeChatApiKey,
   }) => {
+    const secret = await makeSecret();
+    const targetApiKey = await makeChatApiKey(organizationId, secret.id, {
+      provider: "anthropic",
+    });
+    vi.spyOn(ChatApiKeyModel, "findById").mockImplementation(async (id) => {
+      if (id === targetApiKey.id) {
+        return targetApiKey;
+      }
+      return null;
+    });
+
     const targetAgent = await makeAgent({
       name: "Swap Target Agent",
       agentType: "agent",
       organizationId: organizationId,
+      llmApiKeyId: targetApiKey.id,
+      llmModel: "claude-3-5-sonnet",
     });
 
     const conversation = await makeConversation(testAgent.id, {
@@ -180,6 +220,16 @@ describe("chat tool execution", () => {
     expect(parsed.success).toBe(true);
     expect(parsed.agent_id).toBe(targetAgent.id);
     expect(parsed.agent_name).toBe("Swap Target Agent");
+
+    const updatedConversation = await ConversationModel.findById({
+      id: conversation.id,
+      userId,
+      organizationId,
+    });
+    expect(updatedConversation?.agentId).toBe(targetAgent.id);
+    expect(updatedConversation?.selectedModel).toBe("claude-3-5-sonnet");
+    expect(updatedConversation?.selectedProvider).toBe("anthropic");
+    expect(updatedConversation?.chatApiKeyId).toBe(targetApiKey.id);
   });
 
   test("swap_agent returns error when swapping to same agent", async ({
@@ -243,11 +293,26 @@ describe("chat tool execution", () => {
   test("swap_to_default_agent succeeds when on non-default agent", async ({
     makeAgent,
     makeConversation,
+    makeSecret,
+    makeChatApiKey,
   }) => {
+    const secret = await makeSecret();
+    const defaultApiKey = await makeChatApiKey(organizationId, secret.id, {
+      provider: "openai",
+    });
+    vi.spyOn(ChatApiKeyModel, "findById").mockImplementation(async (id) => {
+      if (id === defaultApiKey.id) {
+        return defaultApiKey;
+      }
+      return null;
+    });
+
     const defaultAgent = await makeAgent({
       name: "Default Router Agent",
       agentType: "agent",
       organizationId: organizationId,
+      llmApiKeyId: defaultApiKey.id,
+      llmModel: "gpt-4o",
     });
     await OrganizationModel.patch(organizationId, {
       defaultAgentId: defaultAgent.id,
@@ -284,6 +349,16 @@ describe("chat tool execution", () => {
     expect(parsed.success).toBe(true);
     expect(parsed.agent_id).toBe(defaultAgent.id);
     expect(parsed.agent_name).toBe("Default Router Agent");
+
+    const updatedConversation = await ConversationModel.findById({
+      id: conversation.id,
+      userId,
+      organizationId,
+    });
+    expect(updatedConversation?.agentId).toBe(defaultAgent.id);
+    expect(updatedConversation?.selectedModel).toBe("gpt-4o");
+    expect(updatedConversation?.selectedProvider).toBe("openai");
+    expect(updatedConversation?.chatApiKeyId).toBe(defaultApiKey.id);
   });
 
   test("swap_to_default_agent returns error when already on default agent", async ({

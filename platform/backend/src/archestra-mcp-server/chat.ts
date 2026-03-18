@@ -8,6 +8,7 @@ import {
   ConversationModel,
   OrganizationModel,
 } from "@/models";
+import { resolveConversationLlmSelectionForAgent } from "@/services/conversation-llm-selection";
 import {
   catchError,
   defineArchestraTool,
@@ -256,12 +257,27 @@ async function handleSwapAgent(params: {
       );
     }
 
-    // Update the conversation's agent
+    const llmSelection = await resolveConversationLlmSelectionForAgent({
+      agent: {
+        llmApiKeyId: targetAgent.llmApiKeyId ?? null,
+        llmModel: targetAgent.llmModel ?? null,
+      },
+      organizationId: context.organizationId,
+      userId: context.userId,
+    });
+
+    // Update the conversation's agent and LLM selection together so the
+    // follow-up response uses the new agent's model/key immediately.
     const updated = await ConversationModel.update(
       context.conversationId,
       context.userId,
       context.organizationId,
-      { agentId: targetAgent.id },
+      {
+        agentId: targetAgent.id,
+        chatApiKeyId: llmSelection.chatApiKeyId,
+        selectedModel: llmSelection.selectedModel,
+        selectedProvider: llmSelection.selectedProvider,
+      },
     );
 
     if (!updated) {
@@ -319,11 +335,25 @@ async function handleSwapToDefaultAgent(params: {
       );
     }
 
+    const llmSelection = await resolveConversationLlmSelectionForAgent({
+      agent: {
+        llmApiKeyId: targetAgent.llmApiKeyId ?? null,
+        llmModel: targetAgent.llmModel ?? null,
+      },
+      organizationId: context.organizationId,
+      userId: context.userId,
+    });
+
     const updated = await ConversationModel.update(
       context.conversationId,
       context.userId,
       context.organizationId,
-      { agentId: defaultAgentId },
+      {
+        agentId: defaultAgentId,
+        chatApiKeyId: llmSelection.chatApiKeyId,
+        selectedModel: llmSelection.selectedModel,
+        selectedProvider: llmSelection.selectedProvider,
+      },
     );
 
     if (!updated) {

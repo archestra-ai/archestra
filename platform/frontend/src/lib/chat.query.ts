@@ -38,6 +38,50 @@ const {
   stopChatStream,
 } = archestraApiSdk;
 
+export function mergeUpdatedConversationIntoCache(
+  oldConversation:
+    | archestraApiTypes.GetChatConversationResponses["200"]
+    | undefined,
+  updatedConversation: archestraApiTypes.UpdateChatConversationResponses["200"],
+  variables: { id: string } & NonNullable<
+    archestraApiTypes.UpdateChatConversationData["body"]
+  >,
+) {
+  if (!oldConversation) {
+    return updatedConversation;
+  }
+
+  const merged = { ...oldConversation };
+
+  if (variables.title !== undefined) {
+    merged.title = updatedConversation.title;
+  }
+  if (
+    variables.selectedModel !== undefined ||
+    variables.agentId !== undefined
+  ) {
+    merged.selectedModel = updatedConversation.selectedModel;
+  }
+  if (
+    variables.selectedProvider !== undefined ||
+    variables.agentId !== undefined
+  ) {
+    merged.selectedProvider = updatedConversation.selectedProvider;
+  }
+  if (variables.chatApiKeyId !== undefined || variables.agentId !== undefined) {
+    merged.chatApiKeyId = updatedConversation.chatApiKeyId;
+  }
+  if (variables.agentId !== undefined) {
+    merged.agentId = updatedConversation.agentId;
+    merged.agent = updatedConversation.agent;
+  }
+  if (variables.pinnedAt !== undefined) {
+    merged.pinnedAt = updatedConversation.pinnedAt;
+  }
+
+  return merged;
+}
+
 export function useConversation(conversationId?: string) {
   return useQuery({
     queryKey: ["conversation", conversationId],
@@ -166,29 +210,10 @@ export function useUpdateConversation() {
     },
     onSuccess: (data, variables) => {
       if (!data) return;
-      // Merge only the fields this mutation updated into the cache.
-      // Using a full replacement (`setQueryData(key, data)`) causes flicker when
-      // concurrent mutations race (e.g. model change + API key auto-select):
-      // the slower response can overwrite fields the faster mutation already set.
       queryClient.setQueryData(
         ["conversation", variables.id],
-        (old: typeof data | undefined) => {
-          if (!old) return data;
-          const merged = { ...old };
-          if (variables.title !== undefined) merged.title = data.title;
-          if (variables.selectedModel !== undefined)
-            merged.selectedModel = data.selectedModel;
-          if (variables.selectedProvider !== undefined)
-            merged.selectedProvider = data.selectedProvider;
-          if (variables.chatApiKeyId !== undefined)
-            merged.chatApiKeyId = data.chatApiKeyId;
-          if (variables.agentId !== undefined) {
-            merged.agentId = data.agentId;
-            merged.agent = data.agent;
-          }
-          if (variables.pinnedAt !== undefined) merged.pinnedAt = data.pinnedAt;
-          return merged;
-        },
+        (old: typeof data | undefined) =>
+          mergeUpdatedConversationIntoCache(old, data, variables),
       );
       // Only invalidate the conversations list for sidebar-relevant changes
       // (title, pin status, agent). Model/key updates don't affect the sidebar

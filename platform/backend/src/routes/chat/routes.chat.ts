@@ -43,6 +43,7 @@ import {
   TeamModel,
 } from "@/models";
 import { startActiveChatSpan } from "@/observability/tracing";
+import { resolveConversationLlmSelectionForAgent } from "@/services/conversation-llm-selection";
 import {
   promptNeedsRendering,
   renderSystemPrompt,
@@ -933,6 +934,25 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
         if (!agent) {
           throw new ApiError(404, "Agent not found");
+        }
+
+        if (
+          body.selectedModel === undefined &&
+          body.selectedProvider === undefined &&
+          body.chatApiKeyId === undefined
+        ) {
+          const llmSelection = await resolveConversationLlmSelectionForAgent({
+            agent: {
+              llmApiKeyId: agent.llmApiKeyId ?? null,
+              llmModel: agent.llmModel ?? null,
+            },
+            organizationId,
+            userId: user.id,
+          });
+
+          body.selectedModel = llmSelection.selectedModel;
+          body.selectedProvider = llmSelection.selectedProvider;
+          body.chatApiKeyId = llmSelection.chatApiKeyId;
         }
       }
 

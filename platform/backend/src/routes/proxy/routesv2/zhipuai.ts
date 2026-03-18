@@ -36,7 +36,7 @@ const zhipuaiProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.ZhipuaiChatCompletionsWithDefaultAgent,
         description:
           "Create a chat completion with Zhipu AI (uses default agent)",
-        tags: ["llm-proxy"],
+        tags: ["LLM Proxy"],
         body: Zhipuai.API.ChatCompletionRequestSchema,
         headers: Zhipuai.API.ChatCompletionsHeadersSchema,
         response: constructResponseSchema(
@@ -66,7 +66,7 @@ const zhipuaiProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.ZhipuaiChatCompletionsWithAgent,
         description:
           "Create a chat completion with Zhipu AI for a specific agent",
-        tags: ["llm-proxy"],
+        tags: ["LLM Proxy"],
         params: z.object({
           agentId: UuidIdSchema,
         }),

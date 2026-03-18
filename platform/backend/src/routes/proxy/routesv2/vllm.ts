@@ -49,7 +49,7 @@ const vllmProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.VllmChatCompletionsWithDefaultAgent,
         description: "Create a chat completion with vLLM (uses default agent)",
-        tags: ["llm-proxy"],
+        tags: ["LLM Proxy"],
         body: Vllm.API.ChatCompletionRequestSchema,
         headers: Vllm.API.ChatCompletionsHeadersSchema,
         response: constructResponseSchema(
@@ -82,7 +82,7 @@ const vllmProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.VllmChatCompletionsWithAgent,
         description: "Create a chat completion with vLLM for a specific agent",
-        tags: ["llm-proxy"],
+        tags: ["LLM Proxy"],
         params: z.object({
           agentId: UuidIdSchema,
         }),

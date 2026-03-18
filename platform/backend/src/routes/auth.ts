@@ -21,7 +21,7 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
     schema: {
       operationId: RouteId.GetDefaultCredentialsStatus,
       description: "Get default credentials status",
-      tags: ["auth"],
+      tags: ["Auth"],
       response: {
         200: z.object({
           enabled: z.boolean(),
@@ -82,7 +82,7 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
     method: "POST",
     url: "/api/auth/organization/remove-member",
     schema: {
-      tags: ["auth"],
+      tags: ["Auth"],
     },
     async handler(request, reply) {
       const body = request.body as Record<string, unknown>;
@@ -181,7 +181,7 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
     schema: {
       operationId: RouteId.GetOAuthClientInfo,
       description: "Get OAuth client name by client_id",
-      tags: ["auth"],
+      tags: ["Auth"],
       querystring: z.object({ client_id: z.string() }),
       response: {
         200: z.object({ client_name: z.string().nullable() }),
@@ -202,7 +202,7 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
     method: "GET",
     url: "/api/auth/oauth2/authorize",
     schema: {
-      tags: ["auth"],
+      tags: ["Auth"],
     },
     async handler(request, reply) {
       const query = request.query as Record<string, string>;
@@ -259,7 +259,7 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
     method: "POST",
     url: "/api/auth/oauth2/token",
     schema: {
-      tags: ["auth"],
+      tags: ["Auth"],
     },
     async handler(request, reply) {
       const body = request.body as Record<string, unknown> | undefined;
@@ -333,7 +333,7 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
     schema: {
       operationId: RouteId.SubmitOAuthConsent,
       description: "Submit OAuth consent decision (accept or deny)",
-      tags: ["auth"],
+      tags: ["Auth"],
       body: z.object({
         accept: z.boolean(),
         scope: z.string(),
@@ -402,7 +402,7 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
     method: "POST",
     url: "/api/auth/oauth2/register",
     schema: {
-      tags: ["auth"],
+      tags: ["Auth"],
       body: z.record(z.string(), z.unknown()),
     },
     async handler(request, reply) {
@@ -437,7 +437,7 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
     method: ["GET", "POST"],
     url: "/api/auth/*",
     schema: {
-      tags: ["auth"],
+      tags: ["Auth"],
     },
     async handler(request, reply) {
       const url = new URL(request.url, `http://${request.headers.host}`);

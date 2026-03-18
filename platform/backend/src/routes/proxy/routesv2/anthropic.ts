@@ -48,7 +48,7 @@ const anthropicProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.AnthropicMessagesWithDefaultAgent,
         description: "Send a message to Anthropic using the default agent",
-        tags: ["llm-proxy"],
+        tags: ["LLM Proxy"],
         body: Anthropic.API.MessagesRequestSchema,
         headers: Anthropic.API.MessagesHeadersSchema,
         response: constructResponseSchema(Anthropic.API.MessagesResponseSchema),
@@ -86,7 +86,7 @@ const anthropicProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.AnthropicMessagesWithAgent,
         description:
           "Send a message to Anthropic using a specific agent (n8n URL format)",
-        tags: ["llm-proxy"],
+        tags: ["LLM Proxy"],
         params: z.object({
           agentId: UuidIdSchema,
         }),

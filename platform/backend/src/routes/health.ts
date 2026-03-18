@@ -14,7 +14,7 @@ const healthRoutes: FastifyPluginAsyncZod = async (fastify) => {
     HEALTH_PATH,
     {
       schema: {
-        tags: ["health"],
+        tags: ["Health"],
         response: {
           200: z.object({
             name: z.string(),
@@ -39,7 +39,7 @@ const healthRoutes: FastifyPluginAsyncZod = async (fastify) => {
     READY_PATH,
     {
       schema: {
-        tags: ["health"],
+        tags: ["Health"],
         response: {
           200: z.object({
             name: z.string(),

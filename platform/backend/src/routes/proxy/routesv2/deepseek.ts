@@ -36,7 +36,7 @@ const deepseekProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.DeepSeekChatCompletionsWithDefaultAgent,
         description:
           "Create a chat completion with DeepSeek (uses default agent)",
-        tags: ["llm-proxy"],
+        tags: ["LLM Proxy"],
         body: DeepSeek.API.ChatCompletionRequestSchema,
         headers: DeepSeek.API.ChatCompletionsHeadersSchema,
         response: constructResponseSchema(
@@ -66,7 +66,7 @@ const deepseekProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.DeepSeekChatCompletionsWithAgent,
         description:
           "Create a chat completion with DeepSeek for a specific agent",
-        tags: ["llm-proxy"],
+        tags: ["LLM Proxy"],
         params: z.object({
           agentId: UuidIdSchema,
         }),

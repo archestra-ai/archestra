@@ -37,11 +37,27 @@ export const postV1A2aByAgentId = <ThrowOnError extends boolean = false>(options
 
 /**
  * Get all agents with pagination, sorting, and filtering
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * Checked dynamically based on agent type. `profile` and `agent` require `agent:read`; `mcp_gateway` requires `mcpGateway:read`; `llm_proxy` requires `llmProxy:read`. If no type filter is provided, the user must have read access to at least one agent type.
  */
 export const getAgents = <ThrowOnError extends boolean = false>(options?: Options<GetAgentsData, ThrowOnError>) => (options?.client ?? client).get<GetAgentsResponses, GetAgentsErrors, ThrowOnError>({ url: '/api/agents', ...options });
 
 /**
  * Create a new agent
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * Checked dynamically based on the agent type being created. `profile` and `agent` require `agent:create`; `mcp_gateway` requires `mcpGateway:create`; `llm_proxy` requires `llmProxy:create`. Additional scope and team-admin checks may apply.
  */
 export const createAgent = <ThrowOnError extends boolean = false>(options: Options<CreateAgentData, ThrowOnError>) => (options.client ?? client).post<CreateAgentResponses, CreateAgentErrors, ThrowOnError>({
     url: '/api/agents',
@@ -54,31 +70,83 @@ export const createAgent = <ThrowOnError extends boolean = false>(options: Optio
 
 /**
  * Get all agents without pagination
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * Checked dynamically based on agent type. `profile` and `agent` require `agent:read`; `mcp_gateway` requires `mcpGateway:read`; `llm_proxy` requires `llmProxy:read`. If no type filter is provided, the user must have read access to at least one agent type.
  */
 export const getAllAgents = <ThrowOnError extends boolean = false>(options?: Options<GetAllAgentsData, ThrowOnError>) => (options?.client ?? client).get<GetAllAgentsResponses, GetAllAgentsErrors, ThrowOnError>({ url: '/api/agents/all', ...options });
 
 /**
- * Get or create default MCP Gateway
+ * Get default MCP Gateway
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `mcpGateway:read`: View and list MCP gateways
  */
 export const getDefaultMcpGateway = <ThrowOnError extends boolean = false>(options?: Options<GetDefaultMcpGatewayData, ThrowOnError>) => (options?.client ?? client).get<GetDefaultMcpGatewayResponses, GetDefaultMcpGatewayErrors, ThrowOnError>({ url: '/api/mcp-gateways/default', ...options });
 
 /**
- * Get or create default LLM Proxy
+ * Get default LLM Proxy
+ *
+ * Authentication:
+ *
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `llmProxy:read`: View and list LLM proxies
  */
 export const getDefaultLlmProxy = <ThrowOnError extends boolean = false>(options?: Options<GetDefaultLlmProxyData, ThrowOnError>) => (options?.client ?? client).get<GetDefaultLlmProxyResponses, GetDefaultLlmProxyErrors, ThrowOnError>({ url: '/api/llm-proxy/default', ...options });
 
 /**
  * Delete an agent
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * Checked dynamically based on the target agent's type. `profile` and `agent` require `agent:delete`; `mcp_gateway` requires `mcpGateway:delete`; `llm_proxy` requires `llmProxy:delete`. Additional scope checks may apply.
  */
 export const deleteAgent = <ThrowOnError extends boolean = false>(options: Options<DeleteAgentData, ThrowOnError>) => (options.client ?? client).delete<DeleteAgentResponses, DeleteAgentErrors, ThrowOnError>({ url: '/api/agents/{id}', ...options });
 
 /**
  * Get agent by ID
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * Checked dynamically based on the target agent's type. `profile` and `agent` require `agent:read`; `mcp_gateway` requires `mcpGateway:read`; `llm_proxy` requires `llmProxy:read`.
  */
 export const getAgent = <ThrowOnError extends boolean = false>(options: Options<GetAgentData, ThrowOnError>) => (options.client ?? client).get<GetAgentResponses, GetAgentErrors, ThrowOnError>({ url: '/api/agents/{id}', ...options });
 
 /**
  * Update an agent
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * Checked dynamically based on the target agent's type. `profile` and `agent` require `agent:update`; `mcp_gateway` requires `mcpGateway:update`; `llm_proxy` requires `llmProxy:update`. Additional scope and team-admin checks may apply.
  */
 export const updateAgent = <ThrowOnError extends boolean = false>(options: Options<UpdateAgentData, ThrowOnError>) => (options.client ?? client).put<UpdateAgentResponses, UpdateAgentErrors, ThrowOnError>({
     url: '/api/agents/{id}',
@@ -91,31 +159,79 @@ export const updateAgent = <ThrowOnError extends boolean = false>(options: Optio
 
 /**
  * Get all available label keys
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * None (no additional RBAC permission required)
  */
 export const getLabelKeys = <ThrowOnError extends boolean = false>(options?: Options<GetLabelKeysData, ThrowOnError>) => (options?.client ?? client).get<GetLabelKeysResponses, GetLabelKeysErrors, ThrowOnError>({ url: '/api/agents/labels/keys', ...options });
 
 /**
  * Get all available label values
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * None (no additional RBAC permission required)
  */
 export const getLabelValues = <ThrowOnError extends boolean = false>(options?: Options<GetLabelValuesData, ThrowOnError>) => (options?.client ?? client).get<GetLabelValuesResponses, GetLabelValuesErrors, ThrowOnError>({ url: '/api/agents/labels/values', ...options });
 
 /**
  * Get the current user's default agent ID
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * None (no additional RBAC permission required)
  */
 export const getMemberDefaultAgent = <ThrowOnError extends boolean = false>(options?: Options<GetMemberDefaultAgentData, ThrowOnError>) => (options?.client ?? client).get<GetMemberDefaultAgentResponses, GetMemberDefaultAgentErrors, ThrowOnError>({ url: '/api/members/default-agent', ...options });
 
 /**
  * Get all agent-tool relationships with pagination, sorting, and filtering
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `toolPolicy:read`: View tools, tool invocation policies, and trusted data policies
  */
 export const getAllAgentTools = <ThrowOnError extends boolean = false>(options?: Options<GetAllAgentToolsData, ThrowOnError>) => (options?.client ?? client).get<GetAllAgentToolsResponses, GetAllAgentToolsErrors, ThrowOnError>({ url: '/api/agent-tools', ...options });
 
 /**
  * Unassign a tool from an agent
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * None (no additional RBAC permission required)
  */
 export const unassignToolFromAgent = <ThrowOnError extends boolean = false>(options: Options<UnassignToolFromAgentData, ThrowOnError>) => (options.client ?? client).delete<UnassignToolFromAgentResponses, UnassignToolFromAgentErrors, ThrowOnError>({ url: '/api/agents/{agentId}/tools/{toolId}', ...options });
 
 /**
  * Assign a tool to an agent
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * None (no additional RBAC permission required)
  */
 export const assignToolToAgent = <ThrowOnError extends boolean = false>(options: Options<AssignToolToAgentData, ThrowOnError>) => (options.client ?? client).post<AssignToolToAgentResponses, AssignToolToAgentErrors, ThrowOnError>({
     url: '/api/agents/{agentId}/tools/{toolId}',
@@ -128,6 +244,14 @@ export const assignToolToAgent = <ThrowOnError extends boolean = false>(options:
 
 /**
  * Assign multiple tools to multiple agents in bulk
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * None (no additional RBAC permission required)
  */
 export const bulkAssignTools = <ThrowOnError extends boolean = false>(options: Options<BulkAssignToolsData, ThrowOnError>) => (options.client ?? client).post<BulkAssignToolsResponses, BulkAssignToolsErrors, ThrowOnError>({
     url: '/api/agents/tools/bulk-assign',
@@ -140,6 +264,14 @@ export const bulkAssignTools = <ThrowOnError extends boolean = false>(options: O
 
 /**
  * Automatically configure security policies for tools using LLM analysis
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `toolPolicy:update`: Modify tools, tool configuration, and security policies
  */
 export const autoConfigureAgentToolPolicies = <ThrowOnError extends boolean = false>(options: Options<AutoConfigureAgentToolPoliciesData, ThrowOnError>) => (options.client ?? client).post<AutoConfigureAgentToolPoliciesResponses, AutoConfigureAgentToolPoliciesErrors, ThrowOnError>({
     url: '/api/agent-tools/auto-configure-policies',
@@ -152,11 +284,27 @@ export const autoConfigureAgentToolPolicies = <ThrowOnError extends boolean = fa
 
 /**
  * Get all tools for an agent (both proxy-sniffed and MCP tools)
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `toolPolicy:read`: View tools, tool invocation policies, and trusted data policies
  */
 export const getAgentTools = <ThrowOnError extends boolean = false>(options: Options<GetAgentToolsData, ThrowOnError>) => (options.client ?? client).get<GetAgentToolsResponses, GetAgentToolsErrors, ThrowOnError>({ url: '/api/agents/{agentId}/tools', ...options });
 
 /**
  * Update an agent-tool relationship
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `toolPolicy:update`: Modify tools, tool configuration, and security policies
  */
 export const updateAgentTool = <ThrowOnError extends boolean = false>(options: Options<UpdateAgentToolData, ThrowOnError>) => (options.client ?? client).patch<UpdateAgentToolResponses, UpdateAgentToolErrors, ThrowOnError>({
     url: '/api/agent-tools/{id}',
@@ -169,11 +317,27 @@ export const updateAgentTool = <ThrowOnError extends boolean = false>(options: O
 
 /**
  * Get all delegation targets for an agent. Not applicable to LLM proxies.
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * None (no additional RBAC permission required)
  */
 export const getAgentDelegations = <ThrowOnError extends boolean = false>(options: Options<GetAgentDelegationsData, ThrowOnError>) => (options.client ?? client).get<GetAgentDelegationsResponses, GetAgentDelegationsErrors, ThrowOnError>({ url: '/api/agents/{agentId}/delegations', ...options });
 
 /**
  * Sync delegation targets for an agent. Replaces all existing delegations with the new list. Not applicable to LLM proxies.
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * None (no additional RBAC permission required)
  */
 export const syncAgentDelegations = <ThrowOnError extends boolean = false>(options: Options<SyncAgentDelegationsData, ThrowOnError>) => (options.client ?? client).post<SyncAgentDelegationsResponses, SyncAgentDelegationsErrors, ThrowOnError>({
     url: '/api/agents/{agentId}/delegations',
@@ -186,16 +350,36 @@ export const syncAgentDelegations = <ThrowOnError extends boolean = false>(optio
 
 /**
  * Remove a specific delegation from an agent. Not applicable to LLM proxies.
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * None (no additional RBAC permission required)
  */
 export const deleteAgentDelegation = <ThrowOnError extends boolean = false>(options: Options<DeleteAgentDelegationData, ThrowOnError>) => (options.client ?? client).delete<DeleteAgentDelegationResponses, DeleteAgentDelegationErrors, ThrowOnError>({ url: '/api/agents/{agentId}/delegations/{targetAgentId}', ...options });
 
 /**
  * Get all agent delegation connections for canvas visualization.
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * None (no additional RBAC permission required)
  */
 export const getAllDelegationConnections = <ThrowOnError extends boolean = false>(options?: Options<GetAllDelegationConnectionsData, ThrowOnError>) => (options?.client ?? client).get<GetAllDelegationConnectionsResponses, GetAllDelegationConnectionsErrors, ThrowOnError>({ url: '/api/agent-delegations', ...options });
 
 /**
  * Send a message to Anthropic using the default agent
+ *
+ * Authentication:
+ *
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
  */
 export const anthropicMessagesWithDefaultAgent = <ThrowOnError extends boolean = false>(options: Options<AnthropicMessagesWithDefaultAgentData, ThrowOnError>) => (options.client ?? client).post<AnthropicMessagesWithDefaultAgentResponses, AnthropicMessagesWithDefaultAgentErrors, ThrowOnError>({
     url: '/v1/anthropic/v1/messages',
@@ -208,6 +392,10 @@ export const anthropicMessagesWithDefaultAgent = <ThrowOnError extends boolean =
 
 /**
  * Send a message to Anthropic using a specific agent (n8n URL format)
+ *
+ * Authentication:
+ *
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
  */
 export const anthropicMessagesWithAgent = <ThrowOnError extends boolean = false>(options: Options<AnthropicMessagesWithAgentData, ThrowOnError>) => (options.client ?? client).post<AnthropicMessagesWithAgentResponses, AnthropicMessagesWithAgentErrors, ThrowOnError>({
     url: '/v1/anthropic/{agentId}/v1/messages',
@@ -220,11 +408,27 @@ export const anthropicMessagesWithAgent = <ThrowOnError extends boolean = false>
 
 /**
  * List the authenticated user's Archestra API keys
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `apiKey:read`: View API keys
  */
 export const getApiKeys = <ThrowOnError extends boolean = false>(options?: Options<GetApiKeysData, ThrowOnError>) => (options?.client ?? client).get<GetApiKeysResponses, GetApiKeysErrors, ThrowOnError>({ url: '/api/api-keys', ...options });
 
 /**
  * Create an Archestra API key for the authenticated user
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `apiKey:create`: Create API keys
  */
 export const createApiKey = <ThrowOnError extends boolean = false>(options: Options<CreateApiKeyData, ThrowOnError>) => (options.client ?? client).post<CreateApiKeyResponses, CreateApiKeyErrors, ThrowOnError>({
     url: '/api/api-keys',
@@ -237,16 +441,40 @@ export const createApiKey = <ThrowOnError extends boolean = false>(options: Opti
 
 /**
  * Delete an Archestra API key for the authenticated user
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `apiKey:delete`: Delete API keys
  */
 export const deleteApiKey = <ThrowOnError extends boolean = false>(options: Options<DeleteApiKeyData, ThrowOnError>) => (options.client ?? client).delete<DeleteApiKeyResponses, DeleteApiKeyErrors, ThrowOnError>({ url: '/api/api-keys/{id}', ...options });
 
 /**
  * Get one authenticated user's Archestra API key
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `apiKey:read`: View API keys
  */
 export const getApiKey = <ThrowOnError extends boolean = false>(options: Options<GetApiKeyData, ThrowOnError>) => (options.client ?? client).get<GetApiKeyResponses, GetApiKeyErrors, ThrowOnError>({ url: '/api/api-keys/{id}', ...options });
 
 /**
  * Get default credentials status
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * None (no additional RBAC permission required)
  */
 export const getDefaultCredentialsStatus = <ThrowOnError extends boolean = false>(options?: Options<GetDefaultCredentialsStatusData, ThrowOnError>) => (options?.client ?? client).get<GetDefaultCredentialsStatusResponses, GetDefaultCredentialsStatusErrors, ThrowOnError>({ url: '/api/auth/default-credentials-status', ...options });
 
@@ -254,6 +482,14 @@ export const postApiAuthOrganizationRemoveMember = <ThrowOnError extends boolean
 
 /**
  * Get OAuth client name by client_id
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * None (no additional RBAC permission required)
  */
 export const getOAuthClientInfo = <ThrowOnError extends boolean = false>(options: Options<GetOAuthClientInfoData, ThrowOnError>) => (options.client ?? client).get<GetOAuthClientInfoResponses, unknown, ThrowOnError>({ url: '/api/auth/oauth2/client-info', ...options });
 
@@ -263,6 +499,14 @@ export const postApiAuthOauth2Token = <ThrowOnError extends boolean = false>(opt
 
 /**
  * Submit OAuth consent decision (accept or deny)
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * None (no additional RBAC permission required)
  */
 export const submitOAuthConsent = <ThrowOnError extends boolean = false>(options: Options<SubmitOAuthConsentData, ThrowOnError>) => (options.client ?? client).post<SubmitOAuthConsentResponses, unknown, ThrowOnError>({
     url: '/api/auth/oauth2/consent',
@@ -288,16 +532,40 @@ export const postApiAuthBy__ = <ThrowOnError extends boolean = false>(options: O
 
 /**
  * Get all supported policy operators
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `toolPolicy:read`: View tools, tool invocation policies, and trusted data policies
  */
 export const getOperators = <ThrowOnError extends boolean = false>(options?: Options<GetOperatorsData, ThrowOnError>) => (options?.client ?? client).get<GetOperatorsResponses, GetOperatorsErrors, ThrowOnError>({ url: '/api/autonomy-policies/operators', ...options });
 
 /**
  * Get all tool invocation policies
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `toolPolicy:read`: View tools, tool invocation policies, and trusted data policies
  */
 export const getToolInvocationPolicies = <ThrowOnError extends boolean = false>(options?: Options<GetToolInvocationPoliciesData, ThrowOnError>) => (options?.client ?? client).get<GetToolInvocationPoliciesResponses, GetToolInvocationPoliciesErrors, ThrowOnError>({ url: '/api/autonomy-policies/tool-invocation', ...options });
 
 /**
  * Create a new tool invocation policy
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `toolPolicy:create`: Register tools and create security policies
  */
 export const createToolInvocationPolicy = <ThrowOnError extends boolean = false>(options: Options<CreateToolInvocationPolicyData, ThrowOnError>) => (options.client ?? client).post<CreateToolInvocationPolicyResponses, CreateToolInvocationPolicyErrors, ThrowOnError>({
     url: '/api/autonomy-policies/tool-invocation',
@@ -310,16 +578,40 @@ export const createToolInvocationPolicy = <ThrowOnError extends boolean = false>
 
 /**
  * Delete a tool invocation policy
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `toolPolicy:delete`: Remove tools and security policies
  */
 export const deleteToolInvocationPolicy = <ThrowOnError extends boolean = false>(options: Options<DeleteToolInvocationPolicyData, ThrowOnError>) => (options.client ?? client).delete<DeleteToolInvocationPolicyResponses, DeleteToolInvocationPolicyErrors, ThrowOnError>({ url: '/api/autonomy-policies/tool-invocation/{id}', ...options });
 
 /**
  * Get tool invocation policy by ID
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `toolPolicy:read`: View tools, tool invocation policies, and trusted data policies
  */
 export const getToolInvocationPolicy = <ThrowOnError extends boolean = false>(options: Options<GetToolInvocationPolicyData, ThrowOnError>) => (options.client ?? client).get<GetToolInvocationPolicyResponses, GetToolInvocationPolicyErrors, ThrowOnError>({ url: '/api/autonomy-policies/tool-invocation/{id}', ...options });
 
 /**
  * Update a tool invocation policy
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `toolPolicy:update`: Modify tools, tool configuration, and security policies
  */
 export const updateToolInvocationPolicy = <ThrowOnError extends boolean = false>(options: Options<UpdateToolInvocationPolicyData, ThrowOnError>) => (options.client ?? client).put<UpdateToolInvocationPolicyResponses, UpdateToolInvocationPolicyErrors, ThrowOnError>({
     url: '/api/autonomy-policies/tool-invocation/{id}',
@@ -332,11 +624,27 @@ export const updateToolInvocationPolicy = <ThrowOnError extends boolean = false>
 
 /**
  * Get all trusted data policies
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `toolPolicy:read`: View tools, tool invocation policies, and trusted data policies
  */
 export const getTrustedDataPolicies = <ThrowOnError extends boolean = false>(options?: Options<GetTrustedDataPoliciesData, ThrowOnError>) => (options?.client ?? client).get<GetTrustedDataPoliciesResponses, GetTrustedDataPoliciesErrors, ThrowOnError>({ url: '/api/trusted-data-policies', ...options });
 
 /**
  * Create a new trusted data policy
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `toolPolicy:create`: Register tools and create security policies
  */
 export const createTrustedDataPolicy = <ThrowOnError extends boolean = false>(options: Options<CreateTrustedDataPolicyData, ThrowOnError>) => (options.client ?? client).post<CreateTrustedDataPolicyResponses, CreateTrustedDataPolicyErrors, ThrowOnError>({
     url: '/api/trusted-data-policies',
@@ -349,16 +657,40 @@ export const createTrustedDataPolicy = <ThrowOnError extends boolean = false>(op
 
 /**
  * Delete a trusted data policy
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `toolPolicy:delete`: Remove tools and security policies
  */
 export const deleteTrustedDataPolicy = <ThrowOnError extends boolean = false>(options: Options<DeleteTrustedDataPolicyData, ThrowOnError>) => (options.client ?? client).delete<DeleteTrustedDataPolicyResponses, DeleteTrustedDataPolicyErrors, ThrowOnError>({ url: '/api/trusted-data-policies/{id}', ...options });
 
 /**
  * Get trusted data policy by ID
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `toolPolicy:read`: View tools, tool invocation policies, and trusted data policies
  */
 export const getTrustedDataPolicy = <ThrowOnError extends boolean = false>(options: Options<GetTrustedDataPolicyData, ThrowOnError>) => (options.client ?? client).get<GetTrustedDataPolicyResponses, GetTrustedDataPolicyErrors, ThrowOnError>({ url: '/api/trusted-data-policies/{id}', ...options });
 
 /**
  * Update a trusted data policy
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `toolPolicy:update`: Modify tools, tool configuration, and security policies
  */
 export const updateTrustedDataPolicy = <ThrowOnError extends boolean = false>(options: Options<UpdateTrustedDataPolicyData, ThrowOnError>) => (options.client ?? client).put<UpdateTrustedDataPolicyResponses, UpdateTrustedDataPolicyErrors, ThrowOnError>({
     url: '/api/trusted-data-policies/{id}',
@@ -371,6 +703,14 @@ export const updateTrustedDataPolicy = <ThrowOnError extends boolean = false>(op
 
 /**
  * Bulk upsert default tool invocation policies (empty conditions) for multiple tools
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `toolPolicy:update`: Modify tools, tool configuration, and security policies
  */
 export const bulkUpsertDefaultCallPolicy = <ThrowOnError extends boolean = false>(options: Options<BulkUpsertDefaultCallPolicyData, ThrowOnError>) => (options.client ?? client).post<BulkUpsertDefaultCallPolicyResponses, BulkUpsertDefaultCallPolicyErrors, ThrowOnError>({
     url: '/api/tool-invocation/bulk-default',
@@ -383,6 +723,14 @@ export const bulkUpsertDefaultCallPolicy = <ThrowOnError extends boolean = false
 
 /**
  * Bulk upsert default trusted data policies (empty conditions) for multiple tools
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `toolPolicy:update`: Modify tools, tool configuration, and security policies
  */
 export const bulkUpsertDefaultResultPolicy = <ThrowOnError extends boolean = false>(options: Options<BulkUpsertDefaultResultPolicyData, ThrowOnError>) => (options.client ?? client).post<BulkUpsertDefaultResultPolicyResponses, BulkUpsertDefaultResultPolicyErrors, ThrowOnError>({
     url: '/api/trusted-data-policies/bulk-default',
@@ -395,6 +743,10 @@ export const bulkUpsertDefaultResultPolicy = <ThrowOnError extends boolean = fal
 
 /**
  * Send a message to Amazon Bedrock using the default agent
+ *
+ * Authentication:
+ *
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
  */
 export const bedrockConverseWithDefaultAgent = <ThrowOnError extends boolean = false>(options: Options<BedrockConverseWithDefaultAgentData, ThrowOnError>) => (options.client ?? client).post<BedrockConverseWithDefaultAgentResponses, BedrockConverseWithDefaultAgentErrors, ThrowOnError>({
     url: '/v1/bedrock/converse',
@@ -407,6 +759,10 @@ export const bedrockConverseWithDefaultAgent = <ThrowOnError extends boolean = f
 
 /**
  * Send a message to Amazon Bedrock for a specific agent
+ *
+ * Authentication:
+ *
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
  */
 export const bedrockConverseWithAgent = <ThrowOnError extends boolean = false>(options: Options<BedrockConverseWithAgentData, ThrowOnError>) => (options.client ?? client).post<BedrockConverseWithAgentResponses, BedrockConverseWithAgentErrors, ThrowOnError>({
     url: '/v1/bedrock/{agentId}/converse',
@@ -419,6 +775,10 @@ export const bedrockConverseWithAgent = <ThrowOnError extends boolean = false>(o
 
 /**
  * Stream a message response from Amazon Bedrock using the default agent
+ *
+ * Authentication:
+ *
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
  */
 export const bedrockConverseStreamWithDefaultAgent = <ThrowOnError extends boolean = false>(options: Options<BedrockConverseStreamWithDefaultAgentData, ThrowOnError>) => (options.client ?? client).post<BedrockConverseStreamWithDefaultAgentResponses, unknown, ThrowOnError>({
     url: '/v1/bedrock/converse-stream',
@@ -431,6 +791,10 @@ export const bedrockConverseStreamWithDefaultAgent = <ThrowOnError extends boole
 
 /**
  * Stream a message response from Amazon Bedrock for a specific agent
+ *
+ * Authentication:
+ *
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
  */
 export const bedrockConverseStreamWithAgent = <ThrowOnError extends boolean = false>(options: Options<BedrockConverseStreamWithAgentData, ThrowOnError>) => (options.client ?? client).post<BedrockConverseStreamWithAgentResponses, unknown, ThrowOnError>({
     url: '/v1/bedrock/{agentId}/converse-stream',
@@ -443,6 +807,10 @@ export const bedrockConverseStreamWithAgent = <ThrowOnError extends boolean = fa
 
 /**
  * Send a message to Amazon Bedrock for a specific agent (AI SDK format)
+ *
+ * Authentication:
+ *
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
  */
 export const bedrockConverseWithAgentAndModel = <ThrowOnError extends boolean = false>(options: Options<BedrockConverseWithAgentAndModelData, ThrowOnError>) => (options.client ?? client).post<BedrockConverseWithAgentAndModelResponses, BedrockConverseWithAgentAndModelErrors, ThrowOnError>({
     url: '/v1/bedrock/{agentId}/model/{modelId}/converse',
@@ -455,6 +823,10 @@ export const bedrockConverseWithAgentAndModel = <ThrowOnError extends boolean = 
 
 /**
  * Stream a message response from Amazon Bedrock for a specific agent (AI SDK format)
+ *
+ * Authentication:
+ *
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
  */
 export const bedrockConverseStreamWithAgentAndModel = <ThrowOnError extends boolean = false>(options: Options<BedrockConverseStreamWithAgentAndModelData, ThrowOnError>) => (options.client ?? client).post<BedrockConverseStreamWithAgentAndModelResponses, unknown, ThrowOnError>({
     url: '/v1/bedrock/{agentId}/model/{modelId}/converse-stream',
@@ -467,6 +839,10 @@ export const bedrockConverseStreamWithAgentAndModel = <ThrowOnError extends bool
 
 /**
  * Create a chat completion with Cerebras (uses default agent)
+ *
+ * Authentication:
+ *
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
  */
 export const cerebrasChatCompletionsWithDefaultAgent = <ThrowOnError extends boolean = false>(options: Options<CerebrasChatCompletionsWithDefaultAgentData, ThrowOnError>) => (options.client ?? client).post<CerebrasChatCompletionsWithDefaultAgentResponses, CerebrasChatCompletionsWithDefaultAgentErrors, ThrowOnError>({
     url: '/v1/cerebras/chat/completions',
@@ -479,6 +855,10 @@ export const cerebrasChatCompletionsWithDefaultAgent = <ThrowOnError extends boo
 
 /**
  * Create a chat completion with Cerebras for a specific agent
+ *
+ * Authentication:
+ *
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
  */
 export const cerebrasChatCompletionsWithAgent = <ThrowOnError extends boolean = false>(options: Options<CerebrasChatCompletionsWithAgentData, ThrowOnError>) => (options.client ?? client).post<CerebrasChatCompletionsWithAgentResponses, CerebrasChatCompletionsWithAgentErrors, ThrowOnError>({
     url: '/v1/cerebras/{agentId}/chat/completions',
@@ -491,11 +871,27 @@ export const cerebrasChatCompletionsWithAgent = <ThrowOnError extends boolean = 
 
 /**
  * Get all chat API keys visible to the current user based on scope access
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `llmProvider:read`: View LLM provider API keys, virtual keys, and models
  */
 export const getChatApiKeys = <ThrowOnError extends boolean = false>(options?: Options<GetChatApiKeysData, ThrowOnError>) => (options?.client ?? client).get<GetChatApiKeysResponses, GetChatApiKeysErrors, ThrowOnError>({ url: '/api/chat-api-keys', ...options });
 
 /**
  * Create a new chat API key with specified scope
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `llmProvider:create`: Add new LLM provider API keys or virtual keys
  */
 export const createChatApiKey = <ThrowOnError extends boolean = false>(options: Options<CreateChatApiKeyData, ThrowOnError>) => (options.client ?? client).post<CreateChatApiKeyResponses, CreateChatApiKeyErrors, ThrowOnError>({
     url: '/api/chat-api-keys',
@@ -508,21 +904,53 @@ export const createChatApiKey = <ThrowOnError extends boolean = false>(options: 
 
 /**
  * Get API keys available for the current user to use in chat
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `llmProvider:read`: View LLM provider API keys, virtual keys, and models
  */
 export const getAvailableChatApiKeys = <ThrowOnError extends boolean = false>(options?: Options<GetAvailableChatApiKeysData, ThrowOnError>) => (options?.client ?? client).get<GetAvailableChatApiKeysResponses, GetAvailableChatApiKeysErrors, ThrowOnError>({ url: '/api/chat-api-keys/available', ...options });
 
 /**
  * Delete a chat API key
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `llmProvider:delete`: Remove LLM provider API keys or virtual keys
  */
 export const deleteChatApiKey = <ThrowOnError extends boolean = false>(options: Options<DeleteChatApiKeyData, ThrowOnError>) => (options.client ?? client).delete<DeleteChatApiKeyResponses, DeleteChatApiKeyErrors, ThrowOnError>({ url: '/api/chat-api-keys/{id}', ...options });
 
 /**
  * Get a specific chat API key
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `llmProvider:read`: View LLM provider API keys, virtual keys, and models
  */
 export const getChatApiKey = <ThrowOnError extends boolean = false>(options: Options<GetChatApiKeyData, ThrowOnError>) => (options.client ?? client).get<GetChatApiKeyResponses, GetChatApiKeyErrors, ThrowOnError>({ url: '/api/chat-api-keys/{id}', ...options });
 
 /**
  * Update a chat API key (name, API key value, scope, or team)
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `llmProvider:update`: Modify LLM provider configuration and model pricing
  */
 export const updateChatApiKey = <ThrowOnError extends boolean = false>(options: Options<UpdateChatApiKeyData, ThrowOnError>) => (options.client ?? client).patch<UpdateChatApiKeyResponses, UpdateChatApiKeyErrors, ThrowOnError>({
     url: '/api/chat-api-keys/{id}',
@@ -535,26 +963,66 @@ export const updateChatApiKey = <ThrowOnError extends boolean = false>(options: 
 
 /**
  * Get available LLM models from all configured providers. Models are fetched directly from provider APIs. Includes model capabilities (context length, modalities, tool calling support) when available.
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `chat:read`: View and access chat conversations
  */
 export const getChatModels = <ThrowOnError extends boolean = false>(options?: Options<GetChatModelsData, ThrowOnError>) => (options?.client ?? client).get<GetChatModelsResponses, GetChatModelsErrors, ThrowOnError>({ url: '/api/chat/models', ...options });
 
 /**
  * Sync models from providers for all API keys and store them in the database
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `llmProvider:update`: Modify LLM provider configuration and model pricing
  */
 export const syncChatModels = <ThrowOnError extends boolean = false>(options?: Options<SyncChatModelsData, ThrowOnError>) => (options?.client ?? client).post<SyncChatModelsResponses, SyncChatModelsErrors, ThrowOnError>({ url: '/api/chat/models/sync', ...options });
 
 /**
  * Sync models from providers, overwriting all fields including custom modifications
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `llmProvider:update`: Modify LLM provider configuration and model pricing
  */
 export const syncChatModelsFull = <ThrowOnError extends boolean = false>(options?: Options<SyncChatModelsFullData, ThrowOnError>) => (options?.client ?? client).post<SyncChatModelsFullResponses, SyncChatModelsFullErrors, ThrowOnError>({ url: '/api/chat/models/sync-full', ...options });
 
 /**
  * Get all models with their linked API keys. Returns models from the database with information about which API keys provide access to them.
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `llmProvider:read`: View LLM provider API keys, virtual keys, and models
  */
 export const getModelsWithApiKeys = <ThrowOnError extends boolean = false>(options?: Options<GetModelsWithApiKeysData, ThrowOnError>) => (options?.client ?? client).get<GetModelsWithApiKeysResponses, GetModelsWithApiKeysErrors, ThrowOnError>({ url: '/api/models', ...options });
 
 /**
  * Update model details including custom pricing and modalities.
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `llmProvider:update`: Modify LLM provider configuration and model pricing
  */
 export const updateModel = <ThrowOnError extends boolean = false>(options: Options<UpdateModelData, ThrowOnError>) => (options.client ?? client).patch<UpdateModelResponses, UpdateModelErrors, ThrowOnError>({
     url: '/api/models/{id}',
@@ -567,6 +1035,14 @@ export const updateModel = <ThrowOnError extends boolean = false>(options: Optio
 
 /**
  * Stream chat response with MCP tools (useChat format)
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `chat:read`: View and access chat conversations
  */
 export const streamChat = <ThrowOnError extends boolean = false>(options: Options<StreamChatData, ThrowOnError>) => (options.client ?? client).post<unknown, StreamChatErrors, ThrowOnError>({
     url: '/api/chat',
@@ -579,16 +1055,40 @@ export const streamChat = <ThrowOnError extends boolean = false>(options: Option
 
 /**
  * Stop a running chat stream for a conversation
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `chat:read`: View and access chat conversations
  */
 export const stopChatStream = <ThrowOnError extends boolean = false>(options: Options<StopChatStreamData, ThrowOnError>) => (options.client ?? client).post<StopChatStreamResponses, StopChatStreamErrors, ThrowOnError>({ url: '/api/chat/conversations/{id}/stop', ...options });
 
 /**
  * List all conversations for current user with agent details. Optionally filter by search query.
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `chat:read`: View and access chat conversations
  */
 export const getChatConversations = <ThrowOnError extends boolean = false>(options?: Options<GetChatConversationsData, ThrowOnError>) => (options?.client ?? client).get<GetChatConversationsResponses, GetChatConversationsErrors, ThrowOnError>({ url: '/api/chat/conversations', ...options });
 
 /**
  * Create a new conversation with an agent
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `chat:create`: Start new chat conversations
  */
 export const createChatConversation = <ThrowOnError extends boolean = false>(options: Options<CreateChatConversationData, ThrowOnError>) => (options.client ?? client).post<CreateChatConversationResponses, CreateChatConversationErrors, ThrowOnError>({
     url: '/api/chat/conversations',
@@ -601,16 +1101,40 @@ export const createChatConversation = <ThrowOnError extends boolean = false>(opt
 
 /**
  * Delete a conversation
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `chat:delete`: Delete chat conversations
  */
 export const deleteChatConversation = <ThrowOnError extends boolean = false>(options: Options<DeleteChatConversationData, ThrowOnError>) => (options.client ?? client).delete<DeleteChatConversationResponses, DeleteChatConversationErrors, ThrowOnError>({ url: '/api/chat/conversations/{id}', ...options });
 
 /**
  * Get conversation with messages
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `chat:read`: View and access chat conversations
  */
 export const getChatConversation = <ThrowOnError extends boolean = false>(options: Options<GetChatConversationData, ThrowOnError>) => (options.client ?? client).get<GetChatConversationResponses, GetChatConversationErrors, ThrowOnError>({ url: '/api/chat/conversations/{id}', ...options });
 
 /**
  * Update conversation title, model, agent, or API key
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `chat:update`: Edit chat messages and conversation settings
  */
 export const updateChatConversation = <ThrowOnError extends boolean = false>(options: Options<UpdateChatConversationData, ThrowOnError>) => (options.client ?? client).patch<UpdateChatConversationResponses, UpdateChatConversationErrors, ThrowOnError>({
     url: '/api/chat/conversations/{id}',
@@ -623,11 +1147,27 @@ export const updateChatConversation = <ThrowOnError extends boolean = false>(opt
 
 /**
  * Get MCP tools available for an agent via MCP Gateway
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `agent:read`: View and list agents
  */
 export const getChatAgentMcpTools = <ThrowOnError extends boolean = false>(options: Options<GetChatAgentMcpToolsData, ThrowOnError>) => (options.client ?? client).get<GetChatAgentMcpToolsResponses, GetChatAgentMcpToolsErrors, ThrowOnError>({ url: '/api/chat/agents/{agentId}/mcp-tools', ...options });
 
 /**
  * Generate a title for the conversation based on the first user message and assistant response
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `chat:update`: Edit chat messages and conversation settings
  */
 export const generateChatConversationTitle = <ThrowOnError extends boolean = false>(options: Options<GenerateChatConversationTitleData, ThrowOnError>) => (options.client ?? client).post<GenerateChatConversationTitleResponses, GenerateChatConversationTitleErrors, ThrowOnError>({
     url: '/api/chat/conversations/{id}/generate-title',
@@ -640,6 +1180,14 @@ export const generateChatConversationTitle = <ThrowOnError extends boolean = fal
 
 /**
  * Update a specific text part in a message
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `chat:update`: Edit chat messages and conversation settings
  */
 export const updateChatMessage = <ThrowOnError extends boolean = false>(options: Options<UpdateChatMessageData, ThrowOnError>) => (options.client ?? client).patch<UpdateChatMessageResponses, UpdateChatMessageErrors, ThrowOnError>({
     url: '/api/chat/messages/{id}',
@@ -652,16 +1200,40 @@ export const updateChatMessage = <ThrowOnError extends boolean = false>(options:
 
 /**
  * Clear custom tool selection for a conversation (revert to all tools enabled)
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `chat:update`: Edit chat messages and conversation settings
  */
 export const deleteConversationEnabledTools = <ThrowOnError extends boolean = false>(options: Options<DeleteConversationEnabledToolsData, ThrowOnError>) => (options.client ?? client).delete<DeleteConversationEnabledToolsResponses, DeleteConversationEnabledToolsErrors, ThrowOnError>({ url: '/api/chat/conversations/{id}/enabled-tools', ...options });
 
 /**
  * Get enabled tools for a conversation. Empty array means all profile tools are enabled (default).
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `chat:read`: View and access chat conversations
  */
 export const getConversationEnabledTools = <ThrowOnError extends boolean = false>(options: Options<GetConversationEnabledToolsData, ThrowOnError>) => (options.client ?? client).get<GetConversationEnabledToolsResponses, GetConversationEnabledToolsErrors, ThrowOnError>({ url: '/api/chat/conversations/{id}/enabled-tools', ...options });
 
 /**
  * Set enabled tools for a conversation. Replaces all existing selections.
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `chat:update`: Edit chat messages and conversation settings
  */
 export const updateConversationEnabledTools = <ThrowOnError extends boolean = false>(options: Options<UpdateConversationEnabledToolsData, ThrowOnError>) => (options.client ?? client).put<UpdateConversationEnabledToolsResponses, UpdateConversationEnabledToolsErrors, ThrowOnError>({
     url: '/api/chat/conversations/{id}/enabled-tools',
@@ -674,16 +1246,40 @@ export const updateConversationEnabledTools = <ThrowOnError extends boolean = fa
 
 /**
  * Revoke sharing of a conversation
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `chat:update`: Edit chat messages and conversation settings
  */
 export const unshareConversation = <ThrowOnError extends boolean = false>(options: Options<UnshareConversationData, ThrowOnError>) => (options.client ?? client).delete<UnshareConversationResponses, UnshareConversationErrors, ThrowOnError>({ url: '/api/chat/conversations/{id}/share', ...options });
 
 /**
  * Get share status for a conversation
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `chat:read`: View and access chat conversations
  */
 export const getConversationShare = <ThrowOnError extends boolean = false>(options: Options<GetConversationShareData, ThrowOnError>) => (options.client ?? client).get<GetConversationShareResponses, GetConversationShareErrors, ThrowOnError>({ url: '/api/chat/conversations/{id}/share', ...options });
 
 /**
  * Share a conversation with your organization
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `chat:update`: Edit chat messages and conversation settings
  */
 export const shareConversation = <ThrowOnError extends boolean = false>(options: Options<ShareConversationData, ThrowOnError>) => (options.client ?? client).post<ShareConversationResponses, ShareConversationErrors, ThrowOnError>({
     url: '/api/chat/conversations/{id}/share',
@@ -696,11 +1292,27 @@ export const shareConversation = <ThrowOnError extends boolean = false>(options:
 
 /**
  * Get a shared conversation by share ID
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `chat:read`: View and access chat conversations
  */
 export const getSharedConversation = <ThrowOnError extends boolean = false>(options: Options<GetSharedConversationData, ThrowOnError>) => (options.client ?? client).get<GetSharedConversationResponses, GetSharedConversationErrors, ThrowOnError>({ url: '/api/chat/shared/{shareId}', ...options });
 
 /**
  * Create a new conversation from a shared conversation's messages
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `chat:create`: Start new chat conversations
  */
 export const forkSharedConversation = <ThrowOnError extends boolean = false>(options: Options<ForkSharedConversationData, ThrowOnError>) => (options.client ?? client).post<ForkSharedConversationResponses, ForkSharedConversationErrors, ThrowOnError>({
     url: '/api/chat/shared/{shareId}/fork',
@@ -761,16 +1373,40 @@ export const postApiWebhooksChatopsSlackSlashCommand = <ThrowOnError extends boo
 
 /**
  * Get chatops provider configuration status
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `agentTrigger:read`: View agent trigger configurations (Slack, MS Teams, email)
  */
 export const getChatOpsStatus = <ThrowOnError extends boolean = false>(options?: Options<GetChatOpsStatusData, ThrowOnError>) => (options?.client ?? client).get<GetChatOpsStatusResponses, GetChatOpsStatusErrors, ThrowOnError>({ url: '/api/chatops/status', ...options });
 
 /**
  * List chatops channel bindings with pagination
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `agentTrigger:read`: View agent trigger configurations (Slack, MS Teams, email)
  */
 export const listChatOpsBindings = <ThrowOnError extends boolean = false>(options?: Options<ListChatOpsBindingsData, ThrowOnError>) => (options?.client ?? client).get<ListChatOpsBindingsResponses, ListChatOpsBindingsErrors, ThrowOnError>({ url: '/api/chatops/bindings', ...options });
 
 /**
  * Bulk-update agent assignment for multiple channel bindings
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `agentTrigger:update`: Modify agent trigger configurations
  */
 export const bulkUpdateChatOpsBindings = <ThrowOnError extends boolean = false>(options: Options<BulkUpdateChatOpsBindingsData, ThrowOnError>) => (options.client ?? client).patch<BulkUpdateChatOpsBindingsResponses, BulkUpdateChatOpsBindingsErrors, ThrowOnError>({
     url: '/api/chatops/bindings',
@@ -783,11 +1419,27 @@ export const bulkUpdateChatOpsBindings = <ThrowOnError extends boolean = false>(
 
 /**
  * Delete a chatops channel binding
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `agentTrigger:delete`: Remove agent triggers
  */
 export const deleteChatOpsBinding = <ThrowOnError extends boolean = false>(options: Options<DeleteChatOpsBindingData, ThrowOnError>) => (options.client ?? client).delete<DeleteChatOpsBindingResponses, DeleteChatOpsBindingErrors, ThrowOnError>({ url: '/api/chatops/bindings/{id}', ...options });
 
 /**
  * Update a chatops channel binding
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `agentTrigger:update`: Modify agent trigger configurations
  */
 export const updateChatOpsBinding = <ThrowOnError extends boolean = false>(options: Options<UpdateChatOpsBindingData, ThrowOnError>) => (options.client ?? client).patch<UpdateChatOpsBindingResponses, UpdateChatOpsBindingErrors, ThrowOnError>({
     url: '/api/chatops/bindings/{id}',
@@ -800,6 +1452,14 @@ export const updateChatOpsBinding = <ThrowOnError extends boolean = false>(optio
 
 /**
  * Create a pending DM binding so an agent can be pre-assigned before the first DM interaction
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `agentTrigger:create`: Set up new agent triggers
  */
 export const createChatOpsDmBinding = <ThrowOnError extends boolean = false>(options: Options<CreateChatOpsDmBindingData, ThrowOnError>) => (options.client ?? client).post<CreateChatOpsDmBindingResponses, CreateChatOpsDmBindingErrors, ThrowOnError>({
     url: '/api/chatops/bindings/dm',
@@ -812,6 +1472,14 @@ export const createChatOpsDmBinding = <ThrowOnError extends boolean = false>(opt
 
 /**
  * Update MS Teams chatops configuration
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `agentTrigger:update`: Modify agent trigger configurations
  */
 export const updateChatOpsConfigInQuickstart = <ThrowOnError extends boolean = false>(options: Options<UpdateChatOpsConfigInQuickstartData, ThrowOnError>) => (options.client ?? client).put<UpdateChatOpsConfigInQuickstartResponses, UpdateChatOpsConfigInQuickstartErrors, ThrowOnError>({
     url: '/api/chatops/config/ms-teams',
@@ -824,6 +1492,14 @@ export const updateChatOpsConfigInQuickstart = <ThrowOnError extends boolean = f
 
 /**
  * Update Slack chatops configuration
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `agentTrigger:update`: Modify agent trigger configurations
  */
 export const updateSlackChatOpsConfig = <ThrowOnError extends boolean = false>(options: Options<UpdateSlackChatOpsConfigData, ThrowOnError>) => (options.client ?? client).put<UpdateSlackChatOpsConfigResponses, UpdateSlackChatOpsConfigErrors, ThrowOnError>({
     url: '/api/chatops/config/slack',
@@ -836,6 +1512,14 @@ export const updateSlackChatOpsConfig = <ThrowOnError extends boolean = false>(o
 
 /**
  * Refresh channel discovery cache for a chatops provider
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `agentTrigger:read`: View agent trigger configurations (Slack, MS Teams, email)
  */
 export const refreshChatOpsChannelDiscovery = <ThrowOnError extends boolean = false>(options: Options<RefreshChatOpsChannelDiscoveryData, ThrowOnError>) => (options.client ?? client).post<RefreshChatOpsChannelDiscoveryResponses, RefreshChatOpsChannelDiscoveryErrors, ThrowOnError>({
     url: '/api/chatops/channel-discovery/refresh',
@@ -848,6 +1532,10 @@ export const refreshChatOpsChannelDiscovery = <ThrowOnError extends boolean = fa
 
 /**
  * Send a chat request to Cohere using the default agent
+ *
+ * Authentication:
+ *
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
  */
 export const cohereChatWithDefaultAgent = <ThrowOnError extends boolean = false>(options: Options<CohereChatWithDefaultAgentData, ThrowOnError>) => (options.client ?? client).post<CohereChatWithDefaultAgentResponses, CohereChatWithDefaultAgentErrors, ThrowOnError>({
     url: '/v1/cohere/chat',
@@ -860,6 +1548,10 @@ export const cohereChatWithDefaultAgent = <ThrowOnError extends boolean = false>
 
 /**
  * Send a chat request to Cohere using a specific agent
+ *
+ * Authentication:
+ *
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
  */
 export const cohereChatWithAgent = <ThrowOnError extends boolean = false>(options: Options<CohereChatWithAgentData, ThrowOnError>) => (options.client ?? client).post<CohereChatWithAgentResponses, CohereChatWithAgentErrors, ThrowOnError>({
     url: '/v1/cohere/{agentId}/chat',
@@ -872,11 +1564,23 @@ export const cohereChatWithAgent = <ThrowOnError extends boolean = false>(option
 
 /**
  * Get platform configuration and feature flags
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * None (no additional RBAC permission required)
  */
 export const getConfig = <ThrowOnError extends boolean = false>(options?: Options<GetConfigData, ThrowOnError>) => (options?.client ?? client).get<GetConfigResponses, unknown, ThrowOnError>({ url: '/api/config', ...options });
 
 /**
  * Create a chat completion with DeepSeek (uses default agent)
+ *
+ * Authentication:
+ *
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
  */
 export const deepseekChatCompletionsWithDefaultAgent = <ThrowOnError extends boolean = false>(options: Options<DeepseekChatCompletionsWithDefaultAgentData, ThrowOnError>) => (options.client ?? client).post<DeepseekChatCompletionsWithDefaultAgentResponses, DeepseekChatCompletionsWithDefaultAgentErrors, ThrowOnError>({
     url: '/v1/deepseek/chat/completions',
@@ -889,6 +1593,10 @@ export const deepseekChatCompletionsWithDefaultAgent = <ThrowOnError extends boo
 
 /**
  * Create a chat completion with DeepSeek for a specific agent
+ *
+ * Authentication:
+ *
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
  */
 export const deepseekChatCompletionsWithAgent = <ThrowOnError extends boolean = false>(options: Options<DeepseekChatCompletionsWithAgentData, ThrowOnError>) => (options.client ?? client).post<DeepseekChatCompletionsWithAgentResponses, DeepseekChatCompletionsWithAgentErrors, ThrowOnError>({
     url: '/v1/deepseek/{agentId}/chat/completions',
@@ -901,16 +1609,40 @@ export const deepseekChatCompletionsWithAgent = <ThrowOnError extends boolean = 
 
 /**
  * Get default dual LLM configuration
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `dualLlmConfig:read`: View dual LLM security configurations
  */
 export const getDefaultDualLlmConfig = <ThrowOnError extends boolean = false>(options?: Options<GetDefaultDualLlmConfigData, ThrowOnError>) => (options?.client ?? client).get<GetDefaultDualLlmConfigResponses, GetDefaultDualLlmConfigErrors, ThrowOnError>({ url: '/api/dual-llm-config/default', ...options });
 
 /**
  * Get all dual LLM configurations
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `dualLlmConfig:read`: View dual LLM security configurations
  */
 export const getDualLlmConfigs = <ThrowOnError extends boolean = false>(options?: Options<GetDualLlmConfigsData, ThrowOnError>) => (options?.client ?? client).get<GetDualLlmConfigsResponses, GetDualLlmConfigsErrors, ThrowOnError>({ url: '/api/dual-llm-config', ...options });
 
 /**
  * Create a new dual LLM configuration
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `dualLlmConfig:create`: Create new dual LLM configurations
  */
 export const createDualLlmConfig = <ThrowOnError extends boolean = false>(options: Options<CreateDualLlmConfigData, ThrowOnError>) => (options.client ?? client).post<CreateDualLlmConfigResponses, CreateDualLlmConfigErrors, ThrowOnError>({
     url: '/api/dual-llm-config',
@@ -923,16 +1655,40 @@ export const createDualLlmConfig = <ThrowOnError extends boolean = false>(option
 
 /**
  * Delete a dual LLM configuration
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `dualLlmConfig:delete`: Remove dual LLM configurations
  */
 export const deleteDualLlmConfig = <ThrowOnError extends boolean = false>(options: Options<DeleteDualLlmConfigData, ThrowOnError>) => (options.client ?? client).delete<DeleteDualLlmConfigResponses, DeleteDualLlmConfigErrors, ThrowOnError>({ url: '/api/dual-llm-config/{id}', ...options });
 
 /**
  * Get dual LLM configuration by ID
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `dualLlmConfig:read`: View dual LLM security configurations
  */
 export const getDualLlmConfig = <ThrowOnError extends boolean = false>(options: Options<GetDualLlmConfigData, ThrowOnError>) => (options.client ?? client).get<GetDualLlmConfigResponses, GetDualLlmConfigErrors, ThrowOnError>({ url: '/api/dual-llm-config/{id}', ...options });
 
 /**
  * Update a dual LLM configuration
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `dualLlmConfig:update`: Modify dual LLM configurations
  */
 export const updateDualLlmConfig = <ThrowOnError extends boolean = false>(options: Options<UpdateDualLlmConfigData, ThrowOnError>) => (options.client ?? client).put<UpdateDualLlmConfigResponses, UpdateDualLlmConfigErrors, ThrowOnError>({
     url: '/api/dual-llm-config/{id}',
@@ -945,11 +1701,27 @@ export const updateDualLlmConfig = <ThrowOnError extends boolean = false>(option
 
 /**
  * Get dual LLM result by tool call ID
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `dualLlmResult:read`: View dual LLM security validation results
  */
 export const getDualLlmResultByToolCallId = <ThrowOnError extends boolean = false>(options: Options<GetDualLlmResultByToolCallIdData, ThrowOnError>) => (options.client ?? client).get<GetDualLlmResultByToolCallIdResponses, GetDualLlmResultByToolCallIdErrors, ThrowOnError>({ url: '/api/dual-llm-results/by-tool-call-id/{toolCallId}', ...options });
 
 /**
  * Get all dual LLM results for an interaction
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `dualLlmResult:read`: View dual LLM security validation results
  */
 export const getDualLlmResultsByInteraction = <ThrowOnError extends boolean = false>(options: Options<GetDualLlmResultsByInteractionData, ThrowOnError>) => (options.client ?? client).get<GetDualLlmResultsByInteractionResponses, GetDualLlmResultsByInteractionErrors, ThrowOnError>({ url: '/api/dual-llm-results/by-interaction/{interactionId}', ...options });
 
@@ -957,6 +1729,10 @@ export const getDualLlmResultsByInteraction = <ThrowOnError extends boolean = fa
  * Generate content using Gemini
  *
  * Generate content using Gemini (default agent)
+ *
+ * Authentication:
+ *
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
  */
 export const postV1GeminiV1BetaModelsByModelGenerateContent = <ThrowOnError extends boolean = false>(options: Options<PostV1GeminiV1BetaModelsByModelGenerateContentData, ThrowOnError>) => (options.client ?? client).post<PostV1GeminiV1BetaModelsByModelGenerateContentResponses, PostV1GeminiV1BetaModelsByModelGenerateContentErrors, ThrowOnError>({
     url: '/v1/gemini/v1beta/models/{model}:generateContent',
@@ -971,6 +1747,10 @@ export const postV1GeminiV1BetaModelsByModelGenerateContent = <ThrowOnError exte
  * Stream generated content using Gemini
  *
  * Stream generated content using Gemini (default agent)
+ *
+ * Authentication:
+ *
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
  */
 export const postV1GeminiV1BetaModelsByModelStreamGenerateContent = <ThrowOnError extends boolean = false>(options: Options<PostV1GeminiV1BetaModelsByModelStreamGenerateContentData, ThrowOnError>) => (options.client ?? client).post<unknown, PostV1GeminiV1BetaModelsByModelStreamGenerateContentErrors, ThrowOnError>({
     url: '/v1/gemini/v1beta/models/{model}:streamGenerateContent',
@@ -985,6 +1765,10 @@ export const postV1GeminiV1BetaModelsByModelStreamGenerateContent = <ThrowOnErro
  * Generate content using Gemini (specific agent)
  *
  * Generate content using Gemini with specific agent
+ *
+ * Authentication:
+ *
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
  */
 export const postV1GeminiByAgentIdV1BetaModelsByModelGenerateContent = <ThrowOnError extends boolean = false>(options: Options<PostV1GeminiByAgentIdV1BetaModelsByModelGenerateContentData, ThrowOnError>) => (options.client ?? client).post<PostV1GeminiByAgentIdV1BetaModelsByModelGenerateContentResponses, PostV1GeminiByAgentIdV1BetaModelsByModelGenerateContentErrors, ThrowOnError>({
     url: '/v1/gemini/{agentId}/v1beta/models/{model}:generateContent',
@@ -999,6 +1783,10 @@ export const postV1GeminiByAgentIdV1BetaModelsByModelGenerateContent = <ThrowOnE
  * Stream generated content using Gemini (specific agent)
  *
  * Stream generated content using Gemini with specific agent
+ *
+ * Authentication:
+ *
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
  */
 export const postV1GeminiByAgentIdV1BetaModelsByModelStreamGenerateContent = <ThrowOnError extends boolean = false>(options: Options<PostV1GeminiByAgentIdV1BetaModelsByModelStreamGenerateContentData, ThrowOnError>) => (options.client ?? client).post<unknown, PostV1GeminiByAgentIdV1BetaModelsByModelStreamGenerateContentErrors, ThrowOnError>({
     url: '/v1/gemini/{agentId}/v1beta/models/{model}:streamGenerateContent',
@@ -1011,6 +1799,10 @@ export const postV1GeminiByAgentIdV1BetaModelsByModelStreamGenerateContent = <Th
 
 /**
  * Create a chat completion with Groq (uses default agent)
+ *
+ * Authentication:
+ *
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
  */
 export const groqChatCompletionsWithDefaultAgent = <ThrowOnError extends boolean = false>(options: Options<GroqChatCompletionsWithDefaultAgentData, ThrowOnError>) => (options.client ?? client).post<GroqChatCompletionsWithDefaultAgentResponses, GroqChatCompletionsWithDefaultAgentErrors, ThrowOnError>({
     url: '/v1/groq/chat/completions',
@@ -1023,6 +1815,10 @@ export const groqChatCompletionsWithDefaultAgent = <ThrowOnError extends boolean
 
 /**
  * Create a chat completion with Groq for a specific agent
+ *
+ * Authentication:
+ *
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
  */
 export const groqChatCompletionsWithAgent = <ThrowOnError extends boolean = false>(options: Options<GroqChatCompletionsWithAgentData, ThrowOnError>) => (options.client ?? client).post<GroqChatCompletionsWithAgentResponses, GroqChatCompletionsWithAgentErrors, ThrowOnError>({
     url: '/v1/groq/{agentId}/chat/completions',
@@ -1051,16 +1847,40 @@ export const postApiWebhooksIncomingEmail = <ThrowOnError extends boolean = fals
 
 /**
  * Get the email address for invoking an agent
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * None (no additional RBAC permission required)
  */
 export const getAgentEmailAddress = <ThrowOnError extends boolean = false>(options: Options<GetAgentEmailAddressData, ThrowOnError>) => (options.client ?? client).get<GetAgentEmailAddressResponses, GetAgentEmailAddressErrors, ThrowOnError>({ url: '/api/agents/{agentId}/email-address', ...options });
 
 /**
  * Get the current incoming email webhook subscription status
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `agentTrigger:read`: View agent trigger configurations (Slack, MS Teams, email)
  */
 export const getIncomingEmailStatus = <ThrowOnError extends boolean = false>(options?: Options<GetIncomingEmailStatusData, ThrowOnError>) => (options?.client ?? client).get<GetIncomingEmailStatusResponses, GetIncomingEmailStatusErrors, ThrowOnError>({ url: '/api/incoming-email/status', ...options });
 
 /**
  * Setup or renew incoming email webhook subscription
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `agentTrigger:create`: Set up new agent triggers
  */
 export const setupIncomingEmailWebhook = <ThrowOnError extends boolean = false>(options: Options<SetupIncomingEmailWebhookData, ThrowOnError>) => (options.client ?? client).post<SetupIncomingEmailWebhookResponses, SetupIncomingEmailWebhookErrors, ThrowOnError>({
     url: '/api/incoming-email/setup',
@@ -1073,46 +1893,118 @@ export const setupIncomingEmailWebhook = <ThrowOnError extends boolean = false>(
 
 /**
  * Renew the incoming email webhook subscription
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `agentTrigger:update`: Modify agent trigger configurations
  */
 export const renewIncomingEmailSubscription = <ThrowOnError extends boolean = false>(options?: Options<RenewIncomingEmailSubscriptionData, ThrowOnError>) => (options?.client ?? client).post<RenewIncomingEmailSubscriptionResponses, RenewIncomingEmailSubscriptionErrors, ThrowOnError>({ url: '/api/incoming-email/renew', ...options });
 
 /**
  * Delete the incoming email webhook subscription
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `agentTrigger:delete`: Remove agent triggers
  */
 export const deleteIncomingEmailSubscription = <ThrowOnError extends boolean = false>(options?: Options<DeleteIncomingEmailSubscriptionData, ThrowOnError>) => (options?.client ?? client).delete<DeleteIncomingEmailSubscriptionResponses, DeleteIncomingEmailSubscriptionErrors, ThrowOnError>({ url: '/api/incoming-email/subscription', ...options });
 
 /**
  * Get all interactions with pagination and sorting
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `log:read`: View LLM proxy and MCP tool call logs
  */
 export const getInteractions = <ThrowOnError extends boolean = false>(options?: Options<GetInteractionsData, ThrowOnError>) => (options?.client ?? client).get<GetInteractionsResponses, GetInteractionsErrors, ThrowOnError>({ url: '/api/interactions', ...options });
 
 /**
  * Get all interaction sessions grouped by session ID with aggregated stats
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `log:read`: View LLM proxy and MCP tool call logs
  */
 export const getInteractionSessions = <ThrowOnError extends boolean = false>(options?: Options<GetInteractionSessionsData, ThrowOnError>) => (options?.client ?? client).get<GetInteractionSessionsResponses, GetInteractionSessionsErrors, ThrowOnError>({ url: '/api/interactions/sessions', ...options });
 
 /**
  * Get all unique external agent IDs with display names for filtering (from X-Archestra-Agent-Id header)
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `log:read`: View LLM proxy and MCP tool call logs
  */
 export const getUniqueExternalAgentIds = <ThrowOnError extends boolean = false>(options?: Options<GetUniqueExternalAgentIdsData, ThrowOnError>) => (options?.client ?? client).get<GetUniqueExternalAgentIdsResponses, GetUniqueExternalAgentIdsErrors, ThrowOnError>({ url: '/api/interactions/external-agent-ids', ...options });
 
 /**
  * Get all unique user IDs with names for filtering (from X-Archestra-User-Id header)
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `log:read`: View LLM proxy and MCP tool call logs
  */
 export const getUniqueUserIds = <ThrowOnError extends boolean = false>(options?: Options<GetUniqueUserIdsData, ThrowOnError>) => (options?.client ?? client).get<GetUniqueUserIdsResponses, GetUniqueUserIdsErrors, ThrowOnError>({ url: '/api/interactions/user-ids', ...options });
 
 /**
  * Get interaction by ID
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `log:read`: View LLM proxy and MCP tool call logs
  */
 export const getInteraction = <ThrowOnError extends boolean = false>(options: Options<GetInteractionData, ThrowOnError>) => (options.client ?? client).get<GetInteractionResponses, GetInteractionErrors, ThrowOnError>({ url: '/api/interactions/{interactionId}', ...options });
 
 /**
  * Get all Internal MCP catalog items
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `mcpRegistry:read`: Browse the MCP server registry
  */
 export const getInternalMcpCatalog = <ThrowOnError extends boolean = false>(options?: Options<GetInternalMcpCatalogData, ThrowOnError>) => (options?.client ?? client).get<GetInternalMcpCatalogResponses, GetInternalMcpCatalogErrors, ThrowOnError>({ url: '/api/internal_mcp_catalog', ...options });
 
 /**
  * Create a new Internal MCP catalog item
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `mcpRegistry:create`: Add servers to the MCP registry
  */
 export const createInternalMcpCatalogItem = <ThrowOnError extends boolean = false>(options: Options<CreateInternalMcpCatalogItemData, ThrowOnError>) => (options.client ?? client).post<CreateInternalMcpCatalogItemResponses, CreateInternalMcpCatalogItemErrors, ThrowOnError>({
     url: '/api/internal_mcp_catalog',
@@ -1125,16 +2017,40 @@ export const createInternalMcpCatalogItem = <ThrowOnError extends boolean = fals
 
 /**
  * Delete an Internal MCP catalog item
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `mcpRegistry:delete`: Remove servers from the MCP registry
  */
 export const deleteInternalMcpCatalogItem = <ThrowOnError extends boolean = false>(options: Options<DeleteInternalMcpCatalogItemData, ThrowOnError>) => (options.client ?? client).delete<DeleteInternalMcpCatalogItemResponses, DeleteInternalMcpCatalogItemErrors, ThrowOnError>({ url: '/api/internal_mcp_catalog/{id}', ...options });
 
 /**
  * Get Internal MCP catalog item by ID
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `mcpRegistry:read`: Browse the MCP server registry
  */
 export const getInternalMcpCatalogItem = <ThrowOnError extends boolean = false>(options: Options<GetInternalMcpCatalogItemData, ThrowOnError>) => (options.client ?? client).get<GetInternalMcpCatalogItemResponses, GetInternalMcpCatalogItemErrors, ThrowOnError>({ url: '/api/internal_mcp_catalog/{id}', ...options });
 
 /**
  * Update an Internal MCP catalog item
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `mcpRegistry:update`: Modify MCP registry entries
  */
 export const updateInternalMcpCatalogItem = <ThrowOnError extends boolean = false>(options: Options<UpdateInternalMcpCatalogItemData, ThrowOnError>) => (options.client ?? client).put<UpdateInternalMcpCatalogItemResponses, UpdateInternalMcpCatalogItemErrors, ThrowOnError>({
     url: '/api/internal_mcp_catalog/{id}',
@@ -1147,21 +2063,53 @@ export const updateInternalMcpCatalogItem = <ThrowOnError extends boolean = fals
 
 /**
  * Get tools for a catalog item (including builtin Archestra tools)
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `mcpRegistry:read`: Browse the MCP server registry
  */
 export const getInternalMcpCatalogTools = <ThrowOnError extends boolean = false>(options: Options<GetInternalMcpCatalogToolsData, ThrowOnError>) => (options.client ?? client).get<GetInternalMcpCatalogToolsResponses, GetInternalMcpCatalogToolsErrors, ThrowOnError>({ url: '/api/internal_mcp_catalog/{id}/tools', ...options });
 
 /**
  * Delete an Internal MCP catalog item by name
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `mcpRegistry:delete`: Remove servers from the MCP registry
  */
 export const deleteInternalMcpCatalogItemByName = <ThrowOnError extends boolean = false>(options: Options<DeleteInternalMcpCatalogItemByNameData, ThrowOnError>) => (options.client ?? client).delete<DeleteInternalMcpCatalogItemByNameResponses, DeleteInternalMcpCatalogItemByNameErrors, ThrowOnError>({ url: '/api/internal_mcp_catalog/by-name/{name}', ...options });
 
 /**
  * Generate a deployment YAML template preview for a catalog item
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `mcpRegistry:read`: Browse the MCP server registry
  */
 export const getDeploymentYamlPreview = <ThrowOnError extends boolean = false>(options: Options<GetDeploymentYamlPreviewData, ThrowOnError>) => (options.client ?? client).get<GetDeploymentYamlPreviewResponses, GetDeploymentYamlPreviewErrors, ThrowOnError>({ url: '/api/internal_mcp_catalog/{id}/deployment-yaml-preview', ...options });
 
 /**
  * Validate a deployment YAML template
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `mcpRegistry:read`: Browse the MCP server registry
  */
 export const validateDeploymentYaml = <ThrowOnError extends boolean = false>(options: Options<ValidateDeploymentYamlData, ThrowOnError>) => (options.client ?? client).post<ValidateDeploymentYamlResponses, ValidateDeploymentYamlErrors, ThrowOnError>({
     url: '/api/internal_mcp_catalog/validate-deployment-yaml',
@@ -1174,36 +2122,92 @@ export const validateDeploymentYaml = <ThrowOnError extends boolean = false>(opt
 
 /**
  * Reset the deployment YAML to default by clearing the custom YAML
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `mcpRegistry:update`: Modify MCP registry entries
  */
 export const resetDeploymentYaml = <ThrowOnError extends boolean = false>(options: Options<ResetDeploymentYamlData, ThrowOnError>) => (options.client ?? client).post<ResetDeploymentYamlResponses, ResetDeploymentYamlErrors, ThrowOnError>({ url: '/api/internal_mcp_catalog/{id}/reset-deployment-yaml', ...options });
 
 /**
  * List Kubernetes docker-registry secrets available for imagePullSecrets
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `mcpRegistry:read`: Browse the MCP server registry
  */
 export const getK8sImagePullSecrets = <ThrowOnError extends boolean = false>(options?: Options<GetK8sImagePullSecretsData, ThrowOnError>) => (options?.client ?? client).get<GetK8sImagePullSecretsResponses, GetK8sImagePullSecretsErrors, ThrowOnError>({ url: '/api/k8s/image-pull-secrets', ...options });
 
 /**
  * Get all label keys used by catalog items
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `mcpRegistry:read`: Browse the MCP server registry
  */
 export const getInternalMcpCatalogLabelKeys = <ThrowOnError extends boolean = false>(options?: Options<GetInternalMcpCatalogLabelKeysData, ThrowOnError>) => (options?.client ?? client).get<GetInternalMcpCatalogLabelKeysResponses, GetInternalMcpCatalogLabelKeysErrors, ThrowOnError>({ url: '/api/internal_mcp_catalog/labels/keys', ...options });
 
 /**
  * Get all label values for catalog items
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `mcpRegistry:read`: Browse the MCP server registry
  */
 export const getInternalMcpCatalogLabelValues = <ThrowOnError extends boolean = false>(options?: Options<GetInternalMcpCatalogLabelValuesData, ThrowOnError>) => (options?.client ?? client).get<GetInternalMcpCatalogLabelValuesResponses, GetInternalMcpCatalogLabelValuesErrors, ThrowOnError>({ url: '/api/internal_mcp_catalog/labels/values', ...options });
 
 /**
  * Check if an invitation is valid and whether the user exists
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * None (no additional RBAC permission required)
  */
 export const checkInvitation = <ThrowOnError extends boolean = false>(options: Options<CheckInvitationData, ThrowOnError>) => (options.client ?? client).get<CheckInvitationResponses, CheckInvitationErrors, ThrowOnError>({ url: '/api/invitation/{id}/check', ...options });
 
 /**
  * List all knowledge bases for the organization
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `knowledgeBase:read`: View knowledge bases and connectors
  */
 export const getKnowledgeBases = <ThrowOnError extends boolean = false>(options?: Options<GetKnowledgeBasesData, ThrowOnError>) => (options?.client ?? client).get<GetKnowledgeBasesResponses, GetKnowledgeBasesErrors, ThrowOnError>({ url: '/api/knowledge-bases', ...options });
 
 /**
  * Create a new knowledge base
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `knowledgeBase:create`: Create knowledge bases and connectors
  */
 export const createKnowledgeBase = <ThrowOnError extends boolean = false>(options: Options<CreateKnowledgeBaseData, ThrowOnError>) => (options.client ?? client).post<CreateKnowledgeBaseResponses, CreateKnowledgeBaseErrors, ThrowOnError>({
     url: '/api/knowledge-bases',
@@ -1216,16 +2220,40 @@ export const createKnowledgeBase = <ThrowOnError extends boolean = false>(option
 
 /**
  * Delete a knowledge base and all its connectors
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `knowledgeBase:delete`: Delete knowledge bases and connectors
  */
 export const deleteKnowledgeBase = <ThrowOnError extends boolean = false>(options: Options<DeleteKnowledgeBaseData, ThrowOnError>) => (options.client ?? client).delete<DeleteKnowledgeBaseResponses, DeleteKnowledgeBaseErrors, ThrowOnError>({ url: '/api/knowledge-bases/{id}', ...options });
 
 /**
  * Get a knowledge base by ID
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `knowledgeBase:read`: View knowledge bases and connectors
  */
 export const getKnowledgeBase = <ThrowOnError extends boolean = false>(options: Options<GetKnowledgeBaseData, ThrowOnError>) => (options.client ?? client).get<GetKnowledgeBaseResponses, GetKnowledgeBaseErrors, ThrowOnError>({ url: '/api/knowledge-bases/{id}', ...options });
 
 /**
  * Update a knowledge base
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `knowledgeBase:update`: Modify knowledge bases and connectors
  */
 export const updateKnowledgeBase = <ThrowOnError extends boolean = false>(options: Options<UpdateKnowledgeBaseData, ThrowOnError>) => (options.client ?? client).put<UpdateKnowledgeBaseResponses, UpdateKnowledgeBaseErrors, ThrowOnError>({
     url: '/api/knowledge-bases/{id}',
@@ -1238,16 +2266,40 @@ export const updateKnowledgeBase = <ThrowOnError extends boolean = false>(option
 
 /**
  * Check the health of a knowledge base
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `knowledgeBase:read`: View knowledge bases and connectors
  */
 export const getKnowledgeBaseHealth = <ThrowOnError extends boolean = false>(options: Options<GetKnowledgeBaseHealthData, ThrowOnError>) => (options.client ?? client).get<GetKnowledgeBaseHealthResponses, GetKnowledgeBaseHealthErrors, ThrowOnError>({ url: '/api/knowledge-bases/{id}/health', ...options });
 
 /**
  * List all connectors for the organization
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `knowledgeBase:read`: View knowledge bases and connectors
  */
 export const getConnectors = <ThrowOnError extends boolean = false>(options?: Options<GetConnectorsData, ThrowOnError>) => (options?.client ?? client).get<GetConnectorsResponses, GetConnectorsErrors, ThrowOnError>({ url: '/api/connectors', ...options });
 
 /**
  * Create a new connector
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `knowledgeBase:create`: Create knowledge bases and connectors
  */
 export const createConnector = <ThrowOnError extends boolean = false>(options: Options<CreateConnectorData, ThrowOnError>) => (options.client ?? client).post<CreateConnectorResponses, CreateConnectorErrors, ThrowOnError>({
     url: '/api/connectors',
@@ -1260,16 +2312,40 @@ export const createConnector = <ThrowOnError extends boolean = false>(options: O
 
 /**
  * Delete a connector
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `knowledgeBase:delete`: Delete knowledge bases and connectors
  */
 export const deleteConnector = <ThrowOnError extends boolean = false>(options: Options<DeleteConnectorData, ThrowOnError>) => (options.client ?? client).delete<DeleteConnectorResponses, DeleteConnectorErrors, ThrowOnError>({ url: '/api/connectors/{id}', ...options });
 
 /**
  * Get a connector by ID
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `knowledgeBase:read`: View knowledge bases and connectors
  */
 export const getConnector = <ThrowOnError extends boolean = false>(options: Options<GetConnectorData, ThrowOnError>) => (options.client ?? client).get<GetConnectorResponses, GetConnectorErrors, ThrowOnError>({ url: '/api/connectors/{id}', ...options });
 
 /**
  * Update a connector
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `knowledgeBase:update`: Modify knowledge bases and connectors
  */
 export const updateConnector = <ThrowOnError extends boolean = false>(options: Options<UpdateConnectorData, ThrowOnError>) => (options.client ?? client).put<UpdateConnectorResponses, UpdateConnectorErrors, ThrowOnError>({
     url: '/api/connectors/{id}',
@@ -1282,26 +2358,66 @@ export const updateConnector = <ThrowOnError extends boolean = false>(options: O
 
 /**
  * Manually trigger a connector sync
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `knowledgeBase:update`: Modify knowledge bases and connectors
  */
 export const syncConnector = <ThrowOnError extends boolean = false>(options: Options<SyncConnectorData, ThrowOnError>) => (options.client ?? client).post<SyncConnectorResponses, SyncConnectorErrors, ThrowOnError>({ url: '/api/connectors/{id}/sync', ...options });
 
 /**
  * Force a full re-sync: deletes all documents, chunks, run history, and resets the checkpoint
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `knowledgeBase:update`: Modify knowledge bases and connectors
  */
 export const forceResyncConnector = <ThrowOnError extends boolean = false>(options: Options<ForceResyncConnectorData, ThrowOnError>) => (options.client ?? client).post<ForceResyncConnectorResponses, ForceResyncConnectorErrors, ThrowOnError>({ url: '/api/connectors/{id}/force-resync', ...options });
 
 /**
  * Test a connector connection
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `knowledgeBase:read`: View knowledge bases and connectors
  */
 export const testConnectorConnection = <ThrowOnError extends boolean = false>(options: Options<TestConnectorConnectionData, ThrowOnError>) => (options.client ?? client).post<TestConnectorConnectionResponses, TestConnectorConnectionErrors, ThrowOnError>({ url: '/api/connectors/{id}/test', ...options });
 
 /**
  * List knowledge bases assigned to a connector
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `knowledgeBase:read`: View knowledge bases and connectors
  */
 export const getConnectorKnowledgeBases = <ThrowOnError extends boolean = false>(options: Options<GetConnectorKnowledgeBasesData, ThrowOnError>) => (options.client ?? client).get<GetConnectorKnowledgeBasesResponses, GetConnectorKnowledgeBasesErrors, ThrowOnError>({ url: '/api/connectors/{id}/knowledge-bases', ...options });
 
 /**
  * Assign a connector to one or more knowledge bases
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `knowledgeBase:update`: Modify knowledge bases and connectors
  */
 export const assignConnectorToKnowledgeBases = <ThrowOnError extends boolean = false>(options: Options<AssignConnectorToKnowledgeBasesData, ThrowOnError>) => (options.client ?? client).post<AssignConnectorToKnowledgeBasesResponses, AssignConnectorToKnowledgeBasesErrors, ThrowOnError>({
     url: '/api/connectors/{id}/knowledge-bases',
@@ -1314,26 +2430,66 @@ export const assignConnectorToKnowledgeBases = <ThrowOnError extends boolean = f
 
 /**
  * Unassign a connector from a knowledge base
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `knowledgeBase:update`: Modify knowledge bases and connectors
  */
 export const unassignConnectorFromKnowledgeBase = <ThrowOnError extends boolean = false>(options: Options<UnassignConnectorFromKnowledgeBaseData, ThrowOnError>) => (options.client ?? client).delete<UnassignConnectorFromKnowledgeBaseResponses, UnassignConnectorFromKnowledgeBaseErrors, ThrowOnError>({ url: '/api/connectors/{id}/knowledge-bases/{kbId}', ...options });
 
 /**
  * List connector runs
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `knowledgeBase:read`: View knowledge bases and connectors
  */
 export const getConnectorRuns = <ThrowOnError extends boolean = false>(options: Options<GetConnectorRunsData, ThrowOnError>) => (options.client ?? client).get<GetConnectorRunsResponses, GetConnectorRunsErrors, ThrowOnError>({ url: '/api/connectors/{id}/runs', ...options });
 
 /**
  * Get a single connector run (including logs)
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `knowledgeBase:read`: View knowledge bases and connectors
  */
 export const getConnectorRun = <ThrowOnError extends boolean = false>(options: Options<GetConnectorRunData, ThrowOnError>) => (options.client ?? client).get<GetConnectorRunResponses, GetConnectorRunErrors, ThrowOnError>({ url: '/api/connectors/{id}/runs/{runId}', ...options });
 
 /**
  * Get all limits with optional filtering and per-model usage breakdown
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `llmLimit:read`: View token usage limits
  */
 export const getLimits = <ThrowOnError extends boolean = false>(options?: Options<GetLimitsData, ThrowOnError>) => (options?.client ?? client).get<GetLimitsResponses, GetLimitsErrors, ThrowOnError>({ url: '/api/limits', ...options });
 
 /**
  * Create a new limit
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `llmLimit:create`: Create new usage limits
  */
 export const createLimit = <ThrowOnError extends boolean = false>(options: Options<CreateLimitData, ThrowOnError>) => (options.client ?? client).post<CreateLimitResponses, CreateLimitErrors, ThrowOnError>({
     url: '/api/limits',
@@ -1346,16 +2502,40 @@ export const createLimit = <ThrowOnError extends boolean = false>(options: Optio
 
 /**
  * Delete a limit
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `llmLimit:delete`: Remove usage limits
  */
 export const deleteLimit = <ThrowOnError extends boolean = false>(options: Options<DeleteLimitData, ThrowOnError>) => (options.client ?? client).delete<DeleteLimitResponses, DeleteLimitErrors, ThrowOnError>({ url: '/api/limits/{id}', ...options });
 
 /**
  * Get a limit by ID
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `llmLimit:read`: View token usage limits
  */
 export const getLimit = <ThrowOnError extends boolean = false>(options: Options<GetLimitData, ThrowOnError>) => (options.client ?? client).get<GetLimitResponses, GetLimitErrors, ThrowOnError>({ url: '/api/limits/{id}', ...options });
 
 /**
  * Update a limit
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `llmLimit:update`: Modify existing usage limits
  */
 export const updateLimit = <ThrowOnError extends boolean = false>(options: Options<UpdateLimitData, ThrowOnError>) => (options.client ?? client).patch<UpdateLimitResponses, UpdateLimitErrors, ThrowOnError>({
     url: '/api/limits/{id}',
@@ -1379,11 +2559,27 @@ export const postV1McpByProfileId = <ThrowOnError extends boolean = false>(optio
 
 /**
  * Get all MCP server installation requests
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `mcpServerInstallationRequest:read`: View MCP server installation requests
  */
 export const getMcpServerInstallationRequests = <ThrowOnError extends boolean = false>(options?: Options<GetMcpServerInstallationRequestsData, ThrowOnError>) => (options?.client ?? client).get<GetMcpServerInstallationRequestsResponses, GetMcpServerInstallationRequestsErrors, ThrowOnError>({ url: '/api/mcp_server_installation_requests', ...options });
 
 /**
  * Create a new MCP server installation request
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `mcpServerInstallationRequest:create`: Submit requests to install MCP servers
  */
 export const createMcpServerInstallationRequest = <ThrowOnError extends boolean = false>(options: Options<CreateMcpServerInstallationRequestData, ThrowOnError>) => (options.client ?? client).post<CreateMcpServerInstallationRequestResponses, CreateMcpServerInstallationRequestErrors, ThrowOnError>({
     url: '/api/mcp_server_installation_requests',
@@ -1396,16 +2592,40 @@ export const createMcpServerInstallationRequest = <ThrowOnError extends boolean 
 
 /**
  * Delete an MCP server installation request
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `mcpServerInstallationRequest:delete`: Delete installation requests
  */
 export const deleteMcpServerInstallationRequest = <ThrowOnError extends boolean = false>(options: Options<DeleteMcpServerInstallationRequestData, ThrowOnError>) => (options.client ?? client).delete<DeleteMcpServerInstallationRequestResponses, DeleteMcpServerInstallationRequestErrors, ThrowOnError>({ url: '/api/mcp_server_installation_requests/{id}', ...options });
 
 /**
  * Get an MCP server installation request by ID
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `mcpServerInstallationRequest:read`: View MCP server installation requests
  */
 export const getMcpServerInstallationRequest = <ThrowOnError extends boolean = false>(options: Options<GetMcpServerInstallationRequestData, ThrowOnError>) => (options.client ?? client).get<GetMcpServerInstallationRequestResponses, GetMcpServerInstallationRequestErrors, ThrowOnError>({ url: '/api/mcp_server_installation_requests/{id}', ...options });
 
 /**
  * Update an MCP server installation request
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `mcpServerInstallationRequest:update`: Add notes to installation requests
  */
 export const updateMcpServerInstallationRequest = <ThrowOnError extends boolean = false>(options: Options<UpdateMcpServerInstallationRequestData, ThrowOnError>) => (options.client ?? client).patch<UpdateMcpServerInstallationRequestResponses, UpdateMcpServerInstallationRequestErrors, ThrowOnError>({
     url: '/api/mcp_server_installation_requests/{id}',
@@ -1418,6 +2638,14 @@ export const updateMcpServerInstallationRequest = <ThrowOnError extends boolean 
 
 /**
  * Approve an MCP server installation request
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `mcpServerInstallationRequest:admin`: Approve or decline installation requests
  */
 export const approveMcpServerInstallationRequest = <ThrowOnError extends boolean = false>(options: Options<ApproveMcpServerInstallationRequestData, ThrowOnError>) => (options.client ?? client).post<ApproveMcpServerInstallationRequestResponses, ApproveMcpServerInstallationRequestErrors, ThrowOnError>({
     url: '/api/mcp_server_installation_requests/{id}/approve',
@@ -1430,6 +2658,14 @@ export const approveMcpServerInstallationRequest = <ThrowOnError extends boolean
 
 /**
  * Decline an MCP server installation request
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `mcpServerInstallationRequest:admin`: Approve or decline installation requests
  */
 export const declineMcpServerInstallationRequest = <ThrowOnError extends boolean = false>(options: Options<DeclineMcpServerInstallationRequestData, ThrowOnError>) => (options.client ?? client).post<DeclineMcpServerInstallationRequestResponses, DeclineMcpServerInstallationRequestErrors, ThrowOnError>({
     url: '/api/mcp_server_installation_requests/{id}/decline',
@@ -1442,6 +2678,14 @@ export const declineMcpServerInstallationRequest = <ThrowOnError extends boolean
 
 /**
  * Add a note to an MCP server installation request
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `mcpServerInstallationRequest:update`: Add notes to installation requests
  */
 export const addMcpServerInstallationRequestNote = <ThrowOnError extends boolean = false>(options: Options<AddMcpServerInstallationRequestNoteData, ThrowOnError>) => (options.client ?? client).post<AddMcpServerInstallationRequestNoteResponses, AddMcpServerInstallationRequestNoteErrors, ThrowOnError>({
     url: '/api/mcp_server_installation_requests/{id}/notes',
@@ -1454,11 +2698,27 @@ export const addMcpServerInstallationRequestNote = <ThrowOnError extends boolean
 
 /**
  * Get all installed MCP servers
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `mcpServerInstallation:read`: View installed MCP servers and their status
  */
 export const getMcpServers = <ThrowOnError extends boolean = false>(options?: Options<GetMcpServersData, ThrowOnError>) => (options?.client ?? client).get<GetMcpServersResponses, GetMcpServersErrors, ThrowOnError>({ url: '/api/mcp_server', ...options });
 
 /**
  * Install an MCP server (from catalog or custom)
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `mcpServerInstallation:create`: Install MCP servers from the registry
  */
 export const installMcpServer = <ThrowOnError extends boolean = false>(options: Options<InstallMcpServerData, ThrowOnError>) => (options.client ?? client).post<InstallMcpServerResponses, InstallMcpServerErrors, ThrowOnError>({
     url: '/api/mcp_server',
@@ -1471,16 +2731,40 @@ export const installMcpServer = <ThrowOnError extends boolean = false>(options: 
 
 /**
  * Delete/uninstall an MCP server
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `mcpServerInstallation:delete`: Uninstall MCP servers
  */
 export const deleteMcpServer = <ThrowOnError extends boolean = false>(options: Options<DeleteMcpServerData, ThrowOnError>) => (options.client ?? client).delete<DeleteMcpServerResponses, DeleteMcpServerErrors, ThrowOnError>({ url: '/api/mcp_server/{id}', ...options });
 
 /**
  * Get MCP server by ID
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `mcpServerInstallation:read`: View installed MCP servers and their status
  */
 export const getMcpServer = <ThrowOnError extends boolean = false>(options: Options<GetMcpServerData, ThrowOnError>) => (options.client ?? client).get<GetMcpServerResponses, GetMcpServerErrors, ThrowOnError>({ url: '/api/mcp_server/{id}', ...options });
 
 /**
  * Update MCP server secret after re-authentication (clears OAuth refresh errors)
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `mcpServerInstallation:update`: Modify installed MCP server configuration
  */
 export const reauthenticateMcpServer = <ThrowOnError extends boolean = false>(options: Options<ReauthenticateMcpServerData, ThrowOnError>) => (options.client ?? client).patch<ReauthenticateMcpServerResponses, ReauthenticateMcpServerErrors, ThrowOnError>({
     url: '/api/mcp_server/{id}/reauthenticate',
@@ -1493,16 +2777,40 @@ export const reauthenticateMcpServer = <ThrowOnError extends boolean = false>(op
 
 /**
  * Get the installation status of an MCP server (for polling during local server installation)
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `mcpServerInstallation:read`: View installed MCP servers and their status
  */
 export const getMcpServerInstallationStatus = <ThrowOnError extends boolean = false>(options: Options<GetMcpServerInstallationStatusData, ThrowOnError>) => (options.client ?? client).get<GetMcpServerInstallationStatusResponses, GetMcpServerInstallationStatusErrors, ThrowOnError>({ url: '/api/mcp_server/{id}/installation-status', ...options });
 
 /**
  * Get all tools for an MCP server
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `mcpServerInstallation:read`: View installed MCP servers and their status
  */
 export const getMcpServerTools = <ThrowOnError extends boolean = false>(options: Options<GetMcpServerToolsData, ThrowOnError>) => (options.client ?? client).get<GetMcpServerToolsResponses, GetMcpServerToolsErrors, ThrowOnError>({ url: '/api/mcp_server/{id}/tools', ...options });
 
 /**
  * Inspect a running MCP server (list tools or call a tool)
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `mcpServerInstallation:read`: View installed MCP servers and their status
  */
 export const inspectMcpServer = <ThrowOnError extends boolean = false>(options: Options<InspectMcpServerData, ThrowOnError>) => (options.client ?? client).post<InspectMcpServerResponses, InspectMcpServerErrors, ThrowOnError>({
     url: '/api/mcp_server/{id}/inspect',
@@ -1515,6 +2823,14 @@ export const inspectMcpServer = <ThrowOnError extends boolean = false>(options: 
 
 /**
  * Reinstall an MCP server without losing tool assignments and policies
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `mcpServerInstallation:update`: Modify installed MCP server configuration
  */
 export const reinstallMcpServer = <ThrowOnError extends boolean = false>(options: Options<ReinstallMcpServerData, ThrowOnError>) => (options.client ?? client).post<ReinstallMcpServerResponses, ReinstallMcpServerErrors, ThrowOnError>({
     url: '/api/mcp_server/{id}/reinstall',
@@ -1527,21 +2843,49 @@ export const reinstallMcpServer = <ThrowOnError extends boolean = false>(options
 
 /**
  * Get all MCP tool calls with pagination and sorting
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `log:read`: View LLM proxy and MCP tool call logs
  */
 export const getMcpToolCalls = <ThrowOnError extends boolean = false>(options?: Options<GetMcpToolCallsData, ThrowOnError>) => (options?.client ?? client).get<GetMcpToolCallsResponses, GetMcpToolCallsErrors, ThrowOnError>({ url: '/api/mcp-tool-calls', ...options });
 
 /**
  * Get MCP tool call by ID
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `log:read`: View LLM proxy and MCP tool call logs
  */
 export const getMcpToolCall = <ThrowOnError extends boolean = false>(options: Options<GetMcpToolCallData, ThrowOnError>) => (options.client ?? client).get<GetMcpToolCallResponses, GetMcpToolCallErrors, ThrowOnError>({ url: '/api/mcp-tool-calls/{mcpToolCallId}', ...options });
 
 /**
  * Get all members of the organization with pagination and optional filters
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `member:read`: View organization members and their roles
  */
 export const getMembers = <ThrowOnError extends boolean = false>(options?: Options<GetMembersData, ThrowOnError>) => (options?.client ?? client).get<GetMembersResponses, GetMembersErrors, ThrowOnError>({ url: '/api/members', ...options });
 
 /**
  * Create a chat completion with MiniMax (uses default agent)
+ *
+ * Authentication:
+ *
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
  */
 export const minimaxChatCompletionsWithDefaultAgent = <ThrowOnError extends boolean = false>(options: Options<MinimaxChatCompletionsWithDefaultAgentData, ThrowOnError>) => (options.client ?? client).post<MinimaxChatCompletionsWithDefaultAgentResponses, MinimaxChatCompletionsWithDefaultAgentErrors, ThrowOnError>({
     url: '/v1/minimax/chat/completions',
@@ -1554,6 +2898,10 @@ export const minimaxChatCompletionsWithDefaultAgent = <ThrowOnError extends bool
 
 /**
  * Create a chat completion with MiniMax for a specific agent
+ *
+ * Authentication:
+ *
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
  */
 export const minimaxChatCompletionsWithAgent = <ThrowOnError extends boolean = false>(options: Options<MinimaxChatCompletionsWithAgentData, ThrowOnError>) => (options.client ?? client).post<MinimaxChatCompletionsWithAgentResponses, MinimaxChatCompletionsWithAgentErrors, ThrowOnError>({
     url: '/v1/minimax/{agentId}/chat/completions',
@@ -1566,6 +2914,10 @@ export const minimaxChatCompletionsWithAgent = <ThrowOnError extends boolean = f
 
 /**
  * Create a chat completion with Mistral (uses default agent)
+ *
+ * Authentication:
+ *
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
  */
 export const mistralChatCompletionsWithDefaultAgent = <ThrowOnError extends boolean = false>(options: Options<MistralChatCompletionsWithDefaultAgentData, ThrowOnError>) => (options.client ?? client).post<MistralChatCompletionsWithDefaultAgentResponses, MistralChatCompletionsWithDefaultAgentErrors, ThrowOnError>({
     url: '/v1/mistral/chat/completions',
@@ -1578,6 +2930,10 @@ export const mistralChatCompletionsWithDefaultAgent = <ThrowOnError extends bool
 
 /**
  * Create a chat completion with Mistral for a specific agent
+ *
+ * Authentication:
+ *
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
  */
 export const mistralChatCompletionsWithAgent = <ThrowOnError extends boolean = false>(options: Options<MistralChatCompletionsWithAgentData, ThrowOnError>) => (options.client ?? client).post<MistralChatCompletionsWithAgentResponses, MistralChatCompletionsWithAgentErrors, ThrowOnError>({
     url: '/v1/mistral/{agentId}/chat/completions',
@@ -1590,6 +2946,14 @@ export const mistralChatCompletionsWithAgent = <ThrowOnError extends boolean = f
 
 /**
  * Initiate OAuth flow for MCP server installation
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `mcpServerInstallation:create`: Install MCP servers from the registry
  */
 export const initiateOAuth = <ThrowOnError extends boolean = false>(options: Options<InitiateOAuthData, ThrowOnError>) => (options.client ?? client).post<InitiateOAuthResponses, InitiateOAuthErrors, ThrowOnError>({
     url: '/api/oauth/initiate',
@@ -1602,6 +2966,14 @@ export const initiateOAuth = <ThrowOnError extends boolean = false>(options: Opt
 
 /**
  * Handle OAuth callback and exchange code for tokens
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `mcpServerInstallation:create`: Install MCP servers from the registry
  */
 export const handleOAuthCallback = <ThrowOnError extends boolean = false>(options: Options<HandleOAuthCallbackData, ThrowOnError>) => (options.client ?? client).post<HandleOAuthCallbackResponses, HandleOAuthCallbackErrors, ThrowOnError>({
     url: '/api/oauth/callback',
@@ -1618,6 +2990,10 @@ export const getWellKnownOauthAuthorizationServer = <ThrowOnError extends boolea
 
 /**
  * Create a chat completion with Ollama (uses default agent)
+ *
+ * Authentication:
+ *
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
  */
 export const ollamaChatCompletionsWithDefaultAgent = <ThrowOnError extends boolean = false>(options: Options<OllamaChatCompletionsWithDefaultAgentData, ThrowOnError>) => (options.client ?? client).post<OllamaChatCompletionsWithDefaultAgentResponses, OllamaChatCompletionsWithDefaultAgentErrors, ThrowOnError>({
     url: '/v1/ollama/chat/completions',
@@ -1630,6 +3006,10 @@ export const ollamaChatCompletionsWithDefaultAgent = <ThrowOnError extends boole
 
 /**
  * Create a chat completion with Ollama for a specific agent
+ *
+ * Authentication:
+ *
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
  */
 export const ollamaChatCompletionsWithAgent = <ThrowOnError extends boolean = false>(options: Options<OllamaChatCompletionsWithAgentData, ThrowOnError>) => (options.client ?? client).post<OllamaChatCompletionsWithAgentResponses, OllamaChatCompletionsWithAgentErrors, ThrowOnError>({
     url: '/v1/ollama/{agentId}/chat/completions',
@@ -1642,6 +3022,10 @@ export const ollamaChatCompletionsWithAgent = <ThrowOnError extends boolean = fa
 
 /**
  * Create a chat completion with OpenAI (uses default agent)
+ *
+ * Authentication:
+ *
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
  */
 export const openAiChatCompletionsWithDefaultAgent = <ThrowOnError extends boolean = false>(options: Options<OpenAiChatCompletionsWithDefaultAgentData, ThrowOnError>) => (options.client ?? client).post<OpenAiChatCompletionsWithDefaultAgentResponses, OpenAiChatCompletionsWithDefaultAgentErrors, ThrowOnError>({
     url: '/v1/openai/chat/completions',
@@ -1654,6 +3038,10 @@ export const openAiChatCompletionsWithDefaultAgent = <ThrowOnError extends boole
 
 /**
  * Create a chat completion with OpenAI for a specific agent
+ *
+ * Authentication:
+ *
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
  */
 export const openAiChatCompletionsWithAgent = <ThrowOnError extends boolean = false>(options: Options<OpenAiChatCompletionsWithAgentData, ThrowOnError>) => (options.client ?? client).post<OpenAiChatCompletionsWithAgentResponses, OpenAiChatCompletionsWithAgentErrors, ThrowOnError>({
     url: '/v1/openai/{agentId}/chat/completions',
@@ -1666,6 +3054,10 @@ export const openAiChatCompletionsWithAgent = <ThrowOnError extends boolean = fa
 
 /**
  * Create a chat completion with OpenRouter (uses default agent)
+ *
+ * Authentication:
+ *
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
  */
 export const openrouterChatCompletionsWithDefaultAgent = <ThrowOnError extends boolean = false>(options: Options<OpenrouterChatCompletionsWithDefaultAgentData, ThrowOnError>) => (options.client ?? client).post<OpenrouterChatCompletionsWithDefaultAgentResponses, OpenrouterChatCompletionsWithDefaultAgentErrors, ThrowOnError>({
     url: '/v1/openrouter/chat/completions',
@@ -1678,6 +3070,10 @@ export const openrouterChatCompletionsWithDefaultAgent = <ThrowOnError extends b
 
 /**
  * Create a chat completion with OpenRouter for a specific agent
+ *
+ * Authentication:
+ *
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
  */
 export const openrouterChatCompletionsWithAgent = <ThrowOnError extends boolean = false>(options: Options<OpenrouterChatCompletionsWithAgentData, ThrowOnError>) => (options.client ?? client).post<OpenrouterChatCompletionsWithAgentResponses, OpenrouterChatCompletionsWithAgentErrors, ThrowOnError>({
     url: '/v1/openrouter/{agentId}/chat/completions',
@@ -1690,11 +3086,27 @@ export const openrouterChatCompletionsWithAgent = <ThrowOnError extends boolean 
 
 /**
  * Get all optimization rules for the organization
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `optimizationRule:read`: View optimization rules
  */
 export const getOptimizationRules = <ThrowOnError extends boolean = false>(options?: Options<GetOptimizationRulesData, ThrowOnError>) => (options?.client ?? client).get<GetOptimizationRulesResponses, GetOptimizationRulesErrors, ThrowOnError>({ url: '/api/optimization-rules', ...options });
 
 /**
  * Create a new optimization rule for the organization
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `optimizationRule:create`: Create new optimization rules
  */
 export const createOptimizationRule = <ThrowOnError extends boolean = false>(options: Options<CreateOptimizationRuleData, ThrowOnError>) => (options.client ?? client).post<CreateOptimizationRuleResponses, CreateOptimizationRuleErrors, ThrowOnError>({
     url: '/api/optimization-rules',
@@ -1707,11 +3119,27 @@ export const createOptimizationRule = <ThrowOnError extends boolean = false>(opt
 
 /**
  * Delete an optimization rule
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `optimizationRule:delete`: Remove optimization rules
  */
 export const deleteOptimizationRule = <ThrowOnError extends boolean = false>(options: Options<DeleteOptimizationRuleData, ThrowOnError>) => (options.client ?? client).delete<DeleteOptimizationRuleResponses, DeleteOptimizationRuleErrors, ThrowOnError>({ url: '/api/optimization-rules/{id}', ...options });
 
 /**
  * Update an optimization rule
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `optimizationRule:update`: Modify optimization rules
  */
 export const updateOptimizationRule = <ThrowOnError extends boolean = false>(options: Options<UpdateOptimizationRuleData, ThrowOnError>) => (options.client ?? client).put<UpdateOptimizationRuleResponses, UpdateOptimizationRuleErrors, ThrowOnError>({
     url: '/api/optimization-rules/{id}',
@@ -1724,11 +3152,27 @@ export const updateOptimizationRule = <ThrowOnError extends boolean = false>(opt
 
 /**
  * Get all roles in the organization
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `ac:read`: View custom roles and their permissions
  */
 export const getRoles = <ThrowOnError extends boolean = false>(options?: Options<GetRolesData, ThrowOnError>) => (options?.client ?? client).get<GetRolesResponses, GetRolesErrors, ThrowOnError>({ url: '/api/roles', ...options });
 
 /**
  * Create a new custom role
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `ac:create`: Create new custom roles
  */
 export const createRole = <ThrowOnError extends boolean = false>(options: Options<CreateRoleData, ThrowOnError>) => (options.client ?? client).post<CreateRoleResponses, CreateRoleErrors, ThrowOnError>({
     url: '/api/roles',
@@ -1741,16 +3185,40 @@ export const createRole = <ThrowOnError extends boolean = false>(options: Option
 
 /**
  * Delete a custom role
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `ac:delete`: Delete custom roles
  */
 export const deleteRole = <ThrowOnError extends boolean = false>(options: Options<DeleteRoleData, ThrowOnError>) => (options.client ?? client).delete<DeleteRoleResponses, DeleteRoleErrors, ThrowOnError>({ url: '/api/roles/{roleId}', ...options });
 
 /**
  * Get a specific role by ID
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `ac:read`: View custom roles and their permissions
  */
 export const getRole = <ThrowOnError extends boolean = false>(options: Options<GetRoleData, ThrowOnError>) => (options.client ?? client).get<GetRoleResponses, GetRoleErrors, ThrowOnError>({ url: '/api/roles/{roleId}', ...options });
 
 /**
  * Update a custom role
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `ac:update`: Modify custom role permissions
  */
 export const updateRole = <ThrowOnError extends boolean = false>(options: Options<UpdateRoleData, ThrowOnError>) => (options.client ?? client).put<UpdateRoleResponses, UpdateRoleErrors, ThrowOnError>({
     url: '/api/roles/{roleId}',
@@ -1763,16 +3231,40 @@ export const updateRole = <ThrowOnError extends boolean = false>(options: Option
 
 /**
  * Get organization details
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * None (no additional RBAC permission required)
  */
 export const getOrganization = <ThrowOnError extends boolean = false>(options?: Options<GetOrganizationData, ThrowOnError>) => (options?.client ?? client).get<GetOrganizationResponses, GetOrganizationErrors, ThrowOnError>({ url: '/api/organization', ...options });
 
 /**
  * Get organization appearance settings
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * None (no additional RBAC permission required)
  */
 export const getAppearanceSettings = <ThrowOnError extends boolean = false>(options?: Options<GetAppearanceSettingsData, ThrowOnError>) => (options?.client ?? client).get<GetAppearanceSettingsResponses, GetAppearanceSettingsErrors, ThrowOnError>({ url: '/api/organization/appearance-settings', ...options });
 
 /**
  * Update appearance settings
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `organizationSettings:update`: Customize organization appearance, authentication, etc
  */
 export const updateAppearanceSettings = <ThrowOnError extends boolean = false>(options: Options<UpdateAppearanceSettingsData, ThrowOnError>) => (options.client ?? client).patch<UpdateAppearanceSettingsResponses, UpdateAppearanceSettingsErrors, ThrowOnError>({
     url: '/api/organization/appearance-settings',
@@ -1785,6 +3277,14 @@ export const updateAppearanceSettings = <ThrowOnError extends boolean = false>(o
 
 /**
  * Update security settings (global tool policy, chat file uploads)
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `agentSettings:update`: Modify agent settings (default model, default agent, security engine, file uploads)
  */
 export const updateSecuritySettings = <ThrowOnError extends boolean = false>(options: Options<UpdateSecuritySettingsData, ThrowOnError>) => (options.client ?? client).patch<UpdateSecuritySettingsResponses, UpdateSecuritySettingsErrors, ThrowOnError>({
     url: '/api/organization/security-settings',
@@ -1797,6 +3297,14 @@ export const updateSecuritySettings = <ThrowOnError extends boolean = false>(opt
 
 /**
  * Update LLM settings (TOON compression, compression scope, limit cleanup interval)
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `llmSettings:update`: Modify LLM settings
  */
 export const updateLlmSettings = <ThrowOnError extends boolean = false>(options: Options<UpdateLlmSettingsData, ThrowOnError>) => (options.client ?? client).patch<UpdateLlmSettingsResponses, UpdateLlmSettingsErrors, ThrowOnError>({
     url: '/api/organization/llm-settings',
@@ -1809,6 +3317,14 @@ export const updateLlmSettings = <ThrowOnError extends boolean = false>(options:
 
 /**
  * Update agent settings (default model, default agent)
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `agentSettings:update`: Modify agent settings (default model, default agent, security engine, file uploads)
  */
 export const updateAgentSettings = <ThrowOnError extends boolean = false>(options: Options<UpdateAgentSettingsData, ThrowOnError>) => (options.client ?? client).patch<UpdateAgentSettingsResponses, UpdateAgentSettingsErrors, ThrowOnError>({
     url: '/api/organization/agent-settings',
@@ -1821,6 +3337,14 @@ export const updateAgentSettings = <ThrowOnError extends boolean = false>(option
 
 /**
  * Update knowledge settings (embedding model)
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `knowledgeSettings:update`: Modify knowledge settings (embedding and reranking models)
  */
 export const updateKnowledgeSettings = <ThrowOnError extends boolean = false>(options: Options<UpdateKnowledgeSettingsData, ThrowOnError>) => (options.client ?? client).patch<UpdateKnowledgeSettingsResponses, UpdateKnowledgeSettingsErrors, ThrowOnError>({
     url: '/api/organization/knowledge-settings',
@@ -1833,11 +3357,27 @@ export const updateKnowledgeSettings = <ThrowOnError extends boolean = false>(op
 
 /**
  * Drop the embedding configuration, deleting all KB documents and resetting connector checkpoints
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `knowledgeSettings:update`: Modify knowledge settings (embedding and reranking models)
  */
 export const dropEmbeddingConfig = <ThrowOnError extends boolean = false>(options?: Options<DropEmbeddingConfigData, ThrowOnError>) => (options?.client ?? client).post<DropEmbeddingConfigResponses, DropEmbeddingConfigErrors, ThrowOnError>({ url: '/api/organization/knowledge-settings/drop-embedding', ...options });
 
 /**
  * Test the embedding connection by embedding a sample text
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `knowledgeSettings:update`: Modify knowledge settings (embedding and reranking models)
  */
 export const testEmbeddingConnection = <ThrowOnError extends boolean = false>(options: Options<TestEmbeddingConnectionData, ThrowOnError>) => (options.client ?? client).post<TestEmbeddingConnectionResponses, TestEmbeddingConnectionErrors, ThrowOnError>({
     url: '/api/organization/knowledge-settings/test-embedding',
@@ -1850,6 +3390,14 @@ export const testEmbeddingConnection = <ThrowOnError extends boolean = false>(op
 
 /**
  * Mark organization onboarding as complete
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * None (no additional RBAC permission required)
  */
 export const completeOnboarding = <ThrowOnError extends boolean = false>(options: Options<CompleteOnboardingData, ThrowOnError>) => (options.client ?? client).post<CompleteOnboardingResponses, CompleteOnboardingErrors, ThrowOnError>({
     url: '/api/organization/complete-onboarding',
@@ -1862,31 +3410,75 @@ export const completeOnboarding = <ThrowOnError extends boolean = false>(options
 
 /**
  * Check if organization onboarding is complete
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * None (no additional RBAC permission required)
  */
 export const getOnboardingStatus = <ThrowOnError extends boolean = false>(options?: Options<GetOnboardingStatusData, ThrowOnError>) => (options?.client ?? client).get<GetOnboardingStatusResponses, GetOnboardingStatusErrors, ThrowOnError>({ url: '/api/organization/onboarding-status', ...options });
 
 /**
  * Get which members have completed signup (have an account record)
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * None (no additional RBAC permission required)
  */
 export const getMemberSignupStatus = <ThrowOnError extends boolean = false>(options?: Options<GetMemberSignupStatusData, ThrowOnError>) => (options?.client ?? client).get<GetMemberSignupStatusResponses, GetMemberSignupStatusErrors, ThrowOnError>({ url: '/api/organization/members/signup-status', ...options });
 
 /**
  * Delete an auto-provisioned member who hasn't completed signup
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `member:delete`: Remove members from the organization
  */
 export const deletePendingSignupMember = <ThrowOnError extends boolean = false>(options: Options<DeletePendingSignupMemberData, ThrowOnError>) => (options.client ?? client).delete<DeletePendingSignupMemberResponses, DeletePendingSignupMemberErrors, ThrowOnError>({ url: '/api/organization/members/{userId}/pending-signup', ...options });
 
 /**
  * Get all members of the organization
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `member:read`: View organization members and their roles
  */
 export const getOrganizationMembers = <ThrowOnError extends boolean = false>(options?: Options<GetOrganizationMembersData, ThrowOnError>) => (options?.client ?? client).get<GetOrganizationMembersResponses, GetOrganizationMembersErrors, ThrowOnError>({ url: '/api/organization/members', ...options });
 
 /**
  * Get a member of the organization by user ID or email address
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `member:read`: View organization members and their roles
  */
 export const getOrganizationMember = <ThrowOnError extends boolean = false>(options: Options<GetOrganizationMemberData, ThrowOnError>) => (options.client ?? client).get<GetOrganizationMemberResponses, GetOrganizationMemberErrors, ThrowOnError>({ url: '/api/organization/members/{idOrEmail}', ...options });
 
 /**
  * Create a chat completion with Perplexity (uses default agent). Note: Perplexity does not support external tool calling.
+ *
+ * Authentication:
+ *
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
  */
 export const perplexityChatCompletionsWithDefaultAgent = <ThrowOnError extends boolean = false>(options: Options<PerplexityChatCompletionsWithDefaultAgentData, ThrowOnError>) => (options.client ?? client).post<PerplexityChatCompletionsWithDefaultAgentResponses, PerplexityChatCompletionsWithDefaultAgentErrors, ThrowOnError>({
     url: '/v1/perplexity/chat/completions',
@@ -1899,6 +3491,10 @@ export const perplexityChatCompletionsWithDefaultAgent = <ThrowOnError extends b
 
 /**
  * Create a chat completion with Perplexity for a specific agent. Note: Perplexity does not support external tool calling.
+ *
+ * Authentication:
+ *
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
  */
 export const perplexityChatCompletionsWithAgent = <ThrowOnError extends boolean = false>(options: Options<PerplexityChatCompletionsWithAgentData, ThrowOnError>) => (options.client ?? client).post<PerplexityChatCompletionsWithAgentResponses, PerplexityChatCompletionsWithAgentErrors, ThrowOnError>({
     url: '/v1/perplexity/{agentId}/chat/completions',
@@ -1911,51 +3507,131 @@ export const perplexityChatCompletionsWithAgent = <ThrowOnError extends boolean 
 
 /**
  * Get the secrets manager type and configuration details (for Vault)
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `secret:read`: View secrets manager configuration
  */
 export const getSecretsType = <ThrowOnError extends boolean = false>(options?: Options<GetSecretsTypeData, ThrowOnError>) => (options?.client ?? client).get<GetSecretsTypeResponses, GetSecretsTypeErrors, ThrowOnError>({ url: '/api/secrets/type', ...options });
 
 /**
  * Get a secret by ID
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `secret:read`: View secrets manager configuration
  */
 export const getSecret = <ThrowOnError extends boolean = false>(options: Options<GetSecretData, ThrowOnError>) => (options.client ?? client).get<GetSecretResponses, GetSecretErrors, ThrowOnError>({ url: '/api/secrets/{id}', ...options });
 
 /**
  * Check connectivity to the secrets storage and return secret count.
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `secret:update`: Modify secrets manager settings and test connectivity
  */
 export const checkSecretsConnectivity = <ThrowOnError extends boolean = false>(options?: Options<CheckSecretsConnectivityData, ThrowOnError>) => (options?.client ?? client).post<CheckSecretsConnectivityResponses, CheckSecretsConnectivityErrors, ThrowOnError>({ url: '/api/secrets/check-connectivity', ...options });
 
 /**
  * Get team statistics
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `llmCost:read`: View LLM usage cost statistics and analytics
  */
 export const getTeamStatistics = <ThrowOnError extends boolean = false>(options?: Options<GetTeamStatisticsData, ThrowOnError>) => (options?.client ?? client).get<GetTeamStatisticsResponses, GetTeamStatisticsErrors, ThrowOnError>({ url: '/api/statistics/teams', ...options });
 
 /**
  * Get agent statistics
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `llmCost:read`: View LLM usage cost statistics and analytics
  */
 export const getAgentStatistics = <ThrowOnError extends boolean = false>(options?: Options<GetAgentStatisticsData, ThrowOnError>) => (options?.client ?? client).get<GetAgentStatisticsResponses, GetAgentStatisticsErrors, ThrowOnError>({ url: '/api/statistics/agents', ...options });
 
 /**
  * Get model statistics
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `llmCost:read`: View LLM usage cost statistics and analytics
  */
 export const getModelStatistics = <ThrowOnError extends boolean = false>(options?: Options<GetModelStatisticsData, ThrowOnError>) => (options?.client ?? client).get<GetModelStatisticsResponses, GetModelStatisticsErrors, ThrowOnError>({ url: '/api/statistics/models', ...options });
 
 /**
  * Get overview statistics
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `llmCost:read`: View LLM usage cost statistics and analytics
  */
 export const getOverviewStatistics = <ThrowOnError extends boolean = false>(options?: Options<GetOverviewStatisticsData, ThrowOnError>) => (options?.client ?? client).get<GetOverviewStatisticsResponses, GetOverviewStatisticsErrors, ThrowOnError>({ url: '/api/statistics/overview', ...options });
 
 /**
  * Get cost savings statistics
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `llmCost:read`: View LLM usage cost statistics and analytics
  */
 export const getCostSavingsStatistics = <ThrowOnError extends boolean = false>(options?: Options<GetCostSavingsStatisticsData, ThrowOnError>) => (options?.client ?? client).get<GetCostSavingsStatisticsResponses, GetCostSavingsStatisticsErrors, ThrowOnError>({ url: '/api/statistics/cost-savings', ...options });
 
 /**
  * Get all teams in the organization
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `team:read`: View teams and their members
  */
 export const getTeams = <ThrowOnError extends boolean = false>(options?: Options<GetTeamsData, ThrowOnError>) => (options?.client ?? client).get<GetTeamsResponses, GetTeamsErrors, ThrowOnError>({ url: '/api/teams', ...options });
 
 /**
  * Create a new team
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `team:create`: Create new teams
  */
 export const createTeam = <ThrowOnError extends boolean = false>(options: Options<CreateTeamData, ThrowOnError>) => (options.client ?? client).post<CreateTeamResponses, CreateTeamErrors, ThrowOnError>({
     url: '/api/teams',
@@ -1968,16 +3644,40 @@ export const createTeam = <ThrowOnError extends boolean = false>(options: Option
 
 /**
  * Delete a team
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `team:delete`: Delete teams
  */
 export const deleteTeam = <ThrowOnError extends boolean = false>(options: Options<DeleteTeamData, ThrowOnError>) => (options.client ?? client).delete<DeleteTeamResponses, DeleteTeamErrors, ThrowOnError>({ url: '/api/teams/{id}', ...options });
 
 /**
  * Get a team by ID
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `team:read`: View teams and their members
  */
 export const getTeam = <ThrowOnError extends boolean = false>(options: Options<GetTeamData, ThrowOnError>) => (options.client ?? client).get<GetTeamResponses, GetTeamErrors, ThrowOnError>({ url: '/api/teams/{id}', ...options });
 
 /**
  * Update a team
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `team:update`: Modify team settings
  */
 export const updateTeam = <ThrowOnError extends boolean = false>(options: Options<UpdateTeamData, ThrowOnError>) => (options.client ?? client).put<UpdateTeamResponses, UpdateTeamErrors, ThrowOnError>({
     url: '/api/teams/{id}',
@@ -1990,11 +3690,27 @@ export const updateTeam = <ThrowOnError extends boolean = false>(options: Option
 
 /**
  * Get all members of a team
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `team:read`: View teams and their members
  */
 export const getTeamMembers = <ThrowOnError extends boolean = false>(options: Options<GetTeamMembersData, ThrowOnError>) => (options.client ?? client).get<GetTeamMembersResponses, GetTeamMembersErrors, ThrowOnError>({ url: '/api/teams/{id}/members', ...options });
 
 /**
  * Add a member to a team
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `team:admin`: Manage team membership (add/remove members)
  */
 export const addTeamMember = <ThrowOnError extends boolean = false>(options: Options<AddTeamMemberData, ThrowOnError>) => (options.client ?? client).post<AddTeamMemberResponses, AddTeamMemberErrors, ThrowOnError>({
     url: '/api/teams/{id}/members',
@@ -2007,16 +3723,40 @@ export const addTeamMember = <ThrowOnError extends boolean = false>(options: Opt
 
 /**
  * Remove a member from a team
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `team:admin`: Manage team membership (add/remove members)
  */
 export const removeTeamMember = <ThrowOnError extends boolean = false>(options: Options<RemoveTeamMemberData, ThrowOnError>) => (options.client ?? client).delete<RemoveTeamMemberResponses, RemoveTeamMemberErrors, ThrowOnError>({ url: '/api/teams/{id}/members/{userId}', ...options });
 
 /**
  * Get all external groups mapped to a team for SSO team sync
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `team:read`: View teams and their members
  */
 export const getTeamExternalGroups = <ThrowOnError extends boolean = false>(options: Options<GetTeamExternalGroupsData, ThrowOnError>) => (options.client ?? client).get<GetTeamExternalGroupsResponses, GetTeamExternalGroupsErrors, ThrowOnError>({ url: '/api/teams/{id}/external-groups', ...options });
 
 /**
  * Add an external group mapping to a team for SSO team sync
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `team:admin`: Manage team membership (add/remove members)
  */
 export const addTeamExternalGroup = <ThrowOnError extends boolean = false>(options: Options<AddTeamExternalGroupData, ThrowOnError>) => (options.client ?? client).post<AddTeamExternalGroupResponses, AddTeamExternalGroupErrors, ThrowOnError>({
     url: '/api/teams/{id}/external-groups',
@@ -2029,71 +3769,183 @@ export const addTeamExternalGroup = <ThrowOnError extends boolean = false>(optio
 
 /**
  * Remove an external group mapping from a team for SSO team sync
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `team:admin`: Manage team membership (add/remove members)
  */
 export const removeTeamExternalGroup = <ThrowOnError extends boolean = false>(options: Options<RemoveTeamExternalGroupData, ThrowOnError>) => (options.client ?? client).delete<RemoveTeamExternalGroupResponses, RemoveTeamExternalGroupErrors, ThrowOnError>({ url: '/api/teams/{id}/external-groups/{groupId}', ...options });
 
 /**
  * Get tokens visible to the user based on their permissions
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `team:read`: View teams and their members
  */
 export const getTokens = <ThrowOnError extends boolean = false>(options?: Options<GetTokensData, ThrowOnError>) => (options?.client ?? client).get<GetTokensResponses, GetTokensErrors, ThrowOnError>({ url: '/api/tokens', ...options });
 
 /**
  * Get the full token value (for copying to clipboard)
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `team:update`: Modify team settings
  */
 export const getTokenValue = <ThrowOnError extends boolean = false>(options: Options<GetTokenValueData, ThrowOnError>) => (options.client ?? client).get<GetTokenValueResponses, GetTokenValueErrors, ThrowOnError>({ url: '/api/tokens/{tokenId}/value', ...options });
 
 /**
  * Rotate a token (generate new value)
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `team:update`: Modify team settings
  */
 export const rotateToken = <ThrowOnError extends boolean = false>(options: Options<RotateTokenData, ThrowOnError>) => (options.client ?? client).post<RotateTokenResponses, RotateTokenErrors, ThrowOnError>({ url: '/api/tokens/{tokenId}/rotate', ...options });
 
 /**
  * Get all tools
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `toolPolicy:read`: View tools, tool invocation policies, and trusted data policies
  */
 export const getTools = <ThrowOnError extends boolean = false>(options?: Options<GetToolsData, ThrowOnError>) => (options?.client ?? client).get<GetToolsResponses, GetToolsErrors, ThrowOnError>({ url: '/api/tools', ...options });
 
 /**
  * Get all tools with their profile assignments (one entry per tool)
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `toolPolicy:read`: View tools, tool invocation policies, and trusted data policies
  */
 export const getToolsWithAssignments = <ThrowOnError extends boolean = false>(options?: Options<GetToolsWithAssignmentsData, ThrowOnError>) => (options?.client ?? client).get<GetToolsWithAssignmentsResponses, GetToolsWithAssignmentsErrors, ThrowOnError>({ url: '/api/tools/with-assignments', ...options });
 
 /**
  * Delete an auto-discovered tool (tools without an MCP server)
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `toolPolicy:delete`: Remove tools and security policies
  */
 export const deleteTool = <ThrowOnError extends boolean = false>(options: Options<DeleteToolData, ThrowOnError>) => (options.client ?? client).delete<DeleteToolResponses, DeleteToolErrors, ThrowOnError>({ url: '/api/tools/{id}', ...options });
 
 /**
  * Get current user's permissions
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * None (no additional RBAC permission required)
  */
 export const getUserPermissions = <ThrowOnError extends boolean = false>(options?: Options<GetUserPermissionsData, ThrowOnError>) => (options?.client ?? client).get<GetUserPermissionsResponses, GetUserPermissionsErrors, ThrowOnError>({ url: '/api/user/permissions', ...options });
 
 /**
  * Get current user's personal token
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * None (no additional RBAC permission required)
  */
 export const getUserToken = <ThrowOnError extends boolean = false>(options?: Options<GetUserTokenData, ThrowOnError>) => (options?.client ?? client).get<GetUserTokenResponses, GetUserTokenErrors, ThrowOnError>({ url: '/api/user-tokens/me', ...options });
 
 /**
  * Get the full personal token value
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * None (no additional RBAC permission required)
  */
 export const getUserTokenValue = <ThrowOnError extends boolean = false>(options?: Options<GetUserTokenValueData, ThrowOnError>) => (options?.client ?? client).get<GetUserTokenValueResponses, GetUserTokenValueErrors, ThrowOnError>({ url: '/api/user-tokens/me/value', ...options });
 
 /**
  * Rotate personal token (generate new value)
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * None (no additional RBAC permission required)
  */
 export const rotateUserToken = <ThrowOnError extends boolean = false>(options?: Options<RotateUserTokenData, ThrowOnError>) => (options?.client ?? client).post<RotateUserTokenResponses, RotateUserTokenErrors, ThrowOnError>({ url: '/api/user-tokens/me/rotate', ...options });
 
 /**
  * Get all virtual API keys for the organization, with parent API key info
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `llmProvider:read`: View LLM provider API keys, virtual keys, and models
  */
 export const getAllVirtualApiKeys = <ThrowOnError extends boolean = false>(options?: Options<GetAllVirtualApiKeysData, ThrowOnError>) => (options?.client ?? client).get<GetAllVirtualApiKeysResponses, GetAllVirtualApiKeysErrors, ThrowOnError>({ url: '/api/virtual-api-keys', ...options });
 
 /**
  * Get all virtual API keys for a chat API key
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `llmProvider:read`: View LLM provider API keys, virtual keys, and models
  */
 export const getVirtualApiKeys = <ThrowOnError extends boolean = false>(options: Options<GetVirtualApiKeysData, ThrowOnError>) => (options.client ?? client).get<GetVirtualApiKeysResponses, GetVirtualApiKeysErrors, ThrowOnError>({ url: '/api/chat-api-keys/{chatApiKeyId}/virtual-keys', ...options });
 
 /**
  * Create a new virtual API key. Returns the full token value once.
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `llmProvider:create`: Add new LLM provider API keys or virtual keys
  */
 export const createVirtualApiKey = <ThrowOnError extends boolean = false>(options: Options<CreateVirtualApiKeyData, ThrowOnError>) => (options.client ?? client).post<CreateVirtualApiKeyResponses, CreateVirtualApiKeyErrors, ThrowOnError>({
     url: '/api/chat-api-keys/{chatApiKeyId}/virtual-keys',
@@ -2106,11 +3958,23 @@ export const createVirtualApiKey = <ThrowOnError extends boolean = false>(option
 
 /**
  * Delete a virtual API key
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `llmProvider:delete`: Remove LLM provider API keys or virtual keys
  */
 export const deleteVirtualApiKey = <ThrowOnError extends boolean = false>(options: Options<DeleteVirtualApiKeyData, ThrowOnError>) => (options.client ?? client).delete<DeleteVirtualApiKeyResponses, DeleteVirtualApiKeyErrors, ThrowOnError>({ url: '/api/chat-api-keys/{chatApiKeyId}/virtual-keys/{id}', ...options });
 
 /**
  * Create a chat completion with vLLM (uses default agent)
+ *
+ * Authentication:
+ *
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
  */
 export const vllmChatCompletionsWithDefaultAgent = <ThrowOnError extends boolean = false>(options: Options<VllmChatCompletionsWithDefaultAgentData, ThrowOnError>) => (options.client ?? client).post<VllmChatCompletionsWithDefaultAgentResponses, VllmChatCompletionsWithDefaultAgentErrors, ThrowOnError>({
     url: '/v1/vllm/chat/completions',
@@ -2123,6 +3987,10 @@ export const vllmChatCompletionsWithDefaultAgent = <ThrowOnError extends boolean
 
 /**
  * Create a chat completion with vLLM for a specific agent
+ *
+ * Authentication:
+ *
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
  */
 export const vllmChatCompletionsWithAgent = <ThrowOnError extends boolean = false>(options: Options<VllmChatCompletionsWithAgentData, ThrowOnError>) => (options.client ?? client).post<VllmChatCompletionsWithAgentResponses, VllmChatCompletionsWithAgentErrors, ThrowOnError>({
     url: '/v1/vllm/{agentId}/chat/completions',
@@ -2135,6 +4003,10 @@ export const vllmChatCompletionsWithAgent = <ThrowOnError extends boolean = fals
 
 /**
  * Create a chat completion with xAI (uses default agent)
+ *
+ * Authentication:
+ *
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
  */
 export const xaiChatCompletionsWithDefaultAgent = <ThrowOnError extends boolean = false>(options: Options<XaiChatCompletionsWithDefaultAgentData, ThrowOnError>) => (options.client ?? client).post<XaiChatCompletionsWithDefaultAgentResponses, XaiChatCompletionsWithDefaultAgentErrors, ThrowOnError>({
     url: '/v1/xai/chat/completions',
@@ -2147,6 +4019,10 @@ export const xaiChatCompletionsWithDefaultAgent = <ThrowOnError extends boolean 
 
 /**
  * Create a chat completion with xAI for a specific agent
+ *
+ * Authentication:
+ *
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
  */
 export const xaiChatCompletionsWithAgent = <ThrowOnError extends boolean = false>(options: Options<XaiChatCompletionsWithAgentData, ThrowOnError>) => (options.client ?? client).post<XaiChatCompletionsWithAgentResponses, XaiChatCompletionsWithAgentErrors, ThrowOnError>({
     url: '/v1/xai/{agentId}/chat/completions',
@@ -2159,6 +4035,10 @@ export const xaiChatCompletionsWithAgent = <ThrowOnError extends boolean = false
 
 /**
  * Create a chat completion with Zhipu AI (uses default agent)
+ *
+ * Authentication:
+ *
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
  */
 export const zhipuaiChatCompletionsWithDefaultAgent = <ThrowOnError extends boolean = false>(options: Options<ZhipuaiChatCompletionsWithDefaultAgentData, ThrowOnError>) => (options.client ?? client).post<ZhipuaiChatCompletionsWithDefaultAgentResponses, ZhipuaiChatCompletionsWithDefaultAgentErrors, ThrowOnError>({
     url: '/v1/zhipuai/chat/completions',
@@ -2171,6 +4051,10 @@ export const zhipuaiChatCompletionsWithDefaultAgent = <ThrowOnError extends bool
 
 /**
  * Create a chat completion with Zhipu AI for a specific agent
+ *
+ * Authentication:
+ *
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
  */
 export const zhipuaiChatCompletionsWithAgent = <ThrowOnError extends boolean = false>(options: Options<ZhipuaiChatCompletionsWithAgentData, ThrowOnError>) => (options.client ?? client).post<ZhipuaiChatCompletionsWithAgentResponses, ZhipuaiChatCompletionsWithAgentErrors, ThrowOnError>({
     url: '/v1/zhipuai/{agentId}/chat/completions',
@@ -2183,16 +4067,40 @@ export const zhipuaiChatCompletionsWithAgent = <ThrowOnError extends boolean = f
 
 /**
  * Get public identity provider list for login page (no secrets exposed)
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * None (no additional RBAC permission required)
  */
 export const getPublicIdentityProviders = <ThrowOnError extends boolean = false>(options?: Options<GetPublicIdentityProvidersData, ThrowOnError>) => (options?.client ?? client).get<GetPublicIdentityProvidersResponses, GetPublicIdentityProvidersErrors, ThrowOnError>({ url: '/api/identity-providers/public', ...options });
 
 /**
  * Get all identity providers with full configuration (admin only)
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `identityProvider:read`: View identity provider configurations (SSO)
  */
 export const getIdentityProviders = <ThrowOnError extends boolean = false>(options?: Options<GetIdentityProvidersData, ThrowOnError>) => (options?.client ?? client).get<GetIdentityProvidersResponses, GetIdentityProvidersErrors, ThrowOnError>({ url: '/api/identity-providers', ...options });
 
 /**
  * Create a new identity provider
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `identityProvider:create`: Set up new identity providers
  */
 export const createIdentityProvider = <ThrowOnError extends boolean = false>(options: Options<CreateIdentityProviderData, ThrowOnError>) => (options.client ?? client).post<CreateIdentityProviderResponses, CreateIdentityProviderErrors, ThrowOnError>({
     url: '/api/identity-providers',
@@ -2205,21 +4113,53 @@ export const createIdentityProvider = <ThrowOnError extends boolean = false>(opt
 
 /**
  * Get the IdP logout URL for the current user's identity provider
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * None (no additional RBAC permission required)
  */
 export const getIdentityProviderIdpLogoutUrl = <ThrowOnError extends boolean = false>(options?: Options<GetIdentityProviderIdpLogoutUrlData, ThrowOnError>) => (options?.client ?? client).get<GetIdentityProviderIdpLogoutUrlResponses, GetIdentityProviderIdpLogoutUrlErrors, ThrowOnError>({ url: '/api/identity-providers/idp-logout-url', ...options });
 
 /**
  * Delete identity provider
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `identityProvider:delete`: Remove identity providers
  */
 export const deleteIdentityProvider = <ThrowOnError extends boolean = false>(options: Options<DeleteIdentityProviderData, ThrowOnError>) => (options.client ?? client).delete<DeleteIdentityProviderResponses, DeleteIdentityProviderErrors, ThrowOnError>({ url: '/api/identity-providers/{id}', ...options });
 
 /**
  * Get identity provider by ID
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `identityProvider:read`: View identity provider configurations (SSO)
  */
 export const getIdentityProvider = <ThrowOnError extends boolean = false>(options: Options<GetIdentityProviderData, ThrowOnError>) => (options.client ?? client).get<GetIdentityProviderResponses, GetIdentityProviderErrors, ThrowOnError>({ url: '/api/identity-providers/{id}', ...options });
 
 /**
  * Update identity provider
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `identityProvider:update`: Modify identity provider settings
  */
 export const updateIdentityProvider = <ThrowOnError extends boolean = false>(options: Options<UpdateIdentityProviderData, ThrowOnError>) => (options.client ?? client).put<UpdateIdentityProviderResponses, UpdateIdentityProviderErrors, ThrowOnError>({
     url: '/api/identity-providers/{id}',
@@ -2232,16 +4172,40 @@ export const updateIdentityProvider = <ThrowOnError extends boolean = false>(opt
 
 /**
  * Delete a team's Vault folder mapping
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `team:update`: Modify team settings
  */
 export const deleteTeamVaultFolder = <ThrowOnError extends boolean = false>(options: Options<DeleteTeamVaultFolderData, ThrowOnError>) => (options.client ?? client).delete<DeleteTeamVaultFolderResponses, DeleteTeamVaultFolderErrors, ThrowOnError>({ url: '/api/teams/{teamId}/vault-folder', ...options });
 
 /**
  * Get a team's Vault folder configuration
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `team:read`: View teams and their members
  */
 export const getTeamVaultFolder = <ThrowOnError extends boolean = false>(options: Options<GetTeamVaultFolderData, ThrowOnError>) => (options.client ?? client).get<GetTeamVaultFolderResponses, GetTeamVaultFolderErrors, ThrowOnError>({ url: '/api/teams/{teamId}/vault-folder', ...options });
 
 /**
  * Set or update a team's Vault folder path
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `team:update`: Modify team settings
  */
 export const setTeamVaultFolder = <ThrowOnError extends boolean = false>(options: Options<SetTeamVaultFolderData, ThrowOnError>) => (options.client ?? client).post<SetTeamVaultFolderResponses, SetTeamVaultFolderErrors, ThrowOnError>({
     url: '/api/teams/{teamId}/vault-folder',
@@ -2254,6 +4218,14 @@ export const setTeamVaultFolder = <ThrowOnError extends boolean = false>(options
 
 /**
  * Check connectivity to a team's Vault folder
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `team:update`: Modify team settings
  */
 export const checkTeamVaultFolderConnectivity = <ThrowOnError extends boolean = false>(options: Options<CheckTeamVaultFolderConnectivityData, ThrowOnError>) => (options.client ?? client).post<CheckTeamVaultFolderConnectivityResponses, CheckTeamVaultFolderConnectivityErrors, ThrowOnError>({
     url: '/api/teams/{teamId}/vault-folder/check-connectivity',
@@ -2266,11 +4238,27 @@ export const checkTeamVaultFolderConnectivity = <ThrowOnError extends boolean = 
 
 /**
  * List secrets available in a team's Vault folder
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `team:read`: View teams and their members
  */
 export const listTeamVaultFolderSecrets = <ThrowOnError extends boolean = false>(options: Options<ListTeamVaultFolderSecretsData, ThrowOnError>) => (options.client ?? client).get<ListTeamVaultFolderSecretsResponses, ListTeamVaultFolderSecretsErrors, ThrowOnError>({ url: '/api/teams/{teamId}/vault-folder/secrets', ...options });
 
 /**
  * Get the keys of a specific secret in a team's Vault folder
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `team:read`: View teams and their members
  */
 export const getTeamVaultSecretKeys = <ThrowOnError extends boolean = false>(options: Options<GetTeamVaultSecretKeysData, ThrowOnError>) => (options.client ?? client).post<GetTeamVaultSecretKeysResponses, GetTeamVaultSecretKeysErrors, ThrowOnError>({
     url: '/api/teams/{teamId}/vault-folder/secrets/keys',

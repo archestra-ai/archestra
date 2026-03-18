@@ -40,7 +40,7 @@ const xaiProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.XaiChatCompletionsWithDefaultAgent,
         description: "Create a chat completion with xAI (uses default agent)",
-        tags: ["llm-proxy"],
+        tags: ["LLM Proxy"],
         body: Xai.API.ChatCompletionRequestSchema,
         headers: Xai.API.ChatCompletionsHeadersSchema,
         response: constructResponseSchema(Xai.API.ChatCompletionResponseSchema),
@@ -62,7 +62,7 @@ const xaiProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.XaiChatCompletionsWithAgent,
         description: "Create a chat completion with xAI for a specific agent",
-        tags: ["llm-proxy"],
+        tags: ["LLM Proxy"],
         params: z.object({
           agentId: UuidIdSchema,
         }),

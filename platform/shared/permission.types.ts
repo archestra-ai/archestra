@@ -18,6 +18,7 @@ export const actions = [
   "admin",
   "cancel",
   "enable",
+  "query",
 ] as const;
 
 export const resources = [

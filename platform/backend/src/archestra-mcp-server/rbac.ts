@@ -84,7 +84,7 @@ export const TOOL_PERMISSIONS: Record<
   },
 
   // Knowledge Management
-  query_knowledge_sources: { resource: "knowledgeBase", action: "read" },
+  query_knowledge_sources: { resource: "knowledgeBase", action: "query" },
   create_knowledge_base: { resource: "knowledgeBase", action: "create" },
   get_knowledge_bases: { resource: "knowledgeBase", action: "read" },
   get_knowledge_base: { resource: "knowledgeBase", action: "read" },

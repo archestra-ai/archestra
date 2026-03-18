@@ -43,7 +43,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   mcpServerInstallationRequest: ["read", "create", "update", "delete", "admin"],
 
   // Knowledge
-  knowledgeBase: ["read", "create", "update", "delete"],
+  knowledgeBase: ["read", "create", "update", "delete", "query"],
 
   // Dual LLM
   dualLlmConfig: ["read", "create", "update", "delete"],
@@ -96,7 +96,7 @@ export const editorPermissions: Record<Resource, Action[]> = {
   mcpServerInstallationRequest: ["read", "create", "update", "delete"],
 
   // Knowledge
-  knowledgeBase: ["read", "create", "update", "delete"],
+  knowledgeBase: ["read", "create", "update", "delete", "query"],
 
   // Dual LLM
   dualLlmConfig: ["read"],
@@ -149,7 +149,7 @@ export const memberPermissions: Record<Resource, Action[]> = {
   mcpServerInstallationRequest: ["read", "create", "update"],
 
   // Knowledge
-  knowledgeBase: ["read"],
+  knowledgeBase: ["read", "query"],
 
   // Dual LLM
   dualLlmConfig: [],
@@ -324,6 +324,7 @@ export const permissionDescriptions: Record<string, string> = {
   "knowledgeBase:create": "Create knowledge bases and connectors",
   "knowledgeBase:update": "Modify knowledge bases and connectors",
   "knowledgeBase:delete": "Delete knowledge bases and connectors",
+  "knowledgeBase:query": "Query knowledge sources for information retrieval",
   "knowledgeSettings:read":
     "View knowledge settings (embedding and reranking models)",
   "knowledgeSettings:update":

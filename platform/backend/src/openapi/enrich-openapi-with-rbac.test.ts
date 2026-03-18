@@ -151,7 +151,8 @@ describe("enrichOpenApiWithRbac", () => {
     };
 
     const enriched = enrichOpenApiWithRbac(spec);
-    const postOperation = enriched.paths["/v1/openai/chat/completions"].post as {
+    const postOperation = enriched.paths["/v1/openai/chat/completions"]
+      .post as {
       description?: string;
       tags?: string[];
     };

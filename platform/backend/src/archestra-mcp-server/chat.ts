@@ -221,7 +221,15 @@ async function handleSwapAgent(params: {
     const results = await AgentModel.findAllPaginated(
       { limit: 5, offset: 0 },
       undefined,
-      { name: agentName, agentType: "agent" },
+      {
+        name: agentName,
+        agentType: "agent",
+        // Hide other users' personal agents. swap_agent is the primary
+        // Archestra MCP use-case and requires only the caller's own personal
+        // agents to be visible, even though admins can see all personal
+        // agents in the UI.
+        excludeOtherPersonalAgents: true,
+      },
       context.userId,
       isAdmin,
     );

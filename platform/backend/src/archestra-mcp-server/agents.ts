@@ -259,6 +259,11 @@ const registry = defineArchestraTools([
           {
             agentType: "agent",
             ...(args.name ? { name: args.name } : {}),
+            // Hide other users' personal agents. swap_agent is the primary
+            // Archestra MCP use-case and requires only the caller's own
+            // personal agents to be visible, even though admins can see all
+            // personal agents in the UI.
+            excludeOtherPersonalAgents: true,
           },
           context.userId,
           isAdmin,

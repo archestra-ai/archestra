@@ -36507,7 +36507,7 @@
         "tags": [
           "Agents"
         ],
-        "description": "Get all agents with pagination, sorting, and filtering",
+        "description": "Get all agents with pagination, sorting, and filtering\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- Checked dynamically based on agent type. `profile` and `agent` require `agent:read`; `mcp_gateway` requires `mcpGateway:read`; `llm_proxy` requires `llmProxy:read`. If no type filter is provided, the user must have read access to at least one agent type.",
         "parameters": [
           {
             "schema": {
@@ -37263,6 +37263,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "kind": "dynamic",
+          "note": "Checked dynamically based on agent type. `profile` and `agent` require `agent:read`; `mcp_gateway` requires `mcpGateway:read`; `llm_proxy` requires `llmProxy:read`. If no type filter is provided, the user must have read access to at least one agent type.",
+          "permissions": []
         }
       },
       "post": {
@@ -37270,7 +37275,7 @@
         "tags": [
           "Agents"
         ],
-        "description": "Create a new agent",
+        "description": "Create a new agent\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- Checked dynamically based on the agent type being created. `profile` and `agent` require `agent:create`; `mcp_gateway` requires `mcpGateway:create`; `llm_proxy` requires `llmProxy:create`. Additional scope and team-admin checks may apply.",
         "requestBody": {
           "required": true,
           "content": {
@@ -38001,6 +38006,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "kind": "dynamic",
+          "note": "Checked dynamically based on the agent type being created. `profile` and `agent` require `agent:create`; `mcp_gateway` requires `mcpGateway:create`; `llm_proxy` requires `llmProxy:create`. Additional scope and team-admin checks may apply.",
+          "permissions": []
         }
       }
     },
@@ -38010,7 +38020,7 @@
         "tags": [
           "Agents"
         ],
-        "description": "Get all agents without pagination",
+        "description": "Get all agents without pagination\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- Checked dynamically based on agent type. `profile` and `agent` require `agent:read`; `mcp_gateway` requires `mcpGateway:read`; `llm_proxy` requires `llmProxy:read`. If no type filter is provided, the user must have read access to at least one agent type.",
         "parameters": [
           {
             "schema": {
@@ -38620,6 +38630,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "kind": "dynamic",
+          "note": "Checked dynamically based on agent type. `profile` and `agent` require `agent:read`; `mcp_gateway` requires `mcpGateway:read`; `llm_proxy` requires `llmProxy:read`. If no type filter is provided, the user must have read access to at least one agent type.",
+          "permissions": []
         }
       }
     },
@@ -38629,7 +38644,7 @@
         "tags": [
           "MCP Gateways"
         ],
-        "description": "Get or create default MCP Gateway\n\nRequired RBAC permissions:\n- `mcpGateway:read`: View and list MCP gateways",
+        "description": "Get or create default MCP Gateway\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `mcpGateway:read`: View and list MCP gateways",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -39179,7 +39194,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "mcpGateway:read"
           ]
         }
@@ -39191,7 +39207,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Get or create default LLM Proxy\n\nRequired RBAC permissions:\n- `llmProxy:read`: View and list LLM proxies",
+        "description": "Get or create default LLM Proxy\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `llmProxy:read`: View and list LLM proxies",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -39741,7 +39757,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "llmProxy:read"
           ]
         }
@@ -39753,7 +39770,7 @@
         "tags": [
           "Agents"
         ],
-        "description": "Get agent by ID",
+        "description": "Get agent by ID\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- Checked dynamically based on the target agent's type. `profile` and `agent` require `agent:read`; `mcp_gateway` requires `mcpGateway:read`; `llm_proxy` requires `llmProxy:read`.",
         "parameters": [
           {
             "schema": {
@@ -40313,6 +40330,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "kind": "dynamic",
+          "note": "Checked dynamically based on the target agent's type. `profile` and `agent` require `agent:read`; `mcp_gateway` requires `mcpGateway:read`; `llm_proxy` requires `llmProxy:read`.",
+          "permissions": []
         }
       },
       "put": {
@@ -40320,7 +40342,7 @@
         "tags": [
           "Agents"
         ],
-        "description": "Update an agent",
+        "description": "Update an agent\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- Checked dynamically based on the target agent's type. `profile` and `agent` require `agent:update`; `mcp_gateway` requires `mcpGateway:update`; `llm_proxy` requires `llmProxy:update`. Additional scope and team-admin checks may apply.",
         "requestBody": {
           "required": true,
           "content": {
@@ -41056,6 +41078,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "kind": "dynamic",
+          "note": "Checked dynamically based on the target agent's type. `profile` and `agent` require `agent:update`; `mcp_gateway` requires `mcpGateway:update`; `llm_proxy` requires `llmProxy:update`. Additional scope and team-admin checks may apply.",
+          "permissions": []
         }
       },
       "delete": {
@@ -41063,7 +41090,7 @@
         "tags": [
           "Agents"
         ],
-        "description": "Delete an agent",
+        "description": "Delete an agent\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- Checked dynamically based on the target agent's type. `profile` and `agent` require `agent:delete`; `mcp_gateway` requires `mcpGateway:delete`; `llm_proxy` requires `llmProxy:delete`. Additional scope checks may apply.",
         "parameters": [
           {
             "schema": {
@@ -41306,6 +41333,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "kind": "dynamic",
+          "note": "Checked dynamically based on the target agent's type. `profile` and `agent` require `agent:delete`; `mcp_gateway` requires `mcpGateway:delete`; `llm_proxy` requires `llmProxy:delete`. Additional scope checks may apply.",
+          "permissions": []
         }
       }
     },
@@ -41315,7 +41347,7 @@
         "tags": [
           "Agents"
         ],
-        "description": "Get all available label keys",
+        "description": "Get all available label keys\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- None (no additional RBAC permission required)",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -41540,6 +41572,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       }
     },
@@ -41549,7 +41586,7 @@
         "tags": [
           "Agents"
         ],
-        "description": "Get all available label values",
+        "description": "Get all available label values\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- None (no additional RBAC permission required)",
         "parameters": [
           {
             "schema": {
@@ -41785,6 +41822,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       }
     },
@@ -41794,7 +41836,7 @@
         "tags": [
           "Members"
         ],
-        "description": "Get the current user's default agent ID",
+        "description": "Get the current user's default agent ID\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- None (no additional RBAC permission required)",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -42028,6 +42070,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       }
     },
@@ -42037,7 +42084,7 @@
         "tags": [
           "Agent Tools"
         ],
-        "description": "Get all agent-tool relationships with pagination, sorting, and filtering\n\nRequired RBAC permissions:\n- `toolPolicy:read`: View tools, tool invocation policies, and trusted data policies",
+        "description": "Get all agent-tool relationships with pagination, sorting, and filtering\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `toolPolicy:read`: View tools, tool invocation policies, and trusted data policies",
         "parameters": [
           {
             "schema": {
@@ -42520,7 +42567,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "toolPolicy:read"
           ]
         }
@@ -42532,7 +42580,7 @@
         "tags": [
           "Agent Tools"
         ],
-        "description": "Assign a tool to an agent",
+        "description": "Assign a tool to an agent\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- None (no additional RBAC permission required)",
         "requestBody": {
           "required": true,
           "content": {
@@ -42813,6 +42861,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       },
       "delete": {
@@ -42820,7 +42873,7 @@
         "tags": [
           "Agent Tools"
         ],
-        "description": "Unassign a tool from an agent",
+        "description": "Unassign a tool from an agent\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- None (no additional RBAC permission required)",
         "parameters": [
           {
             "schema": {
@@ -43073,6 +43126,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       }
     },
@@ -43082,7 +43140,7 @@
         "tags": [
           "Agent Tools"
         ],
-        "description": "Assign multiple tools to multiple agents in bulk",
+        "description": "Assign multiple tools to multiple agents in bulk\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- None (no additional RBAC permission required)",
         "requestBody": {
           "required": true,
           "content": {
@@ -43425,6 +43483,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       }
     },
@@ -43434,7 +43497,7 @@
         "tags": [
           "Agent Tools"
         ],
-        "description": "Automatically configure security policies for tools using LLM analysis\n\nRequired RBAC permissions:\n- `toolPolicy:update`: Modify tools, tool configuration, and security policies",
+        "description": "Automatically configure security policies for tools using LLM analysis\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `toolPolicy:update`: Modify tools, tool configuration, and security policies",
         "requestBody": {
           "required": true,
           "content": {
@@ -43747,7 +43810,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "toolPolicy:update"
           ]
         }
@@ -43759,7 +43823,7 @@
         "tags": [
           "Agent Tools"
         ],
-        "description": "Get all tools for an agent (both proxy-sniffed and MCP tools)\n\nRequired RBAC permissions:\n- `toolPolicy:read`: View tools, tool invocation policies, and trusted data policies",
+        "description": "Get all tools for an agent (both proxy-sniffed and MCP tools)\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `toolPolicy:read`: View tools, tool invocation policies, and trusted data policies",
         "parameters": [
           {
             "schema": {
@@ -44080,7 +44144,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "toolPolicy:read"
           ]
         }
@@ -44092,7 +44157,7 @@
         "tags": [
           "Agent Tools"
         ],
-        "description": "Update an agent-tool relationship\n\nRequired RBAC permissions:\n- `toolPolicy:update`: Modify tools, tool configuration, and security policies",
+        "description": "Update an agent-tool relationship\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `toolPolicy:update`: Modify tools, tool configuration, and security policies",
         "requestBody": {
           "required": true,
           "content": {
@@ -44396,7 +44461,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "toolPolicy:update"
           ]
         }
@@ -44408,7 +44474,7 @@
         "tags": [
           "Agent Delegations"
         ],
-        "description": "Get all delegation targets for an agent. Not applicable to LLM proxies.",
+        "description": "Get all delegation targets for an agent. Not applicable to LLM proxies.\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- None (no additional RBAC permission required)",
         "parameters": [
           {
             "schema": {
@@ -44670,6 +44736,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       },
       "post": {
@@ -44677,7 +44748,7 @@
         "tags": [
           "Agent Delegations"
         ],
-        "description": "Sync delegation targets for an agent. Replaces all existing delegations with the new list. Not applicable to LLM proxies.",
+        "description": "Sync delegation targets for an agent. Replaces all existing delegations with the new list. Not applicable to LLM proxies.\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- None (no additional RBAC permission required)",
         "requestBody": {
           "required": true,
           "content": {
@@ -44953,6 +45024,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       }
     },
@@ -44962,7 +45038,7 @@
         "tags": [
           "Agent Delegations"
         ],
-        "description": "Remove a specific delegation from an agent. Not applicable to LLM proxies.",
+        "description": "Remove a specific delegation from an agent. Not applicable to LLM proxies.\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- None (no additional RBAC permission required)",
         "parameters": [
           {
             "schema": {
@@ -45215,6 +45291,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       }
     },
@@ -45224,7 +45305,7 @@
         "tags": [
           "Agent Delegations"
         ],
-        "description": "Get all agent delegation connections for canvas visualization.",
+        "description": "Get all agent delegation connections for canvas visualization.\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- None (no additional RBAC permission required)",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -45521,6 +45602,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       }
     },
@@ -46112,7 +46198,7 @@
         "tags": [
           "API Keys"
         ],
-        "description": "List the authenticated user's Archestra API keys\n\nRequired RBAC permissions:\n- `apiKey:read`: View API keys",
+        "description": "List the authenticated user's Archestra API keys\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `apiKey:read`: View API keys",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -46411,7 +46497,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "apiKey:read"
           ]
         }
@@ -46421,7 +46508,7 @@
         "tags": [
           "API Keys"
         ],
-        "description": "Create an Archestra API key for the authenticated user\n\nRequired RBAC permissions:\n- `apiKey:create`: Create API keys",
+        "description": "Create an Archestra API key for the authenticated user\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `apiKey:create`: Create API keys",
         "requestBody": {
           "required": true,
           "content": {
@@ -46744,7 +46831,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "apiKey:create"
           ]
         }
@@ -46756,7 +46844,7 @@
         "tags": [
           "API Keys"
         ],
-        "description": "Get one authenticated user's Archestra API key\n\nRequired RBAC permissions:\n- `apiKey:read`: View API keys",
+        "description": "Get one authenticated user's Archestra API key\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `apiKey:read`: View API keys",
         "parameters": [
           {
             "schema": {
@@ -47062,7 +47150,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "apiKey:read"
           ]
         }
@@ -47072,7 +47161,7 @@
         "tags": [
           "API Keys"
         ],
-        "description": "Delete an Archestra API key for the authenticated user\n\nRequired RBAC permissions:\n- `apiKey:delete`: Delete API keys",
+        "description": "Delete an Archestra API key for the authenticated user\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `apiKey:delete`: Delete API keys",
         "parameters": [
           {
             "schema": {
@@ -47315,7 +47404,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "apiKey:delete"
           ]
         }
@@ -47327,7 +47417,7 @@
         "tags": [
           "auth"
         ],
-        "description": "Get default credentials status",
+        "description": "Get default credentials status\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- None (no additional RBAC permission required)",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -47367,6 +47457,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       }
     },
@@ -47388,7 +47483,7 @@
         "tags": [
           "auth"
         ],
-        "description": "Get OAuth client name by client_id",
+        "description": "Get OAuth client name by client_id\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- None (no additional RBAC permission required)",
         "parameters": [
           {
             "schema": {
@@ -47420,6 +47515,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       }
     },
@@ -47453,7 +47553,7 @@
         "tags": [
           "auth"
         ],
-        "description": "Submit OAuth consent decision (accept or deny)",
+        "description": "Submit OAuth consent decision (accept or deny)\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- None (no additional RBAC permission required)",
         "requestBody": {
           "required": true,
           "content": {
@@ -47500,6 +47600,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       }
     },
@@ -47574,7 +47679,7 @@
         "tags": [
           "Autonomy Policies"
         ],
-        "description": "Get all supported policy operators\n\nRequired RBAC permissions:\n- `toolPolicy:read`: View tools, tool invocation policies, and trusted data policies",
+        "description": "Get all supported policy operators\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `toolPolicy:read`: View tools, tool invocation policies, and trusted data policies",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -47823,7 +47928,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "toolPolicy:read"
           ]
         }
@@ -47835,7 +47941,7 @@
         "tags": [
           "Tool Invocation Policies"
         ],
-        "description": "Get all tool invocation policies\n\nRequired RBAC permissions:\n- `toolPolicy:read`: View tools, tool invocation policies, and trusted data policies",
+        "description": "Get all tool invocation policies\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `toolPolicy:read`: View tools, tool invocation policies, and trusted data policies",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -48137,7 +48243,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "toolPolicy:read"
           ]
         }
@@ -48147,7 +48254,7 @@
         "tags": [
           "Tool Invocation Policies"
         ],
-        "description": "Create a new tool invocation policy\n\nRequired RBAC permissions:\n- `toolPolicy:create`: Register tools and create security policies",
+        "description": "Create a new tool invocation policy\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `toolPolicy:create`: Register tools and create security policies",
         "requestBody": {
           "required": true,
           "content": {
@@ -48512,7 +48619,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "toolPolicy:create"
           ]
         }
@@ -48524,7 +48632,7 @@
         "tags": [
           "Tool Invocation Policies"
         ],
-        "description": "Get tool invocation policy by ID\n\nRequired RBAC permissions:\n- `toolPolicy:read`: View tools, tool invocation policies, and trusted data policies",
+        "description": "Get tool invocation policy by ID\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `toolPolicy:read`: View tools, tool invocation policies, and trusted data policies",
         "parameters": [
           {
             "schema": {
@@ -48835,7 +48943,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "toolPolicy:read"
           ]
         }
@@ -48845,7 +48954,7 @@
         "tags": [
           "Tool Invocation Policies"
         ],
-        "description": "Update a tool invocation policy\n\nRequired RBAC permissions:\n- `toolPolicy:update`: Modify tools, tool configuration, and security policies",
+        "description": "Update a tool invocation policy\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `toolPolicy:update`: Modify tools, tool configuration, and security policies",
         "requestBody": {
           "required": true,
           "content": {
@@ -49217,7 +49326,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "toolPolicy:update"
           ]
         }
@@ -49227,7 +49337,7 @@
         "tags": [
           "Tool Invocation Policies"
         ],
-        "description": "Delete a tool invocation policy\n\nRequired RBAC permissions:\n- `toolPolicy:delete`: Remove tools and security policies",
+        "description": "Delete a tool invocation policy\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `toolPolicy:delete`: Remove tools and security policies",
         "parameters": [
           {
             "schema": {
@@ -49472,7 +49582,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "toolPolicy:delete"
           ]
         }
@@ -49484,7 +49595,7 @@
         "tags": [
           "Trusted Data Policies"
         ],
-        "description": "Get all trusted data policies\n\nRequired RBAC permissions:\n- `toolPolicy:read`: View tools, tool invocation policies, and trusted data policies",
+        "description": "Get all trusted data policies\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `toolPolicy:read`: View tools, tool invocation policies, and trusted data policies",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -49786,7 +49897,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "toolPolicy:read"
           ]
         }
@@ -49796,7 +49908,7 @@
         "tags": [
           "Trusted Data Policies"
         ],
-        "description": "Create a new trusted data policy\n\nRequired RBAC permissions:\n- `toolPolicy:create`: Register tools and create security policies",
+        "description": "Create a new trusted data policy\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `toolPolicy:create`: Register tools and create security policies",
         "requestBody": {
           "required": true,
           "content": {
@@ -50161,7 +50273,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "toolPolicy:create"
           ]
         }
@@ -50173,7 +50286,7 @@
         "tags": [
           "Trusted Data Policies"
         ],
-        "description": "Get trusted data policy by ID\n\nRequired RBAC permissions:\n- `toolPolicy:read`: View tools, tool invocation policies, and trusted data policies",
+        "description": "Get trusted data policy by ID\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `toolPolicy:read`: View tools, tool invocation policies, and trusted data policies",
         "parameters": [
           {
             "schema": {
@@ -50484,7 +50597,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "toolPolicy:read"
           ]
         }
@@ -50494,7 +50608,7 @@
         "tags": [
           "Trusted Data Policies"
         ],
-        "description": "Update a trusted data policy\n\nRequired RBAC permissions:\n- `toolPolicy:update`: Modify tools, tool configuration, and security policies",
+        "description": "Update a trusted data policy\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `toolPolicy:update`: Modify tools, tool configuration, and security policies",
         "requestBody": {
           "required": true,
           "content": {
@@ -50866,7 +50980,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "toolPolicy:update"
           ]
         }
@@ -50876,7 +50991,7 @@
         "tags": [
           "Trusted Data Policies"
         ],
-        "description": "Delete a trusted data policy\n\nRequired RBAC permissions:\n- `toolPolicy:delete`: Remove tools and security policies",
+        "description": "Delete a trusted data policy\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `toolPolicy:delete`: Remove tools and security policies",
         "parameters": [
           {
             "schema": {
@@ -51121,7 +51236,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "toolPolicy:delete"
           ]
         }
@@ -51133,7 +51249,7 @@
         "tags": [
           "Tool Invocation Policies"
         ],
-        "description": "Bulk upsert default tool invocation policies (empty conditions) for multiple tools\n\nRequired RBAC permissions:\n- `toolPolicy:update`: Modify tools, tool configuration, and security policies",
+        "description": "Bulk upsert default tool invocation policies (empty conditions) for multiple tools\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `toolPolicy:update`: Modify tools, tool configuration, and security policies",
         "requestBody": {
           "required": true,
           "content": {
@@ -51403,7 +51519,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "toolPolicy:update"
           ]
         }
@@ -51415,7 +51532,7 @@
         "tags": [
           "Trusted Data Policies"
         ],
-        "description": "Bulk upsert default trusted data policies (empty conditions) for multiple tools\n\nRequired RBAC permissions:\n- `toolPolicy:update`: Modify tools, tool configuration, and security policies",
+        "description": "Bulk upsert default trusted data policies (empty conditions) for multiple tools\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `toolPolicy:update`: Modify tools, tool configuration, and security policies",
         "requestBody": {
           "required": true,
           "content": {
@@ -51685,7 +51802,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "toolPolicy:update"
           ]
         }
@@ -57994,7 +58112,7 @@
         "tags": [
           "Chat API Keys"
         ],
-        "description": "Get all chat API keys visible to the current user based on scope access\n\nRequired RBAC permissions:\n- `llmProvider:read`: View LLM provider API keys, virtual keys, and models",
+        "description": "Get all chat API keys visible to the current user based on scope access\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `llmProvider:read`: View LLM provider API keys, virtual keys, and models",
         "parameters": [
           {
             "schema": {
@@ -58380,7 +58498,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "llmProvider:read"
           ]
         }
@@ -58390,7 +58509,7 @@
         "tags": [
           "Chat API Keys"
         ],
-        "description": "Create a new chat API key with specified scope\n\nRequired RBAC permissions:\n- `llmProvider:create`: Add new LLM provider API keys or virtual keys",
+        "description": "Create a new chat API key with specified scope\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `llmProvider:create`: Add new LLM provider API keys or virtual keys",
         "requestBody": {
           "required": true,
           "content": {
@@ -58777,7 +58896,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "llmProvider:create"
           ]
         }
@@ -58789,7 +58909,7 @@
         "tags": [
           "Chat API Keys"
         ],
-        "description": "Get API keys available for the current user to use in chat\n\nRequired RBAC permissions:\n- `llmProvider:read`: View LLM provider API keys, virtual keys, and models",
+        "description": "Get API keys available for the current user to use in chat\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `llmProvider:read`: View LLM provider API keys, virtual keys, and models",
         "parameters": [
           {
             "schema": {
@@ -59176,7 +59296,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "llmProvider:read"
           ]
         }
@@ -59188,7 +59309,7 @@
         "tags": [
           "Chat API Keys"
         ],
-        "description": "Get a specific chat API key\n\nRequired RBAC permissions:\n- `llmProvider:read`: View LLM provider API keys, virtual keys, and models",
+        "description": "Get a specific chat API key\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `llmProvider:read`: View LLM provider API keys, virtual keys, and models",
         "parameters": [
           {
             "schema": {
@@ -59546,7 +59667,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "llmProvider:read"
           ]
         }
@@ -59556,7 +59678,7 @@
         "tags": [
           "Chat API Keys"
         ],
-        "description": "Update a chat API key (name, API key value, scope, or team)\n\nRequired RBAC permissions:\n- `llmProvider:update`: Modify LLM provider configuration and model pricing",
+        "description": "Update a chat API key (name, API key value, scope, or team)\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `llmProvider:update`: Modify LLM provider configuration and model pricing",
         "requestBody": {
           "required": true,
           "content": {
@@ -59932,7 +60054,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "llmProvider:update"
           ]
         }
@@ -59942,7 +60065,7 @@
         "tags": [
           "Chat API Keys"
         ],
-        "description": "Delete a chat API key\n\nRequired RBAC permissions:\n- `llmProvider:delete`: Remove LLM provider API keys or virtual keys",
+        "description": "Delete a chat API key\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `llmProvider:delete`: Remove LLM provider API keys or virtual keys",
         "parameters": [
           {
             "schema": {
@@ -60187,7 +60310,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "llmProvider:delete"
           ]
         }
@@ -60199,7 +60323,7 @@
         "tags": [
           "Chat"
         ],
-        "description": "Get available LLM models from all configured providers. Models are fetched directly from provider APIs. Includes model capabilities (context length, modalities, tool calling support) when available.\n\nRequired RBAC permissions:\n- `chat:read`: View and access chat conversations",
+        "description": "Get available LLM models from all configured providers. Models are fetched directly from provider APIs. Includes model capabilities (context length, modalities, tool calling support) when available.\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `chat:read`: View and access chat conversations",
         "parameters": [
           {
             "schema": {
@@ -60579,7 +60703,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "chat:read"
           ]
         }
@@ -60591,7 +60716,7 @@
         "tags": [
           "Chat"
         ],
-        "description": "Sync models from providers for all API keys and store them in the database\n\nRequired RBAC permissions:\n- `llmProvider:update`: Modify LLM provider configuration and model pricing",
+        "description": "Sync models from providers for all API keys and store them in the database\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `llmProvider:update`: Modify LLM provider configuration and model pricing",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -60824,7 +60949,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "llmProvider:update"
           ]
         }
@@ -60836,7 +60962,7 @@
         "tags": [
           "Chat"
         ],
-        "description": "Sync models from providers, overwriting all fields including custom modifications\n\nRequired RBAC permissions:\n- `llmProvider:update`: Modify LLM provider configuration and model pricing",
+        "description": "Sync models from providers, overwriting all fields including custom modifications\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `llmProvider:update`: Modify LLM provider configuration and model pricing",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -61069,7 +61195,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "llmProvider:update"
           ]
         }
@@ -61081,7 +61208,7 @@
         "tags": [
           "Models"
         ],
-        "description": "Get all models with their linked API keys. Returns models from the database with information about which API keys provide access to them.\n\nRequired RBAC permissions:\n- `llmProvider:read`: View LLM provider API keys, virtual keys, and models",
+        "description": "Get all models with their linked API keys. Returns models from the database with information about which API keys provide access to them.\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `llmProvider:read`: View LLM provider API keys, virtual keys, and models",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -61547,7 +61674,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "llmProvider:read"
           ]
         }
@@ -61559,7 +61687,7 @@
         "tags": [
           "Models"
         ],
-        "description": "Update model details including custom pricing and modalities.\n\nRequired RBAC permissions:\n- `llmProvider:update`: Modify LLM provider configuration and model pricing",
+        "description": "Update model details including custom pricing and modalities.\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `llmProvider:update`: Modify LLM provider configuration and model pricing",
         "requestBody": {
           "required": true,
           "content": {
@@ -61968,7 +62096,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "llmProvider:update"
           ]
         }
@@ -61980,7 +62109,7 @@
         "tags": [
           "Chat"
         ],
-        "description": "Stream chat response with MCP tools (useChat format)\n\nRequired RBAC permissions:\n- `chat:read`: View and access chat conversations",
+        "description": "Stream chat response with MCP tools (useChat format)\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `chat:read`: View and access chat conversations",
         "requestBody": {
           "required": true,
           "content": {
@@ -62226,7 +62355,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "chat:read"
           ]
         }
@@ -62238,7 +62368,7 @@
         "tags": [
           "Chat"
         ],
-        "description": "Stop a running chat stream for a conversation\n\nRequired RBAC permissions:\n- `chat:read`: View and access chat conversations",
+        "description": "Stop a running chat stream for a conversation\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `chat:read`: View and access chat conversations",
         "parameters": [
           {
             "schema": {
@@ -62483,7 +62613,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "chat:read"
           ]
         }
@@ -62495,7 +62626,7 @@
         "tags": [
           "Chat"
         ],
-        "description": "List all conversations for current user with agent details. Optionally filter by search query.\n\nRequired RBAC permissions:\n- `chat:read`: View and access chat conversations",
+        "description": "List all conversations for current user with agent details. Optionally filter by search query.\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `chat:read`: View and access chat conversations",
         "parameters": [
           {
             "schema": {
@@ -62899,7 +63030,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "chat:read"
           ]
         }
@@ -62909,7 +63041,7 @@
         "tags": [
           "Chat"
         ],
-        "description": "Create a new conversation with an agent\n\nRequired RBAC permissions:\n- `chat:create`: Start new chat conversations",
+        "description": "Create a new conversation with an agent\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `chat:create`: Start new chat conversations",
         "requestBody": {
           "required": true,
           "content": {
@@ -63354,7 +63486,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "chat:create"
           ]
         }
@@ -63366,7 +63499,7 @@
         "tags": [
           "Chat"
         ],
-        "description": "Get conversation with messages\n\nRequired RBAC permissions:\n- `chat:read`: View and access chat conversations",
+        "description": "Get conversation with messages\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `chat:read`: View and access chat conversations",
         "parameters": [
           {
             "schema": {
@@ -63769,7 +63902,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "chat:read"
           ]
         }
@@ -63779,7 +63913,7 @@
         "tags": [
           "Chat"
         ],
-        "description": "Update conversation title, model, agent, or API key\n\nRequired RBAC permissions:\n- `chat:update`: Edit chat messages and conversation settings",
+        "description": "Update conversation title, model, agent, or API key\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `chat:update`: Edit chat messages and conversation settings",
         "requestBody": {
           "required": true,
           "content": {
@@ -64243,7 +64377,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "chat:update"
           ]
         }
@@ -64253,7 +64388,7 @@
         "tags": [
           "Chat"
         ],
-        "description": "Delete a conversation\n\nRequired RBAC permissions:\n- `chat:delete`: Delete chat conversations",
+        "description": "Delete a conversation\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `chat:delete`: Delete chat conversations",
         "parameters": [
           {
             "schema": {
@@ -64498,7 +64633,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "chat:delete"
           ]
         }
@@ -64510,7 +64646,7 @@
         "tags": [
           "Chat"
         ],
-        "description": "Get MCP tools available for an agent via MCP Gateway\n\nRequired RBAC permissions:\n- `agent:read`: View and list agents",
+        "description": "Get MCP tools available for an agent via MCP Gateway\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `agent:read`: View and list agents",
         "parameters": [
           {
             "schema": {
@@ -64768,7 +64904,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "agent:read"
           ]
         }
@@ -64780,7 +64917,7 @@
         "tags": [
           "Chat"
         ],
-        "description": "Generate a title for the conversation based on the first user message and assistant response\n\nRequired RBAC permissions:\n- `chat:update`: Edit chat messages and conversation settings",
+        "description": "Generate a title for the conversation based on the first user message and assistant response\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `chat:update`: Edit chat messages and conversation settings",
         "requestBody": {
           "required": true,
           "content": {
@@ -65199,7 +65336,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "chat:update"
           ]
         }
@@ -65211,7 +65349,7 @@
         "tags": [
           "Chat"
         ],
-        "description": "Update a specific text part in a message\n\nRequired RBAC permissions:\n- `chat:update`: Edit chat messages and conversation settings",
+        "description": "Update a specific text part in a message\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `chat:update`: Edit chat messages and conversation settings",
         "requestBody": {
           "required": true,
           "content": {
@@ -65640,7 +65778,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "chat:update"
           ]
         }
@@ -65652,7 +65791,7 @@
         "tags": [
           "Chat"
         ],
-        "description": "Get enabled tools for a conversation. Empty array means all profile tools are enabled (default).\n\nRequired RBAC permissions:\n- `chat:read`: View and access chat conversations",
+        "description": "Get enabled tools for a conversation. Empty array means all profile tools are enabled (default).\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `chat:read`: View and access chat conversations",
         "parameters": [
           {
             "schema": {
@@ -65904,7 +66043,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "chat:read"
           ]
         }
@@ -65914,7 +66054,7 @@
         "tags": [
           "Chat"
         ],
-        "description": "Set enabled tools for a conversation. Replaces all existing selections.\n\nRequired RBAC permissions:\n- `chat:update`: Edit chat messages and conversation settings",
+        "description": "Set enabled tools for a conversation. Replaces all existing selections.\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `chat:update`: Edit chat messages and conversation settings",
         "requestBody": {
           "required": true,
           "content": {
@@ -66187,7 +66327,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "chat:update"
           ]
         }
@@ -66197,7 +66338,7 @@
         "tags": [
           "Chat"
         ],
-        "description": "Clear custom tool selection for a conversation (revert to all tools enabled)\n\nRequired RBAC permissions:\n- `chat:update`: Edit chat messages and conversation settings",
+        "description": "Clear custom tool selection for a conversation (revert to all tools enabled)\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `chat:update`: Edit chat messages and conversation settings",
         "parameters": [
           {
             "schema": {
@@ -66442,7 +66583,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "chat:update"
           ]
         }
@@ -66454,7 +66596,7 @@
         "tags": [
           "Chat"
         ],
-        "description": "Get share status for a conversation\n\nRequired RBAC permissions:\n- `chat:read`: View and access chat conversations",
+        "description": "Get share status for a conversation\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `chat:read`: View and access chat conversations",
         "parameters": [
           {
             "schema": {
@@ -66728,7 +66870,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "chat:read"
           ]
         }
@@ -66738,7 +66881,7 @@
         "tags": [
           "Chat"
         ],
-        "description": "Share a conversation with your organization\n\nRequired RBAC permissions:\n- `chat:update`: Edit chat messages and conversation settings",
+        "description": "Share a conversation with your organization\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `chat:update`: Edit chat messages and conversation settings",
         "requestBody": {
           "required": true,
           "content": {
@@ -67032,7 +67175,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "chat:update"
           ]
         }
@@ -67042,7 +67186,7 @@
         "tags": [
           "Chat"
         ],
-        "description": "Revoke sharing of a conversation\n\nRequired RBAC permissions:\n- `chat:update`: Edit chat messages and conversation settings",
+        "description": "Revoke sharing of a conversation\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `chat:update`: Edit chat messages and conversation settings",
         "parameters": [
           {
             "schema": {
@@ -67287,7 +67431,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "chat:update"
           ]
         }
@@ -67299,7 +67444,7 @@
         "tags": [
           "Chat"
         ],
-        "description": "Get a shared conversation by share ID\n\nRequired RBAC permissions:\n- `chat:read`: View and access chat conversations",
+        "description": "Get a shared conversation by share ID\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `chat:read`: View and access chat conversations",
         "parameters": [
           {
             "schema": {
@@ -67706,7 +67851,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "chat:read"
           ]
         }
@@ -67718,7 +67864,7 @@
         "tags": [
           "Chat"
         ],
-        "description": "Create a new conversation from a shared conversation's messages\n\nRequired RBAC permissions:\n- `chat:create`: Start new chat conversations",
+        "description": "Create a new conversation from a shared conversation's messages\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `chat:create`: Start new chat conversations",
         "requestBody": {
           "required": true,
           "content": {
@@ -68141,7 +68287,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "chat:create"
           ]
         }
@@ -68642,7 +68789,7 @@
         "tags": [
           "ChatOps"
         ],
-        "description": "Get chatops provider configuration status\n\nRequired RBAC permissions:\n- `agentTrigger:read`: View agent trigger configurations (Slack, MS Teams, email)",
+        "description": "Get chatops provider configuration status\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `agentTrigger:read`: View agent trigger configurations (Slack, MS Teams, email)",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -68945,7 +69092,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "agentTrigger:read"
           ]
         }
@@ -68957,7 +69105,7 @@
         "tags": [
           "ChatOps"
         ],
-        "description": "List chatops channel bindings with pagination\n\nRequired RBAC permissions:\n- `agentTrigger:read`: View agent trigger configurations (Slack, MS Teams, email)",
+        "description": "List chatops channel bindings with pagination\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `agentTrigger:read`: View agent trigger configurations (Slack, MS Teams, email)",
         "parameters": [
           {
             "schema": {
@@ -69439,7 +69587,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "agentTrigger:read"
           ]
         }
@@ -69449,7 +69598,7 @@
         "tags": [
           "ChatOps"
         ],
-        "description": "Bulk-update agent assignment for multiple channel bindings\n\nRequired RBAC permissions:\n- `agentTrigger:update`: Modify agent trigger configurations",
+        "description": "Bulk-update agent assignment for multiple channel bindings\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `agentTrigger:update`: Modify agent trigger configurations",
         "requestBody": {
           "required": true,
           "content": {
@@ -69783,7 +69932,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "agentTrigger:update"
           ]
         }
@@ -69795,7 +69945,7 @@
         "tags": [
           "ChatOps"
         ],
-        "description": "Delete a chatops channel binding\n\nRequired RBAC permissions:\n- `agentTrigger:delete`: Remove agent triggers",
+        "description": "Delete a chatops channel binding\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `agentTrigger:delete`: Remove agent triggers",
         "parameters": [
           {
             "schema": {
@@ -70040,7 +70190,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "agentTrigger:delete"
           ]
         }
@@ -70050,7 +70201,7 @@
         "tags": [
           "ChatOps"
         ],
-        "description": "Update a chatops channel binding\n\nRequired RBAC permissions:\n- `agentTrigger:update`: Modify agent trigger configurations",
+        "description": "Update a chatops channel binding\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `agentTrigger:update`: Modify agent trigger configurations",
         "requestBody": {
           "required": true,
           "content": {
@@ -70379,7 +70530,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "agentTrigger:update"
           ]
         }
@@ -70391,7 +70543,7 @@
         "tags": [
           "ChatOps"
         ],
-        "description": "Create a pending DM binding so an agent can be pre-assigned before the first DM interaction\n\nRequired RBAC permissions:\n- `agentTrigger:create`: Set up new agent triggers",
+        "description": "Create a pending DM binding so an agent can be pre-assigned before the first DM interaction\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `agentTrigger:create`: Set up new agent triggers",
         "requestBody": {
           "required": true,
           "content": {
@@ -70719,7 +70871,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "agentTrigger:create"
           ]
         }
@@ -70731,7 +70884,7 @@
         "tags": [
           "ChatOps"
         ],
-        "description": "Update MS Teams chatops configuration\n\nRequired RBAC permissions:\n- `agentTrigger:update`: Modify agent trigger configurations",
+        "description": "Update MS Teams chatops configuration\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `agentTrigger:update`: Modify agent trigger configurations",
         "requestBody": {
           "required": true,
           "content": {
@@ -70994,7 +71147,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "agentTrigger:update"
           ]
         }
@@ -71006,7 +71160,7 @@
         "tags": [
           "ChatOps"
         ],
-        "description": "Update Slack chatops configuration\n\nRequired RBAC permissions:\n- `agentTrigger:update`: Modify agent trigger configurations",
+        "description": "Update Slack chatops configuration\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `agentTrigger:update`: Modify agent trigger configurations",
         "requestBody": {
           "required": true,
           "content": {
@@ -71277,7 +71431,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "agentTrigger:update"
           ]
         }
@@ -71289,7 +71444,7 @@
         "tags": [
           "ChatOps"
         ],
-        "description": "Refresh channel discovery cache for a chatops provider\n\nRequired RBAC permissions:\n- `agentTrigger:read`: View agent trigger configurations (Slack, MS Teams, email)",
+        "description": "Refresh channel discovery cache for a chatops provider\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `agentTrigger:read`: View agent trigger configurations (Slack, MS Teams, email)",
         "requestBody": {
           "required": true,
           "content": {
@@ -71544,7 +71699,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "agentTrigger:read"
           ]
         }
@@ -72088,7 +72244,7 @@
         "tags": [
           "Config"
         ],
-        "description": "Get platform configuration and feature flags",
+        "description": "Get platform configuration and feature flags\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- None (no additional RBAC permission required)",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -72235,6 +72391,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       }
     },
@@ -72776,7 +72937,7 @@
         "tags": [
           "Dual LLM Config"
         ],
-        "description": "Get default dual LLM configuration\n\nRequired RBAC permissions:\n- `dualLlmConfig:read`: View dual LLM security configurations",
+        "description": "Get default dual LLM configuration\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `dualLlmConfig:read`: View dual LLM security configurations",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -73043,7 +73204,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "dualLlmConfig:read"
           ]
         }
@@ -73055,7 +73217,7 @@
         "tags": [
           "Dual LLM Config"
         ],
-        "description": "Get all dual LLM configurations\n\nRequired RBAC permissions:\n- `dualLlmConfig:read`: View dual LLM security configurations",
+        "description": "Get all dual LLM configurations\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `dualLlmConfig:read`: View dual LLM security configurations",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -73325,7 +73487,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "dualLlmConfig:read"
           ]
         }
@@ -73335,7 +73498,7 @@
         "tags": [
           "Dual LLM Config"
         ],
-        "description": "Create a new dual LLM configuration\n\nRequired RBAC permissions:\n- `dualLlmConfig:create`: Create new dual LLM configurations",
+        "description": "Create a new dual LLM configuration\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `dualLlmConfig:create`: Create new dual LLM configurations",
         "requestBody": {
           "required": true,
           "content": {
@@ -73636,7 +73799,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "dualLlmConfig:create"
           ]
         }
@@ -73648,7 +73812,7 @@
         "tags": [
           "Dual LLM Config"
         ],
-        "description": "Get dual LLM configuration by ID\n\nRequired RBAC permissions:\n- `dualLlmConfig:read`: View dual LLM security configurations",
+        "description": "Get dual LLM configuration by ID\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `dualLlmConfig:read`: View dual LLM security configurations",
         "parameters": [
           {
             "schema": {
@@ -73927,7 +74091,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "dualLlmConfig:read"
           ]
         }
@@ -73937,7 +74102,7 @@
         "tags": [
           "Dual LLM Config"
         ],
-        "description": "Update a dual LLM configuration\n\nRequired RBAC permissions:\n- `dualLlmConfig:update`: Modify dual LLM configurations",
+        "description": "Update a dual LLM configuration\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `dualLlmConfig:update`: Modify dual LLM configurations",
         "requestBody": {
           "required": true,
           "content": {
@@ -74245,7 +74410,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "dualLlmConfig:update"
           ]
         }
@@ -74255,7 +74421,7 @@
         "tags": [
           "Dual LLM Config"
         ],
-        "description": "Delete a dual LLM configuration\n\nRequired RBAC permissions:\n- `dualLlmConfig:delete`: Remove dual LLM configurations",
+        "description": "Delete a dual LLM configuration\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `dualLlmConfig:delete`: Remove dual LLM configurations",
         "parameters": [
           {
             "schema": {
@@ -74500,7 +74666,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "dualLlmConfig:delete"
           ]
         }
@@ -74512,7 +74679,7 @@
         "tags": [
           "Dual LLM Results"
         ],
-        "description": "Get dual LLM result by tool call ID\n\nRequired RBAC permissions:\n- `dualLlmResult:read`: View dual LLM security validation results",
+        "description": "Get dual LLM result by tool call ID\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `dualLlmResult:read`: View dual LLM security validation results",
         "parameters": [
           {
             "schema": {
@@ -74810,7 +74977,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "dualLlmResult:read"
           ]
         }
@@ -74822,7 +74990,7 @@
         "tags": [
           "Dual LLM Results"
         ],
-        "description": "Get all dual LLM results for an interaction\n\nRequired RBAC permissions:\n- `dualLlmResult:read`: View dual LLM security validation results",
+        "description": "Get all dual LLM results for an interaction\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `dualLlmResult:read`: View dual LLM security validation results",
         "parameters": [
           {
             "schema": {
@@ -75124,7 +75292,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "dualLlmResult:read"
           ]
         }
@@ -76962,7 +77131,7 @@
         "tags": [
           "Agents"
         ],
-        "description": "Get the email address for invoking an agent",
+        "description": "Get the email address for invoking an agent\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- None (no additional RBAC permission required)",
         "parameters": [
           {
             "schema": {
@@ -77228,6 +77397,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       }
     },
@@ -77237,7 +77411,7 @@
         "tags": [
           "Incoming Email"
         ],
-        "description": "Get the current incoming email webhook subscription status\n\nRequired RBAC permissions:\n- `agentTrigger:read`: View agent trigger configurations (Slack, MS Teams, email)",
+        "description": "Get the current incoming email webhook subscription status\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `agentTrigger:read`: View agent trigger configurations (Slack, MS Teams, email)",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -77502,7 +77676,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "agentTrigger:read"
           ]
         }
@@ -77514,7 +77689,7 @@
         "tags": [
           "Incoming Email"
         ],
-        "description": "Setup or renew incoming email webhook subscription\n\nRequired RBAC permissions:\n- `agentTrigger:create`: Set up new agent triggers",
+        "description": "Setup or renew incoming email webhook subscription\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `agentTrigger:create`: Set up new agent triggers",
         "requestBody": {
           "required": true,
           "content": {
@@ -77777,7 +77952,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "agentTrigger:create"
           ]
         }
@@ -77789,7 +77965,7 @@
         "tags": [
           "Incoming Email"
         ],
-        "description": "Renew the incoming email webhook subscription\n\nRequired RBAC permissions:\n- `agentTrigger:update`: Modify agent trigger configurations",
+        "description": "Renew the incoming email webhook subscription\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `agentTrigger:update`: Modify agent trigger configurations",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -78033,7 +78209,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "agentTrigger:update"
           ]
         }
@@ -78045,7 +78222,7 @@
         "tags": [
           "Incoming Email"
         ],
-        "description": "Delete the incoming email webhook subscription\n\nRequired RBAC permissions:\n- `agentTrigger:delete`: Remove agent triggers",
+        "description": "Delete the incoming email webhook subscription\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `agentTrigger:delete`: Remove agent triggers",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -78278,7 +78455,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "agentTrigger:delete"
           ]
         }
@@ -78290,7 +78468,7 @@
         "tags": [
           "Interaction"
         ],
-        "description": "Get all interactions with pagination and sorting\n\nRequired RBAC permissions:\n- `log:read`: View LLM proxy and MCP tool call logs",
+        "description": "Get all interactions with pagination and sorting\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `log:read`: View LLM proxy and MCP tool call logs",
         "parameters": [
           {
             "schema": {
@@ -83209,7 +83387,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "log:read"
           ]
         }
@@ -83221,7 +83400,7 @@
         "tags": [
           "Interaction"
         ],
-        "description": "Get all interaction sessions grouped by session ID with aggregated stats\n\nRequired RBAC permissions:\n- `log:read`: View LLM proxy and MCP tool call logs",
+        "description": "Get all interaction sessions grouped by session ID with aggregated stats\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `log:read`: View LLM proxy and MCP tool call logs",
         "parameters": [
           {
             "schema": {
@@ -83756,7 +83935,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "log:read"
           ]
         }
@@ -83768,7 +83948,7 @@
         "tags": [
           "Interaction"
         ],
-        "description": "Get all unique external agent IDs with display names for filtering (from X-Archestra-Agent-Id header)\n\nRequired RBAC permissions:\n- `log:read`: View LLM proxy and MCP tool call logs",
+        "description": "Get all unique external agent IDs with display names for filtering (from X-Archestra-Agent-Id header)\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `log:read`: View LLM proxy and MCP tool call logs",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -84008,7 +84188,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "log:read"
           ]
         }
@@ -84020,7 +84201,7 @@
         "tags": [
           "Interaction"
         ],
-        "description": "Get all unique user IDs with names for filtering (from X-Archestra-User-Id header)\n\nRequired RBAC permissions:\n- `log:read`: View LLM proxy and MCP tool call logs",
+        "description": "Get all unique user IDs with names for filtering (from X-Archestra-User-Id header)\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `log:read`: View LLM proxy and MCP tool call logs",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -84260,7 +84441,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "log:read"
           ]
         }
@@ -84272,7 +84454,7 @@
         "tags": [
           "Interaction"
         ],
-        "description": "Get interaction by ID\n\nRequired RBAC permissions:\n- `log:read`: View LLM proxy and MCP tool call logs",
+        "description": "Get interaction by ID\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `log:read`: View LLM proxy and MCP tool call logs",
         "parameters": [
           {
             "schema": {
@@ -89038,7 +89220,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "log:read"
           ]
         }
@@ -89050,7 +89233,7 @@
         "tags": [
           "MCP Catalog"
         ],
-        "description": "Get all Internal MCP catalog items\n\nRequired RBAC permissions:\n- `mcpRegistry:read`: Browse the MCP server registry",
+        "description": "Get all Internal MCP catalog items\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `mcpRegistry:read`: Browse the MCP server registry",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -89814,7 +89997,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "mcpRegistry:read"
           ]
         }
@@ -89824,7 +90008,7 @@
         "tags": [
           "MCP Catalog"
         ],
-        "description": "Create a new Internal MCP catalog item\n\nRequired RBAC permissions:\n- `mcpRegistry:create`: Add servers to the MCP registry",
+        "description": "Create a new Internal MCP catalog item\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `mcpRegistry:create`: Add servers to the MCP registry",
         "requestBody": {
           "required": true,
           "content": {
@@ -91071,7 +91255,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "mcpRegistry:create"
           ]
         }
@@ -91083,7 +91268,7 @@
         "tags": [
           "MCP Catalog"
         ],
-        "description": "Get Internal MCP catalog item by ID\n\nRequired RBAC permissions:\n- `mcpRegistry:read`: Browse the MCP server registry",
+        "description": "Get Internal MCP catalog item by ID\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `mcpRegistry:read`: Browse the MCP server registry",
         "parameters": [
           {
             "schema": {
@@ -91856,7 +92041,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "mcpRegistry:read"
           ]
         }
@@ -91866,7 +92052,7 @@
         "tags": [
           "MCP Catalog"
         ],
-        "description": "Update an Internal MCP catalog item\n\nRequired RBAC permissions:\n- `mcpRegistry:update`: Modify MCP registry entries",
+        "description": "Update an Internal MCP catalog item\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `mcpRegistry:update`: Modify MCP registry entries",
         "requestBody": {
           "required": true,
           "content": {
@@ -93116,7 +93302,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "mcpRegistry:update"
           ]
         }
@@ -93126,7 +93313,7 @@
         "tags": [
           "MCP Catalog"
         ],
-        "description": "Delete an Internal MCP catalog item\n\nRequired RBAC permissions:\n- `mcpRegistry:delete`: Remove servers from the MCP registry",
+        "description": "Delete an Internal MCP catalog item\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `mcpRegistry:delete`: Remove servers from the MCP registry",
         "parameters": [
           {
             "schema": {
@@ -93371,7 +93558,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "mcpRegistry:delete"
           ]
         }
@@ -93383,7 +93571,7 @@
         "tags": [
           "MCP Catalog"
         ],
-        "description": "Get tools for a catalog item (including builtin Archestra tools)\n\nRequired RBAC permissions:\n- `mcpRegistry:read`: Browse the MCP server registry",
+        "description": "Get tools for a catalog item (including builtin Archestra tools)\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `mcpRegistry:read`: Browse the MCP server registry",
         "parameters": [
           {
             "schema": {
@@ -93674,7 +93862,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "mcpRegistry:read"
           ]
         }
@@ -93686,7 +93875,7 @@
         "tags": [
           "MCP Catalog"
         ],
-        "description": "Delete an Internal MCP catalog item by name\n\nRequired RBAC permissions:\n- `mcpRegistry:delete`: Remove servers from the MCP registry",
+        "description": "Delete an Internal MCP catalog item by name\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `mcpRegistry:delete`: Remove servers from the MCP registry",
         "parameters": [
           {
             "schema": {
@@ -93930,7 +94119,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "mcpRegistry:delete"
           ]
         }
@@ -93942,7 +94132,7 @@
         "tags": [
           "MCP Catalog"
         ],
-        "description": "Generate a deployment YAML template preview for a catalog item\n\nRequired RBAC permissions:\n- `mcpRegistry:read`: Browse the MCP server registry",
+        "description": "Generate a deployment YAML template preview for a catalog item\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `mcpRegistry:read`: Browse the MCP server registry",
         "parameters": [
           {
             "schema": {
@@ -94187,7 +94377,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "mcpRegistry:read"
           ]
         }
@@ -94199,7 +94390,7 @@
         "tags": [
           "MCP Catalog"
         ],
-        "description": "Validate a deployment YAML template\n\nRequired RBAC permissions:\n- `mcpRegistry:read`: Browse the MCP server registry",
+        "description": "Validate a deployment YAML template\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `mcpRegistry:read`: Browse the MCP server registry",
         "requestBody": {
           "required": true,
           "content": {
@@ -94465,7 +94656,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "mcpRegistry:read"
           ]
         }
@@ -94477,7 +94669,7 @@
         "tags": [
           "MCP Catalog"
         ],
-        "description": "Reset the deployment YAML to default by clearing the custom YAML\n\nRequired RBAC permissions:\n- `mcpRegistry:update`: Modify MCP registry entries",
+        "description": "Reset the deployment YAML to default by clearing the custom YAML\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `mcpRegistry:update`: Modify MCP registry entries",
         "parameters": [
           {
             "schema": {
@@ -94722,7 +94914,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "mcpRegistry:update"
           ]
         }
@@ -94734,7 +94927,7 @@
         "tags": [
           "MCP Catalog"
         ],
-        "description": "List Kubernetes docker-registry secrets available for imagePullSecrets\n\nRequired RBAC permissions:\n- `mcpRegistry:read`: Browse the MCP server registry",
+        "description": "List Kubernetes docker-registry secrets available for imagePullSecrets\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `mcpRegistry:read`: Browse the MCP server registry",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -94970,7 +95163,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "mcpRegistry:read"
           ]
         }
@@ -94982,7 +95176,7 @@
         "tags": [
           "MCP Catalog"
         ],
-        "description": "Get all label keys used by catalog items\n\nRequired RBAC permissions:\n- `mcpRegistry:read`: Browse the MCP server registry",
+        "description": "Get all label keys used by catalog items\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `mcpRegistry:read`: Browse the MCP server registry",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -95209,7 +95403,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "mcpRegistry:read"
           ]
         }
@@ -95221,7 +95416,7 @@
         "tags": [
           "MCP Catalog"
         ],
-        "description": "Get all label values for catalog items\n\nRequired RBAC permissions:\n- `mcpRegistry:read`: Browse the MCP server registry",
+        "description": "Get all label values for catalog items\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `mcpRegistry:read`: Browse the MCP server registry",
         "parameters": [
           {
             "schema": {
@@ -95459,7 +95654,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "mcpRegistry:read"
           ]
         }
@@ -95471,7 +95667,7 @@
         "tags": [
           "Invitation"
         ],
-        "description": "Check if an invitation is valid and whether the user exists",
+        "description": "Check if an invitation is valid and whether the user exists\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- None (no additional RBAC permission required)",
         "parameters": [
           {
             "schema": {
@@ -95744,6 +95940,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       }
     },
@@ -95753,7 +95954,7 @@
         "tags": [
           "Knowledge Bases"
         ],
-        "description": "List all knowledge bases for the organization\n\nRequired RBAC permissions:\n- `knowledgeBase:read`: View knowledge bases and connectors",
+        "description": "List all knowledge bases for the organization\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `knowledgeBase:read`: View knowledge bases and connectors",
         "parameters": [
           {
             "schema": {
@@ -96199,7 +96400,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "knowledgeBase:read"
           ]
         }
@@ -96209,7 +96411,7 @@
         "tags": [
           "Knowledge Bases"
         ],
-        "description": "Create a new knowledge base\n\nRequired RBAC permissions:\n- `knowledgeBase:create`: Create knowledge bases and connectors",
+        "description": "Create a new knowledge base\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `knowledgeBase:create`: Create knowledge bases and connectors",
         "requestBody": {
           "required": true,
           "content": {
@@ -96523,7 +96725,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "knowledgeBase:create"
           ]
         }
@@ -96535,7 +96738,7 @@
         "tags": [
           "Knowledge Bases"
         ],
-        "description": "Get a knowledge base by ID\n\nRequired RBAC permissions:\n- `knowledgeBase:read`: View knowledge bases and connectors",
+        "description": "Get a knowledge base by ID\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `knowledgeBase:read`: View knowledge bases and connectors",
         "parameters": [
           {
             "schema": {
@@ -96823,7 +97026,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "knowledgeBase:read"
           ]
         }
@@ -96833,7 +97037,7 @@
         "tags": [
           "Knowledge Bases"
         ],
-        "description": "Update a knowledge base\n\nRequired RBAC permissions:\n- `knowledgeBase:update`: Modify knowledge bases and connectors",
+        "description": "Update a knowledge base\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `knowledgeBase:update`: Modify knowledge bases and connectors",
         "requestBody": {
           "required": true,
           "content": {
@@ -97155,7 +97359,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "knowledgeBase:update"
           ]
         }
@@ -97165,7 +97370,7 @@
         "tags": [
           "Knowledge Bases"
         ],
-        "description": "Delete a knowledge base and all its connectors\n\nRequired RBAC permissions:\n- `knowledgeBase:delete`: Delete knowledge bases and connectors",
+        "description": "Delete a knowledge base and all its connectors\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `knowledgeBase:delete`: Delete knowledge bases and connectors",
         "parameters": [
           {
             "schema": {
@@ -97408,7 +97613,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "knowledgeBase:delete"
           ]
         }
@@ -97420,7 +97626,7 @@
         "tags": [
           "Knowledge Bases"
         ],
-        "description": "Check the health of a knowledge base\n\nRequired RBAC permissions:\n- `knowledgeBase:read`: View knowledge bases and connectors",
+        "description": "Check the health of a knowledge base\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `knowledgeBase:read`: View knowledge bases and connectors",
         "parameters": [
           {
             "schema": {
@@ -97670,7 +97876,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "knowledgeBase:read"
           ]
         }
@@ -97682,7 +97889,7 @@
         "tags": [
           "Connectors"
         ],
-        "description": "List all connectors for the organization\n\nRequired RBAC permissions:\n- `knowledgeBase:read`: View knowledge bases and connectors",
+        "description": "List all connectors for the organization\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `knowledgeBase:read`: View knowledge bases and connectors",
         "parameters": [
           {
             "schema": {
@@ -98427,7 +98634,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "knowledgeBase:read"
           ]
         }
@@ -98437,7 +98645,7 @@
         "tags": [
           "Connectors"
         ],
-        "description": "Create a new connector\n\nRequired RBAC permissions:\n- `knowledgeBase:create`: Create knowledge bases and connectors",
+        "description": "Create a new connector\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `knowledgeBase:create`: Create knowledge bases and connectors",
         "requestBody": {
           "required": true,
           "content": {
@@ -99340,7 +99548,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "knowledgeBase:create"
           ]
         }
@@ -99352,7 +99561,7 @@
         "tags": [
           "Connectors"
         ],
-        "description": "Get a connector by ID\n\nRequired RBAC permissions:\n- `knowledgeBase:read`: View knowledge bases and connectors",
+        "description": "Get a connector by ID\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `knowledgeBase:read`: View knowledge bases and connectors",
         "parameters": [
           {
             "schema": {
@@ -99955,7 +100164,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "knowledgeBase:read"
           ]
         }
@@ -99965,7 +100175,7 @@
         "tags": [
           "Connectors"
         ],
-        "description": "Update a connector\n\nRequired RBAC permissions:\n- `knowledgeBase:update`: Modify knowledge bases and connectors",
+        "description": "Update a connector\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `knowledgeBase:update`: Modify knowledge bases and connectors",
         "requestBody": {
           "required": true,
           "content": {
@@ -100832,7 +101042,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "knowledgeBase:update"
           ]
         }
@@ -100842,7 +101053,7 @@
         "tags": [
           "Connectors"
         ],
-        "description": "Delete a connector\n\nRequired RBAC permissions:\n- `knowledgeBase:delete`: Delete knowledge bases and connectors",
+        "description": "Delete a connector\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `knowledgeBase:delete`: Delete knowledge bases and connectors",
         "parameters": [
           {
             "schema": {
@@ -101085,7 +101296,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "knowledgeBase:delete"
           ]
         }
@@ -101097,7 +101309,7 @@
         "tags": [
           "Connectors"
         ],
-        "description": "Manually trigger a connector sync\n\nRequired RBAC permissions:\n- `knowledgeBase:update`: Modify knowledge bases and connectors",
+        "description": "Manually trigger a connector sync\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `knowledgeBase:update`: Modify knowledge bases and connectors",
         "parameters": [
           {
             "schema": {
@@ -101344,7 +101556,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "knowledgeBase:update"
           ]
         }
@@ -101356,7 +101569,7 @@
         "tags": [
           "Connectors"
         ],
-        "description": "Force a full re-sync: deletes all documents, chunks, run history, and resets the checkpoint\n\nRequired RBAC permissions:\n- `knowledgeBase:update`: Modify knowledge bases and connectors",
+        "description": "Force a full re-sync: deletes all documents, chunks, run history, and resets the checkpoint\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `knowledgeBase:update`: Modify knowledge bases and connectors",
         "parameters": [
           {
             "schema": {
@@ -101603,7 +101816,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "knowledgeBase:update"
           ]
         }
@@ -101615,7 +101829,7 @@
         "tags": [
           "Connectors"
         ],
-        "description": "Test a connector connection\n\nRequired RBAC permissions:\n- `knowledgeBase:read`: View knowledge bases and connectors",
+        "description": "Test a connector connection\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `knowledgeBase:read`: View knowledge bases and connectors",
         "parameters": [
           {
             "schema": {
@@ -101861,7 +102075,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "knowledgeBase:read"
           ]
         }
@@ -101873,7 +102088,7 @@
         "tags": [
           "Connectors"
         ],
-        "description": "Assign a connector to one or more knowledge bases\n\nRequired RBAC permissions:\n- `knowledgeBase:update`: Modify knowledge bases and connectors",
+        "description": "Assign a connector to one or more knowledge bases\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `knowledgeBase:update`: Modify knowledge bases and connectors",
         "requestBody": {
           "required": true,
           "content": {
@@ -102138,7 +102353,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "knowledgeBase:update"
           ]
         }
@@ -102148,7 +102364,7 @@
         "tags": [
           "Connectors"
         ],
-        "description": "List knowledge bases assigned to a connector\n\nRequired RBAC permissions:\n- `knowledgeBase:read`: View knowledge bases and connectors",
+        "description": "List knowledge bases assigned to a connector\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `knowledgeBase:read`: View knowledge bases and connectors",
         "parameters": [
           {
             "schema": {
@@ -102448,7 +102664,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "knowledgeBase:read"
           ]
         }
@@ -102460,7 +102677,7 @@
         "tags": [
           "Connectors"
         ],
-        "description": "Unassign a connector from a knowledge base\n\nRequired RBAC permissions:\n- `knowledgeBase:update`: Modify knowledge bases and connectors",
+        "description": "Unassign a connector from a knowledge base\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `knowledgeBase:update`: Modify knowledge bases and connectors",
         "parameters": [
           {
             "schema": {
@@ -102711,7 +102928,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "knowledgeBase:update"
           ]
         }
@@ -102723,7 +102941,7 @@
         "tags": [
           "Connectors"
         ],
-        "description": "List connector runs\n\nRequired RBAC permissions:\n- `knowledgeBase:read`: View knowledge bases and connectors",
+        "description": "List connector runs\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `knowledgeBase:read`: View knowledge bases and connectors",
         "parameters": [
           {
             "schema": {
@@ -103157,7 +103375,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "knowledgeBase:read"
           ]
         }
@@ -103169,7 +103388,7 @@
         "tags": [
           "Connectors"
         ],
-        "description": "Get a single connector run (including logs)\n\nRequired RBAC permissions:\n- `knowledgeBase:read`: View knowledge bases and connectors",
+        "description": "Get a single connector run (including logs)\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `knowledgeBase:read`: View knowledge bases and connectors",
         "parameters": [
           {
             "schema": {
@@ -103541,7 +103760,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "knowledgeBase:read"
           ]
         }
@@ -103553,7 +103773,7 @@
         "tags": [
           "Limits"
         ],
-        "description": "Get all limits with optional filtering and per-model usage breakdown\n\nRequired RBAC permissions:\n- `llmLimit:read`: View token usage limits",
+        "description": "Get all limits with optional filtering and per-model usage breakdown\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `llmLimit:read`: View token usage limits",
         "parameters": [
           {
             "schema": {
@@ -103917,7 +104137,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "llmLimit:read"
           ]
         }
@@ -103927,7 +104148,7 @@
         "tags": [
           "Limits"
         ],
-        "description": "Create a new limit\n\nRequired RBAC permissions:\n- `llmLimit:create`: Create new usage limits",
+        "description": "Create a new limit\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `llmLimit:create`: Create new usage limits",
         "requestBody": {
           "required": true,
           "content": {
@@ -104287,7 +104508,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "llmLimit:create"
           ]
         }
@@ -104299,7 +104521,7 @@
         "tags": [
           "Limits"
         ],
-        "description": "Get a limit by ID\n\nRequired RBAC permissions:\n- `llmLimit:read`: View token usage limits",
+        "description": "Get a limit by ID\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `llmLimit:read`: View token usage limits",
         "parameters": [
           {
             "schema": {
@@ -104609,7 +104831,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "llmLimit:read"
           ]
         }
@@ -104619,7 +104842,7 @@
         "tags": [
           "Limits"
         ],
-        "description": "Update a limit\n\nRequired RBAC permissions:\n- `llmLimit:update`: Modify existing usage limits",
+        "description": "Update a limit\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `llmLimit:update`: Modify existing usage limits",
         "requestBody": {
           "required": true,
           "content": {
@@ -104985,7 +105208,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "llmLimit:update"
           ]
         }
@@ -104995,7 +105219,7 @@
         "tags": [
           "Limits"
         ],
-        "description": "Delete a limit\n\nRequired RBAC permissions:\n- `llmLimit:delete`: Remove usage limits",
+        "description": "Delete a limit\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `llmLimit:delete`: Remove usage limits",
         "parameters": [
           {
             "schema": {
@@ -105240,7 +105464,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "llmLimit:delete"
           ]
         }
@@ -105400,7 +105625,7 @@
         "tags": [
           "MCP Server Installation Requests"
         ],
-        "description": "Get all MCP server installation requests\n\nRequired RBAC permissions:\n- `mcpServerInstallationRequest:read`: View MCP server installation requests",
+        "description": "Get all MCP server installation requests\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `mcpServerInstallationRequest:read`: View MCP server installation requests",
         "parameters": [
           {
             "schema": {
@@ -106078,7 +106303,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "mcpServerInstallationRequest:read"
           ]
         }
@@ -106088,7 +106314,7 @@
         "tags": [
           "MCP Server Installation Requests"
         ],
-        "description": "Create a new MCP server installation request\n\nRequired RBAC permissions:\n- `mcpServerInstallationRequest:create`: Submit requests to install MCP servers",
+        "description": "Create a new MCP server installation request\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `mcpServerInstallationRequest:create`: Submit requests to install MCP servers",
         "requestBody": {
           "required": true,
           "content": {
@@ -107103,7 +107329,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "mcpServerInstallationRequest:create"
           ]
         }
@@ -107115,7 +107342,7 @@
         "tags": [
           "MCP Server Installation Requests"
         ],
-        "description": "Get an MCP server installation request by ID\n\nRequired RBAC permissions:\n- `mcpServerInstallationRequest:read`: View MCP server installation requests",
+        "description": "Get an MCP server installation request by ID\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `mcpServerInstallationRequest:read`: View MCP server installation requests",
         "parameters": [
           {
             "schema": {
@@ -107786,7 +108013,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "mcpServerInstallationRequest:read"
           ]
         }
@@ -107796,7 +108024,7 @@
         "tags": [
           "MCP Server Installation Requests"
         ],
-        "description": "Update an MCP server installation request\n\nRequired RBAC permissions:\n- `mcpServerInstallationRequest:update`: Add notes to installation requests",
+        "description": "Update an MCP server installation request\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `mcpServerInstallationRequest:update`: Add notes to installation requests",
         "requestBody": {
           "required": true,
           "content": {
@@ -108866,7 +109094,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "mcpServerInstallationRequest:update"
           ]
         }
@@ -108876,7 +109105,7 @@
         "tags": [
           "MCP Server Installation Requests"
         ],
-        "description": "Delete an MCP server installation request\n\nRequired RBAC permissions:\n- `mcpServerInstallationRequest:delete`: Delete installation requests",
+        "description": "Delete an MCP server installation request\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `mcpServerInstallationRequest:delete`: Delete installation requests",
         "parameters": [
           {
             "schema": {
@@ -109121,7 +109350,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "mcpServerInstallationRequest:delete"
           ]
         }
@@ -109133,7 +109363,7 @@
         "tags": [
           "MCP Server Installation Requests"
         ],
-        "description": "Approve an MCP server installation request\n\nRequired RBAC permissions:\n- `mcpServerInstallationRequest:admin`: Approve or decline installation requests",
+        "description": "Approve an MCP server installation request\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `mcpServerInstallationRequest:admin`: Approve or decline installation requests",
         "requestBody": {
           "required": true,
           "content": {
@@ -109819,7 +110049,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "mcpServerInstallationRequest:admin"
           ]
         }
@@ -109831,7 +110062,7 @@
         "tags": [
           "MCP Server Installation Requests"
         ],
-        "description": "Decline an MCP server installation request\n\nRequired RBAC permissions:\n- `mcpServerInstallationRequest:admin`: Approve or decline installation requests",
+        "description": "Decline an MCP server installation request\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `mcpServerInstallationRequest:admin`: Approve or decline installation requests",
         "requestBody": {
           "required": true,
           "content": {
@@ -110517,7 +110748,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "mcpServerInstallationRequest:admin"
           ]
         }
@@ -110529,7 +110761,7 @@
         "tags": [
           "MCP Server Installation Requests"
         ],
-        "description": "Add a note to an MCP server installation request\n\nRequired RBAC permissions:\n- `mcpServerInstallationRequest:update`: Add notes to installation requests",
+        "description": "Add a note to an MCP server installation request\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `mcpServerInstallationRequest:update`: Add notes to installation requests",
         "requestBody": {
           "required": true,
           "content": {
@@ -111219,7 +111451,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "mcpServerInstallationRequest:update"
           ]
         }
@@ -111231,7 +111464,7 @@
         "tags": [
           "MCP Server"
         ],
-        "description": "Get all installed MCP servers\n\nRequired RBAC permissions:\n- `mcpServerInstallation:read`: View installed MCP servers and their status",
+        "description": "Get all installed MCP servers\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `mcpServerInstallation:read`: View installed MCP servers and their status",
         "parameters": [
           {
             "schema": {
@@ -111629,7 +111862,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "mcpServerInstallation:read"
           ]
         }
@@ -111639,7 +111873,7 @@
         "tags": [
           "MCP Server"
         ],
-        "description": "Install an MCP server (from catalog or custom)\n\nRequired RBAC permissions:\n- `mcpServerInstallation:create`: Install MCP servers from the registry",
+        "description": "Install an MCP server (from catalog or custom)\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `mcpServerInstallation:create`: Install MCP servers from the registry",
         "requestBody": {
           "required": true,
           "content": {
@@ -112121,7 +112355,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "mcpServerInstallation:create"
           ]
         }
@@ -112133,7 +112368,7 @@
         "tags": [
           "MCP Server"
         ],
-        "description": "Get MCP server by ID\n\nRequired RBAC permissions:\n- `mcpServerInstallation:read`: View installed MCP servers and their status",
+        "description": "Get MCP server by ID\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `mcpServerInstallation:read`: View installed MCP servers and their status",
         "parameters": [
           {
             "schema": {
@@ -112530,7 +112765,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "mcpServerInstallation:read"
           ]
         }
@@ -112540,7 +112776,7 @@
         "tags": [
           "MCP Server"
         ],
-        "description": "Delete/uninstall an MCP server\n\nRequired RBAC permissions:\n- `mcpServerInstallation:delete`: Uninstall MCP servers",
+        "description": "Delete/uninstall an MCP server\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `mcpServerInstallation:delete`: Uninstall MCP servers",
         "parameters": [
           {
             "schema": {
@@ -112785,7 +113021,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "mcpServerInstallation:delete"
           ]
         }
@@ -112797,7 +113034,7 @@
         "tags": [
           "MCP Server"
         ],
-        "description": "Update MCP server secret after re-authentication (clears OAuth refresh errors)\n\nRequired RBAC permissions:\n- `mcpServerInstallation:update`: Modify installed MCP server configuration",
+        "description": "Update MCP server secret after re-authentication (clears OAuth refresh errors)\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `mcpServerInstallation:update`: Modify installed MCP server configuration",
         "requestBody": {
           "required": true,
           "content": {
@@ -113229,7 +113466,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "mcpServerInstallation:update"
           ]
         }
@@ -113241,7 +113479,7 @@
         "tags": [
           "MCP Server"
         ],
-        "description": "Get the installation status of an MCP server (for polling during local server installation)\n\nRequired RBAC permissions:\n- `mcpServerInstallation:read`: View installed MCP servers and their status",
+        "description": "Get the installation status of an MCP server (for polling during local server installation)\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `mcpServerInstallation:read`: View installed MCP servers and their status",
         "parameters": [
           {
             "schema": {
@@ -113498,7 +113736,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "mcpServerInstallation:read"
           ]
         }
@@ -113510,7 +113749,7 @@
         "tags": [
           "MCP Server"
         ],
-        "description": "Get all tools for an MCP server\n\nRequired RBAC permissions:\n- `mcpServerInstallation:read`: View installed MCP servers and their status",
+        "description": "Get all tools for an MCP server\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `mcpServerInstallation:read`: View installed MCP servers and their status",
         "parameters": [
           {
             "schema": {
@@ -113801,7 +114040,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "mcpServerInstallation:read"
           ]
         }
@@ -113813,7 +114053,7 @@
         "tags": [
           "MCP Server"
         ],
-        "description": "Inspect a running MCP server (list tools or call a tool)\n\nRequired RBAC permissions:\n- `mcpServerInstallation:read`: View installed MCP servers and their status",
+        "description": "Inspect a running MCP server (list tools or call a tool)\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `mcpServerInstallation:read`: View installed MCP servers and their status",
         "requestBody": {
           "required": true,
           "content": {
@@ -114079,7 +114319,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "mcpServerInstallation:read"
           ]
         }
@@ -114091,7 +114332,7 @@
         "tags": [
           "MCP Server"
         ],
-        "description": "Reinstall an MCP server without losing tool assignments and policies\n\nRequired RBAC permissions:\n- `mcpServerInstallation:update`: Modify installed MCP server configuration",
+        "description": "Reinstall an MCP server without losing tool assignments and policies\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `mcpServerInstallation:update`: Modify installed MCP server configuration",
         "requestBody": {
           "required": true,
           "content": {
@@ -114512,7 +114753,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "mcpServerInstallation:update"
           ]
         }
@@ -114524,7 +114766,7 @@
         "tags": [
           "MCP Tool Call"
         ],
-        "description": "Get all MCP tool calls with pagination and sorting\n\nRequired RBAC permissions:\n- `log:read`: View LLM proxy and MCP tool call logs",
+        "description": "Get all MCP tool calls with pagination and sorting\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `log:read`: View LLM proxy and MCP tool call logs",
         "parameters": [
           {
             "schema": {
@@ -114977,7 +115219,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "log:read"
           ]
         }
@@ -114989,7 +115232,7 @@
         "tags": [
           "MCP Tool Call"
         ],
-        "description": "Get MCP tool call by ID\n\nRequired RBAC permissions:\n- `log:read`: View LLM proxy and MCP tool call logs",
+        "description": "Get MCP tool call by ID\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `log:read`: View LLM proxy and MCP tool call logs",
         "parameters": [
           {
             "schema": {
@@ -115308,7 +115551,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "log:read"
           ]
         }
@@ -115320,7 +115564,7 @@
         "tags": [
           "Member"
         ],
-        "description": "Get all members of the organization with pagination and optional filters\n\nRequired RBAC permissions:\n- `member:read`: View organization members and their roles",
+        "description": "Get all members of the organization with pagination and optional filters\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `member:read`: View organization members and their roles",
         "parameters": [
           {
             "schema": {
@@ -115675,7 +115919,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "member:read"
           ]
         }
@@ -116731,7 +116976,7 @@
         "tags": [
           "OAuth"
         ],
-        "description": "Initiate OAuth flow for MCP server installation\n\nRequired RBAC permissions:\n- `mcpServerInstallation:create`: Install MCP servers from the registry",
+        "description": "Initiate OAuth flow for MCP server installation\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `mcpServerInstallation:create`: Install MCP servers from the registry",
         "requestBody": {
           "required": true,
           "content": {
@@ -116994,7 +117239,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "mcpServerInstallation:create"
           ]
         }
@@ -117006,7 +117252,7 @@
         "tags": [
           "OAuth"
         ],
-        "description": "Handle OAuth callback and exchange code for tokens\n\nRequired RBAC permissions:\n- `mcpServerInstallation:create`: Install MCP servers from the registry",
+        "description": "Handle OAuth callback and exchange code for tokens\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `mcpServerInstallation:create`: Install MCP servers from the registry",
         "requestBody": {
           "required": true,
           "content": {
@@ -117287,7 +117533,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "mcpServerInstallation:create"
           ]
         }
@@ -119037,7 +119284,7 @@
         "tags": [
           "Optimization Rules"
         ],
-        "description": "Get all optimization rules for the organization\n\nRequired RBAC permissions:\n- `optimizationRule:read`: View optimization rules",
+        "description": "Get all optimization rules for the organization\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `optimizationRule:read`: View optimization rules",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -119362,7 +119609,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "optimizationRule:read"
           ]
         }
@@ -119372,7 +119620,7 @@
         "tags": [
           "Optimization Rules"
         ],
-        "description": "Create a new optimization rule for the organization\n\nRequired RBAC permissions:\n- `optimizationRule:create`: Create new optimization rules",
+        "description": "Create a new optimization rule for the organization\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `optimizationRule:create`: Create new optimization rules",
         "requestBody": {
           "required": true,
           "content": {
@@ -119789,7 +120037,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "optimizationRule:create"
           ]
         }
@@ -119801,7 +120050,7 @@
         "tags": [
           "Optimization Rules"
         ],
-        "description": "Update an optimization rule\n\nRequired RBAC permissions:\n- `optimizationRule:update`: Modify optimization rules",
+        "description": "Update an optimization rule\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `optimizationRule:update`: Modify optimization rules",
         "requestBody": {
           "required": true,
           "content": {
@@ -120223,7 +120472,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "optimizationRule:update"
           ]
         }
@@ -120233,7 +120483,7 @@
         "tags": [
           "Optimization Rules"
         ],
-        "description": "Delete an optimization rule\n\nRequired RBAC permissions:\n- `optimizationRule:delete`: Remove optimization rules",
+        "description": "Delete an optimization rule\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `optimizationRule:delete`: Remove optimization rules",
         "parameters": [
           {
             "schema": {
@@ -120478,7 +120728,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "optimizationRule:delete"
           ]
         }
@@ -120490,7 +120741,7 @@
         "tags": [
           "Roles"
         ],
-        "description": "Get all roles in the organization\n\nRequired RBAC permissions:\n- `ac:read`: View custom roles and their permissions",
+        "description": "Get all roles in the organization\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `ac:read`: View custom roles and their permissions",
         "parameters": [
           {
             "schema": {
@@ -120861,7 +121112,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "ac:read"
           ]
         }
@@ -120871,7 +121123,7 @@
         "tags": [
           "Roles"
         ],
-        "description": "Create a new custom role\n\nRequired RBAC permissions:\n- `ac:create`: Create new custom roles",
+        "description": "Create a new custom role\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `ac:create`: Create new custom roles",
         "requestBody": {
           "required": true,
           "content": {
@@ -121202,7 +121454,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "ac:create"
           ]
         }
@@ -121214,7 +121467,7 @@
         "tags": [
           "Roles"
         ],
-        "description": "Get a specific role by ID\n\nRequired RBAC permissions:\n- `ac:read`: View custom roles and their permissions",
+        "description": "Get a specific role by ID\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `ac:read`: View custom roles and their permissions",
         "parameters": [
           {
             "schema": {
@@ -121525,7 +121778,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "ac:read"
           ]
         }
@@ -121535,7 +121789,7 @@
         "tags": [
           "Roles"
         ],
-        "description": "Update a custom role\n\nRequired RBAC permissions:\n- `ac:update`: Modify custom role permissions",
+        "description": "Update a custom role\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `ac:update`: Modify custom role permissions",
         "requestBody": {
           "required": true,
           "content": {
@@ -121887,7 +122141,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "ac:update"
           ]
         }
@@ -121897,7 +122152,7 @@
         "tags": [
           "Roles"
         ],
-        "description": "Delete a custom role\n\nRequired RBAC permissions:\n- `ac:delete`: Delete custom roles",
+        "description": "Delete a custom role\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `ac:delete`: Delete custom roles",
         "parameters": [
           {
             "schema": {
@@ -122142,7 +122397,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "ac:delete"
           ]
         }
@@ -122154,7 +122410,7 @@
         "tags": [
           "Organization"
         ],
-        "description": "Get organization details",
+        "description": "Get organization details\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- None (no additional RBAC permission required)",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -122618,6 +122874,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       }
     },
@@ -122627,7 +122888,7 @@
         "tags": [
           "Organization"
         ],
-        "description": "Update appearance settings\n\nRequired RBAC permissions:\n- `organizationSettings:update`: Customize organization appearance, authentication, etc",
+        "description": "Update appearance settings\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `organizationSettings:update`: Customize organization appearance, authentication, etc",
         "requestBody": {
           "required": true,
           "content": {
@@ -123219,7 +123480,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "organizationSettings:update"
           ]
         }
@@ -123229,7 +123491,7 @@
         "tags": [
           "Organization"
         ],
-        "description": "Get organization appearance settings",
+        "description": "Get organization appearance settings\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- None (no additional RBAC permission required)",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -123566,6 +123828,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       }
     },
@@ -123575,7 +123842,7 @@
         "tags": [
           "Organization"
         ],
-        "description": "Update security settings (global tool policy, chat file uploads)\n\nRequired RBAC permissions:\n- `agentSettings:update`: Modify agent settings (default model, default agent, security engine, file uploads)",
+        "description": "Update security settings (global tool policy, chat file uploads)\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `agentSettings:update`: Modify agent settings (default model, default agent, security engine, file uploads)",
         "requestBody": {
           "required": true,
           "content": {
@@ -124063,7 +124330,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "agentSettings:update"
           ]
         }
@@ -124075,7 +124343,7 @@
         "tags": [
           "Organization"
         ],
-        "description": "Update LLM settings (TOON compression, compression scope, limit cleanup interval)\n\nRequired RBAC permissions:\n- `llmSettings:update`: Modify LLM settings",
+        "description": "Update LLM settings (TOON compression, compression scope, limit cleanup interval)\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `llmSettings:update`: Modify LLM settings",
         "requestBody": {
           "required": true,
           "content": {
@@ -124574,7 +124842,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "llmSettings:update"
           ]
         }
@@ -124586,7 +124855,7 @@
         "tags": [
           "Organization"
         ],
-        "description": "Update agent settings (default model, default agent)\n\nRequired RBAC permissions:\n- `agentSettings:update`: Modify agent settings (default model, default agent, security engine, file uploads)",
+        "description": "Update agent settings (default model, default agent)\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `agentSettings:update`: Modify agent settings (default model, default agent, security engine, file uploads)",
         "requestBody": {
           "required": true,
           "content": {
@@ -125084,7 +125353,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "agentSettings:update"
           ]
         }
@@ -125096,7 +125366,7 @@
         "tags": [
           "Organization"
         ],
-        "description": "Update knowledge settings (embedding model)\n\nRequired RBAC permissions:\n- `knowledgeSettings:update`: Modify knowledge settings (embedding and reranking models)",
+        "description": "Update knowledge settings (embedding model)\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `knowledgeSettings:update`: Modify knowledge settings (embedding and reranking models)",
         "requestBody": {
           "required": true,
           "content": {
@@ -125610,7 +125880,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "knowledgeSettings:update"
           ]
         }
@@ -125622,7 +125893,7 @@
         "tags": [
           "Organization"
         ],
-        "description": "Drop the embedding configuration, deleting all KB documents and resetting connector checkpoints\n\nRequired RBAC permissions:\n- `knowledgeSettings:update`: Modify knowledge settings (embedding and reranking models)",
+        "description": "Drop the embedding configuration, deleting all KB documents and resetting connector checkpoints\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `knowledgeSettings:update`: Modify knowledge settings (embedding and reranking models)",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -126088,7 +126359,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "knowledgeSettings:update"
           ]
         }
@@ -126100,7 +126372,7 @@
         "tags": [
           "Organization"
         ],
-        "description": "Test the embedding connection by embedding a sample text\n\nRequired RBAC permissions:\n- `knowledgeSettings:update`: Modify knowledge settings (embedding and reranking models)",
+        "description": "Test the embedding connection by embedding a sample text\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `knowledgeSettings:update`: Modify knowledge settings (embedding and reranking models)",
         "requestBody": {
           "required": true,
           "content": {
@@ -126361,7 +126633,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "knowledgeSettings:update"
           ]
         }
@@ -126373,7 +126646,7 @@
         "tags": [
           "Organization"
         ],
-        "description": "Mark organization onboarding as complete",
+        "description": "Mark organization onboarding as complete\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- None (no additional RBAC permission required)",
         "requestBody": {
           "required": true,
           "content": {
@@ -126858,6 +127131,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       }
     },
@@ -126867,7 +127145,7 @@
         "tags": [
           "Organization"
         ],
-        "description": "Check if organization onboarding is complete",
+        "description": "Check if organization onboarding is complete\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- None (no additional RBAC permission required)",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -127102,6 +127380,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       }
     },
@@ -127111,7 +127394,7 @@
         "tags": [
           "Organization"
         ],
-        "description": "Get which members have completed signup (have an account record)",
+        "description": "Get which members have completed signup (have an account record)\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- None (no additional RBAC permission required)",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -127382,6 +127665,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       }
     },
@@ -127391,7 +127679,7 @@
         "tags": [
           "Organization"
         ],
-        "description": "Delete an auto-provisioned member who hasn't completed signup\n\nRequired RBAC permissions:\n- `member:delete`: Remove members from the organization",
+        "description": "Delete an auto-provisioned member who hasn't completed signup\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `member:delete`: Remove members from the organization",
         "parameters": [
           {
             "schema": {
@@ -127634,7 +127922,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "member:delete"
           ]
         }
@@ -127646,7 +127935,7 @@
         "tags": [
           "Organization"
         ],
-        "description": "Get all members of the organization\n\nRequired RBAC permissions:\n- `member:read`: View organization members and their roles",
+        "description": "Get all members of the organization\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `member:read`: View organization members and their roles",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -127890,7 +128179,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "member:read"
           ]
         }
@@ -127902,7 +128192,7 @@
         "tags": [
           "Organization"
         ],
-        "description": "Get a member of the organization by user ID or email address\n\nRequired RBAC permissions:\n- `member:read`: View organization members and their roles",
+        "description": "Get a member of the organization by user ID or email address\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `member:read`: View organization members and their roles",
         "parameters": [
           {
             "schema": {
@@ -128159,7 +128449,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "member:read"
           ]
         }
@@ -128703,7 +128994,7 @@
         "tags": [
           "Secrets"
         ],
-        "description": "Get the secrets manager type and configuration details (for Vault)\n\nRequired RBAC permissions:\n- `secret:read`: View secrets manager configuration",
+        "description": "Get the secrets manager type and configuration details (for Vault)\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `secret:read`: View secrets manager configuration",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -128948,7 +129239,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "secret:read"
           ]
         }
@@ -128960,7 +129252,7 @@
         "tags": [
           "Secrets"
         ],
-        "description": "Get a secret by ID\n\nRequired RBAC permissions:\n- `secret:read`: View secrets manager configuration",
+        "description": "Get a secret by ID\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `secret:read`: View secrets manager configuration",
         "parameters": [
           {
             "schema": {
@@ -129235,7 +129527,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "secret:read"
           ]
         }
@@ -129247,7 +129540,7 @@
         "tags": [
           "Secrets"
         ],
-        "description": "Check connectivity to the secrets storage and return secret count.\n\nRequired RBAC permissions:\n- `secret:update`: Modify secrets manager settings and test connectivity",
+        "description": "Check connectivity to the secrets storage and return secret count.\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `secret:update`: Modify secrets manager settings and test connectivity",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -129480,7 +129773,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "secret:update"
           ]
         }
@@ -129492,7 +129786,7 @@
         "tags": [
           "Statistics"
         ],
-        "description": "Get team statistics\n\nRequired RBAC permissions:\n- `llmCost:read`: View LLM usage cost statistics and analytics",
+        "description": "Get team statistics\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `llmCost:read`: View LLM usage cost statistics and analytics",
         "parameters": [
           {
             "schema": {
@@ -129808,7 +130102,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "llmCost:read"
           ]
         }
@@ -129820,7 +130115,7 @@
         "tags": [
           "Statistics"
         ],
-        "description": "Get agent statistics\n\nRequired RBAC permissions:\n- `llmCost:read`: View LLM usage cost statistics and analytics",
+        "description": "Get agent statistics\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `llmCost:read`: View LLM usage cost statistics and analytics",
         "parameters": [
           {
             "schema": {
@@ -130136,7 +130431,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "llmCost:read"
           ]
         }
@@ -130148,7 +130444,7 @@
         "tags": [
           "Statistics"
         ],
-        "description": "Get model statistics\n\nRequired RBAC permissions:\n- `llmCost:read`: View LLM usage cost statistics and analytics",
+        "description": "Get model statistics\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `llmCost:read`: View LLM usage cost statistics and analytics",
         "parameters": [
           {
             "schema": {
@@ -130456,7 +130752,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "llmCost:read"
           ]
         }
@@ -130468,7 +130765,7 @@
         "tags": [
           "Statistics"
         ],
-        "description": "Get overview statistics\n\nRequired RBAC permissions:\n- `llmCost:read`: View LLM usage cost statistics and analytics",
+        "description": "Get overview statistics\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `llmCost:read`: View LLM usage cost statistics and analytics",
         "parameters": [
           {
             "schema": {
@@ -130753,7 +131050,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "llmCost:read"
           ]
         }
@@ -130765,7 +131063,7 @@
         "tags": [
           "Statistics"
         ],
-        "description": "Get cost savings statistics\n\nRequired RBAC permissions:\n- `llmCost:read`: View LLM usage cost statistics and analytics",
+        "description": "Get cost savings statistics\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `llmCost:read`: View LLM usage cost statistics and analytics",
         "parameters": [
           {
             "schema": {
@@ -131078,7 +131376,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "llmCost:read"
           ]
         }
@@ -131090,7 +131389,7 @@
         "tags": [
           "Teams"
         ],
-        "description": "Get all teams in the organization\n\nRequired RBAC permissions:\n- `team:read`: View teams and their members",
+        "description": "Get all teams in the organization\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `team:read`: View teams and their members",
         "parameters": [
           {
             "schema": {
@@ -131475,7 +131774,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "team:read"
           ]
         }
@@ -131485,7 +131785,7 @@
         "tags": [
           "Teams"
         ],
-        "description": "Create a new team\n\nRequired RBAC permissions:\n- `team:create`: Create new teams",
+        "description": "Create a new team\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `team:create`: Create new teams",
         "requestBody": {
           "required": true,
           "content": {
@@ -131807,7 +132107,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "team:create"
           ]
         }
@@ -131819,7 +132120,7 @@
         "tags": [
           "Teams"
         ],
-        "description": "Get a team by ID\n\nRequired RBAC permissions:\n- `team:read`: View teams and their members",
+        "description": "Get a team by ID\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `team:read`: View teams and their members",
         "parameters": [
           {
             "schema": {
@@ -132129,7 +132430,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "team:read"
           ]
         }
@@ -132139,7 +132441,7 @@
         "tags": [
           "Teams"
         ],
-        "description": "Update a team\n\nRequired RBAC permissions:\n- `team:update`: Modify team settings",
+        "description": "Update a team\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `team:update`: Modify team settings",
         "requestBody": {
           "required": true,
           "content": {
@@ -132471,7 +132773,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "team:update"
           ]
         }
@@ -132481,7 +132784,7 @@
         "tags": [
           "Teams"
         ],
-        "description": "Delete a team\n\nRequired RBAC permissions:\n- `team:delete`: Delete teams",
+        "description": "Delete a team\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `team:delete`: Delete teams",
         "parameters": [
           {
             "schema": {
@@ -132724,7 +133027,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "team:delete"
           ]
         }
@@ -132736,7 +133040,7 @@
         "tags": [
           "Teams"
         ],
-        "description": "Get all members of a team\n\nRequired RBAC permissions:\n- `team:read`: View teams and their members",
+        "description": "Get all members of a team\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `team:read`: View teams and their members",
         "parameters": [
           {
             "schema": {
@@ -133003,7 +133307,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "team:read"
           ]
         }
@@ -133013,7 +133318,7 @@
         "tags": [
           "Teams"
         ],
-        "description": "Add a member to a team\n\nRequired RBAC permissions:\n- `team:admin`: Manage team membership (add/remove members)",
+        "description": "Add a member to a team\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `team:admin`: Manage team membership (add/remove members)",
         "requestBody": {
           "required": true,
           "content": {
@@ -133299,7 +133604,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "team:admin"
           ]
         }
@@ -133311,7 +133617,7 @@
         "tags": [
           "Teams"
         ],
-        "description": "Remove a member from a team\n\nRequired RBAC permissions:\n- `team:admin`: Manage team membership (add/remove members)",
+        "description": "Remove a member from a team\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `team:admin`: Manage team membership (add/remove members)",
         "parameters": [
           {
             "schema": {
@@ -133562,7 +133868,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "team:admin"
           ]
         }
@@ -133574,7 +133881,7 @@
         "tags": [
           "Teams"
         ],
-        "description": "Get all external groups mapped to a team for SSO team sync\n\nRequired RBAC permissions:\n- `team:read`: View teams and their members",
+        "description": "Get all external groups mapped to a team for SSO team sync\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `team:read`: View teams and their members",
         "parameters": [
           {
             "schema": {
@@ -133833,7 +134140,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "team:read"
           ]
         }
@@ -133843,7 +134151,7 @@
         "tags": [
           "Teams"
         ],
-        "description": "Add an external group mapping to a team for SSO team sync\n\nRequired RBAC permissions:\n- `team:admin`: Manage team membership (add/remove members)",
+        "description": "Add an external group mapping to a team for SSO team sync\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `team:admin`: Manage team membership (add/remove members)",
         "requestBody": {
           "required": true,
           "content": {
@@ -134118,7 +134426,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "team:admin"
           ]
         }
@@ -134130,7 +134439,7 @@
         "tags": [
           "Teams"
         ],
-        "description": "Remove an external group mapping from a team for SSO team sync\n\nRequired RBAC permissions:\n- `team:admin`: Manage team membership (add/remove members)",
+        "description": "Remove an external group mapping from a team for SSO team sync\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `team:admin`: Manage team membership (add/remove members)",
         "parameters": [
           {
             "schema": {
@@ -134381,7 +134690,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "team:admin"
           ]
         }
@@ -134393,7 +134703,7 @@
         "tags": [
           "Tokens"
         ],
-        "description": "Get tokens visible to the user based on their permissions\n\nRequired RBAC permissions:\n- `team:read`: View teams and their members",
+        "description": "Get tokens visible to the user based on their permissions\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `team:read`: View teams and their members",
         "parameters": [
           {
             "schema": {
@@ -134711,7 +135021,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "team:read"
           ]
         }
@@ -134723,7 +135034,7 @@
         "tags": [
           "Tokens"
         ],
-        "description": "Get the full token value (for copying to clipboard)\n\nRequired RBAC permissions:\n- `team:update`: Modify team settings",
+        "description": "Get the full token value (for copying to clipboard)\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `team:update`: Modify team settings",
         "parameters": [
           {
             "schema": {
@@ -134968,7 +135279,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "team:update"
           ]
         }
@@ -134980,7 +135292,7 @@
         "tags": [
           "Tokens"
         ],
-        "description": "Rotate a token (generate new value)\n\nRequired RBAC permissions:\n- `team:update`: Modify team settings",
+        "description": "Rotate a token (generate new value)\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `team:update`: Modify team settings",
         "parameters": [
           {
             "schema": {
@@ -135272,7 +135584,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "team:update"
           ]
         }
@@ -135284,7 +135597,7 @@
         "tags": [
           "Tools"
         ],
-        "description": "Get all tools\n\nRequired RBAC permissions:\n- `toolPolicy:read`: View tools, tool invocation policies, and trusted data policies",
+        "description": "Get all tools\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `toolPolicy:read`: View tools, tool invocation policies, and trusted data policies",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -135622,7 +135935,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "toolPolicy:read"
           ]
         }
@@ -135634,7 +135948,7 @@
         "tags": [
           "Tools"
         ],
-        "description": "Get all tools with their profile assignments (one entry per tool)\n\nRequired RBAC permissions:\n- `toolPolicy:read`: View tools, tool invocation policies, and trusted data policies",
+        "description": "Get all tools with their profile assignments (one entry per tool)\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `toolPolicy:read`: View tools, tool invocation policies, and trusted data policies",
         "parameters": [
           {
             "schema": {
@@ -136107,7 +136421,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "toolPolicy:read"
           ]
         }
@@ -136119,7 +136434,7 @@
         "tags": [
           "Tools"
         ],
-        "description": "Delete an auto-discovered tool (tools without an MCP server)\n\nRequired RBAC permissions:\n- `toolPolicy:delete`: Remove tools and security policies",
+        "description": "Delete an auto-discovered tool (tools without an MCP server)\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `toolPolicy:delete`: Remove tools and security policies",
         "parameters": [
           {
             "schema": {
@@ -136364,7 +136679,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "toolPolicy:delete"
           ]
         }
@@ -136376,7 +136692,7 @@
         "tags": [
           "User"
         ],
-        "description": "Get current user's permissions",
+        "description": "Get current user's permissions\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- None (no additional RBAC permission required)",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -136615,6 +136931,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       }
     },
@@ -136624,7 +136945,7 @@
         "tags": [
           "UserTokens"
         ],
-        "description": "Get current user's personal token",
+        "description": "Get current user's personal token\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- None (no additional RBAC permission required)",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -136876,6 +137197,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       }
     },
@@ -136885,7 +137211,7 @@
         "tags": [
           "UserTokens"
         ],
-        "description": "Get the full personal token value",
+        "description": "Get the full personal token value\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- None (no additional RBAC permission required)",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -137116,6 +137442,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       }
     },
@@ -137125,7 +137456,7 @@
         "tags": [
           "UserTokens"
         ],
-        "description": "Rotate personal token (generate new value)",
+        "description": "Rotate personal token (generate new value)\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- None (no additional RBAC permission required)",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -137381,6 +137712,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       }
     },
@@ -137390,7 +137726,7 @@
         "tags": [
           "Virtual API Keys"
         ],
-        "description": "Get all virtual API keys for the organization, with parent API key info\n\nRequired RBAC permissions:\n- `llmProvider:read`: View LLM provider API keys, virtual keys, and models",
+        "description": "Get all virtual API keys for the organization, with parent API key info\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `llmProvider:read`: View LLM provider API keys, virtual keys, and models",
         "parameters": [
           {
             "schema": {
@@ -137773,7 +138109,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "llmProvider:read"
           ]
         }
@@ -137785,7 +138122,7 @@
         "tags": [
           "Virtual API Keys"
         ],
-        "description": "Get all virtual API keys for a chat API key\n\nRequired RBAC permissions:\n- `llmProvider:read`: View LLM provider API keys, virtual keys, and models",
+        "description": "Get all virtual API keys for a chat API key\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `llmProvider:read`: View LLM provider API keys, virtual keys, and models",
         "parameters": [
           {
             "schema": {
@@ -138074,7 +138411,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "llmProvider:read"
           ]
         }
@@ -138084,7 +138422,7 @@
         "tags": [
           "Virtual API Keys"
         ],
-        "description": "Create a new virtual API key. Returns the full token value once.\n\nRequired RBAC permissions:\n- `llmProvider:create`: Add new LLM provider API keys or virtual keys",
+        "description": "Create a new virtual API key. Returns the full token value once.\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `llmProvider:create`: Add new LLM provider API keys or virtual keys",
         "requestBody": {
           "required": true,
           "content": {
@@ -138397,7 +138735,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "llmProvider:create"
           ]
         }
@@ -138409,7 +138748,7 @@
         "tags": [
           "Virtual API Keys"
         ],
-        "description": "Delete a virtual API key\n\nRequired RBAC permissions:\n- `llmProvider:delete`: Remove LLM provider API keys or virtual keys",
+        "description": "Delete a virtual API key\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `llmProvider:delete`: Remove LLM provider API keys or virtual keys",
         "parameters": [
           {
             "schema": {
@@ -138664,7 +139003,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "llmProvider:delete"
           ]
         }
@@ -140288,7 +140628,7 @@
         "tags": [
           "Identity Providers"
         ],
-        "description": "Get public identity provider list for login page (no secrets exposed)",
+        "description": "Get public identity provider list for login page (no secrets exposed)\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- None (no additional RBAC permission required)",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -140526,6 +140866,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       }
     },
@@ -140535,7 +140880,7 @@
         "tags": [
           "Identity Providers"
         ],
-        "description": "Get all identity providers with full configuration (admin only)\n\nRequired RBAC permissions:\n- `identityProvider:read`: View identity provider configurations (SSO)",
+        "description": "Get all identity providers with full configuration (admin only)\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `identityProvider:read`: View identity provider configurations (SSO)",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -141098,7 +141443,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "identityProvider:read"
           ]
         }
@@ -141108,7 +141454,7 @@
         "tags": [
           "Identity Providers"
         ],
-        "description": "Create a new identity provider\n\nRequired RBAC permissions:\n- `identityProvider:create`: Set up new identity providers",
+        "description": "Create a new identity provider\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `identityProvider:create`: Set up new identity providers",
         "requestBody": {
           "required": true,
           "content": {
@@ -141992,7 +142338,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "identityProvider:create"
           ]
         }
@@ -142004,7 +142351,7 @@
         "tags": [
           "Identity Providers"
         ],
-        "description": "Get the IdP logout URL for the current user's identity provider",
+        "description": "Get the IdP logout URL for the current user's identity provider\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- None (no additional RBAC permission required)",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -142236,6 +142583,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       }
     },
@@ -142245,7 +142597,7 @@
         "tags": [
           "Identity Providers"
         ],
-        "description": "Get identity provider by ID\n\nRequired RBAC permissions:\n- `identityProvider:read`: View identity provider configurations (SSO)",
+        "description": "Get identity provider by ID\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `identityProvider:read`: View identity provider configurations (SSO)",
         "parameters": [
           {
             "schema": {
@@ -142815,7 +143167,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "identityProvider:read"
           ]
         }
@@ -142825,7 +143178,7 @@
         "tags": [
           "Identity Providers"
         ],
-        "description": "Update identity provider\n\nRequired RBAC permissions:\n- `identityProvider:update`: Modify identity provider settings",
+        "description": "Update identity provider\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `identityProvider:update`: Modify identity provider settings",
         "requestBody": {
           "required": true,
           "content": {
@@ -143710,7 +144063,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "identityProvider:update"
           ]
         }
@@ -143720,7 +144074,7 @@
         "tags": [
           "Identity Providers"
         ],
-        "description": "Delete identity provider\n\nRequired RBAC permissions:\n- `identityProvider:delete`: Remove identity providers",
+        "description": "Delete identity provider\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `identityProvider:delete`: Remove identity providers",
         "parameters": [
           {
             "schema": {
@@ -143963,7 +144317,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "identityProvider:delete"
           ]
         }
@@ -143976,7 +144331,7 @@
           "Teams",
           "Vault"
         ],
-        "description": "Get a team's Vault folder configuration\n\nRequired RBAC permissions:\n- `team:read`: View teams and their members",
+        "description": "Get a team's Vault folder configuration\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `team:read`: View teams and their members",
         "parameters": [
           {
             "schema": {
@@ -144238,7 +144593,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "team:read"
           ]
         }
@@ -144249,7 +144605,7 @@
           "Teams",
           "Vault"
         ],
-        "description": "Set or update a team's Vault folder path\n\nRequired RBAC permissions:\n- `team:update`: Modify team settings",
+        "description": "Set or update a team's Vault folder path\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `team:update`: Modify team settings",
         "requestBody": {
           "required": true,
           "content": {
@@ -144529,7 +144885,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "team:update"
           ]
         }
@@ -144540,7 +144897,7 @@
           "Teams",
           "Vault"
         ],
-        "description": "Delete a team's Vault folder mapping\n\nRequired RBAC permissions:\n- `team:update`: Modify team settings",
+        "description": "Delete a team's Vault folder mapping\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `team:update`: Modify team settings",
         "parameters": [
           {
             "schema": {
@@ -144783,7 +145140,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "team:update"
           ]
         }
@@ -144796,7 +145154,7 @@
           "Teams",
           "Vault"
         ],
-        "description": "Check connectivity to a team's Vault folder\n\nRequired RBAC permissions:\n- `team:update`: Modify team settings",
+        "description": "Check connectivity to a team's Vault folder\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `team:update`: Modify team settings",
         "requestBody": {
           "required": true,
           "content": {
@@ -145061,7 +145419,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "team:update"
           ]
         }
@@ -145074,7 +145433,7 @@
           "Teams",
           "Vault"
         ],
-        "description": "List secrets available in a team's Vault folder\n\nRequired RBAC permissions:\n- `team:read`: View teams and their members",
+        "description": "List secrets available in a team's Vault folder\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `team:read`: View teams and their members",
         "parameters": [
           {
             "schema": {
@@ -145324,7 +145683,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "team:read"
           ]
         }
@@ -145337,7 +145697,7 @@
           "Teams",
           "Vault"
         ],
-        "description": "Get the keys of a specific secret in a team's Vault folder\n\nRequired RBAC permissions:\n- `team:read`: View teams and their members",
+        "description": "Get the keys of a specific secret in a team's Vault folder\n\nAuthentication:\n- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nRequired RBAC permissions:\n- `team:read`: View teams and their members",
         "requestBody": {
           "required": true,
           "content": {
@@ -145602,7 +145962,8 @@
           }
         },
         "x-required-permissions": {
-          "allOf": [
+          "kind": "static",
+          "permissions": [
             "team:read"
           ]
         }

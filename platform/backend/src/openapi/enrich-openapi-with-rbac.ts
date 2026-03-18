@@ -1,3 +1,4 @@
+import { RouteId } from "@shared";
 import {
   permissionDescriptions,
   requiredEndpointPermissionsMap,
@@ -8,41 +9,30 @@ import {
 export function enrichOpenApiWithRbac<T extends OpenApiDocument>(spec: T): T {
   const clonedSpec = structuredClone(spec);
 
-  for (const pathItem of Object.values(clonedSpec.paths ?? {})) {
+  for (const [path, pathItem] of Object.entries(clonedSpec.paths ?? {})) {
     if (!pathItem) {
       continue;
     }
 
     for (const operation of getOperations(pathItem)) {
-      const operationId = operation.operationId;
-      if (!operationId) {
+      if (!operation.operationId) {
         continue;
       }
 
-      const permissionKeys = flattenPermissions(
-        requiredEndpointPermissionsMap[
-          operationId as keyof typeof requiredEndpointPermissionsMap
-        ],
-      );
-      if (permissionKeys.length === 0) {
+      if (!path.startsWith("/api/")) {
         continue;
       }
 
-      operation["x-required-permissions"] = {
-        allOf: permissionKeys,
-      };
-
-      const permissionSection = [
-        "Required RBAC permissions:",
-        ...permissionKeys.map(
-          (key) =>
-            `- \`${key}\`: ${permissionDescriptions[key] ?? "No description available"}`,
-        ),
-      ].join("\n");
+      const rbacMetadata = getRbacMetadata(operation.operationId);
+      operation["x-required-permissions"] = rbacMetadata;
 
       operation.description = appendDescriptionSection(
         operation.description,
-        permissionSection,
+        createAuthenticationSection(),
+      );
+      operation.description = appendDescriptionSection(
+        operation.description,
+        createPermissionSection(rbacMetadata),
       );
     }
   }
@@ -67,9 +57,7 @@ type OpenApiPathItem = Partial<
 type OpenApiOperation = {
   operationId?: string;
   description?: string;
-  "x-required-permissions"?: {
-    allOf: string[];
-  };
+  "x-required-permissions"?: RequiredPermissionsExtension;
 };
 
 type HttpMethod =
@@ -82,6 +70,12 @@ type HttpMethod =
   | "put"
   | "trace";
 
+type RequiredPermissionsExtension = {
+  kind: "dynamic" | "none" | "static";
+  note?: string;
+  permissions: string[];
+};
+
 // === Internal helpers ===
 
 function getOperations(pathItem: OpenApiPathItem): OpenApiOperation[] {
@@ -92,6 +86,38 @@ function getOperations(pathItem: OpenApiPathItem): OpenApiOperation[] {
       (operation): operation is OpenApiOperation =>
         operation !== undefined && operation !== null,
     );
+}
+
+function getRbacMetadata(operationId: string): RequiredPermissionsExtension {
+  const dynamicNote =
+    DYNAMIC_ROUTE_PERMISSION_NOTES[
+      operationId as keyof typeof DYNAMIC_ROUTE_PERMISSION_NOTES
+    ];
+  if (dynamicNote) {
+    return {
+      kind: "dynamic",
+      note: dynamicNote,
+      permissions: [],
+    };
+  }
+
+  const permissions = flattenPermissions(
+    requiredEndpointPermissionsMap[
+      operationId as keyof typeof requiredEndpointPermissionsMap
+    ],
+  );
+  if (permissions.length === 0) {
+    return {
+      kind: "none",
+      note: "None (no additional RBAC permission required)",
+      permissions: [],
+    };
+  }
+
+  return {
+    kind: "static",
+    permissions,
+  };
 }
 
 function flattenPermissions(
@@ -119,6 +145,32 @@ function appendDescriptionSection(
   return `${description}\n\n${section}`;
 }
 
+function createAuthenticationSection(): string {
+  return [
+    "Authentication:",
+    "- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.",
+  ].join("\n");
+}
+
+function createPermissionSection(
+  metadata: RequiredPermissionsExtension,
+): string {
+  if (metadata.kind === "static") {
+    return [
+      "Required RBAC permissions:",
+      ...metadata.permissions.map(
+        (permission) =>
+          `- \`${permission}\`: ${permissionDescriptions[permission] ?? "No description available"}`,
+      ),
+    ].join("\n");
+  }
+
+  return [
+    "Required RBAC permissions:",
+    `- ${metadata.note ?? "None (no additional RBAC permission required)"}`,
+  ].join("\n");
+}
+
 const HTTP_METHODS = new Set<HttpMethod>([
   "delete",
   "get",
@@ -129,3 +181,18 @@ const HTTP_METHODS = new Set<HttpMethod>([
   "put",
   "trace",
 ]);
+
+const DYNAMIC_ROUTE_PERMISSION_NOTES = {
+  [RouteId.GetAgents]:
+    "Checked dynamically based on agent type. `profile` and `agent` require `agent:read`; `mcp_gateway` requires `mcpGateway:read`; `llm_proxy` requires `llmProxy:read`. If no type filter is provided, the user must have read access to at least one agent type.",
+  [RouteId.GetAllAgents]:
+    "Checked dynamically based on agent type. `profile` and `agent` require `agent:read`; `mcp_gateway` requires `mcpGateway:read`; `llm_proxy` requires `llmProxy:read`. If no type filter is provided, the user must have read access to at least one agent type.",
+  [RouteId.GetAgent]:
+    "Checked dynamically based on the target agent's type. `profile` and `agent` require `agent:read`; `mcp_gateway` requires `mcpGateway:read`; `llm_proxy` requires `llmProxy:read`.",
+  [RouteId.CreateAgent]:
+    "Checked dynamically based on the agent type being created. `profile` and `agent` require `agent:create`; `mcp_gateway` requires `mcpGateway:create`; `llm_proxy` requires `llmProxy:create`. Additional scope and team-admin checks may apply.",
+  [RouteId.UpdateAgent]:
+    "Checked dynamically based on the target agent's type. `profile` and `agent` require `agent:update`; `mcp_gateway` requires `mcpGateway:update`; `llm_proxy` requires `llmProxy:update`. Additional scope and team-admin checks may apply.",
+  [RouteId.DeleteAgent]:
+    "Checked dynamically based on the target agent's type. `profile` and `agent` require `agent:delete`; `mcp_gateway` requires `mcpGateway:delete`; `llm_proxy` requires `llmProxy:delete`. Additional scope checks may apply.",
+} satisfies Partial<Record<RouteId, string>>;

@@ -1566,10 +1566,15 @@ export function AgentDialog({
                                     setApiKeySelectorOpen(false);
                                   }}
                                 >
-                                  <span className="text-muted-foreground">
-                                    Dynamic API key (resolved at runtime:
-                                    org-wide → team → personal)
-                                  </span>
+                                  <div className="flex flex-col min-w-0">
+                                    <span className="text-muted-foreground">
+                                      Dynamic API key
+                                    </span>
+                                    <span className="text-xs text-muted-foreground">
+                                      Resolved at runtime: org-wide → team →
+                                      personal
+                                    </span>
+                                  </div>
                                   {!llmApiKeyId && (
                                     <CheckIcon className="ml-auto h-4 w-4" />
                                   )}

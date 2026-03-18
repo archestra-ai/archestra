@@ -7,7 +7,10 @@ import {
 } from "@shared";
 
 import { Editor } from "@/components/editor";
-import { computeHandlebarsReplaceOffsets } from "@/lib/handlebars-completion";
+import {
+  computeHandlebarsReplaceOffsets,
+  shouldShowHandlebarsCompletions,
+} from "@/lib/handlebars-completion";
 
 export function SystemPromptEditor({
   value,
@@ -102,9 +105,16 @@ function registerSystemPromptCompletions(monaco: Monaco) {
   const provideCompletionItems = (model: any, position: any) => {
     const lineContent = model.getLineContent(position.lineNumber) as string;
     const col = position.column as number;
+    const textBeforeCursor = lineContent.substring(0, col - 1);
+    const textAfterCursor = lineContent.substring(col - 1);
+
+    if (!shouldShowHandlebarsCompletions(textBeforeCursor)) {
+      return { suggestions: [] };
+    }
+
     const { startOffset, endOffset } = computeHandlebarsReplaceOffsets(
-      lineContent.substring(0, col - 1),
-      lineContent.substring(col - 1),
+      textBeforeCursor,
+      textAfterCursor,
     );
     const range = {
       startLineNumber: position.lineNumber,

@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { computeHandlebarsReplaceOffsets } from "./handlebars-completion";
+import {
+  computeHandlebarsReplaceOffsets,
+  shouldShowHandlebarsCompletions,
+} from "./handlebars-completion";
 
 describe("computeHandlebarsReplaceOffsets", () => {
   it("returns zero offsets when no braces around cursor", () => {
@@ -73,5 +76,31 @@ describe("computeHandlebarsReplaceOffsets", () => {
       startOffset: 3,
       endOffset: 0,
     });
+  });
+});
+
+describe("shouldShowHandlebarsCompletions", () => {
+  it("returns false for plain instruction text", () => {
+    expect(shouldShowHandlebarsCompletions("Use the search tool")).toBe(false);
+  });
+
+  it("returns false for a single opening brace", () => {
+    expect(shouldShowHandlebarsCompletions("Use {")).toBe(false);
+  });
+
+  it("returns true when starting a handlebars expression", () => {
+    expect(shouldShowHandlebarsCompletions("Use {{")).toBe(true);
+  });
+
+  it("returns true while typing a variable name", () => {
+    expect(shouldShowHandlebarsCompletions("Use {{current")).toBe(true);
+  });
+
+  it("returns true after whitespace inside an expression", () => {
+    expect(shouldShowHandlebarsCompletions("Use {{ current")).toBe(true);
+  });
+
+  it("returns false once the expression context has ended", () => {
+    expect(shouldShowHandlebarsCompletions("Use {{current}} and")).toBe(false);
   });
 });

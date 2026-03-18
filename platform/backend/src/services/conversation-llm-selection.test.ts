@@ -68,6 +68,28 @@ describe("resolveConversationLlmSelectionForAgent", () => {
     });
   });
 
+  test("falls back to the model provider when the agent key provider is unsupported", async () => {
+    vi.spyOn(ChatApiKeyModel, "findById").mockResolvedValue({
+      id: "key-unknown",
+      provider: "not-a-provider",
+    } as never);
+
+    const result = await resolveConversationLlmSelectionForAgent({
+      agent: {
+        llmApiKeyId: "key-unknown",
+        llmModel: "gpt-4o-mini",
+      },
+      organizationId: "org-1",
+      userId: "user-1",
+    });
+
+    expect(result).toEqual({
+      chatApiKeyId: "key-unknown",
+      selectedModel: "gpt-4o-mini",
+      selectedProvider: "openai",
+    });
+  });
+
   test("falls back to the organization default when the agent has no override", async () => {
     vi.spyOn(OrganizationModel, "getById").mockResolvedValue({
       id: "org-1",

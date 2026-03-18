@@ -14,3 +14,9 @@ export function computeHandlebarsReplaceOffsets(
   const endOffset = textAfterCursor.match(/^\}+/)?.[0]?.length ?? 0;
   return { startOffset, endOffset };
 }
+
+export function shouldShowHandlebarsCompletions(
+  textBeforeCursor: string,
+): boolean {
+  return /\{\{\{?\s*[\w.-]*$/.test(textBeforeCursor);
+}

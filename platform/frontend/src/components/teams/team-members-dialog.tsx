@@ -1,6 +1,6 @@
 "use client";
 
-import { archestraApiSdk } from "@shared";
+import { archestraApiSdk, type archestraApiTypes } from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Trash2 } from "lucide-react";
 import { useState } from "react";
@@ -25,44 +25,31 @@ interface TeamMembersDialogProps {
   team: Team;
 }
 
-type OrganizationMemberOption = {
-  id?: string;
+type PaginatedMember =
+  archestraApiTypes.GetMembersResponses["200"]["data"][number];
+type TeamMember = archestraApiTypes.GetTeamMembersResponses["200"][number];
+type ActiveOrganizationMember = {
   userId: string;
-  role?: string;
   name?: string | null;
   email?: string | null;
-  user?: { name?: string | null; email?: string | null } | null;
 };
 
-function getMemberDisplayName(member: unknown): string {
-  if (!member) return "Unknown user";
-
-  const record = member as {
-    userId?: string;
-    name?: string | null;
-    email?: string | null;
-    user?: { name?: string | null; email?: string | null } | null;
-  };
-
-  return (
-    record.user?.name ||
-    record.name ||
-    record.user?.email ||
-    record.email ||
-    record.userId ||
-    "Unknown user"
-  );
+function getMemberDisplayName(
+  member: Pick<
+    PaginatedMember | TeamMember | ActiveOrganizationMember,
+    "userId" | "name" | "email"
+  >,
+): string {
+  return member.name || member.email || member.userId;
 }
 
-function getMemberEmail(member: unknown): string | null {
-  if (!member) return null;
-
-  const record = member as {
-    email?: string | null;
-    user?: { email?: string | null } | null;
-  };
-
-  return record.user?.email || record.email || null;
+function getMemberEmail(
+  member: Pick<
+    PaginatedMember | TeamMember | ActiveOrganizationMember,
+    "email"
+  >,
+): string | null {
+  return member.email || null;
 }
 
 export function TeamMembersDialog({
@@ -91,13 +78,10 @@ export function TeamMembersDialog({
     name: memberSearch || undefined,
   });
 
-  // Get organization members to show in dropdown
-  const orgMembers = (activeOrg?.members ?? []) as OrganizationMemberOption[];
+  const orgMembers = (activeOrg?.members ?? []) as ActiveOrganizationMember[];
   const memberUserIds = new Set(teamMembers?.map((m) => m.userId) || []);
-  const availableMembers = (
-    (membersResponse?.data ?? orgMembers) as OrganizationMemberOption[]
-  ).filter(
-    (member: OrganizationMemberOption) => !memberUserIds.has(member.userId),
+  const availableMembers = (membersResponse?.data ?? []).filter(
+    (member: PaginatedMember) => !memberUserIds.has(member.userId),
   );
 
   const addMutation = useMutation({
@@ -186,7 +170,7 @@ export function TeamMembersDialog({
             <div className="space-y-2">
               {teamMembers.map((member) => {
                 const orgMember = orgMembers.find(
-                  (m: OrganizationMemberOption) => m.userId === member.userId,
+                  (m: ActiveOrganizationMember) => m.userId === member.userId,
                 );
                 return (
                   <div
@@ -195,7 +179,8 @@ export function TeamMembersDialog({
                   >
                     <div>
                       <p className="text-sm font-medium">
-                        {getMemberEmail(orgMember) ||
+                        {member.email ||
+                          orgMember?.email ||
                           getMemberDisplayName(member)}
                       </p>
                       <p className="text-xs text-muted-foreground">

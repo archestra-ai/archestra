@@ -36056,6 +36056,9 @@ export type GetTeamMembersResponses = {
         role: string;
         syncedFromSso: boolean;
         createdAt: string;
+        name: string | null;
+        email: string;
+        image: string | null;
     }>;
 };
 

@@ -7,6 +7,7 @@ import type {
   Team,
   TeamExternalGroup,
   TeamMember,
+  TeamMemberListItem,
   UpdateTeam,
 } from "@/types";
 import { ApiError } from "@/types";
@@ -266,6 +267,35 @@ class TeamModel {
     logger.debug(
       { teamId, count: members.length },
       "TeamModel.getTeamMembers: completed",
+    );
+    return members;
+  }
+
+  static async getTeamMembersWithUsers(
+    teamId: string,
+  ): Promise<TeamMemberListItem[]> {
+    logger.debug(
+      { teamId },
+      "TeamModel.getTeamMembersWithUsers: fetching members",
+    );
+    const members = await db
+      .select({
+        ...getTableColumns(schema.teamMembersTable),
+        name: schema.usersTable.name,
+        email: schema.usersTable.email,
+        image: schema.usersTable.image,
+      })
+      .from(schema.teamMembersTable)
+      .innerJoin(
+        schema.usersTable,
+        eq(schema.teamMembersTable.userId, schema.usersTable.id),
+      )
+      .where(eq(schema.teamMembersTable.teamId, teamId))
+      .orderBy(schema.usersTable.name);
+
+    logger.debug(
+      { teamId, count: members.length },
+      "TeamModel.getTeamMembersWithUsers: completed",
     );
     return members;
   }

@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.1.31](https://github.com/archestra-ai/archestra/compare/platform-v1.1.30...platform-v1.1.31) (2026-03-18)
+
+
+### Bug Fixes
+
+* apply rbac to agent mcp tools ([#3444](https://github.com/archestra-ai/archestra/issues/3444)) ([95b7bee](https://github.com/archestra-ai/archestra/commit/95b7bee3def8c57bd729ab0da63a0f1f485f477c))
+* role permission UI, chat tool call UX, and MCP server docs/codegen ([#3443](https://github.com/archestra-ai/archestra/issues/3443)) ([e961a98](https://github.com/archestra-ai/archestra/commit/e961a9868ddbbdb03e0785205ac3c14f168d9c91))
+
+## [1.1.30](https://github.com/archestra-ai/archestra/compare/platform-v1.1.29...platform-v1.1.30) (2026-03-18)
+
+
+### Miscellaneous Chores
+
+* kb query permission ([#3442](https://github.com/archestra-ai/archestra/issues/3442)) ([8399dc9](https://github.com/archestra-ai/archestra/commit/8399dc917c2c318159662bfa408379911908554c))
+* reuse shared llm selectors in agent and knowledge settings ([#3441](https://github.com/archestra-ai/archestra/issues/3441)) ([13ca86a](https://github.com/archestra-ai/archestra/commit/13ca86aab55f965096fd210c87926ff233c78fb7))
+* reuse the shared chat API key dialog ([#3439](https://github.com/archestra-ai/archestra/issues/3439)) ([f6e46e3](https://github.com/archestra-ai/archestra/commit/f6e46e393e3b85a1a363e36f9dd0b7197858d468))
+
 ## [1.1.29](https://github.com/archestra-ai/archestra/compare/platform-v1.1.28...platform-v1.1.29) (2026-03-18)
 
 

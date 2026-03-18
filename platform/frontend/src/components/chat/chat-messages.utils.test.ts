@@ -1,6 +1,10 @@
 import type { UIMessage } from "@ai-sdk/react";
 import { describe, expect, it } from "vitest";
-import { extractFileAttachments, hasTextPart } from "./chat-messages.utils";
+import {
+  extractFileAttachments,
+  filterOptimisticToolCalls,
+  hasTextPart,
+} from "./chat-messages.utils";
 
 describe("extractFileAttachments", () => {
   it("should return undefined for undefined parts", () => {
@@ -141,5 +145,42 @@ describe("hasTextPart", () => {
       { type: "reasoning", text: "Thinking..." },
     ];
     expect(hasTextPart(parts)).toBe(false);
+  });
+});
+
+describe("filterOptimisticToolCalls", () => {
+  it("keeps optimistic tool calls until a rendered part with the same toolCallId exists", () => {
+    const optimisticToolCalls = [
+      {
+        toolCallId: "call_1",
+        toolName: "google__search",
+        input: { q: "weather" },
+      },
+      {
+        toolCallId: "call_2",
+        toolName: "google__maps",
+        input: { location: "Toronto" },
+      },
+    ];
+
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          {
+            type: "dynamic-tool",
+            toolName: "google__search",
+            toolCallId: "call_1",
+            state: "input-available",
+            input: { q: "weather" },
+          },
+        ],
+      },
+    ] as never;
+
+    expect(filterOptimisticToolCalls(messages, optimisticToolCalls)).toEqual([
+      optimisticToolCalls[1],
+    ]);
   });
 });

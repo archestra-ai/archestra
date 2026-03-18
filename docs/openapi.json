@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "1.1.28"
+    "version": "1.1.31"
   },
   "components": {
     "schemas": {
@@ -119861,7 +119861,8 @@
                                   "team-admin",
                                   "admin",
                                   "cancel",
-                                  "enable"
+                                  "enable",
+                                  "query"
                                 ]
                               }
                             }
@@ -120191,7 +120192,8 @@
                           "team-admin",
                           "admin",
                           "cancel",
-                          "enable"
+                          "enable",
+                          "query"
                         ]
                       }
                     }
@@ -120243,7 +120245,8 @@
                             "team-admin",
                             "admin",
                             "cancel",
-                            "enable"
+                            "enable",
+                            "query"
                           ]
                         }
                       }
@@ -120560,7 +120563,8 @@
                             "team-admin",
                             "admin",
                             "cancel",
-                            "enable"
+                            "enable",
+                            "query"
                           ]
                         }
                       }
@@ -120842,7 +120846,8 @@
                           "team-admin",
                           "admin",
                           "cancel",
-                          "enable"
+                          "enable",
+                          "query"
                         ]
                       }
                     }
@@ -120915,7 +120920,8 @@
                             "team-admin",
                             "admin",
                             "cancel",
-                            "enable"
+                            "enable",
+                            "query"
                           ]
                         }
                       }
@@ -135485,7 +135491,8 @@
                         "team-admin",
                         "admin",
                         "cancel",
-                        "enable"
+                        "enable",
+                        "query"
                       ]
                     }
                   }

@@ -35,6 +35,7 @@ const actionLabels: Record<Action, string> = {
   admin: "Admin",
   cancel: "Cancel",
   enable: "Enable",
+  query: "Query",
 };
 
 export function RolePermissionsCard() {

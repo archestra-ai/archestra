@@ -1,9 +1,14 @@
 "use client";
 
 import type { archestraApiTypes } from "@shared";
-import { Key } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { PROVIDER_CONFIG } from "@/components/chat-api-key-form";
+import { LlmModelSearchableSelect } from "@/components/llm-model-select";
+import {
+  LlmProviderApiKeyOptionLabel,
+  LlmProviderApiKeySelectItems,
+} from "@/components/llm-provider-options";
 import { WithPermissions } from "@/components/roles/with-permissions";
 import {
   SettingsBlock,
@@ -146,9 +151,15 @@ export default function AgentSettingsPage() {
     if (!allModels) return [];
     return allModels.map((model) => ({
       value: model.id,
-      label: model.displayName ?? model.id,
+      model: model.displayName ?? model.id,
+      provider: model.provider,
     }));
   }, [allModels]);
+
+  const selectedApiKey = useMemo(
+    () => availableKeys.find((key) => key.id === selectedApiKeyId) ?? null,
+    [availableKeys, selectedApiKeyId],
+  );
 
   const agentItems = useMemo(() => {
     const items = [{ value: "__personal__", label: "User's personal agent" }];
@@ -190,35 +201,52 @@ export default function AgentSettingsPage() {
                   disabled={isSaving || !hasPermission}
                 >
                   <SelectTrigger className="w-80">
-                    <SelectValue placeholder="Select API key..." />
+                    <SelectValue placeholder="Select API key...">
+                      {selectedApiKey ? (
+                        <LlmProviderApiKeyOptionLabel
+                          icon={PROVIDER_CONFIG[selectedApiKey.provider].icon}
+                          providerName={
+                            PROVIDER_CONFIG[selectedApiKey.provider].name
+                          }
+                          keyName={selectedApiKey.name}
+                          secondaryLabel={`${selectedApiKey.provider} - ${selectedApiKey.scope}`}
+                        />
+                      ) : (
+                        "Select API key..."
+                      )}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
-                    {availableKeys.map((key) => (
-                      <SelectItem key={key.id} value={key.id}>
-                        <div className="flex items-center gap-2">
-                          <Key className="h-3 w-3" />
-                          <span>{key.name}</span>
-                          <span className="text-xs text-muted-foreground">
-                            ({key.scope})
-                          </span>
-                        </div>
-                      </SelectItem>
-                    ))}
+                    <LlmProviderApiKeySelectItems
+                      options={availableKeys.map((key) => ({
+                        value: key.id,
+                        icon: PROVIDER_CONFIG[key.provider].icon,
+                        providerName: PROVIDER_CONFIG[key.provider].name,
+                        keyName: key.name,
+                        secondaryLabel: `${key.provider} - ${key.scope}`,
+                      }))}
+                    />
                   </SelectContent>
                 </Select>
-                {selectedApiKeyId && (
-                  <SearchableSelect
-                    value={defaultModel}
-                    onValueChange={setDefaultModel}
-                    placeholder={
-                      modelsLoading ? "Loading models..." : "Select model..."
-                    }
-                    searchPlaceholder="Search or type model name..."
-                    items={modelItems}
-                    className="w-80"
-                    disabled={isSaving || !hasPermission || modelsLoading}
-                  />
-                )}
+                <LlmModelSearchableSelect
+                  value={defaultModel}
+                  onValueChange={setDefaultModel}
+                  options={modelItems}
+                  placeholder={
+                    !selectedApiKeyId
+                      ? "Select API key first..."
+                      : modelsLoading
+                        ? "Loading models..."
+                        : "Select model..."
+                  }
+                  className="w-80"
+                  disabled={
+                    isSaving ||
+                    !hasPermission ||
+                    modelsLoading ||
+                    !selectedApiKeyId
+                  }
+                />
               </div>
             )}
           </WithPermissions>

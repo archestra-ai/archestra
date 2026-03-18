@@ -1,13 +1,8 @@
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
-import { userHasPermission } from "@/auth/utils";
+import { isAgentTypeAdmin } from "@/auth/agent-type-permissions";
 import logger from "@/logging";
-import {
-  AgentModel,
-  AgentTeamModel,
-  ConversationModel,
-  OrganizationModel,
-} from "@/models";
+import { AgentModel, ConversationModel, OrganizationModel } from "@/models";
 import { resolveConversationLlmSelectionForAgent } from "@/services/conversation-llm-selection";
 import {
   catchError,
@@ -213,13 +208,30 @@ async function handleSwapAgent(params: {
       );
     }
 
-    // Look up agent by name (search across all accessible agents)
+    // Look up agent by name
+    const isAdmin =
+      context.userId && context.organizationId
+        ? await isAgentTypeAdmin({
+            userId: context.userId,
+            organizationId: context.organizationId,
+            agentType: "agent",
+          })
+        : false;
+
     const results = await AgentModel.findAllPaginated(
       { limit: 5, offset: 0 },
       undefined,
-      { name: agentName, agentType: "agent" },
+      {
+        name: agentName,
+        agentType: "agent",
+        // Hide other users' personal agents. swap_agent is the primary
+        // Archestra MCP use-case and requires only the caller's own personal
+        // agents to be visible, even though admins can see all personal
+        // agents in the UI.
+        excludeOtherPersonalAgents: true,
+      },
       context.userId,
-      true,
+      isAdmin,
     );
 
     if (results.data.length === 0) {
@@ -236,24 +248,6 @@ async function handleSwapAgent(params: {
     if (targetAgent.id === contextAgent.id) {
       return errorResult(
         `Already using agent "${targetAgent.name}". Choose a different agent.`,
-      );
-    }
-
-    // Verify user has access via team-based authorization
-    const isAdmin = await userHasPermission(
-      context.userId,
-      context.organizationId,
-      "agent",
-      "admin",
-    );
-    const accessibleIds = await AgentTeamModel.getUserAccessibleAgentIds(
-      context.userId,
-      isAdmin,
-    );
-
-    if (!accessibleIds.includes(targetAgent.id)) {
-      return errorResult(
-        `You do not have access to agent "${targetAgent.name}".`,
       );
     }
 

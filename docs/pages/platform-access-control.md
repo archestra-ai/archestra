@@ -3,7 +3,7 @@ title: "Access Control"
 category: Administration
 description: "Role-based access control (RBAC) system for managing user permissions in Archestra"
 order: 1
-lastUpdated: 2026-03-15
+lastUpdated: 2026-03-18
 ---
 <!--
 Check ../docs_writer_prompt.md before changing this file.
@@ -48,7 +48,7 @@ Full access to core resources and settings, but cannot manage users, roles, or i
 | MCP Registry | `read`, `create`, `update`, `delete` |
 | MCP Server Installations | `read`, `create`, `update`, `delete` |
 | MCP Server Installation Requests | `read`, `create`, `update`, `delete` |
-| Knowledge Bases | `read`, `create`, `update`, `delete` |
+| Knowledge Bases | `read`, `create`, `update`, `delete`, `query` |
 | Dual LLM Configs | `read` |
 | Dual LLM Results | `read` |
 | Chats | `read`, `create`, `update`, `delete` |
@@ -81,7 +81,7 @@ Can manage agents, tools, and chat, with read-only access to most other resource
 | MCP Registry | `read` |
 | MCP Server Installations | `read`, `create`, `delete` |
 | MCP Server Installation Requests | `read`, `create`, `update` |
-| Knowledge Bases | `read` |
+| Knowledge Bases | `read`, `query` |
 | Dual LLM Results | `read` |
 | Chats | `read`, `create`, `update`, `delete` |
 | API Keys | `read`, `create`, `delete` |
@@ -144,6 +144,7 @@ The following table lists all available permissions that can be assigned to cust
 | `knowledgeBase:create` | Create knowledge bases and connectors |
 | `knowledgeBase:update` | Modify knowledge bases and connectors |
 | `knowledgeBase:delete` | Delete knowledge bases and connectors |
+| `knowledgeBase:query` | Query knowledge sources for information retrieval |
 | `knowledgeSettings:read` | View knowledge settings (embedding and reranking models) |
 | `knowledgeSettings:update` | Modify knowledge settings (embedding and reranking models) |
 | `llmCost:read` | View LLM usage cost statistics and analytics |

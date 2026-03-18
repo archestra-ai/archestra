@@ -187,7 +187,8 @@ function generateMarkdownBody(): string {
   // Knowledge tools are conditionally assigned (only when knowledge sources are attached)
   const knowledgeToolSet = new Set<string>(knowledgeManagementToolShortNames);
   const preInstalledShortNames = allPreInstalledShortNames.filter(
-    (n) => !knowledgeToolSet.has(n),
+    (n): n is ArchestraToolShortName =>
+      isArchestraToolShortName(n) && !knowledgeToolSet.has(n),
   );
 
   // Group tools
@@ -354,8 +355,14 @@ export function formatToolPermission(
   return `\`${permission.resource}:${permission.action}\``;
 }
 
-function formatToolLink(toolShortName: string): string {
+function formatToolLink(toolShortName: ArchestraToolShortName): string {
   return `[\`${toolShortName}\`](#${toolShortName})`;
+}
+
+function isArchestraToolShortName(
+  toolShortName: string,
+): toolShortName is ArchestraToolShortName {
+  return Object.hasOwn(toolGroups, toolShortName);
 }
 
 // === Input schema rendering ===

@@ -260,8 +260,11 @@ function generateMarkdownBody(): string {
   }
 
   const preInstalledList = preInstalledShortNames
-    .map((n) => `\`${n}\``)
+    .map((n) => formatToolLink(n))
     .join(", ");
+  const queryKnowledgeSourcesPermission = formatToolPermission(
+    "query_knowledge_sources",
+  );
 
   return `
 <!--
@@ -273,7 +276,7 @@ The Archestra MCP Server is a built-in MCP server that ships with the platform a
 
 Most tools require explicit assignment to Agents or MCP Gateways before they can be used. The following tools are pre-installed on all new agents by default: ${preInstalledList}.
 
-Additionally, \`query_knowledge_sources\` is automatically assigned to Agents and MCP Gateways that have at least one [knowledge base](/platform-knowledge-bases) or [knowledge connector](/platform-knowledge-connectors) attached.
+Additionally, ${formatToolLink("query_knowledge_sources")} is automatically assigned to Agents and MCP Gateways that have at least one [knowledge base](/platform-knowledge-bases) or [knowledge connector](/platform-knowledge-connectors) attached. To use it, the user must have ${queryKnowledgeSourcesPermission}.
 
 All Archestra tools are prefixed with \`archestra__\` and are always trusted — they bypass tool invocation and trusted data policies.
 
@@ -281,7 +284,7 @@ All Archestra tools are prefixed with \`archestra__\` and are always trusted —
 
 Archestra tools are **trusted**, meaning they bypass [tool invocation policies](/platform-tool-invocation-policies) and [trusted data policies](/platform-trusted-data-policies) — the tool will always execute without policy evaluation.
 
-However, **RBAC (role-based access control) is still enforced**. Every tool is mapped to a required permission (resource + action). The \`tools/list\` endpoint dynamically filters tools so users only see tools they have permission to use. For example, a user without \`knowledgeBase:create\` permission will not see \`create_knowledge_base\` in their tool list and cannot execute it.
+However, **RBAC (role-based access control) is still enforced**. Every tool is mapped to a required permission (resource + action). The \`tools/list\` endpoint dynamically filters tools so users only see tools they have permission to use. For example, a user without \`knowledgeBase:create\` permission will not see ${formatToolLink("create_knowledge_base")} in their tool list and cannot execute it.
 
 ## Tools Reference
 
@@ -346,6 +349,10 @@ export function formatToolPermission(toolShortName: string): string {
   }
 
   return `\`${permission.resource}:${permission.action}\``;
+}
+
+function formatToolLink(toolShortName: string): string {
+  return `[\`${toolShortName}\`](#${toolShortName})`;
 }
 
 // === Input schema rendering ===

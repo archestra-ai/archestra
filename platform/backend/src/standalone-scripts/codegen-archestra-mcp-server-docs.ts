@@ -199,11 +199,7 @@ function generateMarkdownBody(): string {
     {
       shortName: ArchestraToolShortName;
       description: string;
-<<<<<<< HEAD
-      requiredPermission: string;
-=======
       requiredPermission: ToolPermissionDisplay;
->>>>>>> origin/main
       inputSchema: JsonSchema;
       outputSchema?: JsonSchema;
     }[]
@@ -229,11 +225,7 @@ function generateMarkdownBody(): string {
     grouped.get(group)?.push({
       shortName: typedShortName,
       description: truncateDescription(tool.description ?? ""),
-<<<<<<< HEAD
-      requiredPermission: formatToolPermission(shortName),
-=======
       requiredPermission: formatToolPermission(typedShortName),
->>>>>>> origin/main
       inputSchema: tool.inputSchema as JsonSchema,
       outputSchema: tool.outputSchema as JsonSchema | undefined,
     });

@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { enrichOpenApiWithRbac } from "./enrich-openapi-with-rbac";
 
 describe("enrichOpenApiWithRbac", () => {
-  it("adds permission metadata and markdown for routes with static RBAC requirements", () => {
+  it("adds permission metadata plus authentication and RBAC guidance for routes with static requirements", () => {
     const spec = {
       paths: {
         "/api/tools": {
@@ -29,8 +29,11 @@ describe("enrichOpenApiWithRbac", () => {
       kind: "static",
       permissions: ["toolPolicy:read"],
     });
-    expect(getOperation.description).toContain("Authentication:");
-    expect(getOperation.description).toContain("Required RBAC permissions:");
+    expect(getOperation.description).toContain("Authentication:\n\n");
+    expect(getOperation.description).toContain(
+      "Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.",
+    );
+    expect(getOperation.description).toContain("\n\nAuthorization:\n\n");
     expect(getOperation.description).toContain(
       "`toolPolicy:read`: View tools, tool invocation policies, and trusted data policies",
     );
@@ -63,7 +66,11 @@ describe("enrichOpenApiWithRbac", () => {
       note: "None (no additional RBAC permission required)",
       permissions: [],
     });
-    expect(getOperation.description).toContain("Authentication:");
+    expect(getOperation.description).toContain("Authentication:\n\n");
+    expect(getOperation.description).toContain(
+      "Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.",
+    );
+    expect(getOperation.description).toContain("\n\nAuthorization:\n\n");
     expect(getOperation.description).toContain(
       "None (no additional RBAC permission required)",
     );
@@ -98,8 +105,11 @@ describe("enrichOpenApiWithRbac", () => {
       ),
       permissions: [],
     });
-    expect(getOperation.description).toContain("Required RBAC permissions:");
-    expect(getOperation.description).toContain("mcpGateway:read");
+    expect(getOperation.description).toContain("Authentication:\n\n");
+    expect(getOperation.description).toContain(
+      "Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.",
+    );
+    expect(getOperation.description).toContain("\n\nAuthorization:\n\n");
   });
 
   it("leaves non-api routes alone", () => {
@@ -126,5 +136,32 @@ describe("enrichOpenApiWithRbac", () => {
 
     expect(postOperation["x-required-permissions"]).toBe(undefined);
     expect(postOperation.description).toBe("Send A2A message");
+  });
+
+  it("adds the LLM Proxy key-type note", () => {
+    const spec = {
+      paths: {
+        "/v1/openai/chat/completions": {
+          post: {
+            description: "OpenAI-compatible chat completions",
+            tags: ["LLM Proxy", "OAuth", "Auth"],
+          },
+        },
+      },
+    };
+
+    const enriched = enrichOpenApiWithRbac(spec);
+    const postOperation = enriched.paths["/v1/openai/chat/completions"].post as {
+      description?: string;
+      tags?: string[];
+    };
+
+    expect(postOperation.tags).toEqual(["LLM Proxy", "OAuth", "Auth"]);
+    expect(postOperation.description).toContain(
+      "This route accepts either an LLM provider API key or a Virtual API Key.",
+    );
+    expect(postOperation.description).toContain(
+      "[LLM Proxy Authentication](/docs/platform-llm-proxy-authentication)",
+    );
   });
 });

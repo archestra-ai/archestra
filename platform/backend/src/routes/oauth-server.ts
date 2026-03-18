@@ -27,7 +27,7 @@ const oauthServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
     "/.well-known/oauth-protected-resource/*",
     {
       schema: {
-        tags: ["oauth"],
+        tags: ["OAuth"],
         response: {
           200: z.object({
             resource: z.string(),
@@ -80,7 +80,7 @@ const oauthServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
     "/.well-known/oauth-authorization-server",
     {
       schema: {
-        tags: ["oauth"],
+        tags: ["OAuth"],
         response: {
           200: z.object({
             issuer: z.string(),

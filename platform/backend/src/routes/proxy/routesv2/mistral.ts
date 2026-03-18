@@ -47,7 +47,7 @@ const mistralProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.MistralChatCompletionsWithDefaultAgent,
         description:
           "Create a chat completion with Mistral (uses default agent)",
-        tags: ["llm-proxy"],
+        tags: ["LLM Proxy"],
         body: Mistral.API.ChatCompletionRequestSchema,
         headers: Mistral.API.ChatCompletionsHeadersSchema,
         response: constructResponseSchema(
@@ -80,7 +80,7 @@ const mistralProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.MistralChatCompletionsWithAgent,
         description:
           "Create a chat completion with Mistral for a specific agent",
-        tags: ["llm-proxy"],
+        tags: ["LLM Proxy"],
         params: z.object({
           agentId: UuidIdSchema,
         }),

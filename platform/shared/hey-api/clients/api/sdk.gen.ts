@@ -37,11 +37,27 @@ export const postV1A2aByAgentId = <ThrowOnError extends boolean = false>(options
 
 /**
  * Get all agents with pagination, sorting, and filtering
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Required RBAC permissions:
+ * - Checked dynamically based on agent type. `profile` and `agent` require `agent:read`; `mcp_gateway` requires `mcpGateway:read`; `llm_proxy` requires `llmProxy:read`. If no type filter is provided, the user must have read access to at least one agent type.
  */
 export const getAgents = <ThrowOnError extends boolean = false>(options?: Options<GetAgentsData, ThrowOnError>) => (options?.client ?? client).get<GetAgentsResponses, GetAgentsErrors, ThrowOnError>({ url: '/api/agents', ...options });
 
 /**
  * Create a new agent
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Required RBAC permissions:
+ * - Checked dynamically based on the agent type being created. `profile` and `agent` require `agent:create`; `mcp_gateway` requires `mcpGateway:create`; `llm_proxy` requires `llmProxy:create`. Additional scope and team-admin checks may apply.
  */
 export const createAgent = <ThrowOnError extends boolean = false>(options: Options<CreateAgentData, ThrowOnError>) => (options.client ?? client).post<CreateAgentResponses, CreateAgentErrors, ThrowOnError>({
     url: '/api/agents',
@@ -54,11 +70,24 @@ export const createAgent = <ThrowOnError extends boolean = false>(options: Optio
 
 /**
  * Get all agents without pagination
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Required RBAC permissions:
+ * - Checked dynamically based on agent type. `profile` and `agent` require `agent:read`; `mcp_gateway` requires `mcpGateway:read`; `llm_proxy` requires `llmProxy:read`. If no type filter is provided, the user must have read access to at least one agent type.
  */
 export const getAllAgents = <ThrowOnError extends boolean = false>(options?: Options<GetAllAgentsData, ThrowOnError>) => (options?.client ?? client).get<GetAllAgentsResponses, GetAllAgentsErrors, ThrowOnError>({ url: '/api/agents/all', ...options });
 
 /**
- * Get or create default MCP Gateway
+ * Get default MCP Gateway
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
  *
  * Required RBAC permissions:
  * - `mcpGateway:read`: View and list MCP gateways
@@ -66,7 +95,12 @@ export const getAllAgents = <ThrowOnError extends boolean = false>(options?: Opt
 export const getDefaultMcpGateway = <ThrowOnError extends boolean = false>(options?: Options<GetDefaultMcpGatewayData, ThrowOnError>) => (options?.client ?? client).get<GetDefaultMcpGatewayResponses, GetDefaultMcpGatewayErrors, ThrowOnError>({ url: '/api/mcp-gateways/default', ...options });
 
 /**
- * Get or create default LLM Proxy
+ * Get default LLM Proxy
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
  *
  * Required RBAC permissions:
  * - `llmProxy:read`: View and list LLM proxies
@@ -75,16 +109,40 @@ export const getDefaultLlmProxy = <ThrowOnError extends boolean = false>(options
 
 /**
  * Delete an agent
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Required RBAC permissions:
+ * - Checked dynamically based on the target agent's type. `profile` and `agent` require `agent:delete`; `mcp_gateway` requires `mcpGateway:delete`; `llm_proxy` requires `llmProxy:delete`. Additional scope checks may apply.
  */
 export const deleteAgent = <ThrowOnError extends boolean = false>(options: Options<DeleteAgentData, ThrowOnError>) => (options.client ?? client).delete<DeleteAgentResponses, DeleteAgentErrors, ThrowOnError>({ url: '/api/agents/{id}', ...options });
 
 /**
  * Get agent by ID
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Required RBAC permissions:
+ * - Checked dynamically based on the target agent's type. `profile` and `agent` require `agent:read`; `mcp_gateway` requires `mcpGateway:read`; `llm_proxy` requires `llmProxy:read`.
  */
 export const getAgent = <ThrowOnError extends boolean = false>(options: Options<GetAgentData, ThrowOnError>) => (options.client ?? client).get<GetAgentResponses, GetAgentErrors, ThrowOnError>({ url: '/api/agents/{id}', ...options });
 
 /**
  * Update an agent
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Required RBAC permissions:
+ * - Checked dynamically based on the target agent's type. `profile` and `agent` require `agent:update`; `mcp_gateway` requires `mcpGateway:update`; `llm_proxy` requires `llmProxy:update`. Additional scope and team-admin checks may apply.
  */
 export const updateAgent = <ThrowOnError extends boolean = false>(options: Options<UpdateAgentData, ThrowOnError>) => (options.client ?? client).put<UpdateAgentResponses, UpdateAgentErrors, ThrowOnError>({
     url: '/api/agents/{id}',
@@ -97,21 +155,50 @@ export const updateAgent = <ThrowOnError extends boolean = false>(options: Optio
 
 /**
  * Get all available label keys
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Required RBAC permissions:
+ * - None (no additional RBAC permission required)
  */
 export const getLabelKeys = <ThrowOnError extends boolean = false>(options?: Options<GetLabelKeysData, ThrowOnError>) => (options?.client ?? client).get<GetLabelKeysResponses, GetLabelKeysErrors, ThrowOnError>({ url: '/api/agents/labels/keys', ...options });
 
 /**
  * Get all available label values
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Required RBAC permissions:
+ * - None (no additional RBAC permission required)
  */
 export const getLabelValues = <ThrowOnError extends boolean = false>(options?: Options<GetLabelValuesData, ThrowOnError>) => (options?.client ?? client).get<GetLabelValuesResponses, GetLabelValuesErrors, ThrowOnError>({ url: '/api/agents/labels/values', ...options });
 
 /**
  * Get the current user's default agent ID
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Required RBAC permissions:
+ * - None (no additional RBAC permission required)
  */
 export const getMemberDefaultAgent = <ThrowOnError extends boolean = false>(options?: Options<GetMemberDefaultAgentData, ThrowOnError>) => (options?.client ?? client).get<GetMemberDefaultAgentResponses, GetMemberDefaultAgentErrors, ThrowOnError>({ url: '/api/members/default-agent', ...options });
 
 /**
  * Get all agent-tool relationships with pagination, sorting, and filtering
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
  *
  * Required RBAC permissions:
  * - `toolPolicy:read`: View tools, tool invocation policies, and trusted data policies
@@ -120,11 +207,27 @@ export const getAllAgentTools = <ThrowOnError extends boolean = false>(options?:
 
 /**
  * Unassign a tool from an agent
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Required RBAC permissions:
+ * - None (no additional RBAC permission required)
  */
 export const unassignToolFromAgent = <ThrowOnError extends boolean = false>(options: Options<UnassignToolFromAgentData, ThrowOnError>) => (options.client ?? client).delete<UnassignToolFromAgentResponses, UnassignToolFromAgentErrors, ThrowOnError>({ url: '/api/agents/{agentId}/tools/{toolId}', ...options });
 
 /**
  * Assign a tool to an agent
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Required RBAC permissions:
+ * - None (no additional RBAC permission required)
  */
 export const assignToolToAgent = <ThrowOnError extends boolean = false>(options: Options<AssignToolToAgentData, ThrowOnError>) => (options.client ?? client).post<AssignToolToAgentResponses, AssignToolToAgentErrors, ThrowOnError>({
     url: '/api/agents/{agentId}/tools/{toolId}',
@@ -137,6 +240,14 @@ export const assignToolToAgent = <ThrowOnError extends boolean = false>(options:
 
 /**
  * Assign multiple tools to multiple agents in bulk
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Required RBAC permissions:
+ * - None (no additional RBAC permission required)
  */
 export const bulkAssignTools = <ThrowOnError extends boolean = false>(options: Options<BulkAssignToolsData, ThrowOnError>) => (options.client ?? client).post<BulkAssignToolsResponses, BulkAssignToolsErrors, ThrowOnError>({
     url: '/api/agents/tools/bulk-assign',
@@ -149,6 +260,11 @@ export const bulkAssignTools = <ThrowOnError extends boolean = false>(options: O
 
 /**
  * Automatically configure security policies for tools using LLM analysis
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
  *
  * Required RBAC permissions:
  * - `toolPolicy:update`: Modify tools, tool configuration, and security policies
@@ -165,6 +281,11 @@ export const autoConfigureAgentToolPolicies = <ThrowOnError extends boolean = fa
 /**
  * Get all tools for an agent (both proxy-sniffed and MCP tools)
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `toolPolicy:read`: View tools, tool invocation policies, and trusted data policies
  */
@@ -172,6 +293,11 @@ export const getAgentTools = <ThrowOnError extends boolean = false>(options: Opt
 
 /**
  * Update an agent-tool relationship
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
  *
  * Required RBAC permissions:
  * - `toolPolicy:update`: Modify tools, tool configuration, and security policies
@@ -187,11 +313,27 @@ export const updateAgentTool = <ThrowOnError extends boolean = false>(options: O
 
 /**
  * Get all delegation targets for an agent. Not applicable to LLM proxies.
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Required RBAC permissions:
+ * - None (no additional RBAC permission required)
  */
 export const getAgentDelegations = <ThrowOnError extends boolean = false>(options: Options<GetAgentDelegationsData, ThrowOnError>) => (options.client ?? client).get<GetAgentDelegationsResponses, GetAgentDelegationsErrors, ThrowOnError>({ url: '/api/agents/{agentId}/delegations', ...options });
 
 /**
  * Sync delegation targets for an agent. Replaces all existing delegations with the new list. Not applicable to LLM proxies.
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Required RBAC permissions:
+ * - None (no additional RBAC permission required)
  */
 export const syncAgentDelegations = <ThrowOnError extends boolean = false>(options: Options<SyncAgentDelegationsData, ThrowOnError>) => (options.client ?? client).post<SyncAgentDelegationsResponses, SyncAgentDelegationsErrors, ThrowOnError>({
     url: '/api/agents/{agentId}/delegations',
@@ -204,11 +346,27 @@ export const syncAgentDelegations = <ThrowOnError extends boolean = false>(optio
 
 /**
  * Remove a specific delegation from an agent. Not applicable to LLM proxies.
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Required RBAC permissions:
+ * - None (no additional RBAC permission required)
  */
 export const deleteAgentDelegation = <ThrowOnError extends boolean = false>(options: Options<DeleteAgentDelegationData, ThrowOnError>) => (options.client ?? client).delete<DeleteAgentDelegationResponses, DeleteAgentDelegationErrors, ThrowOnError>({ url: '/api/agents/{agentId}/delegations/{targetAgentId}', ...options });
 
 /**
  * Get all agent delegation connections for canvas visualization.
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Required RBAC permissions:
+ * - None (no additional RBAC permission required)
  */
 export const getAllDelegationConnections = <ThrowOnError extends boolean = false>(options?: Options<GetAllDelegationConnectionsData, ThrowOnError>) => (options?.client ?? client).get<GetAllDelegationConnectionsResponses, GetAllDelegationConnectionsErrors, ThrowOnError>({ url: '/api/agent-delegations', ...options });
 
@@ -239,6 +397,11 @@ export const anthropicMessagesWithAgent = <ThrowOnError extends boolean = false>
 /**
  * List the authenticated user's Archestra API keys
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `apiKey:read`: View API keys
  */
@@ -246,6 +409,11 @@ export const getApiKeys = <ThrowOnError extends boolean = false>(options?: Optio
 
 /**
  * Create an Archestra API key for the authenticated user
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
  *
  * Required RBAC permissions:
  * - `apiKey:create`: Create API keys
@@ -262,6 +430,11 @@ export const createApiKey = <ThrowOnError extends boolean = false>(options: Opti
 /**
  * Delete an Archestra API key for the authenticated user
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `apiKey:delete`: Delete API keys
  */
@@ -270,6 +443,11 @@ export const deleteApiKey = <ThrowOnError extends boolean = false>(options: Opti
 /**
  * Get one authenticated user's Archestra API key
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `apiKey:read`: View API keys
  */
@@ -277,6 +455,14 @@ export const getApiKey = <ThrowOnError extends boolean = false>(options: Options
 
 /**
  * Get default credentials status
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Required RBAC permissions:
+ * - None (no additional RBAC permission required)
  */
 export const getDefaultCredentialsStatus = <ThrowOnError extends boolean = false>(options?: Options<GetDefaultCredentialsStatusData, ThrowOnError>) => (options?.client ?? client).get<GetDefaultCredentialsStatusResponses, GetDefaultCredentialsStatusErrors, ThrowOnError>({ url: '/api/auth/default-credentials-status', ...options });
 
@@ -284,6 +470,14 @@ export const postApiAuthOrganizationRemoveMember = <ThrowOnError extends boolean
 
 /**
  * Get OAuth client name by client_id
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Required RBAC permissions:
+ * - None (no additional RBAC permission required)
  */
 export const getOAuthClientInfo = <ThrowOnError extends boolean = false>(options: Options<GetOAuthClientInfoData, ThrowOnError>) => (options.client ?? client).get<GetOAuthClientInfoResponses, unknown, ThrowOnError>({ url: '/api/auth/oauth2/client-info', ...options });
 
@@ -293,6 +487,14 @@ export const postApiAuthOauth2Token = <ThrowOnError extends boolean = false>(opt
 
 /**
  * Submit OAuth consent decision (accept or deny)
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Required RBAC permissions:
+ * - None (no additional RBAC permission required)
  */
 export const submitOAuthConsent = <ThrowOnError extends boolean = false>(options: Options<SubmitOAuthConsentData, ThrowOnError>) => (options.client ?? client).post<SubmitOAuthConsentResponses, unknown, ThrowOnError>({
     url: '/api/auth/oauth2/consent',
@@ -319,6 +521,11 @@ export const postApiAuthBy__ = <ThrowOnError extends boolean = false>(options: O
 /**
  * Get all supported policy operators
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `toolPolicy:read`: View tools, tool invocation policies, and trusted data policies
  */
@@ -327,6 +534,11 @@ export const getOperators = <ThrowOnError extends boolean = false>(options?: Opt
 /**
  * Get all tool invocation policies
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `toolPolicy:read`: View tools, tool invocation policies, and trusted data policies
  */
@@ -334,6 +546,11 @@ export const getToolInvocationPolicies = <ThrowOnError extends boolean = false>(
 
 /**
  * Create a new tool invocation policy
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
  *
  * Required RBAC permissions:
  * - `toolPolicy:create`: Register tools and create security policies
@@ -350,6 +567,11 @@ export const createToolInvocationPolicy = <ThrowOnError extends boolean = false>
 /**
  * Delete a tool invocation policy
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `toolPolicy:delete`: Remove tools and security policies
  */
@@ -358,6 +580,11 @@ export const deleteToolInvocationPolicy = <ThrowOnError extends boolean = false>
 /**
  * Get tool invocation policy by ID
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `toolPolicy:read`: View tools, tool invocation policies, and trusted data policies
  */
@@ -365,6 +592,11 @@ export const getToolInvocationPolicy = <ThrowOnError extends boolean = false>(op
 
 /**
  * Update a tool invocation policy
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
  *
  * Required RBAC permissions:
  * - `toolPolicy:update`: Modify tools, tool configuration, and security policies
@@ -381,6 +613,11 @@ export const updateToolInvocationPolicy = <ThrowOnError extends boolean = false>
 /**
  * Get all trusted data policies
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `toolPolicy:read`: View tools, tool invocation policies, and trusted data policies
  */
@@ -388,6 +625,11 @@ export const getTrustedDataPolicies = <ThrowOnError extends boolean = false>(opt
 
 /**
  * Create a new trusted data policy
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
  *
  * Required RBAC permissions:
  * - `toolPolicy:create`: Register tools and create security policies
@@ -404,6 +646,11 @@ export const createTrustedDataPolicy = <ThrowOnError extends boolean = false>(op
 /**
  * Delete a trusted data policy
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `toolPolicy:delete`: Remove tools and security policies
  */
@@ -412,6 +659,11 @@ export const deleteTrustedDataPolicy = <ThrowOnError extends boolean = false>(op
 /**
  * Get trusted data policy by ID
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `toolPolicy:read`: View tools, tool invocation policies, and trusted data policies
  */
@@ -419,6 +671,11 @@ export const getTrustedDataPolicy = <ThrowOnError extends boolean = false>(optio
 
 /**
  * Update a trusted data policy
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
  *
  * Required RBAC permissions:
  * - `toolPolicy:update`: Modify tools, tool configuration, and security policies
@@ -435,6 +692,11 @@ export const updateTrustedDataPolicy = <ThrowOnError extends boolean = false>(op
 /**
  * Bulk upsert default tool invocation policies (empty conditions) for multiple tools
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `toolPolicy:update`: Modify tools, tool configuration, and security policies
  */
@@ -449,6 +711,11 @@ export const bulkUpsertDefaultCallPolicy = <ThrowOnError extends boolean = false
 
 /**
  * Bulk upsert default trusted data policies (empty conditions) for multiple tools
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
  *
  * Required RBAC permissions:
  * - `toolPolicy:update`: Modify tools, tool configuration, and security policies
@@ -561,6 +828,11 @@ export const cerebrasChatCompletionsWithAgent = <ThrowOnError extends boolean = 
 /**
  * Get all chat API keys visible to the current user based on scope access
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `llmProvider:read`: View LLM provider API keys, virtual keys, and models
  */
@@ -568,6 +840,11 @@ export const getChatApiKeys = <ThrowOnError extends boolean = false>(options?: O
 
 /**
  * Create a new chat API key with specified scope
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
  *
  * Required RBAC permissions:
  * - `llmProvider:create`: Add new LLM provider API keys or virtual keys
@@ -584,6 +861,11 @@ export const createChatApiKey = <ThrowOnError extends boolean = false>(options: 
 /**
  * Get API keys available for the current user to use in chat
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `llmProvider:read`: View LLM provider API keys, virtual keys, and models
  */
@@ -591,6 +873,11 @@ export const getAvailableChatApiKeys = <ThrowOnError extends boolean = false>(op
 
 /**
  * Delete a chat API key
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
  *
  * Required RBAC permissions:
  * - `llmProvider:delete`: Remove LLM provider API keys or virtual keys
@@ -600,6 +887,11 @@ export const deleteChatApiKey = <ThrowOnError extends boolean = false>(options: 
 /**
  * Get a specific chat API key
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `llmProvider:read`: View LLM provider API keys, virtual keys, and models
  */
@@ -607,6 +899,11 @@ export const getChatApiKey = <ThrowOnError extends boolean = false>(options: Opt
 
 /**
  * Update a chat API key (name, API key value, scope, or team)
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
  *
  * Required RBAC permissions:
  * - `llmProvider:update`: Modify LLM provider configuration and model pricing
@@ -623,6 +920,11 @@ export const updateChatApiKey = <ThrowOnError extends boolean = false>(options: 
 /**
  * Get available LLM models from all configured providers. Models are fetched directly from provider APIs. Includes model capabilities (context length, modalities, tool calling support) when available.
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `chat:read`: View and access chat conversations
  */
@@ -630,6 +932,11 @@ export const getChatModels = <ThrowOnError extends boolean = false>(options?: Op
 
 /**
  * Sync models from providers for all API keys and store them in the database
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
  *
  * Required RBAC permissions:
  * - `llmProvider:update`: Modify LLM provider configuration and model pricing
@@ -639,6 +946,11 @@ export const syncChatModels = <ThrowOnError extends boolean = false>(options?: O
 /**
  * Sync models from providers, overwriting all fields including custom modifications
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `llmProvider:update`: Modify LLM provider configuration and model pricing
  */
@@ -647,6 +959,11 @@ export const syncChatModelsFull = <ThrowOnError extends boolean = false>(options
 /**
  * Get all models with their linked API keys. Returns models from the database with information about which API keys provide access to them.
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `llmProvider:read`: View LLM provider API keys, virtual keys, and models
  */
@@ -654,6 +971,11 @@ export const getModelsWithApiKeys = <ThrowOnError extends boolean = false>(optio
 
 /**
  * Update model details including custom pricing and modalities.
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
  *
  * Required RBAC permissions:
  * - `llmProvider:update`: Modify LLM provider configuration and model pricing
@@ -670,6 +992,11 @@ export const updateModel = <ThrowOnError extends boolean = false>(options: Optio
 /**
  * Stream chat response with MCP tools (useChat format)
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `chat:read`: View and access chat conversations
  */
@@ -685,6 +1012,11 @@ export const streamChat = <ThrowOnError extends boolean = false>(options: Option
 /**
  * Stop a running chat stream for a conversation
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `chat:read`: View and access chat conversations
  */
@@ -693,6 +1025,11 @@ export const stopChatStream = <ThrowOnError extends boolean = false>(options: Op
 /**
  * List all conversations for current user with agent details. Optionally filter by search query.
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `chat:read`: View and access chat conversations
  */
@@ -700,6 +1037,11 @@ export const getChatConversations = <ThrowOnError extends boolean = false>(optio
 
 /**
  * Create a new conversation with an agent
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
  *
  * Required RBAC permissions:
  * - `chat:create`: Start new chat conversations
@@ -716,6 +1058,11 @@ export const createChatConversation = <ThrowOnError extends boolean = false>(opt
 /**
  * Delete a conversation
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `chat:delete`: Delete chat conversations
  */
@@ -724,6 +1071,11 @@ export const deleteChatConversation = <ThrowOnError extends boolean = false>(opt
 /**
  * Get conversation with messages
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `chat:read`: View and access chat conversations
  */
@@ -731,6 +1083,11 @@ export const getChatConversation = <ThrowOnError extends boolean = false>(option
 
 /**
  * Update conversation title, model, agent, or API key
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
  *
  * Required RBAC permissions:
  * - `chat:update`: Edit chat messages and conversation settings
@@ -747,6 +1104,11 @@ export const updateChatConversation = <ThrowOnError extends boolean = false>(opt
 /**
  * Get MCP tools available for an agent via MCP Gateway
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `agent:read`: View and list agents
  */
@@ -754,6 +1116,11 @@ export const getChatAgentMcpTools = <ThrowOnError extends boolean = false>(optio
 
 /**
  * Generate a title for the conversation based on the first user message and assistant response
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
  *
  * Required RBAC permissions:
  * - `chat:update`: Edit chat messages and conversation settings
@@ -770,6 +1137,11 @@ export const generateChatConversationTitle = <ThrowOnError extends boolean = fal
 /**
  * Update a specific text part in a message
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `chat:update`: Edit chat messages and conversation settings
  */
@@ -785,6 +1157,11 @@ export const updateChatMessage = <ThrowOnError extends boolean = false>(options:
 /**
  * Clear custom tool selection for a conversation (revert to all tools enabled)
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `chat:update`: Edit chat messages and conversation settings
  */
@@ -793,6 +1170,11 @@ export const deleteConversationEnabledTools = <ThrowOnError extends boolean = fa
 /**
  * Get enabled tools for a conversation. Empty array means all profile tools are enabled (default).
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `chat:read`: View and access chat conversations
  */
@@ -800,6 +1182,11 @@ export const getConversationEnabledTools = <ThrowOnError extends boolean = false
 
 /**
  * Set enabled tools for a conversation. Replaces all existing selections.
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
  *
  * Required RBAC permissions:
  * - `chat:update`: Edit chat messages and conversation settings
@@ -816,6 +1203,11 @@ export const updateConversationEnabledTools = <ThrowOnError extends boolean = fa
 /**
  * Revoke sharing of a conversation
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `chat:update`: Edit chat messages and conversation settings
  */
@@ -824,6 +1216,11 @@ export const unshareConversation = <ThrowOnError extends boolean = false>(option
 /**
  * Get share status for a conversation
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `chat:read`: View and access chat conversations
  */
@@ -831,6 +1228,11 @@ export const getConversationShare = <ThrowOnError extends boolean = false>(optio
 
 /**
  * Share a conversation with your organization
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
  *
  * Required RBAC permissions:
  * - `chat:update`: Edit chat messages and conversation settings
@@ -847,6 +1249,11 @@ export const shareConversation = <ThrowOnError extends boolean = false>(options:
 /**
  * Get a shared conversation by share ID
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `chat:read`: View and access chat conversations
  */
@@ -854,6 +1261,11 @@ export const getSharedConversation = <ThrowOnError extends boolean = false>(opti
 
 /**
  * Create a new conversation from a shared conversation's messages
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
  *
  * Required RBAC permissions:
  * - `chat:create`: Start new chat conversations
@@ -918,6 +1330,11 @@ export const postApiWebhooksChatopsSlackSlashCommand = <ThrowOnError extends boo
 /**
  * Get chatops provider configuration status
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `agentTrigger:read`: View agent trigger configurations (Slack, MS Teams, email)
  */
@@ -926,6 +1343,11 @@ export const getChatOpsStatus = <ThrowOnError extends boolean = false>(options?:
 /**
  * List chatops channel bindings with pagination
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `agentTrigger:read`: View agent trigger configurations (Slack, MS Teams, email)
  */
@@ -933,6 +1355,11 @@ export const listChatOpsBindings = <ThrowOnError extends boolean = false>(option
 
 /**
  * Bulk-update agent assignment for multiple channel bindings
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
  *
  * Required RBAC permissions:
  * - `agentTrigger:update`: Modify agent trigger configurations
@@ -949,6 +1376,11 @@ export const bulkUpdateChatOpsBindings = <ThrowOnError extends boolean = false>(
 /**
  * Delete a chatops channel binding
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `agentTrigger:delete`: Remove agent triggers
  */
@@ -956,6 +1388,11 @@ export const deleteChatOpsBinding = <ThrowOnError extends boolean = false>(optio
 
 /**
  * Update a chatops channel binding
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
  *
  * Required RBAC permissions:
  * - `agentTrigger:update`: Modify agent trigger configurations
@@ -972,6 +1409,11 @@ export const updateChatOpsBinding = <ThrowOnError extends boolean = false>(optio
 /**
  * Create a pending DM binding so an agent can be pre-assigned before the first DM interaction
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `agentTrigger:create`: Set up new agent triggers
  */
@@ -986,6 +1428,11 @@ export const createChatOpsDmBinding = <ThrowOnError extends boolean = false>(opt
 
 /**
  * Update MS Teams chatops configuration
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
  *
  * Required RBAC permissions:
  * - `agentTrigger:update`: Modify agent trigger configurations
@@ -1002,6 +1449,11 @@ export const updateChatOpsConfigInQuickstart = <ThrowOnError extends boolean = f
 /**
  * Update Slack chatops configuration
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `agentTrigger:update`: Modify agent trigger configurations
  */
@@ -1016,6 +1468,11 @@ export const updateSlackChatOpsConfig = <ThrowOnError extends boolean = false>(o
 
 /**
  * Refresh channel discovery cache for a chatops provider
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
  *
  * Required RBAC permissions:
  * - `agentTrigger:read`: View agent trigger configurations (Slack, MS Teams, email)
@@ -1055,6 +1512,14 @@ export const cohereChatWithAgent = <ThrowOnError extends boolean = false>(option
 
 /**
  * Get platform configuration and feature flags
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Required RBAC permissions:
+ * - None (no additional RBAC permission required)
  */
 export const getConfig = <ThrowOnError extends boolean = false>(options?: Options<GetConfigData, ThrowOnError>) => (options?.client ?? client).get<GetConfigResponses, unknown, ThrowOnError>({ url: '/api/config', ...options });
 
@@ -1085,6 +1550,11 @@ export const deepseekChatCompletionsWithAgent = <ThrowOnError extends boolean = 
 /**
  * Get default dual LLM configuration
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `dualLlmConfig:read`: View dual LLM security configurations
  */
@@ -1093,6 +1563,11 @@ export const getDefaultDualLlmConfig = <ThrowOnError extends boolean = false>(op
 /**
  * Get all dual LLM configurations
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `dualLlmConfig:read`: View dual LLM security configurations
  */
@@ -1100,6 +1575,11 @@ export const getDualLlmConfigs = <ThrowOnError extends boolean = false>(options?
 
 /**
  * Create a new dual LLM configuration
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
  *
  * Required RBAC permissions:
  * - `dualLlmConfig:create`: Create new dual LLM configurations
@@ -1116,6 +1596,11 @@ export const createDualLlmConfig = <ThrowOnError extends boolean = false>(option
 /**
  * Delete a dual LLM configuration
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `dualLlmConfig:delete`: Remove dual LLM configurations
  */
@@ -1124,6 +1609,11 @@ export const deleteDualLlmConfig = <ThrowOnError extends boolean = false>(option
 /**
  * Get dual LLM configuration by ID
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `dualLlmConfig:read`: View dual LLM security configurations
  */
@@ -1131,6 +1621,11 @@ export const getDualLlmConfig = <ThrowOnError extends boolean = false>(options: 
 
 /**
  * Update a dual LLM configuration
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
  *
  * Required RBAC permissions:
  * - `dualLlmConfig:update`: Modify dual LLM configurations
@@ -1147,6 +1642,11 @@ export const updateDualLlmConfig = <ThrowOnError extends boolean = false>(option
 /**
  * Get dual LLM result by tool call ID
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `dualLlmResult:read`: View dual LLM security validation results
  */
@@ -1154,6 +1654,11 @@ export const getDualLlmResultByToolCallId = <ThrowOnError extends boolean = fals
 
 /**
  * Get all dual LLM results for an interaction
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
  *
  * Required RBAC permissions:
  * - `dualLlmResult:read`: View dual LLM security validation results
@@ -1258,11 +1763,24 @@ export const postApiWebhooksIncomingEmail = <ThrowOnError extends boolean = fals
 
 /**
  * Get the email address for invoking an agent
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Required RBAC permissions:
+ * - None (no additional RBAC permission required)
  */
 export const getAgentEmailAddress = <ThrowOnError extends boolean = false>(options: Options<GetAgentEmailAddressData, ThrowOnError>) => (options.client ?? client).get<GetAgentEmailAddressResponses, GetAgentEmailAddressErrors, ThrowOnError>({ url: '/api/agents/{agentId}/email-address', ...options });
 
 /**
  * Get the current incoming email webhook subscription status
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
  *
  * Required RBAC permissions:
  * - `agentTrigger:read`: View agent trigger configurations (Slack, MS Teams, email)
@@ -1271,6 +1789,11 @@ export const getIncomingEmailStatus = <ThrowOnError extends boolean = false>(opt
 
 /**
  * Setup or renew incoming email webhook subscription
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
  *
  * Required RBAC permissions:
  * - `agentTrigger:create`: Set up new agent triggers
@@ -1287,6 +1810,11 @@ export const setupIncomingEmailWebhook = <ThrowOnError extends boolean = false>(
 /**
  * Renew the incoming email webhook subscription
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `agentTrigger:update`: Modify agent trigger configurations
  */
@@ -1294,6 +1822,11 @@ export const renewIncomingEmailSubscription = <ThrowOnError extends boolean = fa
 
 /**
  * Delete the incoming email webhook subscription
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
  *
  * Required RBAC permissions:
  * - `agentTrigger:delete`: Remove agent triggers
@@ -1303,6 +1836,11 @@ export const deleteIncomingEmailSubscription = <ThrowOnError extends boolean = f
 /**
  * Get all interactions with pagination and sorting
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `log:read`: View LLM proxy and MCP tool call logs
  */
@@ -1310,6 +1848,11 @@ export const getInteractions = <ThrowOnError extends boolean = false>(options?: 
 
 /**
  * Get all interaction sessions grouped by session ID with aggregated stats
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
  *
  * Required RBAC permissions:
  * - `log:read`: View LLM proxy and MCP tool call logs
@@ -1319,6 +1862,11 @@ export const getInteractionSessions = <ThrowOnError extends boolean = false>(opt
 /**
  * Get all unique external agent IDs with display names for filtering (from X-Archestra-Agent-Id header)
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `log:read`: View LLM proxy and MCP tool call logs
  */
@@ -1326,6 +1874,11 @@ export const getUniqueExternalAgentIds = <ThrowOnError extends boolean = false>(
 
 /**
  * Get all unique user IDs with names for filtering (from X-Archestra-User-Id header)
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
  *
  * Required RBAC permissions:
  * - `log:read`: View LLM proxy and MCP tool call logs
@@ -1335,6 +1888,11 @@ export const getUniqueUserIds = <ThrowOnError extends boolean = false>(options?:
 /**
  * Get interaction by ID
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `log:read`: View LLM proxy and MCP tool call logs
  */
@@ -1343,6 +1901,11 @@ export const getInteraction = <ThrowOnError extends boolean = false>(options: Op
 /**
  * Get all Internal MCP catalog items
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `mcpRegistry:read`: Browse the MCP server registry
  */
@@ -1350,6 +1913,11 @@ export const getInternalMcpCatalog = <ThrowOnError extends boolean = false>(opti
 
 /**
  * Create a new Internal MCP catalog item
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
  *
  * Required RBAC permissions:
  * - `mcpRegistry:create`: Add servers to the MCP registry
@@ -1366,6 +1934,11 @@ export const createInternalMcpCatalogItem = <ThrowOnError extends boolean = fals
 /**
  * Delete an Internal MCP catalog item
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `mcpRegistry:delete`: Remove servers from the MCP registry
  */
@@ -1374,6 +1947,11 @@ export const deleteInternalMcpCatalogItem = <ThrowOnError extends boolean = fals
 /**
  * Get Internal MCP catalog item by ID
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `mcpRegistry:read`: Browse the MCP server registry
  */
@@ -1381,6 +1959,11 @@ export const getInternalMcpCatalogItem = <ThrowOnError extends boolean = false>(
 
 /**
  * Update an Internal MCP catalog item
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
  *
  * Required RBAC permissions:
  * - `mcpRegistry:update`: Modify MCP registry entries
@@ -1397,6 +1980,11 @@ export const updateInternalMcpCatalogItem = <ThrowOnError extends boolean = fals
 /**
  * Get tools for a catalog item (including builtin Archestra tools)
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `mcpRegistry:read`: Browse the MCP server registry
  */
@@ -1404,6 +1992,11 @@ export const getInternalMcpCatalogTools = <ThrowOnError extends boolean = false>
 
 /**
  * Delete an Internal MCP catalog item by name
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
  *
  * Required RBAC permissions:
  * - `mcpRegistry:delete`: Remove servers from the MCP registry
@@ -1413,6 +2006,11 @@ export const deleteInternalMcpCatalogItemByName = <ThrowOnError extends boolean 
 /**
  * Generate a deployment YAML template preview for a catalog item
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `mcpRegistry:read`: Browse the MCP server registry
  */
@@ -1420,6 +2018,11 @@ export const getDeploymentYamlPreview = <ThrowOnError extends boolean = false>(o
 
 /**
  * Validate a deployment YAML template
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
  *
  * Required RBAC permissions:
  * - `mcpRegistry:read`: Browse the MCP server registry
@@ -1436,6 +2039,11 @@ export const validateDeploymentYaml = <ThrowOnError extends boolean = false>(opt
 /**
  * Reset the deployment YAML to default by clearing the custom YAML
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `mcpRegistry:update`: Modify MCP registry entries
  */
@@ -1443,6 +2051,11 @@ export const resetDeploymentYaml = <ThrowOnError extends boolean = false>(option
 
 /**
  * List Kubernetes docker-registry secrets available for imagePullSecrets
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
  *
  * Required RBAC permissions:
  * - `mcpRegistry:read`: Browse the MCP server registry
@@ -1452,6 +2065,11 @@ export const getK8sImagePullSecrets = <ThrowOnError extends boolean = false>(opt
 /**
  * Get all label keys used by catalog items
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `mcpRegistry:read`: Browse the MCP server registry
  */
@@ -1460,6 +2078,11 @@ export const getInternalMcpCatalogLabelKeys = <ThrowOnError extends boolean = fa
 /**
  * Get all label values for catalog items
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `mcpRegistry:read`: Browse the MCP server registry
  */
@@ -1467,11 +2090,24 @@ export const getInternalMcpCatalogLabelValues = <ThrowOnError extends boolean = 
 
 /**
  * Check if an invitation is valid and whether the user exists
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Required RBAC permissions:
+ * - None (no additional RBAC permission required)
  */
 export const checkInvitation = <ThrowOnError extends boolean = false>(options: Options<CheckInvitationData, ThrowOnError>) => (options.client ?? client).get<CheckInvitationResponses, CheckInvitationErrors, ThrowOnError>({ url: '/api/invitation/{id}/check', ...options });
 
 /**
  * List all knowledge bases for the organization
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
  *
  * Required RBAC permissions:
  * - `knowledgeBase:read`: View knowledge bases and connectors
@@ -1480,6 +2116,11 @@ export const getKnowledgeBases = <ThrowOnError extends boolean = false>(options?
 
 /**
  * Create a new knowledge base
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
  *
  * Required RBAC permissions:
  * - `knowledgeBase:create`: Create knowledge bases and connectors
@@ -1496,6 +2137,11 @@ export const createKnowledgeBase = <ThrowOnError extends boolean = false>(option
 /**
  * Delete a knowledge base and all its connectors
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `knowledgeBase:delete`: Delete knowledge bases and connectors
  */
@@ -1504,6 +2150,11 @@ export const deleteKnowledgeBase = <ThrowOnError extends boolean = false>(option
 /**
  * Get a knowledge base by ID
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `knowledgeBase:read`: View knowledge bases and connectors
  */
@@ -1511,6 +2162,11 @@ export const getKnowledgeBase = <ThrowOnError extends boolean = false>(options: 
 
 /**
  * Update a knowledge base
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
  *
  * Required RBAC permissions:
  * - `knowledgeBase:update`: Modify knowledge bases and connectors
@@ -1527,6 +2183,11 @@ export const updateKnowledgeBase = <ThrowOnError extends boolean = false>(option
 /**
  * Check the health of a knowledge base
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `knowledgeBase:read`: View knowledge bases and connectors
  */
@@ -1535,6 +2196,11 @@ export const getKnowledgeBaseHealth = <ThrowOnError extends boolean = false>(opt
 /**
  * List all connectors for the organization
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `knowledgeBase:read`: View knowledge bases and connectors
  */
@@ -1542,6 +2208,11 @@ export const getConnectors = <ThrowOnError extends boolean = false>(options?: Op
 
 /**
  * Create a new connector
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
  *
  * Required RBAC permissions:
  * - `knowledgeBase:create`: Create knowledge bases and connectors
@@ -1558,6 +2229,11 @@ export const createConnector = <ThrowOnError extends boolean = false>(options: O
 /**
  * Delete a connector
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `knowledgeBase:delete`: Delete knowledge bases and connectors
  */
@@ -1566,6 +2242,11 @@ export const deleteConnector = <ThrowOnError extends boolean = false>(options: O
 /**
  * Get a connector by ID
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `knowledgeBase:read`: View knowledge bases and connectors
  */
@@ -1573,6 +2254,11 @@ export const getConnector = <ThrowOnError extends boolean = false>(options: Opti
 
 /**
  * Update a connector
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
  *
  * Required RBAC permissions:
  * - `knowledgeBase:update`: Modify knowledge bases and connectors
@@ -1589,6 +2275,11 @@ export const updateConnector = <ThrowOnError extends boolean = false>(options: O
 /**
  * Manually trigger a connector sync
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `knowledgeBase:update`: Modify knowledge bases and connectors
  */
@@ -1596,6 +2287,11 @@ export const syncConnector = <ThrowOnError extends boolean = false>(options: Opt
 
 /**
  * Force a full re-sync: deletes all documents, chunks, run history, and resets the checkpoint
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
  *
  * Required RBAC permissions:
  * - `knowledgeBase:update`: Modify knowledge bases and connectors
@@ -1605,6 +2301,11 @@ export const forceResyncConnector = <ThrowOnError extends boolean = false>(optio
 /**
  * Test a connector connection
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `knowledgeBase:read`: View knowledge bases and connectors
  */
@@ -1613,6 +2314,11 @@ export const testConnectorConnection = <ThrowOnError extends boolean = false>(op
 /**
  * List knowledge bases assigned to a connector
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `knowledgeBase:read`: View knowledge bases and connectors
  */
@@ -1620,6 +2326,11 @@ export const getConnectorKnowledgeBases = <ThrowOnError extends boolean = false>
 
 /**
  * Assign a connector to one or more knowledge bases
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
  *
  * Required RBAC permissions:
  * - `knowledgeBase:update`: Modify knowledge bases and connectors
@@ -1636,6 +2347,11 @@ export const assignConnectorToKnowledgeBases = <ThrowOnError extends boolean = f
 /**
  * Unassign a connector from a knowledge base
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `knowledgeBase:update`: Modify knowledge bases and connectors
  */
@@ -1643,6 +2359,11 @@ export const unassignConnectorFromKnowledgeBase = <ThrowOnError extends boolean 
 
 /**
  * List connector runs
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
  *
  * Required RBAC permissions:
  * - `knowledgeBase:read`: View knowledge bases and connectors
@@ -1652,6 +2373,11 @@ export const getConnectorRuns = <ThrowOnError extends boolean = false>(options: 
 /**
  * Get a single connector run (including logs)
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `knowledgeBase:read`: View knowledge bases and connectors
  */
@@ -1660,6 +2386,11 @@ export const getConnectorRun = <ThrowOnError extends boolean = false>(options: O
 /**
  * Get all limits with optional filtering and per-model usage breakdown
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `llmLimit:read`: View token usage limits
  */
@@ -1667,6 +2398,11 @@ export const getLimits = <ThrowOnError extends boolean = false>(options?: Option
 
 /**
  * Create a new limit
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
  *
  * Required RBAC permissions:
  * - `llmLimit:create`: Create new usage limits
@@ -1683,6 +2419,11 @@ export const createLimit = <ThrowOnError extends boolean = false>(options: Optio
 /**
  * Delete a limit
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `llmLimit:delete`: Remove usage limits
  */
@@ -1691,6 +2432,11 @@ export const deleteLimit = <ThrowOnError extends boolean = false>(options: Optio
 /**
  * Get a limit by ID
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `llmLimit:read`: View token usage limits
  */
@@ -1698,6 +2444,11 @@ export const getLimit = <ThrowOnError extends boolean = false>(options: Options<
 
 /**
  * Update a limit
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
  *
  * Required RBAC permissions:
  * - `llmLimit:update`: Modify existing usage limits
@@ -1725,6 +2476,11 @@ export const postV1McpByProfileId = <ThrowOnError extends boolean = false>(optio
 /**
  * Get all MCP server installation requests
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `mcpServerInstallationRequest:read`: View MCP server installation requests
  */
@@ -1732,6 +2488,11 @@ export const getMcpServerInstallationRequests = <ThrowOnError extends boolean = 
 
 /**
  * Create a new MCP server installation request
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
  *
  * Required RBAC permissions:
  * - `mcpServerInstallationRequest:create`: Submit requests to install MCP servers
@@ -1748,6 +2509,11 @@ export const createMcpServerInstallationRequest = <ThrowOnError extends boolean 
 /**
  * Delete an MCP server installation request
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `mcpServerInstallationRequest:delete`: Delete installation requests
  */
@@ -1756,6 +2522,11 @@ export const deleteMcpServerInstallationRequest = <ThrowOnError extends boolean 
 /**
  * Get an MCP server installation request by ID
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `mcpServerInstallationRequest:read`: View MCP server installation requests
  */
@@ -1763,6 +2534,11 @@ export const getMcpServerInstallationRequest = <ThrowOnError extends boolean = f
 
 /**
  * Update an MCP server installation request
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
  *
  * Required RBAC permissions:
  * - `mcpServerInstallationRequest:update`: Add notes to installation requests
@@ -1779,6 +2555,11 @@ export const updateMcpServerInstallationRequest = <ThrowOnError extends boolean 
 /**
  * Approve an MCP server installation request
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `mcpServerInstallationRequest:admin`: Approve or decline installation requests
  */
@@ -1793,6 +2574,11 @@ export const approveMcpServerInstallationRequest = <ThrowOnError extends boolean
 
 /**
  * Decline an MCP server installation request
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
  *
  * Required RBAC permissions:
  * - `mcpServerInstallationRequest:admin`: Approve or decline installation requests
@@ -1809,6 +2595,11 @@ export const declineMcpServerInstallationRequest = <ThrowOnError extends boolean
 /**
  * Add a note to an MCP server installation request
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `mcpServerInstallationRequest:update`: Add notes to installation requests
  */
@@ -1824,6 +2615,11 @@ export const addMcpServerInstallationRequestNote = <ThrowOnError extends boolean
 /**
  * Get all installed MCP servers
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `mcpServerInstallation:read`: View installed MCP servers and their status
  */
@@ -1831,6 +2627,11 @@ export const getMcpServers = <ThrowOnError extends boolean = false>(options?: Op
 
 /**
  * Install an MCP server (from catalog or custom)
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
  *
  * Required RBAC permissions:
  * - `mcpServerInstallation:create`: Install MCP servers from the registry
@@ -1847,6 +2648,11 @@ export const installMcpServer = <ThrowOnError extends boolean = false>(options: 
 /**
  * Delete/uninstall an MCP server
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `mcpServerInstallation:delete`: Uninstall MCP servers
  */
@@ -1855,6 +2661,11 @@ export const deleteMcpServer = <ThrowOnError extends boolean = false>(options: O
 /**
  * Get MCP server by ID
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `mcpServerInstallation:read`: View installed MCP servers and their status
  */
@@ -1862,6 +2673,11 @@ export const getMcpServer = <ThrowOnError extends boolean = false>(options: Opti
 
 /**
  * Update MCP server secret after re-authentication (clears OAuth refresh errors)
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
  *
  * Required RBAC permissions:
  * - `mcpServerInstallation:update`: Modify installed MCP server configuration
@@ -1878,6 +2694,11 @@ export const reauthenticateMcpServer = <ThrowOnError extends boolean = false>(op
 /**
  * Get the installation status of an MCP server (for polling during local server installation)
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `mcpServerInstallation:read`: View installed MCP servers and their status
  */
@@ -1886,6 +2707,11 @@ export const getMcpServerInstallationStatus = <ThrowOnError extends boolean = fa
 /**
  * Get all tools for an MCP server
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `mcpServerInstallation:read`: View installed MCP servers and their status
  */
@@ -1893,6 +2719,11 @@ export const getMcpServerTools = <ThrowOnError extends boolean = false>(options:
 
 /**
  * Inspect a running MCP server (list tools or call a tool)
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
  *
  * Required RBAC permissions:
  * - `mcpServerInstallation:read`: View installed MCP servers and their status
@@ -1909,6 +2740,11 @@ export const inspectMcpServer = <ThrowOnError extends boolean = false>(options: 
 /**
  * Reinstall an MCP server without losing tool assignments and policies
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `mcpServerInstallation:update`: Modify installed MCP server configuration
  */
@@ -1924,6 +2760,11 @@ export const reinstallMcpServer = <ThrowOnError extends boolean = false>(options
 /**
  * Get all MCP tool calls with pagination and sorting
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `log:read`: View LLM proxy and MCP tool call logs
  */
@@ -1932,6 +2773,11 @@ export const getMcpToolCalls = <ThrowOnError extends boolean = false>(options?: 
 /**
  * Get MCP tool call by ID
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `log:read`: View LLM proxy and MCP tool call logs
  */
@@ -1939,6 +2785,11 @@ export const getMcpToolCall = <ThrowOnError extends boolean = false>(options: Op
 
 /**
  * Get all members of the organization with pagination and optional filters
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
  *
  * Required RBAC permissions:
  * - `member:read`: View organization members and their roles
@@ -1996,6 +2847,11 @@ export const mistralChatCompletionsWithAgent = <ThrowOnError extends boolean = f
 /**
  * Initiate OAuth flow for MCP server installation
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `mcpServerInstallation:create`: Install MCP servers from the registry
  */
@@ -2010,6 +2866,11 @@ export const initiateOAuth = <ThrowOnError extends boolean = false>(options: Opt
 
 /**
  * Handle OAuth callback and exchange code for tokens
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
  *
  * Required RBAC permissions:
  * - `mcpServerInstallation:create`: Install MCP servers from the registry
@@ -2102,6 +2963,11 @@ export const openrouterChatCompletionsWithAgent = <ThrowOnError extends boolean 
 /**
  * Get all optimization rules for the organization
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `optimizationRule:read`: View optimization rules
  */
@@ -2109,6 +2975,11 @@ export const getOptimizationRules = <ThrowOnError extends boolean = false>(optio
 
 /**
  * Create a new optimization rule for the organization
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
  *
  * Required RBAC permissions:
  * - `optimizationRule:create`: Create new optimization rules
@@ -2125,6 +2996,11 @@ export const createOptimizationRule = <ThrowOnError extends boolean = false>(opt
 /**
  * Delete an optimization rule
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `optimizationRule:delete`: Remove optimization rules
  */
@@ -2132,6 +3008,11 @@ export const deleteOptimizationRule = <ThrowOnError extends boolean = false>(opt
 
 /**
  * Update an optimization rule
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
  *
  * Required RBAC permissions:
  * - `optimizationRule:update`: Modify optimization rules
@@ -2148,6 +3029,11 @@ export const updateOptimizationRule = <ThrowOnError extends boolean = false>(opt
 /**
  * Get all roles in the organization
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `ac:read`: View custom roles and their permissions
  */
@@ -2155,6 +3041,11 @@ export const getRoles = <ThrowOnError extends boolean = false>(options?: Options
 
 /**
  * Create a new custom role
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
  *
  * Required RBAC permissions:
  * - `ac:create`: Create new custom roles
@@ -2171,6 +3062,11 @@ export const createRole = <ThrowOnError extends boolean = false>(options: Option
 /**
  * Delete a custom role
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `ac:delete`: Delete custom roles
  */
@@ -2179,6 +3075,11 @@ export const deleteRole = <ThrowOnError extends boolean = false>(options: Option
 /**
  * Get a specific role by ID
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `ac:read`: View custom roles and their permissions
  */
@@ -2186,6 +3087,11 @@ export const getRole = <ThrowOnError extends boolean = false>(options: Options<G
 
 /**
  * Update a custom role
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
  *
  * Required RBAC permissions:
  * - `ac:update`: Modify custom role permissions
@@ -2201,16 +3107,37 @@ export const updateRole = <ThrowOnError extends boolean = false>(options: Option
 
 /**
  * Get organization details
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Required RBAC permissions:
+ * - None (no additional RBAC permission required)
  */
 export const getOrganization = <ThrowOnError extends boolean = false>(options?: Options<GetOrganizationData, ThrowOnError>) => (options?.client ?? client).get<GetOrganizationResponses, GetOrganizationErrors, ThrowOnError>({ url: '/api/organization', ...options });
 
 /**
  * Get organization appearance settings
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Required RBAC permissions:
+ * - None (no additional RBAC permission required)
  */
 export const getAppearanceSettings = <ThrowOnError extends boolean = false>(options?: Options<GetAppearanceSettingsData, ThrowOnError>) => (options?.client ?? client).get<GetAppearanceSettingsResponses, GetAppearanceSettingsErrors, ThrowOnError>({ url: '/api/organization/appearance-settings', ...options });
 
 /**
  * Update appearance settings
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
  *
  * Required RBAC permissions:
  * - `organizationSettings:update`: Customize organization appearance, authentication, etc
@@ -2227,6 +3154,11 @@ export const updateAppearanceSettings = <ThrowOnError extends boolean = false>(o
 /**
  * Update security settings (global tool policy, chat file uploads)
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `agentSettings:update`: Modify agent settings (default model, default agent, security engine, file uploads)
  */
@@ -2241,6 +3173,11 @@ export const updateSecuritySettings = <ThrowOnError extends boolean = false>(opt
 
 /**
  * Update LLM settings (TOON compression, compression scope, limit cleanup interval)
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
  *
  * Required RBAC permissions:
  * - `llmSettings:update`: Modify LLM settings
@@ -2257,6 +3194,11 @@ export const updateLlmSettings = <ThrowOnError extends boolean = false>(options:
 /**
  * Update agent settings (default model, default agent)
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `agentSettings:update`: Modify agent settings (default model, default agent, security engine, file uploads)
  */
@@ -2271,6 +3213,11 @@ export const updateAgentSettings = <ThrowOnError extends boolean = false>(option
 
 /**
  * Update knowledge settings (embedding model)
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
  *
  * Required RBAC permissions:
  * - `knowledgeSettings:update`: Modify knowledge settings (embedding and reranking models)
@@ -2287,6 +3234,11 @@ export const updateKnowledgeSettings = <ThrowOnError extends boolean = false>(op
 /**
  * Drop the embedding configuration, deleting all KB documents and resetting connector checkpoints
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `knowledgeSettings:update`: Modify knowledge settings (embedding and reranking models)
  */
@@ -2294,6 +3246,11 @@ export const dropEmbeddingConfig = <ThrowOnError extends boolean = false>(option
 
 /**
  * Test the embedding connection by embedding a sample text
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
  *
  * Required RBAC permissions:
  * - `knowledgeSettings:update`: Modify knowledge settings (embedding and reranking models)
@@ -2309,6 +3266,14 @@ export const testEmbeddingConnection = <ThrowOnError extends boolean = false>(op
 
 /**
  * Mark organization onboarding as complete
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Required RBAC permissions:
+ * - None (no additional RBAC permission required)
  */
 export const completeOnboarding = <ThrowOnError extends boolean = false>(options: Options<CompleteOnboardingData, ThrowOnError>) => (options.client ?? client).post<CompleteOnboardingResponses, CompleteOnboardingErrors, ThrowOnError>({
     url: '/api/organization/complete-onboarding',
@@ -2321,16 +3286,37 @@ export const completeOnboarding = <ThrowOnError extends boolean = false>(options
 
 /**
  * Check if organization onboarding is complete
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Required RBAC permissions:
+ * - None (no additional RBAC permission required)
  */
 export const getOnboardingStatus = <ThrowOnError extends boolean = false>(options?: Options<GetOnboardingStatusData, ThrowOnError>) => (options?.client ?? client).get<GetOnboardingStatusResponses, GetOnboardingStatusErrors, ThrowOnError>({ url: '/api/organization/onboarding-status', ...options });
 
 /**
  * Get which members have completed signup (have an account record)
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Required RBAC permissions:
+ * - None (no additional RBAC permission required)
  */
 export const getMemberSignupStatus = <ThrowOnError extends boolean = false>(options?: Options<GetMemberSignupStatusData, ThrowOnError>) => (options?.client ?? client).get<GetMemberSignupStatusResponses, GetMemberSignupStatusErrors, ThrowOnError>({ url: '/api/organization/members/signup-status', ...options });
 
 /**
  * Delete an auto-provisioned member who hasn't completed signup
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
  *
  * Required RBAC permissions:
  * - `member:delete`: Remove members from the organization
@@ -2340,6 +3326,11 @@ export const deletePendingSignupMember = <ThrowOnError extends boolean = false>(
 /**
  * Get all members of the organization
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `member:read`: View organization members and their roles
  */
@@ -2347,6 +3338,11 @@ export const getOrganizationMembers = <ThrowOnError extends boolean = false>(opt
 
 /**
  * Get a member of the organization by user ID or email address
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
  *
  * Required RBAC permissions:
  * - `member:read`: View organization members and their roles
@@ -2380,6 +3376,11 @@ export const perplexityChatCompletionsWithAgent = <ThrowOnError extends boolean 
 /**
  * Get the secrets manager type and configuration details (for Vault)
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `secret:read`: View secrets manager configuration
  */
@@ -2387,6 +3388,11 @@ export const getSecretsType = <ThrowOnError extends boolean = false>(options?: O
 
 /**
  * Get a secret by ID
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
  *
  * Required RBAC permissions:
  * - `secret:read`: View secrets manager configuration
@@ -2396,6 +3402,11 @@ export const getSecret = <ThrowOnError extends boolean = false>(options: Options
 /**
  * Check connectivity to the secrets storage and return secret count.
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `secret:update`: Modify secrets manager settings and test connectivity
  */
@@ -2403,6 +3414,11 @@ export const checkSecretsConnectivity = <ThrowOnError extends boolean = false>(o
 
 /**
  * Get team statistics
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
  *
  * Required RBAC permissions:
  * - `llmCost:read`: View LLM usage cost statistics and analytics
@@ -2412,6 +3428,11 @@ export const getTeamStatistics = <ThrowOnError extends boolean = false>(options?
 /**
  * Get agent statistics
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `llmCost:read`: View LLM usage cost statistics and analytics
  */
@@ -2419,6 +3440,11 @@ export const getAgentStatistics = <ThrowOnError extends boolean = false>(options
 
 /**
  * Get model statistics
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
  *
  * Required RBAC permissions:
  * - `llmCost:read`: View LLM usage cost statistics and analytics
@@ -2428,6 +3454,11 @@ export const getModelStatistics = <ThrowOnError extends boolean = false>(options
 /**
  * Get overview statistics
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `llmCost:read`: View LLM usage cost statistics and analytics
  */
@@ -2435,6 +3466,11 @@ export const getOverviewStatistics = <ThrowOnError extends boolean = false>(opti
 
 /**
  * Get cost savings statistics
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
  *
  * Required RBAC permissions:
  * - `llmCost:read`: View LLM usage cost statistics and analytics
@@ -2444,6 +3480,11 @@ export const getCostSavingsStatistics = <ThrowOnError extends boolean = false>(o
 /**
  * Get all teams in the organization
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `team:read`: View teams and their members
  */
@@ -2451,6 +3492,11 @@ export const getTeams = <ThrowOnError extends boolean = false>(options?: Options
 
 /**
  * Create a new team
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
  *
  * Required RBAC permissions:
  * - `team:create`: Create new teams
@@ -2467,6 +3513,11 @@ export const createTeam = <ThrowOnError extends boolean = false>(options: Option
 /**
  * Delete a team
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `team:delete`: Delete teams
  */
@@ -2475,6 +3526,11 @@ export const deleteTeam = <ThrowOnError extends boolean = false>(options: Option
 /**
  * Get a team by ID
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `team:read`: View teams and their members
  */
@@ -2482,6 +3538,11 @@ export const getTeam = <ThrowOnError extends boolean = false>(options: Options<G
 
 /**
  * Update a team
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
  *
  * Required RBAC permissions:
  * - `team:update`: Modify team settings
@@ -2498,6 +3559,11 @@ export const updateTeam = <ThrowOnError extends boolean = false>(options: Option
 /**
  * Get all members of a team
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `team:read`: View teams and their members
  */
@@ -2505,6 +3571,11 @@ export const getTeamMembers = <ThrowOnError extends boolean = false>(options: Op
 
 /**
  * Add a member to a team
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
  *
  * Required RBAC permissions:
  * - `team:admin`: Manage team membership (add/remove members)
@@ -2521,6 +3592,11 @@ export const addTeamMember = <ThrowOnError extends boolean = false>(options: Opt
 /**
  * Remove a member from a team
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `team:admin`: Manage team membership (add/remove members)
  */
@@ -2529,6 +3605,11 @@ export const removeTeamMember = <ThrowOnError extends boolean = false>(options: 
 /**
  * Get all external groups mapped to a team for SSO team sync
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `team:read`: View teams and their members
  */
@@ -2536,6 +3617,11 @@ export const getTeamExternalGroups = <ThrowOnError extends boolean = false>(opti
 
 /**
  * Add an external group mapping to a team for SSO team sync
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
  *
  * Required RBAC permissions:
  * - `team:admin`: Manage team membership (add/remove members)
@@ -2552,6 +3638,11 @@ export const addTeamExternalGroup = <ThrowOnError extends boolean = false>(optio
 /**
  * Remove an external group mapping from a team for SSO team sync
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `team:admin`: Manage team membership (add/remove members)
  */
@@ -2559,6 +3650,11 @@ export const removeTeamExternalGroup = <ThrowOnError extends boolean = false>(op
 
 /**
  * Get tokens visible to the user based on their permissions
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
  *
  * Required RBAC permissions:
  * - `team:read`: View teams and their members
@@ -2568,6 +3664,11 @@ export const getTokens = <ThrowOnError extends boolean = false>(options?: Option
 /**
  * Get the full token value (for copying to clipboard)
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `team:update`: Modify team settings
  */
@@ -2575,6 +3676,11 @@ export const getTokenValue = <ThrowOnError extends boolean = false>(options: Opt
 
 /**
  * Rotate a token (generate new value)
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
  *
  * Required RBAC permissions:
  * - `team:update`: Modify team settings
@@ -2584,6 +3690,11 @@ export const rotateToken = <ThrowOnError extends boolean = false>(options: Optio
 /**
  * Get all tools
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `toolPolicy:read`: View tools, tool invocation policies, and trusted data policies
  */
@@ -2591,6 +3702,11 @@ export const getTools = <ThrowOnError extends boolean = false>(options?: Options
 
 /**
  * Get all tools with their profile assignments (one entry per tool)
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
  *
  * Required RBAC permissions:
  * - `toolPolicy:read`: View tools, tool invocation policies, and trusted data policies
@@ -2600,6 +3716,11 @@ export const getToolsWithAssignments = <ThrowOnError extends boolean = false>(op
 /**
  * Delete an auto-discovered tool (tools without an MCP server)
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `toolPolicy:delete`: Remove tools and security policies
  */
@@ -2607,26 +3728,63 @@ export const deleteTool = <ThrowOnError extends boolean = false>(options: Option
 
 /**
  * Get current user's permissions
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Required RBAC permissions:
+ * - None (no additional RBAC permission required)
  */
 export const getUserPermissions = <ThrowOnError extends boolean = false>(options?: Options<GetUserPermissionsData, ThrowOnError>) => (options?.client ?? client).get<GetUserPermissionsResponses, GetUserPermissionsErrors, ThrowOnError>({ url: '/api/user/permissions', ...options });
 
 /**
  * Get current user's personal token
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Required RBAC permissions:
+ * - None (no additional RBAC permission required)
  */
 export const getUserToken = <ThrowOnError extends boolean = false>(options?: Options<GetUserTokenData, ThrowOnError>) => (options?.client ?? client).get<GetUserTokenResponses, GetUserTokenErrors, ThrowOnError>({ url: '/api/user-tokens/me', ...options });
 
 /**
  * Get the full personal token value
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Required RBAC permissions:
+ * - None (no additional RBAC permission required)
  */
 export const getUserTokenValue = <ThrowOnError extends boolean = false>(options?: Options<GetUserTokenValueData, ThrowOnError>) => (options?.client ?? client).get<GetUserTokenValueResponses, GetUserTokenValueErrors, ThrowOnError>({ url: '/api/user-tokens/me/value', ...options });
 
 /**
  * Rotate personal token (generate new value)
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Required RBAC permissions:
+ * - None (no additional RBAC permission required)
  */
 export const rotateUserToken = <ThrowOnError extends boolean = false>(options?: Options<RotateUserTokenData, ThrowOnError>) => (options?.client ?? client).post<RotateUserTokenResponses, RotateUserTokenErrors, ThrowOnError>({ url: '/api/user-tokens/me/rotate', ...options });
 
 /**
  * Get all virtual API keys for the organization, with parent API key info
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
  *
  * Required RBAC permissions:
  * - `llmProvider:read`: View LLM provider API keys, virtual keys, and models
@@ -2636,6 +3794,11 @@ export const getAllVirtualApiKeys = <ThrowOnError extends boolean = false>(optio
 /**
  * Get all virtual API keys for a chat API key
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `llmProvider:read`: View LLM provider API keys, virtual keys, and models
  */
@@ -2643,6 +3806,11 @@ export const getVirtualApiKeys = <ThrowOnError extends boolean = false>(options:
 
 /**
  * Create a new virtual API key. Returns the full token value once.
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
  *
  * Required RBAC permissions:
  * - `llmProvider:create`: Add new LLM provider API keys or virtual keys
@@ -2658,6 +3826,11 @@ export const createVirtualApiKey = <ThrowOnError extends boolean = false>(option
 
 /**
  * Delete a virtual API key
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
  *
  * Required RBAC permissions:
  * - `llmProvider:delete`: Remove LLM provider API keys or virtual keys
@@ -2738,11 +3911,24 @@ export const zhipuaiChatCompletionsWithAgent = <ThrowOnError extends boolean = f
 
 /**
  * Get public identity provider list for login page (no secrets exposed)
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Required RBAC permissions:
+ * - None (no additional RBAC permission required)
  */
 export const getPublicIdentityProviders = <ThrowOnError extends boolean = false>(options?: Options<GetPublicIdentityProvidersData, ThrowOnError>) => (options?.client ?? client).get<GetPublicIdentityProvidersResponses, GetPublicIdentityProvidersErrors, ThrowOnError>({ url: '/api/identity-providers/public', ...options });
 
 /**
  * Get all identity providers with full configuration (admin only)
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
  *
  * Required RBAC permissions:
  * - `identityProvider:read`: View identity provider configurations (SSO)
@@ -2751,6 +3937,11 @@ export const getIdentityProviders = <ThrowOnError extends boolean = false>(optio
 
 /**
  * Create a new identity provider
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
  *
  * Required RBAC permissions:
  * - `identityProvider:create`: Set up new identity providers
@@ -2766,11 +3957,24 @@ export const createIdentityProvider = <ThrowOnError extends boolean = false>(opt
 
 /**
  * Get the IdP logout URL for the current user's identity provider
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Required RBAC permissions:
+ * - None (no additional RBAC permission required)
  */
 export const getIdentityProviderIdpLogoutUrl = <ThrowOnError extends boolean = false>(options?: Options<GetIdentityProviderIdpLogoutUrlData, ThrowOnError>) => (options?.client ?? client).get<GetIdentityProviderIdpLogoutUrlResponses, GetIdentityProviderIdpLogoutUrlErrors, ThrowOnError>({ url: '/api/identity-providers/idp-logout-url', ...options });
 
 /**
  * Delete identity provider
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
  *
  * Required RBAC permissions:
  * - `identityProvider:delete`: Remove identity providers
@@ -2780,6 +3984,11 @@ export const deleteIdentityProvider = <ThrowOnError extends boolean = false>(opt
 /**
  * Get identity provider by ID
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `identityProvider:read`: View identity provider configurations (SSO)
  */
@@ -2787,6 +3996,11 @@ export const getIdentityProvider = <ThrowOnError extends boolean = false>(option
 
 /**
  * Update identity provider
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
  *
  * Required RBAC permissions:
  * - `identityProvider:update`: Modify identity provider settings
@@ -2803,6 +4017,11 @@ export const updateIdentityProvider = <ThrowOnError extends boolean = false>(opt
 /**
  * Delete a team's Vault folder mapping
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `team:update`: Modify team settings
  */
@@ -2811,6 +4030,11 @@ export const deleteTeamVaultFolder = <ThrowOnError extends boolean = false>(opti
 /**
  * Get a team's Vault folder configuration
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `team:read`: View teams and their members
  */
@@ -2818,6 +4042,11 @@ export const getTeamVaultFolder = <ThrowOnError extends boolean = false>(options
 
 /**
  * Set or update a team's Vault folder path
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
  *
  * Required RBAC permissions:
  * - `team:update`: Modify team settings
@@ -2834,6 +4063,11 @@ export const setTeamVaultFolder = <ThrowOnError extends boolean = false>(options
 /**
  * Check connectivity to a team's Vault folder
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `team:update`: Modify team settings
  */
@@ -2849,6 +4083,11 @@ export const checkTeamVaultFolderConnectivity = <ThrowOnError extends boolean = 
 /**
  * List secrets available in a team's Vault folder
  *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
  * Required RBAC permissions:
  * - `team:read`: View teams and their members
  */
@@ -2856,6 +4095,11 @@ export const listTeamVaultFolderSecrets = <ThrowOnError extends boolean = false>
 
 /**
  * Get the keys of a specific secret in a team's Vault folder
+ *
+ * Authentication:
+ * - Required.
+ * Authorization:
+ * - Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
  *
  * Required RBAC permissions:
  * - `team:read`: View teams and their members

@@ -274,8 +274,8 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.GetDefaultMcpGateway,
-        description: "Get or create default MCP Gateway",
-        tags: ["MCP Gateways"],
+        description: "Get default MCP Gateway",
+        tags: ["MCP Gateway"],
         response: constructResponseSchema(SelectAgentSchema),
       },
     },
@@ -291,7 +291,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.GetDefaultLlmProxy,
-        description: "Get or create default LLM Proxy",
+        description: "Get default LLM Proxy",
         tags: ["LLM Proxy"],
         response: constructResponseSchema(SelectAgentSchema),
       },

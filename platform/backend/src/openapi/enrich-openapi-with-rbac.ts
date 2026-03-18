@@ -15,6 +15,13 @@ export function enrichOpenApiWithRbac<T extends OpenApiDocument>(spec: T): T {
     }
 
     for (const operation of getOperations(pathItem)) {
+      if (hasTag(operation, "LLM Proxy")) {
+        operation.description = appendDescriptionSection(
+          operation.description,
+          createLlmProxyAuthenticationSection(),
+        );
+      }
+
       if (!operation.operationId) {
         continue;
       }
@@ -57,6 +64,7 @@ type OpenApiPathItem = Partial<
 type OpenApiOperation = {
   operationId?: string;
   description?: string;
+  tags?: string[];
   "x-required-permissions"?: RequiredPermissionsExtension;
 };
 
@@ -86,6 +94,10 @@ function getOperations(pathItem: OpenApiPathItem): OpenApiOperation[] {
       (operation): operation is OpenApiOperation =>
         operation !== undefined && operation !== null,
     );
+}
+
+function hasTag(operation: OpenApiOperation, tag: string): boolean {
+  return operation.tags?.includes(tag) ?? false;
 }
 
 function getRbacMetadata(operationId: string): RequiredPermissionsExtension {
@@ -148,7 +160,16 @@ function appendDescriptionSection(
 function createAuthenticationSection(): string {
   return [
     "Authentication:",
-    "- Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.",
+    "",
+    "Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.",
+  ].join("\n");
+}
+
+function createLlmProxyAuthenticationSection(): string {
+  return [
+    "Authentication:",
+    "",
+    "This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
   ].join("\n");
 }
 
@@ -157,17 +178,19 @@ function createPermissionSection(
 ): string {
   if (metadata.kind === "static") {
     return [
-      "Required RBAC permissions:",
+      "Authorization:",
+      "",
       ...metadata.permissions.map(
         (permission) =>
-          `- \`${permission}\`: ${permissionDescriptions[permission] ?? "No description available"}`,
+          `\`${permission}\`: ${permissionDescriptions[permission] ?? "No description available"}`,
       ),
     ].join("\n");
   }
 
   return [
-    "Required RBAC permissions:",
-    `- ${metadata.note ?? "None (no additional RBAC permission required)"}`,
+    "Authorization:",
+    "",
+    metadata.note ?? "None (no additional RBAC permission required)",
   ].join("\n");
 }
 

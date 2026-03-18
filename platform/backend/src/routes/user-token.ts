@@ -20,7 +20,7 @@ const userTokenRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetUserToken,
         description: "Get current user's personal token",
-        tags: ["UserTokens"],
+        tags: ["User Tokens"],
         response: constructResponseSchema(UserTokenResponseSchema),
       },
     },
@@ -52,7 +52,7 @@ const userTokenRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetUserTokenValue,
         description: "Get the full personal token value",
-        tags: ["UserTokens"],
+        tags: ["User Tokens"],
         response: constructResponseSchema(z.object({ value: z.string() })),
       },
     },
@@ -86,7 +86,7 @@ const userTokenRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.RotateUserToken,
         description: "Rotate personal token (generate new value)",
-        tags: ["UserTokens"],
+        tags: ["User Tokens"],
         response: constructResponseSchema(UserTokenWithValueResponseSchema),
       },
     },

@@ -105,7 +105,7 @@ const geminiProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         description: "Generate content using Gemini (default agent)",
         summary: "Generate content using Gemini",
-        tags: ["llm-proxy"],
+        tags: ["LLM Proxy"],
         params: z.object({
           model: z.string().describe("The model to use"),
         }),
@@ -147,7 +147,7 @@ const geminiProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         description: "Stream generated content using Gemini (default agent)",
         summary: "Stream generated content using Gemini",
-        tags: ["llm-proxy"],
+        tags: ["LLM Proxy"],
         params: z.object({
           model: z.string().describe("The model to use"),
         }),
@@ -188,7 +188,7 @@ const geminiProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         description: "Generate content using Gemini with specific agent",
         summary: "Generate content using Gemini (specific agent)",
-        tags: ["llm-proxy"],
+        tags: ["LLM Proxy"],
         params: z.object({
           agentId: UuidIdSchema,
           model: z.string().describe("The model to use"),
@@ -237,7 +237,7 @@ const geminiProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
         description:
           "Stream generated content using Gemini with specific agent",
         summary: "Stream generated content using Gemini (specific agent)",
-        tags: ["llm-proxy"],
+        tags: ["LLM Proxy"],
         params: z.object({
           agentId: UuidIdSchema,
           model: z.string().describe("The model to use"),

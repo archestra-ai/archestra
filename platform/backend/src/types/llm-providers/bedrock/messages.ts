@@ -167,7 +167,12 @@ export const MessageSchema = z.object({
 // =============================================================================
 
 // System content block (text or guard content)
+// Also accepts Anthropic-style { type: "text", text: string } blocks (e.g. from @ai-sdk/amazon-bedrock)
+// and normalizes them to Bedrock format { text: string }
 const SystemContentBlockSchema = z.union([
+  z
+    .object({ type: z.literal("text"), text: z.string() })
+    .transform(({ text }) => ({ text })),
   z.object({ text: z.string() }),
   GuardContentBlockSchema,
 ]);

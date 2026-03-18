@@ -9,7 +9,6 @@ import {
 import {
   AlertTriangle,
   Info,
-  Key,
   Loader2,
   Lock,
   Plus,
@@ -24,8 +23,14 @@ import {
   ChatApiKeyForm,
   type ChatApiKeyFormValues,
   PLACEHOLDER_KEY,
+  PROVIDER_CONFIG,
 } from "@/components/chat-api-key-form";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { FormDialog } from "@/components/form-dialog";
+import {
+  LlmProviderApiKeyOptionLabel,
+  LlmProviderApiKeySelectItems,
+} from "@/components/llm-provider-options";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { WithPermissions } from "@/components/roles/with-permissions";
 import {
@@ -36,13 +41,9 @@ import {
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
+  DialogBody,
   DialogForm,
-  DialogHeader,
-  DialogTitle,
+  DialogStickyFooter,
 } from "@/components/ui/dialog";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
@@ -146,62 +147,63 @@ function AddApiKeyDialog({
   });
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle>Add LLM Provider Key</DialogTitle>
-          <DialogDescription>
-            {forEmbedding
-              ? "Add an API key for knowledge base embeddings (OpenAI or Ollama)."
-              : "Add an LLM provider API key for knowledge base reranking."}
-          </DialogDescription>
-        </DialogHeader>
-        {forEmbedding && (
-          <Alert variant="default" className="py-2">
-            <Info className="h-4 w-4" />
-            <AlertDescription className="text-xs">
-              OpenAI and Ollama are supported for embeddings. The key must have
-              access to at least one of the following models:
-              <ul className="list-disc list-inside mt-1">
-                {Object.keys(EMBEDDING_MODELS).map((model) => (
-                  <li key={model}>{model}</li>
-                ))}
-              </ul>
-            </AlertDescription>
-          </Alert>
-        )}
-        <DialogForm onSubmit={handleCreate}>
-          <div className="py-2">
-            <ChatApiKeyForm
-              mode="full"
-              showConsoleLink
-              form={form}
-              isPending={createMutation.isPending}
-              geminiVertexAiEnabled={geminiVertexAiEnabled}
-              hideScopeAndPrimary
-            />
-          </div>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              disabled={!isValid || createMutation.isPending}
-            >
-              {createMutation.isPending && (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              )}
-              Test & Create
-            </Button>
-          </DialogFooter>
-        </DialogForm>
-      </DialogContent>
-    </Dialog>
+    <FormDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Add LLM Provider Key"
+      description={
+        forEmbedding
+          ? "Add an API key for knowledge base embeddings (OpenAI or Ollama)."
+          : "Add an LLM provider API key for knowledge base reranking."
+      }
+      size="small"
+    >
+      <DialogForm
+        onSubmit={handleCreate}
+        className="flex min-h-0 flex-1 flex-col"
+      >
+        <DialogBody className="space-y-4">
+          {forEmbedding && (
+            <Alert variant="default">
+              <Info className="h-4 w-4" />
+              <AlertDescription className="text-xs">
+                OpenAI and Ollama are supported for embeddings. The key must
+                have access to at least one of the following models:
+                <ul className="mt-1 list-inside list-disc">
+                  {Object.keys(EMBEDDING_MODELS).map((model) => (
+                    <li key={model}>{model}</li>
+                  ))}
+                </ul>
+              </AlertDescription>
+            </Alert>
+          )}
+          <ChatApiKeyForm
+            mode="full"
+            showConsoleLink={false}
+            form={form}
+            isPending={createMutation.isPending}
+            geminiVertexAiEnabled={geminiVertexAiEnabled}
+            allowedProviders={forEmbedding ? ["openai", "ollama"] : undefined}
+            hideScopeAndPrimary
+          />
+        </DialogBody>
+        <DialogStickyFooter className="mt-0">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+          >
+            Cancel
+          </Button>
+          <Button type="submit" disabled={!isValid || createMutation.isPending}>
+            {createMutation.isPending && (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            )}
+            Test & Create
+          </Button>
+        </DialogStickyFooter>
+      </DialogForm>
+    </FormDialog>
   );
 }
 
@@ -234,6 +236,7 @@ function ApiKeySelector({
   const isEmbeddingSelector = !!filterEmbeddingProviders;
   const selectableKeys = isEmbeddingSelector ? compatibleKeys : keys;
   const hasSelectableKeys = selectableKeys.length > 0;
+  const selectedKey = keys.find((key) => key.id === value) ?? null;
 
   // Auto-select the first key when transitioning from 0 → N selectable keys
   useEffect(() => {
@@ -290,56 +293,58 @@ function ApiKeySelector({
           )}
         >
           <SelectValue placeholder={`Select ${label}...`}>
-            {value
-              ? (keys.find((k) => k.id === value)?.name ?? "Selected key")
-              : `Select ${label}...`}
+            {selectedKey ? (
+              <LlmProviderApiKeyOptionLabel
+                icon={PROVIDER_CONFIG[selectedKey.provider].icon}
+                providerName={PROVIDER_CONFIG[selectedKey.provider].name}
+                keyName={selectedKey.name}
+                secondaryLabel={`${selectedKey.provider} - ${selectedKey.scope}`}
+              />
+            ) : (
+              `Select ${label}...`
+            )}
           </SelectValue>
         </SelectTrigger>
         <SelectContent>
           {isEmbeddingSelector ? (
             <>
-              {compatibleKeys.map((key) => (
-                <SelectItem key={key.id} value={key.id}>
-                  <div className="flex items-center gap-2">
-                    <Key className="h-3 w-3" />
-                    <span>{key.name}</span>
-                    <span className="text-xs text-muted-foreground">
-                      ({key.provider} - {key.scope})
-                    </span>
-                  </div>
-                </SelectItem>
-              ))}
+              <LlmProviderApiKeySelectItems
+                options={compatibleKeys.map((key) => ({
+                  value: key.id,
+                  icon: PROVIDER_CONFIG[key.provider].icon,
+                  providerName: PROVIDER_CONFIG[key.provider].name,
+                  keyName: key.name,
+                  secondaryLabel: `${key.provider} - ${key.scope}`,
+                }))}
+              />
               {incompatibleKeys.length > 0 && (
                 <>
                   <div className="px-2 py-1.5 text-xs text-muted-foreground border-t mt-1 pt-2">
                     Only OpenAI and Ollama are supported for embeddings
                   </div>
-                  {incompatibleKeys.map((key) => (
-                    <SelectItem key={key.id} value={key.id} disabled>
-                      <div className="flex items-center gap-2 opacity-50">
-                        <Key className="h-3 w-3" />
-                        <span>{key.name}</span>
-                        <span className="text-xs text-muted-foreground">
-                          ({key.provider})
-                        </span>
-                      </div>
-                    </SelectItem>
-                  ))}
+                  <LlmProviderApiKeySelectItems
+                    options={incompatibleKeys.map((key) => ({
+                      value: key.id,
+                      icon: PROVIDER_CONFIG[key.provider].icon,
+                      providerName: PROVIDER_CONFIG[key.provider].name,
+                      keyName: key.name,
+                      secondaryLabel: key.provider,
+                      disabled: true,
+                    }))}
+                  />
                 </>
               )}
             </>
           ) : (
-            keys.map((key) => (
-              <SelectItem key={key.id} value={key.id}>
-                <div className="flex items-center gap-2">
-                  <Key className="h-3 w-3" />
-                  <span>{key.name}</span>
-                  <span className="text-xs text-muted-foreground">
-                    ({key.provider} - {key.scope})
-                  </span>
-                </div>
-              </SelectItem>
-            ))
+            <LlmProviderApiKeySelectItems
+              options={keys.map((key) => ({
+                value: key.id,
+                icon: PROVIDER_CONFIG[key.provider].icon,
+                providerName: PROVIDER_CONFIG[key.provider].name,
+                keyName: key.name,
+                secondaryLabel: `${key.provider} - ${key.scope}`,
+              }))}
+            />
           )}
         </SelectContent>
       </Select>
@@ -415,15 +420,23 @@ function RerankerModelSelector({
 function useSetupStep({
   selectedKeyId,
   selectedModel,
+  selectedDimensions,
   hasSelectableKeys,
 }: {
   selectedKeyId: string | null;
   selectedModel: string | null;
+  selectedDimensions?: number | null;
   hasSelectableKeys: boolean;
-}): "add-key" | "select-key" | "select-model" | null {
+}): "add-key" | "select-key" | "select-model" | "select-dimensions" | null {
   if (!hasSelectableKeys) return "add-key";
   if (!selectedKeyId) return "select-key";
   if (!selectedModel) return "select-model";
+  if (
+    selectedDimensions !== undefined &&
+    (selectedDimensions === null || selectedDimensions === undefined)
+  ) {
+    return "select-dimensions";
+  }
   return null;
 }
 
@@ -541,6 +554,7 @@ function KnowledgeSettingsContent() {
   const embeddingSetupStep = useSetupStep({
     selectedKeyId: embeddingChatApiKeyId,
     selectedModel: embeddingModel,
+    selectedDimensions: embeddingDimensions,
     hasSelectableKeys: isInitialLoading ? true : hasEmbeddingKeys,
   });
 
@@ -551,6 +565,11 @@ function KnowledgeSettingsContent() {
   });
 
   const isFullyConfigured = !embeddingSetupStep && !rerankerSetupStep;
+  const requiresEmbeddingDimensions =
+    !!embeddingChatApiKeyId &&
+    !!embeddingModel &&
+    embeddingDimensions === null &&
+    !isEmbeddingModelLocked;
 
   const handleSave = async () => {
     await updateKnowledgeSettings.mutateAsync({
@@ -728,7 +747,13 @@ function KnowledgeSettingsContent() {
                       !embeddingChatApiKeyId
                     }
                   >
-                    <SelectTrigger className="w-80">
+                    <SelectTrigger
+                      className={cn(
+                        "w-80",
+                        embeddingSetupStep === "select-dimensions" &&
+                          "animate-pulse ring-2 ring-primary/40",
+                      )}
+                    >
                       <SelectValue placeholder="Select dimensions..." />
                     </SelectTrigger>
                     <SelectContent>
@@ -834,6 +859,7 @@ function KnowledgeSettingsContent() {
           hasChanges={hasChanges}
           isSaving={updateKnowledgeSettings.isPending}
           permissions={{ knowledgeSettings: ["update"] }}
+          disabledSave={requiresEmbeddingDimensions}
           onSave={handleSave}
           onCancel={handleCancel}
         />

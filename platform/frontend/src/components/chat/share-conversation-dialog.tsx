@@ -2,13 +2,9 @@
 
 import { Check, Link, Lock, Users } from "lucide-react";
 import { useCallback } from "react";
+import { FormDialog } from "@/components/form-dialog";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { DialogBody, DialogStickyFooter } from "@/components/ui/dialog";
 import {
   useConversationShare,
   useShareConversation,
@@ -54,89 +50,88 @@ export function ShareConversationDialog({
   }, [shareLink, onOpenChange]);
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-xl">
-        <DialogHeader>
-          <DialogTitle>Chat Visibility</DialogTitle>
-        </DialogHeader>
-
-        <div className="flex flex-col gap-3 pt-2 overflow-hidden">
-          {/* Private option */}
-          <button
-            type="button"
-            className={cn(
-              "flex items-center gap-3 p-3 rounded-lg border transition-colors text-left",
-              !isShared
-                ? "border-primary bg-primary/5"
-                : "border-border hover:border-muted-foreground/50",
-            )}
-            onClick={handleSelectPrivate}
-            disabled={isPending || isLoading}
-          >
-            <Lock className="h-5 w-5 shrink-0 text-muted-foreground" />
-            <div className="flex-1 min-w-0">
-              <div className="font-medium text-sm">Private</div>
-              <div className="text-xs text-muted-foreground">
-                Only you have access to this chat.
-              </div>
-            </div>
-            {!isShared && <Check className="h-4 w-4 text-primary shrink-0" />}
-          </button>
-
-          {/* Organization option */}
-          <button
-            type="button"
-            className={cn(
-              "flex items-center gap-3 p-3 rounded-lg border transition-colors text-left",
-              isShared
-                ? "border-primary bg-primary/5"
-                : "border-border hover:border-muted-foreground/50",
-            )}
-            onClick={handleSelectOrganization}
-            disabled={isPending || isLoading}
-          >
-            <Users className="h-5 w-5 shrink-0 text-muted-foreground" />
-            <div className="flex-1 min-w-0">
-              <div className="font-medium text-sm">
-                Shared with Your Organization
-              </div>
-              <div className="text-xs text-muted-foreground">
-                Anyone in your organization can view this chat.
-              </div>
-            </div>
-            {isShared && <Check className="h-4 w-4 text-primary shrink-0" />}
-          </button>
-
-          {/* Share link */}
-          {isShared && shareLink && (
-            <div className="flex items-center gap-2 rounded-md border bg-muted/50 px-3 py-2 min-w-0 overflow-hidden">
-              <span className="text-sm font-mono min-w-0 flex-1 truncate text-muted-foreground">
-                {shareLink}
-              </span>
-            </div>
+    <FormDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Chat Visibility"
+      description="Choose whether this chat stays private or is shared with your organization."
+      size="medium"
+    >
+      <DialogBody className="space-y-3">
+        <Button
+          type="button"
+          variant="outline"
+          className={cn(
+            "h-auto w-full justify-start rounded-lg px-4 py-5 text-left",
+            !isShared
+              ? "border-primary bg-primary/5 hover:bg-primary/10"
+              : "hover:border-muted-foreground/50",
           )}
+          onClick={handleSelectPrivate}
+          disabled={isPending || isLoading}
+        >
+          <Lock className="mr-3 h-5 w-5 shrink-0 text-muted-foreground" />
+          <div className="min-w-0 flex-1">
+            <div className="font-medium text-sm">Private</div>
+            <div className="text-xs text-muted-foreground">
+              Only you have access to this chat.
+            </div>
+          </div>
+          {!isShared && <Check className="h-4 w-4 shrink-0 text-primary" />}
+        </Button>
 
-          {/* Action button */}
-          <Button
-            className="w-full"
-            onClick={
-              isShared && shareLink
-                ? handleCopyLinkAndClose
-                : () => onOpenChange(false)
-            }
-            disabled={isPending}
-          >
-            {isShared && shareLink ? (
-              <>
-                <Link className="h-4 w-4 mr-2" />
-                Copy Link and Close
-              </>
-            ) : (
-              "Close"
-            )}
-          </Button>
-        </div>
-      </DialogContent>
-    </Dialog>
+        <Button
+          type="button"
+          variant="outline"
+          className={cn(
+            "h-auto w-full justify-start rounded-lg px-4 py-5 text-left",
+            isShared
+              ? "border-primary bg-primary/5 hover:bg-primary/10"
+              : "hover:border-muted-foreground/50",
+          )}
+          onClick={handleSelectOrganization}
+          disabled={isPending || isLoading}
+        >
+          <Users className="mr-3 h-5 w-5 shrink-0 text-muted-foreground" />
+          <div className="min-w-0 flex-1">
+            <div className="font-medium text-sm">
+              Shared with Your Organization
+            </div>
+            <div className="text-xs text-muted-foreground">
+              Anyone in your organization can view this chat.
+            </div>
+          </div>
+          {isShared && <Check className="h-4 w-4 shrink-0 text-primary" />}
+        </Button>
+
+        {isShared && shareLink && (
+          <div className="flex min-w-0 items-center gap-2 overflow-hidden rounded-md border bg-muted/50 px-3 py-2">
+            <span className="min-w-0 flex-1 truncate font-mono text-sm text-muted-foreground">
+              {shareLink}
+            </span>
+          </div>
+        )}
+      </DialogBody>
+      <DialogStickyFooter className="mt-0">
+        <Button
+          className="w-full sm:w-auto"
+          onClick={
+            isShared && shareLink
+              ? handleCopyLinkAndClose
+              : () => onOpenChange(false)
+          }
+          disabled={isPending}
+        >
+          {isShared && shareLink ? (
+            <>
+              <Link className="mr-2 h-4 w-4" />
+              Copy Link and Close
+            </>
+          ) : (
+            "Close"
+          )}
+        </Button>
+      </DialogStickyFooter>
+    </FormDialog>
   );
 }

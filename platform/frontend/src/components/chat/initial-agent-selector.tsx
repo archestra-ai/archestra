@@ -2081,7 +2081,7 @@ function ToolServerAvatarGroup({
 
 function truncateAgentDescription(description?: string | null) {
   if (!description) {
-    return "Add a description...";
+    return null;
   }
 
   const maxLength = 80;

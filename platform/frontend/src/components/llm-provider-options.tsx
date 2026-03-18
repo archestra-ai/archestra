@@ -112,10 +112,15 @@ export function LlmProviderApiKeySelectItems({
     providerName: string;
     keyName: string;
     secondaryLabel?: string;
+    disabled?: boolean;
   }[];
 }) {
   return options.map((option) => (
-    <SelectItem key={option.value} value={option.value}>
+    <SelectItem
+      key={option.value}
+      value={option.value}
+      disabled={option.disabled}
+    >
       <LlmProviderApiKeyOptionLabel
         icon={option.icon}
         providerName={option.providerName}

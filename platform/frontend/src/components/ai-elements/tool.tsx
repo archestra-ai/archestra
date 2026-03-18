@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import type { ComponentProps, ReactNode } from "react";
 import { createContext, useContext, useRef, useState } from "react";
+import { CopyButton } from "@/components/copy-button";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -169,16 +170,23 @@ export type ToolInputProps = ComponentProps<"div"> & {
   input: ToolUIPart["input"];
 };
 
-export const ToolInput = ({ className, input, ...props }: ToolInputProps) => (
-  <div className={cn("space-y-2 overflow-hidden p-4", className)} {...props}>
-    <h4 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
-      Parameters
-    </h4>
-    <div className="rounded-md bg-muted/50">
-      <CodeBlock code={JSON.stringify(input, null, 2)} language="json" />
+export const ToolInput = ({ className, input, ...props }: ToolInputProps) => {
+  const serializedInput = JSON.stringify(input, null, 2);
+
+  return (
+    <div className={cn("space-y-2 overflow-hidden p-4", className)} {...props}>
+      <div className="flex items-center justify-between gap-2">
+        <h4 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
+          Parameters
+        </h4>
+        <CopyButton text={serializedInput} />
+      </div>
+      <div className="rounded-md bg-muted/50">
+        <CodeBlock code={serializedInput} language="json" />
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
 export type ToolErrorDetailsProps = ComponentProps<"div"> & {
   errorText: string;
@@ -219,6 +227,7 @@ export const ToolOutput = ({
 }: ToolOutputProps) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const labelText = label ?? (errorText ? "Error" : "Result");
 
   if (!(output || errorText || conversations)) {
     return null;
@@ -227,11 +236,16 @@ export const ToolOutput = ({
   // Render conversations as chat bubbles if provided
   // Note: In Dual LLM context, "user" = Main Profile (questions), "assistant" = Quarantined Profile (answers)
   if (conversations && conversations.length > 0) {
+    const serializedConversations = JSON.stringify(conversations, null, 2);
+
     return (
       <div className={cn("space-y-2 p-4", className)} {...props}>
-        <h4 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
-          {label ?? "Conversation"}
-        </h4>
+        <div className="flex items-center justify-between gap-2">
+          <h4 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
+            {label ?? "Conversation"}
+          </h4>
+          <CopyButton text={serializedConversations} />
+        </div>
         <div className="space-y-3 rounded-md bg-muted/50 p-3">
           {conversations.map((conv, idx) => {
             // Create a stable key combining index and content hash
@@ -268,6 +282,7 @@ export const ToolOutput = ({
   }
 
   let Output: ReactNode;
+  let copyText: string | undefined;
 
   if (typeof output === "object" || typeof output === "string") {
     // If output is a string, try to parse it as JSON for proper formatting
@@ -283,6 +298,7 @@ export const ToolOutput = ({
       typeof formattedOutput === "object"
         ? JSON.stringify(formattedOutput, null, 2)
         : String(formattedOutput);
+    copyText = codeString;
     const lines = codeString.split("\n");
     const MAX_LINES = 20;
     const isLarge = lines.length > MAX_LINES;
@@ -333,6 +349,7 @@ export const ToolOutput = ({
       </div>
     );
   } else {
+    copyText = String(output);
     Output = <div>{String(output)}</div>;
   }
 
@@ -342,9 +359,12 @@ export const ToolOutput = ({
       className={cn("space-y-2 p-4", className)}
       {...props}
     >
-      <h4 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
-        {label ?? (errorText ? "Error" : "Result")}
-      </h4>
+      <div className="flex items-center justify-between gap-2">
+        <h4 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
+          {labelText}
+        </h4>
+        {copyText ? <CopyButton text={copyText} /> : null}
+      </div>
       <div
         className={cn(
           "overflow-x-auto rounded-md text-xs [&_table]:w-full",

@@ -318,6 +318,97 @@ describe("agent tool execution", () => {
   });
 });
 
+describe("agent RBAC visibility", () => {
+  test("list_agents only returns agents accessible to non-admin member", async ({
+    makeUser,
+    makeOrganization,
+    makeMember,
+    makeTeam,
+    makeTeamMember,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "member" });
+
+    const teamA = await makeTeam(org.id, user.id, { name: "Team A" });
+    const teamB = await makeTeam(org.id, user.id, { name: "Team B" });
+    await makeTeamMember(teamA.id, user.id);
+    // user is NOT a member of teamB
+
+    const visibleAgent = await makeAgent({
+      name: "Visible Agent",
+      agentType: "agent",
+      organizationId: org.id,
+      scope: "team",
+      teams: [teamA.id],
+    });
+    await makeAgent({
+      name: "Hidden Agent",
+      agentType: "agent",
+      organizationId: org.id,
+      scope: "team",
+      teams: [teamB.id],
+    });
+
+    const memberContext: ArchestraContext = {
+      agent: { id: visibleAgent.id, name: visibleAgent.name },
+      userId: user.id,
+      organizationId: org.id,
+    };
+
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}list_agents`,
+      {},
+      memberContext,
+    );
+
+    expect(result.isError).toBe(false);
+    const parsed = JSON.parse((result.content[0] as any).text);
+    const agentNames = parsed.agents.map((a: any) => a.name);
+    expect(agentNames).toContain("Visible Agent");
+    expect(agentNames).not.toContain("Hidden Agent");
+  });
+
+  test("get_agent by name does not return inaccessible team-scoped agent", async ({
+    makeUser,
+    makeOrganization,
+    makeMember,
+    makeTeam,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "member" });
+
+    const teamB = await makeTeam(org.id, user.id, { name: "Team B" });
+    // user is NOT a member of teamB
+
+    const inaccessibleAgent = await makeAgent({
+      name: "Secret Agent",
+      agentType: "agent",
+      organizationId: org.id,
+      scope: "team",
+      teams: [teamB.id],
+    });
+
+    const memberContext: ArchestraContext = {
+      agent: { id: inaccessibleAgent.id, name: inaccessibleAgent.name },
+      userId: user.id,
+      organizationId: org.id,
+    };
+
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}get_agent`,
+      { name: "Secret Agent" },
+      memberContext,
+    );
+
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain("not found");
+  });
+});
+
 function extractCreatedId(
   result: Awaited<ReturnType<typeof executeArchestraTool>>,
 ) {

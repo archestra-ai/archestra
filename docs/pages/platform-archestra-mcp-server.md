@@ -134,7 +134,6 @@ Required RBAC permission: `agent:read`
 |-----------|------|----------|-------------|
 | `limit` | `integer` | No | Maximum number of agents to return. |
 | `name` | `string` | No | Optional agent name filter. Use this when the user names an agent but you still need to look up the ID. |
-| `scope` | `"personal" \| "team" \| "org"` | No | Optional scope filter: personal, team, or org. |
 
 ##### Output
 

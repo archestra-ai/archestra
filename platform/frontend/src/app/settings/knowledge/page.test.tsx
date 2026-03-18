@@ -309,8 +309,8 @@ describe("KnowledgeSettingsPage", () => {
       await user.click(getEmbeddingModelTrigger());
 
       expect(
-        screen.getAllByText("Best cost/quality ratio (1536 dims)"),
-      ).not.toHaveLength(0);
+        screen.getAllByText("Best cost/quality ratio (1536 dims)").length,
+      ).toBeGreaterThanOrEqual(1);
     });
 
     it("allows entering a custom embedding model name", async () => {

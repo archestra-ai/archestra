@@ -52,6 +52,7 @@ import { enterpriseLicenseMiddleware } from "@/middleware";
 import AgentLabelModel from "@/models/agent-label";
 import OrganizationModel from "@/models/organization";
 import { metrics } from "@/observability";
+import { enrichOpenApiWithRbac } from "@/openapi/enrich-openapi-with-rbac";
 import { systemKeyManager } from "@/services/system-key-manager";
 import { taskQueueService } from "@/task-queue";
 import { registerTaskHandlers } from "@/task-queue/handlers";
@@ -663,7 +664,9 @@ const startWebServer = async () => {
     await registerSwaggerPlugin(fastify);
 
     // Register routes
-    fastify.get("/openapi.json", async () => fastify.swagger());
+    fastify.get("/openapi.json", async () =>
+      enrichOpenApiWithRbac(fastify.swagger()),
+    );
 
     if (enableE2eTestEndpoints) {
       fastify.get("/test", async () => ({

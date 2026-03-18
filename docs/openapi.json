@@ -38629,7 +38629,7 @@
         "tags": [
           "MCP Gateways"
         ],
-        "description": "Get or create default MCP Gateway",
+        "description": "Get or create default MCP Gateway\n\nRequired RBAC permissions:\n- `mcpGateway:read`: View and list MCP gateways",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -39177,6 +39177,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "mcpGateway:read"
+          ]
         }
       }
     },
@@ -39186,7 +39191,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Get or create default LLM Proxy",
+        "description": "Get or create default LLM Proxy\n\nRequired RBAC permissions:\n- `llmProxy:read`: View and list LLM proxies",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -39734,6 +39739,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "llmProxy:read"
+          ]
         }
       }
     },
@@ -42027,7 +42037,7 @@
         "tags": [
           "Agent Tools"
         ],
-        "description": "Get all agent-tool relationships with pagination, sorting, and filtering",
+        "description": "Get all agent-tool relationships with pagination, sorting, and filtering\n\nRequired RBAC permissions:\n- `toolPolicy:read`: View tools, tool invocation policies, and trusted data policies",
         "parameters": [
           {
             "schema": {
@@ -42508,6 +42518,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "toolPolicy:read"
+          ]
         }
       }
     },
@@ -43419,7 +43434,7 @@
         "tags": [
           "Agent Tools"
         ],
-        "description": "Automatically configure security policies for tools using LLM analysis",
+        "description": "Automatically configure security policies for tools using LLM analysis\n\nRequired RBAC permissions:\n- `toolPolicy:update`: Modify tools, tool configuration, and security policies",
         "requestBody": {
           "required": true,
           "content": {
@@ -43730,6 +43745,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "toolPolicy:update"
+          ]
         }
       }
     },
@@ -43739,7 +43759,7 @@
         "tags": [
           "Agent Tools"
         ],
-        "description": "Get all tools for an agent (both proxy-sniffed and MCP tools)",
+        "description": "Get all tools for an agent (both proxy-sniffed and MCP tools)\n\nRequired RBAC permissions:\n- `toolPolicy:read`: View tools, tool invocation policies, and trusted data policies",
         "parameters": [
           {
             "schema": {
@@ -44058,6 +44078,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "toolPolicy:read"
+          ]
         }
       }
     },
@@ -44067,7 +44092,7 @@
         "tags": [
           "Agent Tools"
         ],
-        "description": "Update an agent-tool relationship",
+        "description": "Update an agent-tool relationship\n\nRequired RBAC permissions:\n- `toolPolicy:update`: Modify tools, tool configuration, and security policies",
         "requestBody": {
           "required": true,
           "content": {
@@ -44369,6 +44394,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "toolPolicy:update"
+          ]
         }
       }
     },
@@ -46082,7 +46112,7 @@
         "tags": [
           "API Keys"
         ],
-        "description": "List the authenticated user's Archestra API keys",
+        "description": "List the authenticated user's Archestra API keys\n\nRequired RBAC permissions:\n- `apiKey:read`: View API keys",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -46379,6 +46409,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "apiKey:read"
+          ]
         }
       },
       "post": {
@@ -46386,7 +46421,7 @@
         "tags": [
           "API Keys"
         ],
-        "description": "Create an Archestra API key for the authenticated user",
+        "description": "Create an Archestra API key for the authenticated user\n\nRequired RBAC permissions:\n- `apiKey:create`: Create API keys",
         "requestBody": {
           "required": true,
           "content": {
@@ -46707,6 +46742,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "apiKey:create"
+          ]
         }
       }
     },
@@ -46716,7 +46756,7 @@
         "tags": [
           "API Keys"
         ],
-        "description": "Get one authenticated user's Archestra API key",
+        "description": "Get one authenticated user's Archestra API key\n\nRequired RBAC permissions:\n- `apiKey:read`: View API keys",
         "parameters": [
           {
             "schema": {
@@ -47020,6 +47060,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "apiKey:read"
+          ]
         }
       },
       "delete": {
@@ -47027,7 +47072,7 @@
         "tags": [
           "API Keys"
         ],
-        "description": "Delete an Archestra API key for the authenticated user",
+        "description": "Delete an Archestra API key for the authenticated user\n\nRequired RBAC permissions:\n- `apiKey:delete`: Delete API keys",
         "parameters": [
           {
             "schema": {
@@ -47268,6 +47313,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "apiKey:delete"
+          ]
         }
       }
     },
@@ -47524,7 +47574,7 @@
         "tags": [
           "Autonomy Policies"
         ],
-        "description": "Get all supported policy operators",
+        "description": "Get all supported policy operators\n\nRequired RBAC permissions:\n- `toolPolicy:read`: View tools, tool invocation policies, and trusted data policies",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -47771,6 +47821,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "toolPolicy:read"
+          ]
         }
       }
     },
@@ -47780,7 +47835,7 @@
         "tags": [
           "Tool Invocation Policies"
         ],
-        "description": "Get all tool invocation policies",
+        "description": "Get all tool invocation policies\n\nRequired RBAC permissions:\n- `toolPolicy:read`: View tools, tool invocation policies, and trusted data policies",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -48080,6 +48135,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "toolPolicy:read"
+          ]
         }
       },
       "post": {
@@ -48087,7 +48147,7 @@
         "tags": [
           "Tool Invocation Policies"
         ],
-        "description": "Create a new tool invocation policy",
+        "description": "Create a new tool invocation policy\n\nRequired RBAC permissions:\n- `toolPolicy:create`: Register tools and create security policies",
         "requestBody": {
           "required": true,
           "content": {
@@ -48450,6 +48510,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "toolPolicy:create"
+          ]
         }
       }
     },
@@ -48459,7 +48524,7 @@
         "tags": [
           "Tool Invocation Policies"
         ],
-        "description": "Get tool invocation policy by ID",
+        "description": "Get tool invocation policy by ID\n\nRequired RBAC permissions:\n- `toolPolicy:read`: View tools, tool invocation policies, and trusted data policies",
         "parameters": [
           {
             "schema": {
@@ -48768,6 +48833,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "toolPolicy:read"
+          ]
         }
       },
       "put": {
@@ -48775,7 +48845,7 @@
         "tags": [
           "Tool Invocation Policies"
         ],
-        "description": "Update a tool invocation policy",
+        "description": "Update a tool invocation policy\n\nRequired RBAC permissions:\n- `toolPolicy:update`: Modify tools, tool configuration, and security policies",
         "requestBody": {
           "required": true,
           "content": {
@@ -49145,6 +49215,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "toolPolicy:update"
+          ]
         }
       },
       "delete": {
@@ -49152,7 +49227,7 @@
         "tags": [
           "Tool Invocation Policies"
         ],
-        "description": "Delete a tool invocation policy",
+        "description": "Delete a tool invocation policy\n\nRequired RBAC permissions:\n- `toolPolicy:delete`: Remove tools and security policies",
         "parameters": [
           {
             "schema": {
@@ -49395,6 +49470,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "toolPolicy:delete"
+          ]
         }
       }
     },
@@ -49404,7 +49484,7 @@
         "tags": [
           "Trusted Data Policies"
         ],
-        "description": "Get all trusted data policies",
+        "description": "Get all trusted data policies\n\nRequired RBAC permissions:\n- `toolPolicy:read`: View tools, tool invocation policies, and trusted data policies",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -49704,6 +49784,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "toolPolicy:read"
+          ]
         }
       },
       "post": {
@@ -49711,7 +49796,7 @@
         "tags": [
           "Trusted Data Policies"
         ],
-        "description": "Create a new trusted data policy",
+        "description": "Create a new trusted data policy\n\nRequired RBAC permissions:\n- `toolPolicy:create`: Register tools and create security policies",
         "requestBody": {
           "required": true,
           "content": {
@@ -50074,6 +50159,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "toolPolicy:create"
+          ]
         }
       }
     },
@@ -50083,7 +50173,7 @@
         "tags": [
           "Trusted Data Policies"
         ],
-        "description": "Get trusted data policy by ID",
+        "description": "Get trusted data policy by ID\n\nRequired RBAC permissions:\n- `toolPolicy:read`: View tools, tool invocation policies, and trusted data policies",
         "parameters": [
           {
             "schema": {
@@ -50392,6 +50482,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "toolPolicy:read"
+          ]
         }
       },
       "put": {
@@ -50399,7 +50494,7 @@
         "tags": [
           "Trusted Data Policies"
         ],
-        "description": "Update a trusted data policy",
+        "description": "Update a trusted data policy\n\nRequired RBAC permissions:\n- `toolPolicy:update`: Modify tools, tool configuration, and security policies",
         "requestBody": {
           "required": true,
           "content": {
@@ -50769,6 +50864,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "toolPolicy:update"
+          ]
         }
       },
       "delete": {
@@ -50776,7 +50876,7 @@
         "tags": [
           "Trusted Data Policies"
         ],
-        "description": "Delete a trusted data policy",
+        "description": "Delete a trusted data policy\n\nRequired RBAC permissions:\n- `toolPolicy:delete`: Remove tools and security policies",
         "parameters": [
           {
             "schema": {
@@ -51019,6 +51119,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "toolPolicy:delete"
+          ]
         }
       }
     },
@@ -51028,7 +51133,7 @@
         "tags": [
           "Tool Invocation Policies"
         ],
-        "description": "Bulk upsert default tool invocation policies (empty conditions) for multiple tools",
+        "description": "Bulk upsert default tool invocation policies (empty conditions) for multiple tools\n\nRequired RBAC permissions:\n- `toolPolicy:update`: Modify tools, tool configuration, and security policies",
         "requestBody": {
           "required": true,
           "content": {
@@ -51296,6 +51401,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "toolPolicy:update"
+          ]
         }
       }
     },
@@ -51305,7 +51415,7 @@
         "tags": [
           "Trusted Data Policies"
         ],
-        "description": "Bulk upsert default trusted data policies (empty conditions) for multiple tools",
+        "description": "Bulk upsert default trusted data policies (empty conditions) for multiple tools\n\nRequired RBAC permissions:\n- `toolPolicy:update`: Modify tools, tool configuration, and security policies",
         "requestBody": {
           "required": true,
           "content": {
@@ -51573,6 +51683,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "toolPolicy:update"
+          ]
         }
       }
     },
@@ -57879,7 +57994,7 @@
         "tags": [
           "Chat API Keys"
         ],
-        "description": "Get all chat API keys visible to the current user based on scope access",
+        "description": "Get all chat API keys visible to the current user based on scope access\n\nRequired RBAC permissions:\n- `llmProvider:read`: View LLM provider API keys, virtual keys, and models",
         "parameters": [
           {
             "schema": {
@@ -58263,6 +58378,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "llmProvider:read"
+          ]
         }
       },
       "post": {
@@ -58270,7 +58390,7 @@
         "tags": [
           "Chat API Keys"
         ],
-        "description": "Create a new chat API key with specified scope",
+        "description": "Create a new chat API key with specified scope\n\nRequired RBAC permissions:\n- `llmProvider:create`: Add new LLM provider API keys or virtual keys",
         "requestBody": {
           "required": true,
           "content": {
@@ -58655,6 +58775,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "llmProvider:create"
+          ]
         }
       }
     },
@@ -58664,7 +58789,7 @@
         "tags": [
           "Chat API Keys"
         ],
-        "description": "Get API keys available for the current user to use in chat",
+        "description": "Get API keys available for the current user to use in chat\n\nRequired RBAC permissions:\n- `llmProvider:read`: View LLM provider API keys, virtual keys, and models",
         "parameters": [
           {
             "schema": {
@@ -59049,6 +59174,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "llmProvider:read"
+          ]
         }
       }
     },
@@ -59058,7 +59188,7 @@
         "tags": [
           "Chat API Keys"
         ],
-        "description": "Get a specific chat API key",
+        "description": "Get a specific chat API key\n\nRequired RBAC permissions:\n- `llmProvider:read`: View LLM provider API keys, virtual keys, and models",
         "parameters": [
           {
             "schema": {
@@ -59414,6 +59544,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "llmProvider:read"
+          ]
         }
       },
       "patch": {
@@ -59421,7 +59556,7 @@
         "tags": [
           "Chat API Keys"
         ],
-        "description": "Update a chat API key (name, API key value, scope, or team)",
+        "description": "Update a chat API key (name, API key value, scope, or team)\n\nRequired RBAC permissions:\n- `llmProvider:update`: Modify LLM provider configuration and model pricing",
         "requestBody": {
           "required": true,
           "content": {
@@ -59795,6 +59930,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "llmProvider:update"
+          ]
         }
       },
       "delete": {
@@ -59802,7 +59942,7 @@
         "tags": [
           "Chat API Keys"
         ],
-        "description": "Delete a chat API key",
+        "description": "Delete a chat API key\n\nRequired RBAC permissions:\n- `llmProvider:delete`: Remove LLM provider API keys or virtual keys",
         "parameters": [
           {
             "schema": {
@@ -60045,6 +60185,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "llmProvider:delete"
+          ]
         }
       }
     },
@@ -60054,7 +60199,7 @@
         "tags": [
           "Chat"
         ],
-        "description": "Get available LLM models from all configured providers. Models are fetched directly from provider APIs. Includes model capabilities (context length, modalities, tool calling support) when available.",
+        "description": "Get available LLM models from all configured providers. Models are fetched directly from provider APIs. Includes model capabilities (context length, modalities, tool calling support) when available.\n\nRequired RBAC permissions:\n- `chat:read`: View and access chat conversations",
         "parameters": [
           {
             "schema": {
@@ -60432,6 +60577,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "chat:read"
+          ]
         }
       }
     },
@@ -60441,7 +60591,7 @@
         "tags": [
           "Chat"
         ],
-        "description": "Sync models from providers for all API keys and store them in the database",
+        "description": "Sync models from providers for all API keys and store them in the database\n\nRequired RBAC permissions:\n- `llmProvider:update`: Modify LLM provider configuration and model pricing",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -60672,6 +60822,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "llmProvider:update"
+          ]
         }
       }
     },
@@ -60681,7 +60836,7 @@
         "tags": [
           "Chat"
         ],
-        "description": "Sync models from providers, overwriting all fields including custom modifications",
+        "description": "Sync models from providers, overwriting all fields including custom modifications\n\nRequired RBAC permissions:\n- `llmProvider:update`: Modify LLM provider configuration and model pricing",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -60912,6 +61067,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "llmProvider:update"
+          ]
         }
       }
     },
@@ -60921,7 +61081,7 @@
         "tags": [
           "Models"
         ],
-        "description": "Get all models with their linked API keys. Returns models from the database with information about which API keys provide access to them.",
+        "description": "Get all models with their linked API keys. Returns models from the database with information about which API keys provide access to them.\n\nRequired RBAC permissions:\n- `llmProvider:read`: View LLM provider API keys, virtual keys, and models",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -61385,6 +61545,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "llmProvider:read"
+          ]
         }
       }
     },
@@ -61394,7 +61559,7 @@
         "tags": [
           "Models"
         ],
-        "description": "Update model details including custom pricing and modalities.",
+        "description": "Update model details including custom pricing and modalities.\n\nRequired RBAC permissions:\n- `llmProvider:update`: Modify LLM provider configuration and model pricing",
         "requestBody": {
           "required": true,
           "content": {
@@ -61801,6 +61966,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "llmProvider:update"
+          ]
         }
       }
     },
@@ -61810,7 +61980,7 @@
         "tags": [
           "Chat"
         ],
-        "description": "Stream chat response with MCP tools (useChat format)",
+        "description": "Stream chat response with MCP tools (useChat format)\n\nRequired RBAC permissions:\n- `chat:read`: View and access chat conversations",
         "requestBody": {
           "required": true,
           "content": {
@@ -62054,6 +62224,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "chat:read"
+          ]
         }
       }
     },
@@ -62063,7 +62238,7 @@
         "tags": [
           "Chat"
         ],
-        "description": "Stop a running chat stream for a conversation",
+        "description": "Stop a running chat stream for a conversation\n\nRequired RBAC permissions:\n- `chat:read`: View and access chat conversations",
         "parameters": [
           {
             "schema": {
@@ -62306,6 +62481,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "chat:read"
+          ]
         }
       }
     },
@@ -62315,7 +62495,7 @@
         "tags": [
           "Chat"
         ],
-        "description": "List all conversations for current user with agent details. Optionally filter by search query.",
+        "description": "List all conversations for current user with agent details. Optionally filter by search query.\n\nRequired RBAC permissions:\n- `chat:read`: View and access chat conversations",
         "parameters": [
           {
             "schema": {
@@ -62717,6 +62897,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "chat:read"
+          ]
         }
       },
       "post": {
@@ -62724,7 +62909,7 @@
         "tags": [
           "Chat"
         ],
-        "description": "Create a new conversation with an agent",
+        "description": "Create a new conversation with an agent\n\nRequired RBAC permissions:\n- `chat:create`: Start new chat conversations",
         "requestBody": {
           "required": true,
           "content": {
@@ -63167,6 +63352,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "chat:create"
+          ]
         }
       }
     },
@@ -63176,7 +63366,7 @@
         "tags": [
           "Chat"
         ],
-        "description": "Get conversation with messages",
+        "description": "Get conversation with messages\n\nRequired RBAC permissions:\n- `chat:read`: View and access chat conversations",
         "parameters": [
           {
             "schema": {
@@ -63577,6 +63767,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "chat:read"
+          ]
         }
       },
       "patch": {
@@ -63584,7 +63779,7 @@
         "tags": [
           "Chat"
         ],
-        "description": "Update conversation title, model, agent, or API key",
+        "description": "Update conversation title, model, agent, or API key\n\nRequired RBAC permissions:\n- `chat:update`: Edit chat messages and conversation settings",
         "requestBody": {
           "required": true,
           "content": {
@@ -64046,6 +64241,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "chat:update"
+          ]
         }
       },
       "delete": {
@@ -64053,7 +64253,7 @@
         "tags": [
           "Chat"
         ],
-        "description": "Delete a conversation",
+        "description": "Delete a conversation\n\nRequired RBAC permissions:\n- `chat:delete`: Delete chat conversations",
         "parameters": [
           {
             "schema": {
@@ -64296,6 +64496,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "chat:delete"
+          ]
         }
       }
     },
@@ -64305,7 +64510,7 @@
         "tags": [
           "Chat"
         ],
-        "description": "Get MCP tools available for an agent via MCP Gateway",
+        "description": "Get MCP tools available for an agent via MCP Gateway\n\nRequired RBAC permissions:\n- `agent:read`: View and list agents",
         "parameters": [
           {
             "schema": {
@@ -64561,6 +64766,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "agent:read"
+          ]
         }
       }
     },
@@ -64570,7 +64780,7 @@
         "tags": [
           "Chat"
         ],
-        "description": "Generate a title for the conversation based on the first user message and assistant response",
+        "description": "Generate a title for the conversation based on the first user message and assistant response\n\nRequired RBAC permissions:\n- `chat:update`: Edit chat messages and conversation settings",
         "requestBody": {
           "required": true,
           "content": {
@@ -64987,6 +65197,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "chat:update"
+          ]
         }
       }
     },
@@ -64996,7 +65211,7 @@
         "tags": [
           "Chat"
         ],
-        "description": "Update a specific text part in a message",
+        "description": "Update a specific text part in a message\n\nRequired RBAC permissions:\n- `chat:update`: Edit chat messages and conversation settings",
         "requestBody": {
           "required": true,
           "content": {
@@ -65423,6 +65638,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "chat:update"
+          ]
         }
       }
     },
@@ -65432,7 +65652,7 @@
         "tags": [
           "Chat"
         ],
-        "description": "Get enabled tools for a conversation. Empty array means all profile tools are enabled (default).",
+        "description": "Get enabled tools for a conversation. Empty array means all profile tools are enabled (default).\n\nRequired RBAC permissions:\n- `chat:read`: View and access chat conversations",
         "parameters": [
           {
             "schema": {
@@ -65682,6 +65902,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "chat:read"
+          ]
         }
       },
       "put": {
@@ -65689,7 +65914,7 @@
         "tags": [
           "Chat"
         ],
-        "description": "Set enabled tools for a conversation. Replaces all existing selections.",
+        "description": "Set enabled tools for a conversation. Replaces all existing selections.\n\nRequired RBAC permissions:\n- `chat:update`: Edit chat messages and conversation settings",
         "requestBody": {
           "required": true,
           "content": {
@@ -65960,6 +66185,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "chat:update"
+          ]
         }
       },
       "delete": {
@@ -65967,7 +66197,7 @@
         "tags": [
           "Chat"
         ],
-        "description": "Clear custom tool selection for a conversation (revert to all tools enabled)",
+        "description": "Clear custom tool selection for a conversation (revert to all tools enabled)\n\nRequired RBAC permissions:\n- `chat:update`: Edit chat messages and conversation settings",
         "parameters": [
           {
             "schema": {
@@ -66210,6 +66440,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "chat:update"
+          ]
         }
       }
     },
@@ -66219,7 +66454,7 @@
         "tags": [
           "Chat"
         ],
-        "description": "Get share status for a conversation",
+        "description": "Get share status for a conversation\n\nRequired RBAC permissions:\n- `chat:read`: View and access chat conversations",
         "parameters": [
           {
             "schema": {
@@ -66491,6 +66726,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "chat:read"
+          ]
         }
       },
       "post": {
@@ -66498,7 +66738,7 @@
         "tags": [
           "Chat"
         ],
-        "description": "Share a conversation with your organization",
+        "description": "Share a conversation with your organization\n\nRequired RBAC permissions:\n- `chat:update`: Edit chat messages and conversation settings",
         "requestBody": {
           "required": true,
           "content": {
@@ -66790,6 +67030,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "chat:update"
+          ]
         }
       },
       "delete": {
@@ -66797,7 +67042,7 @@
         "tags": [
           "Chat"
         ],
-        "description": "Revoke sharing of a conversation",
+        "description": "Revoke sharing of a conversation\n\nRequired RBAC permissions:\n- `chat:update`: Edit chat messages and conversation settings",
         "parameters": [
           {
             "schema": {
@@ -67040,6 +67285,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "chat:update"
+          ]
         }
       }
     },
@@ -67049,7 +67299,7 @@
         "tags": [
           "Chat"
         ],
-        "description": "Get a shared conversation by share ID",
+        "description": "Get a shared conversation by share ID\n\nRequired RBAC permissions:\n- `chat:read`: View and access chat conversations",
         "parameters": [
           {
             "schema": {
@@ -67454,6 +67704,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "chat:read"
+          ]
         }
       }
     },
@@ -67463,7 +67718,7 @@
         "tags": [
           "Chat"
         ],
-        "description": "Create a new conversation from a shared conversation's messages",
+        "description": "Create a new conversation from a shared conversation's messages\n\nRequired RBAC permissions:\n- `chat:create`: Start new chat conversations",
         "requestBody": {
           "required": true,
           "content": {
@@ -67884,6 +68139,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "chat:create"
+          ]
         }
       }
     },
@@ -68382,7 +68642,7 @@
         "tags": [
           "ChatOps"
         ],
-        "description": "Get chatops provider configuration status",
+        "description": "Get chatops provider configuration status\n\nRequired RBAC permissions:\n- `agentTrigger:read`: View agent trigger configurations (Slack, MS Teams, email)",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -68683,6 +68943,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "agentTrigger:read"
+          ]
         }
       }
     },
@@ -68692,7 +68957,7 @@
         "tags": [
           "ChatOps"
         ],
-        "description": "List chatops channel bindings with pagination",
+        "description": "List chatops channel bindings with pagination\n\nRequired RBAC permissions:\n- `agentTrigger:read`: View agent trigger configurations (Slack, MS Teams, email)",
         "parameters": [
           {
             "schema": {
@@ -69172,6 +69437,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "agentTrigger:read"
+          ]
         }
       },
       "patch": {
@@ -69179,7 +69449,7 @@
         "tags": [
           "ChatOps"
         ],
-        "description": "Bulk-update agent assignment for multiple channel bindings",
+        "description": "Bulk-update agent assignment for multiple channel bindings\n\nRequired RBAC permissions:\n- `agentTrigger:update`: Modify agent trigger configurations",
         "requestBody": {
           "required": true,
           "content": {
@@ -69511,6 +69781,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "agentTrigger:update"
+          ]
         }
       }
     },
@@ -69520,7 +69795,7 @@
         "tags": [
           "ChatOps"
         ],
-        "description": "Delete a chatops channel binding",
+        "description": "Delete a chatops channel binding\n\nRequired RBAC permissions:\n- `agentTrigger:delete`: Remove agent triggers",
         "parameters": [
           {
             "schema": {
@@ -69763,6 +70038,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "agentTrigger:delete"
+          ]
         }
       },
       "patch": {
@@ -69770,7 +70050,7 @@
         "tags": [
           "ChatOps"
         ],
-        "description": "Update a chatops channel binding",
+        "description": "Update a chatops channel binding\n\nRequired RBAC permissions:\n- `agentTrigger:update`: Modify agent trigger configurations",
         "requestBody": {
           "required": true,
           "content": {
@@ -70097,6 +70377,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "agentTrigger:update"
+          ]
         }
       }
     },
@@ -70106,7 +70391,7 @@
         "tags": [
           "ChatOps"
         ],
-        "description": "Create a pending DM binding so an agent can be pre-assigned before the first DM interaction",
+        "description": "Create a pending DM binding so an agent can be pre-assigned before the first DM interaction\n\nRequired RBAC permissions:\n- `agentTrigger:create`: Set up new agent triggers",
         "requestBody": {
           "required": true,
           "content": {
@@ -70432,6 +70717,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "agentTrigger:create"
+          ]
         }
       }
     },
@@ -70441,7 +70731,7 @@
         "tags": [
           "ChatOps"
         ],
-        "description": "Update MS Teams chatops configuration",
+        "description": "Update MS Teams chatops configuration\n\nRequired RBAC permissions:\n- `agentTrigger:update`: Modify agent trigger configurations",
         "requestBody": {
           "required": true,
           "content": {
@@ -70702,6 +70992,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "agentTrigger:update"
+          ]
         }
       }
     },
@@ -70711,7 +71006,7 @@
         "tags": [
           "ChatOps"
         ],
-        "description": "Update Slack chatops configuration",
+        "description": "Update Slack chatops configuration\n\nRequired RBAC permissions:\n- `agentTrigger:update`: Modify agent trigger configurations",
         "requestBody": {
           "required": true,
           "content": {
@@ -70980,6 +71275,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "agentTrigger:update"
+          ]
         }
       }
     },
@@ -70989,7 +71289,7 @@
         "tags": [
           "ChatOps"
         ],
-        "description": "Refresh channel discovery cache for a chatops provider",
+        "description": "Refresh channel discovery cache for a chatops provider\n\nRequired RBAC permissions:\n- `agentTrigger:read`: View agent trigger configurations (Slack, MS Teams, email)",
         "requestBody": {
           "required": true,
           "content": {
@@ -71242,6 +71542,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "agentTrigger:read"
+          ]
         }
       }
     },
@@ -72471,7 +72776,7 @@
         "tags": [
           "Dual LLM Config"
         ],
-        "description": "Get default dual LLM configuration",
+        "description": "Get default dual LLM configuration\n\nRequired RBAC permissions:\n- `dualLlmConfig:read`: View dual LLM security configurations",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -72736,6 +73041,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "dualLlmConfig:read"
+          ]
         }
       }
     },
@@ -72745,7 +73055,7 @@
         "tags": [
           "Dual LLM Config"
         ],
-        "description": "Get all dual LLM configurations",
+        "description": "Get all dual LLM configurations\n\nRequired RBAC permissions:\n- `dualLlmConfig:read`: View dual LLM security configurations",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -73013,6 +73323,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "dualLlmConfig:read"
+          ]
         }
       },
       "post": {
@@ -73020,7 +73335,7 @@
         "tags": [
           "Dual LLM Config"
         ],
-        "description": "Create a new dual LLM configuration",
+        "description": "Create a new dual LLM configuration\n\nRequired RBAC permissions:\n- `dualLlmConfig:create`: Create new dual LLM configurations",
         "requestBody": {
           "required": true,
           "content": {
@@ -73319,6 +73634,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "dualLlmConfig:create"
+          ]
         }
       }
     },
@@ -73328,7 +73648,7 @@
         "tags": [
           "Dual LLM Config"
         ],
-        "description": "Get dual LLM configuration by ID",
+        "description": "Get dual LLM configuration by ID\n\nRequired RBAC permissions:\n- `dualLlmConfig:read`: View dual LLM security configurations",
         "parameters": [
           {
             "schema": {
@@ -73605,6 +73925,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "dualLlmConfig:read"
+          ]
         }
       },
       "put": {
@@ -73612,7 +73937,7 @@
         "tags": [
           "Dual LLM Config"
         ],
-        "description": "Update a dual LLM configuration",
+        "description": "Update a dual LLM configuration\n\nRequired RBAC permissions:\n- `dualLlmConfig:update`: Modify dual LLM configurations",
         "requestBody": {
           "required": true,
           "content": {
@@ -73918,6 +74243,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "dualLlmConfig:update"
+          ]
         }
       },
       "delete": {
@@ -73925,7 +74255,7 @@
         "tags": [
           "Dual LLM Config"
         ],
-        "description": "Delete a dual LLM configuration",
+        "description": "Delete a dual LLM configuration\n\nRequired RBAC permissions:\n- `dualLlmConfig:delete`: Remove dual LLM configurations",
         "parameters": [
           {
             "schema": {
@@ -74168,6 +74498,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "dualLlmConfig:delete"
+          ]
         }
       }
     },
@@ -74177,7 +74512,7 @@
         "tags": [
           "Dual LLM Results"
         ],
-        "description": "Get dual LLM result by tool call ID",
+        "description": "Get dual LLM result by tool call ID\n\nRequired RBAC permissions:\n- `dualLlmResult:read`: View dual LLM security validation results",
         "parameters": [
           {
             "schema": {
@@ -74473,6 +74808,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "dualLlmResult:read"
+          ]
         }
       }
     },
@@ -74482,7 +74822,7 @@
         "tags": [
           "Dual LLM Results"
         ],
-        "description": "Get all dual LLM results for an interaction",
+        "description": "Get all dual LLM results for an interaction\n\nRequired RBAC permissions:\n- `dualLlmResult:read`: View dual LLM security validation results",
         "parameters": [
           {
             "schema": {
@@ -74782,6 +75122,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "dualLlmResult:read"
+          ]
         }
       }
     },
@@ -76892,7 +77237,7 @@
         "tags": [
           "Incoming Email"
         ],
-        "description": "Get the current incoming email webhook subscription status",
+        "description": "Get the current incoming email webhook subscription status\n\nRequired RBAC permissions:\n- `agentTrigger:read`: View agent trigger configurations (Slack, MS Teams, email)",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -77155,6 +77500,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "agentTrigger:read"
+          ]
         }
       }
     },
@@ -77164,7 +77514,7 @@
         "tags": [
           "Incoming Email"
         ],
-        "description": "Setup or renew incoming email webhook subscription",
+        "description": "Setup or renew incoming email webhook subscription\n\nRequired RBAC permissions:\n- `agentTrigger:create`: Set up new agent triggers",
         "requestBody": {
           "required": true,
           "content": {
@@ -77425,6 +77775,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "agentTrigger:create"
+          ]
         }
       }
     },
@@ -77434,7 +77789,7 @@
         "tags": [
           "Incoming Email"
         ],
-        "description": "Renew the incoming email webhook subscription",
+        "description": "Renew the incoming email webhook subscription\n\nRequired RBAC permissions:\n- `agentTrigger:update`: Modify agent trigger configurations",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -77676,6 +78031,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "agentTrigger:update"
+          ]
         }
       }
     },
@@ -77685,7 +78045,7 @@
         "tags": [
           "Incoming Email"
         ],
-        "description": "Delete the incoming email webhook subscription",
+        "description": "Delete the incoming email webhook subscription\n\nRequired RBAC permissions:\n- `agentTrigger:delete`: Remove agent triggers",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -77916,6 +78276,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "agentTrigger:delete"
+          ]
         }
       }
     },
@@ -77925,7 +78290,7 @@
         "tags": [
           "Interaction"
         ],
-        "description": "Get all interactions with pagination and sorting",
+        "description": "Get all interactions with pagination and sorting\n\nRequired RBAC permissions:\n- `log:read`: View LLM proxy and MCP tool call logs",
         "parameters": [
           {
             "schema": {
@@ -82842,6 +83207,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "log:read"
+          ]
         }
       }
     },
@@ -82851,7 +83221,7 @@
         "tags": [
           "Interaction"
         ],
-        "description": "Get all interaction sessions grouped by session ID with aggregated stats",
+        "description": "Get all interaction sessions grouped by session ID with aggregated stats\n\nRequired RBAC permissions:\n- `log:read`: View LLM proxy and MCP tool call logs",
         "parameters": [
           {
             "schema": {
@@ -83384,6 +83754,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "log:read"
+          ]
         }
       }
     },
@@ -83393,7 +83768,7 @@
         "tags": [
           "Interaction"
         ],
-        "description": "Get all unique external agent IDs with display names for filtering (from X-Archestra-Agent-Id header)",
+        "description": "Get all unique external agent IDs with display names for filtering (from X-Archestra-Agent-Id header)\n\nRequired RBAC permissions:\n- `log:read`: View LLM proxy and MCP tool call logs",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -83631,6 +84006,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "log:read"
+          ]
         }
       }
     },
@@ -83640,7 +84020,7 @@
         "tags": [
           "Interaction"
         ],
-        "description": "Get all unique user IDs with names for filtering (from X-Archestra-User-Id header)",
+        "description": "Get all unique user IDs with names for filtering (from X-Archestra-User-Id header)\n\nRequired RBAC permissions:\n- `log:read`: View LLM proxy and MCP tool call logs",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -83878,6 +84258,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "log:read"
+          ]
         }
       }
     },
@@ -83887,7 +84272,7 @@
         "tags": [
           "Interaction"
         ],
-        "description": "Get interaction by ID",
+        "description": "Get interaction by ID\n\nRequired RBAC permissions:\n- `log:read`: View LLM proxy and MCP tool call logs",
         "parameters": [
           {
             "schema": {
@@ -88651,6 +89036,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "log:read"
+          ]
         }
       }
     },
@@ -88660,7 +89050,7 @@
         "tags": [
           "MCP Catalog"
         ],
-        "description": "Get all Internal MCP catalog items",
+        "description": "Get all Internal MCP catalog items\n\nRequired RBAC permissions:\n- `mcpRegistry:read`: Browse the MCP server registry",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -89422,6 +89812,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "mcpRegistry:read"
+          ]
         }
       },
       "post": {
@@ -89429,7 +89824,7 @@
         "tags": [
           "MCP Catalog"
         ],
-        "description": "Create a new Internal MCP catalog item",
+        "description": "Create a new Internal MCP catalog item\n\nRequired RBAC permissions:\n- `mcpRegistry:create`: Add servers to the MCP registry",
         "requestBody": {
           "required": true,
           "content": {
@@ -90674,6 +91069,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "mcpRegistry:create"
+          ]
         }
       }
     },
@@ -90683,7 +91083,7 @@
         "tags": [
           "MCP Catalog"
         ],
-        "description": "Get Internal MCP catalog item by ID",
+        "description": "Get Internal MCP catalog item by ID\n\nRequired RBAC permissions:\n- `mcpRegistry:read`: Browse the MCP server registry",
         "parameters": [
           {
             "schema": {
@@ -91454,6 +91854,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "mcpRegistry:read"
+          ]
         }
       },
       "put": {
@@ -91461,7 +91866,7 @@
         "tags": [
           "MCP Catalog"
         ],
-        "description": "Update an Internal MCP catalog item",
+        "description": "Update an Internal MCP catalog item\n\nRequired RBAC permissions:\n- `mcpRegistry:update`: Modify MCP registry entries",
         "requestBody": {
           "required": true,
           "content": {
@@ -92709,6 +93114,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "mcpRegistry:update"
+          ]
         }
       },
       "delete": {
@@ -92716,7 +93126,7 @@
         "tags": [
           "MCP Catalog"
         ],
-        "description": "Delete an Internal MCP catalog item",
+        "description": "Delete an Internal MCP catalog item\n\nRequired RBAC permissions:\n- `mcpRegistry:delete`: Remove servers from the MCP registry",
         "parameters": [
           {
             "schema": {
@@ -92959,6 +93369,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "mcpRegistry:delete"
+          ]
         }
       }
     },
@@ -92968,7 +93383,7 @@
         "tags": [
           "MCP Catalog"
         ],
-        "description": "Get tools for a catalog item (including builtin Archestra tools)",
+        "description": "Get tools for a catalog item (including builtin Archestra tools)\n\nRequired RBAC permissions:\n- `mcpRegistry:read`: Browse the MCP server registry",
         "parameters": [
           {
             "schema": {
@@ -93257,6 +93672,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "mcpRegistry:read"
+          ]
         }
       }
     },
@@ -93266,7 +93686,7 @@
         "tags": [
           "MCP Catalog"
         ],
-        "description": "Delete an Internal MCP catalog item by name",
+        "description": "Delete an Internal MCP catalog item by name\n\nRequired RBAC permissions:\n- `mcpRegistry:delete`: Remove servers from the MCP registry",
         "parameters": [
           {
             "schema": {
@@ -93508,6 +93928,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "mcpRegistry:delete"
+          ]
         }
       }
     },
@@ -93517,7 +93942,7 @@
         "tags": [
           "MCP Catalog"
         ],
-        "description": "Generate a deployment YAML template preview for a catalog item",
+        "description": "Generate a deployment YAML template preview for a catalog item\n\nRequired RBAC permissions:\n- `mcpRegistry:read`: Browse the MCP server registry",
         "parameters": [
           {
             "schema": {
@@ -93760,6 +94185,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "mcpRegistry:read"
+          ]
         }
       }
     },
@@ -93769,7 +94199,7 @@
         "tags": [
           "MCP Catalog"
         ],
-        "description": "Validate a deployment YAML template",
+        "description": "Validate a deployment YAML template\n\nRequired RBAC permissions:\n- `mcpRegistry:read`: Browse the MCP server registry",
         "requestBody": {
           "required": true,
           "content": {
@@ -94033,6 +94463,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "mcpRegistry:read"
+          ]
         }
       }
     },
@@ -94042,7 +94477,7 @@
         "tags": [
           "MCP Catalog"
         ],
-        "description": "Reset the deployment YAML to default by clearing the custom YAML",
+        "description": "Reset the deployment YAML to default by clearing the custom YAML\n\nRequired RBAC permissions:\n- `mcpRegistry:update`: Modify MCP registry entries",
         "parameters": [
           {
             "schema": {
@@ -94285,6 +94720,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "mcpRegistry:update"
+          ]
         }
       }
     },
@@ -94294,7 +94734,7 @@
         "tags": [
           "MCP Catalog"
         ],
-        "description": "List Kubernetes docker-registry secrets available for imagePullSecrets",
+        "description": "List Kubernetes docker-registry secrets available for imagePullSecrets\n\nRequired RBAC permissions:\n- `mcpRegistry:read`: Browse the MCP server registry",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -94528,6 +94968,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "mcpRegistry:read"
+          ]
         }
       }
     },
@@ -94537,7 +94982,7 @@
         "tags": [
           "MCP Catalog"
         ],
-        "description": "Get all label keys used by catalog items",
+        "description": "Get all label keys used by catalog items\n\nRequired RBAC permissions:\n- `mcpRegistry:read`: Browse the MCP server registry",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -94762,6 +95207,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "mcpRegistry:read"
+          ]
         }
       }
     },
@@ -94771,7 +95221,7 @@
         "tags": [
           "MCP Catalog"
         ],
-        "description": "Get all label values for catalog items",
+        "description": "Get all label values for catalog items\n\nRequired RBAC permissions:\n- `mcpRegistry:read`: Browse the MCP server registry",
         "parameters": [
           {
             "schema": {
@@ -95007,6 +95457,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "mcpRegistry:read"
+          ]
         }
       }
     },
@@ -95298,7 +95753,7 @@
         "tags": [
           "Knowledge Bases"
         ],
-        "description": "List all knowledge bases for the organization",
+        "description": "List all knowledge bases for the organization\n\nRequired RBAC permissions:\n- `knowledgeBase:read`: View knowledge bases and connectors",
         "parameters": [
           {
             "schema": {
@@ -95742,6 +96197,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "knowledgeBase:read"
+          ]
         }
       },
       "post": {
@@ -95749,7 +96209,7 @@
         "tags": [
           "Knowledge Bases"
         ],
-        "description": "Create a new knowledge base",
+        "description": "Create a new knowledge base\n\nRequired RBAC permissions:\n- `knowledgeBase:create`: Create knowledge bases and connectors",
         "requestBody": {
           "required": true,
           "content": {
@@ -96061,6 +96521,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "knowledgeBase:create"
+          ]
         }
       }
     },
@@ -96070,7 +96535,7 @@
         "tags": [
           "Knowledge Bases"
         ],
-        "description": "Get a knowledge base by ID",
+        "description": "Get a knowledge base by ID\n\nRequired RBAC permissions:\n- `knowledgeBase:read`: View knowledge bases and connectors",
         "parameters": [
           {
             "schema": {
@@ -96356,6 +96821,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "knowledgeBase:read"
+          ]
         }
       },
       "put": {
@@ -96363,7 +96833,7 @@
         "tags": [
           "Knowledge Bases"
         ],
-        "description": "Update a knowledge base",
+        "description": "Update a knowledge base\n\nRequired RBAC permissions:\n- `knowledgeBase:update`: Modify knowledge bases and connectors",
         "requestBody": {
           "required": true,
           "content": {
@@ -96683,6 +97153,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "knowledgeBase:update"
+          ]
         }
       },
       "delete": {
@@ -96690,7 +97165,7 @@
         "tags": [
           "Knowledge Bases"
         ],
-        "description": "Delete a knowledge base and all its connectors",
+        "description": "Delete a knowledge base and all its connectors\n\nRequired RBAC permissions:\n- `knowledgeBase:delete`: Delete knowledge bases and connectors",
         "parameters": [
           {
             "schema": {
@@ -96931,6 +97406,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "knowledgeBase:delete"
+          ]
         }
       }
     },
@@ -96940,7 +97420,7 @@
         "tags": [
           "Knowledge Bases"
         ],
-        "description": "Check the health of a knowledge base",
+        "description": "Check the health of a knowledge base\n\nRequired RBAC permissions:\n- `knowledgeBase:read`: View knowledge bases and connectors",
         "parameters": [
           {
             "schema": {
@@ -97188,6 +97668,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "knowledgeBase:read"
+          ]
         }
       }
     },
@@ -97197,7 +97682,7 @@
         "tags": [
           "Connectors"
         ],
-        "description": "List all connectors for the organization",
+        "description": "List all connectors for the organization\n\nRequired RBAC permissions:\n- `knowledgeBase:read`: View knowledge bases and connectors",
         "parameters": [
           {
             "schema": {
@@ -97940,6 +98425,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "knowledgeBase:read"
+          ]
         }
       },
       "post": {
@@ -97947,7 +98437,7 @@
         "tags": [
           "Connectors"
         ],
-        "description": "Create a new connector",
+        "description": "Create a new connector\n\nRequired RBAC permissions:\n- `knowledgeBase:create`: Create knowledge bases and connectors",
         "requestBody": {
           "required": true,
           "content": {
@@ -98848,6 +99338,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "knowledgeBase:create"
+          ]
         }
       }
     },
@@ -98857,7 +99352,7 @@
         "tags": [
           "Connectors"
         ],
-        "description": "Get a connector by ID",
+        "description": "Get a connector by ID\n\nRequired RBAC permissions:\n- `knowledgeBase:read`: View knowledge bases and connectors",
         "parameters": [
           {
             "schema": {
@@ -99458,6 +99953,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "knowledgeBase:read"
+          ]
         }
       },
       "put": {
@@ -99465,7 +99965,7 @@
         "tags": [
           "Connectors"
         ],
-        "description": "Update a connector",
+        "description": "Update a connector\n\nRequired RBAC permissions:\n- `knowledgeBase:update`: Modify knowledge bases and connectors",
         "requestBody": {
           "required": true,
           "content": {
@@ -100330,6 +100830,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "knowledgeBase:update"
+          ]
         }
       },
       "delete": {
@@ -100337,7 +100842,7 @@
         "tags": [
           "Connectors"
         ],
-        "description": "Delete a connector",
+        "description": "Delete a connector\n\nRequired RBAC permissions:\n- `knowledgeBase:delete`: Delete knowledge bases and connectors",
         "parameters": [
           {
             "schema": {
@@ -100578,6 +101083,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "knowledgeBase:delete"
+          ]
         }
       }
     },
@@ -100587,7 +101097,7 @@
         "tags": [
           "Connectors"
         ],
-        "description": "Manually trigger a connector sync",
+        "description": "Manually trigger a connector sync\n\nRequired RBAC permissions:\n- `knowledgeBase:update`: Modify knowledge bases and connectors",
         "parameters": [
           {
             "schema": {
@@ -100832,6 +101342,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "knowledgeBase:update"
+          ]
         }
       }
     },
@@ -100841,7 +101356,7 @@
         "tags": [
           "Connectors"
         ],
-        "description": "Force a full re-sync: deletes all documents, chunks, run history, and resets the checkpoint",
+        "description": "Force a full re-sync: deletes all documents, chunks, run history, and resets the checkpoint\n\nRequired RBAC permissions:\n- `knowledgeBase:update`: Modify knowledge bases and connectors",
         "parameters": [
           {
             "schema": {
@@ -101086,6 +101601,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "knowledgeBase:update"
+          ]
         }
       }
     },
@@ -101095,7 +101615,7 @@
         "tags": [
           "Connectors"
         ],
-        "description": "Test a connector connection",
+        "description": "Test a connector connection\n\nRequired RBAC permissions:\n- `knowledgeBase:read`: View knowledge bases and connectors",
         "parameters": [
           {
             "schema": {
@@ -101339,6 +101859,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "knowledgeBase:read"
+          ]
         }
       }
     },
@@ -101348,7 +101873,7 @@
         "tags": [
           "Connectors"
         ],
-        "description": "Assign a connector to one or more knowledge bases",
+        "description": "Assign a connector to one or more knowledge bases\n\nRequired RBAC permissions:\n- `knowledgeBase:update`: Modify knowledge bases and connectors",
         "requestBody": {
           "required": true,
           "content": {
@@ -101611,6 +102136,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "knowledgeBase:update"
+          ]
         }
       },
       "get": {
@@ -101618,7 +102148,7 @@
         "tags": [
           "Connectors"
         ],
-        "description": "List knowledge bases assigned to a connector",
+        "description": "List knowledge bases assigned to a connector\n\nRequired RBAC permissions:\n- `knowledgeBase:read`: View knowledge bases and connectors",
         "parameters": [
           {
             "schema": {
@@ -101916,6 +102446,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "knowledgeBase:read"
+          ]
         }
       }
     },
@@ -101925,7 +102460,7 @@
         "tags": [
           "Connectors"
         ],
-        "description": "Unassign a connector from a knowledge base",
+        "description": "Unassign a connector from a knowledge base\n\nRequired RBAC permissions:\n- `knowledgeBase:update`: Modify knowledge bases and connectors",
         "parameters": [
           {
             "schema": {
@@ -102174,6 +102709,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "knowledgeBase:update"
+          ]
         }
       }
     },
@@ -102183,7 +102723,7 @@
         "tags": [
           "Connectors"
         ],
-        "description": "List connector runs",
+        "description": "List connector runs\n\nRequired RBAC permissions:\n- `knowledgeBase:read`: View knowledge bases and connectors",
         "parameters": [
           {
             "schema": {
@@ -102615,6 +103155,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "knowledgeBase:read"
+          ]
         }
       }
     },
@@ -102624,7 +103169,7 @@
         "tags": [
           "Connectors"
         ],
-        "description": "Get a single connector run (including logs)",
+        "description": "Get a single connector run (including logs)\n\nRequired RBAC permissions:\n- `knowledgeBase:read`: View knowledge bases and connectors",
         "parameters": [
           {
             "schema": {
@@ -102994,6 +103539,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "knowledgeBase:read"
+          ]
         }
       }
     },
@@ -103003,7 +103553,7 @@
         "tags": [
           "Limits"
         ],
-        "description": "Get all limits with optional filtering and per-model usage breakdown",
+        "description": "Get all limits with optional filtering and per-model usage breakdown\n\nRequired RBAC permissions:\n- `llmLimit:read`: View token usage limits",
         "parameters": [
           {
             "schema": {
@@ -103365,6 +103915,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "llmLimit:read"
+          ]
         }
       },
       "post": {
@@ -103372,7 +103927,7 @@
         "tags": [
           "Limits"
         ],
-        "description": "Create a new limit",
+        "description": "Create a new limit\n\nRequired RBAC permissions:\n- `llmLimit:create`: Create new usage limits",
         "requestBody": {
           "required": true,
           "content": {
@@ -103730,6 +104285,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "llmLimit:create"
+          ]
         }
       }
     },
@@ -103739,7 +104299,7 @@
         "tags": [
           "Limits"
         ],
-        "description": "Get a limit by ID",
+        "description": "Get a limit by ID\n\nRequired RBAC permissions:\n- `llmLimit:read`: View token usage limits",
         "parameters": [
           {
             "schema": {
@@ -104047,6 +104607,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "llmLimit:read"
+          ]
         }
       },
       "patch": {
@@ -104054,7 +104619,7 @@
         "tags": [
           "Limits"
         ],
-        "description": "Update a limit",
+        "description": "Update a limit\n\nRequired RBAC permissions:\n- `llmLimit:update`: Modify existing usage limits",
         "requestBody": {
           "required": true,
           "content": {
@@ -104418,6 +104983,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "llmLimit:update"
+          ]
         }
       },
       "delete": {
@@ -104425,7 +104995,7 @@
         "tags": [
           "Limits"
         ],
-        "description": "Delete a limit",
+        "description": "Delete a limit\n\nRequired RBAC permissions:\n- `llmLimit:delete`: Remove usage limits",
         "parameters": [
           {
             "schema": {
@@ -104668,6 +105238,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "llmLimit:delete"
+          ]
         }
       }
     },
@@ -104825,7 +105400,7 @@
         "tags": [
           "MCP Server Installation Requests"
         ],
-        "description": "Get all MCP server installation requests",
+        "description": "Get all MCP server installation requests\n\nRequired RBAC permissions:\n- `mcpServerInstallationRequest:read`: View MCP server installation requests",
         "parameters": [
           {
             "schema": {
@@ -105501,6 +106076,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "mcpServerInstallationRequest:read"
+          ]
         }
       },
       "post": {
@@ -105508,7 +106088,7 @@
         "tags": [
           "MCP Server Installation Requests"
         ],
-        "description": "Create a new MCP server installation request",
+        "description": "Create a new MCP server installation request\n\nRequired RBAC permissions:\n- `mcpServerInstallationRequest:create`: Submit requests to install MCP servers",
         "requestBody": {
           "required": true,
           "content": {
@@ -106521,6 +107101,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "mcpServerInstallationRequest:create"
+          ]
         }
       }
     },
@@ -106530,7 +107115,7 @@
         "tags": [
           "MCP Server Installation Requests"
         ],
-        "description": "Get an MCP server installation request by ID",
+        "description": "Get an MCP server installation request by ID\n\nRequired RBAC permissions:\n- `mcpServerInstallationRequest:read`: View MCP server installation requests",
         "parameters": [
           {
             "schema": {
@@ -107199,6 +107784,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "mcpServerInstallationRequest:read"
+          ]
         }
       },
       "patch": {
@@ -107206,7 +107796,7 @@
         "tags": [
           "MCP Server Installation Requests"
         ],
-        "description": "Update an MCP server installation request",
+        "description": "Update an MCP server installation request\n\nRequired RBAC permissions:\n- `mcpServerInstallationRequest:update`: Add notes to installation requests",
         "requestBody": {
           "required": true,
           "content": {
@@ -108274,6 +108864,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "mcpServerInstallationRequest:update"
+          ]
         }
       },
       "delete": {
@@ -108281,7 +108876,7 @@
         "tags": [
           "MCP Server Installation Requests"
         ],
-        "description": "Delete an MCP server installation request",
+        "description": "Delete an MCP server installation request\n\nRequired RBAC permissions:\n- `mcpServerInstallationRequest:delete`: Delete installation requests",
         "parameters": [
           {
             "schema": {
@@ -108524,6 +109119,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "mcpServerInstallationRequest:delete"
+          ]
         }
       }
     },
@@ -108533,7 +109133,7 @@
         "tags": [
           "MCP Server Installation Requests"
         ],
-        "description": "Approve an MCP server installation request",
+        "description": "Approve an MCP server installation request\n\nRequired RBAC permissions:\n- `mcpServerInstallationRequest:admin`: Approve or decline installation requests",
         "requestBody": {
           "required": true,
           "content": {
@@ -109217,6 +109817,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "mcpServerInstallationRequest:admin"
+          ]
         }
       }
     },
@@ -109226,7 +109831,7 @@
         "tags": [
           "MCP Server Installation Requests"
         ],
-        "description": "Decline an MCP server installation request",
+        "description": "Decline an MCP server installation request\n\nRequired RBAC permissions:\n- `mcpServerInstallationRequest:admin`: Approve or decline installation requests",
         "requestBody": {
           "required": true,
           "content": {
@@ -109910,6 +110515,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "mcpServerInstallationRequest:admin"
+          ]
         }
       }
     },
@@ -109919,7 +110529,7 @@
         "tags": [
           "MCP Server Installation Requests"
         ],
-        "description": "Add a note to an MCP server installation request",
+        "description": "Add a note to an MCP server installation request\n\nRequired RBAC permissions:\n- `mcpServerInstallationRequest:update`: Add notes to installation requests",
         "requestBody": {
           "required": true,
           "content": {
@@ -110607,6 +111217,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "mcpServerInstallationRequest:update"
+          ]
         }
       }
     },
@@ -110616,7 +111231,7 @@
         "tags": [
           "MCP Server"
         ],
-        "description": "Get all installed MCP servers",
+        "description": "Get all installed MCP servers\n\nRequired RBAC permissions:\n- `mcpServerInstallation:read`: View installed MCP servers and their status",
         "parameters": [
           {
             "schema": {
@@ -111012,6 +111627,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "mcpServerInstallation:read"
+          ]
         }
       },
       "post": {
@@ -111019,7 +111639,7 @@
         "tags": [
           "MCP Server"
         ],
-        "description": "Install an MCP server (from catalog or custom)",
+        "description": "Install an MCP server (from catalog or custom)\n\nRequired RBAC permissions:\n- `mcpServerInstallation:create`: Install MCP servers from the registry",
         "requestBody": {
           "required": true,
           "content": {
@@ -111499,6 +112119,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "mcpServerInstallation:create"
+          ]
         }
       }
     },
@@ -111508,7 +112133,7 @@
         "tags": [
           "MCP Server"
         ],
-        "description": "Get MCP server by ID",
+        "description": "Get MCP server by ID\n\nRequired RBAC permissions:\n- `mcpServerInstallation:read`: View installed MCP servers and their status",
         "parameters": [
           {
             "schema": {
@@ -111903,6 +112528,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "mcpServerInstallation:read"
+          ]
         }
       },
       "delete": {
@@ -111910,7 +112540,7 @@
         "tags": [
           "MCP Server"
         ],
-        "description": "Delete/uninstall an MCP server",
+        "description": "Delete/uninstall an MCP server\n\nRequired RBAC permissions:\n- `mcpServerInstallation:delete`: Uninstall MCP servers",
         "parameters": [
           {
             "schema": {
@@ -112153,6 +112783,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "mcpServerInstallation:delete"
+          ]
         }
       }
     },
@@ -112162,7 +112797,7 @@
         "tags": [
           "MCP Server"
         ],
-        "description": "Update MCP server secret after re-authentication (clears OAuth refresh errors)",
+        "description": "Update MCP server secret after re-authentication (clears OAuth refresh errors)\n\nRequired RBAC permissions:\n- `mcpServerInstallation:update`: Modify installed MCP server configuration",
         "requestBody": {
           "required": true,
           "content": {
@@ -112592,6 +113227,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "mcpServerInstallation:update"
+          ]
         }
       }
     },
@@ -112601,7 +113241,7 @@
         "tags": [
           "MCP Server"
         ],
-        "description": "Get the installation status of an MCP server (for polling during local server installation)",
+        "description": "Get the installation status of an MCP server (for polling during local server installation)\n\nRequired RBAC permissions:\n- `mcpServerInstallation:read`: View installed MCP servers and their status",
         "parameters": [
           {
             "schema": {
@@ -112856,6 +113496,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "mcpServerInstallation:read"
+          ]
         }
       }
     },
@@ -112865,7 +113510,7 @@
         "tags": [
           "MCP Server"
         ],
-        "description": "Get all tools for an MCP server",
+        "description": "Get all tools for an MCP server\n\nRequired RBAC permissions:\n- `mcpServerInstallation:read`: View installed MCP servers and their status",
         "parameters": [
           {
             "schema": {
@@ -113154,6 +113799,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "mcpServerInstallation:read"
+          ]
         }
       }
     },
@@ -113163,7 +113813,7 @@
         "tags": [
           "MCP Server"
         ],
-        "description": "Inspect a running MCP server (list tools or call a tool)",
+        "description": "Inspect a running MCP server (list tools or call a tool)\n\nRequired RBAC permissions:\n- `mcpServerInstallation:read`: View installed MCP servers and their status",
         "requestBody": {
           "required": true,
           "content": {
@@ -113427,6 +114077,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "mcpServerInstallation:read"
+          ]
         }
       }
     },
@@ -113436,7 +114091,7 @@
         "tags": [
           "MCP Server"
         ],
-        "description": "Reinstall an MCP server without losing tool assignments and policies",
+        "description": "Reinstall an MCP server without losing tool assignments and policies\n\nRequired RBAC permissions:\n- `mcpServerInstallation:update`: Modify installed MCP server configuration",
         "requestBody": {
           "required": true,
           "content": {
@@ -113855,6 +114510,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "mcpServerInstallation:update"
+          ]
         }
       }
     },
@@ -113864,7 +114524,7 @@
         "tags": [
           "MCP Tool Call"
         ],
-        "description": "Get all MCP tool calls with pagination and sorting",
+        "description": "Get all MCP tool calls with pagination and sorting\n\nRequired RBAC permissions:\n- `log:read`: View LLM proxy and MCP tool call logs",
         "parameters": [
           {
             "schema": {
@@ -114315,6 +114975,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "log:read"
+          ]
         }
       }
     },
@@ -114324,7 +114989,7 @@
         "tags": [
           "MCP Tool Call"
         ],
-        "description": "Get MCP tool call by ID",
+        "description": "Get MCP tool call by ID\n\nRequired RBAC permissions:\n- `log:read`: View LLM proxy and MCP tool call logs",
         "parameters": [
           {
             "schema": {
@@ -114641,6 +115306,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "log:read"
+          ]
         }
       }
     },
@@ -114650,7 +115320,7 @@
         "tags": [
           "Member"
         ],
-        "description": "Get all members of the organization with pagination and optional filters",
+        "description": "Get all members of the organization with pagination and optional filters\n\nRequired RBAC permissions:\n- `member:read`: View organization members and their roles",
         "parameters": [
           {
             "schema": {
@@ -115003,6 +115673,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "member:read"
+          ]
         }
       }
     },
@@ -116056,7 +116731,7 @@
         "tags": [
           "OAuth"
         ],
-        "description": "Initiate OAuth flow for MCP server installation",
+        "description": "Initiate OAuth flow for MCP server installation\n\nRequired RBAC permissions:\n- `mcpServerInstallation:create`: Install MCP servers from the registry",
         "requestBody": {
           "required": true,
           "content": {
@@ -116317,6 +116992,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "mcpServerInstallation:create"
+          ]
         }
       }
     },
@@ -116326,7 +117006,7 @@
         "tags": [
           "OAuth"
         ],
-        "description": "Handle OAuth callback and exchange code for tokens",
+        "description": "Handle OAuth callback and exchange code for tokens\n\nRequired RBAC permissions:\n- `mcpServerInstallation:create`: Install MCP servers from the registry",
         "requestBody": {
           "required": true,
           "content": {
@@ -116605,6 +117285,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "mcpServerInstallation:create"
+          ]
         }
       }
     },
@@ -118352,7 +119037,7 @@
         "tags": [
           "Optimization Rules"
         ],
-        "description": "Get all optimization rules for the organization",
+        "description": "Get all optimization rules for the organization\n\nRequired RBAC permissions:\n- `optimizationRule:read`: View optimization rules",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -118675,6 +119360,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "optimizationRule:read"
+          ]
         }
       },
       "post": {
@@ -118682,7 +119372,7 @@
         "tags": [
           "Optimization Rules"
         ],
-        "description": "Create a new optimization rule for the organization",
+        "description": "Create a new optimization rule for the organization\n\nRequired RBAC permissions:\n- `optimizationRule:create`: Create new optimization rules",
         "requestBody": {
           "required": true,
           "content": {
@@ -119097,6 +119787,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "optimizationRule:create"
+          ]
         }
       }
     },
@@ -119106,7 +119801,7 @@
         "tags": [
           "Optimization Rules"
         ],
-        "description": "Update an optimization rule",
+        "description": "Update an optimization rule\n\nRequired RBAC permissions:\n- `optimizationRule:update`: Modify optimization rules",
         "requestBody": {
           "required": true,
           "content": {
@@ -119526,6 +120221,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "optimizationRule:update"
+          ]
         }
       },
       "delete": {
@@ -119533,7 +120233,7 @@
         "tags": [
           "Optimization Rules"
         ],
-        "description": "Delete an optimization rule",
+        "description": "Delete an optimization rule\n\nRequired RBAC permissions:\n- `optimizationRule:delete`: Remove optimization rules",
         "parameters": [
           {
             "schema": {
@@ -119776,6 +120476,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "optimizationRule:delete"
+          ]
         }
       }
     },
@@ -119785,7 +120490,7 @@
         "tags": [
           "Roles"
         ],
-        "description": "Get all roles in the organization",
+        "description": "Get all roles in the organization\n\nRequired RBAC permissions:\n- `ac:read`: View custom roles and their permissions",
         "parameters": [
           {
             "schema": {
@@ -120154,6 +120859,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "ac:read"
+          ]
         }
       },
       "post": {
@@ -120161,7 +120871,7 @@
         "tags": [
           "Roles"
         ],
-        "description": "Create a new custom role",
+        "description": "Create a new custom role\n\nRequired RBAC permissions:\n- `ac:create`: Create new custom roles",
         "requestBody": {
           "required": true,
           "content": {
@@ -120490,6 +121200,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "ac:create"
+          ]
         }
       }
     },
@@ -120499,7 +121214,7 @@
         "tags": [
           "Roles"
         ],
-        "description": "Get a specific role by ID",
+        "description": "Get a specific role by ID\n\nRequired RBAC permissions:\n- `ac:read`: View custom roles and their permissions",
         "parameters": [
           {
             "schema": {
@@ -120808,6 +121523,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "ac:read"
+          ]
         }
       },
       "put": {
@@ -120815,7 +121535,7 @@
         "tags": [
           "Roles"
         ],
-        "description": "Update a custom role",
+        "description": "Update a custom role\n\nRequired RBAC permissions:\n- `ac:update`: Modify custom role permissions",
         "requestBody": {
           "required": true,
           "content": {
@@ -121165,6 +121885,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "ac:update"
+          ]
         }
       },
       "delete": {
@@ -121172,7 +121897,7 @@
         "tags": [
           "Roles"
         ],
-        "description": "Delete a custom role",
+        "description": "Delete a custom role\n\nRequired RBAC permissions:\n- `ac:delete`: Delete custom roles",
         "parameters": [
           {
             "schema": {
@@ -121415,6 +122140,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "ac:delete"
+          ]
         }
       }
     },
@@ -121897,7 +122627,7 @@
         "tags": [
           "Organization"
         ],
-        "description": "Update appearance settings",
+        "description": "Update appearance settings\n\nRequired RBAC permissions:\n- `organizationSettings:update`: Customize organization appearance, authentication, etc",
         "requestBody": {
           "required": true,
           "content": {
@@ -122487,6 +123217,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "organizationSettings:update"
+          ]
         }
       },
       "get": {
@@ -122840,7 +123575,7 @@
         "tags": [
           "Organization"
         ],
-        "description": "Update security settings (global tool policy, chat file uploads)",
+        "description": "Update security settings (global tool policy, chat file uploads)\n\nRequired RBAC permissions:\n- `agentSettings:update`: Modify agent settings (default model, default agent, security engine, file uploads)",
         "requestBody": {
           "required": true,
           "content": {
@@ -123326,6 +124061,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "agentSettings:update"
+          ]
         }
       }
     },
@@ -123335,7 +124075,7 @@
         "tags": [
           "Organization"
         ],
-        "description": "Update LLM settings (TOON compression, compression scope, limit cleanup interval)",
+        "description": "Update LLM settings (TOON compression, compression scope, limit cleanup interval)\n\nRequired RBAC permissions:\n- `llmSettings:update`: Modify LLM settings",
         "requestBody": {
           "required": true,
           "content": {
@@ -123832,6 +124572,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "llmSettings:update"
+          ]
         }
       }
     },
@@ -123841,7 +124586,7 @@
         "tags": [
           "Organization"
         ],
-        "description": "Update agent settings (default model, default agent)",
+        "description": "Update agent settings (default model, default agent)\n\nRequired RBAC permissions:\n- `agentSettings:update`: Modify agent settings (default model, default agent, security engine, file uploads)",
         "requestBody": {
           "required": true,
           "content": {
@@ -124337,6 +125082,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "agentSettings:update"
+          ]
         }
       }
     },
@@ -124346,7 +125096,7 @@
         "tags": [
           "Organization"
         ],
-        "description": "Update knowledge settings (embedding model)",
+        "description": "Update knowledge settings (embedding model)\n\nRequired RBAC permissions:\n- `knowledgeSettings:update`: Modify knowledge settings (embedding and reranking models)",
         "requestBody": {
           "required": true,
           "content": {
@@ -124858,6 +125608,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "knowledgeSettings:update"
+          ]
         }
       }
     },
@@ -124867,7 +125622,7 @@
         "tags": [
           "Organization"
         ],
-        "description": "Drop the embedding configuration, deleting all KB documents and resetting connector checkpoints",
+        "description": "Drop the embedding configuration, deleting all KB documents and resetting connector checkpoints\n\nRequired RBAC permissions:\n- `knowledgeSettings:update`: Modify knowledge settings (embedding and reranking models)",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -125331,6 +126086,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "knowledgeSettings:update"
+          ]
         }
       }
     },
@@ -125340,7 +126100,7 @@
         "tags": [
           "Organization"
         ],
-        "description": "Test the embedding connection by embedding a sample text",
+        "description": "Test the embedding connection by embedding a sample text\n\nRequired RBAC permissions:\n- `knowledgeSettings:update`: Modify knowledge settings (embedding and reranking models)",
         "requestBody": {
           "required": true,
           "content": {
@@ -125599,6 +126359,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "knowledgeSettings:update"
+          ]
         }
       }
     },
@@ -126626,7 +127391,7 @@
         "tags": [
           "Organization"
         ],
-        "description": "Delete an auto-provisioned member who hasn't completed signup",
+        "description": "Delete an auto-provisioned member who hasn't completed signup\n\nRequired RBAC permissions:\n- `member:delete`: Remove members from the organization",
         "parameters": [
           {
             "schema": {
@@ -126867,6 +127632,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "member:delete"
+          ]
         }
       }
     },
@@ -126876,7 +127646,7 @@
         "tags": [
           "Organization"
         ],
-        "description": "Get all members of the organization",
+        "description": "Get all members of the organization\n\nRequired RBAC permissions:\n- `member:read`: View organization members and their roles",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -127118,6 +127888,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "member:read"
+          ]
         }
       }
     },
@@ -127127,7 +127902,7 @@
         "tags": [
           "Organization"
         ],
-        "description": "Get a member of the organization by user ID or email address",
+        "description": "Get a member of the organization by user ID or email address\n\nRequired RBAC permissions:\n- `member:read`: View organization members and their roles",
         "parameters": [
           {
             "schema": {
@@ -127382,6 +128157,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "member:read"
+          ]
         }
       }
     },
@@ -127923,7 +128703,7 @@
         "tags": [
           "Secrets"
         ],
-        "description": "Get the secrets manager type and configuration details (for Vault)",
+        "description": "Get the secrets manager type and configuration details (for Vault)\n\nRequired RBAC permissions:\n- `secret:read`: View secrets manager configuration",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -128166,6 +128946,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "secret:read"
+          ]
         }
       }
     },
@@ -128175,7 +128960,7 @@
         "tags": [
           "Secrets"
         ],
-        "description": "Get a secret by ID",
+        "description": "Get a secret by ID\n\nRequired RBAC permissions:\n- `secret:read`: View secrets manager configuration",
         "parameters": [
           {
             "schema": {
@@ -128448,6 +129233,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "secret:read"
+          ]
         }
       }
     },
@@ -128457,7 +129247,7 @@
         "tags": [
           "Secrets"
         ],
-        "description": "Check connectivity to the secrets storage and return secret count.",
+        "description": "Check connectivity to the secrets storage and return secret count.\n\nRequired RBAC permissions:\n- `secret:update`: Modify secrets manager settings and test connectivity",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -128688,6 +129478,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "secret:update"
+          ]
         }
       }
     },
@@ -128697,7 +129492,7 @@
         "tags": [
           "Statistics"
         ],
-        "description": "Get team statistics",
+        "description": "Get team statistics\n\nRequired RBAC permissions:\n- `llmCost:read`: View LLM usage cost statistics and analytics",
         "parameters": [
           {
             "schema": {
@@ -129011,6 +129806,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "llmCost:read"
+          ]
         }
       }
     },
@@ -129020,7 +129820,7 @@
         "tags": [
           "Statistics"
         ],
-        "description": "Get agent statistics",
+        "description": "Get agent statistics\n\nRequired RBAC permissions:\n- `llmCost:read`: View LLM usage cost statistics and analytics",
         "parameters": [
           {
             "schema": {
@@ -129334,6 +130134,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "llmCost:read"
+          ]
         }
       }
     },
@@ -129343,7 +130148,7 @@
         "tags": [
           "Statistics"
         ],
-        "description": "Get model statistics",
+        "description": "Get model statistics\n\nRequired RBAC permissions:\n- `llmCost:read`: View LLM usage cost statistics and analytics",
         "parameters": [
           {
             "schema": {
@@ -129649,6 +130454,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "llmCost:read"
+          ]
         }
       }
     },
@@ -129658,7 +130468,7 @@
         "tags": [
           "Statistics"
         ],
-        "description": "Get overview statistics",
+        "description": "Get overview statistics\n\nRequired RBAC permissions:\n- `llmCost:read`: View LLM usage cost statistics and analytics",
         "parameters": [
           {
             "schema": {
@@ -129941,6 +130751,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "llmCost:read"
+          ]
         }
       }
     },
@@ -129950,7 +130765,7 @@
         "tags": [
           "Statistics"
         ],
-        "description": "Get cost savings statistics",
+        "description": "Get cost savings statistics\n\nRequired RBAC permissions:\n- `llmCost:read`: View LLM usage cost statistics and analytics",
         "parameters": [
           {
             "schema": {
@@ -130261,6 +131076,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "llmCost:read"
+          ]
         }
       }
     },
@@ -130270,7 +131090,7 @@
         "tags": [
           "Teams"
         ],
-        "description": "Get all teams in the organization",
+        "description": "Get all teams in the organization\n\nRequired RBAC permissions:\n- `team:read`: View teams and their members",
         "parameters": [
           {
             "schema": {
@@ -130653,6 +131473,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "team:read"
+          ]
         }
       },
       "post": {
@@ -130660,7 +131485,7 @@
         "tags": [
           "Teams"
         ],
-        "description": "Create a new team",
+        "description": "Create a new team\n\nRequired RBAC permissions:\n- `team:create`: Create new teams",
         "requestBody": {
           "required": true,
           "content": {
@@ -130980,6 +131805,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "team:create"
+          ]
         }
       }
     },
@@ -130989,7 +131819,7 @@
         "tags": [
           "Teams"
         ],
-        "description": "Get a team by ID",
+        "description": "Get a team by ID\n\nRequired RBAC permissions:\n- `team:read`: View teams and their members",
         "parameters": [
           {
             "schema": {
@@ -131297,6 +132127,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "team:read"
+          ]
         }
       },
       "put": {
@@ -131304,7 +132139,7 @@
         "tags": [
           "Teams"
         ],
-        "description": "Update a team",
+        "description": "Update a team\n\nRequired RBAC permissions:\n- `team:update`: Modify team settings",
         "requestBody": {
           "required": true,
           "content": {
@@ -131634,6 +132469,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "team:update"
+          ]
         }
       },
       "delete": {
@@ -131641,7 +132481,7 @@
         "tags": [
           "Teams"
         ],
-        "description": "Delete a team",
+        "description": "Delete a team\n\nRequired RBAC permissions:\n- `team:delete`: Delete teams",
         "parameters": [
           {
             "schema": {
@@ -131882,6 +132722,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "team:delete"
+          ]
         }
       }
     },
@@ -131891,7 +132736,7 @@
         "tags": [
           "Teams"
         ],
-        "description": "Get all members of a team",
+        "description": "Get all members of a team\n\nRequired RBAC permissions:\n- `team:read`: View teams and their members",
         "parameters": [
           {
             "schema": {
@@ -132156,6 +133001,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "team:read"
+          ]
         }
       },
       "post": {
@@ -132163,7 +133013,7 @@
         "tags": [
           "Teams"
         ],
-        "description": "Add a member to a team",
+        "description": "Add a member to a team\n\nRequired RBAC permissions:\n- `team:admin`: Manage team membership (add/remove members)",
         "requestBody": {
           "required": true,
           "content": {
@@ -132447,6 +133297,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "team:admin"
+          ]
         }
       }
     },
@@ -132456,7 +133311,7 @@
         "tags": [
           "Teams"
         ],
-        "description": "Remove a member from a team",
+        "description": "Remove a member from a team\n\nRequired RBAC permissions:\n- `team:admin`: Manage team membership (add/remove members)",
         "parameters": [
           {
             "schema": {
@@ -132705,6 +133560,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "team:admin"
+          ]
         }
       }
     },
@@ -132714,7 +133574,7 @@
         "tags": [
           "Teams"
         ],
-        "description": "Get all external groups mapped to a team for SSO team sync",
+        "description": "Get all external groups mapped to a team for SSO team sync\n\nRequired RBAC permissions:\n- `team:read`: View teams and their members",
         "parameters": [
           {
             "schema": {
@@ -132971,6 +133831,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "team:read"
+          ]
         }
       },
       "post": {
@@ -132978,7 +133843,7 @@
         "tags": [
           "Teams"
         ],
-        "description": "Add an external group mapping to a team for SSO team sync",
+        "description": "Add an external group mapping to a team for SSO team sync\n\nRequired RBAC permissions:\n- `team:admin`: Manage team membership (add/remove members)",
         "requestBody": {
           "required": true,
           "content": {
@@ -133251,6 +134116,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "team:admin"
+          ]
         }
       }
     },
@@ -133260,7 +134130,7 @@
         "tags": [
           "Teams"
         ],
-        "description": "Remove an external group mapping from a team for SSO team sync",
+        "description": "Remove an external group mapping from a team for SSO team sync\n\nRequired RBAC permissions:\n- `team:admin`: Manage team membership (add/remove members)",
         "parameters": [
           {
             "schema": {
@@ -133509,6 +134379,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "team:admin"
+          ]
         }
       }
     },
@@ -133518,7 +134393,7 @@
         "tags": [
           "Tokens"
         ],
-        "description": "Get tokens visible to the user based on their permissions",
+        "description": "Get tokens visible to the user based on their permissions\n\nRequired RBAC permissions:\n- `team:read`: View teams and their members",
         "parameters": [
           {
             "schema": {
@@ -133834,6 +134709,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "team:read"
+          ]
         }
       }
     },
@@ -133843,7 +134723,7 @@
         "tags": [
           "Tokens"
         ],
-        "description": "Get the full token value (for copying to clipboard)",
+        "description": "Get the full token value (for copying to clipboard)\n\nRequired RBAC permissions:\n- `team:update`: Modify team settings",
         "parameters": [
           {
             "schema": {
@@ -134086,6 +134966,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "team:update"
+          ]
         }
       }
     },
@@ -134095,7 +134980,7 @@
         "tags": [
           "Tokens"
         ],
-        "description": "Rotate a token (generate new value)",
+        "description": "Rotate a token (generate new value)\n\nRequired RBAC permissions:\n- `team:update`: Modify team settings",
         "parameters": [
           {
             "schema": {
@@ -134385,6 +135270,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "team:update"
+          ]
         }
       }
     },
@@ -134394,7 +135284,7 @@
         "tags": [
           "Tools"
         ],
-        "description": "Get all tools",
+        "description": "Get all tools\n\nRequired RBAC permissions:\n- `toolPolicy:read`: View tools, tool invocation policies, and trusted data policies",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -134730,6 +135620,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "toolPolicy:read"
+          ]
         }
       }
     },
@@ -134739,7 +135634,7 @@
         "tags": [
           "Tools"
         ],
-        "description": "Get all tools with their profile assignments (one entry per tool)",
+        "description": "Get all tools with their profile assignments (one entry per tool)\n\nRequired RBAC permissions:\n- `toolPolicy:read`: View tools, tool invocation policies, and trusted data policies",
         "parameters": [
           {
             "schema": {
@@ -135210,6 +136105,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "toolPolicy:read"
+          ]
         }
       }
     },
@@ -135219,7 +136119,7 @@
         "tags": [
           "Tools"
         ],
-        "description": "Delete an auto-discovered tool (tools without an MCP server)",
+        "description": "Delete an auto-discovered tool (tools without an MCP server)\n\nRequired RBAC permissions:\n- `toolPolicy:delete`: Remove tools and security policies",
         "parameters": [
           {
             "schema": {
@@ -135462,6 +136362,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "toolPolicy:delete"
+          ]
         }
       }
     },
@@ -136485,7 +137390,7 @@
         "tags": [
           "Virtual API Keys"
         ],
-        "description": "Get all virtual API keys for the organization, with parent API key info",
+        "description": "Get all virtual API keys for the organization, with parent API key info\n\nRequired RBAC permissions:\n- `llmProvider:read`: View LLM provider API keys, virtual keys, and models",
         "parameters": [
           {
             "schema": {
@@ -136866,6 +137771,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "llmProvider:read"
+          ]
         }
       }
     },
@@ -136875,7 +137785,7 @@
         "tags": [
           "Virtual API Keys"
         ],
-        "description": "Get all virtual API keys for a chat API key",
+        "description": "Get all virtual API keys for a chat API key\n\nRequired RBAC permissions:\n- `llmProvider:read`: View LLM provider API keys, virtual keys, and models",
         "parameters": [
           {
             "schema": {
@@ -137162,6 +138072,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "llmProvider:read"
+          ]
         }
       },
       "post": {
@@ -137169,7 +138084,7 @@
         "tags": [
           "Virtual API Keys"
         ],
-        "description": "Create a new virtual API key. Returns the full token value once.",
+        "description": "Create a new virtual API key. Returns the full token value once.\n\nRequired RBAC permissions:\n- `llmProvider:create`: Add new LLM provider API keys or virtual keys",
         "requestBody": {
           "required": true,
           "content": {
@@ -137480,6 +138395,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "llmProvider:create"
+          ]
         }
       }
     },
@@ -137489,7 +138409,7 @@
         "tags": [
           "Virtual API Keys"
         ],
-        "description": "Delete a virtual API key",
+        "description": "Delete a virtual API key\n\nRequired RBAC permissions:\n- `llmProvider:delete`: Remove LLM provider API keys or virtual keys",
         "parameters": [
           {
             "schema": {
@@ -137742,6 +138662,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "llmProvider:delete"
+          ]
         }
       }
     },
@@ -139610,7 +140535,7 @@
         "tags": [
           "Identity Providers"
         ],
-        "description": "Get all identity providers with full configuration (admin only)",
+        "description": "Get all identity providers with full configuration (admin only)\n\nRequired RBAC permissions:\n- `identityProvider:read`: View identity provider configurations (SSO)",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -140171,6 +141096,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "identityProvider:read"
+          ]
         }
       },
       "post": {
@@ -140178,7 +141108,7 @@
         "tags": [
           "Identity Providers"
         ],
-        "description": "Create a new identity provider",
+        "description": "Create a new identity provider\n\nRequired RBAC permissions:\n- `identityProvider:create`: Set up new identity providers",
         "requestBody": {
           "required": true,
           "content": {
@@ -141060,6 +141990,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "identityProvider:create"
+          ]
         }
       }
     },
@@ -141310,7 +142245,7 @@
         "tags": [
           "Identity Providers"
         ],
-        "description": "Get identity provider by ID",
+        "description": "Get identity provider by ID\n\nRequired RBAC permissions:\n- `identityProvider:read`: View identity provider configurations (SSO)",
         "parameters": [
           {
             "schema": {
@@ -141878,6 +142813,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "identityProvider:read"
+          ]
         }
       },
       "put": {
@@ -141885,7 +142825,7 @@
         "tags": [
           "Identity Providers"
         ],
-        "description": "Update identity provider",
+        "description": "Update identity provider\n\nRequired RBAC permissions:\n- `identityProvider:update`: Modify identity provider settings",
         "requestBody": {
           "required": true,
           "content": {
@@ -142768,6 +143708,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "identityProvider:update"
+          ]
         }
       },
       "delete": {
@@ -142775,7 +143720,7 @@
         "tags": [
           "Identity Providers"
         ],
-        "description": "Delete identity provider",
+        "description": "Delete identity provider\n\nRequired RBAC permissions:\n- `identityProvider:delete`: Remove identity providers",
         "parameters": [
           {
             "schema": {
@@ -143016,6 +143961,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "identityProvider:delete"
+          ]
         }
       }
     },
@@ -143026,7 +143976,7 @@
           "Teams",
           "Vault"
         ],
-        "description": "Get a team's Vault folder configuration",
+        "description": "Get a team's Vault folder configuration\n\nRequired RBAC permissions:\n- `team:read`: View teams and their members",
         "parameters": [
           {
             "schema": {
@@ -143286,6 +144236,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "team:read"
+          ]
         }
       },
       "post": {
@@ -143294,7 +144249,7 @@
           "Teams",
           "Vault"
         ],
-        "description": "Set or update a team's Vault folder path",
+        "description": "Set or update a team's Vault folder path\n\nRequired RBAC permissions:\n- `team:update`: Modify team settings",
         "requestBody": {
           "required": true,
           "content": {
@@ -143572,6 +144527,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "team:update"
+          ]
         }
       },
       "delete": {
@@ -143580,7 +144540,7 @@
           "Teams",
           "Vault"
         ],
-        "description": "Delete a team's Vault folder mapping",
+        "description": "Delete a team's Vault folder mapping\n\nRequired RBAC permissions:\n- `team:update`: Modify team settings",
         "parameters": [
           {
             "schema": {
@@ -143821,6 +144781,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "team:update"
+          ]
         }
       }
     },
@@ -143831,7 +144796,7 @@
           "Teams",
           "Vault"
         ],
-        "description": "Check connectivity to a team's Vault folder",
+        "description": "Check connectivity to a team's Vault folder\n\nRequired RBAC permissions:\n- `team:update`: Modify team settings",
         "requestBody": {
           "required": true,
           "content": {
@@ -144094,6 +145059,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "team:update"
+          ]
         }
       }
     },
@@ -144104,7 +145074,7 @@
           "Teams",
           "Vault"
         ],
-        "description": "List secrets available in a team's Vault folder",
+        "description": "List secrets available in a team's Vault folder\n\nRequired RBAC permissions:\n- `team:read`: View teams and their members",
         "parameters": [
           {
             "schema": {
@@ -144352,6 +145322,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "team:read"
+          ]
         }
       }
     },
@@ -144362,7 +145337,7 @@
           "Teams",
           "Vault"
         ],
-        "description": "Get the keys of a specific secret in a team's Vault folder",
+        "description": "Get the keys of a specific secret in a team's Vault folder\n\nRequired RBAC permissions:\n- `team:read`: View teams and their members",
         "requestBody": {
           "required": true,
           "content": {
@@ -144625,6 +145600,11 @@
               }
             }
           }
+        },
+        "x-required-permissions": {
+          "allOf": [
+            "team:read"
+          ]
         }
       }
     }

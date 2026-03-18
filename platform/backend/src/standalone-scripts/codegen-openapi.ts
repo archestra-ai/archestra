@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import logger from "@/logging";
+import { enrichOpenApiWithRbac } from "@/openapi/enrich-openapi-with-rbac";
 import {
   createFastifyInstance,
   registerApiRoutes,
@@ -29,7 +30,7 @@ async function generateOpenApiSpec() {
   await fastify.ready();
 
   // Generate the OpenAPI spec
-  const spec = fastify.swagger();
+  const spec = enrichOpenApiWithRbac(fastify.swagger());
 
   // Output path - write to docs/openapi.json
   const outputPath = path.join(__dirname, "../../../../docs/openapi.json");

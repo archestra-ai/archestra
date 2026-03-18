@@ -175,14 +175,13 @@ export const ToolInput = ({ className, input, ...props }: ToolInputProps) => {
 
   return (
     <div className={cn("space-y-2 overflow-hidden p-4", className)} {...props}>
-      <div className="flex items-center justify-between gap-2">
-        <h4 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
-          Parameters
-        </h4>
-        <CopyButton text={serializedInput} />
-      </div>
+      <h4 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
+        Parameters
+      </h4>
       <div className="rounded-md bg-muted/50">
-        <CodeBlock code={serializedInput} language="json" />
+        <CodeBlock code={serializedInput} language="json">
+          <CopyButton text={serializedInput} />
+        </CodeBlock>
       </div>
     </div>
   );
@@ -236,16 +235,11 @@ export const ToolOutput = ({
   // Render conversations as chat bubbles if provided
   // Note: In Dual LLM context, "user" = Main Profile (questions), "assistant" = Quarantined Profile (answers)
   if (conversations && conversations.length > 0) {
-    const serializedConversations = JSON.stringify(conversations, null, 2);
-
     return (
       <div className={cn("space-y-2 p-4", className)} {...props}>
-        <div className="flex items-center justify-between gap-2">
-          <h4 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
-            {label ?? "Conversation"}
-          </h4>
-          <CopyButton text={serializedConversations} />
-        </div>
+        <h4 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
+          {label ?? "Conversation"}
+        </h4>
         <div className="space-y-3 rounded-md bg-muted/50 p-3">
           {conversations.map((conv, idx) => {
             // Create a stable key combining index and content hash
@@ -312,7 +306,9 @@ export const ToolOutput = ({
 
     Output = (
       <div className="relative group">
-        <CodeBlock code={displayCode} language="json" />
+        <CodeBlock code={displayCode} language="json">
+          <CopyButton text={copyText} />
+        </CodeBlock>
         {isLarge && (
           <div
             className={cn(
@@ -359,12 +355,9 @@ export const ToolOutput = ({
       className={cn("space-y-2 p-4", className)}
       {...props}
     >
-      <div className="flex items-center justify-between gap-2">
-        <h4 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
-          {labelText}
-        </h4>
-        {copyText ? <CopyButton text={copyText} /> : null}
-      </div>
+      <h4 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
+        {labelText}
+      </h4>
       <div
         className={cn(
           "overflow-x-auto rounded-md text-xs [&_table]:w-full",

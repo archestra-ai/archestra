@@ -197,7 +197,7 @@ function generateMarkdownBody(): string {
   const grouped = new Map<
     ToolGroup,
     {
-      shortName: string;
+      shortName: ArchestraToolShortName;
       description: string;
       requiredPermission: ToolPermissionDisplay;
       inputSchema: JsonSchema;
@@ -223,7 +223,7 @@ function generateMarkdownBody(): string {
       grouped.set(group, []);
     }
     grouped.get(group)?.push({
-      shortName,
+      shortName: typedShortName,
       description: truncateDescription(tool.description ?? ""),
       requiredPermission: formatToolPermission(typedShortName),
       inputSchema: tool.inputSchema as JsonSchema,
@@ -379,7 +379,7 @@ interface JsonSchema {
 }
 
 function renderToolSchemas(
-  toolName: string,
+  toolName: ArchestraToolShortName,
   requiredPermission: ToolPermissionDisplay,
   inputSchema: JsonSchema,
   outputSchema?: JsonSchema,

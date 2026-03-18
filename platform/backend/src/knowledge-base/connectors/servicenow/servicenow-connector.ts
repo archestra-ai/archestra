@@ -500,7 +500,6 @@ function dv(field: ServiceNowDisplayValue | undefined): string {
   return field?.display_value ?? field?.value ?? "";
 }
 
-
 function recordToDocument(
   record: ServiceNowRecord,
   instanceUrl: string,

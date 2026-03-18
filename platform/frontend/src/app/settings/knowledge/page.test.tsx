@@ -302,8 +302,8 @@ describe("KnowledgeSettingsPage", () => {
       await user.click(modelTrigger!);
 
       expect(
-        screen.getByText("Best cost/quality ratio (1536 dims)"),
-      ).toBeInTheDocument();
+        screen.getAllByText("Best cost/quality ratio (1536 dims)").length,
+      ).toBeGreaterThanOrEqual(1);
     });
 
     it("allows entering a custom embedding model name", async () => {

@@ -33,7 +33,7 @@ To test benchmarks locally against your development environment:
    bash ./run-benchmark.sh
    ```
 
-The benchmark request is satisfied by [`helm/e2e-tests/mappings/openai-benchmark-chat-with-tools.json`](/Users/joeyorlando/coding/archestra/archestra/platform/helm/e2e-tests/mappings/openai-benchmark-chat-with-tools.json), so no real provider traffic is involved.
+The benchmark request is satisfied by [`helm/e2e-tests/mappings/openai-benchmark-chat-with-tools.json`](../helm/e2e-tests/mappings/openai-benchmark-chat-with-tools.json), so no real provider traffic is involved.
 
 Make sure your local platform is running via `tilt up` before running benchmarks.
 

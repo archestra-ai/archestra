@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isAgentTypeAdmin } from "@/auth/agent-type-permissions";
 import logger from "@/logging";
 import {
   AgentModel,
@@ -98,9 +99,6 @@ const ListAgentsToolArgsSchema = z
       .describe(
         "Optional agent name filter. Use this when the user names an agent but you still need to look up the ID.",
       ),
-    scope: AgentScopeSchema.optional().describe(
-      "Optional scope filter: personal, team, or org.",
-    ),
   })
   .strict();
 
@@ -232,7 +230,7 @@ const registry = defineArchestraTools([
     shortName: "list_agents",
     title: "List Agents",
     description:
-      "List agents with optional filtering by name and scope. Returns each agent's assigned tools and knowledge sources for discoverability.",
+      "List agents with optional filtering by name. Returns each agent's assigned tools and knowledge sources for discoverability.",
     schema: ListAgentsToolArgsSchema,
     outputSchema: ListAgentsOutputSchema,
     async handler({ args, context }) {
@@ -246,16 +244,29 @@ const registry = defineArchestraTools([
       try {
         const limit = Math.min(args.limit ?? 20, 100);
 
+        const isAdmin =
+          context.userId && context.organizationId
+            ? await isAgentTypeAdmin({
+                userId: context.userId,
+                organizationId: context.organizationId,
+                agentType: "agent",
+              })
+            : false;
+
         const results = await AgentModel.findAllPaginated(
           { limit, offset: 0 },
           undefined,
           {
             agentType: "agent",
             ...(args.name ? { name: args.name } : {}),
-            ...(args.scope ? { scope: args.scope } : {}),
+            // Hide other users' personal agents. swap_agent is the primary
+            // Archestra MCP use-case and requires only the caller's own
+            // personal agents to be visible, even though admins can see all
+            // personal agents in the UI.
+            excludeOtherPersonalAgents: true,
           },
           context.userId,
-          true,
+          isAdmin,
         );
 
         const allKbIds = [

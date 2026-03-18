@@ -586,6 +586,7 @@ class AgentModel {
       teamIds?: string[];
       authorIds?: string[];
       excludeAuthorIds?: string[];
+      excludeOtherPersonalAgents?: boolean;
       labels?: Record<string, string[]>;
     },
     userId?: string,
@@ -664,6 +665,17 @@ class AgentModel {
       const condition = or(
         isNull(schema.agentsTable.authorId),
         notInArray(schema.agentsTable.authorId, filters.excludeAuthorIds),
+      );
+      if (condition) {
+        whereConditions.push(condition);
+      }
+    }
+
+    // Exclude other users' personal agents (show non-personal + own personal)
+    if (filters?.excludeOtherPersonalAgents && userId) {
+      const condition = or(
+        ne(schema.agentsTable.scope, "personal"),
+        eq(schema.agentsTable.authorId, userId),
       );
       if (condition) {
         whereConditions.push(condition);

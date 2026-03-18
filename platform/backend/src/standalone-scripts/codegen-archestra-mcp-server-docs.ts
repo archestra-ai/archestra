@@ -11,6 +11,7 @@ import {
   getArchestraMcpTools,
 } from "@/archestra-mcp-server";
 import { toolShortNames as knowledgeManagementToolShortNames } from "@/archestra-mcp-server/knowledge-management";
+import { TOOL_PERMISSIONS } from "@/archestra-mcp-server/rbac";
 import logger from "@/logging";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -195,6 +196,7 @@ function generateMarkdownBody(): string {
     {
       shortName: string;
       description: string;
+      requiredPermission: string;
       inputSchema: JsonSchema;
       outputSchema?: JsonSchema;
     }[]
@@ -219,6 +221,7 @@ function generateMarkdownBody(): string {
     grouped.get(group)?.push({
       shortName,
       description: truncateDescription(tool.description ?? ""),
+      requiredPermission: formatToolPermission(shortName),
       inputSchema: tool.inputSchema as JsonSchema,
       outputSchema: tool.outputSchema as JsonSchema | undefined,
     });
@@ -233,17 +236,18 @@ function generateMarkdownBody(): string {
   const referenceSections: string[] = [];
   for (const [group, groupTools] of sortedGroups) {
     let section = `### ${group}\n\n`;
-    section += "| Tool | Description |\n";
-    section += "|------|-------------|\n";
+    section += "| Tool | Description | Required RBAC Permission |\n";
+    section += "|------|-------------|--------------------------|\n";
 
     for (const tool of groupTools) {
-      section += `| \`${tool.shortName}\` | ${escapeTableCell(tool.description)} |\n`;
+      section += `| \`${tool.shortName}\` | ${escapeTableCell(tool.description)} | ${escapeTableCell(tool.requiredPermission)} |\n`;
     }
 
     // Add detailed input schemas for each tool in this group
     for (const tool of groupTools) {
       const schemaMarkdown = renderToolSchemas(
         tool.shortName,
+        tool.requiredPermission,
         tool.inputSchema,
         tool.outputSchema,
       );
@@ -335,6 +339,15 @@ function escapeTableCell(text: string): string {
   return text.replace(/\|/g, "\\|");
 }
 
+export function formatToolPermission(toolShortName: string): string {
+  const permission = TOOL_PERMISSIONS[toolShortName as ArchestraToolShortName];
+  if (!permission) {
+    return "None (no additional RBAC permission required)";
+  }
+
+  return `\`${permission.resource}:${permission.action}\``;
+}
+
 // === Input schema rendering ===
 
 interface JsonSchema {
@@ -348,10 +361,12 @@ interface JsonSchema {
 
 function renderToolSchemas(
   toolName: string,
+  requiredPermission: string,
   inputSchema: JsonSchema,
   outputSchema?: JsonSchema,
 ): string | null {
   let md = `#### ${toolName}\n\n`;
+  md += `Required RBAC permission: ${requiredPermission}\n\n`;
 
   const inputRows = renderSchemaRows(inputSchema);
   if (inputRows.length === 0) {

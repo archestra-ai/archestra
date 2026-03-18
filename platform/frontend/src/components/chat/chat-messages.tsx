@@ -54,7 +54,11 @@ import { useOrganization } from "@/lib/organization.query";
 import { hasThinkingTags, parseThinkingTags } from "@/lib/parse-thinking";
 import { cn } from "@/lib/utils";
 import { AuthRequiredTool } from "./auth-required-tool";
-import { extractFileAttachments, hasTextPart } from "./chat-messages.utils";
+import {
+  extractFileAttachments,
+  filterOptimisticToolCalls,
+  hasTextPart,
+} from "./chat-messages.utils";
 import {
   getToolErrorText,
   getToolHeaderState,
@@ -77,6 +81,11 @@ interface ChatMessagesProps {
   agentId?: string;
   messages: UIMessage[];
   status: ChatStatus;
+  optimisticToolCalls?: Array<{
+    toolCallId: string;
+    toolName: string;
+    input: unknown;
+  }>;
   isLoadingConversation?: boolean;
   onMessagesUpdate?: (messages: UIMessage[]) => void;
   onUserMessageEdit?: (
@@ -118,6 +127,7 @@ export function ChatMessages({
   agentId,
   messages,
   status,
+  optimisticToolCalls = [],
   isLoadingConversation = false,
   onMessagesUpdate,
   onUserMessageEdit,
@@ -237,6 +247,11 @@ export function ChatMessages({
       }
     }
   };
+
+  const pendingToolCalls = useMemo(
+    () => filterOptimisticToolCalls(messages, optimisticToolCalls),
+    [messages, optimisticToolCalls],
+  );
 
   if (messages.length === 0) {
     // Don't show "start conversation" message while loading - prevents flash of empty state
@@ -771,6 +786,26 @@ export function ChatMessages({
               supportMessage={organization?.chatErrorSupportMessage}
             />
           )}
+          {pendingToolCalls.map((toolCall) => (
+            <MessageTool
+              part={{
+                type: "dynamic-tool",
+                toolName: toolCall.toolName,
+                toolCallId: toolCall.toolCallId,
+                state: "input-available",
+                input: toolCall.input,
+              }}
+              key={`optimistic-tool-${toolCall.toolCallId}`}
+              toolResultPart={null}
+              toolName={toolCall.toolName}
+              agentId={agentId}
+              isDebugging={isDebugging}
+              canExpandToolCalls={canExpandToolCalls}
+              onToolApprovalResponse={onToolApprovalResponse}
+              onInstallMcp={orchestrator.triggerInstallByCatalogId}
+              onReauthMcp={orchestrator.triggerReauthByCatalogIdAndServerId}
+            />
+          ))}
           {(status === "submitted" ||
             (status === "streaming" && isStreamingStalled)) && (
             <div className="absolute bottom-[-10] left-0">

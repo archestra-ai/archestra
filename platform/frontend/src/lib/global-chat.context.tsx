@@ -28,6 +28,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { filterOptimisticToolCalls } from "@/components/chat/chat-messages.utils";
 import { useGenerateConversationTitle } from "@/lib/chat.query";
 
 const SESSION_CLEANUP_TIMEOUT = 10 * 60 * 1000; // 10 min
@@ -74,6 +75,11 @@ interface ChatSession {
     toolCallId: string;
     toolName: string;
   } | null;
+  optimisticToolCalls: Array<{
+    toolCallId: string;
+    toolName: string;
+    input: unknown;
+  }>;
   setPendingCustomServerToolCall: (
     value: { toolCallId: string; toolName: string } | null,
   ) => void;
@@ -253,6 +259,13 @@ function ChatSessionHook({
   const queryClient = useQueryClient();
   const [pendingCustomServerToolCall, setPendingCustomServerToolCall] =
     useState<{ toolCallId: string; toolName: string } | null>(null);
+  const [optimisticToolCalls, setOptimisticToolCalls] = useState<
+    Array<{
+      toolCallId: string;
+      toolName: string;
+      input: unknown;
+    }>
+  >([]);
   const [tokenUsage, setTokenUsage] = useState<TokenUsage | null>(null);
   const generateTitleMutation = useGenerateConversationTitle();
   // Track if title generation has been attempted for this conversation
@@ -292,6 +305,7 @@ function ChatSessionHook({
     }),
     id: conversationId,
     onFinish: ({ message }) => {
+      setOptimisticToolCalls([]);
       queryClient.invalidateQueries({
         queryKey: ["conversation", conversationId],
       });
@@ -319,6 +333,7 @@ function ChatSessionHook({
       // This will be checked when messages update in the effect below
     },
     onError: (chatError) => {
+      setOptimisticToolCalls([]);
       console.error("[ChatSession] Error occurred:", {
         conversationId,
         error: chatError,
@@ -341,6 +356,21 @@ function ChatSessionHook({
       }
     },
     onToolCall: ({ toolCall }) => {
+      setOptimisticToolCalls((current) => {
+        if (current.some((call) => call.toolCallId === toolCall.toolCallId)) {
+          return current;
+        }
+
+        return [
+          ...current,
+          {
+            toolCallId: toolCall.toolCallId,
+            toolName: toolCall.toolName,
+            input: "args" in toolCall ? toolCall.args : undefined,
+          },
+        ];
+      });
+
       if (
         toolCall.toolName ===
         TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_FULL_NAME
@@ -407,6 +437,16 @@ function ChatSessionHook({
   }
   prevMessagesLenRef.current = messages.length;
 
+  useEffect(() => {
+    if (optimisticToolCalls.length === 0) {
+      return;
+    }
+
+    setOptimisticToolCalls((current) =>
+      filterOptimisticToolCalls(messages, current),
+    );
+  }, [messages, optimisticToolCalls.length]);
+
   // Auto-generate title after first assistant response
   useEffect(() => {
     // Skip if already attempted or currently generating
@@ -455,6 +495,7 @@ function ChatSessionHook({
     addToolResult,
     addToolApprovalResponse,
     pendingCustomServerToolCall,
+    optimisticToolCalls,
     setPendingCustomServerToolCall,
     tokenUsage,
   };
@@ -477,6 +518,7 @@ function ChatSessionHook({
     addToolResult,
     addToolApprovalResponse,
     pendingCustomServerToolCall,
+    optimisticToolCalls,
     tokenUsage,
     sessionsRef,
     notifySessionUpdate,

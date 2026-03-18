@@ -783,6 +783,7 @@ export default function ChatPage() {
   const addToolResult = chatSession?.addToolResult;
   const addToolApprovalResponse = chatSession?.addToolApprovalResponse;
   const pendingCustomServerToolCall = chatSession?.pendingCustomServerToolCall;
+  const optimisticToolCalls = chatSession?.optimisticToolCalls ?? [];
   const setPendingCustomServerToolCall =
     chatSession?.setPendingCustomServerToolCall;
   const tokenUsage = chatSession?.tokenUsage;
@@ -1680,6 +1681,7 @@ export default function ChatPage() {
                     agentId={currentProfileId || initialAgentId || undefined}
                     messages={messages}
                     status={status}
+                    optimisticToolCalls={optimisticToolCalls}
                     isLoadingConversation={isLoadingConversation}
                     onMessagesUpdate={setMessages}
                     onUserMessageEdit={(

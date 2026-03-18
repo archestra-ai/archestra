@@ -56,11 +56,9 @@ async function resolveAgentSelection(
   if (agent.llmApiKeyId) {
     const apiKey = await ChatApiKeyModel.findById(agent.llmApiKeyId);
     if (apiKey) {
-      const provider =
-        isSupportedProvider(apiKey.provider) &&
-        apiKey.provider !== "custom-openai-compatible"
-          ? apiKey.provider
-          : detectProviderFromModel(agent.llmModel ?? "");
+      const provider = isSupportedProvider(apiKey.provider)
+        ? apiKey.provider
+        : detectProviderFromModel(agent.llmModel ?? "");
 
       if (agent.llmModel) {
         return {

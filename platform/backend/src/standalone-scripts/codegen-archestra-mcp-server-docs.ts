@@ -366,6 +366,7 @@ function isArchestraToolShortName(
 ): toolShortName is ArchestraToolShortName {
   return Object.hasOwn(toolGroups, toolShortName);
 }
+
 // === Input schema rendering ===
 
 interface JsonSchema {

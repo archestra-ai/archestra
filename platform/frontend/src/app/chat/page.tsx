@@ -1678,10 +1678,6 @@ export default function ChatPage() {
                   <ChatMessages
                     conversationId={conversationId}
                     agentId={currentProfileId || initialAgentId || undefined}
-                    agentName={
-                      _conversationInternalAgent?.name ||
-                      internalAgents.find((a) => a.id === initialAgentId)?.name
-                    }
                     messages={messages}
                     status={status}
                     isLoadingConversation={isLoadingConversation}

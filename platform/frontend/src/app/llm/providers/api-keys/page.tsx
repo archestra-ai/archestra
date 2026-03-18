@@ -5,7 +5,6 @@ import {
   E2eTestId,
   formatSecretStorageType,
   getDocsUrl,
-  PROVIDERS_WITH_OPTIONAL_API_KEY,
 } from "@shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
@@ -31,6 +30,7 @@ import {
   PLACEHOLDER_KEY,
   PROVIDER_CONFIG,
 } from "@/components/chat-api-key-form";
+import { CreateChatApiKeyDialog } from "@/components/create-chat-api-key-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { FormDialog } from "@/components/form-dialog";
 import { LlmProviderSelectItems } from "@/components/llm-provider-options";
@@ -57,7 +57,6 @@ import {
 import {
   type ChatApiKeyScope,
   useChatApiKeys,
-  useCreateChatApiKey,
   useDeleteChatApiKey,
   useUpdateChatApiKey,
 } from "@/lib/chat-settings.query";
@@ -97,11 +96,9 @@ export default function ApiKeysPage() {
         : (providerFilter as ChatApiKeyResponse["provider"]),
   });
   const { data: organization } = useOrganization();
-  const createMutation = useCreateChatApiKey();
   const updateMutation = useUpdateChatApiKey();
   const deleteMutation = useDeleteChatApiKey();
   const byosEnabled = useFeature("byosEnabled");
-  const geminiVertexAiEnabled = useFeature("geminiVertexAiEnabled");
 
   const getKeyUsage = useCallback(
     (keyId: string): string | null => {
@@ -125,22 +122,9 @@ export default function ApiKeysPage() {
     useState<ChatApiKeyResponse | null>(null);
 
   // Forms
-  const createForm = useForm<ChatApiKeyFormValues>({
-    defaultValues: DEFAULT_FORM_VALUES,
-  });
-
   const editForm = useForm<ChatApiKeyFormValues>({
     defaultValues: DEFAULT_FORM_VALUES,
   });
-
-  // Reset create form when dialog opens.
-  // isPrimary is handled by the child ChatApiKeyForm component, which watches
-  // the current provider and sets isPrimary based on whether keys exist for it.
-  useEffect(() => {
-    if (isCreateDialogOpen) {
-      createForm.reset(DEFAULT_FORM_VALUES);
-    }
-  }, [isCreateDialogOpen, createForm]);
 
   // Reset edit form with selected key values when dialog opens
   useEffect(() => {
@@ -158,35 +142,6 @@ export default function ApiKeysPage() {
       });
     }
   }, [isEditDialogOpen, selectedApiKey, editForm]);
-
-  // Submit handlers
-  const handleCreate = createForm.handleSubmit(async (values) => {
-    try {
-      const _created = await createMutation.mutateAsync({
-        name: values.name,
-        provider: values.provider,
-        apiKey: values.apiKey || undefined,
-        baseUrl: values.baseUrl || undefined,
-        scope: values.scope,
-        teamId:
-          values.scope === "team" && values.teamId ? values.teamId : undefined,
-        isPrimary: values.isPrimary,
-        vaultSecretPath:
-          byosEnabled && values.vaultSecretPath
-            ? values.vaultSecretPath
-            : undefined,
-        vaultSecretKey:
-          byosEnabled && values.vaultSecretKey
-            ? values.vaultSecretKey
-            : undefined,
-      });
-
-      createForm.reset(DEFAULT_FORM_VALUES);
-      setIsCreateDialogOpen(false);
-    } catch {
-      // Error already handled by mutation's handleApiError
-    }
-  });
 
   const handleEdit = editForm.handleSubmit(async (values) => {
     if (!selectedApiKey) return;
@@ -251,17 +206,6 @@ export default function ApiKeysPage() {
     setSelectedApiKey(apiKey);
     setIsDeleteDialogOpen(true);
   }, []);
-
-  // Validation for create form
-  const createFormValues = createForm.watch();
-  const isCreateValid =
-    createFormValues.apiKey !== PLACEHOLDER_KEY &&
-    createFormValues.name &&
-    (createFormValues.scope !== "team" || createFormValues.teamId) &&
-    (byosEnabled
-      ? createFormValues.vaultSecretPath && createFormValues.vaultSecretKey
-      : PROVIDERS_WITH_OPTIONAL_API_KEY.has(createFormValues.provider) ||
-        createFormValues.apiKey);
 
   // Validation for edit form
   const editFormValues = editForm.watch();
@@ -521,47 +465,12 @@ export default function ApiKeysPage() {
       </div>
 
       {/* Create Dialog */}
-      <FormDialog
+      <CreateChatApiKeyDialog
         open={isCreateDialogOpen}
         onOpenChange={setIsCreateDialogOpen}
         title="Add API Key"
         description="Add a new LLM provider API key for use in Chat and LLM Proxy"
-        size="small"
-      >
-        <DialogForm
-          onSubmit={handleCreate}
-          className="flex min-h-0 flex-1 flex-col"
-        >
-          <DialogBody>
-            <ChatApiKeyForm
-              mode="full"
-              showConsoleLink={false}
-              form={createForm}
-              existingKeys={apiKeys}
-              isPending={createMutation.isPending}
-              geminiVertexAiEnabled={geminiVertexAiEnabled}
-            />
-          </DialogBody>
-          <DialogStickyFooter className="mt-0">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setIsCreateDialogOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              disabled={!isCreateValid || createMutation.isPending}
-            >
-              {createMutation.isPending && (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              )}
-              Test & Create
-            </Button>
-          </DialogStickyFooter>
-        </DialogForm>
-      </FormDialog>
+      />
 
       {/* Edit Dialog */}
       <FormDialog

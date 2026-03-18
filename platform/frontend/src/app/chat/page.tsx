@@ -1,14 +1,12 @@
 "use client";
 
 import type { UIMessage } from "@ai-sdk/react";
-import { PROVIDERS_WITH_OPTIONAL_API_KEY } from "@shared";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
   Bot,
   FileText,
   Globe,
-  Loader2,
   MoreVertical,
   Plus,
   Share2,
@@ -24,7 +22,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { useForm } from "react-hook-form";
 import { CreateCatalogDialog } from "@/app/mcp/registry/_parts/create-catalog-dialog";
 import { CustomServerRequestDialog } from "@/app/mcp/registry/_parts/custom-server-request-dialog";
 import { AgentDialog } from "@/components/agent-dialog";
@@ -46,11 +43,8 @@ import {
 import { RightSidePanel } from "@/components/chat/right-side-panel";
 import { ShareConversationDialog } from "@/components/chat/share-conversation-dialog";
 import { StreamTimeoutWarning } from "@/components/chat/stream-timeout-warning";
-import {
-  ChatApiKeyForm,
-  type ChatApiKeyFormValues,
-  PLACEHOLDER_KEY,
-} from "@/components/chat-api-key-form";
+import type { ChatApiKeyFormValues } from "@/components/chat-api-key-form";
+import { CreateChatApiKeyDialog } from "@/components/create-chat-api-key-dialog";
 import { LoadingSpinner } from "@/components/loading";
 import { Button } from "@/components/ui/button";
 import {
@@ -60,15 +54,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogForm,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -102,14 +87,13 @@ import { useChatModels, useModelsByProvider } from "@/lib/chat-models.query";
 import {
   type SupportedProvider,
   useChatApiKeys,
-  useCreateChatApiKey,
 } from "@/lib/chat-settings.query";
 import { useConversationShare } from "@/lib/chat-share.query";
 import {
   conversationStorageKeys,
   getConversationDisplayTitle,
 } from "@/lib/chat-utils";
-import { useConfig, useFeature } from "@/lib/config.query";
+import { useConfig } from "@/lib/config.query";
 import { useDialogs } from "@/lib/dialog.hook";
 import { useChatSession } from "@/lib/global-chat.context";
 import { useOrganization } from "@/lib/organization.query";
@@ -1982,57 +1966,6 @@ const DEFAULT_FORM_VALUES: ChatApiKeyFormValues = {
 function NoApiKeySetup() {
   const router = useRouter();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const createMutation = useCreateChatApiKey();
-  const byosEnabled = useFeature("byosEnabled");
-  const geminiVertexAiEnabled = useFeature("geminiVertexAiEnabled");
-
-  const form = useForm<ChatApiKeyFormValues>({
-    defaultValues: DEFAULT_FORM_VALUES,
-  });
-
-  useEffect(() => {
-    if (isDialogOpen) {
-      form.reset(DEFAULT_FORM_VALUES);
-    }
-  }, [isDialogOpen, form]);
-
-  const formValues = form.watch();
-  const isValid =
-    formValues.apiKey !== PLACEHOLDER_KEY &&
-    formValues.name &&
-    (formValues.scope !== "team" || formValues.teamId) &&
-    (byosEnabled
-      ? formValues.vaultSecretPath && formValues.vaultSecretKey
-      : PROVIDERS_WITH_OPTIONAL_API_KEY.has(formValues.provider) ||
-        formValues.apiKey);
-
-  const handleCreate = form.handleSubmit(async (values) => {
-    try {
-      await createMutation.mutateAsync({
-        name: values.name,
-        provider: values.provider,
-        apiKey: values.apiKey || undefined,
-        baseUrl: values.baseUrl || undefined,
-        scope: values.scope,
-        teamId:
-          values.scope === "team" && values.teamId ? values.teamId : undefined,
-        isPrimary: values.isPrimary,
-        vaultSecretPath:
-          byosEnabled && values.vaultSecretPath
-            ? values.vaultSecretPath
-            : undefined,
-        vaultSecretKey:
-          byosEnabled && values.vaultSecretKey
-            ? values.vaultSecretKey
-            : undefined,
-      });
-      setIsDialogOpen(false);
-      // Navigate to clean /chat URL so there's no stale conversation param
-      router.push("/chat");
-    } catch {
-      // Error handled by mutation
-    }
-  });
 
   return (
     <div className="flex h-full w-full items-center justify-center p-8">
@@ -2048,46 +1981,18 @@ function NoApiKeySetup() {
           Add API Key
         </Button>
       </div>
-
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Add API Key</DialogTitle>
-            <DialogDescription>
-              Add an LLM provider API key to start chatting
-            </DialogDescription>
-          </DialogHeader>
-          <DialogForm onSubmit={handleCreate}>
-            <div className="py-2">
-              <ChatApiKeyForm
-                mode="full"
-                showConsoleLink
-                form={form}
-                isPending={createMutation.isPending}
-                geminiVertexAiEnabled={geminiVertexAiEnabled}
-              />
-            </div>
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setIsDialogOpen(false)}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                disabled={!isValid || createMutation.isPending}
-              >
-                {createMutation.isPending && (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                )}
-                Test & Create
-              </Button>
-            </DialogFooter>
-          </DialogForm>
-        </DialogContent>
-      </Dialog>
+      <CreateChatApiKeyDialog
+        open={isDialogOpen}
+        onOpenChange={setIsDialogOpen}
+        title="Add API Key"
+        description="Add a new LLM provider API key for use in Chat and LLM Proxy"
+        defaultValues={DEFAULT_FORM_VALUES}
+        showConsoleLink
+        onSuccess={() => {
+          // Navigate to clean /chat URL so there's no stale conversation param
+          router.push("/chat");
+        }}
+      />
     </div>
   );
 }

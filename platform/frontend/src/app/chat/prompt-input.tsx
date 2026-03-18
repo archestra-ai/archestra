@@ -11,7 +11,7 @@ import {
 import type { ChatStatus } from "ai";
 import { MoreVerticalIcon, PaperclipIcon, RotateCcwIcon } from "lucide-react";
 import type { FormEvent } from "react";
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { ModelSelectorLogo } from "@/components/ai-elements/model-selector";
 import {
@@ -251,7 +251,10 @@ const PromptInputContent = ({
   );
 
   const handleFileError = useCallback(
-    (err: { code: "max_files" | "max_file_size" | "accept"; message: string }) => {
+    (err: {
+      code: "max_files" | "max_file_size" | "accept";
+      message: string;
+    }) => {
       if (err.code === "accept") {
         toast.error(
           !showFileUploadButton
@@ -260,7 +263,7 @@ const PromptInputContent = ({
         );
       }
     },
-    [],
+    [showFileUploadButton],
   );
 
   return (

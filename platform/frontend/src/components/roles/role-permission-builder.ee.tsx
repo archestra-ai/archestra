@@ -154,6 +154,42 @@ export function RolePermissionBuilder({
     [userPermissions, isResourceFullySelected],
   );
 
+  const getResourceCheckState = useCallback(
+    (resource: Resource): boolean | "indeterminate" => {
+      if (isResourceFullySelected(resource)) {
+        return true;
+      }
+
+      if (isResourcePartiallySelected(resource)) {
+        return "indeterminate";
+      }
+
+      return false;
+    },
+    [isResourceFullySelected, isResourcePartiallySelected],
+  );
+
+  const getCategoryCheckState = useCallback(
+    (category: string): boolean | "indeterminate" => {
+      if (isCategoryFullySelected(category)) {
+        return true;
+      }
+
+      const resources = resourceCategories[category] || [];
+      const hasSelectedResource = resources.some((resource) => {
+        const currentActions = permission[resource] || [];
+        return currentActions.length > 0;
+      });
+
+      if (hasSelectedResource) {
+        return "indeterminate";
+      }
+
+      return false;
+    },
+    [isCategoryFullySelected, permission],
+  );
+
   // Select all permissions for all resources in a category
   const selectAllForCategory = useCallback(
     (category: string) => {
@@ -228,7 +264,7 @@ export function RolePermissionBuilder({
 
       <div className="space-y-3">
         {Object.entries(resourceCategories).map(([category, resources]) => {
-          const isCategorySelected = isCategoryFullySelected(category);
+          const categoryCheckState = getCategoryCheckState(category);
 
           return (
             <Card key={category} className="gap-0 p-3">
@@ -246,7 +282,7 @@ export function RolePermissionBuilder({
                 </button>
                 <Checkbox
                   id={`category-${category}`}
-                  checked={isCategorySelected}
+                  checked={categoryCheckState}
                   disabled={readOnly}
                   onCheckedChange={(checked) => {
                     if (checked) {
@@ -275,9 +311,10 @@ export function RolePermissionBuilder({
                     .map((resource) => {
                       const availableActions = userPermissions[resource] || [];
                       const selectedActions = permission[resource] || [];
-                      const isFullySelected = isResourceFullySelected(resource);
+                      const resourceCheckState =
+                        getResourceCheckState(resource);
                       const isPartiallySelected =
-                        isResourcePartiallySelected(resource);
+                        resourceCheckState === "indeterminate";
 
                       return (
                         <div
@@ -288,7 +325,7 @@ export function RolePermissionBuilder({
                             <div className="flex items-center gap-2">
                               <Checkbox
                                 id={`${resource}-all`}
-                                checked={isFullySelected}
+                                checked={resourceCheckState}
                                 disabled={readOnly}
                                 onCheckedChange={(checked) => {
                                   if (checked) {

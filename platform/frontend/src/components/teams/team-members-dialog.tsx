@@ -80,9 +80,22 @@ export function TeamMembersDialog({
 
   const orgMembers = (activeOrg?.members ?? []) as ActiveOrganizationMember[];
   const memberUserIds = new Set(teamMembers?.map((m) => m.userId) || []);
-  const availableMembers = (membersResponse?.data ?? []).filter(
-    (member: PaginatedMember) => !memberUserIds.has(member.userId),
+  const memberOptions = (membersResponse?.data ?? []).map(
+    (member: PaginatedMember) => {
+      const isAlreadyAdded = memberUserIds.has(member.userId);
+
+      return {
+        value: member.userId,
+        label: getMemberDisplayName(member),
+        description: isAlreadyAdded
+          ? `${getMemberEmail(member) || "No email"} • Already in team`
+          : (getMemberEmail(member) ?? undefined),
+        disabled: isAlreadyAdded,
+        checked: isAlreadyAdded,
+      };
+    },
   );
+  const canAddAnyMember = memberOptions.some((member) => !member.disabled);
 
   const addMutation = useMutation({
     mutationFn: async (userId: string) => {
@@ -138,25 +151,28 @@ export function TeamMembersDialog({
       size="medium"
     >
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 space-y-4">
-        {availableMembers.length > 0 && (
-          <div className="space-y-2">
-            <Label>Add User</Label>
-            <SearchableSelect
-              value=""
-              onValueChange={handleAddMember}
-              placeholder="Select a user"
-              searchPlaceholder="Search users by name or email"
-              className="w-full"
-              onSearchQueryChange={setMemberSearch}
-              items={availableMembers.map((member) => ({
-                value: member.userId,
-                label: getMemberDisplayName(member),
-                description: getMemberEmail(member) || undefined,
-              }))}
-              emptyMessage="No matching users found."
-            />
-          </div>
-        )}
+        <div className="space-y-2">
+          <Label>Add User</Label>
+          <SearchableSelect
+            value=""
+            onValueChange={handleAddMember}
+            placeholder={
+              canAddAnyMember
+                ? "Select a user"
+                : "All listed users already added"
+            }
+            searchPlaceholder="Search users by name or email"
+            className="w-full"
+            onSearchQueryChange={setMemberSearch}
+            items={memberOptions}
+            emptyMessage="No matching users found."
+            hint={
+              canAddAnyMember
+                ? undefined
+                : "All users in the current result set are already members of this team."
+            }
+          />
+        </div>
 
         <div className="space-y-2">
           <Label>Current Members ({teamMembers?.length || 0})</Label>

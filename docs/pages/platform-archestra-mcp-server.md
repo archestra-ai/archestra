@@ -51,7 +51,7 @@ This tool takes no arguments.
 |------|-------------|--------------------------|
 | `create_agent` | Create a new agent with the specified name, optional description, labels, prompts, icon emoji, MCP server tool assignments, and sub-agent delegations. | `agent:create` |
 | `get_agent` | Get a specific agent by ID or name. | `agent:read` |
-| `list_agents` | List agents with optional filtering by name and scope. | `agent:read` |
+| `list_agents` | List agents with optional filtering by name. | `agent:read` |
 | `edit_agent` | Edit an existing agent. | `agent:update` |
 
 #### create_agent

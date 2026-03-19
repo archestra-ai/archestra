@@ -1,58 +1,40 @@
 {
   "request": {
     "method": "POST",
-    "urlPath": "/openai/v1/chat/completions",
+    "urlPath": "/v1/chat/completions",
     "headers": {
       "Authorization": {
-        "contains": "openai-allows-regular-after-archestra"
+        "matches": ".*"
       }
     }
   },
   "response": {
     "status": 200,
-    "headers": {
-      "Content-Type": "application/json"
-    },
     "jsonBody": {
-      "id": "chatcmpl-archestra-sequence-123",
+      "id": "chatcmpl-123",
       "object": "chat.completion",
-      "created": 1234567890,
-      "model": "gpt-4",
+      "created": 1677652288,
+      "model": "gpt-3.5-turbo-0613",
       "choices": [
         {
           "index": 0,
           "message": {
             "role": "assistant",
-            "content": null,
-            "refusal": null,
-            "tool_calls": [
-              {
-                "id": "call_archestra_whoami_456",
-                "type": "function",
-                "function": {
-                  "name": "archestra__whoami",
-                  "arguments": "{}"
-                }
-              },
-              {
-                "id": "call_read_file_456",
-                "type": "function",
-                "function": {
-                  "name": "read_file",
-                  "arguments": "{\"file_path\":\"/home/user/document.txt\"}"
-                }
-              }
-            ]
+            "content": "Hello! I have been updated to support MCP Apps."
           },
-          "finish_reason": "tool_calls",
-          "logprobs": null
+          "finish_reason": "stop"
         }
       ],
       "usage": {
-        "prompt_tokens": 140,
-        "completion_tokens": 25,
-        "total_tokens": 165
-      }
+        "prompt_tokens": 9,
+        "completion_tokens": 12,
+        "total_tokens": 21
+      },
+      "mcp_app_supported": true
+    },
+    "headers": {
+      "Content-Type": "application/json",
+      "X-MCP-Version": "1.0"
     }
   }
 }

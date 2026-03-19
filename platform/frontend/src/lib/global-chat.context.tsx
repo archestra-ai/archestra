@@ -384,9 +384,7 @@ function ChatSessionHook({
       // after swap_agent executes, so the old agent won't continue.
       // onFinish then sends a poke to trigger the new agent.
       if (toolCall.toolName === TOOL_SWAP_AGENT_FULL_NAME) {
-        const agentName = (
-          toolCall as unknown as { args?: Record<string, unknown> }
-        ).args?.agent_name;
+        const agentName = getSwapAgentName(toolCall);
         swapAgentPendingRef.current = makeSwapAgentPokeText(
           typeof agentName === "string" ? agentName : "another agent",
         );
@@ -542,6 +540,23 @@ const SWAP_TOOL_TYPES = new Set([
   TOOL_SWAP_TO_DEFAULT_AGENT_FULL_NAME,
   `tool-${TOOL_SWAP_TO_DEFAULT_AGENT_FULL_NAME}`,
 ]);
+
+function getSwapAgentName(toolCall: unknown): string | null {
+  if (
+    typeof toolCall !== "object" ||
+    toolCall === null ||
+    !("args" in toolCall) ||
+    typeof toolCall.args !== "object" ||
+    toolCall.args === null ||
+    !("agent_name" in toolCall.args)
+  ) {
+    return null;
+  }
+
+  return typeof toolCall.args.agent_name === "string"
+    ? toolCall.args.agent_name
+    : null;
+}
 
 function hasSwapToolError(message: UIMessage): boolean {
   return (message.parts ?? []).some((part) => {

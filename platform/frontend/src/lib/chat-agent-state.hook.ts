@@ -1,6 +1,7 @@
 import {
   type archestraApiTypes,
   SWAP_AGENT_FAILED_POKE_TEXT,
+  SWAP_AGENT_POKE_AGENT_NAME_SUFFIX,
   SWAP_AGENT_POKE_PREFIX,
   SWAP_TO_DEFAULT_AGENT_POKE_TEXT,
 } from "@shared";
@@ -67,7 +68,8 @@ function resolveSwappedAgent(params: {
 }): { id: string | null; name: string | null } {
   const { messages, agents, fallbackAgentId } = params;
 
-  for (const message of [...messages].reverse()) {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const message = messages[i];
     const swapTargetName = getSwapTargetNameFromMessage(message);
     if (swapTargetName === null) {
       continue;
@@ -117,7 +119,7 @@ function getSwapTargetNameFromMessage(message: UIMessage): string | null {
 
   const name = text
     .slice(SWAP_AGENT_POKE_PREFIX.length)
-    .split(". Please continue the conversation.")[0]
+    .split(SWAP_AGENT_POKE_AGENT_NAME_SUFFIX)[0]
     ?.trim();
 
   return name || null;

@@ -78,6 +78,25 @@ describe("resolveChatAgentState", () => {
     expect(state.promptAgentId).toBe("agent-test");
   });
 
+  test("uses the latest swap poke when multiple swap messages exist", () => {
+    const state = resolveChatAgentState({
+      conversation: makeConversation({
+        agentId: "agent-a",
+        agent: makeConversationAgent("agent-a", "Agent A"),
+      }),
+      initialAgentId: "agent-a",
+      agents: makeAgents(),
+      messages: [
+        makeUserMessage(makeSwapAgentPokeText("Agent B")),
+        makeUserMessage(makeSwapAgentPokeText("Test Agent")),
+      ],
+    });
+
+    expect(state.swappedAgentId).toBe("agent-test");
+    expect(state.swappedAgentName).toBe("Test Agent");
+    expect(state.activeAgentId).toBe("agent-test");
+  });
+
   test("falls back to the default agent after swap_to_default poke", () => {
     const state = resolveChatAgentState({
       conversation: makeConversation({

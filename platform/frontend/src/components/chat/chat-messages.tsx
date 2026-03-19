@@ -173,8 +173,7 @@ export function ChatMessages({
     return map;
   }, [agentTools, catalogItems]);
 
-  // Initialize mutation hook with conversationId (use empty string as fallback for hook rules)
-  const updateChatMessageMutation = useUpdateChatMessage(conversationId || "");
+  const updateChatMessageMutation = useUpdateChatMessage(conversationId);
 
   // Debounce resize mode change when exiting edit mode to let DOM settle
   const isEditing = editingPartKey !== null;

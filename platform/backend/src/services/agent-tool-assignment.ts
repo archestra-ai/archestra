@@ -14,14 +14,17 @@ export type AgentToolAssignmentError = {
   error: { message: string; type: string };
 };
 
+type PrefetchedMcpServer = {
+  id: string;
+  ownerId: string | null;
+  catalogId: string | null;
+};
+
 export type AgentToolAssignmentPrefetchedData = {
   existingAgentIds: Set<string>;
   toolsMap: Map<string, Tool>;
   catalogItemsMap: Map<string, InternalMcpCatalog>;
-  mcpServersBasicMap: Map<
-    string,
-    { id: string; ownerId: string | null; catalogId: string | null }
-  >;
+  mcpServersBasicMap: Map<string, PrefetchedMcpServer>;
 };
 
 export interface AgentToolAssignmentRequest {
@@ -157,6 +160,7 @@ export async function validateAssignment(
     );
     const validationError = await validateExecutionSource({
       toolId,
+      preFetchedTool: tool,
       executionSourceMcpServerId,
       preFetchedServer,
     });
@@ -232,7 +236,7 @@ function normalizeResolveAtCallTime(params: {
 export async function validateCredentialSource(params: {
   agentId: string;
   credentialSourceMcpServerId: string;
-  preFetchedServer?: { id: string; ownerId: string | null } | null;
+  preFetchedServer?: Pick<PrefetchedMcpServer, "id" | "ownerId"> | null;
 }): Promise<AgentToolAssignmentError | null> {
   const { agentId, credentialSourceMcpServerId, preFetchedServer } = params;
 
@@ -287,9 +291,15 @@ export async function validateCredentialSource(params: {
 export async function validateExecutionSource(params: {
   toolId: string;
   executionSourceMcpServerId: string;
-  preFetchedServer?: { id: string; catalogId: string | null } | null;
+  preFetchedTool?: Tool | null;
+  preFetchedServer?: Pick<PrefetchedMcpServer, "id" | "catalogId"> | null;
 }): Promise<AgentToolAssignmentError | null> {
-  const { toolId, executionSourceMcpServerId, preFetchedServer } = params;
+  const {
+    toolId,
+    executionSourceMcpServerId,
+    preFetchedTool,
+    preFetchedServer,
+  } = params;
 
   const mcpServer =
     preFetchedServer !== undefined
@@ -305,7 +315,10 @@ export async function validateExecutionSource(params: {
     };
   }
 
-  const tool = await ToolModel.findById(toolId);
+  const tool =
+    preFetchedTool !== undefined
+      ? preFetchedTool
+      : await ToolModel.findById(toolId);
   if (!tool) {
     return {
       code: "not_found",

@@ -201,7 +201,7 @@
           "fields": "",
           "values": false
         },
-        "showPercentChange": true,
+        "showPercentChange": false,
         "textMode": "auto",
         "wideLayout": true
       },
@@ -328,6 +328,7 @@
         "y": 5
       },
       "id": 610,
+      "description": "Current number of active connector sync and batch embedding tasks. This is task-level progress, not a document count.",
       "options": {
         "colorMode": "background",
         "graphMode": "area",
@@ -359,7 +360,7 @@
           "refId": "A"
         }
       ],
-      "title": "In Progress",
+      "title": "Tasks In Progress",
       "type": "stat"
     },
     {
@@ -367,7 +368,7 @@
         "type": "prometheus",
         "uid": "${metrics_datasource}"
       },
-      "description": "Total documents ingested during the selected time range across all connector syncs",
+      "description": "Documents counted when connector sync summaries are reported. This can lag behind chunk creation while syncs are still running.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -433,7 +434,7 @@
           "refId": "A"
         }
       ],
-      "title": "Documents Ingested (Finalized)",
+      "title": "Documents Ingested (Completed Syncs)",
       "transparent": true,
       "type": "stat"
     },

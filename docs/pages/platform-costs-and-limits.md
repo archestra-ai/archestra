@@ -8,8 +8,6 @@ Archestra tracks LLM usage costs, enforces usage limits, and records savings fro
 
 ## Statistics
 
-![Cost Statistics Dashboard](/docs/automated_screenshots/platform_cost_statistics.png)
-
 The statistics view is the rollup layer for LLM traffic. It aggregates usage by time range, team, profile, and model so you can answer questions like:
 
 - which teams are driving spend
@@ -24,8 +22,6 @@ Archestra stores both raw spend and savings. Savings can come from:
 - TOON compression that reduces tool-result tokens before the result is sent to the model
 
 ## Usage Limits
-
-![Usage Limits Configuration](/docs/automated_screenshots/platform_cost_limits.png)
 
 Usage limits are guardrails applied to an organization, team, or profile. They are intended to cap spend or request volume before usage grows unexpectedly.
 
@@ -61,8 +57,6 @@ Model pricing is configured on the provider model settings pages. Pricing is the
 If you use custom or self-hosted models, add pricing explicitly so cost reporting stays meaningful.
 
 ## Optimization Rules
-
-![Optimization Rules](/docs/automated_screenshots/platform_cost_optimization.png)
 
 Optimization rules reduce cost before a request is sent to an LLM. They evaluate request context and can switch the request to a lower-cost model when the rule conditions match.
 

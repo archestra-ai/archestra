@@ -2015,7 +2015,11 @@
     }
   ],
   "schemaVersion": 40,
-  "tags": [],
+  "tags": [
+    "archestra",
+    "genai",
+    "knowledge-base"
+  ],
   "templating": {
     "list": [
       {

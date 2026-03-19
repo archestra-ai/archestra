@@ -101,29 +101,43 @@ export function InlineChatError({
               <p className="text-sm text-foreground">{chatError.message}</p>
             )}
 
-            {/* Reference IDs — compact row with copy-all button */}
-            {refEntries.length > 0 && (
-              <div className="flex items-center gap-1.5 flex-wrap">
-                {refEntries.map((entry) => (
-                  <span
-                    key={entry.label}
-                    className="inline-flex items-center gap-1 rounded bg-muted/60 px-1.5 py-0.5 text-[11px] text-muted-foreground font-mono"
-                  >
-                    <span className="opacity-60">{entry.label}</span>
-                    <span>{entry.value.slice(0, 8)}</span>
-                  </span>
-                ))}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-5 w-5 p-0 text-muted-foreground hover:text-foreground"
-                  onClick={copyDebugInfo}
-                  title="Copy debug info"
+            {/* Context & reference IDs — compact row with copy button */}
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {agentName && (
+                <span className="inline-flex items-center gap-1 rounded bg-muted/60 px-1.5 py-0.5 text-[11px] text-muted-foreground font-mono">
+                  <span className="opacity-60">Agent</span>
+                  <span>{agentName}</span>
+                </span>
+              )}
+              {selectedModel && (
+                <span className="inline-flex items-center gap-1 rounded bg-muted/60 px-1.5 py-0.5 text-[11px] text-muted-foreground font-mono">
+                  <span className="opacity-60">Model</span>
+                  <span>{selectedModel}</span>
+                </span>
+              )}
+              <span className="inline-flex items-center gap-1 rounded bg-muted/60 px-1.5 py-0.5 text-[11px] text-muted-foreground font-mono">
+                <span className="opacity-60">Source</span>
+                <span>{formatModelSource(modelSource)}</span>
+              </span>
+              {refEntries.map((entry) => (
+                <span
+                  key={entry.label}
+                  className="inline-flex items-center gap-1 rounded bg-muted/60 px-1.5 py-0.5 text-[11px] text-muted-foreground font-mono"
                 >
-                  <Copy className="h-3 w-3" />
-                </Button>
-              </div>
-            )}
+                  <span className="opacity-60">{entry.label}</span>
+                  <span>{entry.value.slice(0, 8)}</span>
+                </span>
+              ))}
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-5 w-5 p-0 text-muted-foreground hover:text-foreground"
+                onClick={copyDebugInfo}
+                title="Copy debug info"
+              >
+                <Copy className="h-3 w-3" />
+              </Button>
+            </div>
 
             {/* Admin-only: collapsible error details */}
             {isAdmin && (

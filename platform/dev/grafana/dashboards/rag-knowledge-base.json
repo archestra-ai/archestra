@@ -571,7 +571,7 @@
             "uid": "${metrics_datasource}"
           },
           "editorMode": "code",
-          "expr": "rate(rag_connector_syncs_total{connector_type=~\"$connector_type\"}[$__rate_interval])",
+          "expr": "sum by (connector_type, status) (rate(rag_connector_syncs_total{connector_type=~\"$connector_type\"}[$__rate_interval]))",
           "legendFormat": "{{connector_type}} - {{status}}",
           "range": true,
           "refId": "A"
@@ -836,7 +836,7 @@
             "uid": "${metrics_datasource}"
           },
           "editorMode": "code",
-          "expr": "100 * sum(increase(rag_embedding_batches_total{status=\"error\"}[$__range])) / clamp_min(sum(increase(rag_embedding_batches_total[$__range])), 1)",
+          "expr": "(100 * sum(increase(rag_embedding_batches_total{status=\"error\"}[$__range])) / clamp_min(sum(increase(rag_embedding_batches_total[$__range])), 1)) or vector(0)",
           "legendFormat": "Embedding Error Rate",
           "range": true,
           "refId": "A"
@@ -969,7 +969,7 @@
             "uid": "${metrics_datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(rate(rag_embedding_batches_total[$__rate_interval])) by (status)",
+          "expr": "sum(increase(rag_embedding_batches_total[$__rate_interval])) by (status)",
           "legendFormat": "{{status}}",
           "range": true,
           "refId": "A"
@@ -1102,7 +1102,7 @@
             "uid": "${metrics_datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(rate(rag_embedding_documents_total[$__rate_interval])) by (status)",
+          "expr": "sum(increase(rag_embedding_documents_total[$__rate_interval])) by (status)",
           "legendFormat": "{{status}}",
           "range": true,
           "refId": "A"

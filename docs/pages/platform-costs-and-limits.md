@@ -4,58 +4,92 @@ category: LLM Proxy
 order: 2
 ---
 
-Monitor and control AI model expenses with real-time tracking, spending limits, and automatic optimizations.
+Archestra tracks LLM usage costs, enforces usage limits, and records savings from model optimization and tool-result compression. These controls work together: pricing defines cost, logs and statistics show what happened, limits stop or shape usage, and optimization reduces spend before a request reaches a model.
 
 ## Statistics
 
-![Cost Statistics Dashboard](/docs/automated_screenshots/platform_cost_statistics.png)
+The statistics view is the rollup layer for LLM traffic. It aggregates usage by time range, team, profile, and model so you can answer questions like:
 
-Track usage and costs across teams, profiles, and models with time-based filtering (hour to 12 months).
+- which teams are driving spend
+- which models are responsible for the largest share of cost
+- whether optimization rules or TOON compression are reducing spend over time
 
-**Key metrics:**
+For a fuller cost view outside the Archestra UI, use Archestra's exported [metrics](platform-observability#metrics) and the prebuilt [Grafana dashboards](platform-observability#grafana-dashboards). Those surfaces are better suited for long-term monitoring, alerting, and cross-system cost analysis.
 
-- Team costs with member/profile counts
-- Individual profile usage
-- Model breakdown by cost percentage
-- Interactive charts for trend analysis
+This page depends on model pricing being configured correctly. If a model has no pricing, usage can still be logged, but cost calculations will be incomplete.
+
+Archestra stores both raw spend and savings. Savings can come from:
+
+- optimization rules that reroute requests to lower-cost models
+- TOON compression that reduces tool-result tokens before the result is sent to the model
 
 ## Usage Limits
 
-![Usage Limits Configuration](/docs/automated_screenshots/platform_cost_limits.png)
+Usage limits are guardrails for LLM spend. Archestra supports token-cost limits scoped to either the organization or a team, and each limit targets one or more specific models.
 
-Set spending limits to prevent budget overruns:
+Use organization limits for a shared platform-wide budget. Use team limits when different groups need separate spend caps.
 
-**LLM Limits**
+Limits are evaluated from recorded model usage, so pricing configuration affects token-cost limits directly.
 
-- Apply to organization, teams, or profiles
-- Daily/monthly reset periods
-- Actions when limit reached (block, alert, fallback)
+## Limit Cleanup
 
-**Auto-cleanup**
+Limit usage is periodically reset according to the configured cleanup interval. This is an operational setting, not a retention policy. It controls how often expired or completed limit windows are cleaned up so counters stay accurate and limit storage does not grow unnecessarily.
 
-- Configure data retention (hourly to monthly)
-- Keep costs database optimized
+Use shorter intervals if you rely on tighter reset windows and want counters refreshed more aggressively.
 
 ## Model Pricing
 
-Model pricing is configured on the **Provider Settings > Models** page. Pricing determines how token costs are calculated for statistics, limits, and optimization rules.
+Model pricing is configured on the provider model settings pages. Pricing is the foundation for every cost feature in Archestra:
+
+- statistics use it to convert token counts into spend
+- token-cost limits use it to decide when a budget is reached
+- optimization reports use it to calculate savings
+- TOON compression savings are reported in dollars using the configured model price
+
+If you use custom or self-hosted models, add pricing explicitly so cost reporting stays meaningful.
 
 ## Optimization Rules
 
-![Optimization Rules](/docs/automated_screenshots/platform_cost_optimization.png)
+Optimization rules reduce cost before a request is sent to an LLM. They evaluate request context and can switch the request to a lower-cost model when the rule conditions match.
 
-Automatically switch to cheaper models based on conditions:
+Typical uses:
 
-**Rule Types:**
+- route short prompts to a cheaper model
+- use a less expensive model when tool use is not required
+- apply time-based policies for predictable traffic patterns
 
-- **Content Length** - Use cheaper models for short prompts (<500 tokens)
-- **Tool Presence** - Simpler models when no tools required
-- **Time-based** - Off-peak optimizations
+Rules are applied by priority order. This makes them useful for layered policies, where a specific exception should win over a general fallback.
 
-Rules apply by priority order with configurable target models.
+## TOON Compression
+
+TOON compression reduces the token footprint of structured tool results before they are passed to the model. Archestra keeps the original JSON for application logic, then converts the model-facing representation to TOON when compression is enabled and when the converted form is actually smaller.
+
+TOON is a compact, lossless representation of the JSON data model designed for LLM input. Its main advantage is with uniform arrays of objects, where repeated field names are declared once and row values are emitted in a table-like form. In practice, this is useful for tool outputs like:
+
+- database query results
+- lists of API resources
+- analytics rows
+- search results with repeated fields
+
+Compression is skipped when:
+
+- TOON is disabled
+- a response has no tool results
+- the TOON version would not save tokens
+
+Archestra records before/after token counts and savings when compression is applied, so those savings appear in logs and aggregate cost reporting.
+
+You can enable TOON compression at:
+
+- organization level for all traffic
+- team level when only certain teams should use it
+
+See the upstream TOON format project for the format specification and benchmarks: [toon-format/toon](https://github.com/toon-format/toon).
 
 ## Related Documentation
 
+- [Dual LLM](platform-dual-llm)
+- [Policy Configuration](platform-built-in-agents-policy-config)
 - [Profiles Configuration](platform-profiles)
 - [Observability](platform-observability)
 - [Deployment](platform-deployment)

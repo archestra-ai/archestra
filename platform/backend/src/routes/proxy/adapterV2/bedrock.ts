@@ -3,6 +3,11 @@ import { EventStreamCodec } from "@smithy/eventstream-codec";
 import { fromUtf8, toUtf8 } from "@smithy/util-utf8";
 import { encode as toonEncode } from "@toon-format/toon";
 import { BedrockClient } from "@/clients/bedrock-client";
+import {
+  getBedrockCredentialProvider,
+  getBedrockRegion,
+  isBedrockIamAuthEnabled,
+} from "@/clients/bedrock-credentials";
 import config from "@/config";
 import logger from "@/logging";
 import { ModelModel } from "@/models";
@@ -1295,24 +1300,26 @@ export const bedrockAdapterFactory: LLMProvider<
       "[BedrockAdapter] createClient called",
     );
     const baseUrl = config.llm.bedrock.baseUrl;
+    const region = getBedrockRegion(baseUrl);
 
-    // Extract region from baseUrl (e.g., https://bedrock-runtime.us-east-1.amazonaws.com)
-    // or use a default region
-    const regionMatch = baseUrl.match(/bedrock-runtime\.([a-z0-9-]+)\./);
-    const region = regionMatch?.[1] || "us-east-1";
-
-    logger.info({ region }, "[BedrockAdapter] region extracted from baseUrl");
+    logger.info({ region }, "[BedrockAdapter] region");
     logger.info({ endpoint: baseUrl }, "[BedrockAdapter] baseUrl");
     logger.info({ hasApiKey: !!apiKey }, "[BedrockAdapter] apiKey");
 
-    // Create fetch-based client with Bearer token auth when apiKey is provided
-    const client = new BedrockClient({
+    if (!apiKey && isBedrockIamAuthEnabled()) {
+      logger.info("[BedrockAdapter] using IAM credential provider");
+      return new BedrockClient({
+        baseUrl,
+        region,
+        credentialProvider: getBedrockCredentialProvider(),
+      });
+    }
+
+    return new BedrockClient({
       baseUrl,
       region,
       apiKey,
     });
-
-    return client;
   },
 
   async execute(

@@ -3,6 +3,7 @@ import { RouteId, SupportedProvidersSchema } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { getEmailProviderInfo } from "@/agents/incoming-email";
+import { isBedrockIamAuthEnabled } from "@/clients/bedrock-credentials";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
 import config from "@/config";
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
@@ -29,6 +30,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
               orchestratorK8sRuntime: z.boolean(),
               byosEnabled: z.boolean(),
               byosVaultKvVersion: z.enum(["1", "2"]).nullable(),
+              bedrockIamAuthEnabled: z.boolean(),
               geminiVertexAiEnabled: z.boolean(),
               globalToolPolicy: z.enum(["permissive", "restrictive"]),
               incomingEmail: z.object({
@@ -67,6 +69,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
           orchestratorK8sRuntime: McpServerRuntimeManager.isEnabled,
           byosEnabled: isByosEnabled(),
           byosVaultKvVersion: getByosVaultKvVersion(),
+          bedrockIamAuthEnabled: isBedrockIamAuthEnabled(),
           geminiVertexAiEnabled: isVertexAiEnabled(),
           globalToolPolicy,
           incomingEmail: getEmailProviderInfo(),

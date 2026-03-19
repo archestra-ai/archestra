@@ -41,6 +41,7 @@ export function CreateChatApiKeyDialog({
   const createMutation = useCreateChatApiKey();
   const { data: existingKeys = [] } = useChatApiKeys({ enabled: open });
   const byosEnabled = useFeature("byosEnabled");
+  const bedrockIamAuthEnabled = useFeature("bedrockIamAuthEnabled");
   const geminiVertexAiEnabled = useFeature("geminiVertexAiEnabled");
 
   const form = useForm<ChatApiKeyFormValues>({
@@ -104,6 +105,7 @@ export function CreateChatApiKeyDialog({
             form={form}
             existingKeys={existingKeys}
             isPending={createMutation.isPending}
+            bedrockIamAuthEnabled={bedrockIamAuthEnabled}
             geminiVertexAiEnabled={geminiVertexAiEnabled}
           />
         </DialogBody>

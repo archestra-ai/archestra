@@ -1,4 +1,5 @@
 import type { SupportedProvider } from "@shared";
+import { isBedrockIamAuthEnabled } from "@/clients/bedrock-credentials";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
 import { modelsDevClient } from "@/clients/models-dev-client";
 import logger from "@/logging";
@@ -20,11 +21,8 @@ interface KeylessProviderConfig {
 /**
  * Manages system API keys for truly keyless providers.
  *
- * Currently only Vertex AI qualifies as keyless because it uses GCP's
- * Application Default Credentials (ADC) instead of API keys.
- *
- * Other providers (vLLM, Ollama, Bedrock) may have optional authentication
- * but should use the normal API key flow through the UI.
+ * Currently Vertex AI and Bedrock (with IAM auth) qualify as keyless because
+ * they use cloud provider credentials (ADC / IRSA) instead of API keys.
  *
  * System keys are auto-created when a keyless provider is enabled via environment config,
  * and auto-deleted when the provider is disabled.
@@ -32,20 +30,29 @@ interface KeylessProviderConfig {
 class SystemKeyManager {
   /**
    * Registry of keyless providers that need system API keys.
-   * Only Vertex AI is truly keyless (uses ADC).
    */
   private readonly keylessProviders: KeylessProviderConfig[] = [
     {
       provider: "gemini",
       name: "Vertex AI",
       isEnabled: () => isVertexAiEnabled(),
-      // Vertex AI uses ADC, not API keys - we'll use a custom fetch via dynamic import
       customFetch: async () => {
-        // Dynamic import to avoid circular dependency
         const { fetchGeminiModelsViaVertexAi } = await import(
           "@/routes/chat/routes.models"
         );
         const models = await fetchGeminiModelsViaVertexAi();
+        return models.map((m) => ({ id: m.id, displayName: m.displayName }));
+      },
+    },
+    {
+      provider: "bedrock",
+      name: "AWS IAM",
+      isEnabled: () => isBedrockIamAuthEnabled(),
+      customFetch: async () => {
+        const { fetchBedrockModelsViaIam } = await import(
+          "@/routes/chat/routes.models"
+        );
+        const models = await fetchBedrockModelsViaIam();
         return models.map((m) => ({ id: m.id, displayName: m.displayName }));
       },
     },

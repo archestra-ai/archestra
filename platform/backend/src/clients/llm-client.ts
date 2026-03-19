@@ -20,6 +20,11 @@ import {
   USER_ID_HEADER,
 } from "@shared";
 import type { streamText } from "ai";
+import {
+  getBedrockCredentialProvider,
+  getBedrockRegion,
+  isBedrockIamAuthEnabled,
+} from "@/clients/bedrock-credentials";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
 import config from "@/config";
 import logger from "@/logging";
@@ -344,16 +349,32 @@ export async function createLLMModelForAgent(params: {
 
   // Check if Gemini with Vertex AI (doesn't require API key)
   const isGeminiWithVertexAi = provider === "gemini" && isVertexAiEnabled();
+  // Check if Bedrock with IAM auth (doesn't require API key)
+  const isBedrockWithIamAuth =
+    provider === "bedrock" && isBedrockIamAuthEnabled();
   // vLLM and Ollama typically don't require API keys
   const isVllm = provider === "vllm";
   const isOllama = provider === "ollama";
 
   logger.info(
-    { apiKeySource, provider, isGeminiWithVertexAi, isVllm, isOllama },
+    {
+      apiKeySource,
+      provider,
+      isGeminiWithVertexAi,
+      isBedrockWithIamAuth,
+      isVllm,
+      isOllama,
+    },
     "Using LLM provider API key",
   );
 
-  if (!apiKey && !isGeminiWithVertexAi && !isVllm && !isOllama) {
+  if (
+    !apiKey &&
+    !isGeminiWithVertexAi &&
+    !isBedrockWithIamAuth &&
+    !isVllm &&
+    !isOllama
+  ) {
     throw new ApiError(
       400,
       "LLM Provider API key not configured. Please configure it in Provider Settings.",
@@ -602,10 +623,18 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
 
   bedrock: {
     createModel: ({ apiKey, modelName, baseURL, headers, fetch }) => {
-      // Extract region from Bedrock base URL if present; falls back to us-east-1
-      const regionMatch = baseURL?.match(/bedrock-runtime\.([a-z0-9-]+)\./);
+      const region = getBedrockRegion(baseURL);
 
-      const region = regionMatch?.[1] || "us-east-1";
+      if (!apiKey && isBedrockIamAuthEnabled()) {
+        return createAmazonBedrock({
+          region,
+          baseURL,
+          credentialProvider: getBedrockCredentialProvider(),
+          headers,
+          fetch,
+        })(modelName);
+      }
+
       return createAmazonBedrock({
         apiKey,
         region,
@@ -619,8 +648,9 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
       })(modelName);
     },
     defaultBaseUrl: config.llm.bedrock.baseUrl,
-    apiKeyRequiredMessage:
-      "Amazon Bedrock API key is required. Please configure ARCHESTRA_CHAT_BEDROCK_API_KEY.",
+    apiKeyRequiredMessage: isBedrockIamAuthEnabled()
+      ? undefined
+      : "Amazon Bedrock API key is required. Please configure ARCHESTRA_CHAT_BEDROCK_API_KEY.",
   },
 };
 

@@ -20288,6 +20288,7 @@ export type GetConfigResponses = {
             orchestratorK8sRuntime: boolean;
             byosEnabled: boolean;
             byosVaultKvVersion: '1' | '2';
+            bedrockIamAuthEnabled: boolean;
             geminiVertexAiEnabled: boolean;
             globalToolPolicy: 'permissive' | 'restrictive';
             incomingEmail: {

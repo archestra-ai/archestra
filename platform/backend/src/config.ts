@@ -591,6 +591,10 @@ const config = {
       /** Prefix for cross-region inference profile models (e.g., "us." or "eu.") */
       inferenceProfilePrefix:
         process.env.ARCHESTRA_BEDROCK_INFERENCE_PROFILE_PREFIX || "",
+      /** Enable AWS IAM authentication (IRSA, env vars, instance profile) instead of API key */
+      iamAuthEnabled: process.env.ARCHESTRA_BEDROCK_IAM_AUTH_ENABLED === "true",
+      /** Explicit AWS region override; falls back to extracting from base URL */
+      region: process.env.ARCHESTRA_BEDROCK_REGION || "",
     },
     minimax: {
       baseUrl:

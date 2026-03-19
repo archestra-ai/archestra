@@ -6,8 +6,14 @@ import {
   type SupportedProvider,
   SupportedProvidersSchema,
 } from "@shared";
+import { AwsV4Signer } from "aws4fetch";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import {
+  getBedrockCredentialProvider,
+  getBedrockRegion,
+  isBedrockIamAuthEnabled,
+} from "@/clients/bedrock-credentials";
 import {
   createGoogleGenAIClient,
   isVertexAiEnabled,
@@ -820,6 +826,103 @@ export async function fetchBedrockModels(
 }
 
 /**
+ * Fetch models from AWS Bedrock API via IAM credentials (IRSA, env vars, instance profile).
+ * Uses SigV4 signing for authentication instead of API keys.
+ * This is the Bedrock equivalent of fetchGeminiModelsViaVertexAi.
+ */
+export async function fetchBedrockModelsViaIam(): Promise<ModelInfo[]> {
+  const baseUrl = config.llm.bedrock.baseUrl;
+  if (!baseUrl) {
+    logger.warn("Bedrock base URL not configured");
+    return [];
+  }
+
+  const region = getBedrockRegion(baseUrl);
+  const url = `${baseUrl.replace("-runtime", "")}/foundation-models?byOutputModality=TEXT&byInputModality=TEXT`;
+
+  const creds = await getBedrockCredentialProvider()();
+
+  const signer = new AwsV4Signer({
+    url,
+    method: "GET",
+    region,
+    accessKeyId: creds.accessKeyId,
+    secretAccessKey: creds.secretAccessKey,
+    sessionToken: creds.sessionToken,
+    service: "bedrock",
+  });
+
+  const signed = await signer.sign();
+  const response = await fetch(signed.url, { headers: signed.headers });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    logger.error(
+      { status: response.status, error: errorText },
+      "Failed to fetch Bedrock models via IAM",
+    );
+    throw new Error(
+      `Failed to fetch Bedrock models via IAM: ${response.status}`,
+    );
+  }
+
+  const data = (await response.json()) as {
+    modelSummaries?: Array<{
+      modelId?: string;
+      modelName?: string;
+      providerName?: string;
+      inferenceTypesSupported?: string[];
+      inputModalities?: string[];
+    }>;
+  };
+
+  if (!data.modelSummaries) {
+    logger.warn("No models returned from Bedrock ListFoundationModels via IAM");
+    return [];
+  }
+
+  const inferenceProfilePrefix = config.llm.bedrock.inferenceProfilePrefix;
+
+  const models = data.modelSummaries
+    .filter((model) => {
+      if (!model.inputModalities?.includes("TEXT")) return false;
+      const supportsOnDemand =
+        model.inferenceTypesSupported?.includes("ON_DEMAND");
+      const supportsInferenceProfile =
+        model.inferenceTypesSupported?.includes("INFERENCE_PROFILE");
+      return (
+        supportsOnDemand || (supportsInferenceProfile && inferenceProfilePrefix)
+      );
+    })
+    .map((model) => {
+      const providerName = model.providerName || "Unknown";
+      const modelName = model.modelName || model.modelId || "Unknown Model";
+      const displayName = `${providerName} ${modelName}`;
+      const isInferenceProfile =
+        model.inferenceTypesSupported?.includes("INFERENCE_PROFILE");
+      const prefix = inferenceProfilePrefix.endsWith(".")
+        ? inferenceProfilePrefix
+        : `${inferenceProfilePrefix}.`;
+      const modelId =
+        isInferenceProfile && inferenceProfilePrefix
+          ? `${prefix}${model.modelId}`
+          : model.modelId;
+      return {
+        id: modelId || "",
+        displayName,
+        provider: "bedrock" as const,
+      };
+    });
+
+  logger.info(
+    { modelCount: models.length },
+    "[fetchBedrockModelsViaIam] fetched models",
+  );
+
+  return models;
+}
+
+/**
  * Fetch models from OpenRouter API (OpenAI-compatible)
  */
 async function fetchOpenrouterModels(
@@ -1009,6 +1112,9 @@ export async function fetchModelsForProvider({
   // Gemini with Vertex AI uses ADC instead of API keys
   const vertexAiEnabled = provider === "gemini" && isVertexAiEnabled();
 
+  // Bedrock with IAM auth uses AWS credential chain instead of API keys
+  const bedrockIamEnabled = provider === "bedrock" && isBedrockIamAuthEnabled();
+
   // Some providers don't require API keys but need base URL configured
   const isKeylessProviderEnabled =
     (provider === "vllm" && config.llm.vllm.enabled) ||
@@ -1020,6 +1126,7 @@ export async function fetchModelsForProvider({
   if (
     !apiKey &&
     !vertexAiEnabled &&
+    !bedrockIamEnabled &&
     !isKeylessProviderEnabled &&
     !isBedrockEnabled
   ) {
@@ -1036,6 +1143,9 @@ export async function fetchModelsForProvider({
     if (provider === "gemini" && vertexAiEnabled) {
       // Vertex AI uses ADC for authentication, not API keys
       models = await fetchGeminiModelsViaVertexAi();
+    } else if (provider === "bedrock" && bedrockIamEnabled) {
+      // Bedrock with IAM uses AWS credential chain, not API keys
+      models = await fetchBedrockModelsViaIam();
     } else {
       // All other providers use the standard model fetcher with an API key
       // (keyless providers like vLLM/Ollama/MiniMax/Perplexity pass "EMPTY" as a placeholder)

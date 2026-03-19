@@ -691,6 +691,15 @@ These environment variables set the default base URL for each LLM provider. Per-
   - Set to `0` to create virtual keys that never expire by default
   - Users can override this per-key when creating virtual keys via the UI
 
+- **`ARCHESTRA_BEDROCK_IAM_AUTH_ENABLED`** - Enable AWS IAM authentication for Bedrock.
+  - Default: `false`
+  - Set to `true` to use the AWS credential chain (IRSA, instance profiles, env vars) instead of API keys
+  - See: [Bedrock IAM setup guide](/docs/platform-supported-llm-providers#iam-authentication-setup-irsa)
+
+- **`ARCHESTRA_BEDROCK_REGION`** - Explicit AWS region for Bedrock.
+  - Optional: Falls back to extracting from `ARCHESTRA_BEDROCK_BASE_URL`
+  - Example: `us-east-1`
+
 - **`ARCHESTRA_GEMINI_VERTEX_AI_ENABLED`** - Enable Vertex AI mode for Gemini.
   - Default: `false`
   - Set to `true` to use Vertex AI instead of the Google AI Studio API

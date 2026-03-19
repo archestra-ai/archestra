@@ -98,6 +98,7 @@ function AddApiKeyDialog({
 }) {
   const createMutation = useCreateChatApiKey();
   const byosEnabled = useFeature("byosEnabled");
+  const bedrockIamAuthEnabled = useFeature("bedrockIamAuthEnabled");
   const geminiVertexAiEnabled = useFeature("geminiVertexAiEnabled");
 
   const defaults = forEmbedding
@@ -186,6 +187,7 @@ function AddApiKeyDialog({
             showConsoleLink={false}
             form={form}
             isPending={createMutation.isPending}
+            bedrockIamAuthEnabled={bedrockIamAuthEnabled}
             geminiVertexAiEnabled={geminiVertexAiEnabled}
             allowedProviders={forEmbedding ? ["openai", "ollama"] : undefined}
             hideScopeAndPrimary

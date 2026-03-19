@@ -22,6 +22,12 @@ interface BedrockClientConfig {
   secretAccessKey?: string;
   /** AWS session token for SigV4 auth (optional) */
   sessionToken?: string;
+  /** Dynamic credential provider for SigV4 auth (e.g., IRSA, instance profile) */
+  credentialProvider?: () => Promise<{
+    accessKeyId: string;
+    secretAccessKey: string;
+    sessionToken?: string;
+  }>;
 }
 
 // Use SDK stream event type with raw bytes for passthrough
@@ -165,35 +171,19 @@ export class BedrockClient {
       // Bearer token auth
       headers.set("Authorization", `Bearer ${this.config.apiKey}`);
       logger.debug("[BedrockClient] using Bearer token auth");
+    } else if (this.config.credentialProvider) {
+      // Dynamic SigV4 auth via credential provider (IRSA, instance profile, etc.)
+      logger.debug("[BedrockClient] using SigV4 auth via credential provider");
+      const creds = await this.config.credentialProvider();
+      await this.signWithSigV4(url, init, headers, creds);
     } else if (this.config.accessKeyId && this.config.secretAccessKey) {
-      // SigV4 auth using aws4fetch
+      // Static SigV4 auth using aws4fetch
       logger.debug("[BedrockClient] using SigV4 auth");
-
-      const bodyString =
-        typeof init.body === "string"
-          ? init.body
-          : init.body instanceof Uint8Array
-            ? new TextDecoder().decode(init.body)
-            : JSON.stringify(init.body);
-
-      const signer = new AwsV4Signer({
-        url,
-        method: init.method ?? "POST",
-        headers: Array.from(headers.entries()),
-        body: bodyString,
-        region: this.config.region,
+      await this.signWithSigV4(url, init, headers, {
         accessKeyId: this.config.accessKeyId,
         secretAccessKey: this.config.secretAccessKey,
         sessionToken: this.config.sessionToken,
-        service: "bedrock",
       });
-
-      const signingResult = await signer.sign();
-
-      // Add signed headers to request
-      for (const [key, value] of signingResult.headers.entries()) {
-        headers.set(key, value);
-      }
     } else {
       logger.warn("[BedrockClient] no authentication configured");
     }
@@ -207,6 +197,42 @@ export class BedrockClient {
   /**
    * Create an async iterable from a readable stream of event stream bytes
    */
+  private async signWithSigV4(
+    url: string,
+    init: RequestInit,
+    headers: Headers,
+    creds: {
+      accessKeyId: string;
+      secretAccessKey: string;
+      sessionToken?: string;
+    },
+  ): Promise<void> {
+    const bodyString =
+      typeof init.body === "string"
+        ? init.body
+        : init.body instanceof Uint8Array
+          ? new TextDecoder().decode(init.body)
+          : JSON.stringify(init.body);
+
+    const signer = new AwsV4Signer({
+      url,
+      method: init.method ?? "POST",
+      headers: Array.from(headers.entries()),
+      body: bodyString,
+      region: this.config.region,
+      accessKeyId: creds.accessKeyId,
+      secretAccessKey: creds.secretAccessKey,
+      sessionToken: creds.sessionToken,
+      service: "bedrock",
+    });
+
+    const signingResult = await signer.sign();
+
+    for (const [key, value] of signingResult.headers.entries()) {
+      headers.set(key, value);
+    }
+  }
+
   private createEventStreamIterable(
     body: ReadableStream<Uint8Array>,
   ): AsyncIterable<BedrockStreamEventWithRaw> {

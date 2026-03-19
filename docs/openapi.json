@@ -72718,6 +72718,9 @@
                             "2"
                           ]
                         },
+                        "bedrockIamAuthEnabled": {
+                          "type": "boolean"
+                        },
                         "geminiVertexAiEnabled": {
                           "type": "boolean"
                         },
@@ -72772,6 +72775,7 @@
                         "orchestratorK8sRuntime",
                         "byosEnabled",
                         "byosVaultKvVersion",
+                        "bedrockIamAuthEnabled",
                         "geminiVertexAiEnabled",
                         "globalToolPolicy",
                         "incomingEmail",

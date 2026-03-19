@@ -18,8 +18,9 @@ export function JsonCodeBlock({
   const formattedJson = JSON.stringify(value, null, 2);
 
   return (
-    <div className={`overflow-auto rounded-lg ${maxHeightClassName}`}>
+    <div className={`mt-2 overflow-hidden rounded-lg ${maxHeightClassName}`}>
       <CodeBlock
+        className="rounded-lg"
         code={formattedJson}
         language="json"
         contentStyle={{

@@ -447,7 +447,10 @@ const startMetricsServer = async () => {
 
   await registerStandaloneMetricsEndpoint({
     fastify: metricsServer,
-    enableDefaultMetrics: false,
+    // In local dev, web and worker can run in the same process. Default
+    // Prometheus process/node metrics must only be registered once per process.
+    // In split deployments, the worker-only process registers its own defaults.
+    enableDefaultMetrics: !shouldRunWorker,
   });
 
   // Start metrics server on dedicated port

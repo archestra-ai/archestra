@@ -52,7 +52,7 @@ const PolicyConfigAgentConfigSchema = z.object({
 
 const DualLlmMainAgentConfigSchema = z.object({
   name: z.literal(BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN),
-  maxRounds: z.int().min(1).max(20),
+  maxRounds: z.number().int().min(1).max(20),
 });
 
 const DualLlmQuarantineAgentConfigSchema = z.object({

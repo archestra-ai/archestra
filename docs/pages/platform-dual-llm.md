@@ -46,8 +46,6 @@ Both built-in agents are edited from the standard agent dialog:
 - **Dual LLM Main Agent**: system prompt, model selection, and max rounds
 - **Dual LLM Quarantine Agent**: system prompt and model selection
 
-These settings live on built-in agents in the regular `agents` framework. There is no separate Dual LLM settings page or provider-specific client configuration.
-
 ## What Gets Stored
 
 When Dual LLM runs, Archestra stores the analysis transcript on the interaction record:

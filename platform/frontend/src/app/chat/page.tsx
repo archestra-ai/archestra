@@ -1669,53 +1669,51 @@ export default function ChatPage() {
               {/* Chat content - hidden on mobile when panels are open */}
               <div
                 className={cn(
-                  "flex-1 overflow-y-auto relative",
+                  "flex-1 min-h-0 relative",
                   (isArtifactOpen ||
                     (isBrowserPanelOpen && !isPlaywrightSetupVisible)) &&
                     "hidden md:block",
                 )}
               >
-                <div className="max-w-4xl mx-auto w-full">
-                  <ChatMessages
-                    conversationId={conversationId}
-                    agentId={currentProfileId || initialAgentId || undefined}
-                    messages={messages}
-                    status={status}
-                    optimisticToolCalls={optimisticToolCalls}
-                    isLoadingConversation={isLoadingConversation}
-                    onMessagesUpdate={setMessages}
-                    onUserMessageEdit={(
-                      editedMessage,
-                      updatedMessages,
-                      editedPartIndex,
-                    ) => {
-                      if (setMessages && sendMessage) {
-                        userMessageJustEdited.current = true;
-                        const messagesWithoutEditedMessage =
-                          updatedMessages.slice(0, -1);
-                        setMessages(messagesWithoutEditedMessage);
-                        const editedPart =
-                          editedMessage.parts?.[editedPartIndex];
-                        const editedText =
-                          editedPart?.type === "text" ? editedPart.text : "";
-                        if (editedText?.trim()) {
-                          sendMessage({
-                            role: "user",
-                            parts: [{ type: "text", text: editedText }],
-                          });
-                        }
+                <ChatMessages
+                  conversationId={conversationId}
+                  agentId={currentProfileId || initialAgentId || undefined}
+                  messages={messages}
+                  status={status}
+                  optimisticToolCalls={optimisticToolCalls}
+                  isLoadingConversation={isLoadingConversation}
+                  onMessagesUpdate={setMessages}
+                  onUserMessageEdit={(
+                    editedMessage,
+                    updatedMessages,
+                    editedPartIndex,
+                  ) => {
+                    if (setMessages && sendMessage) {
+                      userMessageJustEdited.current = true;
+                      const messagesWithoutEditedMessage =
+                        updatedMessages.slice(0, -1);
+                      setMessages(messagesWithoutEditedMessage);
+                      const editedPart =
+                        editedMessage.parts?.[editedPartIndex];
+                      const editedText =
+                        editedPart?.type === "text" ? editedPart.text : "";
+                      if (editedText?.trim()) {
+                        sendMessage({
+                          role: "user",
+                          parts: [{ type: "text", text: editedText }],
+                        });
                       }
-                    }}
-                    error={error}
-                    onToolApprovalResponse={
-                      addToolApprovalResponse
-                        ? ({ id, approved, reason }) => {
-                            addToolApprovalResponse({ id, approved, reason });
-                          }
-                        : undefined
                     }
-                  />
-                </div>
+                  }}
+                  error={error}
+                  onToolApprovalResponse={
+                    addToolApprovalResponse
+                      ? ({ id, approved, reason }) => {
+                          addToolApprovalResponse({ id, approved, reason });
+                        }
+                      : undefined
+                  }
+                />
               </div>
 
               {isAgentDeleted ? (

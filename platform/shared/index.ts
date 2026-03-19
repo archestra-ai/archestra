@@ -32,5 +32,6 @@ export * from "./themes/theme-config";
 export * from "./themes/theme-utils";
 export * from "./types";
 export * from "./utils";
+export * from "./vault";
 export * from "./websocket";
 export * from "./zod-schemas";

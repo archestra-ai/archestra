@@ -7,6 +7,15 @@ import { TOOL_SWAP_TO_DEFAULT_AGENT_FULL_NAME } from "./archestra-mcp-server";
  */
 export const AGENT_TOOL_PREFIX = "agent__";
 
+/** Maximum number of suggested prompts per agent */
+export const MAX_SUGGESTED_PROMPTS = 10;
+
+/** Maximum character length for a suggested prompt's summary title (button label) */
+export const MAX_SUGGESTED_PROMPT_TITLE_LENGTH = 50;
+
+/** Maximum character length for a suggested prompt's full prompt text */
+export const MAX_SUGGESTED_PROMPT_TEXT_LENGTH = 5000;
+
 /**
  * Check if a tool name is an agent delegation tool (agent__<name>).
  */

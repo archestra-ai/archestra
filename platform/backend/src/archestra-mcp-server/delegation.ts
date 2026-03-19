@@ -6,11 +6,7 @@ import { userHasPermission } from "@/auth/utils";
 import logger from "@/logging";
 import { AgentTeamModel, ToolModel } from "@/models";
 import { ProviderError } from "@/routes/chat/errors";
-import {
-  errorResult,
-  isAbortLikeError,
-  successResult,
-} from "./helpers";
+import { errorResult, isAbortLikeError, successResult } from "./helpers";
 import type { ArchestraContext } from "./types";
 
 export const delegationToolArgsSchema = z.object({

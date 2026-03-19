@@ -389,8 +389,7 @@ const registry = defineArchestraTools([
     },
   }),
   defineArchestraTool({
-    shortName:
-      TOOL_UNASSIGN_KNOWLEDGE_CONNECTOR_FROM_KNOWLEDGE_BASE_SHORT_NAME,
+    shortName: TOOL_UNASSIGN_KNOWLEDGE_CONNECTOR_FROM_KNOWLEDGE_BASE_SHORT_NAME,
     title: "Unassign Knowledge Connector from Knowledge Base",
     description: "Remove a knowledge connector from a knowledge base.",
     schema: ConnectorKnowledgeBaseAssignmentSchema,

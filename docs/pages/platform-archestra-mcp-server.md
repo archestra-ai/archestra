@@ -166,7 +166,7 @@ Required RBAC permission: `agent:update`
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `id` | `string` | Yes | The ID of the agent to edit. Use archestra__get_agent or archestra__list_agents to look it up by name. |
+| `id` | `string` | Yes | The ID of the agent to edit. Use get_agent or list_agents to look it up by name. |
 | `subAgentIds` | `string[]` | No | Agent IDs to add as delegation targets. |
 | `toolAssignments` | `object[]` | No | Explicit tool assignments to add or update on the agent. |
 | `toolAssignments[].toolId` | `string` | Yes | The ID of the tool to assign to the agent. |

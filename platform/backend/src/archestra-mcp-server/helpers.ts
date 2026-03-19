@@ -3,7 +3,6 @@ import {
   type ArchestraToolFullName,
   type ArchestraToolShortName,
   getArchestraToolFullName,
-  slugify,
 } from "@shared";
 import { ZodError, type ZodType, z } from "zod";
 import logger from "@/logging";

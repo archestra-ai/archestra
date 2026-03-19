@@ -42,3 +42,12 @@ export const BROWSER_PREVIEW_HEADER_HEIGHT = 77;
  * Using about:blank ensures no automatic navigation happens until user requests it.
  */
 export const DEFAULT_BROWSER_PREVIEW_URL = "about:blank";
+
+/**
+ * Check if a tool name is a Playwright/browser MCP tool.
+ * Matches tools from Playwright MCP server (e.g., microsoft__playwright-mcp__browser_navigate)
+ * and tools with browser_ prefix.
+ */
+export function isBrowserMcpTool(toolName: string): boolean {
+  return toolName.includes("playwright") || toolName.startsWith("browser_");
+}

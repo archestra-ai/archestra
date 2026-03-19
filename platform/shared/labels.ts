@@ -1,12 +1,3 @@
-/** Maximum number of suggested prompts per agent */
-export const MAX_SUGGESTED_PROMPTS = 10;
-
-/** Maximum character length for a suggested prompt's summary title (button label) */
-export const MAX_SUGGESTED_PROMPT_TITLE_LENGTH = 50;
-
-/** Maximum character length for a suggested prompt's full prompt text */
-export const MAX_SUGGESTED_PROMPT_TEXT_LENGTH = 5000;
-
 /**
  * Delimiter used to separate multiple values within a single label key
  * in the labels query parameter. Pipe is used instead of comma because

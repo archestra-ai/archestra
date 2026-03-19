@@ -25,7 +25,7 @@ Archestra stores both raw spend and savings. Savings can come from:
 
 ## Usage Limits
 
-Usage limits are guardrails for LLM spend. The current product UI supports token-cost limits only, scoped to either the organization or a team, and each limit targets one or more specific models.
+Usage limits are guardrails for LLM spend. Archestra supports token-cost limits scoped to either the organization or a team, and each limit targets one or more specific models.
 
 Use organization limits for a shared platform-wide budget. Use team limits when different groups need separate spend caps.
 

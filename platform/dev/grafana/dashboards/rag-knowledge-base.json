@@ -160,6 +160,7 @@
             "mode": "thresholds"
           },
           "mappings": [],
+          "unit": "short",
           "thresholds": {
             "mode": "absolute",
             "steps": [

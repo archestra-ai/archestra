@@ -67,6 +67,7 @@ import {
 import { estimateMessagesSize } from "@/utils/message-size";
 import {
   parseMaxInputTokens,
+  shouldProbeTextStreamForContextTrimRetry,
   trimMessagesToTokenLimit,
 } from "./context-trimming";
 import {
@@ -445,48 +446,50 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 // Try reading the first text chunk to detect immediate provider errors.
                 // Context-length errors fire before any tokens, so this catches them
                 // without blocking normal streaming (first token arrives in ~100-500ms).
-                try {
-                  const reader = result.textStream[Symbol.asyncIterator]();
-                  await reader.next();
-                } catch (error) {
-                  const maxTokens = parseMaxInputTokens(error);
-                  if (maxTokens !== null) {
-                    const trimmed = trimMessagesToTokenLimit(
-                      modelMessages,
-                      maxTokens,
-                    );
-                    logger.info(
-                      {
+                if (shouldProbeTextStreamForContextTrimRetry(provider)) {
+                  try {
+                    const reader = result.textStream[Symbol.asyncIterator]();
+                    await reader.next();
+                  } catch (error) {
+                    const maxTokens = parseMaxInputTokens(error);
+                    if (maxTokens !== null) {
+                      const trimmed = trimMessagesToTokenLimit(
+                        modelMessages,
                         maxTokens,
-                        originalMessages: modelMessages.length,
-                        trimmedMessages: trimmed.length,
-                        conversationId,
-                      },
-                      "[ContextTrimming] retrying with trimmed messages",
-                    );
-                    result = streamText({
-                      ...streamTextConfig,
-                      messages: trimmed,
-                    });
-                  } else {
-                    // Save messages before throwing — this error path runs before
-                    // writer.merge(), so onError/onFinish callbacks won't fire.
-                    if (!messagesPersisted && conversationId) {
-                      messagesPersisted = true;
-                      try {
-                        await persistNewMessages(
+                      );
+                      logger.info(
+                        {
+                          maxTokens,
+                          originalMessages: modelMessages.length,
+                          trimmedMessages: trimmed.length,
                           conversationId,
-                          messages,
-                          "onExecuteError",
-                        );
-                      } catch (persistError) {
-                        logger.error(
-                          { persistError, conversationId },
-                          "Failed to persist messages during execute error",
-                        );
+                        },
+                        "[ContextTrimming] retrying with trimmed messages",
+                      );
+                      result = streamText({
+                        ...streamTextConfig,
+                        messages: trimmed,
+                      });
+                    } else {
+                      // Save messages before throwing — this error path runs before
+                      // writer.merge(), so onError/onFinish callbacks won't fire.
+                      if (!messagesPersisted && conversationId) {
+                        messagesPersisted = true;
+                        try {
+                          await persistNewMessages(
+                            conversationId,
+                            messages,
+                            "onExecuteError",
+                          );
+                        } catch (persistError) {
+                          logger.error(
+                            { persistError, conversationId },
+                            "Failed to persist messages during execute error",
+                          );
+                        }
                       }
+                      throw error;
                     }
-                    throw error;
                   }
                 }
 

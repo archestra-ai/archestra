@@ -179,4 +179,58 @@ describe("DualLlmSubagent", () => {
       result: "Safe summary",
     });
   });
+
+  test("does not treat incidental DONE text as a terminal signal", async () => {
+    const mainAgent = makeBuiltInAgent({
+      name: BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN,
+      systemPrompt: "main prompt",
+      maxRounds: 2,
+    });
+    const quarantineAgent = makeBuiltInAgent({
+      name: BUILT_IN_AGENT_IDS.DUAL_LLM_QUARANTINE,
+      systemPrompt: "quarantine prompt",
+    });
+
+    vi.spyOn(AgentModel, "getBuiltInAgent").mockImplementation(
+      async (name) => {
+        if (name === BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN) {
+          return mainAgent;
+        }
+        if (name === BUILT_IN_AGENT_IDS.DUAL_LLM_QUARANTINE) {
+          return quarantineAgent;
+        }
+        return null;
+      },
+    );
+
+    vi.mocked(generateText)
+      .mockResolvedValueOnce({
+        text: "The task is DONE once we verify the data.",
+      } as never)
+      .mockResolvedValueOnce({ text: "Safe summary" } as never);
+
+    const subagent = await DualLlmSubagent.create({
+      dualLlmParams: {
+        toolCallId: "tool-call-1",
+        userRequest: "summarize this safely",
+        toolResult: { raw: "sensitive data" },
+      },
+      callingAgentId: "agent-1",
+      organizationId: "org-1",
+    });
+
+    const result = await subagent.processWithMainAgent();
+
+    expect(generateObject).not.toHaveBeenCalled();
+    expect(result).toEqual({
+      toolCallId: "tool-call-1",
+      conversations: [
+        {
+          role: "assistant",
+          content: "The task is DONE once we verify the data.",
+        },
+      ],
+      result: "Safe summary",
+    });
+  });
 });

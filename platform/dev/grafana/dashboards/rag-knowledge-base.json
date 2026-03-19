@@ -15,7 +15,7 @@
       }
     ]
   },
-  "description": "RAG pipeline monitoring: connector syncs, document ingestion, embedding, and query performance",
+  "description": "Knowledge base operations monitoring: connector syncs, ingestion, embeddings, query volume, and reranker performance",
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
@@ -127,7 +127,7 @@
           "showLineNumbers": false,
           "showMiniMap": false
         },
-        "content": "# RAG & Knowledge Base\n\nMonitor the full RAG pipeline: connector syncs, document ingestion, embedding batches, and query performance. Use the variables above to filter by connector type or search type.",
+        "content": "# Knowledge Base Operations\n\nMonitor connector syncs, document ingestion, embedding batches, query traffic, and reranker performance. Use the variables above to filter by connector type or search type.",
         "mode": "markdown"
       },
       "pluginVersion": "12.3.2",
@@ -153,7 +153,7 @@
         "type": "prometheus",
         "uid": "${metrics_datasource}"
       },
-      "description": "Total number of connector sync operations across all connector types and statuses",
+      "description": "Total connector sync operations during the selected time range across all connector types and statuses",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -213,7 +213,7 @@
             "uid": "${metrics_datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(rag_connector_syncs_total{connector_type=~\"$connector_type\"})",
+          "expr": "sum(increase(rag_connector_syncs_total{connector_type=~\"$connector_type\"}[$__range])) or vector(0)",
           "legendFormat": "Total Syncs",
           "range": true,
           "refId": "A"
@@ -228,7 +228,7 @@
         "type": "prometheus",
         "uid": "${metrics_datasource}"
       },
-      "description": "Percentage of successful syncs out of all sync operations",
+      "description": "Percentage of successful connector syncs during the selected time range",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -288,7 +288,7 @@
             "uid": "${metrics_datasource}"
           },
           "editorMode": "code",
-          "expr": "(sum(rag_connector_syncs_total{connector_type=~\"$connector_type\", status=\"success\"}) / sum(rag_connector_syncs_total{connector_type=~\"$connector_type\"})) * 100",
+          "expr": "100 * sum(increase(rag_connector_syncs_total{connector_type=~\"$connector_type\", status=\"success\"}[$__range])) / clamp_min(sum(increase(rag_connector_syncs_total{connector_type=~\"$connector_type\"}[$__range])), 1)",
           "legendFormat": "Success Rate",
           "range": true,
           "refId": "A"
@@ -303,7 +303,7 @@
         "type": "prometheus",
         "uid": "${metrics_datasource}"
       },
-      "description": "Total number of documents ingested across all connector syncs",
+      "description": "Total documents ingested during the selected time range across all connector syncs",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -363,7 +363,7 @@
             "uid": "${metrics_datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(rag_documents_ingested_total{connector_type=~\"$connector_type\"})",
+          "expr": "sum(increase(rag_documents_ingested_total{connector_type=~\"$connector_type\"}[$__range])) or vector(0)",
           "legendFormat": "Documents Ingested",
           "range": true,
           "refId": "A"
@@ -378,7 +378,7 @@
         "type": "prometheus",
         "uid": "${metrics_datasource}"
       },
-      "description": "Total number of text chunks created from ingested documents",
+      "description": "Total text chunks created during the selected time range",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -438,7 +438,7 @@
             "uid": "${metrics_datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(rag_chunks_created_total{connector_type=~\"$connector_type\"})",
+          "expr": "sum(increase(rag_chunks_created_total{connector_type=~\"$connector_type\"}[$__range])) or vector(0)",
           "legendFormat": "Chunks Created",
           "range": true,
           "refId": "A"
@@ -701,7 +701,7 @@
         "type": "prometheus",
         "uid": "${metrics_datasource}"
       },
-      "description": "Total number of embedding batch operations processed",
+      "description": "Total embedding batch operations processed during the selected time range",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -761,7 +761,7 @@
             "uid": "${metrics_datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(rag_embedding_batches_total)",
+          "expr": "sum(increase(rag_embedding_batches_total[$__range])) or vector(0)",
           "legendFormat": "Total Embedding Batches",
           "range": true,
           "refId": "A"
@@ -776,7 +776,7 @@
         "type": "prometheus",
         "uid": "${metrics_datasource}"
       },
-      "description": "Percentage of embedding batches that resulted in errors",
+      "description": "Percentage of embedding batches that resulted in errors during the selected time range",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -836,7 +836,7 @@
             "uid": "${metrics_datasource}"
           },
           "editorMode": "code",
-          "expr": "(sum(rag_embedding_batches_total{status=\"error\"}) / sum(rag_embedding_batches_total)) * 100",
+          "expr": "100 * sum(increase(rag_embedding_batches_total{status=\"error\"}[$__range])) / clamp_min(sum(increase(rag_embedding_batches_total[$__range])), 1)",
           "legendFormat": "Embedding Error Rate",
           "range": true,
           "refId": "A"
@@ -1356,7 +1356,7 @@
         "type": "prometheus",
         "uid": "${metrics_datasource}"
       },
-      "description": "Total number of RAG queries executed across all search types",
+      "description": "Total RAG queries executed during the selected time range across all search types",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1416,7 +1416,7 @@
             "uid": "${metrics_datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(rag_queries_total{search_type=~\"$search_type\"})",
+          "expr": "sum(increase(rag_queries_total{search_type=~\"$search_type\"}[$__range])) or vector(0)",
           "legendFormat": "Total Queries",
           "range": true,
           "refId": "A"
@@ -1905,7 +1905,7 @@
         "type": "prometheus",
         "uid": "${metrics_datasource}"
       },
-      "description": "Token usage rate for knowledge base reranker operations by token type (input, output)",
+      "description": "Token usage rate for knowledge base reranker operations by token type (input, output), with zero fallback when no reranker token metrics are present",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1992,10 +1992,21 @@
             "uid": "${metrics_datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(rate(llm_tokens_total{source=\"knowledge:reranker\"}[$__rate_interval])) by (type)",
-          "legendFormat": "{{type}}",
+          "expr": "sum(rate(llm_tokens_total{source=\"knowledge:reranker\", type=\"input\"}[$__rate_interval])) or vector(0)",
+          "legendFormat": "input",
           "range": true,
           "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${metrics_datasource}"
+          },
+          "editorMode": "code",
+          "expr": "sum(rate(llm_tokens_total{source=\"knowledge:reranker\", type=\"output\"}[$__rate_interval])) or vector(0)",
+          "legendFormat": "output",
+          "range": true,
+          "refId": "B"
         }
       ],
       "title": "KB Reranker Token Usage",
@@ -2004,7 +2015,11 @@
     }
   ],
   "schemaVersion": 40,
-  "tags": [],
+  "tags": [
+    "archestra",
+    "genai",
+    "knowledge-base"
+  ],
   "templating": {
     "list": [
       {
@@ -2080,7 +2095,7 @@
   },
   "timepicker": {},
   "timezone": "browser",
-  "title": "Archestra / RAG & Knowledge Base",
+  "title": "Archestra / Knowledge Base Operations",
   "uid": "archestra-rag-knowledge-base",
   "version": 1
 }

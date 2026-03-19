@@ -5,6 +5,7 @@ import logger from "@/logging";
 import { ModelModel } from "@/models";
 import { metrics } from "@/observability";
 import { getTokenizer } from "@/tokenizers";
+import { extractCommonMessageText } from "@/types";
 import type {
   ChunkProcessingResult,
   CommonMcpToolDefinition,
@@ -380,6 +381,7 @@ class MinimaxRequestAdapter
     for (const message of messages) {
       const commonMessage: CommonMessage = {
         role: message.role as CommonMessage["role"],
+        content: extractCommonMessageText(message),
       };
 
       if (message.role === "tool") {

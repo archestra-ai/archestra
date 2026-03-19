@@ -147,6 +147,7 @@ export async function evaluateIfContextIsTrusted(
 
     const { isTrusted, isBlocked, shouldSanitizeWithDualLlm, reason } =
       evaluation;
+    let toolResultIsTrusted = isTrusted;
     logger.debug(
       {
         agentId,
@@ -159,10 +160,6 @@ export async function evaluateIfContextIsTrusted(
       "[trustedData] evaluateIfContextIsTrusted: tool evaluation result",
     );
 
-    if (!isTrusted) {
-      hasUntrustedData = true;
-    }
-
     if (isBlocked) {
       // Tool result is blocked - replace with blocked message
       logger.debug(
@@ -171,6 +168,7 @@ export async function evaluateIfContextIsTrusted(
       );
       toolResultUpdates[toolCallId] =
         `[Content blocked by policy${reason ? `: ${reason}` : ""}]`;
+      toolResultIsTrusted = false;
     } else if (shouldSanitizeWithDualLlm) {
       if (!usedDualLlm && onDualLlmStart) {
         logger.debug(
@@ -211,9 +209,11 @@ export async function evaluateIfContextIsTrusted(
         { agentId, toolCallId, summaryLength: analysis.result.length },
         "[trustedData] evaluateIfContextIsTrusted: dual LLM processing complete",
       );
+      toolResultIsTrusted = true;
+    }
 
-      // After sanitization, treat as trusted
-      hasUntrustedData = false;
+    if (!toolResultIsTrusted) {
+      hasUntrustedData = true;
     }
     // If not blocked or sanitized, no update needed (original content remains)
   }
@@ -242,13 +242,12 @@ export async function evaluateIfContextIsTrusted(
  * Looks for the last user message that contains actual content
  */
 function extractUserRequest(messages: CommonMessage[]): string {
-  // Find the last user message
   for (let i = messages.length - 1; i >= 0; i--) {
-    if (messages[i].role === "user") {
-      // For now, we return a generic request
-      // The adapters can provide more specific extraction if needed
-      return "process this data";
+    const message = messages[i];
+    if (message?.role === "user" && message.content?.trim()) {
+      return message.content.trim();
     }
   }
+
   return "process this data";
 }

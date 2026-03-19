@@ -108,7 +108,7 @@ export class DualLlmSubagent {
 
       conversation.push({ role: "assistant", content: response });
 
-      if (response.trim() === "DONE" || response.includes("DONE")) {
+      if (response.trim() === "DONE") {
         break;
       }
 

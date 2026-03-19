@@ -7,6 +7,7 @@ import config from "@/config";
 import logger from "@/logging";
 import { ModelModel } from "@/models";
 import { getTokenizer } from "@/tokenizers";
+import { extractCommonMessageText } from "@/types";
 import type {
   Bedrock,
   ChunkProcessingResult,
@@ -377,6 +378,7 @@ class BedrockRequestAdapter
     for (const message of messages) {
       const commonMessage: CommonMessage = {
         role: message.role as CommonMessage["role"],
+        content: extractCommonMessageText(message),
       };
 
       // Handle user messages that may contain tool results

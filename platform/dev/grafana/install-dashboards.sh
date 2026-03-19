@@ -207,7 +207,7 @@ for name in "${DASHBOARDS[@]}"; do
 
   if [[ -z "$dashboard_json" ]]; then
     echo "  SKIP     $name (could not read file)"
-    ((failed++))
+    ((failed+=1))
     continue
   fi
 
@@ -240,15 +240,15 @@ print(json.dumps(payload))
     version=$(echo "$resp_body" | python3 -c "import sys,json; print(json.load(sys.stdin).get('version',0))" 2>/dev/null || echo "0")
     if [[ "$version" == "1" ]]; then
       echo "  CREATED  $name -> $GRAFANA_URL/d/$slug"
-      ((created++))
+      ((created+=1))
     else
       echo "  UPDATED  $name (v$version) -> $GRAFANA_URL/d/$slug"
-      ((updated++))
+      ((updated+=1))
     fi
   else
     msg=$(echo "$resp_body" | python3 -c "import sys,json; print(json.load(sys.stdin).get('message','unknown error'))" 2>/dev/null || echo "$resp_body")
     echo "  FAIL     $name (HTTP $resp_code): $msg"
-    ((failed++))
+    ((failed+=1))
   fi
 done
 

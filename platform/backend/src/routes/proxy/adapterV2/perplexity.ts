@@ -19,6 +19,7 @@ import type {
 import config from "@/config";
 import logger from "@/logging";
 import { metrics } from "@/observability";
+import { extractCommonMessageText } from "@/types";
 import type {
   ChunkProcessingResult,
   CommonMcpToolDefinition,
@@ -159,6 +160,7 @@ class PerplexityRequestAdapter
     for (const message of messages) {
       const commonMessage: CommonMessage = {
         role: message.role as CommonMessage["role"],
+        content: extractCommonMessageText(message),
       };
       commonMessages.push(commonMessage);
     }

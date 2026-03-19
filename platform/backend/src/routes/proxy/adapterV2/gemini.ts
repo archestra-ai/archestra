@@ -17,6 +17,7 @@ import logger from "@/logging";
 import { ModelModel } from "@/models";
 import { metrics } from "@/observability";
 import { getTokenizer } from "@/tokenizers";
+import { extractCommonMessageText } from "@/types";
 import type {
   ChunkProcessingResult,
   CommonMcpToolDefinition,
@@ -100,6 +101,7 @@ class GeminiRequestAdapter
     for (const content of contents) {
       const commonMessage: CommonMessage = {
         role: content.role as CommonMessage["role"],
+        content: extractCommonMessageText(content),
       };
 
       // Process parts looking for function responses

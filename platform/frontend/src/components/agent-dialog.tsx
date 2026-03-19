@@ -586,6 +586,11 @@ export function AgentDialog({
   const isDualLlmQuarantineBuiltIn =
     builtInAgentName === BUILT_IN_AGENT_IDS.DUAL_LLM_QUARANTINE;
   const isDualLlmBuiltIn = isDualLlmMainBuiltIn || isDualLlmQuarantineBuiltIn;
+  const showPrimarySettingsCard =
+    !isBuiltIn ||
+    shouldShowDescriptionField({ agentType, isBuiltIn }) ||
+    isPolicyConfigBuiltIn ||
+    isDualLlmMainBuiltIn;
   const showToolsAndSubagents =
     !isBuiltIn &&
     (agentType === "mcp_gateway" ||
@@ -1101,85 +1106,83 @@ export function AgentDialog({
             )}
 
             {/* Section 1: Name, Description, Visibility, LLM Configuration */}
-            <div className="rounded-lg border bg-card p-4 space-y-4">
-              {/* Name + Icon (hidden for built-in agents, shown in dialog title) */}
-              {!isBuiltIn && (
-                <div className="space-y-4">
-                  <AgentIconPicker
-                    value={icon}
-                    onChange={setIcon}
-                    fallbackType={defaultIconType}
-                  />
-                  <div className="space-y-2">
-                    <Label htmlFor="agentName">Name *</Label>
-                    <Input
-                      id="agentName"
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      placeholder={getNamePlaceholder(agentType)}
-                      autoFocus
+            {showPrimarySettingsCard && (
+              <div className="rounded-lg border bg-card p-4 space-y-4">
+                {/* Name + Icon (hidden for built-in agents, shown in dialog title) */}
+                {!isBuiltIn && (
+                  <div className="space-y-4">
+                    <AgentIconPicker
+                      value={icon}
+                      onChange={setIcon}
+                      fallbackType={defaultIconType}
                     />
-                  </div>
-                </div>
-              )}
-
-              {/* Description (hidden for built-in agents) */}
-              {shouldShowDescriptionField({ agentType, isBuiltIn }) && (
-                <div className="space-y-2">
-                  <Label htmlFor="agentDescription">Description</Label>
-                  <Textarea
-                    id="agentDescription"
-                    value={description}
-                    onChange={(e) => setDescription(e.target.value)}
-                    placeholder={getDescriptionPlaceholder(agentType)}
-                    className="min-h-[60px]"
-                  />
-                </div>
-              )}
-
-              {/* Built-in agent config */}
-              {isPolicyConfigBuiltIn && (
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-0.5">
-                      <Label
-                        htmlFor="auto-configure-on-tool-assignment"
-                        className="text-sm font-medium cursor-pointer"
-                      >
-                        Auto-configure on tool assignment
-                      </Label>
-                      <p className="text-sm text-muted-foreground">
-                        Automatically analyze and configure security policies
-                        when tools are assigned to agents
-                      </p>
-                    </div>
-                    <Switch
-                      id="auto-configure-on-tool-assignment"
-                      checked={autoConfigureOnToolAssignment}
-                      onCheckedChange={setAutoConfigureOnToolAssignment}
-                    />
-                  </div>
-                </div>
-              )}
-
-              {isDualLlmBuiltIn && (
-                <div className="space-y-4">
-                  {isDualLlmMainBuiltIn && (
                     <div className="space-y-2">
-                      <Label htmlFor="dual-llm-max-rounds">Max rounds</Label>
+                      <Label htmlFor="agentName">Name *</Label>
                       <Input
-                        id="dual-llm-max-rounds"
-                        type="number"
-                        min={1}
-                        max={20}
-                        value={dualLlmMaxRounds}
-                        onChange={(e) => setDualLlmMaxRounds(e.target.value)}
+                        id="agentName"
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        placeholder={getNamePlaceholder(agentType)}
+                        autoFocus
                       />
                     </div>
-                  )}
-                </div>
-              )}
-            </div>
+                  </div>
+                )}
+
+                {/* Description (hidden for built-in agents) */}
+                {shouldShowDescriptionField({ agentType, isBuiltIn }) && (
+                  <div className="space-y-2">
+                    <Label htmlFor="agentDescription">Description</Label>
+                    <Textarea
+                      id="agentDescription"
+                      value={description}
+                      onChange={(e) => setDescription(e.target.value)}
+                      placeholder={getDescriptionPlaceholder(agentType)}
+                      className="min-h-[60px]"
+                    />
+                  </div>
+                )}
+
+                {/* Built-in agent config */}
+                {isPolicyConfigBuiltIn && (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-0.5">
+                        <Label
+                          htmlFor="auto-configure-on-tool-assignment"
+                          className="text-sm font-medium cursor-pointer"
+                        >
+                          Auto-configure on tool assignment
+                        </Label>
+                        <p className="text-sm text-muted-foreground">
+                          Automatically analyze and configure security policies
+                          when tools are assigned to agents
+                        </p>
+                      </div>
+                      <Switch
+                        id="auto-configure-on-tool-assignment"
+                        checked={autoConfigureOnToolAssignment}
+                        onCheckedChange={setAutoConfigureOnToolAssignment}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {isDualLlmMainBuiltIn && (
+                  <div className="space-y-2">
+                    <Label htmlFor="dual-llm-max-rounds">Max rounds</Label>
+                    <Input
+                      id="dual-llm-max-rounds"
+                      type="number"
+                      min={1}
+                      max={20}
+                      value={dualLlmMaxRounds}
+                      onChange={(e) => setDualLlmMaxRounds(e.target.value)}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Section 2: Instruction (Agent only) */}
             {isInternalAgent && (

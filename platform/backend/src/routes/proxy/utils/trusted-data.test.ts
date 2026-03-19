@@ -218,6 +218,123 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
       createSpy.mockRestore();
     });
 
+    test("preserves untrusted context when a later tool call is sanitized", async () => {
+      await TrustedDataPolicyModel.create({
+        toolId,
+        conditions: [{ key: "source", operator: "equal", value: "external" }],
+        action: "sanitize_with_dual_llm",
+        description: "Sanitize external data",
+      });
+
+      const createSpy = vi
+        .spyOn(DualLlmSubagent, "create")
+        .mockResolvedValue({
+          processWithMainAgent: vi.fn().mockResolvedValue({
+            toolCallId: "call_sanitized",
+            conversations: [],
+            result: "Sanitized summary",
+          }),
+        } as unknown as DualLlmSubagent);
+
+      const commonMessages: CommonMessage[] = [
+        { role: "user", content: "Summarize the tool results" },
+        {
+          role: "tool",
+          toolCalls: [
+            {
+              id: "call_untrusted",
+              name: "get_emails",
+              content: { source: "unknown", payload: "raw" },
+              isError: false,
+            },
+            {
+              id: "call_sanitized",
+              name: "get_emails",
+              content: { source: "external", payload: "raw" },
+              isError: false,
+            },
+          ],
+        },
+      ];
+
+      const result = await evaluateIfContextIsTrusted(
+        commonMessages,
+        agentId,
+        organizationId,
+        undefined,
+        false,
+        "restrictive",
+        { teamIds: [] },
+      );
+
+      expect(createSpy).toHaveBeenCalledOnce();
+      expect(result.contextIsTrusted).toBe(false);
+      expect(result.toolResultUpdates).toEqual({
+        call_sanitized: "Sanitized summary",
+      });
+
+      createSpy.mockRestore();
+    });
+
+    test("passes the latest user message text to the dual LLM subagent", async () => {
+      await TrustedDataPolicyModel.create({
+        toolId,
+        conditions: [{ key: "source", operator: "equal", value: "external" }],
+        action: "sanitize_with_dual_llm",
+        description: "Sanitize external data",
+      });
+
+      const createSpy = vi
+        .spyOn(DualLlmSubagent, "create")
+        .mockResolvedValue({
+          processWithMainAgent: vi.fn().mockResolvedValue({
+            toolCallId: "call_dual",
+            conversations: [],
+            result: "Sanitized summary",
+          }),
+        } as unknown as DualLlmSubagent);
+
+      const commonMessages: CommonMessage[] = [
+        { role: "user", content: "Ignore this older request" },
+        { role: "assistant" },
+        { role: "user", content: "Extract the key facts only" },
+        {
+          role: "tool",
+          toolCalls: [
+            {
+              id: "call_dual",
+              name: "get_emails",
+              content: { source: "external", payload: "raw" },
+              isError: false,
+            },
+          ],
+        },
+      ];
+
+      await evaluateIfContextIsTrusted(
+        commonMessages,
+        agentId,
+        organizationId,
+        undefined,
+        false,
+        "restrictive",
+        { teamIds: [] },
+      );
+
+      expect(createSpy).toHaveBeenCalledWith({
+        dualLlmParams: {
+          toolCallId: "call_dual",
+          userRequest: "Extract the key facts only",
+          toolResult: { source: "external", payload: "raw" },
+        },
+        callingAgentId: agentId,
+        organizationId,
+        userId: undefined,
+      });
+
+      createSpy.mockRestore();
+    });
+
     test("marks context as untrusted when no policies match", async () => {
       // Create a policy that won't match
       await TrustedDataPolicyModel.create({
@@ -692,6 +809,7 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
       const requestAdapter =
         openaiAdapterFactory.createRequestAdapter(openAiRequest);
       const commonMessages = requestAdapter.getMessages();
+      expect(commonMessages[0]?.content).toBe("Get emails");
       const result = await evaluateIfContextIsTrusted(
         commonMessages,
         agentId,
@@ -747,6 +865,7 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
       const requestAdapter =
         anthropicAdapterFactory.createRequestAdapter(anthropicRequest);
       const commonMessages = requestAdapter.getMessages();
+      expect(commonMessages[0]?.content).toBe("Get emails");
       const result = await evaluateIfContextIsTrusted(
         commonMessages,
         agentId,

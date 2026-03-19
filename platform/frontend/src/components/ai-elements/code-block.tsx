@@ -30,6 +30,7 @@ export type CodeBlockProps = HTMLAttributes<HTMLDivElement> & {
   language: string;
   showLineNumbers?: boolean;
   contentStyle?: CSSProperties;
+  contentClassName?: string;
   children?: ReactNode;
 };
 
@@ -38,6 +39,7 @@ export const CodeBlock = ({
   language,
   showLineNumbers = false,
   contentStyle,
+  contentClassName,
   className,
   children,
   ...props
@@ -56,7 +58,7 @@ export const CodeBlock = ({
       >
         <div className="relative">
           <SyntaxHighlighter
-            className="overflow-hidden"
+            className={cn("overflow-hidden", contentClassName)}
             codeTagProps={{
               className: "font-mono text-sm",
             }}

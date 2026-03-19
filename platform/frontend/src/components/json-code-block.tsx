@@ -13,16 +13,17 @@ interface JsonCodeBlockProps {
 
 export function JsonCodeBlock({
   value,
-  maxHeightClassName = "max-h-[600px]",
+  maxHeightClassName = "max-h-[600px] overflow-auto",
 }: JsonCodeBlockProps) {
   const formattedJson = JSON.stringify(value, null, 2);
 
   return (
-    <div className={`mt-2 overflow-hidden rounded-lg ${maxHeightClassName}`}>
+    <div className="mt-2">
       <CodeBlock
         className="rounded-lg"
         code={formattedJson}
         language="json"
+        contentClassName={maxHeightClassName}
         contentStyle={{
           fontSize: "0.75rem",
           paddingRight: "3.5rem",

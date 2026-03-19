@@ -13,7 +13,7 @@ import { cn } from "@/lib/utils";
 
 type DialogSize = "small" | "medium" | "large";
 
-type FormDialogProps = {
+export type FormDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   title: string | React.ReactNode;

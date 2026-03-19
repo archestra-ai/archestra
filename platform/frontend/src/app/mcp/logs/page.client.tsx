@@ -378,7 +378,7 @@ function McpToolCallsTable({
 
   const hasFilters =
     profileFilter !== "all" ||
-    dateTimePicker.dateRange !== undefined ||
+    dateTimePicker.startDate !== undefined ||
     !!searchFromUrl;
 
   const clearFilters = useCallback(() => {
@@ -398,19 +398,17 @@ function McpToolCallsTable({
   // Shared date picker component
   const datePickerComponent = (
     <DateTimeRangePicker
-      dateRange={dateTimePicker.dateRange}
+      startDate={dateTimePicker.startDate}
+      endDate={dateTimePicker.endDate}
       isDialogOpen={dateTimePicker.isDateDialogOpen}
-      tempDateRange={dateTimePicker.tempDateRange}
-      fromTime={dateTimePicker.fromTime}
-      toTime={dateTimePicker.toTime}
+      tempStartDate={dateTimePicker.tempStartDate}
+      tempEndDate={dateTimePicker.tempEndDate}
       displayText={dateTimePicker.getDateRangeDisplay()}
       onDialogOpenChange={dateTimePicker.setIsDateDialogOpen}
-      onTempDateRangeChange={dateTimePicker.setTempDateRange}
-      onFromTimeChange={dateTimePicker.setFromTime}
-      onToTimeChange={dateTimePicker.setToTime}
+      onTempStartDateChange={dateTimePicker.setTempStartDate}
+      onTempEndDateChange={dateTimePicker.setTempEndDate}
       onOpenDialog={dateTimePicker.openDateDialog}
       onApply={dateTimePicker.handleApplyDateRange}
-      idPrefix="mcp-gateway-"
     />
   );
 

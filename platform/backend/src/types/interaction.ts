@@ -5,6 +5,7 @@ import {
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
+import { DualLlmAnalysisSchema } from "./dual-llm";
 import {
   Anthropic,
   Bedrock,
@@ -23,7 +24,6 @@ import {
   Xai,
   Zhipuai,
 } from "./llm-providers";
-import { DualLlmAnalysisSchema } from "./dual-llm";
 import { ToonSkipReasonSchema } from "./tool-result-compression";
 
 export { InteractionSourceSchema };

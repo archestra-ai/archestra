@@ -17,7 +17,6 @@ import logger from "@/logging";
 import { ModelModel } from "@/models";
 import { metrics } from "@/observability";
 import { getTokenizer } from "@/tokenizers";
-import { extractCommonMessageText } from "@/types";
 import type {
   ChunkProcessingResult,
   CommonMcpToolDefinition,
@@ -34,6 +33,7 @@ import type {
   ToolCompressionStats,
   UsageView,
 } from "@/types";
+import { extractCommonMessageText } from "@/types";
 import {
   hasImageContent,
   isImageTooLarge,

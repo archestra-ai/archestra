@@ -1,8 +1,8 @@
+import { vi } from "vitest";
+import { DualLlmSubagent } from "@/agents/subagents/dual-llm";
 import { AgentToolModel, ToolModel, TrustedDataPolicyModel } from "@/models";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { CommonMessage, Tool } from "@/types";
-import { vi } from "vitest";
-import { DualLlmSubagent } from "@/agents/subagents/dual-llm";
 import { evaluateIfContextIsTrusted } from "./trusted-data";
 
 describe("trusted-data evaluation (provider-agnostic)", () => {
@@ -160,18 +160,16 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         description: "Sanitize external data",
       });
 
-      const createSpy = vi
-        .spyOn(DualLlmSubagent, "create")
-        .mockResolvedValue({
-          processWithMainAgent: vi.fn().mockResolvedValue({
-            toolCallId: "call_dual",
-            conversations: [
-              { role: "assistant", content: "QUESTION: What kind of data?" },
-              { role: "user", content: "Answer: 0" },
-            ],
-            result: "Sanitized summary",
-          }),
-        } as unknown as DualLlmSubagent);
+      const createSpy = vi.spyOn(DualLlmSubagent, "create").mockResolvedValue({
+        processWithMainAgent: vi.fn().mockResolvedValue({
+          toolCallId: "call_dual",
+          conversations: [
+            { role: "assistant", content: "QUESTION: What kind of data?" },
+            { role: "user", content: "Answer: 0" },
+          ],
+          result: "Sanitized summary",
+        }),
+      } as unknown as DualLlmSubagent);
 
       const commonMessages: CommonMessage[] = [
         { role: "user" },
@@ -226,15 +224,13 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         description: "Sanitize external data",
       });
 
-      const createSpy = vi
-        .spyOn(DualLlmSubagent, "create")
-        .mockResolvedValue({
-          processWithMainAgent: vi.fn().mockResolvedValue({
-            toolCallId: "call_sanitized",
-            conversations: [],
-            result: "Sanitized summary",
-          }),
-        } as unknown as DualLlmSubagent);
+      const createSpy = vi.spyOn(DualLlmSubagent, "create").mockResolvedValue({
+        processWithMainAgent: vi.fn().mockResolvedValue({
+          toolCallId: "call_sanitized",
+          conversations: [],
+          result: "Sanitized summary",
+        }),
+      } as unknown as DualLlmSubagent);
 
       const commonMessages: CommonMessage[] = [
         { role: "user", content: "Summarize the tool results" },
@@ -284,15 +280,13 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         description: "Sanitize external data",
       });
 
-      const createSpy = vi
-        .spyOn(DualLlmSubagent, "create")
-        .mockResolvedValue({
-          processWithMainAgent: vi.fn().mockResolvedValue({
-            toolCallId: "call_dual",
-            conversations: [],
-            result: "Sanitized summary",
-          }),
-        } as unknown as DualLlmSubagent);
+      const createSpy = vi.spyOn(DualLlmSubagent, "create").mockResolvedValue({
+        processWithMainAgent: vi.fn().mockResolvedValue({
+          toolCallId: "call_dual",
+          conversations: [],
+          result: "Sanitized summary",
+        }),
+      } as unknown as DualLlmSubagent);
 
       const commonMessages: CommonMessage[] = [
         { role: "user", content: "Ignore this older request" },

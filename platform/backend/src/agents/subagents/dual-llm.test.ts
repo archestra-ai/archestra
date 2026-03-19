@@ -2,7 +2,7 @@ import { BUILT_IN_AGENT_IDS } from "@shared";
 import { generateObject, generateText } from "ai";
 import { vi } from "vitest";
 import AgentModel from "@/models/agent";
-import { describe, expect, test, beforeEach } from "@/test";
+import { beforeEach, describe, expect, test } from "@/test";
 import type { Agent } from "@/types";
 import { resolveSmartDefaultLlm } from "@/utils/llm-resolution";
 import { DualLlmSubagent } from "./dual-llm";
@@ -23,7 +23,9 @@ vi.mock("@/utils/llm-resolution", () => ({
 }));
 
 vi.mock("@/templating", () => ({
-  renderSystemPrompt: vi.fn((prompt: string | null | undefined) => prompt ?? ""),
+  renderSystemPrompt: vi.fn(
+    (prompt: string | null | undefined) => prompt ?? "",
+  ),
 }));
 
 const MOCK_RESOLVED_LLM = {
@@ -116,17 +118,15 @@ describe("DualLlmSubagent", () => {
       systemPrompt: "quarantine prompt",
     });
 
-    vi.spyOn(AgentModel, "getBuiltInAgent").mockImplementation(
-      async (name) => {
-        if (name === BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN) {
-          return mainAgent;
-        }
-        if (name === BUILT_IN_AGENT_IDS.DUAL_LLM_QUARANTINE) {
-          return quarantineAgent;
-        }
-        return null;
-      },
-    );
+    vi.spyOn(AgentModel, "getBuiltInAgent").mockImplementation(async (name) => {
+      if (name === BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN) {
+        return mainAgent;
+      }
+      if (name === BUILT_IN_AGENT_IDS.DUAL_LLM_QUARANTINE) {
+        return quarantineAgent;
+      }
+      return null;
+    });
 
     vi.mocked(generateText)
       .mockResolvedValueOnce({
@@ -191,17 +191,15 @@ describe("DualLlmSubagent", () => {
       systemPrompt: "quarantine prompt",
     });
 
-    vi.spyOn(AgentModel, "getBuiltInAgent").mockImplementation(
-      async (name) => {
-        if (name === BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN) {
-          return mainAgent;
-        }
-        if (name === BUILT_IN_AGENT_IDS.DUAL_LLM_QUARANTINE) {
-          return quarantineAgent;
-        }
-        return null;
-      },
-    );
+    vi.spyOn(AgentModel, "getBuiltInAgent").mockImplementation(async (name) => {
+      if (name === BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN) {
+        return mainAgent;
+      }
+      if (name === BUILT_IN_AGENT_IDS.DUAL_LLM_QUARANTINE) {
+        return quarantineAgent;
+      }
+      return null;
+    });
 
     vi.mocked(generateText)
       .mockResolvedValueOnce({

@@ -1,11 +1,11 @@
 "use client";
 
 import {
-  BUILT_IN_AGENT_IDS,
   type AgentScope,
   type AgentType,
   archestraApiSdk,
   type archestraApiTypes,
+  BUILT_IN_AGENT_IDS,
   DocsPage,
   getDocsUrl,
   getResourceForAgentType,
@@ -634,12 +634,14 @@ export function AgentDialog({
           agentData.incomingEmailAllowedDomain || "",
         );
         setAutoConfigureOnToolAssignment(
-          agentData.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.POLICY_CONFIG
+          agentData.builtInAgentConfig?.name ===
+            BUILT_IN_AGENT_IDS.POLICY_CONFIG
             ? agentData.builtInAgentConfig.autoConfigureOnToolAssignment
             : false,
         );
         setDualLlmMaxRounds(
-          agentData.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN
+          agentData.builtInAgentConfig?.name ===
+            BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN
             ? String(agentData.builtInAgentConfig.maxRounds)
             : "5",
         );

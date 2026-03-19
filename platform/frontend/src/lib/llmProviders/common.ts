@@ -11,7 +11,9 @@ import type {
 
 export type Interaction =
   archestraApiTypes.GetInteractionsResponses["200"]["data"][number];
-export type DualLlmAnalysis = NonNullable<Interaction["dualLlmAnalyses"]>[number];
+export type DualLlmAnalysis = NonNullable<
+  Interaction["dualLlmAnalyses"]
+>[number];
 
 export interface RefusalInfo {
   toolName?: string;

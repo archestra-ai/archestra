@@ -81,7 +81,11 @@ function extractTextValue(value: unknown): string[] {
     }
 
     if ("type" in item) {
-      if (item.type === "text" && "text" in item && typeof item.text === "string") {
+      if (
+        item.type === "text" &&
+        "text" in item &&
+        typeof item.text === "string"
+      ) {
         return [item.text];
       }
 

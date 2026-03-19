@@ -38,15 +38,13 @@ export class DualLlmSubagent {
     organizationId: string;
     userId?: string;
   }): Promise<DualLlmSubagent> {
-    const {
-      dualLlmParams,
-      callingAgentId,
-      organizationId,
-      userId,
-    } = params;
+    const { dualLlmParams, callingAgentId, organizationId, userId } = params;
 
     const [mainAgent, quarantineAgent] = await Promise.all([
-      AgentModel.getBuiltInAgent(BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN, organizationId),
+      AgentModel.getBuiltInAgent(
+        BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN,
+        organizationId,
+      ),
       AgentModel.getBuiltInAgent(
         BUILT_IN_AGENT_IDS.DUAL_LLM_QUARANTINE,
         organizationId,
@@ -125,7 +123,8 @@ export class DualLlmSubagent {
       }
 
       const answerIndex = await this.answerQuestion(question, options);
-      const selectedOption = options[answerIndex] ?? options[options.length - 1];
+      const selectedOption =
+        options[answerIndex] ?? options[options.length - 1];
 
       if (onProgress) {
         onProgress({
@@ -276,7 +275,8 @@ async function resolveBuiltInAgentSelection(params: {
       return {
         provider: apiKey.provider,
         apiKey: secretValue,
-        modelName: agent.llmModel ?? bestModel?.modelId ?? config.chat.defaultModel,
+        modelName:
+          agent.llmModel ?? bestModel?.modelId ?? config.chat.defaultModel,
         baseUrl: apiKey.baseUrl,
       };
     }

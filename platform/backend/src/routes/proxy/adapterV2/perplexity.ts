@@ -19,7 +19,6 @@ import type {
 import config from "@/config";
 import logger from "@/logging";
 import { metrics } from "@/observability";
-import { extractCommonMessageText } from "@/types";
 import type {
   ChunkProcessingResult,
   CommonMcpToolDefinition,
@@ -36,6 +35,7 @@ import type {
   ToolCompressionStats,
   UsageView,
 } from "@/types";
+import { extractCommonMessageText } from "@/types";
 
 // =============================================================================
 // TYPE ALIASES

@@ -7,7 +7,6 @@ import config from "@/config";
 import logger from "@/logging";
 import { ModelModel } from "@/models";
 import { getTokenizer } from "@/tokenizers";
-import { extractCommonMessageText } from "@/types";
 import type {
   Bedrock,
   ChunkProcessingResult,
@@ -24,6 +23,7 @@ import type {
   ToolCompressionStats,
   UsageView,
 } from "@/types";
+import { extractCommonMessageText } from "@/types";
 
 // ToolCompressionStats imported from @/types
 

@@ -24,13 +24,13 @@ import {
   TeamModel,
   ToolModel,
 } from "@/models";
-import type { InternalMcpCatalog } from "@/types";
 import {
   assignToolToAgent,
   validateAssignment,
   validateCredentialSource,
   validateExecutionSource,
 } from "@/services/agent-tool-assignment";
+import type { InternalMcpCatalog } from "@/types";
 import {
   AgentToolAssignmentBodySchema,
   AgentToolFilterSchema,
@@ -164,7 +164,10 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
 
       if (result && result !== "duplicate" && result !== "updated") {
-        throw new ApiError(result.status, result.error.message);
+        throw new ApiError(
+          mapAgentToolAssignmentErrorCodeToHttpStatus(result.code),
+          result.error.message,
+        );
       }
 
       // Clear chat MCP client cache to ensure fresh tools are fetched
@@ -587,7 +590,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         if (validationError) {
           throw new ApiError(
-            validationError.status,
+            mapAgentToolAssignmentErrorCodeToHttpStatus(validationError.code),
             validationError.error.message,
           );
         }
@@ -602,7 +605,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         if (validationError) {
           throw new ApiError(
-            validationError.status,
+            mapAgentToolAssignmentErrorCodeToHttpStatus(validationError.code),
             validationError.error.message,
           );
         }
@@ -967,5 +970,11 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 };
+
+function mapAgentToolAssignmentErrorCodeToHttpStatus(
+  code: "not_found" | "validation_error",
+): 400 | 404 {
+  return code === "not_found" ? 404 : 400;
+}
 
 export default agentToolRoutes;

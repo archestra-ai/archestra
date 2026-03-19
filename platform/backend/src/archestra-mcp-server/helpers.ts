@@ -5,7 +5,7 @@ import {
 } from "@shared";
 import { ZodError, type ZodType, z } from "zod";
 import logger from "@/logging";
-import { AgentModel, AgentToolModel, ToolModel } from "@/models";
+import { AgentModel, AgentToolModel } from "@/models";
 import { assignToolToAgent } from "@/services/agent-tool-assignment";
 import type { ArchestraContext } from "./types";
 
@@ -33,12 +33,6 @@ export function isAbortLikeError(error: unknown): boolean {
   return /\baborted?\b/i.test(error.message);
 }
 
-export type McpServerResult = {
-  id: string;
-  status: string;
-  toolCount?: number;
-  error?: string;
-};
 export type SubAgentResult = { id: string; status: string };
 export type ToolAssignmentInput = {
   toolId: string;
@@ -86,67 +80,6 @@ type ArchestraToolDefinitionInput<
 > = Omit<ArchestraToolDefinition<ShortName, TSchema>, "invoke">;
 
 export const EmptyToolArgsSchema = z.strictObject({});
-
-export async function assignMcpServerTools(params: {
-  agentId: string;
-  mcpServerIds: string[];
-  useDynamicTeamCredential?: boolean;
-}): Promise<McpServerResult[]> {
-  const { agentId, mcpServerIds, useDynamicTeamCredential } = params;
-  const results: McpServerResult[] = [];
-  for (const mcpServerId of mcpServerIds) {
-    try {
-      const tools = await ToolModel.findByCatalogId(mcpServerId);
-      if (tools.length === 0) {
-        results.push({ id: mcpServerId, status: "no_tools" });
-        continue;
-      }
-
-      const assignmentResults = await Promise.all(
-        tools.map((tool) =>
-          assignToolToAgent({
-            agentId,
-            toolId: tool.id,
-            useDynamicTeamCredential,
-          }),
-        ),
-      );
-      const failed = assignmentResults.filter(
-        (result) =>
-          result !== null && result !== "duplicate" && result !== "updated",
-      );
-
-      if (failed.length > 0) {
-        const errors = [
-          ...new Set(failed.map((result) => result.error.message)),
-        ];
-        results.push({
-          id: mcpServerId,
-          status:
-            failed.length === assignmentResults.length
-              ? "validation_failed"
-              : "partial_success",
-          toolCount: assignmentResults.length - failed.length,
-          error: errors.join("; "),
-        });
-        continue;
-      }
-
-      results.push({
-        id: mcpServerId,
-        status: "success",
-        toolCount: tools.length,
-      });
-    } catch (error) {
-      logger.error(
-        { err: error, mcpServerId },
-        "Error assigning MCP server tools",
-      );
-      results.push({ id: mcpServerId, status: "error" });
-    }
-  }
-  return results;
-}
 
 export async function assignToolAssignments(
   agentId: string,
@@ -230,20 +163,9 @@ export async function assignSubAgentDelegations(
 
 export function formatAssignmentSummary(
   lines: string[],
-  mcpServerResults: McpServerResult[],
   subAgentResults: SubAgentResult[],
   toolAssignmentResults: ToolAssignmentResult[] = [],
 ): void {
-  if (mcpServerResults.length > 0) {
-    lines.push(
-      "",
-      "MCP Server Tool Assignments:",
-      ...mcpServerResults.map(
-        (r) =>
-          `  - ${r.id}: ${r.status}${r.toolCount ? ` (${r.toolCount} tools)` : ""}${r.error ? ` - ${r.error}` : ""}`,
-      ),
-    );
-  }
   if (subAgentResults.length > 0) {
     lines.push(
       "",

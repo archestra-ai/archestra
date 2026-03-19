@@ -51,33 +51,33 @@ describe("isAbortLikeError", () => {
 });
 
 describe("formatAssignmentSummary", () => {
-  test("appends MCP server results to lines", () => {
+  test("appends tool assignment results to lines", () => {
     const lines: string[] = ["Header"];
     formatAssignmentSummary(
       lines,
-      [
-        { id: "mcp-1", status: "success", toolCount: 3 },
-        { id: "mcp-2", status: "no_tools" },
-      ],
       [],
+      [
+        { toolId: "tool-1", status: "success" },
+        { toolId: "tool-2", status: "error", error: "validation failed" },
+      ],
     );
 
-    expect(lines).toContain("MCP Server Tool Assignments:");
-    expect(lines.some((l) => l.includes("mcp-1: success (3 tools)"))).toBe(
+    expect(lines).toContain("Tool Assignments:");
+    expect(lines.some((l) => l.includes("tool-1: success"))).toBe(true);
+    expect(lines.some((l) => l.includes("tool-2: error - validation failed"))).toBe(
       true,
     );
-    expect(lines.some((l) => l.includes("mcp-2: no_tools"))).toBe(true);
   });
 
   test("appends sub-agent results to lines", () => {
     const lines: string[] = [];
-    formatAssignmentSummary(lines, [], [{ id: "agent-1", status: "success" }]);
+    formatAssignmentSummary(lines, [{ id: "agent-1", status: "success" }]);
     expect(lines).toContain("Sub-Agent Delegations:");
   });
 
   test("does nothing when both arrays are empty", () => {
     const lines: string[] = ["Initial"];
-    formatAssignmentSummary(lines, [], []);
+    formatAssignmentSummary(lines, []);
     expect(lines).toEqual(["Initial"]);
   });
 });

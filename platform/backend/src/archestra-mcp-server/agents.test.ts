@@ -85,44 +85,6 @@ describe("agent tool execution", () => {
     expect(created?.connectorIds).toEqual([connector.id]);
   });
 
-  test("create_agent does not write invalid remote MCP tool assignments from mcpServerIds", async ({
-    makeInternalMcpCatalog,
-    makeTool,
-  }) => {
-    const catalog = await makeInternalMcpCatalog({ serverType: "remote" });
-    await makeTool({
-      name: "remote_catalog_tool",
-      catalogId: catalog.id,
-    });
-
-    const result = await executeArchestraTool(
-      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_agent`,
-      {
-        name: "Agent With Invalid Catalog Assignment",
-        mcpServerIds: [catalog.id],
-      },
-      mockContext,
-    );
-
-    expect(result.isError).toBe(false);
-    expect((result.content[0] as any).text).toContain("validation_failed");
-
-    const createdAgentId = ((result.content[0] as any).text as string)
-      .split("\n")
-      .find((line) => line.startsWith("ID: "))
-      ?.replace("ID: ", "");
-    expect(createdAgentId).toBeDefined();
-    if (!createdAgentId) {
-      throw new Error("Expected created agent id in tool output");
-    }
-
-    const createdAssignments = await db
-      .select()
-      .from(schema.agentToolsTable)
-      .where(eq(schema.agentToolsTable.agentId, createdAgentId));
-    expect(createdAssignments).toEqual([]);
-  });
-
   test("create_agent supports validated toolAssignments with dynamic credentials", async ({
     makeInternalMcpCatalog,
     makeTool,
@@ -173,46 +135,36 @@ describe("agent tool execution", () => {
     expect(assignment.useDynamicTeamCredential).toBe(true);
   });
 
-  test("create_agent assigns remote MCP tools from mcpServerIds with dynamic credentials", async ({
+  test("create_agent reports invalid remote toolAssignments without credentials", async ({
     makeInternalMcpCatalog,
     makeTool,
   }) => {
     const catalog = await makeInternalMcpCatalog({ serverType: "remote" });
     const tool = await makeTool({
-      name: "remote_dynamic_catalog_tool",
+      name: "remote_catalog_tool",
       catalogId: catalog.id,
     });
 
     const result = await executeArchestraTool(
       `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_agent`,
       {
-        name: "Agent With Remote Dynamic Catalog Assignment",
-        mcpServerIds: [catalog.id],
-        mcpServerUseDynamicTeamCredential: true,
+        name: "Agent With Invalid Tool Assignment",
+        toolAssignments: [
+          {
+            toolId: tool.id,
+          },
+        ],
       },
       mockContext,
     );
 
     expect(result.isError).toBe(false);
-    expect((result.content[0] as any).text).toContain(
-      `${catalog.id}: success (1 tools)`,
-    );
-
-    const createdAgentId = extractCreatedId(result);
-    const [assignment] = await db
-      .select()
-      .from(schema.agentToolsTable)
-      .where(
-        and(
-          eq(schema.agentToolsTable.agentId, createdAgentId),
-          eq(schema.agentToolsTable.toolId, tool.id),
-        ),
-      );
-    expect(assignment).toBeDefined();
-    expect(assignment.useDynamicTeamCredential).toBe(true);
+    expect((result.content[0] as any).text).toContain("Tool Assignments:");
+    expect((result.content[0] as any).text).toContain(`${tool.id}: error`);
+    expect((result.content[0] as any).text).toContain("Credential source");
   });
 
-  test("create_agent assigns local MCP tools from mcpServerIds with dynamic credentials", async ({
+  test("create_agent assigns local MCP tools with dynamic credentials via toolAssignments", async ({
     makeInternalMcpCatalog,
     makeTool,
   }) => {
@@ -225,17 +177,20 @@ describe("agent tool execution", () => {
     const result = await executeArchestraTool(
       `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_agent`,
       {
-        name: "Agent With Local Dynamic Catalog Assignment",
-        mcpServerIds: [catalog.id],
-        mcpServerUseDynamicTeamCredential: true,
+        name: "Agent With Local Dynamic Tool Assignment",
+        toolAssignments: [
+          {
+            toolId: tool.id,
+            useDynamicTeamCredential: true,
+          },
+        ],
       },
       mockContext,
     );
 
     expect(result.isError).toBe(false);
-    expect((result.content[0] as any).text).toContain(
-      `${catalog.id}: success (1 tools)`,
-    );
+    expect((result.content[0] as any).text).toContain("Tool Assignments:");
+    expect((result.content[0] as any).text).toContain(`${tool.id}: success`);
 
     const createdAgentId = extractCreatedId(result);
     const [assignment] = await db
@@ -304,7 +259,7 @@ describe("agent tool execution", () => {
     expect(updated?.connectorIds).toEqual([replacementConnector.id]);
   });
 
-  test("edit_agent assigns MCP tools from mcpServerIds with dynamic credentials", async ({
+  test("edit_agent assigns MCP tools with dynamic credentials via toolAssignments", async ({
     makeAgent,
     makeInternalMcpCatalog,
     makeTool,
@@ -329,16 +284,19 @@ describe("agent tool execution", () => {
       `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}edit_agent`,
       {
         id: agent.id,
-        mcpServerIds: [catalog.id],
-        mcpServerUseDynamicTeamCredential: true,
+        toolAssignments: [
+          {
+            toolId: tool.id,
+            useDynamicTeamCredential: true,
+          },
+        ],
       },
       mockContext,
     );
 
     expect(result.isError).toBe(false);
-    expect((result.content[0] as any).text).toContain(
-      `${catalog.id}: success (1 tools)`,
-    );
+    expect((result.content[0] as any).text).toContain("Tool Assignments:");
+    expect((result.content[0] as any).text).toContain(`${tool.id}: success`);
 
     const [assignment] = await db
       .select()

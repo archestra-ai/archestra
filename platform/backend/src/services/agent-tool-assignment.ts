@@ -10,7 +10,7 @@ import {
 import type { InternalMcpCatalog, Tool } from "@/types";
 
 export type AgentToolAssignmentError = {
-  status: 400 | 404;
+  code: "not_found" | "validation_error";
   error: { message: string; type: string };
 };
 
@@ -86,8 +86,8 @@ export async function validateAssignment(params: {
     : await AgentModel.exists(agentId);
 
   if (!agentExists) {
-    return {
-      status: 404,
+      return {
+      code: "not_found",
       error: {
         message: `Agent with ID ${agentId} not found`,
         type: "not_found",
@@ -101,7 +101,7 @@ export async function validateAssignment(params: {
 
   if (!tool) {
     return {
-      status: 404,
+      code: "not_found",
       error: {
         message: `Tool with ID ${toolId} not found`,
         type: "not_found",
@@ -178,8 +178,8 @@ async function validateCatalogRequirements(params: {
 
   if (catalogItem?.serverType === "local") {
     if (!executionSourceMcpServerId && !useDynamicTeamCredential) {
-      return {
-        status: 400,
+        return {
+        code: "validation_error",
         error: {
           message:
             "Execution source installation or dynamic team credential is required for local MCP server tools",
@@ -192,7 +192,7 @@ async function validateCatalogRequirements(params: {
   if (catalogItem?.serverType === "remote") {
     if (!credentialSourceMcpServerId && !useDynamicTeamCredential) {
       return {
-        status: 400,
+        code: "validation_error",
         error: {
           message:
             "Credential source or dynamic team credential is required for remote MCP server tools",
@@ -219,7 +219,7 @@ export async function validateCredentialSource(params: {
 
   if (!mcpServer) {
     return {
-      status: 404,
+      code: "not_found",
       error: {
         message: `MCP server with ID ${credentialSourceMcpServerId} not found`,
         type: "not_found",
@@ -232,7 +232,7 @@ export async function validateCredentialSource(params: {
     : null;
   if (!owner) {
     return {
-      status: 400,
+      code: "validation_error",
       error: {
         message: "Personal token owner not found",
         type: "validation_error",
@@ -248,7 +248,7 @@ export async function validateCredentialSource(params: {
 
   if (!hasAccess) {
     return {
-      status: 400,
+      code: "validation_error",
       error: {
         message:
           "The credential owner must be a member of a team that this agent is assigned to",
@@ -273,7 +273,7 @@ export async function validateExecutionSource(params: {
       : await McpServerModel.findById(executionSourceMcpServerId);
   if (!mcpServer) {
     return {
-      status: 404,
+      code: "not_found",
       error: {
         message: `MCP server with ID ${executionSourceMcpServerId} not found`,
         type: "not_found",
@@ -284,7 +284,7 @@ export async function validateExecutionSource(params: {
   const tool = await ToolModel.findById(toolId);
   if (!tool) {
     return {
-      status: 404,
+      code: "not_found",
       error: {
         message: `Tool with ID ${toolId} not found`,
         type: "not_found",
@@ -294,7 +294,7 @@ export async function validateExecutionSource(params: {
 
   if (!tool.catalogId) {
     return {
-      status: 400,
+      code: "validation_error",
       error: {
         message: "Only MCP server tools can use an execution source",
         type: "validation_error",
@@ -304,7 +304,7 @@ export async function validateExecutionSource(params: {
 
   if (mcpServer.catalogId !== tool.catalogId) {
     return {
-      status: 400,
+      code: "validation_error",
       error: {
         message:
           "Execution source MCP server must come from the same catalog item as the tool",

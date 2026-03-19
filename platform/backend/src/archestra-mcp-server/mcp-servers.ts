@@ -379,7 +379,7 @@ const registry = defineArchestraTools([
     shortName: "get_mcp_servers",
     title: "Get MCP Servers",
     description:
-      "List all MCP servers from the catalog. Returns catalog item IDs that can be used with mcpServerIds in create_agent/edit_agent.",
+      "List all MCP servers from the catalog. Use this to identify candidate MCP servers, then call get_mcp_server_tools to fetch exact tool IDs for create_agent/edit_agent toolAssignments.",
     schema: EmptyToolArgsSchema,
     outputSchema: GetMcpServersOutputSchema,
     async handler({ args, context }) {

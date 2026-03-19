@@ -22,7 +22,6 @@ import {
   UuidIdSchema,
 } from "@/types";
 import {
-  assignMcpServerTools,
   assignSubAgentDelegations,
   assignToolAssignments,
   catchError,
@@ -189,8 +188,6 @@ export async function handleCreateResource<
     connectorIds?: string[];
     systemPrompt?: string | null;
     suggestedPrompts?: Array<{ summaryTitle: string; prompt: string }>;
-    mcpServerIds?: string[];
-    mcpServerUseDynamicTeamCredential?: boolean;
     subAgentIds?: string[];
     toolAssignments?: ToolAssignmentInput[];
   },
@@ -303,14 +300,6 @@ export async function handleCreateResource<
       scope === "personal" ? context.userId : undefined,
     );
 
-    const mcpServerResults =
-      targetAgentType === "agent" && (args.mcpServerIds?.length ?? 0) > 0
-        ? await assignMcpServerTools({
-            agentId: created.id,
-            mcpServerIds: args.mcpServerIds ?? [],
-            useDynamicTeamCredential: args.mcpServerUseDynamicTeamCredential,
-          })
-        : [];
     const toolAssignmentResults =
       targetAgentType === "agent" && (args.toolAssignments?.length ?? 0) > 0
         ? await assignToolAssignments(created.id, args.toolAssignments ?? [])
@@ -333,7 +322,6 @@ export async function handleCreateResource<
     ];
     formatAssignmentSummary(
       lines,
-      mcpServerResults,
       subAgentResults,
       toolAssignmentResults,
     );
@@ -445,8 +433,6 @@ export async function handleEditResource<
     connectorIds?: string[];
     systemPrompt?: string | null;
     suggestedPrompts?: Array<{ summaryTitle: string; prompt: string }>;
-    mcpServerIds?: string[];
-    mcpServerUseDynamicTeamCredential?: boolean;
     subAgentIds?: string[];
     toolAssignments?: ToolAssignmentInput[];
   },
@@ -542,14 +528,6 @@ export async function handleEditResource<
       return errorResult(`failed to update ${toolLabel}.`);
     }
 
-    const mcpServerResults =
-      expectedType === "agent" && (args.mcpServerIds?.length ?? 0) > 0
-        ? await assignMcpServerTools({
-            agentId: args.id,
-            mcpServerIds: args.mcpServerIds ?? [],
-            useDynamicTeamCredential: args.mcpServerUseDynamicTeamCredential,
-          })
-        : [];
     const toolAssignmentResults =
       expectedType === "agent" && (args.toolAssignments?.length ?? 0) > 0
         ? await assignToolAssignments(args.id, args.toolAssignments ?? [])
@@ -572,7 +550,6 @@ export async function handleEditResource<
     ];
     formatAssignmentSummary(
       lines,
-      mcpServerResults,
       subAgentResults,
       toolAssignmentResults,
     );

@@ -216,16 +216,19 @@ async function handleBulkAssignTool(params: {
         return assignToolToAgent({
           agentId: targetId,
           toolId: String(assignment.toolId),
-          credentialSourceMcpServerId: (assignment.credentialSourceMcpServerId as
-            | string
-            | null
-            | undefined) ?? undefined,
-          executionSourceMcpServerId: (assignment.executionSourceMcpServerId as
-            | string
-            | null
-            | undefined) ?? undefined,
-          useDynamicTeamCredential:
-            assignment.useDynamicTeamCredential as boolean | undefined,
+          credentialSourceMcpServerId:
+            (assignment.credentialSourceMcpServerId as
+              | string
+              | null
+              | undefined) ?? undefined,
+          executionSourceMcpServerId:
+            (assignment.executionSourceMcpServerId as
+              | string
+              | null
+              | undefined) ?? undefined,
+          useDynamicTeamCredential: assignment.useDynamicTeamCredential as
+            | boolean
+            | undefined,
         });
       }),
     );

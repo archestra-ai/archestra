@@ -1,5 +1,5 @@
-import { describe, expect, test } from "@/test";
 import { validateAssignment } from "@/services/agent-tool-assignment";
+import { describe, expect, test } from "@/test";
 import type { InternalMcpCatalog, Tool } from "@/types";
 
 /**
@@ -86,7 +86,7 @@ describe("validateAssignment", () => {
       preFetchedData: data,
     });
     expect(result).not.toBeNull();
-    expect(result?.status).toBe(404);
+    expect(result?.code).toBe("not_found");
     expect(result?.error.type).toBe("not_found");
     expect(result?.error.message).toContain("missing-agent");
   });
@@ -105,7 +105,7 @@ describe("validateAssignment", () => {
       preFetchedData: data,
     });
     expect(result).not.toBeNull();
-    expect(result?.status).toBe(404);
+    expect(result?.code).toBe("not_found");
     expect(result?.error.type).toBe("not_found");
     expect(result?.error.message).toContain("missing-tool");
   });
@@ -130,7 +130,7 @@ describe("validateAssignment", () => {
       preFetchedData: data,
     });
     expect(result).not.toBeNull();
-    expect(result?.status).toBe(400);
+    expect(result?.code).toBe("validation_error");
     expect(result?.error.message).toContain("Execution source");
   });
 
@@ -212,7 +212,7 @@ describe("validateAssignment", () => {
       preFetchedData: data,
     });
     expect(result).not.toBeNull();
-    expect(result?.status).toBe(400);
+    expect(result?.code).toBe("validation_error");
     expect(result?.error.message).toContain("Credential source");
   });
 

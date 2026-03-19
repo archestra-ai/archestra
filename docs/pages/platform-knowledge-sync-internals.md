@@ -80,9 +80,13 @@ Meaning of the main statuses:
 - `partial`: the sync paused and scheduled a continuation
 - `failed`: the sync could not complete
 
-## Manual Sync (Sync Now)
+## Manual Sync
 
 When you trigger **Sync now**, Archestra immediately marks the connector as `running` and enqueues the same pipeline used for scheduled syncs. The UI then polls for progress and final status updates.
+
+## Force Re-sync
+
+Force Re-sync clears the connector checkpoint and starts the sync from the beginning. Use it when the source system changed in a way incremental sync will not pick up, or when you want to rebuild the connector's indexed content from scratch.
 
 ## Document Deduplication
 

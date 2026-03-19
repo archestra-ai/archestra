@@ -177,8 +177,7 @@
                 "value": 1000
               }
             ]
-          },
-          "unit": "short"
+          }
         },
         "overrides": []
       },
@@ -318,7 +317,8 @@
                 "value": null
               }
             ]
-          }
+          },
+          "unit": "short"
         },
         "overrides": []
       },
@@ -343,7 +343,7 @@
           "fields": "",
           "values": false
         },
-        "showPercentChange": true,
+        "showPercentChange": false,
         "textMode": "auto",
         "wideLayout": true
       },
@@ -362,7 +362,8 @@
         }
       ],
       "title": "Tasks In Progress",
-      "type": "stat"
+      "type": "stat",
+      "transparent": true
     },
     {
       "datasource": {

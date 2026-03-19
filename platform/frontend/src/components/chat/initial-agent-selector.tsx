@@ -1501,13 +1501,12 @@ function ConfigureToolView({
   return (
     <div className="flex flex-col h-full">
       <DialogHeader
-        title="Add Tools"
+        title={catalog.name}
         breadcrumbs={[agentName, "Add Tools"]}
         onBack={onBack}
         description={
           <>
-            <span className="font-medium text-foreground">{catalog.name}</span>
-            {catalog.description ? `: ${catalog.description}` : null}
+            {catalog.description}
             {showArchestraDocsLink ? (
               <>
                 {" "}

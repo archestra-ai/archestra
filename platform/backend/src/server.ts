@@ -20,7 +20,7 @@ import fastifyCors from "@fastify/cors";
 import fastifyFormbody from "@fastify/formbody";
 import fastifySwagger from "@fastify/swagger";
 import * as Sentry from "@sentry/node";
-import Fastify, { type FastifyInstance } from "fastify";
+import Fastify from "fastify";
 import metricsPlugin from "fastify-metrics";
 import {
   hasZodFastifySchemaValidationErrors,
@@ -383,7 +383,9 @@ const registerMetricsPlugin = async (
   });
 };
 
-const addMetricsAuthenticationHook = (fastify: FastifyInstance): void => {
+const addMetricsAuthenticationHook = (
+  fastify: FastifyInstanceWithZod,
+): void => {
   const { secret: metricsSecret } = observability.metrics;
 
   if (!metricsSecret) {
@@ -414,7 +416,7 @@ const addMetricsAuthenticationHook = (fastify: FastifyInstance): void => {
 };
 
 const registerStandaloneMetricsEndpoint = async (
-  fastify: FastifyInstance,
+  fastify: FastifyInstanceWithZod,
 ): Promise<void> => {
   addMetricsAuthenticationHook(fastify);
 
@@ -816,7 +818,7 @@ const startWorker = async () => {
     taskQueueService.startWorker();
 
     // Minimal worker server for Kubernetes probes and Prometheus scraping
-    const healthServer = Fastify();
+    const healthServer = createFastifyInstance();
 
     healthServer.get("/health", async () => ({ status: "ok" }));
     healthServer.get("/ready", async (_request, reply) => {

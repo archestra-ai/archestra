@@ -37,7 +37,7 @@ export function CustomDateTimeRangeDialog({
       title={title}
       description={description}
       size="small"
-      onSubmit={onApply}
+      onSubmit={() => onApply()}
       footer={
         <>
           <Button

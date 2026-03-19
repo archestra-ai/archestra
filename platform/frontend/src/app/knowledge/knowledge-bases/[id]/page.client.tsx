@@ -25,7 +25,6 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { DataTable } from "@/components/ui/data-table";
-import { DialogBody } from "@/components/ui/dialog";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -414,84 +413,80 @@ function AddConnectorDialog({
         }
       >
         {step === "choose" && (
-          <DialogBody className="pt-4">
-            <div className="grid grid-cols-2 gap-3">
-              <button
-                type="button"
-                onClick={() => setStep("reuse")}
-                disabled={availableConnectors.length === 0}
-                className="flex flex-col items-center gap-3 rounded-lg border p-5 text-center transition-colors hover:bg-muted/50 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-muted">
-                  <Link2 className="h-7 w-7 text-muted-foreground" />
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              type="button"
+              onClick={() => setStep("reuse")}
+              disabled={availableConnectors.length === 0}
+              className="flex flex-col items-center gap-3 rounded-lg border p-5 text-center transition-colors hover:bg-muted/50 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-muted">
+                <Link2 className="h-7 w-7 text-muted-foreground" />
+              </div>
+              <div>
+                <div className="font-medium">Reuse Existing</div>
+                <div className="text-xs text-muted-foreground mt-1">
+                  {availableConnectors.length === 0
+                    ? "No unassigned connectors"
+                    : `${availableConnectors.length} available`}
                 </div>
-                <div>
-                  <div className="font-medium">Reuse Existing</div>
-                  <div className="text-xs text-muted-foreground mt-1">
-                    {availableConnectors.length === 0
-                      ? "No unassigned connectors"
-                      : `${availableConnectors.length} available`}
-                  </div>
+              </div>
+            </button>
+            <button
+              type="button"
+              onClick={() => setStep("create")}
+              className="flex flex-col items-center gap-3 rounded-lg border p-5 text-center transition-colors hover:bg-muted/50 cursor-pointer"
+            >
+              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-muted">
+                <Plus className="h-7 w-7 text-muted-foreground" />
+              </div>
+              <div>
+                <div className="font-medium">Create New</div>
+                <div className="text-xs text-muted-foreground mt-1">
+                  Set up a new connector
                 </div>
-              </button>
-              <button
-                type="button"
-                onClick={() => setStep("create")}
-                className="flex flex-col items-center gap-3 rounded-lg border p-5 text-center transition-colors hover:bg-muted/50 cursor-pointer"
-              >
-                <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-muted">
-                  <Plus className="h-7 w-7 text-muted-foreground" />
-                </div>
-                <div>
-                  <div className="font-medium">Create New</div>
-                  <div className="text-xs text-muted-foreground mt-1">
-                    Set up a new connector
-                  </div>
-                </div>
-              </button>
-            </div>
-          </DialogBody>
+              </div>
+            </button>
+          </div>
         )}
 
         {step === "reuse" && (
-          <DialogBody className="pt-4">
-            <div className="grid max-h-[50vh] grid-cols-2 gap-3 overflow-y-auto">
-              {availableConnectors.map((connector) => {
-                const isSelected = selectedIds.has(connector.id);
-                return (
-                  <button
-                    key={connector.id}
-                    type="button"
-                    onClick={() => toggleSelected(connector.id)}
-                    className={cn(
-                      "relative flex items-center gap-3 rounded-lg border p-3 text-left transition-colors cursor-pointer hover:bg-muted/50",
-                      isSelected && "border-primary bg-primary/5",
-                    )}
-                  >
-                    {isSelected && (
-                      <div className="absolute top-2 right-2">
-                        <Check className="h-4 w-4 text-primary" />
-                      </div>
-                    )}
-                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-muted">
-                      <ConnectorTypeIcon
-                        type={connector.connectorType}
-                        className="h-5 w-5"
-                      />
+          <div className="grid max-h-[50vh] grid-cols-2 gap-3 overflow-y-auto">
+            {availableConnectors.map((connector) => {
+              const isSelected = selectedIds.has(connector.id);
+              return (
+                <button
+                  key={connector.id}
+                  type="button"
+                  onClick={() => toggleSelected(connector.id)}
+                  className={cn(
+                    "relative flex items-center gap-3 rounded-lg border p-3 text-left transition-colors cursor-pointer hover:bg-muted/50",
+                    isSelected && "border-primary bg-primary/5",
+                  )}
+                >
+                  {isSelected && (
+                    <div className="absolute top-2 right-2">
+                      <Check className="h-4 w-4 text-primary" />
                     </div>
-                    <div className="min-w-0">
-                      <div className="font-medium text-sm truncate">
-                        {connector.name}
-                      </div>
-                      <div className="text-xs text-muted-foreground capitalize">
-                        {connector.connectorType}
-                      </div>
+                  )}
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-muted">
+                    <ConnectorTypeIcon
+                      type={connector.connectorType}
+                      className="h-5 w-5"
+                    />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="font-medium text-sm truncate">
+                      {connector.name}
                     </div>
-                  </button>
-                );
-              })}
-            </div>
-          </DialogBody>
+                    <div className="text-xs text-muted-foreground capitalize">
+                      {connector.connectorType}
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
         )}
       </StandardDialog>
 

@@ -52,6 +52,12 @@ const AgentCreateToolArgsSchema = CreateBaseToolArgsSchema.extend({
     .describe(
       "Catalog item IDs from get_mcp_servers whose tools should be assigned to the agent.",
     ),
+  mcpServerUseDynamicTeamCredential: z
+    .boolean()
+    .optional()
+    .describe(
+      "When true, assign tools from mcpServerIds using dynamic team credentials instead of requiring pinned MCP deployments.",
+    ),
   subAgentIds: z
     .array(UuidIdSchema)
     .optional()
@@ -112,6 +118,12 @@ const EditAgentToolArgsSchema = z
       .optional()
       .describe(
         "Catalog item IDs from get_mcp_servers whose tools should be added to the agent.",
+      ),
+    mcpServerUseDynamicTeamCredential: z
+      .boolean()
+      .optional()
+      .describe(
+        "When true, assign tools from mcpServerIds using dynamic team credentials instead of requiring pinned MCP deployments.",
       ),
     subAgentIds: z
       .array(UuidIdSchema)

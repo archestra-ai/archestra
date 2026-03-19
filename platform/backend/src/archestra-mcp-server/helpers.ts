@@ -87,10 +87,12 @@ type ArchestraToolDefinitionInput<
 
 export const EmptyToolArgsSchema = z.strictObject({});
 
-export async function assignMcpServerTools(
-  agentId: string,
-  mcpServerIds: string[],
-): Promise<McpServerResult[]> {
+export async function assignMcpServerTools(params: {
+  agentId: string;
+  mcpServerIds: string[];
+  useDynamicTeamCredential?: boolean;
+}): Promise<McpServerResult[]> {
+  const { agentId, mcpServerIds, useDynamicTeamCredential } = params;
   const results: McpServerResult[] = [];
   for (const mcpServerId of mcpServerIds) {
     try {
@@ -102,7 +104,14 @@ export async function assignMcpServerTools(
 
       const assignmentResults = await Promise.all(
         tools.map((tool) =>
-          assignToolToAgent(agentId, tool.id, undefined, undefined),
+          assignToolToAgent(
+            agentId,
+            tool.id,
+            undefined,
+            undefined,
+            undefined,
+            useDynamicTeamCredential,
+          ),
         ),
       );
       const failed = assignmentResults.filter(

@@ -190,6 +190,7 @@ export async function handleCreateResource<
     systemPrompt?: string | null;
     suggestedPrompts?: Array<{ summaryTitle: string; prompt: string }>;
     mcpServerIds?: string[];
+    mcpServerUseDynamicTeamCredential?: boolean;
     subAgentIds?: string[];
     toolAssignments?: ToolAssignmentInput[];
   },
@@ -304,7 +305,11 @@ export async function handleCreateResource<
 
     const mcpServerResults =
       targetAgentType === "agent" && (args.mcpServerIds?.length ?? 0) > 0
-        ? await assignMcpServerTools(created.id, args.mcpServerIds ?? [])
+        ? await assignMcpServerTools({
+            agentId: created.id,
+            mcpServerIds: args.mcpServerIds ?? [],
+            useDynamicTeamCredential: args.mcpServerUseDynamicTeamCredential,
+          })
         : [];
     const toolAssignmentResults =
       targetAgentType === "agent" && (args.toolAssignments?.length ?? 0) > 0
@@ -441,6 +446,7 @@ export async function handleEditResource<
     systemPrompt?: string | null;
     suggestedPrompts?: Array<{ summaryTitle: string; prompt: string }>;
     mcpServerIds?: string[];
+    mcpServerUseDynamicTeamCredential?: boolean;
     subAgentIds?: string[];
     toolAssignments?: ToolAssignmentInput[];
   },
@@ -538,7 +544,11 @@ export async function handleEditResource<
 
     const mcpServerResults =
       expectedType === "agent" && (args.mcpServerIds?.length ?? 0) > 0
-        ? await assignMcpServerTools(args.id, args.mcpServerIds ?? [])
+        ? await assignMcpServerTools({
+            agentId: args.id,
+            mcpServerIds: args.mcpServerIds ?? [],
+            useDynamicTeamCredential: args.mcpServerUseDynamicTeamCredential,
+          })
         : [];
     const toolAssignmentResults =
       expectedType === "agent" && (args.toolAssignments?.length ?? 0) > 0

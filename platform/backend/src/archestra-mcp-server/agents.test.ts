@@ -173,6 +173,84 @@ describe("agent tool execution", () => {
     expect(assignment.useDynamicTeamCredential).toBe(true);
   });
 
+  test("create_agent assigns remote MCP tools from mcpServerIds with dynamic credentials", async ({
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({ serverType: "remote" });
+    const tool = await makeTool({
+      name: "remote_dynamic_catalog_tool",
+      catalogId: catalog.id,
+    });
+
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_agent`,
+      {
+        name: "Agent With Remote Dynamic Catalog Assignment",
+        mcpServerIds: [catalog.id],
+        mcpServerUseDynamicTeamCredential: true,
+      },
+      mockContext,
+    );
+
+    expect(result.isError).toBe(false);
+    expect((result.content[0] as any).text).toContain(
+      `${catalog.id}: success (1 tools)`,
+    );
+
+    const createdAgentId = extractCreatedId(result);
+    const [assignment] = await db
+      .select()
+      .from(schema.agentToolsTable)
+      .where(
+        and(
+          eq(schema.agentToolsTable.agentId, createdAgentId),
+          eq(schema.agentToolsTable.toolId, tool.id),
+        ),
+      );
+    expect(assignment).toBeDefined();
+    expect(assignment.useDynamicTeamCredential).toBe(true);
+  });
+
+  test("create_agent assigns local MCP tools from mcpServerIds with dynamic credentials", async ({
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({ serverType: "local" });
+    const tool = await makeTool({
+      name: "local_dynamic_catalog_tool",
+      catalogId: catalog.id,
+    });
+
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_agent`,
+      {
+        name: "Agent With Local Dynamic Catalog Assignment",
+        mcpServerIds: [catalog.id],
+        mcpServerUseDynamicTeamCredential: true,
+      },
+      mockContext,
+    );
+
+    expect(result.isError).toBe(false);
+    expect((result.content[0] as any).text).toContain(
+      `${catalog.id}: success (1 tools)`,
+    );
+
+    const createdAgentId = extractCreatedId(result);
+    const [assignment] = await db
+      .select()
+      .from(schema.agentToolsTable)
+      .where(
+        and(
+          eq(schema.agentToolsTable.agentId, createdAgentId),
+          eq(schema.agentToolsTable.toolId, tool.id),
+        ),
+      );
+    expect(assignment).toBeDefined();
+    expect(assignment.useDynamicTeamCredential).toBe(true);
+  });
+
   test("edit_agent replaces assigned knowledge bases and connectors", async ({
     makeAgent,
     makeKnowledgeBase,
@@ -224,6 +302,55 @@ describe("agent tool execution", () => {
     );
     expect(updated?.knowledgeBaseIds).toEqual([replacementKb.id]);
     expect(updated?.connectorIds).toEqual([replacementConnector.id]);
+  });
+
+  test("edit_agent assigns MCP tools from mcpServerIds with dynamic credentials", async ({
+    makeAgent,
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const organizationId = mockContext.organizationId;
+    if (!organizationId) {
+      throw new Error("Expected organizationId in test context");
+    }
+
+    const agent = await makeAgent({
+      name: "Editable Dynamic Assignment Agent",
+      agentType: "agent",
+      organizationId,
+    });
+    const catalog = await makeInternalMcpCatalog({ serverType: "remote" });
+    const tool = await makeTool({
+      name: "remote_dynamic_edit_catalog_tool",
+      catalogId: catalog.id,
+    });
+
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}edit_agent`,
+      {
+        id: agent.id,
+        mcpServerIds: [catalog.id],
+        mcpServerUseDynamicTeamCredential: true,
+      },
+      mockContext,
+    );
+
+    expect(result.isError).toBe(false);
+    expect((result.content[0] as any).text).toContain(
+      `${catalog.id}: success (1 tools)`,
+    );
+
+    const [assignment] = await db
+      .select()
+      .from(schema.agentToolsTable)
+      .where(
+        and(
+          eq(schema.agentToolsTable.agentId, agent.id),
+          eq(schema.agentToolsTable.toolId, tool.id),
+        ),
+      );
+    expect(assignment).toBeDefined();
+    expect(assignment.useDynamicTeamCredential).toBe(true);
   });
 
   test("get_agent requires id or name", async () => {

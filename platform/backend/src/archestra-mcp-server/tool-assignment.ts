@@ -6,7 +6,7 @@ import {
 } from "@/auth/agent-type-permissions";
 import logger from "@/logging";
 import { AgentModel, TeamModel } from "@/models";
-import { assignToolToAgent } from "@/routes/agent-tool";
+import { assignToolToAgent } from "@/services/agent-tool-assignment";
 import { AgentToolAssignmentInputSchema, UuidIdSchema } from "@/types";
 import {
   catchError,
@@ -213,20 +213,20 @@ async function handleBulkAssignTool(params: {
           });
         }
 
-        return assignToolToAgent(
-          targetId,
-          String(assignment.toolId),
-          (assignment.credentialSourceMcpServerId as
+        return assignToolToAgent({
+          agentId: targetId,
+          toolId: String(assignment.toolId),
+          credentialSourceMcpServerId: (assignment.credentialSourceMcpServerId as
             | string
             | null
             | undefined) ?? undefined,
-          (assignment.executionSourceMcpServerId as
+          executionSourceMcpServerId: (assignment.executionSourceMcpServerId as
             | string
             | null
             | undefined) ?? undefined,
-          undefined,
-          assignment.useDynamicTeamCredential as boolean | undefined,
-        );
+          useDynamicTeamCredential:
+            assignment.useDynamicTeamCredential as boolean | undefined,
+        });
       }),
     );
 

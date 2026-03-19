@@ -6,7 +6,7 @@ import {
 import { ZodError, type ZodType, z } from "zod";
 import logger from "@/logging";
 import { AgentModel, AgentToolModel, ToolModel } from "@/models";
-import { assignToolToAgent } from "@/routes/agent-tool";
+import { assignToolToAgent } from "@/services/agent-tool-assignment";
 import type { ArchestraContext } from "./types";
 
 /**
@@ -104,14 +104,11 @@ export async function assignMcpServerTools(params: {
 
       const assignmentResults = await Promise.all(
         tools.map((tool) =>
-          assignToolToAgent(
+          assignToolToAgent({
             agentId,
-            tool.id,
-            undefined,
-            undefined,
-            undefined,
+            toolId: tool.id,
             useDynamicTeamCredential,
-          ),
+          }),
         ),
       );
       const failed = assignmentResults.filter(
@@ -159,14 +156,13 @@ export async function assignToolAssignments(
 
   for (const assignment of assignments) {
     try {
-      const result = await assignToolToAgent(
+      const result = await assignToolToAgent({
         agentId,
-        assignment.toolId,
-        assignment.credentialSourceMcpServerId,
-        assignment.executionSourceMcpServerId,
-        undefined,
-        assignment.useDynamicTeamCredential,
-      );
+        toolId: assignment.toolId,
+        credentialSourceMcpServerId: assignment.credentialSourceMcpServerId,
+        executionSourceMcpServerId: assignment.executionSourceMcpServerId,
+        useDynamicTeamCredential: assignment.useDynamicTeamCredential,
+      });
 
       if (result === null || result === "updated") {
         results.push({ toolId: assignment.toolId, status: "success" });

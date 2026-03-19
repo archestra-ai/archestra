@@ -237,18 +237,18 @@ export function ProxyConnectionInstructions({
               className="mt-2 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-muted-foreground"
             />
             <span>
-            <a
-              href={getDocsUrl(
-                DocsPage.PlatformLlmProxyAuthentication,
-                "direct-provider-api-key",
-              )}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="underline hover:text-foreground"
-            >
-              Direct Provider API Key
-            </a>{" "}
-            — authenticate requests with your provider's native API key
+              <a
+                href={getDocsUrl(
+                  DocsPage.PlatformLlmProxyAuthentication,
+                  "direct-provider-api-key",
+                )}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline hover:text-foreground"
+              >
+                Direct Provider API Key
+              </a>{" "}
+              — authenticate requests with your provider's native API key
             </span>
           </li>
           <li className="flex items-start gap-2">
@@ -257,14 +257,14 @@ export function ProxyConnectionInstructions({
               className="mt-2 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-muted-foreground"
             />
             <span>
-            <a
-              href="/llm/providers/virtual-keys"
-              className="underline hover:text-foreground"
-            >
-              Virtual API Keys
-            </a>{" "}
-            — generate keys for external clients without exposing real provider
-            keys
+              <a
+                href="/llm/providers/virtual-keys"
+                className="underline hover:text-foreground"
+              >
+                Virtual API Keys
+              </a>{" "}
+              — generate keys for external clients without exposing real
+              provider keys
             </span>
           </li>
           <li className="flex items-start gap-2">
@@ -273,18 +273,18 @@ export function ProxyConnectionInstructions({
               className="mt-2 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-muted-foreground"
             />
             <span>
-            <a
-              href={getDocsUrl(
-                DocsPage.PlatformLlmProxyAuthentication,
-                "jwks-external-identity-provider",
-              )}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="underline hover:text-foreground"
-            >
-              JWKS Authentication
-            </a>{" "}
-            — authenticate with an external identity provider
+              <a
+                href={getDocsUrl(
+                  DocsPage.PlatformLlmProxyAuthentication,
+                  "jwks-external-identity-provider",
+                )}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline hover:text-foreground"
+              >
+                JWKS Authentication
+              </a>{" "}
+              — authenticate with an external identity provider
             </span>
           </li>
         </ul>

@@ -188,7 +188,6 @@ curl -X GET "${agentCardUrl}" \\
           language="text"
           contentStyle={{
             fontSize: "0.75rem",
-            paddingTop: "2.75rem",
             paddingRight: "3.5rem",
           }}
         >

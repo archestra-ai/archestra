@@ -4,7 +4,7 @@ import type { archestraApiTypes } from "@shared";
 import { ArrowLeft, Database, Layers } from "lucide-react";
 import Link from "next/link";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
-import { CopyButton } from "@/components/copy-button";
+import { JsonCodeBlock } from "@/components/json-code-block";
 import { LoadingSpinner } from "@/components/loading";
 import MessageThread from "@/components/message-thread";
 import { MetadataCard, MetadataItem } from "@/components/metadata-card";
@@ -263,15 +263,7 @@ function LogDetail({
                 </span>
               </AccordionTrigger>
               <AccordionContent className="px-6 pb-4">
-                <div className="bg-muted rounded-lg p-4 overflow-auto max-h-[600px] relative">
-                  <CopyButton
-                    text={JSON.stringify(dynamicInteraction.request, null, 2)}
-                    className="absolute top-2 right-2"
-                  />
-                  <pre className="text-xs whitespace-pre-wrap break-words">
-                    {JSON.stringify(dynamicInteraction.request, null, 2)}
-                  </pre>
-                </div>
+                <JsonCodeBlock value={dynamicInteraction.request} />
               </AccordionContent>
             </AccordionItem>
 
@@ -286,23 +278,7 @@ function LogDetail({
                   </span>
                 </AccordionTrigger>
                 <AccordionContent className="px-6 pb-4">
-                  <div className="bg-muted rounded-lg p-4 overflow-auto max-h-[600px] relative">
-                    <CopyButton
-                      text={JSON.stringify(
-                        dynamicInteraction.processedRequest,
-                        null,
-                        2,
-                      )}
-                      className="absolute top-2 right-2"
-                    />
-                    <pre className="text-xs whitespace-pre-wrap break-words">
-                      {JSON.stringify(
-                        dynamicInteraction.processedRequest,
-                        null,
-                        2,
-                      )}
-                    </pre>
-                  </div>
+                  <JsonCodeBlock value={dynamicInteraction.processedRequest} />
                   <p className="text-xs text-muted-foreground mt-2">
                     This shows the request after processing (e.g., TOON
                     conversion, trusted data filtering, etc.)
@@ -319,15 +295,7 @@ function LogDetail({
                 <span className="text-base font-semibold">Raw Response</span>
               </AccordionTrigger>
               <AccordionContent className="px-6 pb-4">
-                <div className="bg-muted rounded-lg p-4 overflow-auto max-h-[600px] relative">
-                  <CopyButton
-                    text={JSON.stringify(dynamicInteraction.response, null, 2)}
-                    className="absolute top-2 right-2"
-                  />
-                  <pre className="text-xs whitespace-pre-wrap break-words">
-                    {JSON.stringify(dynamicInteraction.response, null, 2)}
-                  </pre>
-                </div>
+                <JsonCodeBlock value={dynamicInteraction.response} />
               </AccordionContent>
             </AccordionItem>
           </Accordion>

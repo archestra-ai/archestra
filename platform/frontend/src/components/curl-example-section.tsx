@@ -116,7 +116,6 @@ export function CurlExampleSection({
       language="bash"
       contentStyle={{
         fontSize: "0.75rem",
-        paddingTop: "2.75rem",
         paddingRight: "5rem",
       }}
     >

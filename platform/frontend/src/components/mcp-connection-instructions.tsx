@@ -619,7 +619,6 @@ export function McpConnectionInstructions({
               language="json"
               contentStyle={{
                 fontSize: "0.75rem",
-                paddingTop: "2.75rem",
                 paddingRight: "5rem",
               }}
             >
@@ -717,7 +716,6 @@ function OAuthConfigBlock({ mcpUrl }: { mcpUrl: string }) {
         language="json"
         contentStyle={{
           fontSize: "0.75rem",
-          paddingTop: "2.75rem",
           paddingRight: "3.5rem",
         }}
       >

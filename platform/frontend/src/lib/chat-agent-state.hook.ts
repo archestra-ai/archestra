@@ -11,6 +11,8 @@ import { useMemo } from "react";
 type ChatConversation = archestraApiTypes.GetChatConversationResponses["200"];
 export type ChatAgentOption = { id: string; name: string };
 
+const DEFAULT_SWAP_TARGET_NAME = "__DEFAULT__";
+
 export type ResolvedChatAgentState = {
   conversationAgentId: string | null;
   swappedAgentId: string | null;
@@ -75,7 +77,7 @@ function resolveSwappedAgent(params: {
       continue;
     }
 
-    if (swapTargetName === "__DEFAULT__") {
+    if (swapTargetName === DEFAULT_SWAP_TARGET_NAME) {
       return { id: fallbackAgentId, name: "default agent" };
     }
 
@@ -113,7 +115,7 @@ function getSwapTargetNameFromMessage(message: UIMessage): string | null {
   }
 
   if (text === SWAP_TO_DEFAULT_AGENT_POKE_TEXT) {
-    return "__DEFAULT__";
+    return DEFAULT_SWAP_TARGET_NAME;
   }
 
   if (!text.startsWith(SWAP_AGENT_POKE_PREFIX)) {

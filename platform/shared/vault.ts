@@ -1,18 +1,3 @@
-export function formatSecretStorageType(
-  storageType: "vault" | "external_vault" | "database" | "none" | undefined,
-): string {
-  switch (storageType) {
-    case "vault":
-      return "Vault";
-    case "external_vault":
-      return "External Vault";
-    case "database":
-      return "Database";
-    default:
-      return "None";
-  }
-}
-
 /**
  * Check if a value is a BYOS vault reference (path#key format)
  * Type guard to narrow string | undefined to string

@@ -274,8 +274,9 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             agentLlmApiKeyId: agent.llmApiKeyId,
           });
 
-          // Strip images and large browser tool results from messages before sending to LLM
-          // This prevents context limit issues from accumulated screenshots and page snapshots
+          // Normalize chat history before replaying it to the model.
+          // This dedupes repeated tool parts, drops dangling interrupted tool calls,
+          // and strips heavy image/browser payloads that would otherwise bloat context.
           const normalizedMessagesForLLM = normalizeChatMessages(
             messages as ChatMessage[],
           );

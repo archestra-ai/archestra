@@ -1693,8 +1693,7 @@ export default function ChatPage() {
                       const messagesWithoutEditedMessage =
                         updatedMessages.slice(0, -1);
                       setMessages(messagesWithoutEditedMessage);
-                      const editedPart =
-                        editedMessage.parts?.[editedPartIndex];
+                      const editedPart = editedMessage.parts?.[editedPartIndex];
                       const editedText =
                         editedPart?.type === "text" ? editedPart.text : "";
                       if (editedText?.trim()) {

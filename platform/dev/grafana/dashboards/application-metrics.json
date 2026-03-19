@@ -882,7 +882,7 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "histogram_quantile(0.99, rate(nodejs_eventloop_lag_seconds_bucket[$__rate_interval]))",
+          "expr": "nodejs_eventloop_lag_p99_seconds",
           "hide": false,
           "instant": false,
           "legendFormat": "p99",
@@ -895,10 +895,10 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "histogram_quantile(0.95, rate(nodejs_eventloop_lag_seconds_bucket[$__rate_interval]))",
+          "expr": "nodejs_eventloop_lag_p90_seconds",
           "hide": false,
           "instant": false,
-          "legendFormat": "p95",
+          "legendFormat": "p90",
           "queryType": "range",
           "range": true,
           "refId": "B"
@@ -908,7 +908,7 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "histogram_quantile(0.50, rate(nodejs_eventloop_lag_seconds_bucket[$__rate_interval]))",
+          "expr": "nodejs_eventloop_lag_p50_seconds",
           "hide": false,
           "instant": false,
           "legendFormat": "p50",
@@ -917,7 +917,7 @@
           "refId": "C"
         }
       ],
-      "title": "Event Loop Lag",
+      "title": "Event Loop Lag (P50, P90, P99)",
       "type": "timeseries"
     },
     {
@@ -1637,7 +1637,7 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "sum(task_queue_active_tasks)",
+          "expr": "sum(task_queue_active_tasks) or vector(0)",
           "hide": false,
           "instant": true,
           "legendFormat": "",
@@ -1701,7 +1701,7 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "sum(task_queue_tasks_enqueued_total)",
+          "expr": "sum(increase(task_queue_tasks_enqueued_total[$__range])) or vector(0)",
           "hide": false,
           "instant": true,
           "legendFormat": "",
@@ -1765,7 +1765,7 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "sum(task_queue_tasks_completed_total)",
+          "expr": "sum(increase(task_queue_tasks_completed_total[$__range])) or vector(0)",
           "hide": false,
           "instant": true,
           "legendFormat": "",
@@ -1833,7 +1833,7 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "sum(task_queue_tasks_dead_total)",
+          "expr": "sum(increase(task_queue_tasks_dead_total[$__range])) or vector(0)",
           "hide": false,
           "instant": true,
           "legendFormat": "",
@@ -1897,7 +1897,7 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "sum(task_queue_stuck_tasks_reset_total)",
+          "expr": "sum(increase(task_queue_stuck_tasks_reset_total[$__range])) or vector(0)",
           "hide": false,
           "instant": true,
           "legendFormat": "",

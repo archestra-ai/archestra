@@ -20,7 +20,7 @@ import fastifyCors from "@fastify/cors";
 import fastifyFormbody from "@fastify/formbody";
 import fastifySwagger from "@fastify/swagger";
 import * as Sentry from "@sentry/node";
-import Fastify from "fastify";
+import Fastify, { type FastifyInstance } from "fastify";
 import metricsPlugin from "fastify-metrics";
 import {
   hasZodFastifySchemaValidationErrors,
@@ -383,6 +383,48 @@ const registerMetricsPlugin = async (
   });
 };
 
+const addMetricsAuthenticationHook = (fastify: FastifyInstance): void => {
+  const { secret: metricsSecret } = observability.metrics;
+
+  if (!metricsSecret) {
+    return;
+  }
+
+  fastify.addHook("preHandler", async (request, reply) => {
+    if (
+      request.url === HEALTH_PATH ||
+      request.url === READY_PATH ||
+      request.url.startsWith(`${HEALTH_PATH}?`) ||
+      request.url.startsWith(`${READY_PATH}?`)
+    ) {
+      return;
+    }
+
+    const authHeader = request.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      reply.code(401).send({ error: "Unauthorized: Bearer token required" });
+      return;
+    }
+
+    const token = authHeader.slice(7);
+    if (token !== metricsSecret) {
+      reply.code(401).send({ error: "Unauthorized: Invalid token" });
+    }
+  });
+};
+
+const registerStandaloneMetricsEndpoint = async (
+  fastify: FastifyInstance,
+): Promise<void> => {
+  addMetricsAuthenticationHook(fastify);
+
+  await fastify.register(metricsPlugin, {
+    endpoint: observability.metrics.endpoint,
+    defaultMetrics: { enabled: true },
+    routeMetrics: { enabled: false },
+  });
+};
+
 /**
  * Create separate Fastify instance for metrics on a separate port
  *
@@ -393,36 +435,12 @@ let metricsServerInstance: Awaited<
 > | null = null;
 
 const startMetricsServer = async () => {
-  const { secret: metricsSecret } = observability.metrics;
-
   const metricsServer = createFastifyInstance();
   metricsServerInstance = metricsServer;
 
-  // Add authentication hook for metrics endpoint if secret is configured
-  if (metricsSecret) {
-    metricsServer.addHook("preHandler", async (request, reply) => {
-      // Skip auth for health and readiness endpoints
-      if (request.url === HEALTH_PATH || request.url === READY_PATH) {
-        return;
-      }
-
-      const authHeader = request.headers.authorization;
-      if (!authHeader || !authHeader.startsWith("Bearer ")) {
-        reply.code(401).send({ error: "Unauthorized: Bearer token required" });
-        return;
-      }
-
-      const token = authHeader.slice(7); // Remove 'Bearer ' prefix
-      if (token !== metricsSecret) {
-        reply.code(401).send({ error: "Unauthorized: Invalid token" });
-        return;
-      }
-    });
-  }
-
   metricsServer.get(HEALTH_PATH, () => ({ status: "ok" }));
 
-  await registerMetricsPlugin(metricsServer, true);
+  await registerStandaloneMetricsEndpoint(metricsServer);
 
   // Start metrics server on dedicated port
   await metricsServer.listen({
@@ -431,7 +449,9 @@ const startMetricsServer = async () => {
   });
   metricsServer.log.info(
     `Metrics server started on port ${observability.metrics.port}${
-      metricsSecret ? " (with authentication)" : " (no authentication)"
+      observability.metrics.secret
+        ? " (with authentication)"
+        : " (no authentication)"
     }`,
   );
 };
@@ -795,8 +815,9 @@ const startWorker = async () => {
     await taskQueueService.seedPeriodicTasks();
     taskQueueService.startWorker();
 
-    // Minimal health server for Kubernetes probes
+    // Minimal worker server for Kubernetes probes and Prometheus scraping
     const healthServer = Fastify();
+
     healthServer.get("/health", async () => ({ status: "ok" }));
     healthServer.get("/ready", async (_request, reply) => {
       const dbHealthy = await isDatabaseHealthy();
@@ -805,8 +826,11 @@ const startWorker = async () => {
       }
       return { status: "ok" };
     });
+
+    await registerStandaloneMetricsEndpoint(healthServer);
+
     await healthServer.listen({ port: port, host });
-    logger.info(`Worker health server started on port ${port}`);
+    logger.info(`Worker server started on port ${port}`);
 
     const gracefulShutdown = async (signal: string) => {
       logger.info(`Worker received ${signal}, shutting down...`);

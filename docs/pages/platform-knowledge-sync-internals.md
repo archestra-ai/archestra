@@ -1,7 +1,7 @@
 ---
 title: Knowledge Sync Internals
-category: Development
-order: 4
+category: Knowledge
+order: 3
 description: Internal data flow and task orchestration for knowledge base connector sync
 lastUpdated: 2026-03-09
 ---

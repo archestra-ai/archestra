@@ -25,21 +25,11 @@ Archestra stores both raw spend and savings. Savings can come from:
 
 ## Usage Limits
 
-Usage limits are guardrails applied to an organization, team, or profile. They are intended to cap spend or request volume before usage grows unexpectedly.
+Usage limits are guardrails for LLM spend. The current product UI supports token-cost limits only, scoped to either the organization or a team, and each limit targets one or more specific models.
 
-Archestra supports limits for:
+Use organization limits for a shared platform-wide budget. Use team limits when different groups need separate spend caps.
 
-- token cost
-- MCP server calls
-- tool calls
-
-Choose the narrowest scope that matches the budget owner:
-
-- organization limits for global platform budgets
-- team limits when different departments or environments need separate caps
-- profile limits when a single agent or workflow needs tighter control
-
-Limits are evaluated from recorded usage, so pricing configuration affects token-cost limits directly.
+Limits are evaluated from recorded model usage, so pricing configuration affects token-cost limits directly.
 
 ## Limit Cleanup
 

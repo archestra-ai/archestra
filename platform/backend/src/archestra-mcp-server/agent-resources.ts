@@ -55,27 +55,27 @@ export const SuggestedPromptToolInputSchema = SuggestedPromptInputSchema.extend(
 ).strict();
 
 export const ToolAssignmentToolInputSchema =
-  AgentToolAssignmentInputSchema.extend({
-    toolId: AgentToolAssignmentInputSchema.shape.toolId.describe(
-      "The ID of the tool to assign to the agent.",
-    ),
-    resolveAtCallTime:
-      AgentToolAssignmentInputSchema.shape.resolveAtCallTime.describe(
-        "When true, resolve credentials and execution target at tool call time. Prefer this for builder flows.",
+  AgentToolAssignmentInputSchema.omit({
+    useDynamicTeamCredential: true,
+  })
+    .extend({
+      toolId: AgentToolAssignmentInputSchema.shape.toolId.describe(
+        "The ID of the tool to assign to the agent.",
       ),
-    credentialSourceMcpServerId:
-      AgentToolAssignmentInputSchema.shape.credentialSourceMcpServerId.describe(
-        "Optional explicit credential source override for remote MCP tools when you do not want late-bound resolution.",
-      ),
-    executionSourceMcpServerId:
-      AgentToolAssignmentInputSchema.shape.executionSourceMcpServerId.describe(
-        "Optional explicit execution source override for local MCP tools when you do not want late-bound resolution.",
-      ),
-    useDynamicTeamCredential:
-      AgentToolAssignmentInputSchema.shape.useDynamicTeamCredential.describe(
-        "Legacy alias for resolveAtCallTime. Prefer resolveAtCallTime in new MCP tool calls.",
-      ),
-  }).strict();
+      resolveAtCallTime:
+        AgentToolAssignmentInputSchema.shape.resolveAtCallTime.describe(
+          "When true, resolve credentials and execution target at tool call time. Prefer this for builder flows.",
+        ),
+      credentialSourceMcpServerId:
+        AgentToolAssignmentInputSchema.shape.credentialSourceMcpServerId.describe(
+          "Optional explicit remote MCP installation to use as the credential source. Use this only when you want credentials to come from one specific installed MCP server instead of resolving them at call time.",
+        ),
+      executionSourceMcpServerId:
+        AgentToolAssignmentInputSchema.shape.executionSourceMcpServerId.describe(
+          "Optional explicit local MCP installation to run the tool on. Use this only when you want a local MCP tool to execute on one specific installed MCP server instead of resolving the execution target at call time.",
+        ),
+    })
+    .strict();
 
 export const KnowledgeBaseIdsToolInputSchema =
   InsertAgentSchemaBase.shape.knowledgeBaseIds.describe(

@@ -1,6 +1,10 @@
 "use client";
 
-import type { archestraApiTypes } from "@shared";
+import {
+  type archestraApiTypes,
+  TOOL_SWAP_AGENT_FULL_NAME,
+  TOOL_SWAP_TO_DEFAULT_AGENT_FULL_NAME,
+} from "@shared";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PROVIDER_CONFIG } from "@/components/chat-api-key-form";
@@ -274,7 +278,7 @@ export default function AgentSettingsPage() {
       />
       <SettingsBlock
         title="Default agent"
-        description="The default agent is preselected for all new chat conversations. To enable agent routing, assign archestra__swap_agent to the default agent so it can swap to other agents, and archestra__swap_to_default_agent to other agents so they can swap back automatically. Only organization-scoped agents are shown."
+        description={`The default agent is preselected for all new chat conversations. To enable agent routing, assign ${TOOL_SWAP_AGENT_FULL_NAME} to the default agent so it can swap to other agents, and ${TOOL_SWAP_TO_DEFAULT_AGENT_FULL_NAME} to other agents so they can swap back automatically. Only organization-scoped agents are shown.`}
         control={
           <WithPermissions
             permissions={{ agentSettings: ["update"] }}

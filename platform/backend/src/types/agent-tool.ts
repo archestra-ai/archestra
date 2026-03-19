@@ -17,18 +17,21 @@ export interface AgentToolAssignmentIntent {
    */
   resolveAtCallTime?: boolean;
   /**
-   * Legacy alias for late-bound resolution.
-   * Prefer `resolveAtCallTime` in new code and MCP tool calls.
+   * Compatibility alias for `resolveAtCallTime`.
+   * Keep using `resolveAtCallTime` in new code and MCP tool calls; this field only
+   * exists so older callers do not break.
    */
   useDynamicTeamCredential?: boolean;
   /**
-   * Explicit credential source override for remote MCP tools.
-   * Use this only when you intentionally want to pin execution to a specific deployment.
+   * Explicit remote MCP installation to use as the credential source.
+   * This means "use credentials from this specific installed MCP server" instead
+   * of resolving credentials dynamically at tool call time.
    */
   credentialSourceMcpServerId?: string | null;
   /**
-   * Explicit execution source override for local MCP tools.
-   * Use this only when you intentionally want to pin execution to a specific deployment.
+   * Explicit local MCP installation to use as the execution target.
+   * This means "run the tool on this specific installed MCP server" instead of
+   * resolving the execution target dynamically at tool call time.
    */
   executionSourceMcpServerId?: string | null;
 }

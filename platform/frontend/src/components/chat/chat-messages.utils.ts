@@ -151,14 +151,12 @@ export function identifyCompactToolGroups(
   }
 
   let currentGroup: CompactToolGroup | null = null;
-  let previousInvocationIndex: number | null = null;
 
   for (const idx of invocationIndices) {
     const rawPart = parts[idx];
     if (!isToolPart(rawPart)) {
       finalizeCurrentGroup({ currentGroup, groupMap });
       currentGroup = null;
-      previousInvocationIndex = null;
       continue;
     }
 
@@ -166,7 +164,6 @@ export function identifyCompactToolGroups(
     if (!toolName) {
       finalizeCurrentGroup({ currentGroup, groupMap });
       currentGroup = null;
-      previousInvocationIndex = null;
       continue;
     }
 
@@ -186,16 +183,8 @@ export function identifyCompactToolGroups(
       toolResultPart: toolResultPart as never,
       toolName,
     });
-    const isAdjacent =
-      previousInvocationIndex === null ||
-      hasOnlyImmediateResultPartsBetween({
-        parts,
-        previousInvocationIndex,
-        currentInvocationIndex: idx,
-        resultByCallId,
-      });
 
-    if (isEligible && isAdjacent) {
+    if (isEligible) {
       if (!currentGroup) {
         currentGroup = { startIndex: idx, entries: [] };
       }
@@ -233,8 +222,6 @@ export function identifyCompactToolGroups(
         }
       }
     }
-
-    previousInvocationIndex = idx;
   }
 
   finalizeCurrentGroup({ currentGroup, groupMap });
@@ -269,44 +256,6 @@ function getToolName(part: DynamicToolUIPart | ToolUIPart): string | null {
   }
 
   return null;
-}
-
-function hasOnlyImmediateResultPartsBetween(params: {
-  parts: NonNullable<UIMessage["parts"]>;
-  previousInvocationIndex: number;
-  currentInvocationIndex: number;
-  resultByCallId: Map<string, number>;
-}) {
-  const {
-    parts,
-    previousInvocationIndex,
-    currentInvocationIndex,
-    resultByCallId,
-  } = params;
-
-  const previousPart = parts[previousInvocationIndex];
-  const previousResultIndex =
-    isToolPart(previousPart) && previousPart.toolCallId
-      ? resultByCallId.get(previousPart.toolCallId)
-      : undefined;
-
-  const allowedIndices = new Set<number>([
-    previousInvocationIndex,
-    ...(previousResultIndex !== undefined ? [previousResultIndex] : []),
-    currentInvocationIndex,
-  ]);
-
-  for (
-    let index = previousInvocationIndex + 1;
-    index < currentInvocationIndex;
-    index++
-  ) {
-    if (!allowedIndices.has(index)) {
-      return false;
-    }
-  }
-
-  return true;
 }
 
 function finalizeCurrentGroup(params: {

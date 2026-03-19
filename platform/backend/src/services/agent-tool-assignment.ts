@@ -39,12 +39,21 @@ export interface AgentToolAssignmentRequest {
   resolveAtCallTime?: boolean;
   /**
    * Legacy alias for late-bound assignment mode.
-   * Prefer `resolveAtCallTime` in new MCP-facing code.
+   * Keep using `resolveAtCallTime` in new MCP-facing code; this alias remains
+   * for backwards compatibility with older callers.
    */
   useDynamicTeamCredential?: boolean;
-  /** Explicit credential source override for remote MCP tools. */
+  /**
+   * Explicit remote MCP installation to use as the credential source.
+   * Use this only when you want to pin the tool to credentials from one
+   * specific installed MCP server instead of resolving credentials at call time.
+   */
   credentialSourceMcpServerId?: string | null;
-  /** Explicit execution source override for local MCP tools. */
+  /**
+   * Explicit local MCP installation to use as the execution target.
+   * Use this only when you want to force a local MCP tool to run on one
+   * specific installed MCP server instead of resolving execution at call time.
+   */
   executionSourceMcpServerId?: string | null;
   /** Optional prefetched lookup data used to avoid N+1 validation queries. */
   preFetchedData?: Partial<AgentToolAssignmentPrefetchedData>;

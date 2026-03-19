@@ -29,15 +29,15 @@ const AgentAssignmentSchema = AgentToolAssignmentInputSchema.extend({
     ),
   credentialSourceMcpServerId:
     AgentToolAssignmentInputSchema.shape.credentialSourceMcpServerId.describe(
-      "Optional explicit credential source override for remote MCP tools when you do not want late-bound resolution.",
+      "Optional explicit remote MCP installation to use as the credential source. Use this only when you want credentials to come from one specific installed MCP server instead of resolving them at call time.",
     ),
   executionSourceMcpServerId:
     AgentToolAssignmentInputSchema.shape.executionSourceMcpServerId.describe(
-      "Optional explicit execution source override for local MCP tools when you do not want late-bound resolution.",
+      "Optional explicit local MCP installation to run the tool on. Use this only when you want a local MCP tool to execute on one specific installed MCP server instead of resolving the execution target at call time.",
     ),
   useDynamicTeamCredential:
     AgentToolAssignmentInputSchema.shape.useDynamicTeamCredential.describe(
-      "Legacy alias for resolveAtCallTime. Prefer resolveAtCallTime in new MCP tool calls.",
+      "Compatibility alias for resolveAtCallTime. Prefer resolveAtCallTime in new MCP tool calls; this field exists so older callers do not break.",
     ),
   agentId: UuidIdSchema.describe("The agent ID to assign the tool to."),
 }).strict();
@@ -52,15 +52,15 @@ const McpGatewayAssignmentSchema = AgentToolAssignmentInputSchema.extend({
     ),
   credentialSourceMcpServerId:
     AgentToolAssignmentInputSchema.shape.credentialSourceMcpServerId.describe(
-      "Optional explicit credential source override for remote MCP tools when you do not want late-bound resolution.",
+      "Optional explicit remote MCP installation to use as the credential source. Use this only when you want credentials to come from one specific installed MCP server instead of resolving them at call time.",
     ),
   executionSourceMcpServerId:
     AgentToolAssignmentInputSchema.shape.executionSourceMcpServerId.describe(
-      "Optional explicit execution source override for local MCP tools when you do not want late-bound resolution.",
+      "Optional explicit local MCP installation to run the tool on. Use this only when you want a local MCP tool to execute on one specific installed MCP server instead of resolving the execution target at call time.",
     ),
   useDynamicTeamCredential:
     AgentToolAssignmentInputSchema.shape.useDynamicTeamCredential.describe(
-      "Legacy alias for resolveAtCallTime. Prefer resolveAtCallTime in new MCP tool calls.",
+      "Compatibility alias for resolveAtCallTime. Prefer resolveAtCallTime in new MCP tool calls; this field exists so older callers do not break.",
     ),
   mcpGatewayId: UuidIdSchema.describe(
     "The MCP gateway ID to assign the tool to.",

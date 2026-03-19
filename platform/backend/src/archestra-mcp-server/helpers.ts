@@ -42,11 +42,21 @@ export interface ToolAssignmentInput {
    * When true, credentials and execution target are resolved at tool call time.
    */
   resolveAtCallTime?: boolean;
-  /** Legacy alias for late-bound mode. Prefer `resolveAtCallTime` in new code. */
+  /**
+   * Compatibility alias for `resolveAtCallTime`.
+   * Keep using `resolveAtCallTime` in new code; this alias exists so older
+   * callers do not break.
+   */
   useDynamicTeamCredential?: boolean;
-  /** Explicit credential source override for remote MCP tools. */
+  /**
+   * Explicit remote MCP installation to use as the credential source.
+   * This pins the tool to credentials from one installed MCP server.
+   */
   credentialSourceMcpServerId?: string | null;
-  /** Explicit execution source override for local MCP tools. */
+  /**
+   * Explicit local MCP installation to use as the execution target.
+   * This pins the tool to run on one installed MCP server.
+   */
   executionSourceMcpServerId?: string | null;
 }
 export type ToolAssignmentResult = {

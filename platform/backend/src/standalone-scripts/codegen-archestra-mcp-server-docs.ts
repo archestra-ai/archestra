@@ -1,11 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import {
-  ARCHESTRA_MCP_SERVER_NAME,
-  DEFAULT_ARCHESTRA_TOOL_NAMES,
-  MCP_SERVER_TOOL_NAME_SEPARATOR,
-} from "@shared";
+import { ARCHESTRA_TOOL_PREFIX, DEFAULT_ARCHESTRA_TOOL_NAMES } from "@shared";
 import {
   type ArchestraToolShortName,
   getArchestraMcpTools,
@@ -16,8 +12,6 @@ import logger from "@/logging";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-
-const TOOL_PREFIX = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}`;
 
 type ToolPermissionDisplay = string;
 
@@ -183,7 +177,9 @@ function generateMarkdownBody(): string {
   const tools = getArchestraMcpTools();
 
   const allPreInstalledShortNames = DEFAULT_ARCHESTRA_TOOL_NAMES.map((name) =>
-    name.startsWith(TOOL_PREFIX) ? name.slice(TOOL_PREFIX.length) : name,
+    name.startsWith(ARCHESTRA_TOOL_PREFIX)
+      ? name.slice(ARCHESTRA_TOOL_PREFIX.length)
+      : name,
   );
 
   // Knowledge tools are conditionally assigned (only when knowledge sources are attached)
@@ -206,8 +202,8 @@ function generateMarkdownBody(): string {
   >();
 
   for (const tool of tools) {
-    const shortName = tool.name.startsWith(TOOL_PREFIX)
-      ? tool.name.slice(TOOL_PREFIX.length)
+    const shortName = tool.name.startsWith(ARCHESTRA_TOOL_PREFIX)
+      ? tool.name.slice(ARCHESTRA_TOOL_PREFIX.length)
       : tool.name;
 
     const typedShortName = shortName as ArchestraToolShortName;

@@ -8,6 +8,7 @@ import {
   SWAP_AGENT_FAILED_POKE_TEXT,
   SWAP_TO_DEFAULT_AGENT_POKE_TEXT,
   TOOL_ARTIFACT_WRITE_FULL_NAME,
+  TOOL_CREATE_AGENT_FULL_NAME,
   TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_FULL_NAME,
   TOOL_SWAP_AGENT_FULL_NAME,
   TOOL_SWAP_TO_DEFAULT_AGENT_FULL_NAME,
@@ -34,8 +35,6 @@ import { useGenerateConversationTitle } from "@/lib/chat.query";
 const SESSION_CLEANUP_TIMEOUT = 10 * 60 * 1000; // 10 min
 const MAX_AUTO_RETRIES = 2;
 const AUTO_RETRY_DELAY_MS = 1500;
-const TOOL_CREATE_AGENT_FULL_NAME = "archestra__create_agent";
-
 /** Network-level errors that never reach the backend */
 const RETRYABLE_CLIENT_ERRORS = [
   "Failed to fetch",

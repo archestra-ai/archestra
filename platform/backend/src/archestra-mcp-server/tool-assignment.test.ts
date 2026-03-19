@@ -35,6 +35,24 @@ describe("tool assignment schemas", () => {
     expect(itemProps.useDynamicTeamCredential).toBeDefined();
     expect(itemProps.useDynamicTeamCredential.type).toBe("boolean");
   });
+
+  test("tool assignment schema descriptions explain explicit source fields", () => {
+    const tool = tools.find((t) =>
+      t.name.endsWith("bulk_assign_tools_to_agents"),
+    );
+    const itemProps = (tool?.inputSchema as any).properties.assignments.items
+      .properties;
+
+    expect(itemProps.credentialSourceMcpServerId.description).toContain(
+      "remote MCP installation",
+    );
+    expect(itemProps.executionSourceMcpServerId.description).toContain(
+      "local MCP installation",
+    );
+    expect(itemProps.useDynamicTeamCredential.description).toContain(
+      "Compatibility alias",
+    );
+  });
 });
 
 describe("tool assignment tool execution", () => {

@@ -15,15 +15,8 @@ import { LoadingSpinner } from "@/components/loading";
 import MessageThread, {
   type PartialUIMessage,
 } from "@/components/message-thread";
+import { StandardDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import {
   Empty,
   EmptyContent,
@@ -201,22 +194,15 @@ export default function SharedConversationPage() {
       </div>
 
       {/* Fork dialog - select agent */}
-      <Dialog open={showForkDialog} onOpenChange={setShowForkDialog}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Start New Chat</DialogTitle>
-            <DialogDescription>
-              Select an agent to start a new chat with the preloaded messages
-              from this conversation.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-1">
-            <InitialAgentSelector
-              currentAgentId={forkAgentId}
-              onAgentChange={setForkAgentId}
-            />
-          </div>
-          <DialogFooter>
+      <StandardDialog
+        open={showForkDialog}
+        onOpenChange={setShowForkDialog}
+        title="Start New Chat"
+        description="Select an agent to start a new chat with the preloaded messages from this conversation."
+        size="small"
+        bodyClassName="py-1"
+        footer={
+          <>
             <Button variant="outline" onClick={() => setShowForkDialog(false)}>
               Cancel
             </Button>
@@ -226,9 +212,14 @@ export default function SharedConversationPage() {
             >
               {forkMutation.isPending ? "Creating..." : "Start Chat"}
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </>
+        }
+      >
+        <InitialAgentSelector
+          currentAgentId={forkAgentId}
+          onAgentChange={setForkAgentId}
+        />
+      </StandardDialog>
     </div>
   );
 }

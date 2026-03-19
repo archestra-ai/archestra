@@ -8,6 +8,7 @@ import {
   Vault,
 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { StandardDialog } from "@/components/standard-dialog";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -109,33 +110,28 @@ export default function TeamVaultFolderDialog({
   // Readonly Vault feature requires both enterprise license and ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT
   if (!byosEnabled) {
     return (
-      <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="sm:max-w-[550px]">
-          <DialogHeader>
-            <DialogTitle>Team Vault Folder</DialogTitle>
-            <DialogDescription>
-              Connect a HashiCorp Vault folder to enable team secrets
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-4">
-            <Alert>
-              <AlertCircle className="h-4 w-4" />
-              <AlertTitle>Readonly Vault Not Enabled</AlertTitle>
-              <AlertDescription>
-                Team Vault Folders require Readonly Vault to be enabled. Contact
-                your administrator to configure
-                ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT with an enterprise
-                license.
-              </AlertDescription>
-            </Alert>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => onOpenChange(false)}>
-              Close
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <StandardDialog
+        open={open}
+        onOpenChange={onOpenChange}
+        title="Team Vault Folder"
+        description="Connect a HashiCorp Vault folder to enable team secrets"
+        size="small"
+        footer={
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Close
+          </Button>
+        }
+      >
+        <Alert>
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Readonly Vault Not Enabled</AlertTitle>
+          <AlertDescription>
+            Team Vault Folders require Readonly Vault to be enabled. Contact
+            your administrator to configure
+            ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT with an enterprise license.
+          </AlertDescription>
+        </Alert>
+      </StandardDialog>
     );
   }
 

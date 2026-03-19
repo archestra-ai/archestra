@@ -2,7 +2,12 @@
 
 import { CheckIcon, CopyIcon } from "lucide-react";
 import { useTheme } from "next-themes";
-import type { ComponentProps, HTMLAttributes, ReactNode } from "react";
+import type {
+  ComponentProps,
+  CSSProperties,
+  HTMLAttributes,
+  ReactNode,
+} from "react";
 import { createContext, useContext, useState } from "react";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import {
@@ -24,6 +29,7 @@ export type CodeBlockProps = HTMLAttributes<HTMLDivElement> & {
   code: string;
   language: string;
   showLineNumbers?: boolean;
+  contentStyle?: CSSProperties;
   children?: ReactNode;
 };
 
@@ -31,6 +37,7 @@ export const CodeBlock = ({
   code,
   language,
   showLineNumbers = false,
+  contentStyle,
   className,
   children,
   ...props
@@ -59,6 +66,7 @@ export const CodeBlock = ({
               fontSize: "0.875rem",
               background: "hsl(var(--background))",
               color: "hsl(var(--foreground))",
+              ...contentStyle,
             }}
             language={language}
             lineNumberStyle={{
@@ -119,6 +127,7 @@ export const CodeBlockCopyButton = ({
 
   return (
     <Button
+      aria-label={isCopied ? "Copied!" : "Copy to clipboard"}
       className={cn("shrink-0", className)}
       onClick={copyToClipboard}
       size="icon"

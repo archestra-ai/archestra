@@ -4,6 +4,7 @@ import type { archestraApiTypes } from "@shared";
 import { Check, Copy, Mail } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { CodeBlock } from "@/components/ai-elements/code-block";
 import { CodeText } from "@/components/code-text";
 import { ConnectionBaseUrlSelect } from "@/components/connection-base-url-select";
 import { CopyableCode } from "@/components/copyable-code";
@@ -182,33 +183,29 @@ curl -X GET "${agentCardUrl}" \\
           Use this URL to open chat with the agent and send a message
           automatically.
         </p>
-        <div className="bg-muted rounded-md p-3 pt-10 relative">
-          <pre className="text-xs whitespace-pre-wrap break-all overflow-x-auto">
-            <code>
-              {`${window.location.origin}/chat/new?agent_id=${agent.id}&user_prompt=${encodeURIComponent("Hello!\n\nPlease help me with the following task:\n- Review my code\n- Suggest improvements")}`}
-            </code>
-          </pre>
-          <div className="absolute top-2 right-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="gap-2"
-              onClick={handleCopyChatLink}
-            >
-              {copiedChatLink ? (
-                <>
-                  <Check className="h-4 w-4 text-green-500" />
-                  <span>Copied!</span>
-                </>
-              ) : (
-                <>
-                  <Copy className="h-4 w-4" />
-                  <span>Copy</span>
-                </>
-              )}
-            </Button>
-          </div>
-        </div>
+        <CodeBlock
+          code={`${window.location.origin}/chat/new?agent_id=${agent.id}&user_prompt=${encodeURIComponent("Hello!\n\nPlease help me with the following task:\n- Review my code\n- Suggest improvements")}`}
+          language="text"
+          contentStyle={{
+            fontSize: "0.75rem",
+            paddingTop: "2.75rem",
+            paddingRight: "3.5rem",
+          }}
+        >
+          <Button
+            variant="ghost"
+            size="icon"
+            title={copiedChatLink ? "Copied" : "Copy chat deep link"}
+            onClick={handleCopyChatLink}
+          >
+            {copiedChatLink ? (
+              <Check className="h-4 w-4 text-green-500" />
+            ) : (
+              <Copy className="h-4 w-4" />
+            )}
+            <span className="sr-only">Copy chat deep link</span>
+          </Button>
+        </CodeBlock>
       </div>
 
       {/* Token Selector */}

@@ -3,18 +3,10 @@
 import { AlertCircle, ShieldCheck, User } from "lucide-react";
 import { useState } from "react";
 import { SelectMcpServerCredentialTypeAndTeams } from "@/app/mcp/registry/_parts/select-mcp-server-credential-type-and-teams";
+import { StandardFormDialog } from "@/components/standard-dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogForm,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { useFeature } from "@/lib/config.query";
 
 export interface OAuthInstallResult {
@@ -62,72 +54,64 @@ export function OAuthConfirmationDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[600px]">
-        <DialogHeader>
-          <DialogTitle className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <User className="h-5 w-5" />
-              <span>OAuth Authorization</span>
-              <Badge
-                variant="secondary"
-                className="flex items-center gap-1 ml-2"
-              >
-                <ShieldCheck className="h-3 w-3" />
-                OAuth
-              </Badge>
-              <span className="text-muted-foreground ml-2 font-normal">
-                {serverName}
-              </span>
-            </div>
-          </DialogTitle>
-          <DialogDescription className="pt-4 space-y-3 text-sm">
-            We'll redirect you to {serverName} to authorize access, then bring
-            you back once connected.
-          </DialogDescription>
-        </DialogHeader>
-
-        <DialogForm onSubmit={handleConfirm}>
-          {canInstall && byosEnabled && (
-            <Alert
-              variant="default"
-              className="border-amber-500/50 bg-amber-50 dark:bg-amber-950/20"
-            >
-              <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-500" />
-              <AlertDescription className="text-amber-700 dark:text-amber-400">
-                Read-only Vault Secret Manager doesn't support OAuth
-                credentials. They will be stored in the database.
-              </AlertDescription>
-            </Alert>
-          )}
-
-          <div className="py-4">
-            <SelectMcpServerCredentialTypeAndTeams
-              onTeamChange={setSelectedTeamId}
-              catalogId={catalogId}
-              onCanInstallChange={setCanInstall}
-              preselectedTeamId={preselectedTeamId}
-              personalOnly={personalOnly}
-            />
+    <StandardFormDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title={
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <User className="h-5 w-5" />
+            <span>OAuth Authorization</span>
+            <Badge variant="secondary" className="ml-2 flex items-center gap-1">
+              <ShieldCheck className="h-3 w-3" />
+              OAuth
+            </Badge>
+            <span className="text-muted-foreground ml-2 font-normal">
+              {serverName}
+            </span>
           </div>
+        </div>
+      }
+      description={`We'll redirect you to ${serverName} to authorize access, then bring you back once connected.`}
+      size="medium"
+      bodyClassName="space-y-4"
+      onSubmit={handleConfirm}
+      footer={
+        canInstall ? (
+          <>
+            <Button type="button" variant="outline" onClick={handleCancel}>
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              className="bg-blue-600 text-white hover:bg-blue-700"
+            >
+              Continue to Authorization...
+            </Button>
+          </>
+        ) : null
+      }
+    >
+      {canInstall && byosEnabled ? (
+        <Alert
+          variant="default"
+          className="border-amber-500/50 bg-amber-50 dark:bg-amber-950/20"
+        >
+          <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-500" />
+          <AlertDescription className="text-amber-700 dark:text-amber-400">
+            Read-only Vault Secret Manager doesn't support OAuth credentials.
+            They will be stored in the database.
+          </AlertDescription>
+        </Alert>
+      ) : null}
 
-          <DialogFooter className="gap-3 sm:gap-3">
-            {canInstall && (
-              <Button type="button" variant="outline" onClick={handleCancel}>
-                Cancel
-              </Button>
-            )}
-            {canInstall && (
-              <Button
-                type="submit"
-                className="bg-blue-600 hover:bg-blue-700 text-white"
-              >
-                Continue to Authorization...
-              </Button>
-            )}
-          </DialogFooter>
-        </DialogForm>
-      </DialogContent>
-    </Dialog>
+      <SelectMcpServerCredentialTypeAndTeams
+        onTeamChange={setSelectedTeamId}
+        catalogId={catalogId}
+        onCanInstallChange={setCanInstall}
+        preselectedTeamId={preselectedTeamId}
+        personalOnly={personalOnly}
+      />
+    </StandardFormDialog>
   );
 }

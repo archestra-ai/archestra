@@ -22,16 +22,9 @@ import type {
   UseFormSetValue,
   UseFormWatch,
 } from "react-hook-form";
+import { StandardDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import {
   FormControl,
   FormDescription,
@@ -920,41 +913,22 @@ function ExternalSecretDialog({
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-lg">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Key className="h-5 w-5" />
-            Set external secret
-            {envKey && (
-              <span className="font-mono text-muted-foreground">{envKey}</span>
-            )}
-          </DialogTitle>
-          <DialogDescription>
-            Select a secret from your team's external Vault to use for this
-            environment variable.
-          </DialogDescription>
-        </DialogHeader>
-
-        <Suspense
-          fallback={
-            <div className="h-24 flex items-center justify-center text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin mr-2" />
-              Loading...
-            </div>
-          }
-        >
-          <ExternalSecretSelector
-            selectedTeamId={teamId}
-            selectedSecretPath={secretPath}
-            selectedSecretKey={secretKey}
-            onTeamChange={setTeamId}
-            onSecretChange={setSecretPath}
-            onSecretKeyChange={setSecretKey}
-          />
-        </Suspense>
-
-        <DialogFooter>
+    <StandardDialog
+      open={isOpen}
+      onOpenChange={handleOpenChange}
+      title={
+        <span className="flex items-center gap-2">
+          <Key className="h-5 w-5" />
+          Set external secret
+          {envKey ? (
+            <span className="font-mono text-muted-foreground">{envKey}</span>
+          ) : null}
+        </span>
+      }
+      description="Select a secret from your team's external Vault to use for this environment variable."
+      size="small"
+      footer={
+        <>
           <Button type="button" variant="outline" onClick={onClose}>
             Cancel
           </Button>
@@ -965,8 +939,26 @@ function ExternalSecretDialog({
           >
             Confirm
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </>
+      }
+    >
+      <Suspense
+        fallback={
+          <div className="flex h-24 items-center justify-center text-muted-foreground">
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            Loading...
+          </div>
+        }
+      >
+        <ExternalSecretSelector
+          selectedTeamId={teamId}
+          selectedSecretPath={secretPath}
+          selectedSecretKey={secretKey}
+          onTeamChange={setTeamId}
+          onSecretChange={setSecretPath}
+          onSecretKeyChange={setSecretKey}
+        />
+      </Suspense>
+    </StandardDialog>
   );
 }

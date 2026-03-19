@@ -45,7 +45,7 @@ export function DeleteConfirmDialog({
           onConfirm();
         }}
       >
-        <DialogStickyFooter className="mt-0">
+        <DialogStickyFooter className="mt-0 border-t-0 shadow-none">
           <Button
             type="button"
             variant="outline"

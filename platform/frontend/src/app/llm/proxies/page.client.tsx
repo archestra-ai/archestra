@@ -32,7 +32,10 @@ import {
   ActiveFilterBadges,
   AgentScopeFilter,
 } from "@/components/agent-scope-filter";
-import { ConnectDialog } from "@/components/connect-dialog";
+import {
+  ConnectDialog,
+  ConnectDialogSection,
+} from "@/components/connect-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
@@ -543,32 +546,36 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
 function ProxyConnectionColumns({ agentId }: { agentId: string }) {
   return (
     <div className="space-y-6">
-      <div className="flex gap-3">
-        <div className="flex-1 flex flex-col gap-2 p-3 rounded-lg bg-blue-500/5 border-2 border-blue-500/30">
-          <div className="flex items-center gap-2">
+      <ConnectDialogSection
+        title="Proxy Features"
+        description="Route model traffic through the LLM Proxy for security controls, observability, and cost tracking."
+      >
+        <div className="flex flex-wrap gap-2">
+          <div className="flex items-center gap-2 rounded-md border bg-blue-500/5 px-3 py-2 text-sm">
             <Network className="h-4 w-4 text-blue-500" />
             <span className="font-medium">LLM Proxy</span>
           </div>
-          <div className="flex flex-wrap gap-1.5">
-            <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-background/60 border border-border/50">
-              <Lock className="h-2.5 w-2.5 text-blue-600 dark:text-blue-400" />
-              <span className="text-[10px]">Security</span>
-            </div>
-            <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-background/60 border border-border/50">
-              <Eye className="h-2.5 w-2.5 text-purple-600 dark:text-purple-400" />
-              <span className="text-[10px]">Observability</span>
-            </div>
-            <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-background/60 border border-border/50">
-              <DollarSign className="h-2.5 w-2.5 text-green-600 dark:text-green-400" />
-              <span className="text-[10px]">Cost</span>
-            </div>
+          <div className="flex items-center gap-1 rounded-full border bg-background/60 px-2 py-1 text-xs">
+            <Lock className="h-3 w-3 text-blue-600 dark:text-blue-400" />
+            <span>Security</span>
+          </div>
+          <div className="flex items-center gap-1 rounded-full border bg-background/60 px-2 py-1 text-xs">
+            <Eye className="h-3 w-3 text-purple-600 dark:text-purple-400" />
+            <span>Observability</span>
+          </div>
+          <div className="flex items-center gap-1 rounded-full border bg-background/60 px-2 py-1 text-xs">
+            <DollarSign className="h-3 w-3 text-green-600 dark:text-green-400" />
+            <span>Cost</span>
           </div>
         </div>
-      </div>
+      </ConnectDialogSection>
 
-      <div className="p-4 rounded-lg border bg-card">
+      <ConnectDialogSection
+        title="Connection Instructions"
+        description="Choose a provider, point your client at the proxy, and copy the exact URL or command."
+      >
         <ProxyConnectionInstructions agentId={agentId} />
-      </div>
+      </ConnectDialogSection>
     </div>
   );
 }

@@ -32,7 +32,10 @@ import {
   ActiveFilterBadges,
   AgentScopeFilter,
 } from "@/components/agent-scope-filter";
-import { ConnectDialog } from "@/components/connect-dialog";
+import {
+  ConnectDialog,
+  ConnectDialogSection,
+} from "@/components/connect-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { McpConnectionInstructions } from "@/components/mcp-connection-instructions";
@@ -43,6 +46,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { PermissionButton } from "@/components/ui/permission-button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Tooltip,
   TooltipContent,
@@ -606,80 +610,94 @@ function GatewayConnectionColumns({
   const [activeTab, setActiveTab] = useState<"proxy" | "mcp">("mcp");
 
   return (
-    <div className="space-y-6">
-      <div className="flex gap-3">
-        <button
-          type="button"
-          onClick={() => setActiveTab("mcp")}
-          className={`flex-1 flex flex-col gap-2 p-3 rounded-lg transition-all duration-200 ${
-            activeTab === "mcp"
-              ? "bg-green-500/5 border-2 border-green-500/30"
-              : "bg-muted/30 border-2 border-transparent hover:bg-muted/50"
-          }`}
+    <Tabs
+      value={activeTab}
+      onValueChange={(value) => setActiveTab(value as "proxy" | "mcp")}
+      className="space-y-6"
+    >
+      <ConnectDialogSection
+        title="Connection Mode"
+        description={
+          agentType === "profile"
+            ? "Choose whether to connect through the MCP Gateway or the LLM Proxy."
+            : "Connect through the MCP Gateway to expose tools with unified discovery and observability."
+        }
+      >
+        <TabsList
+          className={
+            agentType === "profile"
+              ? "grid h-auto w-full grid-cols-2 gap-2 bg-transparent p-0"
+              : "grid h-auto w-full grid-cols-1 gap-2 bg-transparent p-0"
+          }
         >
-          <div className="flex items-center gap-2">
-            <Route
-              className={`h-4 w-4 ${activeTab === "mcp" ? "text-green-500" : ""}`}
-            />
-            <span className="font-medium">MCP Gateway</span>
-          </div>
-          <div className="flex flex-wrap gap-1.5">
-            <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-background/60 border border-border/50">
-              <Server className="h-2.5 w-2.5 text-green-600 dark:text-green-400" />
-              <span className="text-[10px]">Unified MCP</span>
-            </div>
-            <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-background/60 border border-border/50">
-              <Eye className="h-2.5 w-2.5 text-purple-600 dark:text-purple-400" />
-              <span className="text-[10px]">Observability</span>
-            </div>
-          </div>
-        </button>
-
-        {agentType === "profile" && (
-          <button
-            type="button"
-            onClick={() => setActiveTab("proxy")}
-            className={`flex-1 flex flex-col gap-2 p-3 rounded-lg transition-all duration-200 ${
-              activeTab === "proxy"
-                ? "bg-blue-500/5 border-2 border-blue-500/30"
-                : "bg-muted/30 border-2 border-transparent hover:bg-muted/50"
-            }`}
+          <TabsTrigger
+            value="mcp"
+            className="flex h-auto min-h-20 flex-col items-start gap-2 rounded-lg border px-4 py-3 text-left data-[state=active]:border-green-500/30 data-[state=active]:bg-green-500/5 data-[state=active]:shadow-none"
           >
             <div className="flex items-center gap-2">
-              <Server
-                className={`h-4 w-4 ${activeTab === "proxy" ? "text-blue-500" : ""}`}
-              />
-              <span className="font-medium">LLM Proxy</span>
+              <Route className="h-4 w-4 text-green-500" />
+              <span className="font-medium">MCP Gateway</span>
             </div>
             <div className="flex flex-wrap gap-1.5">
-              <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-background/60 border border-border/50">
-                <Eye className="h-2.5 w-2.5 text-purple-600 dark:text-purple-400" />
-                <span className="text-[10px]">Observability</span>
+              <div className="flex items-center gap-1 rounded-full border bg-background/60 px-2 py-1 text-[10px]">
+                <Server className="h-2.5 w-2.5 text-green-600 dark:text-green-400" />
+                <span>Unified MCP</span>
               </div>
-              <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-background/60 border border-border/50">
-                <DollarSign className="h-2.5 w-2.5 text-green-600 dark:text-green-400" />
-                <span className="text-[10px]">Cost</span>
+              <div className="flex items-center gap-1 rounded-full border bg-background/60 px-2 py-1 text-[10px]">
+                <Eye className="h-2.5 w-2.5 text-purple-600 dark:text-purple-400" />
+                <span>Observability</span>
               </div>
             </div>
-          </button>
-        )}
-      </div>
+          </TabsTrigger>
 
-      <div className="relative">
-        <div className={activeTab === "mcp" ? "block" : "hidden"}>
-          <div className="p-4 rounded-lg border bg-card">
+          {agentType === "profile" ? (
+            <TabsTrigger
+              value="proxy"
+              className="flex h-auto min-h-20 flex-col items-start gap-2 rounded-lg border px-4 py-3 text-left data-[state=active]:border-blue-500/30 data-[state=active]:bg-blue-500/5 data-[state=active]:shadow-none"
+            >
+              <div className="flex items-center gap-2">
+                <Server className="h-4 w-4 text-blue-500" />
+                <span className="font-medium">LLM Proxy</span>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                <div className="flex items-center gap-1 rounded-full border bg-background/60 px-2 py-1 text-[10px]">
+                  <Eye className="h-2.5 w-2.5 text-purple-600 dark:text-purple-400" />
+                  <span>Observability</span>
+                </div>
+                <div className="flex items-center gap-1 rounded-full border bg-background/60 px-2 py-1 text-[10px]">
+                  <DollarSign className="h-2.5 w-2.5 text-green-600 dark:text-green-400" />
+                  <span>Cost</span>
+                </div>
+              </div>
+            </TabsTrigger>
+          ) : null}
+        </TabsList>
+      </ConnectDialogSection>
+
+      <TabsContent value="mcp" className="mt-0">
+        <ConnectDialogSection
+          title="MCP Gateway Instructions"
+          description="Use the MCP endpoint and token configuration for tool discovery and execution."
+        >
+          <div className="min-w-0">
             <McpConnectionInstructions agentId={agentId} hideProfileSelector />
           </div>
-        </div>
-        {agentType === "profile" && (
-          <div className={activeTab === "proxy" ? "block" : "hidden"}>
-            <div className="p-4 rounded-lg border bg-card">
+        </ConnectDialogSection>
+      </TabsContent>
+
+      {agentType === "profile" ? (
+        <TabsContent value="proxy" className="mt-0">
+          <ConnectDialogSection
+            title="LLM Proxy Instructions"
+            description="Choose a provider and point your client at the proxy for model requests."
+          >
+            <div className="min-w-0">
               <ProxyConnectionInstructions agentId={agentId} />
             </div>
-          </div>
-        )}
-      </div>
-    </div>
+          </ConnectDialogSection>
+        </TabsContent>
+      ) : null}
+    </Tabs>
   );
 }
 

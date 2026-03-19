@@ -23,7 +23,6 @@ export const DocsPage = {
   PlatformFoundry: "platform-foundry",
   PlatformIdentityProviders: "platform-identity-providers",
   PlatformKnowledgeGraphs: "platform-knowledge-graphs",
-  PlatformLangchainExample: "platform-langchain-example",
   PlatformLethalTrifecta: "platform-lethal-trifecta",
   PlatformLlmProxyAuthentication: "platform-llm-proxy-authentication",
   PlatformLlmProxy: "platform-llm-proxy",

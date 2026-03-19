@@ -27,7 +27,10 @@ import { useFeature } from "@/lib/config.query";
 import { useAgentEmailAddress } from "@/lib/incoming-email.query";
 import { useFetchTeamTokenValue, useTokens } from "@/lib/team-token.query";
 import { useFetchUserTokenValue, useUserToken } from "@/lib/user-token.query";
-import { EmailNotConfiguredMessage } from "./email-not-configured-message";
+import {
+  AgentEmailDisabledMessage,
+  EmailNotConfiguredMessage,
+} from "./email-not-configured-message";
 
 const { externalProxyUrls, internalProxyUrl } = config.api;
 
@@ -368,10 +371,7 @@ curl -X GET "${agentCardUrl}" \\
           </>
         ) : (
           <div className="bg-muted/50 rounded-md p-3 text-sm text-muted-foreground">
-            <p>
-              Email invocation is not enabled for this agent. Enable it in the
-              agent settings to allow triggering via email.
-            </p>
+            <AgentEmailDisabledMessage />
           </div>
         )}
       </div>

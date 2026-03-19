@@ -8,6 +8,7 @@ import type { ReactNode } from "react";
 import { FormDialog } from "@/components/form-dialog";
 import { Button } from "@/components/ui/button";
 import { DialogBody, DialogStickyFooter } from "@/components/ui/dialog";
+import { cn } from "@/lib/utils";
 
 const AGENT_TYPE_CONFIG: Record<
   string,
@@ -55,6 +56,7 @@ export function ConnectDialog({
         </div>
       }
       size="large"
+      className="h-auto max-h-[90vh]"
     >
       <DialogBody className="pb-4">{children}</DialogBody>
 
@@ -84,5 +86,29 @@ export function ConnectDialog({
         </Button>
       </DialogStickyFooter>
     </FormDialog>
+  );
+}
+
+export function ConnectDialogSection({
+  title,
+  description,
+  className,
+  children,
+}: {
+  title: string;
+  description?: string;
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    <section className={cn("space-y-4", className)}>
+      <div className="space-y-1">
+        <h3 className="text-sm font-semibold">{title}</h3>
+        {description ? (
+          <p className="text-sm text-muted-foreground">{description}</p>
+        ) : null}
+      </div>
+      {children}
+    </section>
   );
 }

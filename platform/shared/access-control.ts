@@ -45,10 +45,6 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   // Knowledge
   knowledgeBase: ["read", "create", "update", "delete", "query"],
 
-  // Dual LLM
-  dualLlmConfig: ["read", "create", "update", "delete"],
-  dualLlmResult: ["read", "create", "update", "delete"],
-
   // Other
   chat: ["read", "create", "update", "delete"],
   log: ["read"],
@@ -98,10 +94,6 @@ export const editorPermissions: Record<Resource, Action[]> = {
   // Knowledge
   knowledgeBase: ["read", "create", "update", "delete", "query"],
 
-  // Dual LLM
-  dualLlmConfig: ["read"],
-  dualLlmResult: ["read"],
-
   // Other
   chat: ["read", "create", "update", "delete"],
   log: ["read"],
@@ -150,10 +142,6 @@ export const memberPermissions: Record<Resource, Action[]> = {
 
   // Knowledge
   knowledgeBase: ["read", "query"],
-
-  // Dual LLM
-  dualLlmConfig: [],
-  dualLlmResult: ["read"],
 
   // Other
   chat: ["read", "create", "update", "delete"],
@@ -282,14 +270,6 @@ export const permissionDescriptions: Record<string, string> = {
   "chat:update": "Edit chat messages and conversation settings",
   "chat:delete": "Delete chat conversations",
   "log:read": "View LLM proxy and MCP tool call logs",
-  "dualLlmConfig:read": "View dual LLM security configurations",
-  "dualLlmConfig:create": "Create new dual LLM configurations",
-  "dualLlmConfig:update": "Modify dual LLM configurations",
-  "dualLlmConfig:delete": "Remove dual LLM configurations",
-  "dualLlmResult:read": "View dual LLM security validation results",
-  "dualLlmResult:create": "Create dual LLM validation results",
-  "dualLlmResult:update": "Modify dual LLM validation results",
-  "dualLlmResult:delete": "Remove dual LLM validation results",
 
   // Administration
   "member:read": "View organization members and their roles",
@@ -466,30 +446,6 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   [RouteId.BulkUpsertDefaultResultPolicy]: {
     toolPolicy: ["update"],
-  },
-  [RouteId.GetDefaultDualLlmConfig]: {
-    dualLlmConfig: ["read"],
-  },
-  [RouteId.GetDualLlmConfigs]: {
-    dualLlmConfig: ["read"],
-  },
-  [RouteId.GetDualLlmResultsByInteraction]: {
-    dualLlmResult: ["read"],
-  },
-  [RouteId.CreateDualLlmConfig]: {
-    dualLlmConfig: ["create"],
-  },
-  [RouteId.GetDualLlmConfig]: {
-    dualLlmConfig: ["read"],
-  },
-  [RouteId.UpdateDualLlmConfig]: {
-    dualLlmConfig: ["update"],
-  },
-  [RouteId.DeleteDualLlmConfig]: {
-    dualLlmConfig: ["delete"],
-  },
-  [RouteId.GetDualLlmResultByToolCallId]: {
-    dualLlmResult: ["read"],
   },
   [RouteId.GetInternalMcpCatalog]: {
     mcpRegistry: ["read"],
@@ -1022,7 +978,6 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   // Settings
   "/settings/account": {},
   "/settings/api-keys": { apiKey: ["read"] },
-  "/settings/dual-llm": { dualLlmConfig: ["read"] },
   "/settings/llm": { llmSettings: ["read"] },
   "/settings/agents": { agentSettings: ["read"] },
   "/settings/knowledge": { knowledgeSettings: ["read"] },

@@ -23,6 +23,7 @@ import {
   Xai,
   Zhipuai,
 } from "./llm-providers";
+import { DualLlmAnalysisSchema } from "./dual-llm";
 import { ToonSkipReasonSchema } from "./tool-result-compression";
 
 export { InteractionSourceSchema };
@@ -79,6 +80,7 @@ export const InteractionResponseSchema = z.union([
 const extendedFields = {
   source: InteractionSourceSchema.nullable().optional(),
   toonSkipReason: ToonSkipReasonSchema.nullable().optional(),
+  dualLlmAnalyses: z.array(DualLlmAnalysisSchema).nullable().optional(),
 };
 
 /**

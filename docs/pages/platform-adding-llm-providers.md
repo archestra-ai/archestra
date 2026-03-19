@@ -163,17 +163,6 @@ The function must:
 4. Calculate token savings using the appropriate tokenizer
 5. Return compressed messages and compression statistics
 
-### Dual LLM
-
-> **Note:** This is a known abstraction leak that we're planning to address in future versions. Thanks for bearing with us!
-
-Dual LLM pattern uses a secondary LLM for Q&A verification of tool invocations. Each provider needs its own client implementation.
-
-| File                                     | Description                                                                                                                                                                                        |
-| ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `backend/src/clients/dual-llm-client.ts` | **OpenAI-compatible providers:** use `createOpenAiCompatibleDualLlmClient({ providerLabel, baseUrl, defaultModel })`. **Non-OpenAI providers:** create a custom class implementing `DualLlmClient` |
-| `backend/src/clients/dual-llm-client.ts` | Add entry to `dualLlmClientFactories` record                                                                                                                                                       |
-
 ### Metrics
 
 > **Note:** This is a known abstraction leak that we're planning to address in future versions. Thanks for bearing with us!

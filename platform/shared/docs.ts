@@ -19,7 +19,6 @@ export const DocsPage = {
   PlatformCostsAndLimits: "platform-costs-and-limits",
   PlatformDeployment: "platform-deployment",
   PlatformDeveloperQuickstart: "platform-developer-quickstart",
-  PlatformDualLlm: "platform-dual-llm",
   PlatformDynamicTools: "platform-dynamic-tools",
   PlatformFoundry: "platform-foundry",
   PlatformIdentityProviders: "platform-identity-providers",

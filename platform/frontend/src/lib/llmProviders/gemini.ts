@@ -1,6 +1,6 @@
 import type { archestraApiTypes } from "@shared";
 import type { PartialUIMessage } from "@/components/message-thread";
-import type { DualLlmResult, Interaction, InteractionUtils } from "./common";
+import type { DualLlmAnalysis, Interaction, InteractionUtils } from "./common";
 
 // Define more precise types for Gemini parts since the generated types use union discrimination
 type GeminiFunctionCallPart = {
@@ -321,7 +321,7 @@ class GeminiGenerateContentInteraction implements InteractionUtils {
           role: "model";
           content: archestraApiTypes.GeminiGenerateContentResponse["candidates"][number]["content"];
         },
-    _dualLlmResults?: DualLlmResult[],
+    _dualLlmAnalyses?: DualLlmAnalysis[],
   ): PartialUIMessage {
     const parts: PartialUIMessage["parts"] = [];
     const { role } = content;
@@ -375,7 +375,7 @@ class GeminiGenerateContentInteraction implements InteractionUtils {
   }
 
   private mapRequestToUiMessages(
-    dualLlmResults?: DualLlmResult[],
+    dualLlmAnalyses?: DualLlmAnalysis[],
   ): PartialUIMessage[] {
     const uiMessages: PartialUIMessage[] = [];
     const messages = this.request.contents;
@@ -405,7 +405,7 @@ class GeminiGenerateContentInteraction implements InteractionUtils {
         continue;
       }
 
-      const uiMessage = this.mapToUiMessage(msg, dualLlmResults);
+      const uiMessage = this.mapToUiMessage(msg, dualLlmAnalyses);
 
       // If this is a model message with functionCall parts, look ahead for function responses
       if (msg.role === "model" && Array.isArray(msg.parts)) {
@@ -468,7 +468,7 @@ class GeminiGenerateContentInteraction implements InteractionUtils {
                   });
 
                   // Check for dual LLM result
-                  const dualLlmResultForTool = dualLlmResults?.find(
+                  const dualLlmResultForTool = dualLlmAnalyses?.find(
                     (result) => result.toolCallId === functionCallId,
                   );
 
@@ -518,9 +518,9 @@ class GeminiGenerateContentInteraction implements InteractionUtils {
     );
   }
 
-  mapToUiMessages(dualLlmResults?: DualLlmResult[]): PartialUIMessage[] {
+  mapToUiMessages(dualLlmAnalyses?: DualLlmAnalysis[]): PartialUIMessage[] {
     return [
-      ...this.mapRequestToUiMessages(dualLlmResults),
+      ...this.mapRequestToUiMessages(dualLlmAnalyses),
       ...this.mapResponseToUiMessages(),
     ];
   }

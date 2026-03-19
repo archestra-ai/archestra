@@ -3,7 +3,7 @@ title: "Access Control"
 category: Administration
 description: "Role-based access control (RBAC) system for managing user permissions in Archestra"
 order: 1
-lastUpdated: 2026-03-18
+lastUpdated: 2026-03-19
 ---
 <!--
 Check ../docs_writer_prompt.md before changing this file.
@@ -49,8 +49,6 @@ Full access to core resources and settings, but cannot manage users, roles, or i
 | MCP Server Installations | `read`, `create`, `update`, `delete` |
 | MCP Server Installation Requests | `read`, `create`, `update`, `delete` |
 | Knowledge Bases | `read`, `create`, `update`, `delete`, `query` |
-| Dual LLM Configs | `read` |
-| Dual LLM Results | `read` |
 | Chats | `read`, `create`, `update`, `delete` |
 | Logs | `read` |
 | API Keys | `read`, `create`, `delete` |
@@ -82,7 +80,6 @@ Can manage agents, tools, and chat, with read-only access to most other resource
 | MCP Server Installations | `read`, `create`, `delete` |
 | MCP Server Installation Requests | `read`, `create`, `update` |
 | Knowledge Bases | `read`, `query` |
-| Dual LLM Results | `read` |
 | Chats | `read`, `create`, `update`, `delete` |
 | API Keys | `read`, `create`, `delete` |
 | Teams | `read` |
@@ -126,14 +123,6 @@ The following table lists all available permissions that can be assigned to cust
 | `chatAgentPicker:enable` | Show agent picker in chat |
 | `chatExpandToolCalls:enable` | Allow expanding tool call details in chat |
 | `chatProviderSettings:enable` | Show model and API key selectors in chat |
-| `dualLlmConfig:read` | View dual LLM security configurations |
-| `dualLlmConfig:create` | Create new dual LLM configurations |
-| `dualLlmConfig:update` | Modify dual LLM configurations |
-| `dualLlmConfig:delete` | Remove dual LLM configurations |
-| `dualLlmResult:read` | View dual LLM security validation results |
-| `dualLlmResult:create` | Create dual LLM validation results |
-| `dualLlmResult:update` | Modify dual LLM validation results |
-| `dualLlmResult:delete` | Remove dual LLM validation results |
 | `identityProvider:read` | View identity provider configurations (SSO) |
 | `identityProvider:create` | Set up new identity providers |
 | `identityProvider:update` | Modify identity provider settings |

@@ -10554,6 +10554,11 @@ export type GetAgentsResponses = {
             builtInAgentConfig: {
                 name: 'policy-configuration-subagent';
                 autoConfigureOnToolAssignment: boolean;
+            } | {
+                name: 'dual-llm-main-agent';
+                maxRounds: number;
+            } | {
+                name: 'dual-llm-quarantine-agent';
             } | null;
             builtIn: boolean | null;
             createdAt: string;
@@ -10638,6 +10643,11 @@ export type CreateAgentData = {
         builtInAgentConfig?: {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolAssignment: boolean;
+        } | {
+            name: 'dual-llm-main-agent';
+            maxRounds: number;
+        } | {
+            name: 'dual-llm-quarantine-agent';
         } | null;
         teams?: Array<string>;
         labels?: Array<{
@@ -10742,6 +10752,11 @@ export type CreateAgentResponses = {
         builtInAgentConfig: {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolAssignment: boolean;
+        } | {
+            name: 'dual-llm-main-agent';
+            maxRounds: number;
+        } | {
+            name: 'dual-llm-quarantine-agent';
         } | null;
         builtIn: boolean | null;
         createdAt: string;
@@ -10905,6 +10920,11 @@ export type GetAllAgentsResponses = {
         builtInAgentConfig: {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolAssignment: boolean;
+        } | {
+            name: 'dual-llm-main-agent';
+            maxRounds: number;
+        } | {
+            name: 'dual-llm-quarantine-agent';
         } | null;
         builtIn: boolean | null;
         createdAt: string;
@@ -11051,6 +11071,11 @@ export type GetDefaultMcpGatewayResponses = {
         builtInAgentConfig: {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolAssignment: boolean;
+        } | {
+            name: 'dual-llm-main-agent';
+            maxRounds: number;
+        } | {
+            name: 'dual-llm-quarantine-agent';
         } | null;
         builtIn: boolean | null;
         createdAt: string;
@@ -11197,6 +11222,11 @@ export type GetDefaultLlmProxyResponses = {
         builtInAgentConfig: {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolAssignment: boolean;
+        } | {
+            name: 'dual-llm-main-agent';
+            maxRounds: number;
+        } | {
+            name: 'dual-llm-quarantine-agent';
         } | null;
         builtIn: boolean | null;
         createdAt: string;
@@ -11424,6 +11454,11 @@ export type GetAgentResponses = {
         builtInAgentConfig: {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolAssignment: boolean;
+        } | {
+            name: 'dual-llm-main-agent';
+            maxRounds: number;
+        } | {
+            name: 'dual-llm-quarantine-agent';
         } | null;
         builtIn: boolean | null;
         createdAt: string;
@@ -11499,6 +11534,11 @@ export type UpdateAgentData = {
         builtInAgentConfig?: {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolAssignment: boolean;
+        } | {
+            name: 'dual-llm-main-agent';
+            maxRounds: number;
+        } | {
+            name: 'dual-llm-quarantine-agent';
         } | null;
         teams?: Array<string>;
         labels?: Array<{
@@ -11605,6 +11645,11 @@ export type UpdateAgentResponses = {
         builtInAgentConfig: {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolAssignment: boolean;
+        } | {
+            name: 'dual-llm-main-agent';
+            maxRounds: number;
+        } | {
+            name: 'dual-llm-quarantine-agent';
         } | null;
         builtIn: boolean | null;
         createdAt: string;
@@ -20437,693 +20482,6 @@ export type DeepseekChatCompletionsWithAgentResponses = {
 
 export type DeepseekChatCompletionsWithAgentResponse = DeepseekChatCompletionsWithAgentResponses[keyof DeepseekChatCompletionsWithAgentResponses];
 
-export type GetDefaultDualLlmConfigData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/dual-llm-config/default';
-};
-
-export type GetDefaultDualLlmConfigErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type GetDefaultDualLlmConfigError = GetDefaultDualLlmConfigErrors[keyof GetDefaultDualLlmConfigErrors];
-
-export type GetDefaultDualLlmConfigResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        enabled: boolean;
-        mainAgentPrompt: string;
-        quarantinedAgentPrompt: string;
-        summaryPrompt: string;
-        maxRounds: number;
-        createdAt: string;
-        updatedAt: string;
-    };
-};
-
-export type GetDefaultDualLlmConfigResponse = GetDefaultDualLlmConfigResponses[keyof GetDefaultDualLlmConfigResponses];
-
-export type GetDualLlmConfigsData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/dual-llm-config';
-};
-
-export type GetDualLlmConfigsErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type GetDualLlmConfigsError = GetDualLlmConfigsErrors[keyof GetDualLlmConfigsErrors];
-
-export type GetDualLlmConfigsResponses = {
-    /**
-     * Default Response
-     */
-    200: Array<{
-        id: string;
-        enabled: boolean;
-        mainAgentPrompt: string;
-        quarantinedAgentPrompt: string;
-        summaryPrompt: string;
-        maxRounds: number;
-        createdAt: string;
-        updatedAt: string;
-    }>;
-};
-
-export type GetDualLlmConfigsResponse = GetDualLlmConfigsResponses[keyof GetDualLlmConfigsResponses];
-
-export type CreateDualLlmConfigData = {
-    body: {
-        enabled?: boolean;
-        mainAgentPrompt: string;
-        quarantinedAgentPrompt: string;
-        summaryPrompt: string;
-        maxRounds?: number;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/dual-llm-config';
-};
-
-export type CreateDualLlmConfigErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type CreateDualLlmConfigError = CreateDualLlmConfigErrors[keyof CreateDualLlmConfigErrors];
-
-export type CreateDualLlmConfigResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        enabled: boolean;
-        mainAgentPrompt: string;
-        quarantinedAgentPrompt: string;
-        summaryPrompt: string;
-        maxRounds: number;
-        createdAt: string;
-        updatedAt: string;
-    };
-};
-
-export type CreateDualLlmConfigResponse = CreateDualLlmConfigResponses[keyof CreateDualLlmConfigResponses];
-
-export type DeleteDualLlmConfigData = {
-    body?: never;
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/dual-llm-config/{id}';
-};
-
-export type DeleteDualLlmConfigErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type DeleteDualLlmConfigError = DeleteDualLlmConfigErrors[keyof DeleteDualLlmConfigErrors];
-
-export type DeleteDualLlmConfigResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        success: boolean;
-    };
-};
-
-export type DeleteDualLlmConfigResponse = DeleteDualLlmConfigResponses[keyof DeleteDualLlmConfigResponses];
-
-export type GetDualLlmConfigData = {
-    body?: never;
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/dual-llm-config/{id}';
-};
-
-export type GetDualLlmConfigErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type GetDualLlmConfigError = GetDualLlmConfigErrors[keyof GetDualLlmConfigErrors];
-
-export type GetDualLlmConfigResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        enabled: boolean;
-        mainAgentPrompt: string;
-        quarantinedAgentPrompt: string;
-        summaryPrompt: string;
-        maxRounds: number;
-        createdAt: string;
-        updatedAt: string;
-    };
-};
-
-export type GetDualLlmConfigResponse = GetDualLlmConfigResponses[keyof GetDualLlmConfigResponses];
-
-export type UpdateDualLlmConfigData = {
-    body: {
-        enabled?: boolean;
-        mainAgentPrompt?: string;
-        quarantinedAgentPrompt?: string;
-        summaryPrompt?: string;
-        maxRounds?: number;
-    };
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/dual-llm-config/{id}';
-};
-
-export type UpdateDualLlmConfigErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type UpdateDualLlmConfigError = UpdateDualLlmConfigErrors[keyof UpdateDualLlmConfigErrors];
-
-export type UpdateDualLlmConfigResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        enabled: boolean;
-        mainAgentPrompt: string;
-        quarantinedAgentPrompt: string;
-        summaryPrompt: string;
-        maxRounds: number;
-        createdAt: string;
-        updatedAt: string;
-    };
-};
-
-export type UpdateDualLlmConfigResponse = UpdateDualLlmConfigResponses[keyof UpdateDualLlmConfigResponses];
-
-export type GetDualLlmResultByToolCallIdData = {
-    body?: never;
-    path: {
-        toolCallId: string;
-    };
-    query?: never;
-    url: '/api/dual-llm-results/by-tool-call-id/{toolCallId}';
-};
-
-export type GetDualLlmResultByToolCallIdErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type GetDualLlmResultByToolCallIdError = GetDualLlmResultByToolCallIdErrors[keyof GetDualLlmResultByToolCallIdErrors];
-
-export type GetDualLlmResultByToolCallIdResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        agentId: string;
-        toolCallId: string;
-        conversations: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown>;
-        result: string;
-        createdAt: string;
-    } | null;
-};
-
-export type GetDualLlmResultByToolCallIdResponse = GetDualLlmResultByToolCallIdResponses[keyof GetDualLlmResultByToolCallIdResponses];
-
-export type GetDualLlmResultsByInteractionData = {
-    body?: never;
-    path: {
-        interactionId: string;
-    };
-    query?: never;
-    url: '/api/dual-llm-results/by-interaction/{interactionId}';
-};
-
-export type GetDualLlmResultsByInteractionErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type GetDualLlmResultsByInteractionError = GetDualLlmResultsByInteractionErrors[keyof GetDualLlmResultsByInteractionErrors];
-
-export type GetDualLlmResultsByInteractionResponses = {
-    /**
-     * Default Response
-     */
-    200: Array<{
-        id: string;
-        agentId: string;
-        toolCallId: string;
-        conversations: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown>;
-        result: string;
-        createdAt: string;
-    }>;
-};
-
-export type GetDualLlmResultsByInteractionResponse = GetDualLlmResultsByInteractionResponses[keyof GetDualLlmResultsByInteractionResponses];
-
 export type PostV1GeminiV1BetaModelsByModelGenerateContentData = {
     body: GeminiGenerateContentRequestInput;
     headers?: {
@@ -22256,6 +21614,14 @@ export type GetInteractionsResponses = {
             request: XaiChatCompletionRequest;
             processedRequest?: XaiChatCompletionRequest | null;
             response: OpenAiChatCompletionResponse;
+            dualLlmAnalyses?: Array<{
+                toolCallId: string;
+                conversations: Array<{
+                    role: 'user' | 'assistant';
+                    content: string;
+                }>;
+                result: string;
+            }> | null;
             type: 'openai:chatCompletions';
             model: string | null;
             baselineModel: string | null;
@@ -22304,6 +21670,14 @@ export type GetInteractionsResponses = {
                     total_tokens: number;
                 };
             };
+            dualLlmAnalyses?: Array<{
+                toolCallId: string;
+                conversations: Array<{
+                    role: 'user' | 'assistant';
+                    content: string;
+                }>;
+                result: string;
+            }> | null;
             type: 'openai:embeddings';
             model: string | null;
             baselineModel: string | null;
@@ -22328,6 +21702,14 @@ export type GetInteractionsResponses = {
             request: GeminiGenerateContentRequest;
             processedRequest?: GeminiGenerateContentRequest | null;
             response: GeminiGenerateContentResponse;
+            dualLlmAnalyses?: Array<{
+                toolCallId: string;
+                conversations: Array<{
+                    role: 'user' | 'assistant';
+                    content: string;
+                }>;
+                result: string;
+            }> | null;
             type: 'gemini:generateContent';
             model: string | null;
             baselineModel: string | null;
@@ -22354,6 +21736,14 @@ export type GetInteractionsResponses = {
             request: AnthropicMessagesRequest;
             processedRequest?: AnthropicMessagesRequest | null;
             response: AnthropicMessagesResponse;
+            dualLlmAnalyses?: Array<{
+                toolCallId: string;
+                conversations: Array<{
+                    role: 'user' | 'assistant';
+                    content: string;
+                }>;
+                result: string;
+            }> | null;
             type: 'anthropic:messages';
             model: string | null;
             baselineModel: string | null;
@@ -22748,6 +22138,14 @@ export type GetInteractionsResponses = {
                     type?: 'default' | 'throughput';
                 };
             };
+            dualLlmAnalyses?: Array<{
+                toolCallId: string;
+                conversations: Array<{
+                    role: 'user' | 'assistant';
+                    content: string;
+                }>;
+                result: string;
+            }> | null;
             type: 'bedrock:converse';
             model: string | null;
             baselineModel: string | null;
@@ -22774,6 +22172,14 @@ export type GetInteractionsResponses = {
             request: XaiChatCompletionRequest;
             processedRequest?: XaiChatCompletionRequest | null;
             response: CerebrasChatCompletionResponse;
+            dualLlmAnalyses?: Array<{
+                toolCallId: string;
+                conversations: Array<{
+                    role: 'user' | 'assistant';
+                    content: string;
+                }>;
+                result: string;
+            }> | null;
             type: 'cerebras:chatCompletions';
             model: string | null;
             baselineModel: string | null;
@@ -22800,6 +22206,14 @@ export type GetInteractionsResponses = {
             request: XaiChatCompletionRequest;
             processedRequest?: XaiChatCompletionRequest | null;
             response: MistralChatCompletionResponse;
+            dualLlmAnalyses?: Array<{
+                toolCallId: string;
+                conversations: Array<{
+                    role: 'user' | 'assistant';
+                    content: string;
+                }>;
+                result: string;
+            }> | null;
             type: 'mistral:chatCompletions';
             model: string | null;
             baselineModel: string | null;
@@ -22826,6 +22240,14 @@ export type GetInteractionsResponses = {
             request: XaiChatCompletionRequest;
             processedRequest?: XaiChatCompletionRequest | null;
             response: PerplexityChatCompletionResponse;
+            dualLlmAnalyses?: Array<{
+                toolCallId: string;
+                conversations: Array<{
+                    role: 'user' | 'assistant';
+                    content: string;
+                }>;
+                result: string;
+            }> | null;
             type: 'perplexity:chatCompletions';
             model: string | null;
             baselineModel: string | null;
@@ -22852,6 +22274,14 @@ export type GetInteractionsResponses = {
             request: XaiChatCompletionRequest;
             processedRequest?: XaiChatCompletionRequest | null;
             response: GroqChatCompletionResponse;
+            dualLlmAnalyses?: Array<{
+                toolCallId: string;
+                conversations: Array<{
+                    role: 'user' | 'assistant';
+                    content: string;
+                }>;
+                result: string;
+            }> | null;
             type: 'groq:chatCompletions';
             model: string | null;
             baselineModel: string | null;
@@ -22878,6 +22308,14 @@ export type GetInteractionsResponses = {
             request: XaiChatCompletionRequest;
             processedRequest?: XaiChatCompletionRequest | null;
             response: XaiChatCompletionResponse;
+            dualLlmAnalyses?: Array<{
+                toolCallId: string;
+                conversations: Array<{
+                    role: 'user' | 'assistant';
+                    content: string;
+                }>;
+                result: string;
+            }> | null;
             type: 'xai:chatCompletions';
             model: string | null;
             baselineModel: string | null;
@@ -22904,6 +22342,14 @@ export type GetInteractionsResponses = {
             request: XaiChatCompletionRequest;
             processedRequest?: XaiChatCompletionRequest | null;
             response: OpenrouterChatCompletionResponse;
+            dualLlmAnalyses?: Array<{
+                toolCallId: string;
+                conversations: Array<{
+                    role: 'user' | 'assistant';
+                    content: string;
+                }>;
+                result: string;
+            }> | null;
             type: 'openrouter:chatCompletions';
             model: string | null;
             baselineModel: string | null;
@@ -22930,6 +22376,14 @@ export type GetInteractionsResponses = {
             request: VllmChatCompletionRequest;
             processedRequest?: VllmChatCompletionRequest | null;
             response: VllmChatCompletionResponse;
+            dualLlmAnalyses?: Array<{
+                toolCallId: string;
+                conversations: Array<{
+                    role: 'user' | 'assistant';
+                    content: string;
+                }>;
+                result: string;
+            }> | null;
             type: 'vllm:chatCompletions';
             model: string | null;
             baselineModel: string | null;
@@ -22954,6 +22408,14 @@ export type GetInteractionsResponses = {
             request: OllamaChatCompletionRequest;
             processedRequest?: OllamaChatCompletionRequest | null;
             response: OllamaChatCompletionResponse;
+            dualLlmAnalyses?: Array<{
+                toolCallId: string;
+                conversations: Array<{
+                    role: 'user' | 'assistant';
+                    content: string;
+                }>;
+                result: string;
+            }> | null;
             type: 'ollama:chatCompletions';
             model: string | null;
             baselineModel: string | null;
@@ -22978,6 +22440,14 @@ export type GetInteractionsResponses = {
             request: CohereChatRequest;
             processedRequest?: CohereChatRequest | null;
             response: CohereChatResponse;
+            dualLlmAnalyses?: Array<{
+                toolCallId: string;
+                conversations: Array<{
+                    role: 'user' | 'assistant';
+                    content: string;
+                }>;
+                result: string;
+            }> | null;
             type: 'cohere:chat';
             model: string | null;
             baselineModel: string | null;
@@ -23004,6 +22474,14 @@ export type GetInteractionsResponses = {
             request: ZhipuaiChatCompletionRequest;
             processedRequest?: ZhipuaiChatCompletionRequest | null;
             response: ZhipuaiChatCompletionResponse;
+            dualLlmAnalyses?: Array<{
+                toolCallId: string;
+                conversations: Array<{
+                    role: 'user' | 'assistant';
+                    content: string;
+                }>;
+                result: string;
+            }> | null;
             type: 'zhipuai:chatCompletions';
             model: string | null;
             baselineModel: string | null;
@@ -23030,6 +22508,14 @@ export type GetInteractionsResponses = {
             request: DeepSeekChatCompletionRequest;
             processedRequest?: DeepSeekChatCompletionRequest | null;
             response: DeepSeekChatCompletionResponse;
+            dualLlmAnalyses?: Array<{
+                toolCallId: string;
+                conversations: Array<{
+                    role: 'user' | 'assistant';
+                    content: string;
+                }>;
+                result: string;
+            }> | null;
             type: 'deepseek:chatCompletions';
             model: string | null;
             baselineModel: string | null;
@@ -23056,6 +22542,14 @@ export type GetInteractionsResponses = {
             request: MinimaxChatCompletionRequest;
             processedRequest?: MinimaxChatCompletionRequest | null;
             response: MinimaxChatCompletionResponse;
+            dualLlmAnalyses?: Array<{
+                toolCallId: string;
+                conversations: Array<{
+                    role: 'user' | 'assistant';
+                    content: string;
+                }>;
+                result: string;
+            }> | null;
             type: 'minimax:chatCompletions';
             model: string | null;
             baselineModel: string | null;
@@ -23469,6 +22963,14 @@ export type GetInteractionResponses = {
         request: XaiChatCompletionRequest;
         processedRequest?: XaiChatCompletionRequest | null;
         response: OpenAiChatCompletionResponse;
+        dualLlmAnalyses?: Array<{
+            toolCallId: string;
+            conversations: Array<{
+                role: 'user' | 'assistant';
+                content: string;
+            }>;
+            result: string;
+        }> | null;
         type: 'openai:chatCompletions';
         model: string | null;
         baselineModel: string | null;
@@ -23517,6 +23019,14 @@ export type GetInteractionResponses = {
                 total_tokens: number;
             };
         };
+        dualLlmAnalyses?: Array<{
+            toolCallId: string;
+            conversations: Array<{
+                role: 'user' | 'assistant';
+                content: string;
+            }>;
+            result: string;
+        }> | null;
         type: 'openai:embeddings';
         model: string | null;
         baselineModel: string | null;
@@ -23541,6 +23051,14 @@ export type GetInteractionResponses = {
         request: GeminiGenerateContentRequest;
         processedRequest?: GeminiGenerateContentRequest | null;
         response: GeminiGenerateContentResponse;
+        dualLlmAnalyses?: Array<{
+            toolCallId: string;
+            conversations: Array<{
+                role: 'user' | 'assistant';
+                content: string;
+            }>;
+            result: string;
+        }> | null;
         type: 'gemini:generateContent';
         model: string | null;
         baselineModel: string | null;
@@ -23567,6 +23085,14 @@ export type GetInteractionResponses = {
         request: AnthropicMessagesRequest;
         processedRequest?: AnthropicMessagesRequest | null;
         response: AnthropicMessagesResponse;
+        dualLlmAnalyses?: Array<{
+            toolCallId: string;
+            conversations: Array<{
+                role: 'user' | 'assistant';
+                content: string;
+            }>;
+            result: string;
+        }> | null;
         type: 'anthropic:messages';
         model: string | null;
         baselineModel: string | null;
@@ -23961,6 +23487,14 @@ export type GetInteractionResponses = {
                 type?: 'default' | 'throughput';
             };
         };
+        dualLlmAnalyses?: Array<{
+            toolCallId: string;
+            conversations: Array<{
+                role: 'user' | 'assistant';
+                content: string;
+            }>;
+            result: string;
+        }> | null;
         type: 'bedrock:converse';
         model: string | null;
         baselineModel: string | null;
@@ -23987,6 +23521,14 @@ export type GetInteractionResponses = {
         request: XaiChatCompletionRequest;
         processedRequest?: XaiChatCompletionRequest | null;
         response: CerebrasChatCompletionResponse;
+        dualLlmAnalyses?: Array<{
+            toolCallId: string;
+            conversations: Array<{
+                role: 'user' | 'assistant';
+                content: string;
+            }>;
+            result: string;
+        }> | null;
         type: 'cerebras:chatCompletions';
         model: string | null;
         baselineModel: string | null;
@@ -24013,6 +23555,14 @@ export type GetInteractionResponses = {
         request: XaiChatCompletionRequest;
         processedRequest?: XaiChatCompletionRequest | null;
         response: MistralChatCompletionResponse;
+        dualLlmAnalyses?: Array<{
+            toolCallId: string;
+            conversations: Array<{
+                role: 'user' | 'assistant';
+                content: string;
+            }>;
+            result: string;
+        }> | null;
         type: 'mistral:chatCompletions';
         model: string | null;
         baselineModel: string | null;
@@ -24039,6 +23589,14 @@ export type GetInteractionResponses = {
         request: XaiChatCompletionRequest;
         processedRequest?: XaiChatCompletionRequest | null;
         response: PerplexityChatCompletionResponse;
+        dualLlmAnalyses?: Array<{
+            toolCallId: string;
+            conversations: Array<{
+                role: 'user' | 'assistant';
+                content: string;
+            }>;
+            result: string;
+        }> | null;
         type: 'perplexity:chatCompletions';
         model: string | null;
         baselineModel: string | null;
@@ -24065,6 +23623,14 @@ export type GetInteractionResponses = {
         request: XaiChatCompletionRequest;
         processedRequest?: XaiChatCompletionRequest | null;
         response: GroqChatCompletionResponse;
+        dualLlmAnalyses?: Array<{
+            toolCallId: string;
+            conversations: Array<{
+                role: 'user' | 'assistant';
+                content: string;
+            }>;
+            result: string;
+        }> | null;
         type: 'groq:chatCompletions';
         model: string | null;
         baselineModel: string | null;
@@ -24091,6 +23657,14 @@ export type GetInteractionResponses = {
         request: XaiChatCompletionRequest;
         processedRequest?: XaiChatCompletionRequest | null;
         response: XaiChatCompletionResponse;
+        dualLlmAnalyses?: Array<{
+            toolCallId: string;
+            conversations: Array<{
+                role: 'user' | 'assistant';
+                content: string;
+            }>;
+            result: string;
+        }> | null;
         type: 'xai:chatCompletions';
         model: string | null;
         baselineModel: string | null;
@@ -24117,6 +23691,14 @@ export type GetInteractionResponses = {
         request: XaiChatCompletionRequest;
         processedRequest?: XaiChatCompletionRequest | null;
         response: OpenrouterChatCompletionResponse;
+        dualLlmAnalyses?: Array<{
+            toolCallId: string;
+            conversations: Array<{
+                role: 'user' | 'assistant';
+                content: string;
+            }>;
+            result: string;
+        }> | null;
         type: 'openrouter:chatCompletions';
         model: string | null;
         baselineModel: string | null;
@@ -24143,6 +23725,14 @@ export type GetInteractionResponses = {
         request: VllmChatCompletionRequest;
         processedRequest?: VllmChatCompletionRequest | null;
         response: VllmChatCompletionResponse;
+        dualLlmAnalyses?: Array<{
+            toolCallId: string;
+            conversations: Array<{
+                role: 'user' | 'assistant';
+                content: string;
+            }>;
+            result: string;
+        }> | null;
         type: 'vllm:chatCompletions';
         model: string | null;
         baselineModel: string | null;
@@ -24167,6 +23757,14 @@ export type GetInteractionResponses = {
         request: OllamaChatCompletionRequest;
         processedRequest?: OllamaChatCompletionRequest | null;
         response: OllamaChatCompletionResponse;
+        dualLlmAnalyses?: Array<{
+            toolCallId: string;
+            conversations: Array<{
+                role: 'user' | 'assistant';
+                content: string;
+            }>;
+            result: string;
+        }> | null;
         type: 'ollama:chatCompletions';
         model: string | null;
         baselineModel: string | null;
@@ -24191,6 +23789,14 @@ export type GetInteractionResponses = {
         request: CohereChatRequest;
         processedRequest?: CohereChatRequest | null;
         response: CohereChatResponse;
+        dualLlmAnalyses?: Array<{
+            toolCallId: string;
+            conversations: Array<{
+                role: 'user' | 'assistant';
+                content: string;
+            }>;
+            result: string;
+        }> | null;
         type: 'cohere:chat';
         model: string | null;
         baselineModel: string | null;
@@ -24217,6 +23823,14 @@ export type GetInteractionResponses = {
         request: ZhipuaiChatCompletionRequest;
         processedRequest?: ZhipuaiChatCompletionRequest | null;
         response: ZhipuaiChatCompletionResponse;
+        dualLlmAnalyses?: Array<{
+            toolCallId: string;
+            conversations: Array<{
+                role: 'user' | 'assistant';
+                content: string;
+            }>;
+            result: string;
+        }> | null;
         type: 'zhipuai:chatCompletions';
         model: string | null;
         baselineModel: string | null;
@@ -24243,6 +23857,14 @@ export type GetInteractionResponses = {
         request: DeepSeekChatCompletionRequest;
         processedRequest?: DeepSeekChatCompletionRequest | null;
         response: DeepSeekChatCompletionResponse;
+        dualLlmAnalyses?: Array<{
+            toolCallId: string;
+            conversations: Array<{
+                role: 'user' | 'assistant';
+                content: string;
+            }>;
+            result: string;
+        }> | null;
         type: 'deepseek:chatCompletions';
         model: string | null;
         baselineModel: string | null;
@@ -24269,6 +23891,14 @@ export type GetInteractionResponses = {
         request: MinimaxChatCompletionRequest;
         processedRequest?: MinimaxChatCompletionRequest | null;
         response: MinimaxChatCompletionResponse;
+        dualLlmAnalyses?: Array<{
+            toolCallId: string;
+            conversations: Array<{
+                role: 'user' | 'assistant';
+                content: string;
+            }>;
+            result: string;
+        }> | null;
         type: 'minimax:chatCompletions';
         model: string | null;
         baselineModel: string | null;

@@ -1,16 +1,20 @@
 import { AgentToolModel, ToolModel, TrustedDataPolicyModel } from "@/models";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { CommonMessage, Tool } from "@/types";
+import { vi } from "vitest";
+import { DualLlmSubagent } from "@/agents/subagents/dual-llm";
 import { evaluateIfContextIsTrusted } from "./trusted-data";
 
 describe("trusted-data evaluation (provider-agnostic)", () => {
   let agentId: string;
+  let organizationId: string;
   let toolId: string;
 
   beforeEach(async ({ makeAgent }) => {
     // Create test agent
     const agent = await makeAgent();
     agentId = agent.id;
+    organizationId = agent.organizationId;
 
     // Create test tool
     await ToolModel.createToolIfNotExists({
@@ -37,8 +41,8 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
       const result = await evaluateIfContextIsTrusted(
         commonMessages,
         agentId,
-        "test-api-key",
-        "openai",
+        organizationId,
+        undefined,
         false,
         "restrictive",
         { teamIds: [] },
@@ -84,8 +88,8 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
       const result = await evaluateIfContextIsTrusted(
         commonMessages,
         agentId,
-        "test-api-key",
-        "openai",
+        organizationId,
+        undefined,
         false,
         "restrictive",
         { teamIds: [] },
@@ -137,8 +141,8 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
       const result = await evaluateIfContextIsTrusted(
         commonMessages,
         agentId,
-        "test-api-key",
-        "openai",
+        organizationId,
+        undefined,
         false,
         "restrictive",
         { teamIds: [] },
@@ -146,6 +150,72 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
 
       expect(result.contextIsTrusted).toBe(true);
       expect(result.toolResultUpdates).toEqual({});
+    });
+
+    test("sanitizes with dual LLM and stores analysis metadata", async () => {
+      await TrustedDataPolicyModel.create({
+        toolId,
+        conditions: [{ key: "source", operator: "equal", value: "external" }],
+        action: "sanitize_with_dual_llm",
+        description: "Sanitize external data",
+      });
+
+      const createSpy = vi
+        .spyOn(DualLlmSubagent, "create")
+        .mockResolvedValue({
+          processWithMainAgent: vi.fn().mockResolvedValue({
+            toolCallId: "call_dual",
+            conversations: [
+              { role: "assistant", content: "QUESTION: What kind of data?" },
+              { role: "user", content: "Answer: 0" },
+            ],
+            result: "Sanitized summary",
+          }),
+        } as unknown as DualLlmSubagent);
+
+      const commonMessages: CommonMessage[] = [
+        { role: "user" },
+        {
+          role: "tool",
+          toolCalls: [
+            {
+              id: "call_dual",
+              name: "get_emails",
+              content: { source: "external", payload: "raw" },
+              isError: false,
+            },
+          ],
+        },
+      ];
+
+      const result = await evaluateIfContextIsTrusted(
+        commonMessages,
+        agentId,
+        organizationId,
+        undefined,
+        false,
+        "restrictive",
+        { teamIds: [] },
+      );
+
+      expect(createSpy).toHaveBeenCalledOnce();
+      expect(result.contextIsTrusted).toBe(true);
+      expect(result.usedDualLlm).toBe(true);
+      expect(result.toolResultUpdates).toEqual({
+        call_dual: "Sanitized summary",
+      });
+      expect(result.dualLlmAnalyses).toEqual([
+        {
+          toolCallId: "call_dual",
+          conversations: [
+            { role: "assistant", content: "QUESTION: What kind of data?" },
+            { role: "user", content: "Answer: 0" },
+          ],
+          result: "Sanitized summary",
+        },
+      ]);
+
+      createSpy.mockRestore();
     });
 
     test("marks context as untrusted when no policies match", async () => {
@@ -183,8 +253,8 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
       const result = await evaluateIfContextIsTrusted(
         commonMessages,
         agentId,
-        "test-api-key",
-        "openai",
+        organizationId,
+        undefined,
         false,
         "restrictive",
         { teamIds: [] },
@@ -241,8 +311,8 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
       const result = await evaluateIfContextIsTrusted(
         commonMessages,
         agentId,
-        "test-api-key",
-        "openai",
+        organizationId,
+        undefined,
         false,
         "restrictive",
         { teamIds: [] },
@@ -274,8 +344,8 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
       const result = await evaluateIfContextIsTrusted(
         commonMessages,
         agentId,
-        "test-api-key",
-        "openai",
+        organizationId,
+        undefined,
         false,
         "restrictive",
         { teamIds: [] },
@@ -304,8 +374,8 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
       const result = await evaluateIfContextIsTrusted(
         commonMessages,
         agentId,
-        "test-api-key",
-        "openai",
+        organizationId,
+        undefined,
         false,
         "restrictive",
         { teamIds: [] },
@@ -326,8 +396,8 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
       const result = await evaluateIfContextIsTrusted(
         commonMessages,
         agentId,
-        "test-api-key",
-        "openai",
+        organizationId,
+        undefined,
         false,
         "restrictive",
         { teamIds: [] },
@@ -378,8 +448,8 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
       const result = await evaluateIfContextIsTrusted(
         commonMessages,
         agentId,
-        "test-api-key",
-        "openai",
+        organizationId,
+        undefined,
         false,
         "restrictive",
         { teamIds: [] },
@@ -437,8 +507,8 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
       const result = await evaluateIfContextIsTrusted(
         commonMessages,
         agentId,
-        "test-api-key",
-        "openai",
+        organizationId,
+        undefined,
         false,
         "restrictive",
         { teamIds: [] },
@@ -475,8 +545,8 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
       const result = await evaluateIfContextIsTrusted(
         commonMessages,
         agentId,
-        "test-api-key",
-        "openai",
+        organizationId,
+        undefined,
         false,
         "restrictive",
         { teamIds: [] },
@@ -506,8 +576,8 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
       const result = await evaluateIfContextIsTrusted(
         commonMessages,
         agentId,
-        "test-api-key",
-        "openai",
+        organizationId,
+        undefined,
         false,
         "permissive", // YOLO mode
         { teamIds: [] },
@@ -545,8 +615,8 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
       const result = await evaluateIfContextIsTrusted(
         commonMessages,
         agentId,
-        "test-api-key",
-        "openai",
+        organizationId,
+        undefined,
         false,
         "permissive", // YOLO mode
         { teamIds: [] },
@@ -576,8 +646,8 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
       const result = await evaluateIfContextIsTrusted(
         commonMessages,
         agentId,
-        "test-api-key",
-        "openai",
+        organizationId,
+        undefined,
         false,
         "restrictive", // Default restrictive mode
         { teamIds: [] },
@@ -625,8 +695,8 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
       const result = await evaluateIfContextIsTrusted(
         commonMessages,
         agentId,
-        "test-api-key",
-        "openai",
+        organizationId,
+        undefined,
         false,
         "restrictive",
         { teamIds: [] },
@@ -680,8 +750,8 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
       const result = await evaluateIfContextIsTrusted(
         commonMessages,
         agentId,
-        "test-api-key",
-        "anthropic",
+        organizationId,
+        undefined,
         false,
         "restrictive",
         { teamIds: [] },

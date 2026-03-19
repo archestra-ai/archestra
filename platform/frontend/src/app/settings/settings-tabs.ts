@@ -42,8 +42,5 @@ export function useSettingsTabs() {
     ...(permissionMap?.["/settings/organization"]
       ? [{ label: "Organization", href: "/settings/organization" }]
       : []),
-    ...(permissionMap?.["/settings/dual-llm"]
-      ? [{ label: "Dual LLM", href: "/settings/dual-llm" }]
-      : []),
   ];
 }

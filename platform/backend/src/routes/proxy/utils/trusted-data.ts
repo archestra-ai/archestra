@@ -1,13 +1,13 @@
-import type { SupportedProvider } from "@shared";
 import logger from "@/logging";
-import { DualLlmResultModel, TrustedDataPolicyModel } from "@/models";
+import { DualLlmSubagent } from "@/agents/subagents/dual-llm";
+import { TrustedDataPolicyModel } from "@/models";
 import type { PolicyEvaluationContext } from "@/models/tool-invocation-policy";
 import type {
   CommonMessage,
+  DualLlmAnalysis,
   GlobalToolPolicy,
   ToolResultUpdates,
 } from "@/types";
-import { DualLlmSubagent } from "./dual-llm-subagent";
 
 /**
  * Evaluate if context is trusted and return updates for tool results
@@ -25,8 +25,8 @@ import { DualLlmSubagent } from "./dual-llm-subagent";
 export async function evaluateIfContextIsTrusted(
   messages: CommonMessage[],
   agentId: string,
-  apiKey: string | undefined,
-  provider: SupportedProvider,
+  organizationId: string,
+  userId: string | undefined,
   considerContextUntrusted: boolean = false,
   globalToolPolicy: GlobalToolPolicy = "restrictive",
   policyContext: PolicyEvaluationContext,
@@ -40,12 +40,12 @@ export async function evaluateIfContextIsTrusted(
   toolResultUpdates: ToolResultUpdates;
   contextIsTrusted: boolean;
   usedDualLlm: boolean;
+  dualLlmAnalyses: DualLlmAnalysis[];
 }> {
   logger.debug(
     {
       agentId,
       messageCount: messages.length,
-      provider,
       considerContextUntrusted,
       globalToolPolicy,
     },
@@ -53,6 +53,7 @@ export async function evaluateIfContextIsTrusted(
   );
 
   const toolResultUpdates: ToolResultUpdates = {};
+  const dualLlmAnalyses: DualLlmAnalysis[] = [];
   let hasUntrustedData = false;
   let usedDualLlm = false;
 
@@ -67,6 +68,7 @@ export async function evaluateIfContextIsTrusted(
       toolResultUpdates: {},
       contextIsTrusted: false,
       usedDualLlm: false,
+      dualLlmAnalyses: [],
     };
   }
 
@@ -104,6 +106,7 @@ export async function evaluateIfContextIsTrusted(
       toolResultUpdates,
       contextIsTrusted: true,
       usedDualLlm: false,
+      dualLlmAnalyses: [],
     };
   }
 
@@ -169,65 +172,45 @@ export async function evaluateIfContextIsTrusted(
       toolResultUpdates[toolCallId] =
         `[Content blocked by policy${reason ? `: ${reason}` : ""}]`;
     } else if (shouldSanitizeWithDualLlm) {
-      // Check if this tool call has already been analyzed
+      if (!usedDualLlm && onDualLlmStart) {
+        logger.debug(
+          { agentId, toolCallId },
+          "[trustedData] evaluateIfContextIsTrusted: starting dual LLM processing",
+        );
+        onDualLlmStart();
+      }
+
+      usedDualLlm = true;
+
+      const userRequest = extractUserRequest(messages);
+
+      logger.debug(
+        { agentId, toolCallId, organizationId, userId },
+        "[trustedData] evaluateIfContextIsTrusted: creating dual LLM subagent",
+      );
+      const dualLlmSubagent = await DualLlmSubagent.create({
+        dualLlmParams: {
+          toolCallId,
+          userRequest,
+          toolResult,
+        },
+        callingAgentId: agentId,
+        organizationId,
+        userId,
+      });
+
       logger.debug(
         { agentId, toolCallId },
-        "[trustedData] evaluateIfContextIsTrusted: checking for cached dual LLM result",
+        "[trustedData] evaluateIfContextIsTrusted: processing with dual LLM subagent",
       );
-      const existingResult =
-        await DualLlmResultModel.findByToolCallId(toolCallId);
-
-      if (existingResult) {
-        // Use cached result from database
-        logger.debug(
-          { agentId, toolCallId },
-          "[trustedData] evaluateIfContextIsTrusted: using cached dual LLM result",
-        );
-        toolResultUpdates[toolCallId] = existingResult.result;
-      } else {
-        // Notify that dual LLM processing is starting (only once)
-        if (!usedDualLlm && onDualLlmStart) {
-          logger.debug(
-            { agentId, toolCallId },
-            "[trustedData] evaluateIfContextIsTrusted: starting dual LLM processing",
-          );
-          onDualLlmStart();
-        }
-
-        // Run Dual LLM quarantine pattern
-        usedDualLlm = true;
-
-        // Extract user request from messages (last user message)
-        const userRequest = extractUserRequest(messages);
-
-        logger.debug(
-          { agentId, toolCallId, provider },
-          "[trustedData] evaluateIfContextIsTrusted: creating dual LLM subagent",
-        );
-        const dualLlmSubagent = await DualLlmSubagent.create(
-          {
-            toolCallId,
-            userRequest,
-            toolResult,
-          },
-          agentId,
-          apiKey,
-          provider,
-        );
-
-        // Get safe summary and store as update
-        logger.debug(
-          { agentId, toolCallId },
-          "[trustedData] evaluateIfContextIsTrusted: processing with dual LLM subagent",
-        );
-        const safeSummary =
-          await dualLlmSubagent.processWithMainAgent(onDualLlmProgress);
-        toolResultUpdates[toolCallId] = safeSummary;
-        logger.debug(
-          { agentId, toolCallId, summaryLength: safeSummary.length },
-          "[trustedData] evaluateIfContextIsTrusted: dual LLM processing complete",
-        );
-      }
+      const analysis =
+        await dualLlmSubagent.processWithMainAgent(onDualLlmProgress);
+      dualLlmAnalyses.push(analysis);
+      toolResultUpdates[toolCallId] = analysis.result;
+      logger.debug(
+        { agentId, toolCallId, summaryLength: analysis.result.length },
+        "[trustedData] evaluateIfContextIsTrusted: dual LLM processing complete",
+      );
 
       // After sanitization, treat as trusted
       hasUntrustedData = false;
@@ -241,6 +224,7 @@ export async function evaluateIfContextIsTrusted(
       updateCount: Object.keys(toolResultUpdates).length,
       contextIsTrusted: !hasUntrustedData,
       usedDualLlm,
+      dualLlmAnalysisCount: dualLlmAnalyses.length,
     },
     "[trustedData] evaluateIfContextIsTrusted: evaluation complete",
   );
@@ -249,6 +233,7 @@ export async function evaluateIfContextIsTrusted(
     toolResultUpdates,
     contextIsTrusted: !hasUntrustedData,
     usedDualLlm,
+    dualLlmAnalyses,
   };
 }
 

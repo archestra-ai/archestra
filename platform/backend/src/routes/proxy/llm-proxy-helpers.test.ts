@@ -246,6 +246,7 @@ describe("buildInteractionRecord", () => {
       hadToolResults: true,
     } satisfies ToolCompressionStats,
     toonSkipReason: null,
+    dualLlmAnalyses: [],
   };
 
   test("builds correct record with all fields", () => {

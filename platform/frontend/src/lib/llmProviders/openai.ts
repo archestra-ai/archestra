@@ -1,6 +1,6 @@
 import type { archestraApiTypes } from "@shared";
 import type { PartialUIMessage } from "@/components/message-thread";
-import type { DualLlmResult, Interaction, InteractionUtils } from "./common";
+import type { DualLlmAnalysis, Interaction, InteractionUtils } from "./common";
 
 class OpenAiChatCompletionInteraction implements InteractionUtils {
   private request: archestraApiTypes.OpenAiChatCompletionRequest;
@@ -312,7 +312,7 @@ class OpenAiChatCompletionInteraction implements InteractionUtils {
   }
 
   private mapRequestToUiMessages(
-    dualLlmResults?: DualLlmResult[],
+    dualLlmAnalyses?: DualLlmAnalysis[],
   ): PartialUIMessage[] {
     const messages = this.request.messages;
     const uiMessages: PartialUIMessage[] = [];
@@ -349,7 +349,7 @@ class OpenAiChatCompletionInteraction implements InteractionUtils {
             toolCallParts.push(...toolResultUiMsg.parts);
 
             // Check if there's a dual LLM result for this tool call
-            const dualLlmResultForTool = dualLlmResults?.find(
+            const dualLlmResultForTool = dualLlmAnalyses?.find(
               (result) => result.toolCallId === toolCall.id,
             );
 
@@ -388,9 +388,9 @@ class OpenAiChatCompletionInteraction implements InteractionUtils {
     );
   }
 
-  mapToUiMessages(dualLlmResults?: DualLlmResult[]): PartialUIMessage[] {
+  mapToUiMessages(dualLlmAnalyses?: DualLlmAnalysis[]): PartialUIMessage[] {
     return [
-      ...this.mapRequestToUiMessages(dualLlmResults),
+      ...this.mapRequestToUiMessages(dualLlmAnalyses),
       ...this.mapResponseToUiMessages(),
     ];
   }

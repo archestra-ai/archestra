@@ -56,10 +56,6 @@ const PAGE_CONFIG: Record<string, { title: string; description: string }> = {
     title: "Users",
     description: "Manage users, their roles, and user invitations.",
   },
-  "/settings/dual-llm": {
-    title: "Dual LLM",
-    description: "Configure dual-model routing and result validation behavior.",
-  },
 };
 
 type SettingsLayoutContextType = {

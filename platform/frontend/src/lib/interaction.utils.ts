@@ -5,7 +5,7 @@ import BedrockConverseInteraction from "./llmProviders/bedrock";
 import CerebrasChatCompletionInteraction from "./llmProviders/cerebras";
 import CohereChatInteraction from "./llmProviders/cohere";
 import type {
-  DualLlmResult,
+  DualLlmAnalysis,
   Interaction,
   InteractionUtils,
 } from "./llmProviders/common";
@@ -195,8 +195,8 @@ export class DynamicInteraction implements InteractionUtils {
   /**
    * Map request messages, combining tool calls with their results and dual LLM analysis
    */
-  mapToUiMessages(dualLlmResults?: DualLlmResult[]): PartialUIMessage[] {
-    return this.interactionClass.mapToUiMessages(dualLlmResults);
+  mapToUiMessages(dualLlmAnalyses?: DualLlmAnalysis[]): PartialUIMessage[] {
+    return this.interactionClass.mapToUiMessages(dualLlmAnalyses);
   }
 
   /**

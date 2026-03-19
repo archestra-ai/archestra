@@ -19,7 +19,6 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { useDualLlmResultsByInteraction } from "@/lib/dual-llm-result.query";
 import { useInteraction } from "@/lib/interaction.query";
 import {
   calculateCostSavings,
@@ -61,10 +60,6 @@ function LogDetail({
     initialData: initialData?.interaction,
   });
 
-  const { data: allDualLlmResults = [] } = useDualLlmResultsByInteraction({
-    interactionId: id,
-  });
-
   if (isPending) {
     return <LoadingSpinner />;
   }
@@ -83,13 +78,14 @@ function LogDetail({
   const toolsBlocked = interaction.getToolNamesRefused();
   const isDualLlmRelevant = interaction.isLastMessageToolCall();
   const lastToolCallId = interaction.getLastToolCallId();
-  const dualLlmResult = allDualLlmResults.find(
+  const allDualLlmAnalyses = dynamicInteraction.dualLlmAnalyses ?? [];
+  const dualLlmResult = allDualLlmAnalyses.find(
     (r) => r.toolCallId === lastToolCallId,
   );
 
   const requestMessages = new DynamicInteraction(
     dynamicInteraction,
-  ).mapToUiMessages(allDualLlmResults);
+  ).mapToUiMessages(allDualLlmAnalyses);
 
   return (
     <div className="space-y-6">

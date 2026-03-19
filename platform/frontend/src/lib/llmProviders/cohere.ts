@@ -6,7 +6,7 @@
 
 import type { archestraApiTypes } from "@shared";
 import type { PartialUIMessage } from "@/components/message-thread";
-import type { DualLlmResult, Interaction, InteractionUtils } from "./common";
+import type { DualLlmAnalysis, Interaction, InteractionUtils } from "./common";
 
 class CohereChatInteraction implements InteractionUtils {
   private request: archestraApiTypes.CohereChatRequest;
@@ -153,7 +153,7 @@ class CohereChatInteraction implements InteractionUtils {
     return "";
   }
 
-  mapToUiMessages(_dualLlmResults?: DualLlmResult[]): PartialUIMessage[] {
+  mapToUiMessages(_dualLlmAnalyses?: DualLlmAnalysis[]): PartialUIMessage[] {
     const uiMessages: PartialUIMessage[] = [];
     const messages = this.request.messages ?? [];
     const response = this.response;

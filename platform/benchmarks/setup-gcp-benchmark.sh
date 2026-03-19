@@ -82,7 +82,7 @@ set -e
 
 echo "Installing Docker..."
 apt-get update
-apt-get install -y ca-certificates curl
+apt-get install -y ca-certificates curl git
 install -m 0755 -d /etc/apt/keyrings
 curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
 chmod a+r /etc/apt/keyrings/docker.asc
@@ -92,10 +92,28 @@ echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.
 apt-get update
 apt-get install -y docker-ce docker-ce-cli containerd.io
 
-echo "Starting Archestra Platform..."
-docker run -d -p 9000:9000 -p 3000:3000 -e BENCHMARK_MOCK_MODE=true --name archestra archestra/platform:latest
+echo "Preparing benchmark fixtures..."
+git clone --depth 1 https://github.com/archestra-ai/archestra.git /opt/archestra
+docker network create archestra-benchmark >/dev/null 2>&1 || true
 
-echo "✅ Archestra Platform is running (mock mode enabled)"
+echo "Starting WireMock..."
+docker run -d \
+  --name wiremock \
+  --network archestra-benchmark \
+  -p 9092:8080 \
+  -v /opt/archestra/platform/helm/e2e-tests/mappings:/home/wiremock/mappings \
+  wiremock/wiremock:3.13.1
+
+echo "Starting Archestra Platform..."
+docker run -d \
+  --name archestra \
+  --network archestra-benchmark \
+  -p 9000:9000 \
+  -p 3000:3000 \
+  -e ARCHESTRA_OPENAI_BASE_URL=http://wiremock:8080/openai/v1 \
+  archestra/platform:latest
+
+echo "✅ Archestra Platform is running with WireMock upstream"
 echo "API: http://$(hostname -I | awk "{print \$1}"):9000"
 '
 
@@ -186,6 +204,7 @@ export LOADTEST_VM_NAME=$LOADTEST_VM_NAME
 export ARCHESTRA_INTERNAL_IP=$ARCHESTRA_INTERNAL_IP
 export LOADTEST_INTERNAL_IP=$LOADTEST_INTERNAL_IP
 export ARCHESTRA_API_URL=http://$ARCHESTRA_INTERNAL_IP:9000
+export ARCHESTRA_BENCHMARK_API_KEY=benchmark-openai-tools
 EOF
 
 echo "✅ Configuration saved to benchmark-config.env"

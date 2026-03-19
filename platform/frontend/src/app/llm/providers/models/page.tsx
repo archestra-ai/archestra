@@ -20,19 +20,11 @@ import {
   UnknownCapabilitiesBadge,
 } from "@/components/model-badges";
 import { SearchInput } from "@/components/search-input";
+import { StandardFormDialog } from "@/components/standard-dialog";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogForm,
-  DialogHeader,
-  DialogStickyFooter,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import {
   Form,
   FormControl,
@@ -390,180 +382,170 @@ function EditModelDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg max-h-[85vh] flex flex-col overflow-hidden">
-        <DialogHeader>
-          <DialogTitle>Edit Model</DialogTitle>
-          <DialogDescription>
-            Update pricing and modality settings for this model.
-          </DialogDescription>
-        </DialogHeader>
-        <Form {...form}>
-          <DialogForm
-            onSubmit={form.handleSubmit(handleSubmit)}
-            className="flex min-h-0 flex-1 flex-col"
+    <StandardFormDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Edit Model"
+      description="Update pricing and modality settings for this model."
+      size="small"
+      onSubmit={form.handleSubmit(handleSubmit)}
+      footer={
+        <>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => onOpenChange(false)}
           >
-            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4">
-              {/* Read-only: Provider */}
-              <div className="space-y-1">
-                <span className="text-sm font-medium">Provider</span>
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  {providerConfig && (
-                    <Image
-                      src={providerConfig.icon}
-                      alt={providerConfig.name}
-                      width={20}
-                      height={20}
-                      className="rounded dark:invert"
-                    />
-                  )}
-                  <span>{providerConfig?.name ?? model.provider}</span>
-                </div>
-              </div>
+            Cancel
+          </Button>
+          <Button type="submit" disabled={updateModel.isPending}>
+            {updateModel.isPending ? "Saving..." : "Save Changes"}
+          </Button>
+        </>
+      }
+    >
+      <Form {...form}>
+        <div className="space-y-4">
+          {/* Read-only: Provider */}
+          <div className="space-y-1">
+            <span className="text-sm font-medium">Provider</span>
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              {providerConfig && (
+                <Image
+                  src={providerConfig.icon}
+                  alt={providerConfig.name}
+                  width={20}
+                  height={20}
+                  className="rounded dark:invert"
+                />
+              )}
+              <span>{providerConfig?.name ?? model.provider}</span>
+            </div>
+          </div>
 
-              {/* Read-only: Model ID */}
-              <div className="space-y-1">
-                <span className="text-sm font-medium">Model ID</span>
-                <p className="text-sm font-mono text-muted-foreground">
-                  {model.modelId}
-                </p>
-              </div>
+          {/* Read-only: Model ID */}
+          <div className="space-y-1">
+            <span className="text-sm font-medium">Model ID</span>
+            <p className="text-sm font-mono text-muted-foreground">
+              {model.modelId}
+            </p>
+          </div>
 
-              {/* Pricing */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium">
-                    Custom Pricing ($/M tokens)
-                  </span>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 text-xs gap-1"
-                    onClick={handleResetPricing}
-                  >
-                    <RotateCcw className="h-3 w-3" />
-                    Reset
-                  </Button>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <FormField
-                    control={form.control}
-                    name="customPricePerMillionInput"
-                    rules={{
-                      validate: (v) => {
-                        if (!v) return true;
-                        const n = parseFloat(v);
-                        if (Number.isNaN(n) || n < 0)
-                          return "Must be a non-negative number";
-                        return true;
-                      },
-                    }}
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Input</FormLabel>
-                        <FormControl>
-                          <Input
-                            placeholder={fallbackPricing.input}
-                            {...field}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="customPricePerMillionOutput"
-                    rules={{
-                      validate: (v) => {
-                        if (!v) return true;
-                        const n = parseFloat(v);
-                        if (Number.isNaN(n) || n < 0)
-                          return "Must be a non-negative number";
-                        return true;
-                      },
-                    }}
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Output</FormLabel>
-                        <FormControl>
-                          <Input
-                            placeholder={fallbackPricing.output}
-                            {...field}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-              </div>
-
-              {/* Input Modalities */}
+          {/* Pricing */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium">
+                Custom Pricing ($/M tokens)
+              </span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs gap-1"
+                onClick={handleResetPricing}
+              >
+                <RotateCcw className="h-3 w-3" />
+                Reset
+              </Button>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
               <FormField
                 control={form.control}
-                name="inputModalities"
+                name="customPricePerMillionInput"
                 rules={{
-                  validate: (v) =>
-                    v.length > 0 || "At least one input modality is required",
+                  validate: (v) => {
+                    if (!v) return true;
+                    const n = parseFloat(v);
+                    if (Number.isNaN(n) || n < 0)
+                      return "Must be a non-negative number";
+                    return true;
+                  },
                 }}
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Input Modalities</FormLabel>
+                    <FormLabel>Input</FormLabel>
                     <FormControl>
-                      <MultiSelect
-                        items={INPUT_MODALITY_OPTIONS}
-                        value={field.value}
-                        onValueChange={field.onChange}
-                        placeholder="Select input modalities..."
-                      />
+                      <Input placeholder={fallbackPricing.input} {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
-
-              {/* Output Modalities */}
               <FormField
                 control={form.control}
-                name="outputModalities"
+                name="customPricePerMillionOutput"
                 rules={{
-                  validate: (v) =>
-                    v.length > 0 || "At least one output modality is required",
+                  validate: (v) => {
+                    if (!v) return true;
+                    const n = parseFloat(v);
+                    if (Number.isNaN(n) || n < 0)
+                      return "Must be a non-negative number";
+                    return true;
+                  },
                 }}
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Output Modalities</FormLabel>
+                    <FormLabel>Output</FormLabel>
                     <FormControl>
-                      <MultiSelect
-                        items={OUTPUT_MODALITY_OPTIONS}
-                        value={field.value}
-                        onValueChange={field.onChange}
-                        placeholder="Select output modalities..."
-                      />
+                      <Input placeholder={fallbackPricing.output} {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
             </div>
-            <DialogStickyFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => onOpenChange(false)}
-              >
-                Cancel
-              </Button>
-              <Button type="submit" disabled={updateModel.isPending}>
-                {updateModel.isPending ? "Saving..." : "Save Changes"}
-              </Button>
-            </DialogStickyFooter>
-          </DialogForm>
-        </Form>
-      </DialogContent>
-    </Dialog>
+          </div>
+
+          {/* Input Modalities */}
+          <FormField
+            control={form.control}
+            name="inputModalities"
+            rules={{
+              validate: (v) =>
+                v.length > 0 || "At least one input modality is required",
+            }}
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Input Modalities</FormLabel>
+                <FormControl>
+                  <MultiSelect
+                    items={INPUT_MODALITY_OPTIONS}
+                    value={field.value}
+                    onValueChange={field.onChange}
+                    placeholder="Select input modalities..."
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          {/* Output Modalities */}
+          <FormField
+            control={form.control}
+            name="outputModalities"
+            rules={{
+              validate: (v) =>
+                v.length > 0 || "At least one output modality is required",
+            }}
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Output Modalities</FormLabel>
+                <FormControl>
+                  <MultiSelect
+                    items={OUTPUT_MODALITY_OPTIONS}
+                    value={field.value}
+                    onValueChange={field.onChange}
+                    placeholder="Select output modalities..."
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </div>
+      </Form>
+    </StandardFormDialog>
   );
 }
 

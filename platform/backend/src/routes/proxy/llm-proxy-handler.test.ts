@@ -13,10 +13,14 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { vi } from "vitest";
-import config from "@/config";
 import { ModelModel } from "@/models";
 import type { PolicyBlockResult } from "@/routes/proxy/utils/tool-invocation";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import {
+  createAnthropicTestClient,
+  createGeminiTestClient,
+  createOpenAiTestClient,
+} from "@/test/llm-provider-stubs";
 import type { Agent } from "@/types";
 
 // Mock prom-client at module level (like llm-metrics.test.ts)
@@ -73,7 +77,11 @@ vi.mock("@/observability/tracing", async (importOriginal) => {
 
 // Import after mocks to ensure mocks are applied
 import { metrics } from "@/observability";
-import { MockAnthropicClient } from "./mock-anthropic-client";
+import {
+  anthropicAdapterFactory,
+  geminiAdapterFactory,
+  openaiAdapterFactory,
+} from "./adapterV2";
 import anthropicProxyRoutesV2 from "./routesv2/anthropic";
 import geminiProxyRoutesV2 from "./routesv2/gemini";
 import openAiProxyRoutesV2 from "./routesv2/openai";
@@ -81,6 +89,12 @@ import openAiProxyRoutesV2 from "./routesv2/openai";
 describe("LLM Proxy Handler V2 Prometheus Metrics", () => {
   let app: FastifyInstance;
   let testAgent: Agent;
+  let openAiStubOptions: { interruptAtChunk?: number };
+  let anthropicStubOptions: {
+    includeToolUse?: boolean;
+    interruptAtChunk?: number;
+  };
+  let geminiStubOptions: { interruptAtChunk?: number };
 
   beforeEach(async ({ makeAgent }) => {
     vi.clearAllMocks();
@@ -90,8 +104,19 @@ describe("LLM Proxy Handler V2 Prometheus Metrics", () => {
     app.setValidatorCompiler(validatorCompiler);
     app.setSerializerCompiler(serializerCompiler);
 
-    // Enable mock mode
-    config.benchmark.mockMode = true;
+    openAiStubOptions = {};
+    anthropicStubOptions = {};
+    geminiStubOptions = {};
+
+    vi.spyOn(openaiAdapterFactory, "createClient").mockImplementation(
+      () => createOpenAiTestClient(openAiStubOptions) as never,
+    );
+    vi.spyOn(anthropicAdapterFactory, "createClient").mockImplementation(
+      () => createAnthropicTestClient(anthropicStubOptions) as never,
+    );
+    vi.spyOn(geminiAdapterFactory, "createClient").mockImplementation(
+      () => createGeminiTestClient(geminiStubOptions) as never,
+    );
 
     // Create test agent
     testAgent = await makeAgent({ name: "Test Metrics Agent" });
@@ -105,7 +130,7 @@ describe("LLM Proxy Handler V2 Prometheus Metrics", () => {
   });
 
   afterEach(async () => {
-    config.benchmark.mockMode = false;
+    vi.restoreAllMocks();
     await app.close();
   });
 
@@ -147,7 +172,7 @@ describe("LLM Proxy Handler V2 Prometheus Metrics", () => {
       // Wait for async processing
       await new Promise((resolve) => setTimeout(resolve, 100));
 
-      // Verify token metrics (input: 12, output: 10 from MockOpenAIClient)
+      // Verify token metrics (input: 12, output: 10 from the streaming test stub)
       expect(counterInc).toHaveBeenCalledWith(
         expect.objectContaining({
           labels: expect.objectContaining({
@@ -187,14 +212,14 @@ describe("LLM Proxy Handler V2 Prometheus Metrics", () => {
         }),
       );
 
-      // Note: TTFT and tokens/sec histograms may be skipped in mock mode
-      // because the mock returns data instantly (TTFT = 0, which is invalid)
+      // TTFT and tokens/sec histograms may be skipped because the test stub
+      // returns data immediately (TTFT = 0, which is invalid).
     });
 
     test("non-streaming request increments cost metrics", async () => {
-      // Note: In mock mode, token metrics are NOT reported for non-streaming requests
-      // because mock clients don't use getObservableFetch(). In production, tokens
-      // are reported by getObservableFetch() in the HTTP layer.
+      // Token metrics are NOT reported for these non-streaming stubbed requests
+      // because the test clients don't use getObservableFetch(). In production,
+      // tokens are reported by getObservableFetch() in the HTTP layer.
       const response = await app.inject({
         method: "POST",
         url: `/v1/openai/${testAgent.id}/chat/completions`,
@@ -255,7 +280,7 @@ describe("LLM Proxy Handler V2 Prometheus Metrics", () => {
       // Wait for async processing
       await new Promise((resolve) => setTimeout(resolve, 100));
 
-      // Verify token metrics (input: 82, output: 17 from MockOpenAIClient non-streaming)
+      // Verify token metrics (input: 82, output: 17 from the non-streaming test stub)
       expect(counterInc).toHaveBeenCalledWith(
         expect.objectContaining({
           labels: expect.objectContaining({
@@ -323,7 +348,7 @@ describe("LLM Proxy Handler V2 Prometheus Metrics", () => {
       // Wait for async processing
       await new Promise((resolve) => setTimeout(resolve, 100));
 
-      // Verify token metrics (input: 12, output: 10 from MockAnthropicClient)
+      // Verify token metrics (input: 12, output: 10 from the Anthropic test stub)
       expect(counterInc).toHaveBeenCalledWith(
         expect.objectContaining({
           labels: expect.objectContaining({
@@ -363,14 +388,14 @@ describe("LLM Proxy Handler V2 Prometheus Metrics", () => {
         }),
       );
 
-      // Note: TTFT and tokens/sec histograms may be skipped in mock mode
-      // because the mock returns data instantly (TTFT = 0, which is invalid)
+      // TTFT and tokens/sec histograms may be skipped because the test stub
+      // returns data immediately (TTFT = 0, which is invalid).
     });
 
     test("non-streaming request increments cost metrics", async () => {
-      // Note: In mock mode, token metrics are NOT reported for non-streaming requests
-      // because mock clients don't use getObservableFetch(). In production, tokens
-      // are reported by getObservableFetch() in the HTTP layer.
+      // Token metrics are NOT reported for these non-streaming stubbed requests
+      // because the test clients don't use getObservableFetch(). In production,
+      // tokens are reported by getObservableFetch() in the HTTP layer.
       const response = await app.inject({
         method: "POST",
         url: `/v1/anthropic/${testAgent.id}/v1/messages`,
@@ -447,7 +472,7 @@ describe("LLM Proxy Handler V2 Prometheus Metrics", () => {
       // Wait for async processing
       await new Promise((resolve) => setTimeout(resolve, 100));
 
-      // Verify token metrics (input: 12, output: 10 from MockGeminiClient streaming)
+      // Verify token metrics (input: 12, output: 10 from the Gemini streaming test stub)
       expect(counterInc).toHaveBeenCalledWith(
         expect.objectContaining({
           labels: expect.objectContaining({
@@ -487,14 +512,14 @@ describe("LLM Proxy Handler V2 Prometheus Metrics", () => {
         }),
       );
 
-      // Note: TTFT and tokens/sec histograms may be skipped in mock mode
-      // because the mock returns data instantly (TTFT = 0, which is invalid)
+      // TTFT and tokens/sec histograms may be skipped because the test stub
+      // returns data immediately (TTFT = 0, which is invalid).
     });
 
     test("non-streaming request increments cost metrics", async () => {
-      // Note: In mock mode, token metrics are NOT reported for non-streaming requests
-      // because mock clients don't use getObservableFetch(). In production, tokens
-      // are reported by getObservableFetch() in the HTTP layer.
+      // Token metrics are NOT reported for these non-streaming stubbed requests
+      // because the test clients don't use getObservableFetch(). In production,
+      // tokens are reported by getObservableFetch() in the HTTP layer.
       const response = await app.inject({
         method: "POST",
         url: `/v1/gemini/${testAgent.id}/v1beta/models/gemini-2.5-pro:generateContent`,
@@ -536,6 +561,11 @@ describe("LLM Proxy Handler V2 Prometheus Metrics", () => {
 describe("LLM Proxy Handler — recordBlockedToolSpans", () => {
   let app: FastifyInstance;
   let testAgent: Agent;
+  let openAiStubOptions: { interruptAtChunk?: number };
+  let anthropicStubOptions: {
+    includeToolUse?: boolean;
+    interruptAtChunk?: number;
+  };
 
   beforeEach(async ({ makeAgent }) => {
     vi.clearAllMocks();
@@ -544,7 +574,15 @@ describe("LLM Proxy Handler — recordBlockedToolSpans", () => {
     app.setValidatorCompiler(validatorCompiler);
     app.setSerializerCompiler(serializerCompiler);
 
-    config.benchmark.mockMode = true;
+    openAiStubOptions = {};
+    anthropicStubOptions = {};
+
+    vi.spyOn(openaiAdapterFactory, "createClient").mockImplementation(
+      () => createOpenAiTestClient(openAiStubOptions) as never,
+    );
+    vi.spyOn(anthropicAdapterFactory, "createClient").mockImplementation(
+      () => createAnthropicTestClient(anthropicStubOptions) as never,
+    );
 
     testAgent = await makeAgent({ name: "Blocked Tools Agent" });
 
@@ -556,13 +594,12 @@ describe("LLM Proxy Handler — recordBlockedToolSpans", () => {
   });
 
   afterEach(async () => {
-    config.benchmark.mockMode = false;
-    MockAnthropicClient.resetStreamOptions();
+    vi.restoreAllMocks();
     await app.close();
   });
 
   describe("non-streaming (OpenAI)", () => {
-    // MockOpenAIClient non-streaming always returns a "list_files" tool call
+    // The test stub returns a "list_files" tool call for non-streaming requests.
     beforeEach(async () => {
       await app.register(openAiProxyRoutesV2);
 
@@ -675,8 +712,7 @@ describe("LLM Proxy Handler — recordBlockedToolSpans", () => {
   });
 
   describe("streaming (Anthropic)", () => {
-    // MockAnthropicClient.stream() supports includeToolUse option
-    // which emits a "get_weather" tool_use block
+    // The test stub can emit a "get_weather" tool_use block when enabled.
     beforeEach(async () => {
       await app.register(anthropicProxyRoutesV2);
 
@@ -693,7 +729,7 @@ describe("LLM Proxy Handler — recordBlockedToolSpans", () => {
     });
 
     test("calls recordBlockedToolSpans when streaming response contains blocked tool calls", async () => {
-      MockAnthropicClient.setStreamOptions({ includeToolUse: true });
+      anthropicStubOptions.includeToolUse = true;
 
       const blockResult: PolicyBlockResult = {
         refusalMessage: "Tool blocked by policy",
@@ -739,7 +775,7 @@ describe("LLM Proxy Handler — recordBlockedToolSpans", () => {
     });
 
     test("does not call recordBlockedToolSpans when streaming has no tool calls", async () => {
-      MockAnthropicClient.resetStreamOptions();
+      anthropicStubOptions.includeToolUse = false;
       mockEvaluatePolicies.mockResolvedValue(null);
 
       const response = await app.inject({
@@ -766,7 +802,7 @@ describe("LLM Proxy Handler — recordBlockedToolSpans", () => {
     });
 
     test("does not call recordBlockedToolSpans when streaming tool calls are allowed", async () => {
-      MockAnthropicClient.setStreamOptions({ includeToolUse: true });
+      anthropicStubOptions.includeToolUse = true;
       mockEvaluatePolicies.mockResolvedValue(null);
 
       const response = await app.inject({

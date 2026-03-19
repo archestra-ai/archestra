@@ -1,0 +1,62 @@
+suite: archestra worker deployment
+templates:
+  - archestra-worker.yaml
+values:
+  - ../ci/test-values.yaml
+tests:
+  - it: worker deployment inherits global pod annotations
+    set:
+      archestra.podAnnotations:
+        sidecar.istio.io/inject: "true"
+    asserts:
+      - equal:
+          path: spec.template.metadata.annotations["sidecar.istio.io/inject"]
+          value: "true"
+
+  - it: worker deployment merges global and worker pod annotations
+    set:
+      archestra.podAnnotations:
+        sidecar.istio.io/inject: "true"
+      archestra.worker.podAnnotations:
+        cluster-autoscaler.kubernetes.io/safe-to-evict: "true"
+    asserts:
+      - equal:
+          path: spec.template.metadata.annotations["sidecar.istio.io/inject"]
+          value: "true"
+      - equal:
+          path: spec.template.metadata.annotations["cluster-autoscaler.kubernetes.io/safe-to-evict"]
+          value: "true"
+
+  - it: worker deployment forces prometheus scrape port and path to worker metrics endpoint
+    set:
+      archestra.podAnnotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9050"
+        prometheus.io/path: "/custom"
+    asserts:
+      - equal:
+          path: spec.template.metadata.annotations["prometheus.io/scrape"]
+          value: "true"
+      - equal:
+          path: spec.template.metadata.annotations["prometheus.io/port"]
+          value: "9000"
+      - equal:
+          path: spec.template.metadata.annotations["prometheus.io/path"]
+          value: "/metrics"
+
+  - it: worker-specific prometheus scrape annotation also forces worker metrics endpoint
+    set:
+      archestra.worker.podAnnotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9050"
+        prometheus.io/path: "/custom"
+    asserts:
+      - equal:
+          path: spec.template.metadata.annotations["prometheus.io/scrape"]
+          value: "true"
+      - equal:
+          path: spec.template.metadata.annotations["prometheus.io/port"]
+          value: "9000"
+      - equal:
+          path: spec.template.metadata.annotations["prometheus.io/path"]
+          value: "/metrics"

@@ -35,3 +35,20 @@ export function EmailNotConfiguredMessage({
     </p>
   );
 }
+
+export function AgentEmailDisabledMessage({
+  className = "text-sm text-muted-foreground",
+}: EmailNotConfiguredMessageProps) {
+  return (
+    <p className={className}>
+      Email invocation is not enabled for this agent. Enable it in the{" "}
+      <Link
+        href="/agents/triggers/email"
+        className="text-primary hover:underline"
+      >
+        agent trigger settings
+      </Link>{" "}
+      to allow triggering via email.
+    </p>
+  );
+}

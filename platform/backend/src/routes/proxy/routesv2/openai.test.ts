@@ -30,16 +30,27 @@ import {
   validatorCompiler,
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
+import { vi } from "vitest";
 import config from "@/config";
 import { ModelModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { createOpenAiTestClient } from "@/test/llm-provider-stubs";
 import type { OpenAi } from "@/types";
-import { MockOpenAIClient } from "../mock-openai-client";
+import { openaiAdapterFactory } from "../adapterV2";
 import openAiProxyRoutesV2 from "./openai";
 
 describe("OpenAI V2 proxy streaming", () => {
+  let openAiStubOptions: { interruptAtChunk?: number };
+
+  beforeEach(() => {
+    openAiStubOptions = {};
+    vi.spyOn(openaiAdapterFactory, "createClient").mockImplementation(
+      () => createOpenAiTestClient(openAiStubOptions) as never,
+    );
+  });
+
   afterEach(() => {
-    config.benchmark.mockMode = false;
+    vi.restoreAllMocks();
   });
 
   test("streaming response has SSE format", async ({ makeAgent }) => {
@@ -48,7 +59,6 @@ describe("OpenAI V2 proxy streaming", () => {
     app.setSerializerCompiler(serializerCompiler);
 
     await app.register(openAiProxyRoutesV2);
-    config.benchmark.mockMode = true;
 
     const agent = await makeAgent({ name: "Test Streaming Agent" });
 
@@ -81,7 +91,6 @@ describe("OpenAI V2 proxy streaming", () => {
     app.setSerializerCompiler(serializerCompiler);
 
     await app.register(openAiProxyRoutesV2);
-    config.benchmark.mockMode = true;
 
     const agent = await makeAgent({ name: "Test Streaming Agent" });
 
@@ -123,8 +132,14 @@ describe("OpenAI V2 proxy streaming", () => {
 });
 
 describe("OpenAI V2 cost tracking", () => {
+  beforeEach(() => {
+    vi.spyOn(openaiAdapterFactory, "createClient").mockImplementation(
+      () => createOpenAiTestClient() as never,
+    );
+  });
+
   afterEach(() => {
-    config.benchmark.mockMode = false;
+    vi.restoreAllMocks();
   });
 
   test("stores cost and baselineCost in interaction", async ({ makeAgent }) => {
@@ -133,7 +148,6 @@ describe("OpenAI V2 cost tracking", () => {
     app.setSerializerCompiler(serializerCompiler);
 
     await app.register(openAiProxyRoutesV2);
-    config.benchmark.mockMode = true;
 
     await ModelModel.upsert({
       externalId: "openai/gpt-4o",
@@ -180,9 +194,17 @@ describe("OpenAI V2 cost tracking", () => {
 });
 
 describe("OpenAI V2 streaming mode", () => {
+  let openAiStubOptions: { interruptAtChunk?: number };
+
+  beforeEach(() => {
+    openAiStubOptions = {};
+    vi.spyOn(openaiAdapterFactory, "createClient").mockImplementation(
+      () => createOpenAiTestClient(openAiStubOptions) as never,
+    );
+  });
+
   afterEach(() => {
-    config.benchmark.mockMode = false;
-    MockOpenAIClient.resetStreamOptions();
+    vi.restoreAllMocks();
   });
 
   test("streaming mode completes normally and records interaction", async ({
@@ -193,7 +215,6 @@ describe("OpenAI V2 streaming mode", () => {
     app.setSerializerCompiler(serializerCompiler);
 
     await app.register(openAiProxyRoutesV2);
-    config.benchmark.mockMode = true;
 
     await ModelModel.upsert({
       externalId: "openai/gpt-4o",
@@ -261,72 +282,66 @@ describe("OpenAI V2 streaming mode", () => {
     app.setValidatorCompiler(validatorCompiler);
     app.setSerializerCompiler(serializerCompiler);
 
-    config.benchmark.mockMode = true;
+    // Configure stub to interrupt at chunk 4 (after usage chunk but before stream completes)
+    openAiStubOptions.interruptAtChunk = 4;
 
-    // Configure mock to interrupt at chunk 4 (after usage chunk but before stream completes)
-    MockOpenAIClient.setStreamOptions({ interruptAtChunk: 4 });
+    await app.register(openAiProxyRoutesV2);
 
-    try {
-      await app.register(openAiProxyRoutesV2);
+    await ModelModel.upsert({
+      externalId: "openai/gpt-4o",
+      provider: "openai",
+      modelId: "gpt-4o",
+      inputModalities: null,
+      outputModalities: null,
+      customPricePerMillionInput: "2.50",
+      customPricePerMillionOutput: "10.00",
+      lastSyncedAt: new Date(),
+    });
 
-      await ModelModel.upsert({
-        externalId: "openai/gpt-4o",
-        provider: "openai",
-        modelId: "gpt-4o",
-        inputModalities: null,
-        outputModalities: null,
-        customPricePerMillionInput: "2.50",
-        customPricePerMillionOutput: "10.00",
-        lastSyncedAt: new Date(),
-      });
+    const agent = await makeAgent({
+      name: "Test Interrupted Streaming Agent",
+    });
 
-      const agent = await makeAgent({
-        name: "Test Interrupted Streaming Agent",
-      });
+    const { InteractionModel } = await import("@/models");
 
-      const { InteractionModel } = await import("@/models");
+    const initialInteractions =
+      await InteractionModel.getAllInteractionsForProfile(agent.id);
+    const initialCount = initialInteractions.length;
 
-      const initialInteractions =
-        await InteractionModel.getAllInteractionsForProfile(agent.id);
-      const initialCount = initialInteractions.length;
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/chat/completions`,
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer test-key",
+        "user-agent": "test-client",
+      },
+      payload: {
+        model: "gpt-4o",
+        messages: [{ role: "user", content: "Hello!" }],
+        stream: true,
+      },
+    });
 
-      const response = await app.inject({
-        method: "POST",
-        url: `/v1/openai/${agent.id}/chat/completions`,
-        headers: {
-          "content-type": "application/json",
-          authorization: "Bearer test-key",
-          "user-agent": "test-client",
-        },
-        payload: {
-          model: "gpt-4o",
-          messages: [{ role: "user", content: "Hello!" }],
-          stream: true,
-        },
-      });
+    // Stream ends early but request should complete successfully
+    expect(response.statusCode).toBe(200);
 
-      // Stream ends early but request should complete successfully
-      expect(response.statusCode).toBe(200);
+    await new Promise((resolve) => setTimeout(resolve, 200));
 
-      await new Promise((resolve) => setTimeout(resolve, 200));
+    // Verify interaction was still recorded despite interruption
+    const interactions = await InteractionModel.getAllInteractionsForProfile(
+      agent.id,
+    );
+    expect(interactions.length).toBe(initialCount + 1);
 
-      // Verify interaction was still recorded despite interruption
-      const interactions = await InteractionModel.getAllInteractionsForProfile(
-        agent.id,
-      );
-      expect(interactions.length).toBe(initialCount + 1);
+    const interaction = interactions[interactions.length - 1];
 
-      const interaction = interactions[interactions.length - 1];
-
-      expect(interaction.type).toBe("openai:chatCompletions");
-      expect(interaction.model).toBe("gpt-4o");
-      expect(interaction.inputTokens).toBe(12);
-      expect(interaction.outputTokens).toBe(10);
-      expect(interaction.cost).toBeTruthy();
-      expect(interaction.baselineCost).toBeTruthy();
-    } finally {
-      MockOpenAIClient.resetStreamOptions();
-    }
+    expect(interaction.type).toBe("openai:chatCompletions");
+    expect(interaction.model).toBe("gpt-4o");
+    expect(interaction.inputTokens).toBe(12);
+    expect(interaction.outputTokens).toBe(10);
+    expect(interaction.cost).toBeTruthy();
+    expect(interaction.baselineCost).toBeTruthy();
   });
 
   test("streaming mode interrupted before usage handles gracefully", {
@@ -336,52 +351,46 @@ describe("OpenAI V2 streaming mode", () => {
     app.setValidatorCompiler(validatorCompiler);
     app.setSerializerCompiler(serializerCompiler);
 
-    config.benchmark.mockMode = true;
+    // Configure stub to interrupt at chunk 2 (before usage chunk)
+    openAiStubOptions.interruptAtChunk = 2;
 
-    // Configure mock to interrupt at chunk 2 (before usage chunk)
-    MockOpenAIClient.setStreamOptions({ interruptAtChunk: 2 });
+    await app.register(openAiProxyRoutesV2);
 
-    try {
-      await app.register(openAiProxyRoutesV2);
+    await ModelModel.upsert({
+      externalId: "openai/gpt-4o",
+      provider: "openai",
+      modelId: "gpt-4o",
+      inputModalities: null,
+      outputModalities: null,
+      customPricePerMillionInput: "2.50",
+      customPricePerMillionOutput: "10.00",
+      lastSyncedAt: new Date(),
+    });
 
-      await ModelModel.upsert({
-        externalId: "openai/gpt-4o",
-        provider: "openai",
-        modelId: "gpt-4o",
-        inputModalities: null,
-        outputModalities: null,
-        customPricePerMillionInput: "2.50",
-        customPricePerMillionOutput: "10.00",
-        lastSyncedAt: new Date(),
-      });
+    const agent = await makeAgent({
+      name: "Test Interrupted Before Usage Agent",
+    });
 
-      const agent = await makeAgent({
-        name: "Test Interrupted Before Usage Agent",
-      });
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/chat/completions`,
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer test-key",
+        "user-agent": "test-client",
+      },
+      payload: {
+        model: "gpt-4o",
+        messages: [{ role: "user", content: "Hello!" }],
+        stream: true,
+      },
+    });
 
-      const response = await app.inject({
-        method: "POST",
-        url: `/v1/openai/${agent.id}/chat/completions`,
-        headers: {
-          "content-type": "application/json",
-          authorization: "Bearer test-key",
-          "user-agent": "test-client",
-        },
-        payload: {
-          model: "gpt-4o",
-          messages: [{ role: "user", content: "Hello!" }],
-          stream: true,
-        },
-      });
+    // Request should complete without error even when stream is interrupted
+    expect(response.statusCode).toBe(200);
 
-      // Request should complete without error even when stream is interrupted
-      expect(response.statusCode).toBe(200);
-
-      // Response should have partial SSE data
-      expect(response.body).toContain("data: ");
-    } finally {
-      MockOpenAIClient.resetStreamOptions();
-    }
+    // Response should have partial SSE data
+    expect(response.body).toContain("data: ");
   });
 });
 

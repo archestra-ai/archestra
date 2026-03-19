@@ -57,8 +57,6 @@ import type { ToolCompressionStats } from "./tool-result-compression";
 export interface CreateClientOptions {
   /** Base URL override for the provider API */
   baseUrl?: string;
-  /** Enable mock mode for testing */
-  mockMode?: boolean;
   /** Agent for observability metrics (request duration, tokens) */
   agent?: Agent;
   /** External agent ID from X-Archestra-Agent-Id header */

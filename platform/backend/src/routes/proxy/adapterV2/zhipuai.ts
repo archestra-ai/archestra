@@ -5,7 +5,6 @@ import config from "@/config";
 import logger from "@/logging";
 import { ModelModel } from "@/models";
 import { metrics } from "@/observability";
-import { MockZhipuaiClient } from "@/routes/proxy/mock-zhipuai-client";
 import { getTokenizer } from "@/tokenizers";
 import type {
   ChunkProcessingResult,
@@ -23,6 +22,7 @@ import type {
   UsageView,
   Zhipuai,
 } from "@/types";
+import { extractCommonMessageText } from "@/types";
 import { unwrapToolContent } from "../utils/unwrap-tool-content";
 
 // =============================================================================
@@ -384,6 +384,7 @@ class ZhipuaiRequestAdapter
     for (const message of messages) {
       const commonMessage: CommonMessage = {
         role: message.role as CommonMessage["role"],
+        content: extractCommonMessageText(message),
       };
 
       if (message.role === "tool") {
@@ -993,12 +994,7 @@ export const zhipuaiAdapterFactory: LLMProvider<
   createClient(
     apiKey: string | undefined,
     options: CreateClientOptions,
-  ): ZhipuaiClient | MockZhipuaiClient {
-    // Return mock client if mock mode is enabled
-    if (options.mockMode) {
-      return new MockZhipuaiClient() as unknown as ZhipuaiClient;
-    }
-
+  ): ZhipuaiClient {
     const customFetch = options.agent
       ? metrics.llm.getObservableFetch(
           "zhipuai",

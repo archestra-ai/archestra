@@ -1,14 +1,17 @@
 "use client";
 
 import type { archestraApiTypes } from "@shared";
-import { Check, Copy, Mail } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { Mail } from "lucide-react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
+import {
+  CodeBlock,
+  CodeBlockCopyButton,
+} from "@/components/ai-elements/code-block";
 import { CodeText } from "@/components/code-text";
 import { ConnectionBaseUrlSelect } from "@/components/connection-base-url-select";
 import { CopyableCode } from "@/components/copyable-code";
 import { CurlExampleSection } from "@/components/curl-example-section";
-import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -24,7 +27,10 @@ import { useFeature } from "@/lib/config.query";
 import { useAgentEmailAddress } from "@/lib/incoming-email.query";
 import { useFetchTeamTokenValue, useTokens } from "@/lib/team-token.query";
 import { useFetchUserTokenValue, useUserToken } from "@/lib/user-token.query";
-import { EmailNotConfiguredMessage } from "./email-not-configured-message";
+import {
+  AgentEmailDisabledMessage,
+  EmailNotConfiguredMessage,
+} from "./email-not-configured-message";
 
 const { externalProxyUrls, internalProxyUrl } = config.api;
 
@@ -49,7 +55,6 @@ export function A2AConnectionInstructions({
   const incomingEmail = useFeature("incomingEmail");
 
   const tokens = tokensData?.tokens;
-  const [copiedChatLink, setCopiedChatLink] = useState(false);
   const [selectedTokenId, setSelectedTokenId] = useState<string | null>(null);
   const [connectionUrl, setConnectionUrl] = useState<string>(
     externalProxyUrls.length >= 1 ? externalProxyUrls[0] : internalProxyUrl,
@@ -114,18 +119,11 @@ export function A2AConnectionInstructions({
       ? `${selectedTeamToken.tokenStart}***`
       : "ask-admin-for-access-token";
 
-  const handleCopyChatLink = useCallback(async () => {
-    const exampleMessage =
-      "Hello!\n\nPlease help me with the following task:\n- Review my code\n- Suggest improvements";
-    const chatLink = `${window.location.origin}/chat/new?agent_id=${agent.id}&user_prompt=${encodeURIComponent(exampleMessage)}`;
-    await navigator.clipboard.writeText(chatLink);
-    setCopiedChatLink(true);
-    toast.success("Chat deep link copied");
-    setTimeout(() => setCopiedChatLink(false), 2000);
-  }, [agent.id]);
-
   // Agent Card URL for discovery
   const agentCardUrl = `${connectionUrl}/a2a/${agent.id}/.well-known/agent.json`;
+  const chatDeepLink = `${window.location.origin}/chat/new?agent_id=${agent.id}&user_prompt=${encodeURIComponent(
+    "Hello!\n\nPlease help me with the following task:\n- Review my code\n- Suggest improvements",
+  )}`;
 
   // cURL example code for sending messages
   const curlCode = useMemo(
@@ -164,15 +162,24 @@ curl -X GET "${agentCardUrl}" \\
       {/* A2A Endpoint URL */}
       <div className="space-y-2">
         <Label className="text-sm font-medium">A2A Endpoint URL</Label>
-        <CopyableCode
-          value={a2aEndpoint}
-          toastMessage="A2A endpoint URL copied"
-          variant="primary"
+        <CodeBlock
+          code={a2aEndpoint}
+          language="text"
+          wrapLongLines
+          contentClassName="overflow-x-hidden"
+          contentStyle={{
+            fontSize: "0.75rem",
+            paddingRight: "3.5rem",
+          }}
         >
-          <CodeText className="text-xs text-primary break-all">
-            {a2aEndpoint}
-          </CodeText>
-        </CopyableCode>
+          <div className="rounded-md border bg-background/95 p-1 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/80">
+            <CodeBlockCopyButton
+              title="Copy A2A endpoint URL"
+              onCopy={() => toast.success("A2A endpoint URL copied")}
+              onError={() => toast.error("Failed to copy A2A endpoint URL")}
+            />
+          </div>
+        </CodeBlock>
       </div>
 
       {/* Chat Deep Link */}
@@ -182,33 +189,24 @@ curl -X GET "${agentCardUrl}" \\
           Use this URL to open chat with the agent and send a message
           automatically.
         </p>
-        <div className="bg-muted rounded-md p-3 pt-10 relative">
-          <pre className="text-xs whitespace-pre-wrap break-all overflow-x-auto">
-            <code>
-              {`${window.location.origin}/chat/new?agent_id=${agent.id}&user_prompt=${encodeURIComponent("Hello!\n\nPlease help me with the following task:\n- Review my code\n- Suggest improvements")}`}
-            </code>
-          </pre>
-          <div className="absolute top-2 right-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="gap-2"
-              onClick={handleCopyChatLink}
-            >
-              {copiedChatLink ? (
-                <>
-                  <Check className="h-4 w-4 text-green-500" />
-                  <span>Copied!</span>
-                </>
-              ) : (
-                <>
-                  <Copy className="h-4 w-4" />
-                  <span>Copy</span>
-                </>
-              )}
-            </Button>
+        <CodeBlock
+          code={chatDeepLink}
+          language="text"
+          wrapLongLines
+          contentClassName="overflow-x-hidden"
+          contentStyle={{
+            fontSize: "0.75rem",
+            paddingRight: "3.5rem",
+          }}
+        >
+          <div className="rounded-md border bg-background/95 p-1 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/80">
+            <CodeBlockCopyButton
+              title="Copy chat deep link"
+              onCopy={() => toast.success("Chat deep link copied")}
+              onError={() => toast.error("Failed to copy chat deep link")}
+            />
           </div>
-        </div>
+        </CodeBlock>
       </div>
 
       {/* Token Selector */}
@@ -373,10 +371,7 @@ curl -X GET "${agentCardUrl}" \\
           </>
         ) : (
           <div className="bg-muted/50 rounded-md p-3 text-sm text-muted-foreground">
-            <p>
-              Email invocation is not enabled for this agent. Enable it in the
-              agent settings to allow triggering via email.
-            </p>
+            <AgentEmailDisabledMessage />
           </div>
         )}
       </div>

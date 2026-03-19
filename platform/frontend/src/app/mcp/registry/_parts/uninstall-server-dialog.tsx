@@ -1,15 +1,6 @@
 "use client";
 
-import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogForm,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { useDeleteMcpServer } from "@/lib/mcp-server.query";
 
 interface UninstallServerDialogProps {
@@ -56,29 +47,15 @@ export function UninstallServerDialog({
     : "Uninstalling...";
 
   return (
-    <Dialog open={!!server} onOpenChange={onClose}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
-          <DialogDescription>{description}</DialogDescription>
-        </DialogHeader>
-        <DialogForm onSubmit={handleConfirm}>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={onClose}>
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              variant="destructive"
-              disabled={uninstallMutation.isPending}
-            >
-              {uninstallMutation.isPending
-                ? confirmingButtonText
-                : confirmButtonText}
-            </Button>
-          </DialogFooter>
-        </DialogForm>
-      </DialogContent>
-    </Dialog>
+    <DeleteConfirmDialog
+      open={!!server}
+      onOpenChange={() => onClose()}
+      title={title}
+      description={description}
+      isPending={uninstallMutation.isPending}
+      onConfirm={handleConfirm}
+      confirmLabel={confirmButtonText}
+      pendingLabel={confirmingButtonText}
+    />
   );
 }

@@ -222,31 +222,72 @@ export function ProxyConnectionInstructions({
         </div>
       )}
 
-      <div className="mt-4 space-y-1">
-        <p className="text-sm text-muted-foreground">
-          <a
-            href="/llm/providers/virtual-keys"
-            className="underline hover:text-foreground"
-          >
-            Virtual API Keys
-          </a>{" "}
-          — generate keys for external clients without exposing real provider
-          keys
-        </p>
-        <p className="text-sm text-muted-foreground">
-          <a
-            href={getDocsUrl(
-              DocsPage.PlatformLlmProxyAuthentication,
-              "jwks-external-identity-provider",
-            )}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="underline hover:text-foreground"
-          >
-            JWKS Authentication
-          </a>{" "}
-          — authenticate with an external identity provider
-        </p>
+      <div className="mt-4 space-y-2">
+        <div className="space-y-1">
+          <h4 className="text-sm font-medium">Authentication</h4>
+          <p className="text-sm text-muted-foreground">
+            Choose the authentication method that fits your client and
+            deployment model.
+          </p>
+        </div>
+        <ul className="space-y-2 text-sm text-muted-foreground">
+          <li className="flex items-start gap-2">
+            <span
+              aria-hidden="true"
+              className="mt-2 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-muted-foreground"
+            />
+            <span>
+              <a
+                href={getDocsUrl(
+                  DocsPage.PlatformLlmProxyAuthentication,
+                  "direct-provider-api-key",
+                )}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline hover:text-foreground"
+              >
+                Direct Provider API Key
+              </a>{" "}
+              — authenticate requests with your provider's native API key
+            </span>
+          </li>
+          <li className="flex items-start gap-2">
+            <span
+              aria-hidden="true"
+              className="mt-2 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-muted-foreground"
+            />
+            <span>
+              <a
+                href="/llm/providers/virtual-keys"
+                className="underline hover:text-foreground"
+              >
+                Virtual API Keys
+              </a>{" "}
+              — generate keys for external clients without exposing real
+              provider keys
+            </span>
+          </li>
+          <li className="flex items-start gap-2">
+            <span
+              aria-hidden="true"
+              className="mt-2 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-muted-foreground"
+            />
+            <span>
+              <a
+                href={getDocsUrl(
+                  DocsPage.PlatformLlmProxyAuthentication,
+                  "jwks-external-identity-provider",
+                )}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline hover:text-foreground"
+              >
+                JWKS Authentication
+              </a>{" "}
+              — authenticate with an external identity provider
+            </span>
+          </li>
+        </ul>
       </div>
     </div>
   );

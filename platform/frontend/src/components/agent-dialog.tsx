@@ -5,6 +5,7 @@ import {
   type AgentType,
   archestraApiSdk,
   type archestraApiTypes,
+  BUILT_IN_AGENT_IDS,
   DocsPage,
   getDocsUrl,
   getResourceForAgentType,
@@ -572,10 +573,24 @@ export function AgentDialog({
   const [connectorIds, setConnectorIds] = useState<string[]>([]);
   const [autoConfigureOnToolAssignment, setAutoConfigureOnToolAssignment] =
     useState(false);
+  const [dualLlmMaxRounds, setDualLlmMaxRounds] = useState("5");
 
   // Determine type-specific visibility based on agentType prop
   const isInternalAgent = agentType === "agent";
   const isBuiltIn = !!agent?.builtIn;
+  const builtInAgentName = agent?.builtInAgentConfig?.name;
+  const isPolicyConfigBuiltIn =
+    builtInAgentName === BUILT_IN_AGENT_IDS.POLICY_CONFIG;
+  const isDualLlmMainBuiltIn =
+    builtInAgentName === BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN;
+  const isDualLlmQuarantineBuiltIn =
+    builtInAgentName === BUILT_IN_AGENT_IDS.DUAL_LLM_QUARANTINE;
+  const isDualLlmBuiltIn = isDualLlmMainBuiltIn || isDualLlmQuarantineBuiltIn;
+  const showPrimarySettingsCard =
+    !isBuiltIn ||
+    shouldShowDescriptionField({ agentType, isBuiltIn }) ||
+    isPolicyConfigBuiltIn ||
+    isDualLlmMainBuiltIn;
   const showToolsAndSubagents =
     !isBuiltIn &&
     (agentType === "mcp_gateway" ||
@@ -619,7 +634,16 @@ export function AgentDialog({
           agentData.incomingEmailAllowedDomain || "",
         );
         setAutoConfigureOnToolAssignment(
-          agentData.builtInAgentConfig?.autoConfigureOnToolAssignment ?? false,
+          agentData.builtInAgentConfig?.name ===
+            BUILT_IN_AGENT_IDS.POLICY_CONFIG
+            ? agentData.builtInAgentConfig.autoConfigureOnToolAssignment
+            : false,
+        );
+        setDualLlmMaxRounds(
+          agentData.builtInAgentConfig?.name ===
+            BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN
+            ? String(agentData.builtInAgentConfig.maxRounds)
+            : "5",
         );
       } else {
         // Create mode - reset all fields
@@ -643,6 +667,7 @@ export function AgentDialog({
         setIncomingEmailSecurityMode("private");
         setIncomingEmailAllowedDomain("");
         setAutoConfigureOnToolAssignment(false);
+        setDualLlmMaxRounds("5");
       }
       // Reset counts when dialog opens
       setSelectedToolsCount(0);
@@ -766,6 +791,7 @@ export function AgentDialog({
   const handleSave = useCallback(async () => {
     const trimmedName = name.trim();
     const trimmedSystemPrompt = systemPrompt.trim();
+    const parsedDualLlmMaxRounds = Number.parseInt(dualLlmMaxRounds, 10);
 
     if (!trimmedName) {
       toast.error("Name is required");
@@ -775,6 +801,16 @@ export function AgentDialog({
     // Non-admin users must select at least one team for team-scoped resources
     if (!isAdmin && scope === "team" && assignedTeamIds.length === 0) {
       toast.error("Please select at least one team");
+      return;
+    }
+
+    if (
+      isDualLlmMainBuiltIn &&
+      (!Number.isInteger(parsedDualLlmMaxRounds) ||
+        parsedDualLlmMaxRounds < 1 ||
+        parsedDualLlmMaxRounds > 20)
+    ) {
+      toast.error("Max rounds must be an integer between 1 and 20");
       return;
     }
 
@@ -833,16 +869,27 @@ export function AgentDialog({
         : {};
 
       if (agent && isBuiltIn) {
-        // Update built-in agent — only allowed fields
+        const builtInAgentConfig = isPolicyConfigBuiltIn
+          ? {
+              name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
+              autoConfigureOnToolAssignment,
+            }
+          : isDualLlmMainBuiltIn
+            ? {
+                name: BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN,
+                maxRounds: parsedDualLlmMaxRounds,
+              }
+            : {
+                name: BUILT_IN_AGENT_IDS.DUAL_LLM_QUARANTINE,
+              };
+
         const updated = await updateAgent.mutateAsync({
           id: agent.id,
           data: {
-            builtInAgentConfig: {
-              name:
-                agent.builtInAgentConfig?.name ??
-                "policy-configuration-subagent",
-              autoConfigureOnToolAssignment,
-            },
+            builtInAgentConfig,
+            ...(isDualLlmBuiltIn && {
+              systemPrompt: trimmedSystemPrompt || null,
+            }),
             llmApiKeyId: llmApiKeyId || null,
             llmModel: llmModel || null,
           },
@@ -976,7 +1023,11 @@ export function AgentDialog({
     agent,
     isBuiltIn,
     autoConfigureOnToolAssignment,
+    dualLlmMaxRounds,
+    isDualLlmBuiltIn,
+    isDualLlmMainBuiltIn,
     isInternalAgent,
+    isPolicyConfigBuiltIn,
     showSecurity,
     isAdmin,
     selectedDelegationTargetIds,
@@ -1057,67 +1108,83 @@ export function AgentDialog({
             )}
 
             {/* Section 1: Name, Description, Visibility, LLM Configuration */}
-            <div className="rounded-lg border bg-card p-4 space-y-4">
-              {/* Name + Icon (hidden for built-in agents, shown in dialog title) */}
-              {!isBuiltIn && (
-                <div className="space-y-4">
-                  <AgentIconPicker
-                    value={icon}
-                    onChange={setIcon}
-                    fallbackType={defaultIconType}
-                  />
-                  <div className="space-y-2">
-                    <Label htmlFor="agentName">Name *</Label>
-                    <Input
-                      id="agentName"
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      placeholder={getNamePlaceholder(agentType)}
-                      autoFocus
+            {showPrimarySettingsCard && (
+              <div className="rounded-lg border bg-card p-4 space-y-4">
+                {/* Name + Icon (hidden for built-in agents, shown in dialog title) */}
+                {!isBuiltIn && (
+                  <div className="space-y-4">
+                    <AgentIconPicker
+                      value={icon}
+                      onChange={setIcon}
+                      fallbackType={defaultIconType}
                     />
-                  </div>
-                </div>
-              )}
-
-              {/* Description (hidden for built-in agents) */}
-              {shouldShowDescriptionField({ agentType, isBuiltIn }) && (
-                <div className="space-y-2">
-                  <Label htmlFor="agentDescription">Description</Label>
-                  <Textarea
-                    id="agentDescription"
-                    value={description}
-                    onChange={(e) => setDescription(e.target.value)}
-                    placeholder={getDescriptionPlaceholder(agentType)}
-                    className="min-h-[60px]"
-                  />
-                </div>
-              )}
-
-              {/* Built-in agent config */}
-              {isBuiltIn && (
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-0.5">
-                      <Label
-                        htmlFor="auto-configure-on-tool-assignment"
-                        className="text-sm font-medium cursor-pointer"
-                      >
-                        Auto-configure on tool assignment
-                      </Label>
-                      <p className="text-sm text-muted-foreground">
-                        Automatically analyze and configure security policies
-                        when tools are assigned to agents
-                      </p>
+                    <div className="space-y-2">
+                      <Label htmlFor="agentName">Name *</Label>
+                      <Input
+                        id="agentName"
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        placeholder={getNamePlaceholder(agentType)}
+                        autoFocus
+                      />
                     </div>
-                    <Switch
-                      id="auto-configure-on-tool-assignment"
-                      checked={autoConfigureOnToolAssignment}
-                      onCheckedChange={setAutoConfigureOnToolAssignment}
+                  </div>
+                )}
+
+                {/* Description (hidden for built-in agents) */}
+                {shouldShowDescriptionField({ agentType, isBuiltIn }) && (
+                  <div className="space-y-2">
+                    <Label htmlFor="agentDescription">Description</Label>
+                    <Textarea
+                      id="agentDescription"
+                      value={description}
+                      onChange={(e) => setDescription(e.target.value)}
+                      placeholder={getDescriptionPlaceholder(agentType)}
+                      className="min-h-[60px]"
                     />
                   </div>
-                </div>
-              )}
-            </div>
+                )}
+
+                {/* Built-in agent config */}
+                {isPolicyConfigBuiltIn && (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-0.5">
+                        <Label
+                          htmlFor="auto-configure-on-tool-assignment"
+                          className="text-sm font-medium cursor-pointer"
+                        >
+                          Auto-configure on tool assignment
+                        </Label>
+                        <p className="text-sm text-muted-foreground">
+                          Automatically analyze and configure security policies
+                          when tools are assigned to agents
+                        </p>
+                      </div>
+                      <Switch
+                        id="auto-configure-on-tool-assignment"
+                        checked={autoConfigureOnToolAssignment}
+                        onCheckedChange={setAutoConfigureOnToolAssignment}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {isDualLlmMainBuiltIn && (
+                  <div className="space-y-2">
+                    <Label htmlFor="dual-llm-max-rounds">Max rounds</Label>
+                    <Input
+                      id="dual-llm-max-rounds"
+                      type="number"
+                      min={1}
+                      max={20}
+                      value={dualLlmMaxRounds}
+                      onChange={(e) => setDualLlmMaxRounds(e.target.value)}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Section 2: Instruction (Agent only) */}
             {isInternalAgent && (
@@ -1125,7 +1192,7 @@ export function AgentDialog({
                 <SystemPromptEditor
                   value={systemPrompt}
                   onChange={setSystemPrompt}
-                  readOnly={isBuiltIn}
+                  readOnly={isBuiltIn && !isDualLlmBuiltIn}
                   variant="section"
                 />
               </div>

@@ -140,18 +140,6 @@ export const RouteId = {
   BulkUpsertDefaultCallPolicy: "bulkUpsertDefaultCallPolicy",
   BulkUpsertDefaultResultPolicy: "bulkUpsertDefaultResultPolicy",
 
-  // Dual LLM Config Routes
-  GetDefaultDualLlmConfig: "getDefaultDualLlmConfig",
-  GetDualLlmConfigs: "getDualLlmConfigs",
-  CreateDualLlmConfig: "createDualLlmConfig",
-  GetDualLlmConfig: "getDualLlmConfig",
-  UpdateDualLlmConfig: "updateDualLlmConfig",
-  DeleteDualLlmConfig: "deleteDualLlmConfig",
-
-  // Dual LLM Result Routes
-  GetDualLlmResultByToolCallId: "getDualLlmResultByToolCallId",
-  GetDualLlmResultsByInteraction: "getDualLlmResultsByInteraction",
-
   // Proxy Routes - OpenAI
   OpenAiChatCompletionsWithDefaultAgent:
     "openAiChatCompletionsWithDefaultAgent",

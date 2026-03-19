@@ -29,8 +29,6 @@ export { default as chatShareRoutes } from "./chat/routes.share";
 export { default as virtualApiKeysRoutes } from "./chat/routes.virtual-api-keys";
 export { default as chatopsRoutes } from "./chatops";
 export { default as configRoutes } from "./config";
-export { default as dualLlmConfigRoutes } from "./dual-llm-config";
-export { default as dualLlmResultRoutes } from "./dual-llm-result";
 export { default as healthRoutes } from "./health";
 export { default as incomingEmailRoutes } from "./incoming-email";
 export { default as interactionRoutes } from "./interaction";

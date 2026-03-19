@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "1.1.31"
+    "version": "1.1.32"
   },
   "components": {
     "schemas": {
@@ -36776,6 +36776,42 @@
                                   "autoConfigureOnToolAssignment"
                                 ],
                                 "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "name": {
+                                    "type": "string",
+                                    "enum": [
+                                      "dual-llm-main-agent"
+                                    ]
+                                  },
+                                  "maxRounds": {
+                                    "type": "integer",
+                                    "minimum": 1,
+                                    "maximum": 20
+                                  }
+                                },
+                                "required": [
+                                  "name",
+                                  "maxRounds"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "name": {
+                                    "type": "string",
+                                    "enum": [
+                                      "dual-llm-quarantine-agent"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "name"
+                                ],
+                                "additionalProperties": false
                               }
                             ]
                           },
@@ -37373,6 +37409,40 @@
                           "name",
                           "autoConfigureOnToolAssignment"
                         ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "enum": [
+                              "dual-llm-main-agent"
+                            ]
+                          },
+                          "maxRounds": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 20
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "maxRounds"
+                        ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "enum": [
+                              "dual-llm-quarantine-agent"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "name"
+                        ]
                       }
                     ]
                   },
@@ -37565,6 +37635,42 @@
                           "required": [
                             "name",
                             "autoConfigureOnToolAssignment"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "enum": [
+                                "dual-llm-main-agent"
+                              ]
+                            },
+                            "maxRounds": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 20
+                            }
+                          },
+                          "required": [
+                            "name",
+                            "maxRounds"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "enum": [
+                                "dual-llm-quarantine-agent"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "name"
                           ],
                           "additionalProperties": false
                         }
@@ -38190,6 +38296,42 @@
                               "autoConfigureOnToolAssignment"
                             ],
                             "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string",
+                                "enum": [
+                                  "dual-llm-main-agent"
+                                ]
+                              },
+                              "maxRounds": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 20
+                              }
+                            },
+                            "required": [
+                              "name",
+                              "maxRounds"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string",
+                                "enum": [
+                                  "dual-llm-quarantine-agent"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "name"
+                            ],
+                            "additionalProperties": false
                           }
                         ]
                       },
@@ -38753,6 +38895,42 @@
                             "autoConfigureOnToolAssignment"
                           ],
                           "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "enum": [
+                                "dual-llm-main-agent"
+                              ]
+                            },
+                            "maxRounds": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 20
+                            }
+                          },
+                          "required": [
+                            "name",
+                            "maxRounds"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "enum": [
+                                "dual-llm-quarantine-agent"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "name"
+                          ],
+                          "additionalProperties": false
                         }
                       ]
                     },
@@ -39314,6 +39492,42 @@
                           "required": [
                             "name",
                             "autoConfigureOnToolAssignment"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "enum": [
+                                "dual-llm-main-agent"
+                              ]
+                            },
+                            "maxRounds": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 20
+                            }
+                          },
+                          "required": [
+                            "name",
+                            "maxRounds"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "enum": [
+                                "dual-llm-quarantine-agent"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "name"
                           ],
                           "additionalProperties": false
                         }
@@ -39891,6 +40105,42 @@
                             "autoConfigureOnToolAssignment"
                           ],
                           "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "enum": [
+                                "dual-llm-main-agent"
+                              ]
+                            },
+                            "maxRounds": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 20
+                            }
+                          },
+                          "required": [
+                            "name",
+                            "maxRounds"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "enum": [
+                                "dual-llm-quarantine-agent"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "name"
+                          ],
+                          "additionalProperties": false
                         }
                       ]
                     },
@@ -40440,6 +40690,40 @@
                           "name",
                           "autoConfigureOnToolAssignment"
                         ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "enum": [
+                              "dual-llm-main-agent"
+                            ]
+                          },
+                          "maxRounds": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 20
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "maxRounds"
+                        ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "enum": [
+                              "dual-llm-quarantine-agent"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "name"
+                        ]
                       }
                     ]
                   },
@@ -40637,6 +40921,42 @@
                           "required": [
                             "name",
                             "autoConfigureOnToolAssignment"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "enum": [
+                                "dual-llm-main-agent"
+                              ]
+                            },
+                            "maxRounds": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 20
+                            }
+                          },
+                          "required": [
+                            "name",
+                            "maxRounds"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "enum": [
+                                "dual-llm-quarantine-agent"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "name"
                           ],
                           "additionalProperties": false
                         }
@@ -73043,2374 +73363,6 @@
         }
       }
     },
-    "/api/dual-llm-config/default": {
-      "get": {
-        "operationId": "getDefaultDualLlmConfig",
-        "tags": [
-          "Dual LLM Config"
-        ],
-        "description": "Get default dual LLM configuration\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`dualLlmConfig:read`: View dual LLM security configurations",
-        "responses": {
-          "200": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "id": {
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                    },
-                    "enabled": {
-                      "type": "boolean"
-                    },
-                    "mainAgentPrompt": {
-                      "type": "string"
-                    },
-                    "quarantinedAgentPrompt": {
-                      "type": "string"
-                    },
-                    "summaryPrompt": {
-                      "type": "string"
-                    },
-                    "maxRounds": {
-                      "type": "integer",
-                      "minimum": -2147483648,
-                      "maximum": 2147483647
-                    },
-                    "createdAt": {
-                      "type": "string",
-                      "format": "date-time"
-                    },
-                    "updatedAt": {
-                      "type": "string",
-                      "format": "date-time"
-                    }
-                  },
-                  "required": [
-                    "id",
-                    "enabled",
-                    "mainAgentPrompt",
-                    "quarantinedAgentPrompt",
-                    "summaryPrompt",
-                    "maxRounds",
-                    "createdAt",
-                    "updatedAt"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_validation_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authentication_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authorization_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_not_found_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_conflict_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_internal_server_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          }
-        },
-        "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "dualLlmConfig:read"
-          ]
-        }
-      }
-    },
-    "/api/dual-llm-config": {
-      "get": {
-        "operationId": "getDualLlmConfigs",
-        "tags": [
-          "Dual LLM Config"
-        ],
-        "description": "Get all dual LLM configurations\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`dualLlmConfig:read`: View dual LLM security configurations",
-        "responses": {
-          "200": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "properties": {
-                      "id": {
-                        "type": "string",
-                        "format": "uuid",
-                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                      },
-                      "enabled": {
-                        "type": "boolean"
-                      },
-                      "mainAgentPrompt": {
-                        "type": "string"
-                      },
-                      "quarantinedAgentPrompt": {
-                        "type": "string"
-                      },
-                      "summaryPrompt": {
-                        "type": "string"
-                      },
-                      "maxRounds": {
-                        "type": "integer",
-                        "minimum": -2147483648,
-                        "maximum": 2147483647
-                      },
-                      "createdAt": {
-                        "type": "string",
-                        "format": "date-time"
-                      },
-                      "updatedAt": {
-                        "type": "string",
-                        "format": "date-time"
-                      }
-                    },
-                    "required": [
-                      "id",
-                      "enabled",
-                      "mainAgentPrompt",
-                      "quarantinedAgentPrompt",
-                      "summaryPrompt",
-                      "maxRounds",
-                      "createdAt",
-                      "updatedAt"
-                    ],
-                    "additionalProperties": false
-                  }
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_validation_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authentication_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authorization_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_not_found_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_conflict_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_internal_server_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          }
-        },
-        "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "dualLlmConfig:read"
-          ]
-        }
-      },
-      "post": {
-        "operationId": "createDualLlmConfig",
-        "tags": [
-          "Dual LLM Config"
-        ],
-        "description": "Create a new dual LLM configuration\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`dualLlmConfig:create`: Create new dual LLM configurations",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "enabled": {
-                    "type": "boolean"
-                  },
-                  "mainAgentPrompt": {
-                    "type": "string"
-                  },
-                  "quarantinedAgentPrompt": {
-                    "type": "string"
-                  },
-                  "summaryPrompt": {
-                    "type": "string"
-                  },
-                  "maxRounds": {
-                    "type": "integer",
-                    "minimum": -2147483648,
-                    "maximum": 2147483647
-                  }
-                },
-                "required": [
-                  "mainAgentPrompt",
-                  "quarantinedAgentPrompt",
-                  "summaryPrompt"
-                ]
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "id": {
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                    },
-                    "enabled": {
-                      "type": "boolean"
-                    },
-                    "mainAgentPrompt": {
-                      "type": "string"
-                    },
-                    "quarantinedAgentPrompt": {
-                      "type": "string"
-                    },
-                    "summaryPrompt": {
-                      "type": "string"
-                    },
-                    "maxRounds": {
-                      "type": "integer",
-                      "minimum": -2147483648,
-                      "maximum": 2147483647
-                    },
-                    "createdAt": {
-                      "type": "string",
-                      "format": "date-time"
-                    },
-                    "updatedAt": {
-                      "type": "string",
-                      "format": "date-time"
-                    }
-                  },
-                  "required": [
-                    "id",
-                    "enabled",
-                    "mainAgentPrompt",
-                    "quarantinedAgentPrompt",
-                    "summaryPrompt",
-                    "maxRounds",
-                    "createdAt",
-                    "updatedAt"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_validation_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authentication_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authorization_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_not_found_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_conflict_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_internal_server_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          }
-        },
-        "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "dualLlmConfig:create"
-          ]
-        }
-      }
-    },
-    "/api/dual-llm-config/{id}": {
-      "get": {
-        "operationId": "getDualLlmConfig",
-        "tags": [
-          "Dual LLM Config"
-        ],
-        "description": "Get dual LLM configuration by ID\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`dualLlmConfig:read`: View dual LLM security configurations",
-        "parameters": [
-          {
-            "schema": {
-              "type": "string",
-              "format": "uuid",
-              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
-            },
-            "in": "path",
-            "name": "id",
-            "required": true
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "id": {
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                    },
-                    "enabled": {
-                      "type": "boolean"
-                    },
-                    "mainAgentPrompt": {
-                      "type": "string"
-                    },
-                    "quarantinedAgentPrompt": {
-                      "type": "string"
-                    },
-                    "summaryPrompt": {
-                      "type": "string"
-                    },
-                    "maxRounds": {
-                      "type": "integer",
-                      "minimum": -2147483648,
-                      "maximum": 2147483647
-                    },
-                    "createdAt": {
-                      "type": "string",
-                      "format": "date-time"
-                    },
-                    "updatedAt": {
-                      "type": "string",
-                      "format": "date-time"
-                    }
-                  },
-                  "required": [
-                    "id",
-                    "enabled",
-                    "mainAgentPrompt",
-                    "quarantinedAgentPrompt",
-                    "summaryPrompt",
-                    "maxRounds",
-                    "createdAt",
-                    "updatedAt"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_validation_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authentication_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authorization_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_not_found_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_conflict_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_internal_server_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          }
-        },
-        "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "dualLlmConfig:read"
-          ]
-        }
-      },
-      "put": {
-        "operationId": "updateDualLlmConfig",
-        "tags": [
-          "Dual LLM Config"
-        ],
-        "description": "Update a dual LLM configuration\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`dualLlmConfig:update`: Modify dual LLM configurations",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "enabled": {
-                    "type": "boolean"
-                  },
-                  "mainAgentPrompt": {
-                    "type": "string"
-                  },
-                  "quarantinedAgentPrompt": {
-                    "type": "string"
-                  },
-                  "summaryPrompt": {
-                    "type": "string"
-                  },
-                  "maxRounds": {
-                    "type": "integer",
-                    "minimum": -2147483648,
-                    "maximum": 2147483647
-                  }
-                }
-              }
-            }
-          }
-        },
-        "parameters": [
-          {
-            "schema": {
-              "type": "string",
-              "format": "uuid",
-              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
-            },
-            "in": "path",
-            "name": "id",
-            "required": true
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "id": {
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                    },
-                    "enabled": {
-                      "type": "boolean"
-                    },
-                    "mainAgentPrompt": {
-                      "type": "string"
-                    },
-                    "quarantinedAgentPrompt": {
-                      "type": "string"
-                    },
-                    "summaryPrompt": {
-                      "type": "string"
-                    },
-                    "maxRounds": {
-                      "type": "integer",
-                      "minimum": -2147483648,
-                      "maximum": 2147483647
-                    },
-                    "createdAt": {
-                      "type": "string",
-                      "format": "date-time"
-                    },
-                    "updatedAt": {
-                      "type": "string",
-                      "format": "date-time"
-                    }
-                  },
-                  "required": [
-                    "id",
-                    "enabled",
-                    "mainAgentPrompt",
-                    "quarantinedAgentPrompt",
-                    "summaryPrompt",
-                    "maxRounds",
-                    "createdAt",
-                    "updatedAt"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_validation_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authentication_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authorization_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_not_found_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_conflict_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_internal_server_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          }
-        },
-        "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "dualLlmConfig:update"
-          ]
-        }
-      },
-      "delete": {
-        "operationId": "deleteDualLlmConfig",
-        "tags": [
-          "Dual LLM Config"
-        ],
-        "description": "Delete a dual LLM configuration\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`dualLlmConfig:delete`: Remove dual LLM configurations",
-        "parameters": [
-          {
-            "schema": {
-              "type": "string",
-              "format": "uuid",
-              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
-            },
-            "in": "path",
-            "name": "id",
-            "required": true
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "success": {
-                      "type": "boolean"
-                    }
-                  },
-                  "required": [
-                    "success"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_validation_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authentication_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authorization_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_not_found_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_conflict_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_internal_server_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          }
-        },
-        "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "dualLlmConfig:delete"
-          ]
-        }
-      }
-    },
-    "/api/dual-llm-results/by-tool-call-id/{toolCallId}": {
-      "get": {
-        "operationId": "getDualLlmResultByToolCallId",
-        "tags": [
-          "Dual LLM Results"
-        ],
-        "description": "Get dual LLM result by tool call ID\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`dualLlmResult:read`: View dual LLM security validation results",
-        "parameters": [
-          {
-            "schema": {
-              "type": "string"
-            },
-            "in": "path",
-            "name": "toolCallId",
-            "required": true
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "nullable": true,
-                  "type": "object",
-                  "properties": {
-                    "id": {
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                    },
-                    "agentId": {
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                    },
-                    "toolCallId": {
-                      "type": "string"
-                    },
-                    "conversations": {
-                      "anyOf": [
-                        {
-                          "anyOf": [
-                            {
-                              "type": "string"
-                            },
-                            {
-                              "type": "number"
-                            },
-                            {
-                              "type": "boolean"
-                            },
-                            {
-                              "type": "string",
-                              "nullable": true,
-                              "enum": [
-                                null
-                              ]
-                            }
-                          ]
-                        },
-                        {
-                          "type": "object",
-                          "additionalProperties": {}
-                        },
-                        {
-                          "type": "array",
-                          "items": {}
-                        }
-                      ]
-                    },
-                    "result": {
-                      "type": "string"
-                    },
-                    "createdAt": {
-                      "type": "string",
-                      "format": "date-time"
-                    }
-                  },
-                  "required": [
-                    "id",
-                    "agentId",
-                    "toolCallId",
-                    "conversations",
-                    "result",
-                    "createdAt"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_validation_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authentication_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authorization_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_not_found_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_conflict_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_internal_server_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          }
-        },
-        "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "dualLlmResult:read"
-          ]
-        }
-      }
-    },
-    "/api/dual-llm-results/by-interaction/{interactionId}": {
-      "get": {
-        "operationId": "getDualLlmResultsByInteraction",
-        "tags": [
-          "Dual LLM Results"
-        ],
-        "description": "Get all dual LLM results for an interaction\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`dualLlmResult:read`: View dual LLM security validation results",
-        "parameters": [
-          {
-            "schema": {
-              "type": "string",
-              "format": "uuid",
-              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
-            },
-            "in": "path",
-            "name": "interactionId",
-            "required": true
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "properties": {
-                      "id": {
-                        "type": "string",
-                        "format": "uuid",
-                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                      },
-                      "agentId": {
-                        "type": "string",
-                        "format": "uuid",
-                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                      },
-                      "toolCallId": {
-                        "type": "string"
-                      },
-                      "conversations": {
-                        "anyOf": [
-                          {
-                            "anyOf": [
-                              {
-                                "type": "string"
-                              },
-                              {
-                                "type": "number"
-                              },
-                              {
-                                "type": "boolean"
-                              },
-                              {
-                                "type": "string",
-                                "nullable": true,
-                                "enum": [
-                                  null
-                                ]
-                              }
-                            ]
-                          },
-                          {
-                            "type": "object",
-                            "additionalProperties": {}
-                          },
-                          {
-                            "type": "array",
-                            "items": {}
-                          }
-                        ]
-                      },
-                      "result": {
-                        "type": "string"
-                      },
-                      "createdAt": {
-                        "type": "string",
-                        "format": "date-time"
-                      }
-                    },
-                    "required": [
-                      "id",
-                      "agentId",
-                      "toolCallId",
-                      "conversations",
-                      "result",
-                      "createdAt"
-                    ],
-                    "additionalProperties": false
-                  }
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_validation_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authentication_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authorization_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_not_found_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_conflict_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_internal_server_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          }
-        },
-        "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "dualLlmResult:read"
-          ]
-        }
-      }
-    },
     "/v1/gemini/v1beta/models/{model}:generateContent": {
       "post": {
         "summary": "Generate content using Gemini",
@@ -78767,6 +76719,51 @@
                               "response": {
                                 "$ref": "#/components/schemas/OpenAiChatCompletionResponse"
                               },
+                              "dualLlmAnalyses": {
+                                "nullable": true,
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "toolCallId": {
+                                      "type": "string"
+                                    },
+                                    "conversations": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "role": {
+                                            "type": "string",
+                                            "enum": [
+                                              "user",
+                                              "assistant"
+                                            ]
+                                          },
+                                          "content": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "role",
+                                          "content"
+                                        ],
+                                        "additionalProperties": false,
+                                        "description": "Provider-agnostic transcript entry for the built-in Dual LLM workflow."
+                                      }
+                                    },
+                                    "result": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "toolCallId",
+                                    "conversations",
+                                    "result"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              },
                               "type": {
                                 "type": "string",
                                 "enum": [
@@ -79053,6 +77050,51 @@
                                 ],
                                 "additionalProperties": false
                               },
+                              "dualLlmAnalyses": {
+                                "nullable": true,
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "toolCallId": {
+                                      "type": "string"
+                                    },
+                                    "conversations": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "role": {
+                                            "type": "string",
+                                            "enum": [
+                                              "user",
+                                              "assistant"
+                                            ]
+                                          },
+                                          "content": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "role",
+                                          "content"
+                                        ],
+                                        "additionalProperties": false,
+                                        "description": "Provider-agnostic transcript entry for the built-in Dual LLM workflow."
+                                      }
+                                    },
+                                    "result": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "toolCallId",
+                                    "conversations",
+                                    "result"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              },
                               "type": {
                                 "type": "string",
                                 "enum": [
@@ -79202,6 +77244,51 @@
                               },
                               "response": {
                                 "$ref": "#/components/schemas/GeminiGenerateContentResponse"
+                              },
+                              "dualLlmAnalyses": {
+                                "nullable": true,
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "toolCallId": {
+                                      "type": "string"
+                                    },
+                                    "conversations": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "role": {
+                                            "type": "string",
+                                            "enum": [
+                                              "user",
+                                              "assistant"
+                                            ]
+                                          },
+                                          "content": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "role",
+                                          "content"
+                                        ],
+                                        "additionalProperties": false,
+                                        "description": "Provider-agnostic transcript entry for the built-in Dual LLM workflow."
+                                      }
+                                    },
+                                    "result": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "toolCallId",
+                                    "conversations",
+                                    "result"
+                                  ],
+                                  "additionalProperties": false
+                                }
                               },
                               "type": {
                                 "type": "string",
@@ -79363,6 +77450,51 @@
                               },
                               "response": {
                                 "$ref": "#/components/schemas/AnthropicMessagesResponse"
+                              },
+                              "dualLlmAnalyses": {
+                                "nullable": true,
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "toolCallId": {
+                                      "type": "string"
+                                    },
+                                    "conversations": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "role": {
+                                            "type": "string",
+                                            "enum": [
+                                              "user",
+                                              "assistant"
+                                            ]
+                                          },
+                                          "content": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "role",
+                                          "content"
+                                        ],
+                                        "additionalProperties": false,
+                                        "description": "Provider-agnostic transcript entry for the built-in Dual LLM workflow."
+                                      }
+                                    },
+                                    "result": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "toolCallId",
+                                    "conversations",
+                                    "result"
+                                  ],
+                                  "additionalProperties": false
+                                }
                               },
                               "type": {
                                 "type": "string",
@@ -81225,6 +79357,51 @@
                                 ],
                                 "additionalProperties": false
                               },
+                              "dualLlmAnalyses": {
+                                "nullable": true,
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "toolCallId": {
+                                      "type": "string"
+                                    },
+                                    "conversations": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "role": {
+                                            "type": "string",
+                                            "enum": [
+                                              "user",
+                                              "assistant"
+                                            ]
+                                          },
+                                          "content": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "role",
+                                          "content"
+                                        ],
+                                        "additionalProperties": false,
+                                        "description": "Provider-agnostic transcript entry for the built-in Dual LLM workflow."
+                                      }
+                                    },
+                                    "result": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "toolCallId",
+                                    "conversations",
+                                    "result"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              },
                               "type": {
                                 "type": "string",
                                 "enum": [
@@ -81385,6 +79562,51 @@
                               },
                               "response": {
                                 "$ref": "#/components/schemas/CerebrasChatCompletionResponse"
+                              },
+                              "dualLlmAnalyses": {
+                                "nullable": true,
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "toolCallId": {
+                                      "type": "string"
+                                    },
+                                    "conversations": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "role": {
+                                            "type": "string",
+                                            "enum": [
+                                              "user",
+                                              "assistant"
+                                            ]
+                                          },
+                                          "content": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "role",
+                                          "content"
+                                        ],
+                                        "additionalProperties": false,
+                                        "description": "Provider-agnostic transcript entry for the built-in Dual LLM workflow."
+                                      }
+                                    },
+                                    "result": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "toolCallId",
+                                    "conversations",
+                                    "result"
+                                  ],
+                                  "additionalProperties": false
+                                }
                               },
                               "type": {
                                 "type": "string",
@@ -81547,6 +79769,51 @@
                               "response": {
                                 "$ref": "#/components/schemas/MistralChatCompletionResponse"
                               },
+                              "dualLlmAnalyses": {
+                                "nullable": true,
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "toolCallId": {
+                                      "type": "string"
+                                    },
+                                    "conversations": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "role": {
+                                            "type": "string",
+                                            "enum": [
+                                              "user",
+                                              "assistant"
+                                            ]
+                                          },
+                                          "content": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "role",
+                                          "content"
+                                        ],
+                                        "additionalProperties": false,
+                                        "description": "Provider-agnostic transcript entry for the built-in Dual LLM workflow."
+                                      }
+                                    },
+                                    "result": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "toolCallId",
+                                    "conversations",
+                                    "result"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              },
                               "type": {
                                 "type": "string",
                                 "enum": [
@@ -81707,6 +79974,51 @@
                               },
                               "response": {
                                 "$ref": "#/components/schemas/PerplexityChatCompletionResponse"
+                              },
+                              "dualLlmAnalyses": {
+                                "nullable": true,
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "toolCallId": {
+                                      "type": "string"
+                                    },
+                                    "conversations": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "role": {
+                                            "type": "string",
+                                            "enum": [
+                                              "user",
+                                              "assistant"
+                                            ]
+                                          },
+                                          "content": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "role",
+                                          "content"
+                                        ],
+                                        "additionalProperties": false,
+                                        "description": "Provider-agnostic transcript entry for the built-in Dual LLM workflow."
+                                      }
+                                    },
+                                    "result": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "toolCallId",
+                                    "conversations",
+                                    "result"
+                                  ],
+                                  "additionalProperties": false
+                                }
                               },
                               "type": {
                                 "type": "string",
@@ -81869,6 +80181,51 @@
                               "response": {
                                 "$ref": "#/components/schemas/GroqChatCompletionResponse"
                               },
+                              "dualLlmAnalyses": {
+                                "nullable": true,
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "toolCallId": {
+                                      "type": "string"
+                                    },
+                                    "conversations": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "role": {
+                                            "type": "string",
+                                            "enum": [
+                                              "user",
+                                              "assistant"
+                                            ]
+                                          },
+                                          "content": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "role",
+                                          "content"
+                                        ],
+                                        "additionalProperties": false,
+                                        "description": "Provider-agnostic transcript entry for the built-in Dual LLM workflow."
+                                      }
+                                    },
+                                    "result": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "toolCallId",
+                                    "conversations",
+                                    "result"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              },
                               "type": {
                                 "type": "string",
                                 "enum": [
@@ -82029,6 +80386,51 @@
                               },
                               "response": {
                                 "$ref": "#/components/schemas/XaiChatCompletionResponse"
+                              },
+                              "dualLlmAnalyses": {
+                                "nullable": true,
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "toolCallId": {
+                                      "type": "string"
+                                    },
+                                    "conversations": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "role": {
+                                            "type": "string",
+                                            "enum": [
+                                              "user",
+                                              "assistant"
+                                            ]
+                                          },
+                                          "content": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "role",
+                                          "content"
+                                        ],
+                                        "additionalProperties": false,
+                                        "description": "Provider-agnostic transcript entry for the built-in Dual LLM workflow."
+                                      }
+                                    },
+                                    "result": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "toolCallId",
+                                    "conversations",
+                                    "result"
+                                  ],
+                                  "additionalProperties": false
+                                }
                               },
                               "type": {
                                 "type": "string",
@@ -82191,6 +80593,51 @@
                               "response": {
                                 "$ref": "#/components/schemas/OpenrouterChatCompletionResponse"
                               },
+                              "dualLlmAnalyses": {
+                                "nullable": true,
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "toolCallId": {
+                                      "type": "string"
+                                    },
+                                    "conversations": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "role": {
+                                            "type": "string",
+                                            "enum": [
+                                              "user",
+                                              "assistant"
+                                            ]
+                                          },
+                                          "content": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "role",
+                                          "content"
+                                        ],
+                                        "additionalProperties": false,
+                                        "description": "Provider-agnostic transcript entry for the built-in Dual LLM workflow."
+                                      }
+                                    },
+                                    "result": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "toolCallId",
+                                    "conversations",
+                                    "result"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              },
                               "type": {
                                 "type": "string",
                                 "enum": [
@@ -82352,6 +80799,51 @@
                               "response": {
                                 "$ref": "#/components/schemas/VllmChatCompletionResponse"
                               },
+                              "dualLlmAnalyses": {
+                                "nullable": true,
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "toolCallId": {
+                                      "type": "string"
+                                    },
+                                    "conversations": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "role": {
+                                            "type": "string",
+                                            "enum": [
+                                              "user",
+                                              "assistant"
+                                            ]
+                                          },
+                                          "content": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "role",
+                                          "content"
+                                        ],
+                                        "additionalProperties": false,
+                                        "description": "Provider-agnostic transcript entry for the built-in Dual LLM workflow."
+                                      }
+                                    },
+                                    "result": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "toolCallId",
+                                    "conversations",
+                                    "result"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              },
                               "type": {
                                 "type": "string",
                                 "enum": [
@@ -82502,6 +80994,51 @@
                               "response": {
                                 "$ref": "#/components/schemas/OllamaChatCompletionResponse"
                               },
+                              "dualLlmAnalyses": {
+                                "nullable": true,
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "toolCallId": {
+                                      "type": "string"
+                                    },
+                                    "conversations": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "role": {
+                                            "type": "string",
+                                            "enum": [
+                                              "user",
+                                              "assistant"
+                                            ]
+                                          },
+                                          "content": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "role",
+                                          "content"
+                                        ],
+                                        "additionalProperties": false,
+                                        "description": "Provider-agnostic transcript entry for the built-in Dual LLM workflow."
+                                      }
+                                    },
+                                    "result": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "toolCallId",
+                                    "conversations",
+                                    "result"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              },
                               "type": {
                                 "type": "string",
                                 "enum": [
@@ -82651,6 +81188,51 @@
                               },
                               "response": {
                                 "$ref": "#/components/schemas/CohereChatResponse"
+                              },
+                              "dualLlmAnalyses": {
+                                "nullable": true,
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "toolCallId": {
+                                      "type": "string"
+                                    },
+                                    "conversations": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "role": {
+                                            "type": "string",
+                                            "enum": [
+                                              "user",
+                                              "assistant"
+                                            ]
+                                          },
+                                          "content": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "role",
+                                          "content"
+                                        ],
+                                        "additionalProperties": false,
+                                        "description": "Provider-agnostic transcript entry for the built-in Dual LLM workflow."
+                                      }
+                                    },
+                                    "result": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "toolCallId",
+                                    "conversations",
+                                    "result"
+                                  ],
+                                  "additionalProperties": false
+                                }
                               },
                               "type": {
                                 "type": "string",
@@ -82813,6 +81395,51 @@
                               "response": {
                                 "$ref": "#/components/schemas/ZhipuaiChatCompletionResponse"
                               },
+                              "dualLlmAnalyses": {
+                                "nullable": true,
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "toolCallId": {
+                                      "type": "string"
+                                    },
+                                    "conversations": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "role": {
+                                            "type": "string",
+                                            "enum": [
+                                              "user",
+                                              "assistant"
+                                            ]
+                                          },
+                                          "content": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "role",
+                                          "content"
+                                        ],
+                                        "additionalProperties": false,
+                                        "description": "Provider-agnostic transcript entry for the built-in Dual LLM workflow."
+                                      }
+                                    },
+                                    "result": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "toolCallId",
+                                    "conversations",
+                                    "result"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              },
                               "type": {
                                 "type": "string",
                                 "enum": [
@@ -82974,6 +81601,51 @@
                               "response": {
                                 "$ref": "#/components/schemas/DeepSeekChatCompletionResponse"
                               },
+                              "dualLlmAnalyses": {
+                                "nullable": true,
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "toolCallId": {
+                                      "type": "string"
+                                    },
+                                    "conversations": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "role": {
+                                            "type": "string",
+                                            "enum": [
+                                              "user",
+                                              "assistant"
+                                            ]
+                                          },
+                                          "content": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "role",
+                                          "content"
+                                        ],
+                                        "additionalProperties": false,
+                                        "description": "Provider-agnostic transcript entry for the built-in Dual LLM workflow."
+                                      }
+                                    },
+                                    "result": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "toolCallId",
+                                    "conversations",
+                                    "result"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              },
                               "type": {
                                 "type": "string",
                                 "enum": [
@@ -83134,6 +81806,51 @@
                               },
                               "response": {
                                 "$ref": "#/components/schemas/MinimaxChatCompletionResponse"
+                              },
+                              "dualLlmAnalyses": {
+                                "nullable": true,
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "toolCallId": {
+                                      "type": "string"
+                                    },
+                                    "conversations": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "role": {
+                                            "type": "string",
+                                            "enum": [
+                                              "user",
+                                              "assistant"
+                                            ]
+                                          },
+                                          "content": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "role",
+                                          "content"
+                                        ],
+                                        "additionalProperties": false,
+                                        "description": "Provider-agnostic transcript entry for the built-in Dual LLM workflow."
+                                      }
+                                    },
+                                    "result": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "toolCallId",
+                                    "conversations",
+                                    "result"
+                                  ],
+                                  "additionalProperties": false
+                                }
                               },
                               "type": {
                                 "type": "string",
@@ -84648,6 +83365,51 @@
                         "response": {
                           "$ref": "#/components/schemas/OpenAiChatCompletionResponse"
                         },
+                        "dualLlmAnalyses": {
+                          "nullable": true,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "toolCallId": {
+                                "type": "string"
+                              },
+                              "conversations": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "role": {
+                                      "type": "string",
+                                      "enum": [
+                                        "user",
+                                        "assistant"
+                                      ]
+                                    },
+                                    "content": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "role",
+                                    "content"
+                                  ],
+                                  "additionalProperties": false,
+                                  "description": "Provider-agnostic transcript entry for the built-in Dual LLM workflow."
+                                }
+                              },
+                              "result": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "toolCallId",
+                              "conversations",
+                              "result"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
                         "type": {
                           "type": "string",
                           "enum": [
@@ -84934,6 +83696,51 @@
                           ],
                           "additionalProperties": false
                         },
+                        "dualLlmAnalyses": {
+                          "nullable": true,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "toolCallId": {
+                                "type": "string"
+                              },
+                              "conversations": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "role": {
+                                      "type": "string",
+                                      "enum": [
+                                        "user",
+                                        "assistant"
+                                      ]
+                                    },
+                                    "content": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "role",
+                                    "content"
+                                  ],
+                                  "additionalProperties": false,
+                                  "description": "Provider-agnostic transcript entry for the built-in Dual LLM workflow."
+                                }
+                              },
+                              "result": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "toolCallId",
+                              "conversations",
+                              "result"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
                         "type": {
                           "type": "string",
                           "enum": [
@@ -85083,6 +83890,51 @@
                         },
                         "response": {
                           "$ref": "#/components/schemas/GeminiGenerateContentResponse"
+                        },
+                        "dualLlmAnalyses": {
+                          "nullable": true,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "toolCallId": {
+                                "type": "string"
+                              },
+                              "conversations": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "role": {
+                                      "type": "string",
+                                      "enum": [
+                                        "user",
+                                        "assistant"
+                                      ]
+                                    },
+                                    "content": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "role",
+                                    "content"
+                                  ],
+                                  "additionalProperties": false,
+                                  "description": "Provider-agnostic transcript entry for the built-in Dual LLM workflow."
+                                }
+                              },
+                              "result": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "toolCallId",
+                              "conversations",
+                              "result"
+                            ],
+                            "additionalProperties": false
+                          }
                         },
                         "type": {
                           "type": "string",
@@ -85244,6 +84096,51 @@
                         },
                         "response": {
                           "$ref": "#/components/schemas/AnthropicMessagesResponse"
+                        },
+                        "dualLlmAnalyses": {
+                          "nullable": true,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "toolCallId": {
+                                "type": "string"
+                              },
+                              "conversations": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "role": {
+                                      "type": "string",
+                                      "enum": [
+                                        "user",
+                                        "assistant"
+                                      ]
+                                    },
+                                    "content": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "role",
+                                    "content"
+                                  ],
+                                  "additionalProperties": false,
+                                  "description": "Provider-agnostic transcript entry for the built-in Dual LLM workflow."
+                                }
+                              },
+                              "result": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "toolCallId",
+                              "conversations",
+                              "result"
+                            ],
+                            "additionalProperties": false
+                          }
                         },
                         "type": {
                           "type": "string",
@@ -87106,6 +86003,51 @@
                           ],
                           "additionalProperties": false
                         },
+                        "dualLlmAnalyses": {
+                          "nullable": true,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "toolCallId": {
+                                "type": "string"
+                              },
+                              "conversations": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "role": {
+                                      "type": "string",
+                                      "enum": [
+                                        "user",
+                                        "assistant"
+                                      ]
+                                    },
+                                    "content": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "role",
+                                    "content"
+                                  ],
+                                  "additionalProperties": false,
+                                  "description": "Provider-agnostic transcript entry for the built-in Dual LLM workflow."
+                                }
+                              },
+                              "result": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "toolCallId",
+                              "conversations",
+                              "result"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
                         "type": {
                           "type": "string",
                           "enum": [
@@ -87266,6 +86208,51 @@
                         },
                         "response": {
                           "$ref": "#/components/schemas/CerebrasChatCompletionResponse"
+                        },
+                        "dualLlmAnalyses": {
+                          "nullable": true,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "toolCallId": {
+                                "type": "string"
+                              },
+                              "conversations": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "role": {
+                                      "type": "string",
+                                      "enum": [
+                                        "user",
+                                        "assistant"
+                                      ]
+                                    },
+                                    "content": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "role",
+                                    "content"
+                                  ],
+                                  "additionalProperties": false,
+                                  "description": "Provider-agnostic transcript entry for the built-in Dual LLM workflow."
+                                }
+                              },
+                              "result": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "toolCallId",
+                              "conversations",
+                              "result"
+                            ],
+                            "additionalProperties": false
+                          }
                         },
                         "type": {
                           "type": "string",
@@ -87428,6 +86415,51 @@
                         "response": {
                           "$ref": "#/components/schemas/MistralChatCompletionResponse"
                         },
+                        "dualLlmAnalyses": {
+                          "nullable": true,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "toolCallId": {
+                                "type": "string"
+                              },
+                              "conversations": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "role": {
+                                      "type": "string",
+                                      "enum": [
+                                        "user",
+                                        "assistant"
+                                      ]
+                                    },
+                                    "content": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "role",
+                                    "content"
+                                  ],
+                                  "additionalProperties": false,
+                                  "description": "Provider-agnostic transcript entry for the built-in Dual LLM workflow."
+                                }
+                              },
+                              "result": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "toolCallId",
+                              "conversations",
+                              "result"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
                         "type": {
                           "type": "string",
                           "enum": [
@@ -87588,6 +86620,51 @@
                         },
                         "response": {
                           "$ref": "#/components/schemas/PerplexityChatCompletionResponse"
+                        },
+                        "dualLlmAnalyses": {
+                          "nullable": true,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "toolCallId": {
+                                "type": "string"
+                              },
+                              "conversations": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "role": {
+                                      "type": "string",
+                                      "enum": [
+                                        "user",
+                                        "assistant"
+                                      ]
+                                    },
+                                    "content": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "role",
+                                    "content"
+                                  ],
+                                  "additionalProperties": false,
+                                  "description": "Provider-agnostic transcript entry for the built-in Dual LLM workflow."
+                                }
+                              },
+                              "result": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "toolCallId",
+                              "conversations",
+                              "result"
+                            ],
+                            "additionalProperties": false
+                          }
                         },
                         "type": {
                           "type": "string",
@@ -87750,6 +86827,51 @@
                         "response": {
                           "$ref": "#/components/schemas/GroqChatCompletionResponse"
                         },
+                        "dualLlmAnalyses": {
+                          "nullable": true,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "toolCallId": {
+                                "type": "string"
+                              },
+                              "conversations": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "role": {
+                                      "type": "string",
+                                      "enum": [
+                                        "user",
+                                        "assistant"
+                                      ]
+                                    },
+                                    "content": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "role",
+                                    "content"
+                                  ],
+                                  "additionalProperties": false,
+                                  "description": "Provider-agnostic transcript entry for the built-in Dual LLM workflow."
+                                }
+                              },
+                              "result": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "toolCallId",
+                              "conversations",
+                              "result"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
                         "type": {
                           "type": "string",
                           "enum": [
@@ -87910,6 +87032,51 @@
                         },
                         "response": {
                           "$ref": "#/components/schemas/XaiChatCompletionResponse"
+                        },
+                        "dualLlmAnalyses": {
+                          "nullable": true,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "toolCallId": {
+                                "type": "string"
+                              },
+                              "conversations": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "role": {
+                                      "type": "string",
+                                      "enum": [
+                                        "user",
+                                        "assistant"
+                                      ]
+                                    },
+                                    "content": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "role",
+                                    "content"
+                                  ],
+                                  "additionalProperties": false,
+                                  "description": "Provider-agnostic transcript entry for the built-in Dual LLM workflow."
+                                }
+                              },
+                              "result": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "toolCallId",
+                              "conversations",
+                              "result"
+                            ],
+                            "additionalProperties": false
+                          }
                         },
                         "type": {
                           "type": "string",
@@ -88072,6 +87239,51 @@
                         "response": {
                           "$ref": "#/components/schemas/OpenrouterChatCompletionResponse"
                         },
+                        "dualLlmAnalyses": {
+                          "nullable": true,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "toolCallId": {
+                                "type": "string"
+                              },
+                              "conversations": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "role": {
+                                      "type": "string",
+                                      "enum": [
+                                        "user",
+                                        "assistant"
+                                      ]
+                                    },
+                                    "content": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "role",
+                                    "content"
+                                  ],
+                                  "additionalProperties": false,
+                                  "description": "Provider-agnostic transcript entry for the built-in Dual LLM workflow."
+                                }
+                              },
+                              "result": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "toolCallId",
+                              "conversations",
+                              "result"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
                         "type": {
                           "type": "string",
                           "enum": [
@@ -88233,6 +87445,51 @@
                         "response": {
                           "$ref": "#/components/schemas/VllmChatCompletionResponse"
                         },
+                        "dualLlmAnalyses": {
+                          "nullable": true,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "toolCallId": {
+                                "type": "string"
+                              },
+                              "conversations": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "role": {
+                                      "type": "string",
+                                      "enum": [
+                                        "user",
+                                        "assistant"
+                                      ]
+                                    },
+                                    "content": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "role",
+                                    "content"
+                                  ],
+                                  "additionalProperties": false,
+                                  "description": "Provider-agnostic transcript entry for the built-in Dual LLM workflow."
+                                }
+                              },
+                              "result": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "toolCallId",
+                              "conversations",
+                              "result"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
                         "type": {
                           "type": "string",
                           "enum": [
@@ -88383,6 +87640,51 @@
                         "response": {
                           "$ref": "#/components/schemas/OllamaChatCompletionResponse"
                         },
+                        "dualLlmAnalyses": {
+                          "nullable": true,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "toolCallId": {
+                                "type": "string"
+                              },
+                              "conversations": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "role": {
+                                      "type": "string",
+                                      "enum": [
+                                        "user",
+                                        "assistant"
+                                      ]
+                                    },
+                                    "content": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "role",
+                                    "content"
+                                  ],
+                                  "additionalProperties": false,
+                                  "description": "Provider-agnostic transcript entry for the built-in Dual LLM workflow."
+                                }
+                              },
+                              "result": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "toolCallId",
+                              "conversations",
+                              "result"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
                         "type": {
                           "type": "string",
                           "enum": [
@@ -88532,6 +87834,51 @@
                         },
                         "response": {
                           "$ref": "#/components/schemas/CohereChatResponse"
+                        },
+                        "dualLlmAnalyses": {
+                          "nullable": true,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "toolCallId": {
+                                "type": "string"
+                              },
+                              "conversations": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "role": {
+                                      "type": "string",
+                                      "enum": [
+                                        "user",
+                                        "assistant"
+                                      ]
+                                    },
+                                    "content": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "role",
+                                    "content"
+                                  ],
+                                  "additionalProperties": false,
+                                  "description": "Provider-agnostic transcript entry for the built-in Dual LLM workflow."
+                                }
+                              },
+                              "result": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "toolCallId",
+                              "conversations",
+                              "result"
+                            ],
+                            "additionalProperties": false
+                          }
                         },
                         "type": {
                           "type": "string",
@@ -88694,6 +88041,51 @@
                         "response": {
                           "$ref": "#/components/schemas/ZhipuaiChatCompletionResponse"
                         },
+                        "dualLlmAnalyses": {
+                          "nullable": true,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "toolCallId": {
+                                "type": "string"
+                              },
+                              "conversations": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "role": {
+                                      "type": "string",
+                                      "enum": [
+                                        "user",
+                                        "assistant"
+                                      ]
+                                    },
+                                    "content": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "role",
+                                    "content"
+                                  ],
+                                  "additionalProperties": false,
+                                  "description": "Provider-agnostic transcript entry for the built-in Dual LLM workflow."
+                                }
+                              },
+                              "result": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "toolCallId",
+                              "conversations",
+                              "result"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
                         "type": {
                           "type": "string",
                           "enum": [
@@ -88855,6 +88247,51 @@
                         "response": {
                           "$ref": "#/components/schemas/DeepSeekChatCompletionResponse"
                         },
+                        "dualLlmAnalyses": {
+                          "nullable": true,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "toolCallId": {
+                                "type": "string"
+                              },
+                              "conversations": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "role": {
+                                      "type": "string",
+                                      "enum": [
+                                        "user",
+                                        "assistant"
+                                      ]
+                                    },
+                                    "content": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "role",
+                                    "content"
+                                  ],
+                                  "additionalProperties": false,
+                                  "description": "Provider-agnostic transcript entry for the built-in Dual LLM workflow."
+                                }
+                              },
+                              "result": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "toolCallId",
+                              "conversations",
+                              "result"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
                         "type": {
                           "type": "string",
                           "enum": [
@@ -89015,6 +88452,51 @@
                         },
                         "response": {
                           "$ref": "#/components/schemas/MinimaxChatCompletionResponse"
+                        },
+                        "dualLlmAnalyses": {
+                          "nullable": true,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "toolCallId": {
+                                "type": "string"
+                              },
+                              "conversations": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "role": {
+                                      "type": "string",
+                                      "enum": [
+                                        "user",
+                                        "assistant"
+                                      ]
+                                    },
+                                    "content": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "role",
+                                    "content"
+                                  ],
+                                  "additionalProperties": false,
+                                  "description": "Provider-agnostic transcript entry for the built-in Dual LLM workflow."
+                                }
+                              },
+                              "result": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "toolCallId",
+                              "conversations",
+                              "result"
+                            ],
+                            "additionalProperties": false
+                          }
                         },
                         "type": {
                           "type": "string",

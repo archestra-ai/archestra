@@ -1,6 +1,6 @@
 import type { archestraApiTypes } from "@shared";
 import type { PartialUIMessage } from "@/components/message-thread";
-import type { DualLlmResult, Interaction, InteractionUtils } from "./common";
+import type { DualLlmAnalysis, Interaction, InteractionUtils } from "./common";
 
 class AnthropicMessagesInteraction implements InteractionUtils {
   private request: archestraApiTypes.AnthropicMessagesRequest;
@@ -141,7 +141,7 @@ class AnthropicMessagesInteraction implements InteractionUtils {
           role: "assistant";
           content: archestraApiTypes.AnthropicMessagesResponse["content"];
         },
-    _dualLlmResults?: DualLlmResult[],
+    _dualLlmAnalyses?: DualLlmAnalysis[],
   ): PartialUIMessage {
     const parts: PartialUIMessage["parts"] = [];
     const { content, role } = message;
@@ -182,7 +182,7 @@ class AnthropicMessagesInteraction implements InteractionUtils {
     };
   }
 
-  mapToUiMessages(dualLlmResults?: DualLlmResult[]): PartialUIMessage[] {
+  mapToUiMessages(dualLlmAnalyses?: DualLlmAnalysis[]): PartialUIMessage[] {
     const uiMessages: PartialUIMessage[] = [];
     const messages = this.request.messages;
 
@@ -211,7 +211,7 @@ class AnthropicMessagesInteraction implements InteractionUtils {
         continue;
       }
 
-      const uiMessage = this.mapToUiMessage(msg, dualLlmResults);
+      const uiMessage = this.mapToUiMessage(msg, dualLlmAnalyses);
 
       // If this is an assistant message with tool_use blocks, look ahead for tool results
       if (msg.role === "assistant" && Array.isArray(msg.content)) {
@@ -273,7 +273,7 @@ class AnthropicMessagesInteraction implements InteractionUtils {
                   });
 
                   // Check for dual LLM result
-                  const dualLlmResultForTool = dualLlmResults?.find(
+                  const dualLlmResultForTool = dualLlmAnalyses?.find(
                     (result) => result.toolCallId === block.id,
                   );
 
@@ -313,7 +313,7 @@ class AnthropicMessagesInteraction implements InteractionUtils {
     uiMessages.push(
       this.mapToUiMessage(
         { role: "assistant", content: this.response.content },
-        dualLlmResults,
+        dualLlmAnalyses,
       ),
     );
 

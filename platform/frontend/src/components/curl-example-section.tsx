@@ -3,6 +3,7 @@
 import { Check, Copy, Eye, EyeOff, Loader2 } from "lucide-react";
 import { useCallback, useState } from "react";
 import { toast } from "sonner";
+import { CodeBlock } from "@/components/ai-elements/code-block";
 import { Button } from "@/components/ui/button";
 import type { TeamToken, useFetchTeamTokenValue } from "@/lib/team-token.query";
 import type { useFetchUserTokenValue } from "@/lib/user-token.query";
@@ -110,62 +111,52 @@ export function CurlExampleSection({
   ]);
 
   return (
-    <div className="bg-muted rounded-md p-3 pt-12 relative">
-      <pre className="text-xs whitespace-pre-wrap break-all overflow-x-auto">
-        <code>{displayCode}</code>
-      </pre>
-      <div className="absolute top-2 right-2 flex gap-2">
+    <CodeBlock
+      code={displayCode}
+      language="bash"
+      contentStyle={{
+        fontSize: "0.75rem",
+        paddingRight: "5rem",
+      }}
+    >
+      <div className="flex gap-1 rounded-md border bg-background/95 p-1 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/80">
         <Button
           variant="ghost"
-          size="sm"
-          className="gap-2"
+          size="icon"
+          title={showExposedToken ? "Hide token" : "Expose token"}
           onClick={handleExposeToken}
           disabled={
             isLoadingToken || (!isPersonalTokenSelected && !hasAdminPermission)
           }
         >
           {isLoadingToken ? (
-            <>
-              <Loader2 className="h-4 w-4 animate-spin" />
-              <span>Loading...</span>
-            </>
+            <Loader2 className="h-4 w-4 animate-spin" />
           ) : showExposedToken ? (
-            <>
-              <EyeOff className="h-4 w-4" />
-              <span>Hide token</span>
-            </>
+            <EyeOff className="h-4 w-4" />
           ) : (
-            <>
-              <Eye className="h-4 w-4" />
-              <span>Expose token</span>
-            </>
+            <Eye className="h-4 w-4" />
           )}
+          <span className="sr-only">
+            {showExposedToken ? "Hide token" : "Expose token"}
+          </span>
         </Button>
         <Button
           variant="ghost"
-          size="sm"
-          className="gap-2"
+          size="icon"
+          title="Copy with exposed token"
           onClick={handleCopyCode}
           disabled={isCopying}
         >
           {isCopying ? (
-            <>
-              <Loader2 className="h-4 w-4 animate-spin" />
-              <span>Copying...</span>
-            </>
+            <Loader2 className="h-4 w-4 animate-spin" />
           ) : copied ? (
-            <>
-              <Check className="h-4 w-4 text-green-500" />
-              <span>Copied!</span>
-            </>
+            <Check className="h-4 w-4 text-green-500" />
           ) : (
-            <>
-              <Copy className="h-4 w-4" />
-              <span>Copy with exposed token</span>
-            </>
+            <Copy className="h-4 w-4" />
           )}
+          <span className="sr-only">Copy with exposed token</span>
         </Button>
       </div>
-    </div>
+    </CodeBlock>
   );
 }

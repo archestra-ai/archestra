@@ -28,7 +28,7 @@ export default function ConnectionPage() {
   return (
     <PageLayout
       title="Connect"
-      description="Connect your AI agents through LLM Proxy or MCP Gateway"
+      description="Choose how your apps connect to agents with LLM Proxy, MCP Gateway, or A2A."
     >
       <div className="space-y-8">
         {/* Architecture & Connection */}
@@ -94,35 +94,6 @@ export default function ConnectionPage() {
                 <div className="font-medium text-sm">Vercel AI SDK</div>
                 <div className="text-xs text-muted-foreground">
                   TypeScript framework
-                </div>
-              </div>
-              <svg
-                className="w-4 h-4 text-muted-foreground"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-                role="img"
-                aria-label="Arrow icon"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M9 5l7 7-7 7"
-                />
-              </svg>
-            </a>
-
-            <a
-              href={getDocsUrl(DocsPage.PlatformLangchainExample)}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-2 p-3 rounded-lg border border-border hover:bg-muted/50 transition-colors"
-            >
-              <div className="flex-1">
-                <div className="font-medium text-sm">LangChain</div>
-                <div className="text-xs text-muted-foreground">
-                  Python & JS framework
                 </div>
               </div>
               <svg

@@ -1,5 +1,5 @@
 import type { PartialUIMessage } from "@/components/message-thread";
-import type { DualLlmResult, Interaction, InteractionUtils } from "./common";
+import type { DualLlmAnalysis, Interaction, InteractionUtils } from "./common";
 
 /**
  * Bedrock Converse API request/response types
@@ -196,7 +196,7 @@ class BedrockConverseInteraction implements InteractionUtils {
     message:
       | BedrockMessage
       | { role: "assistant"; content: BedrockResponseContentBlock[] },
-    _dualLlmResults?: DualLlmResult[],
+    _dualLlmAnalyses?: DualLlmAnalysis[],
   ): PartialUIMessage {
     const parts: PartialUIMessage["parts"] = [];
     const { content, role } = message;
@@ -228,7 +228,7 @@ class BedrockConverseInteraction implements InteractionUtils {
     };
   }
 
-  mapToUiMessages(dualLlmResults?: DualLlmResult[]): PartialUIMessage[] {
+  mapToUiMessages(dualLlmAnalyses?: DualLlmAnalysis[]): PartialUIMessage[] {
     const uiMessages: PartialUIMessage[] = [];
     const messages = this.request.messages;
 
@@ -259,7 +259,7 @@ class BedrockConverseInteraction implements InteractionUtils {
         continue;
       }
 
-      const uiMessage = this.mapToUiMessage(msg, dualLlmResults);
+      const uiMessage = this.mapToUiMessage(msg, dualLlmAnalyses);
 
       // If this is an assistant message with toolUse blocks, look ahead for tool results
       if (msg.role === "assistant" && Array.isArray(msg.content)) {
@@ -313,7 +313,7 @@ class BedrockConverseInteraction implements InteractionUtils {
                   });
 
                   // Check for dual LLM result
-                  const dualLlmResultForTool = dualLlmResults?.find(
+                  const dualLlmResultForTool = dualLlmAnalyses?.find(
                     (result) => result.toolCallId === block.toolUse?.toolUseId,
                   );
 
@@ -355,7 +355,7 @@ class BedrockConverseInteraction implements InteractionUtils {
       uiMessages.push(
         this.mapToUiMessage(
           { role: "assistant", content: responseContent },
-          dualLlmResults,
+          dualLlmAnalyses,
         ),
       );
     }

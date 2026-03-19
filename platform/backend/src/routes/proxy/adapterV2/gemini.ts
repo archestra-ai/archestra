@@ -33,7 +33,7 @@ import type {
   ToolCompressionStats,
   UsageView,
 } from "@/types";
-import { MockGeminiClient } from "../mock-gemini-client";
+import { extractCommonMessageText } from "@/types";
 import {
   hasImageContent,
   isImageTooLarge,
@@ -101,6 +101,7 @@ class GeminiRequestAdapter
     for (const content of contents) {
       const commonMessage: CommonMessage = {
         role: content.role as CommonMessage["role"],
+        content: extractCommonMessageText(content),
       };
 
       // Process parts looking for function responses
@@ -1327,9 +1328,6 @@ export const geminiAdapterFactory: LLMProvider<
     apiKey: string | undefined,
     options: CreateClientOptions,
   ): GoogleGenAI {
-    if (options.mockMode) {
-      return new MockGeminiClient() as unknown as GoogleGenAI;
-    }
     const client = createGoogleGenAIClient(apiKey, "[GeminiProxyV2]");
 
     // Wrap with observability for request duration metrics

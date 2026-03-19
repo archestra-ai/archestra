@@ -9,7 +9,7 @@ import {
   supportsFileUploads,
 } from "@shared";
 import type { ChatStatus } from "ai";
-import { MoreVerticalIcon, PaperclipIcon, RotateCcwIcon } from "lucide-react";
+import { MoreVerticalIcon, PaperclipIcon, XIcon } from "lucide-react";
 import type { FormEvent } from "react";
 import { useCallback, useEffect, useRef } from "react";
 import { toast } from "sonner";
@@ -39,6 +39,7 @@ import {
   providerToLogoProvider,
 } from "@/components/chat/model-selector";
 import { PlaywrightInstallInline } from "@/components/chat/playwright-install-dialog";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -348,23 +349,27 @@ const PromptInputContent = ({
                       <>
                         {modelSource && (
                           <div className="flex items-center gap-1.5">
-                            <p className="text-xs font-medium text-muted-foreground">
+                            <Badge
+                              variant="secondary"
+                              className="gap-1 bg-slate-200/70 text-slate-600 dark:bg-slate-700/50 dark:text-slate-300 px-3 py-1 text-xs font-medium"
+                            >
                               {modelSource === "agent"
-                                ? "Agent default"
+                                ? "agent"
                                 : modelSource === "organization"
-                                  ? "Org default"
-                                  : "User override"}
-                            </p>
-                            {modelSource === "user" && onResetModelOverride && (
-                              <button
-                                type="button"
-                                onClick={onResetModelOverride}
-                                className="text-muted-foreground hover:text-foreground transition-colors"
-                                title="Reset to default"
-                              >
-                                <RotateCcwIcon className="size-3" />
-                              </button>
-                            )}
+                                  ? "org"
+                                  : "user override"}
+                              {modelSource === "user" &&
+                                onResetModelOverride && (
+                                  <button
+                                    type="button"
+                                    onClick={onResetModelOverride}
+                                    className="text-muted-foreground hover:text-foreground transition-colors"
+                                    title="Reset to default"
+                                  >
+                                    <XIcon className="size-3" />
+                                  </button>
+                                )}
+                            </Badge>
                           </div>
                         )}
                         {(conversationId || onApiKeyChange) && (
@@ -546,8 +551,10 @@ const PromptInputContent = ({
                     }
                   />
                   {modelSource && (
-                    <span className="pr-2.5 pl-0.5 text-xs text-muted-foreground whitespace-nowrap inline-flex items-center gap-1">
-                      {"("}
+                    <Badge
+                      variant="secondary"
+                      className="ml-1 mr-2 gap-1 bg-slate-200/70 text-slate-600 dark:bg-slate-700/50 dark:text-slate-300 px-3 py-1 text-xs font-medium"
+                    >
                       {modelSource === "agent"
                         ? "agent"
                         : modelSource === "organization"
@@ -557,14 +564,13 @@ const PromptInputContent = ({
                         <button
                           type="button"
                           onClick={onResetModelOverride}
-                          className="ml-0.5 text-muted-foreground hover:text-foreground transition-colors"
+                          className="text-muted-foreground hover:text-foreground transition-colors"
                           title="Reset to default"
                         >
-                          <RotateCcwIcon className="size-3" />
+                          <XIcon className="size-3" />
                         </button>
                       )}
-                      {")"}
-                    </span>
+                    </Badge>
                   )}
                 </div>
               )}

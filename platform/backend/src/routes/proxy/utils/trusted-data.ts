@@ -1,13 +1,13 @@
-import type { SupportedProvider } from "@shared";
+import { DualLlmSubagent } from "@/agents/subagents/dual-llm";
 import logger from "@/logging";
-import { DualLlmResultModel, TrustedDataPolicyModel } from "@/models";
+import { TrustedDataPolicyModel } from "@/models";
 import type { PolicyEvaluationContext } from "@/models/tool-invocation-policy";
 import type {
   CommonMessage,
+  DualLlmAnalysis,
   GlobalToolPolicy,
   ToolResultUpdates,
 } from "@/types";
-import { DualLlmSubagent } from "./dual-llm-subagent";
 
 /**
  * Evaluate if context is trusted and return updates for tool results
@@ -25,8 +25,8 @@ import { DualLlmSubagent } from "./dual-llm-subagent";
 export async function evaluateIfContextIsTrusted(
   messages: CommonMessage[],
   agentId: string,
-  apiKey: string | undefined,
-  provider: SupportedProvider,
+  organizationId: string,
+  userId: string | undefined,
   considerContextUntrusted: boolean = false,
   globalToolPolicy: GlobalToolPolicy = "restrictive",
   policyContext: PolicyEvaluationContext,
@@ -40,12 +40,12 @@ export async function evaluateIfContextIsTrusted(
   toolResultUpdates: ToolResultUpdates;
   contextIsTrusted: boolean;
   usedDualLlm: boolean;
+  dualLlmAnalyses: DualLlmAnalysis[];
 }> {
   logger.debug(
     {
       agentId,
       messageCount: messages.length,
-      provider,
       considerContextUntrusted,
       globalToolPolicy,
     },
@@ -53,6 +53,7 @@ export async function evaluateIfContextIsTrusted(
   );
 
   const toolResultUpdates: ToolResultUpdates = {};
+  const dualLlmAnalyses: DualLlmAnalysis[] = [];
   let hasUntrustedData = false;
   let usedDualLlm = false;
 
@@ -67,6 +68,7 @@ export async function evaluateIfContextIsTrusted(
       toolResultUpdates: {},
       contextIsTrusted: false,
       usedDualLlm: false,
+      dualLlmAnalyses: [],
     };
   }
 
@@ -104,6 +106,7 @@ export async function evaluateIfContextIsTrusted(
       toolResultUpdates,
       contextIsTrusted: true,
       usedDualLlm: false,
+      dualLlmAnalyses: [],
     };
   }
 
@@ -144,6 +147,7 @@ export async function evaluateIfContextIsTrusted(
 
     const { isTrusted, isBlocked, shouldSanitizeWithDualLlm, reason } =
       evaluation;
+    let toolResultIsTrusted = isTrusted;
     logger.debug(
       {
         agentId,
@@ -156,10 +160,6 @@ export async function evaluateIfContextIsTrusted(
       "[trustedData] evaluateIfContextIsTrusted: tool evaluation result",
     );
 
-    if (!isTrusted) {
-      hasUntrustedData = true;
-    }
-
     if (isBlocked) {
       // Tool result is blocked - replace with blocked message
       logger.debug(
@@ -168,69 +168,52 @@ export async function evaluateIfContextIsTrusted(
       );
       toolResultUpdates[toolCallId] =
         `[Content blocked by policy${reason ? `: ${reason}` : ""}]`;
+      toolResultIsTrusted = false;
     } else if (shouldSanitizeWithDualLlm) {
-      // Check if this tool call has already been analyzed
-      logger.debug(
-        { agentId, toolCallId },
-        "[trustedData] evaluateIfContextIsTrusted: checking for cached dual LLM result",
-      );
-      const existingResult =
-        await DualLlmResultModel.findByToolCallId(toolCallId);
-
-      if (existingResult) {
-        // Use cached result from database
+      if (!usedDualLlm && onDualLlmStart) {
         logger.debug(
           { agentId, toolCallId },
-          "[trustedData] evaluateIfContextIsTrusted: using cached dual LLM result",
+          "[trustedData] evaluateIfContextIsTrusted: starting dual LLM processing",
         );
-        toolResultUpdates[toolCallId] = existingResult.result;
-      } else {
-        // Notify that dual LLM processing is starting (only once)
-        if (!usedDualLlm && onDualLlmStart) {
-          logger.debug(
-            { agentId, toolCallId },
-            "[trustedData] evaluateIfContextIsTrusted: starting dual LLM processing",
-          );
-          onDualLlmStart();
-        }
-
-        // Run Dual LLM quarantine pattern
-        usedDualLlm = true;
-
-        // Extract user request from messages (last user message)
-        const userRequest = extractUserRequest(messages);
-
-        logger.debug(
-          { agentId, toolCallId, provider },
-          "[trustedData] evaluateIfContextIsTrusted: creating dual LLM subagent",
-        );
-        const dualLlmSubagent = await DualLlmSubagent.create(
-          {
-            toolCallId,
-            userRequest,
-            toolResult,
-          },
-          agentId,
-          apiKey,
-          provider,
-        );
-
-        // Get safe summary and store as update
-        logger.debug(
-          { agentId, toolCallId },
-          "[trustedData] evaluateIfContextIsTrusted: processing with dual LLM subagent",
-        );
-        const safeSummary =
-          await dualLlmSubagent.processWithMainAgent(onDualLlmProgress);
-        toolResultUpdates[toolCallId] = safeSummary;
-        logger.debug(
-          { agentId, toolCallId, summaryLength: safeSummary.length },
-          "[trustedData] evaluateIfContextIsTrusted: dual LLM processing complete",
-        );
+        onDualLlmStart();
       }
 
-      // After sanitization, treat as trusted
-      hasUntrustedData = false;
+      usedDualLlm = true;
+
+      const userRequest = extractUserRequest(messages);
+
+      logger.debug(
+        { agentId, toolCallId, organizationId, userId },
+        "[trustedData] evaluateIfContextIsTrusted: creating dual LLM subagent",
+      );
+      const dualLlmSubagent = await DualLlmSubagent.create({
+        dualLlmParams: {
+          toolCallId,
+          userRequest,
+          toolResult,
+        },
+        callingAgentId: agentId,
+        organizationId,
+        userId,
+      });
+
+      logger.debug(
+        { agentId, toolCallId },
+        "[trustedData] evaluateIfContextIsTrusted: processing with dual LLM subagent",
+      );
+      const analysis =
+        await dualLlmSubagent.processWithMainAgent(onDualLlmProgress);
+      dualLlmAnalyses.push(analysis);
+      toolResultUpdates[toolCallId] = analysis.result;
+      logger.debug(
+        { agentId, toolCallId, summaryLength: analysis.result.length },
+        "[trustedData] evaluateIfContextIsTrusted: dual LLM processing complete",
+      );
+      toolResultIsTrusted = true;
+    }
+
+    if (!toolResultIsTrusted) {
+      hasUntrustedData = true;
     }
     // If not blocked or sanitized, no update needed (original content remains)
   }
@@ -241,6 +224,7 @@ export async function evaluateIfContextIsTrusted(
       updateCount: Object.keys(toolResultUpdates).length,
       contextIsTrusted: !hasUntrustedData,
       usedDualLlm,
+      dualLlmAnalysisCount: dualLlmAnalyses.length,
     },
     "[trustedData] evaluateIfContextIsTrusted: evaluation complete",
   );
@@ -249,6 +233,7 @@ export async function evaluateIfContextIsTrusted(
     toolResultUpdates,
     contextIsTrusted: !hasUntrustedData,
     usedDualLlm,
+    dualLlmAnalyses,
   };
 }
 
@@ -257,13 +242,12 @@ export async function evaluateIfContextIsTrusted(
  * Looks for the last user message that contains actual content
  */
 function extractUserRequest(messages: CommonMessage[]): string {
-  // Find the last user message
   for (let i = messages.length - 1; i >= 0; i--) {
-    if (messages[i].role === "user") {
-      // For now, we return a generic request
-      // The adapters can provide more specific extraction if needed
-      return "process this data";
+    const message = messages[i];
+    if (message?.role === "user" && message.content?.trim()) {
+      return message.content.trim();
     }
   }
+
   return "process this data";
 }

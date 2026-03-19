@@ -374,6 +374,13 @@ export function transformExternalCatalogToFormValues(
   // Determine auth method
   let authMethod: "none" | "bearer" | "raw_token" | "oauth" = "none";
 
+  // Detect bearer/raw_token auth from user_config (e.g. GitHub with requires_proxy: true)
+  if (server.user_config?.raw_access_token) {
+    authMethod = "raw_token";
+  } else if (server.user_config?.access_token) {
+    authMethod = "bearer";
+  }
+
   // Rewrite redirect URIs to prefer platform callback
   let oauthConfig: McpCatalogFormValues["oauthConfig"] | undefined;
   if (server.oauth_config && !server.oauth_config.requires_proxy) {

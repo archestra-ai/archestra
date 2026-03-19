@@ -41,6 +41,7 @@ import {
 import {
   type Agent,
   ApiError,
+  type DualLlmAnalysis,
   type LLMProvider,
   type LLMStreamAdapter,
   type ToolCompressionStats,
@@ -87,6 +88,7 @@ export interface LLMProxyContext<TRequest> {
   globalToolPolicy: "permissive" | "restrictive";
   toonStats: ToolCompressionStats;
   toonSkipReason: ToonSkipReason | null;
+  dualLlmAnalyses: DualLlmAnalysis[];
   externalAgentId?: string;
   userId?: string;
   resolvedUser?: { id: string; email: string; name: string } | null;
@@ -401,12 +403,12 @@ export async function handleLLMProxy<
     );
 
     const commonMessages = requestAdapter.getMessages();
-    const { toolResultUpdates, contextIsTrusted } =
+    const { toolResultUpdates, contextIsTrusted, dualLlmAnalyses } =
       await utils.trustedData.evaluateIfContextIsTrusted(
         commonMessages,
         resolvedAgentId,
-        apiKey,
-        providerName,
+        resolvedAgent.organizationId,
+        userId,
         resolvedAgent.considerContextUntrusted,
         globalToolPolicy,
         { teamIds, externalAgentId },
@@ -510,7 +512,6 @@ export async function handleLLMProxy<
     // Create client with observability (each provider handles metrics internally)
     const client = provider.createClient(apiKey, {
       baseUrl: effectiveBaseUrl,
-      mockMode: config.benchmark.mockMode,
       agent: resolvedAgent,
       externalAgentId,
       source,
@@ -548,6 +549,7 @@ export async function handleLLMProxy<
       globalToolPolicy,
       toonStats,
       toonSkipReason,
+      dualLlmAnalyses,
       externalAgentId,
       userId,
       resolvedUser,
@@ -611,6 +613,7 @@ async function handleStreaming<
     globalToolPolicy,
     toonStats,
     toonSkipReason,
+    dualLlmAnalyses,
     externalAgentId,
     userId,
     resolvedUser,
@@ -880,6 +883,7 @@ async function handleStreaming<
             costs,
             toonStats,
             toonSkipReason,
+            dualLlmAnalyses,
           }),
         );
       } catch (interactionError) {
@@ -919,6 +923,7 @@ async function handleNonStreaming<
     globalToolPolicy,
     toonStats,
     toonSkipReason,
+    dualLlmAnalyses,
     externalAgentId,
     userId,
     resolvedUser,
@@ -1080,6 +1085,7 @@ async function handleNonStreaming<
           costs,
           toonStats,
           toonSkipReason,
+          dualLlmAnalyses,
         }),
       );
 
@@ -1141,6 +1147,7 @@ async function handleNonStreaming<
         costs,
         toonStats,
         toonSkipReason,
+        dualLlmAnalyses,
       }),
     );
   } catch (interactionError) {

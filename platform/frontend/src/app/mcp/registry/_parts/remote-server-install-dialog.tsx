@@ -3,18 +3,11 @@
 import type { archestraApiTypes } from "@shared";
 import { AlertTriangle, Info, ShieldCheck, User } from "lucide-react";
 import { lazy, Suspense, useEffect, useState } from "react";
+import { StandardFormDialog } from "@/components/standard-dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogForm,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { LinkifiedText } from "@/components/ui/linkified-text";
@@ -242,237 +235,227 @@ export function RemoteServerInstallDialog({
   const isValid = !hasConfig || (isNonSensitiveValid && isSensitiveValid);
 
   return (
-    <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-[600px]">
-        <DialogHeader>
-          <DialogTitle className="flex items-center justify-between gap-2">
-            <div className="flex items-end gap-2">
-              <User className="h-5 w-5" />
-              <span>
-                {isReauth ? "Re-authenticate" : "Install Server"}
-                <span className="text-muted-foreground ml-2 font-normal">
-                  {catalogItem.name}
-                </span>
+    <StandardFormDialog
+      open={isOpen}
+      onOpenChange={handleClose}
+      title={
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-end gap-2">
+            <User className="h-5 w-5" />
+            <span>
+              {isReauth ? "Re-authenticate" : "Install Server"}
+              <span className="text-muted-foreground ml-2 font-normal">
+                {catalogItem.name}
               </span>
-            </div>
-            {hasOAuth && (
-              <Badge variant="secondary" className="flex items-center gap-1">
-                <ShieldCheck className="h-3 w-3" />
-                OAuth
-              </Badge>
-            )}
-          </DialogTitle>
-        </DialogHeader>
+            </span>
+          </div>
+          {hasOAuth ? (
+            <Badge variant="secondary" className="flex items-center gap-1">
+              <ShieldCheck className="h-3 w-3" />
+              OAuth
+            </Badge>
+          ) : null}
+        </div>
+      }
+      size="medium"
+      bodyClassName="grid gap-6"
+      onSubmit={handleConfirm}
+      footer={
+        canInstall ? (
+          <>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleClose}
+              disabled={isInstalling}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" disabled={!isValid || isInstalling}>
+              {isInstalling
+                ? isReauth
+                  ? "Updating..."
+                  : "Installing..."
+                : isReauth
+                  ? "Update Credentials"
+                  : "Install"}
+            </Button>
+          </>
+        ) : null
+      }
+    >
+      {isReauth && (
+        <Alert className="border-amber-500/50 bg-amber-500/10">
+          <AlertTriangle className="h-4 w-4 text-amber-500" />
+          <AlertDescription>
+            Your existing credentials are expired or invalid. Submitting new
+            credentials here will replace them while preserving your tool
+            assignments.
+          </AlertDescription>
+        </Alert>
+      )}
 
-        <DialogForm onSubmit={handleConfirm}>
-          <div className="grid gap-6 py-4">
-            {isReauth && (
-              <Alert className="border-amber-500/50 bg-amber-500/10">
-                <AlertTriangle className="h-4 w-4 text-amber-500" />
-                <AlertDescription>
-                  Your existing credentials are expired or invalid. Submitting
-                  new credentials here will replace them while preserving your
-                  tool assignments.
-                </AlertDescription>
-              </Alert>
-            )}
+      <SelectMcpServerCredentialTypeAndTeams
+        onTeamChange={setSelectedTeamId}
+        catalogId={catalogItem?.id}
+        onCredentialTypeChange={setCredentialType}
+        onCanInstallChange={setCanInstall}
+        preselectedTeamId={preselectedTeamId}
+        personalOnly={personalOnly}
+      />
 
-            <SelectMcpServerCredentialTypeAndTeams
-              onTeamChange={setSelectedTeamId}
-              catalogId={catalogItem?.id}
-              onCredentialTypeChange={setCredentialType}
-              onCanInstallChange={setCanInstall}
-              preselectedTeamId={preselectedTeamId}
-              personalOnly={personalOnly}
-            />
+      {useVaultSecrets && credentialType === "personal" && (
+        <div className="space-y-2">
+          <Label>Pull Vault secrets from:</Label>
+          <p className="text-xs text-muted-foreground">
+            Only folders associated with your teams are shown.
+          </p>
+          <Select
+            value={vaultTeamId ?? ""}
+            onValueChange={handleVaultTeamChange}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="-- Select Vault folder --" />
+            </SelectTrigger>
+            <SelectContent>
+              {vaultTeams?.map((team) => (
+                <SelectItem key={team.id} value={team.id}>
+                  {team.vaultPath}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
 
-            {useVaultSecrets && credentialType === "personal" && (
-              <div className="space-y-2">
-                <Label>Pull Vault secrets from:</Label>
-                <p className="text-xs text-muted-foreground">
-                  Only folders associated with your teams are shown.
-                </p>
-                <Select
-                  value={vaultTeamId ?? ""}
-                  onValueChange={handleVaultTeamChange}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="-- Select Vault folder --" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {vaultTeams?.map((team) => (
-                      <SelectItem key={team.id} value={team.id}>
-                        {team.vaultPath}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
+      {canInstall && hasOAuth && (
+        <Alert>
+          <Info className="h-4 w-4" />
+          <AlertDescription>
+            This server requires OAuth authentication. You'll be redirected to
+            complete the authentication flow after clicking Install.
+          </AlertDescription>
+        </Alert>
+      )}
 
-            {canInstall && hasOAuth && (
-              <Alert>
-                <Info className="h-4 w-4" />
-                <AlertDescription>
-                  This server requires OAuth authentication. You'll be
-                  redirected to complete the authentication flow after clicking
-                  Install.
-                </AlertDescription>
-              </Alert>
-            )}
-
-            {/* Config fields - always show when config exists */}
-            {canInstall && hasConfig && (
-              <div className="space-y-4">
-                {Object.entries(userConfig).map(([fieldName, fieldConfig]) => (
-                  <div key={fieldName} className="grid gap-2">
-                    {fieldConfig.type === "boolean" ? (
-                      <div className="flex items-center gap-2">
-                        <Checkbox
-                          id={fieldName}
-                          checked={configValues[fieldName] === "true"}
-                          onCheckedChange={(checked) =>
-                            setConfigValues((prev) => ({
-                              ...prev,
-                              [fieldName]: checked ? "true" : "false",
-                            }))
-                          }
-                        />
-                        <Label htmlFor={fieldName} className="cursor-pointer">
-                          {fieldConfig.title}
-                          {fieldConfig.required && (
-                            <span className="text-red-500"> *</span>
-                          )}
-                        </Label>
-                      </div>
-                    ) : (
-                      <Label htmlFor={fieldName}>
-                        {fieldConfig.title}
-                        {fieldConfig.required && (
-                          <span className="text-red-500"> *</span>
-                        )}
-                      </Label>
+      {/* Config fields - always show when config exists */}
+      {canInstall && hasConfig && (
+        <div className="space-y-4">
+          {Object.entries(userConfig).map(([fieldName, fieldConfig]) => (
+            <div key={fieldName} className="grid gap-2">
+              {fieldConfig.type === "boolean" ? (
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id={fieldName}
+                    checked={configValues[fieldName] === "true"}
+                    onCheckedChange={(checked) =>
+                      setConfigValues((prev) => ({
+                        ...prev,
+                        [fieldName]: checked ? "true" : "false",
+                      }))
+                    }
+                  />
+                  <Label htmlFor={fieldName} className="cursor-pointer">
+                    {fieldConfig.title}
+                    {fieldConfig.required && (
+                      <span className="text-red-500"> *</span>
                     )}
-                    {fieldConfig.description && (
-                      <p className="text-xs text-muted-foreground">
-                        <LinkifiedText>{fieldConfig.description}</LinkifiedText>
-                      </p>
-                    )}
-
-                    {/* BYOS mode: vault selector for sensitive fields */}
-                    {fieldConfig.type ===
-                    "boolean" ? null : fieldConfig.sensitive &&
-                      useVaultSecrets ? (
-                      <Suspense
-                        fallback={
-                          <div className="text-sm text-muted-foreground">
-                            Loading...
-                          </div>
-                        }
-                      >
-                        <InlineVaultSecretSelector
-                          teamId={vaultTeamId}
-                          selectedSecretPath={
-                            vaultSecrets[fieldName]?.path ?? null
-                          }
-                          selectedSecretKey={
-                            vaultSecrets[fieldName]?.key ?? null
-                          }
-                          onSecretPathChange={(path) =>
-                            updateVaultSecret(fieldName, "path", path)
-                          }
-                          onSecretKeyChange={(key) =>
-                            updateVaultSecret(fieldName, "key", key)
-                          }
-                          disabled={isInstalling}
-                          noTeamMessage={
-                            credentialType === "personal"
-                              ? "Select a vault folder to pull secrets from"
-                              : undefined
-                          }
-                        />
-                      </Suspense>
-                    ) : (
-                      <Input
-                        id={fieldName}
-                        type={
-                          fieldConfig.sensitive
-                            ? "password"
-                            : fieldConfig.type === "number"
-                              ? "number"
-                              : "text"
-                        }
-                        placeholder={
-                          fieldConfig.default?.toString() ||
-                          fieldConfig.description
-                        }
-                        value={configValues[fieldName] || ""}
-                        onChange={(e) =>
-                          setConfigValues((prev) => ({
-                            ...prev,
-                            [fieldName]: e.target.value,
-                          }))
-                        }
-                        min={fieldConfig.min}
-                        max={fieldConfig.max}
-                      />
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {canInstall && catalogItem.serverUrl && (
-              <div className="rounded-md bg-muted p-4">
-                <h4 className="text-sm font-medium mb-2">Server Details:</h4>
-                <div className="space-y-1">
-                  <p className="text-sm text-muted-foreground">
-                    <span className="font-medium">URL:</span>{" "}
-                    {catalogItem.serverUrl}
-                  </p>
-                  {catalogItem.docsUrl && (
-                    <p className="text-sm text-muted-foreground">
-                      <span className="font-medium">Documentation:</span>{" "}
-                      <a
-                        href={catalogItem.docsUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-primary hover:underline"
-                      >
-                        {catalogItem.docsUrl}
-                      </a>
-                    </p>
-                  )}
+                  </Label>
                 </div>
-              </div>
+              ) : (
+                <Label htmlFor={fieldName}>
+                  {fieldConfig.title}
+                  {fieldConfig.required && (
+                    <span className="text-red-500"> *</span>
+                  )}
+                </Label>
+              )}
+              {fieldConfig.description && (
+                <p className="text-xs text-muted-foreground">
+                  <LinkifiedText>{fieldConfig.description}</LinkifiedText>
+                </p>
+              )}
+
+              {/* BYOS mode: vault selector for sensitive fields */}
+              {fieldConfig.type === "boolean" ? null : fieldConfig.sensitive &&
+                useVaultSecrets ? (
+                <Suspense
+                  fallback={
+                    <div className="text-sm text-muted-foreground">
+                      Loading...
+                    </div>
+                  }
+                >
+                  <InlineVaultSecretSelector
+                    teamId={vaultTeamId}
+                    selectedSecretPath={vaultSecrets[fieldName]?.path ?? null}
+                    selectedSecretKey={vaultSecrets[fieldName]?.key ?? null}
+                    onSecretPathChange={(path) =>
+                      updateVaultSecret(fieldName, "path", path)
+                    }
+                    onSecretKeyChange={(key) =>
+                      updateVaultSecret(fieldName, "key", key)
+                    }
+                    disabled={isInstalling}
+                    noTeamMessage={
+                      credentialType === "personal"
+                        ? "Select a vault folder to pull secrets from"
+                        : undefined
+                    }
+                  />
+                </Suspense>
+              ) : (
+                <Input
+                  id={fieldName}
+                  type={
+                    fieldConfig.sensitive
+                      ? "password"
+                      : fieldConfig.type === "number"
+                        ? "number"
+                        : "text"
+                  }
+                  placeholder={
+                    fieldConfig.default?.toString() || fieldConfig.description
+                  }
+                  value={configValues[fieldName] || ""}
+                  onChange={(e) =>
+                    setConfigValues((prev) => ({
+                      ...prev,
+                      [fieldName]: e.target.value,
+                    }))
+                  }
+                  min={fieldConfig.min}
+                  max={fieldConfig.max}
+                />
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {canInstall && catalogItem.serverUrl && (
+        <div className="rounded-md bg-muted p-4">
+          <h4 className="text-sm font-medium mb-2">Server Details:</h4>
+          <div className="space-y-1">
+            <p className="text-sm text-muted-foreground">
+              <span className="font-medium">URL:</span> {catalogItem.serverUrl}
+            </p>
+            {catalogItem.docsUrl && (
+              <p className="text-sm text-muted-foreground">
+                <span className="font-medium">Documentation:</span>{" "}
+                <a
+                  href={catalogItem.docsUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary hover:underline"
+                >
+                  {catalogItem.docsUrl}
+                </a>
+              </p>
             )}
           </div>
-
-          <DialogFooter>
-            {canInstall && (
-              <Button
-                type="button"
-                variant="outline"
-                onClick={handleClose}
-                disabled={isInstalling}
-              >
-                Cancel
-              </Button>
-            )}
-            {canInstall && (
-              <Button type="submit" disabled={!isValid || isInstalling}>
-                {isInstalling
-                  ? isReauth
-                    ? "Updating..."
-                    : "Installing..."
-                  : isReauth
-                    ? "Update Credentials"
-                    : "Install"}
-              </Button>
-            )}
-          </DialogFooter>
-        </DialogForm>
-      </DialogContent>
-    </Dialog>
+        </div>
+      )}
+    </StandardFormDialog>
   );
 }

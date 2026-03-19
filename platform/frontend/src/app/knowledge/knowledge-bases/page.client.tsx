@@ -24,6 +24,7 @@ import { KnowledgePageLayout } from "@/app/knowledge/_parts/knowledge-page-layou
 import { ConnectorStatusBadge } from "@/app/knowledge/knowledge-bases/_parts/connector-status-badge";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { SearchInput } from "@/components/search-input";
+import { StandardDialog } from "@/components/standard-dialog";
 import {
   type TableRowAction,
   TableRowActions,
@@ -31,15 +32,6 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
-import {
-  Dialog,
-  DialogBody,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogStickyFooter,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import {
   Tooltip,
   TooltipContent,
@@ -522,138 +514,136 @@ function AddConnectorDialog({
 
   return (
     <>
-      <Dialog open={open && step !== "create"} onOpenChange={handleClose}>
-        <DialogContent className="max-w-xl">
-          {step === "choose" && (
+      <StandardDialog
+        open={open && step !== "create"}
+        onOpenChange={handleClose}
+        title={
+          step === "choose" ? (
+            "Add Connector"
+          ) : (
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7"
+                onClick={() => {
+                  setStep("choose");
+                  setSelectedIds(new Set());
+                }}
+              >
+                <ArrowLeft className="h-4 w-4" />
+              </Button>
+              <span>Select Connectors</span>
+            </div>
+          )
+        }
+        description={
+          step === "choose"
+            ? "Reuse an existing connector or create a new one."
+            : "Choose connectors to assign to this knowledge base."
+        }
+        size="small"
+        footer={
+          step === "reuse" ? (
             <>
-              <DialogHeader>
-                <DialogTitle>Add Connector</DialogTitle>
-                <DialogDescription>
-                  Reuse an existing connector or create a new one.
-                </DialogDescription>
-              </DialogHeader>
-              <DialogBody className="pt-4">
-                <div className="grid grid-cols-2 gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setStep("reuse")}
-                    disabled={availableConnectors.length === 0}
-                    className="flex flex-col items-center gap-3 rounded-lg border p-5 text-center transition-colors hover:bg-muted/50 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-muted">
-                      <Link2 className="h-7 w-7 text-muted-foreground" />
-                    </div>
-                    <div>
-                      <div className="font-medium">Reuse Existing</div>
-                      <div className="text-xs text-muted-foreground mt-1">
-                        {availableConnectors.length === 0
-                          ? "No unassigned connectors"
-                          : `${availableConnectors.length} available`}
-                      </div>
-                    </div>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setStep("create")}
-                    className="flex flex-col items-center gap-3 rounded-lg border p-5 text-center transition-colors hover:bg-muted/50 cursor-pointer"
-                  >
-                    <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-muted">
-                      <Plus className="h-7 w-7 text-muted-foreground" />
-                    </div>
-                    <div>
-                      <div className="font-medium">Create New</div>
-                      <div className="text-xs text-muted-foreground mt-1">
-                        Set up a new connector
-                      </div>
-                    </div>
-                  </button>
-                </div>
-              </DialogBody>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setStep("choose");
+                  setSelectedIds(new Set());
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleAssign}
+                disabled={selectedIds.size === 0 || assignMutation.isPending}
+              >
+                {assignMutation.isPending
+                  ? "Assigning..."
+                  : `Assign ${selectedIds.size > 0 ? `(${selectedIds.size})` : ""}`}
+              </Button>
             </>
-          )}
+          ) : null
+        }
+      >
+        {step === "choose" && (
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              type="button"
+              onClick={() => setStep("reuse")}
+              disabled={availableConnectors.length === 0}
+              className="flex flex-col items-center gap-3 rounded-lg border p-5 text-center transition-colors hover:bg-muted/50 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-muted">
+                <Link2 className="h-7 w-7 text-muted-foreground" />
+              </div>
+              <div>
+                <div className="font-medium">Reuse Existing</div>
+                <div className="text-xs text-muted-foreground mt-1">
+                  {availableConnectors.length === 0
+                    ? "No unassigned connectors"
+                    : `${availableConnectors.length} available`}
+                </div>
+              </div>
+            </button>
+            <button
+              type="button"
+              onClick={() => setStep("create")}
+              className="flex flex-col items-center gap-3 rounded-lg border p-5 text-center transition-colors hover:bg-muted/50 cursor-pointer"
+            >
+              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-muted">
+                <Plus className="h-7 w-7 text-muted-foreground" />
+              </div>
+              <div>
+                <div className="font-medium">Create New</div>
+                <div className="text-xs text-muted-foreground mt-1">
+                  Set up a new connector
+                </div>
+              </div>
+            </button>
+          </div>
+        )}
 
-          {step === "reuse" && (
-            <>
-              <DialogHeader>
-                <DialogTitle className="flex items-center gap-2">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7"
-                    onClick={() => {
-                      setStep("choose");
-                      setSelectedIds(new Set());
-                    }}
-                  >
-                    <ArrowLeft className="h-4 w-4" />
-                  </Button>
-                  Select Connectors
-                </DialogTitle>
-                <DialogDescription>
-                  Choose connectors to assign to this knowledge base.
-                </DialogDescription>
-              </DialogHeader>
-              <DialogBody className="pt-4">
-                <div className="grid max-h-[50vh] grid-cols-2 gap-3 overflow-y-auto">
-                  {availableConnectors.map((connector) => {
-                    const isSelected = selectedIds.has(connector.id);
-                    return (
-                      <button
-                        key={connector.id}
-                        type="button"
-                        onClick={() => toggleSelected(connector.id)}
-                        className={cn(
-                          "relative flex items-center gap-3 rounded-lg border p-3 text-left transition-colors cursor-pointer hover:bg-muted/50",
-                          isSelected && "border-primary bg-primary/5",
-                        )}
-                      >
-                        {isSelected && (
-                          <div className="absolute top-2 right-2">
-                            <Check className="h-4 w-4 text-primary" />
-                          </div>
-                        )}
-                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-muted">
-                          <ConnectorTypeIcon
-                            type={connector.connectorType}
-                            className="h-5 w-5"
-                          />
-                        </div>
-                        <div className="min-w-0">
-                          <div className="font-medium text-sm truncate">
-                            {connector.name}
-                          </div>
-                          <div className="text-xs text-muted-foreground capitalize">
-                            {connector.connectorType}
-                          </div>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              </DialogBody>
-              <DialogStickyFooter className="mt-0">
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setStep("choose");
-                    setSelectedIds(new Set());
-                  }}
+        {step === "reuse" && (
+          <div className="grid max-h-[50vh] grid-cols-2 gap-3 overflow-y-auto">
+            {availableConnectors.map((connector) => {
+              const isSelected = selectedIds.has(connector.id);
+              return (
+                <button
+                  key={connector.id}
+                  type="button"
+                  onClick={() => toggleSelected(connector.id)}
+                  className={cn(
+                    "relative flex items-center gap-3 rounded-lg border p-3 text-left transition-colors cursor-pointer hover:bg-muted/50",
+                    isSelected && "border-primary bg-primary/5",
+                  )}
                 >
-                  Cancel
-                </Button>
-                <Button
-                  onClick={handleAssign}
-                  disabled={selectedIds.size === 0 || assignMutation.isPending}
-                >
-                  {assignMutation.isPending
-                    ? "Assigning..."
-                    : `Assign ${selectedIds.size > 0 ? `(${selectedIds.size})` : ""}`}
-                </Button>
-              </DialogStickyFooter>
-            </>
-          )}
-        </DialogContent>
-      </Dialog>
+                  {isSelected && (
+                    <div className="absolute top-2 right-2">
+                      <Check className="h-4 w-4 text-primary" />
+                    </div>
+                  )}
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-muted">
+                    <ConnectorTypeIcon
+                      type={connector.connectorType}
+                      className="h-5 w-5"
+                    />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="font-medium text-sm truncate">
+                      {connector.name}
+                    </div>
+                    <div className="text-xs text-muted-foreground capitalize">
+                      {connector.connectorType}
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </StandardDialog>
 
       <CreateConnectorDialog
         knowledgeBaseId={knowledgeBaseId}

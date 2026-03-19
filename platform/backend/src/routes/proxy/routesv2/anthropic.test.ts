@@ -27,15 +27,22 @@ import {
   validatorCompiler,
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
-import config from "@/config";
+import { vi } from "vitest";
 import { ModelModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
-import { MockAnthropicClient } from "../mock-anthropic-client";
+import { createAnthropicTestClient } from "@/test/llm-provider-stubs";
+import { anthropicAdapterFactory } from "../adapterV2";
 import anthropicProxyRoutesV2 from "./anthropic";
 
 describe("Anthropic V2 cost tracking", () => {
+  beforeEach(() => {
+    vi.spyOn(anthropicAdapterFactory, "createClient").mockImplementation(
+      () => createAnthropicTestClient() as never,
+    );
+  });
+
   afterEach(() => {
-    config.benchmark.mockMode = false;
+    vi.restoreAllMocks();
   });
 
   test("stores cost and baselineCost in interaction", async ({ makeAgent }) => {
@@ -44,7 +51,6 @@ describe("Anthropic V2 cost tracking", () => {
     app.setSerializerCompiler(serializerCompiler);
 
     await app.register(anthropicProxyRoutesV2);
-    config.benchmark.mockMode = true;
 
     await ModelModel.upsert({
       externalId: "anthropic/claude-opus-4-20250514",
@@ -93,9 +99,20 @@ describe("Anthropic V2 cost tracking", () => {
 });
 
 describe("Anthropic V2 streaming mode", () => {
+  let anthropicStubOptions: {
+    includeToolUse?: boolean;
+    interruptAtChunk?: number;
+  };
+
+  beforeEach(() => {
+    anthropicStubOptions = {};
+    vi.spyOn(anthropicAdapterFactory, "createClient").mockImplementation(
+      () => createAnthropicTestClient(anthropicStubOptions) as never,
+    );
+  });
+
   afterEach(() => {
-    config.benchmark.mockMode = false;
-    MockAnthropicClient.resetStreamOptions();
+    vi.restoreAllMocks();
   });
 
   test("streaming mode completes normally and records interaction", async ({
@@ -106,7 +123,6 @@ describe("Anthropic V2 streaming mode", () => {
     app.setSerializerCompiler(serializerCompiler);
 
     await app.register(anthropicProxyRoutesV2);
-    config.benchmark.mockMode = true;
 
     await ModelModel.upsert({
       externalId: "anthropic/claude-opus-4-20250514",
@@ -178,80 +194,85 @@ describe("Anthropic V2 streaming mode", () => {
     app.setValidatorCompiler(validatorCompiler);
     app.setSerializerCompiler(serializerCompiler);
 
-    config.benchmark.mockMode = true;
+    // Configure stub to interrupt at chunk 3.
+    anthropicStubOptions.interruptAtChunk = 3;
 
-    // Configure mock to interrupt at chunk 3 (after message_start, content_block_start, content_block_delta)
-    MockAnthropicClient.setStreamOptions({ interruptAtChunk: 3 });
+    await app.register(anthropicProxyRoutesV2);
 
-    try {
-      await app.register(anthropicProxyRoutesV2);
+    await ModelModel.upsert({
+      externalId: "anthropic/claude-opus-4-20250514",
+      provider: "anthropic",
+      modelId: "claude-opus-4-20250514",
+      inputModalities: null,
+      outputModalities: null,
+      customPricePerMillionInput: "15.00",
+      customPricePerMillionOutput: "75.00",
+      lastSyncedAt: new Date(),
+    });
 
-      await ModelModel.upsert({
-        externalId: "anthropic/claude-opus-4-20250514",
-        provider: "anthropic",
-        modelId: "claude-opus-4-20250514",
-        inputModalities: null,
-        outputModalities: null,
-        customPricePerMillionInput: "15.00",
-        customPricePerMillionOutput: "75.00",
-        lastSyncedAt: new Date(),
-      });
+    const agent = await makeAgent({
+      name: "Test Interrupted Streaming Agent",
+    });
 
-      const agent = await makeAgent({
-        name: "Test Interrupted Streaming Agent",
-      });
+    const { InteractionModel } = await import("@/models");
 
-      const { InteractionModel } = await import("@/models");
+    const initialInteractions =
+      await InteractionModel.getAllInteractionsForProfile(agent.id);
+    const initialCount = initialInteractions.length;
 
-      const initialInteractions =
-        await InteractionModel.getAllInteractionsForProfile(agent.id);
-      const initialCount = initialInteractions.length;
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/anthropic/${agent.id}/v1/messages`,
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer test-key",
+        "user-agent": "test-client",
+        "anthropic-version": "2023-06-01",
+        "x-api-key": "test-anthropic-key",
+      },
+      payload: {
+        model: "claude-opus-4-20250514",
+        messages: [{ role: "user", content: "Hello!" }],
+        max_tokens: 1024,
+        stream: true,
+      },
+    });
 
-      const response = await app.inject({
-        method: "POST",
-        url: `/v1/anthropic/${agent.id}/v1/messages`,
-        headers: {
-          "content-type": "application/json",
-          authorization: "Bearer test-key",
-          "user-agent": "test-client",
-          "anthropic-version": "2023-06-01",
-          "x-api-key": "test-anthropic-key",
-        },
-        payload: {
-          model: "claude-opus-4-20250514",
-          messages: [{ role: "user", content: "Hello!" }],
-          max_tokens: 1024,
-          stream: true,
-        },
-      });
+    expect(response.statusCode).toBe(200);
 
-      expect(response.statusCode).toBe(200);
+    await new Promise((resolve) => setTimeout(resolve, 200));
 
-      await new Promise((resolve) => setTimeout(resolve, 200));
+    const interactions = await InteractionModel.getAllInteractionsForProfile(
+      agent.id,
+    );
+    expect(interactions.length).toBe(initialCount + 1);
 
-      const interactions = await InteractionModel.getAllInteractionsForProfile(
-        agent.id,
-      );
-      expect(interactions.length).toBe(initialCount + 1);
+    const interaction = interactions[interactions.length - 1];
 
-      const interaction = interactions[interactions.length - 1];
-
-      expect(interaction.type).toBe("anthropic:messages");
-      expect(interaction.model).toBe("claude-opus-4-20250514");
-      expect(interaction.inputTokens).toBe(12);
-      expect(interaction.outputTokens).toBe(10); // Usage from message_start event
-      expect(interaction.cost).toBeTruthy();
-      expect(interaction.baselineCost).toBeTruthy();
-    } finally {
-      MockAnthropicClient.resetStreamOptions();
-    }
+    expect(interaction.type).toBe("anthropic:messages");
+    expect(interaction.model).toBe("claude-opus-4-20250514");
+    expect(interaction.inputTokens).toBe(12);
+    expect(interaction.outputTokens).toBe(10); // Usage from message_start event
+    expect(interaction.cost).toBeTruthy();
+    expect(interaction.baselineCost).toBeTruthy();
   });
 });
 
 describe("Anthropic V2 tool call accumulation", () => {
+  let anthropicStubOptions: {
+    includeToolUse?: boolean;
+    interruptAtChunk?: number;
+  };
+
+  beforeEach(() => {
+    anthropicStubOptions = {};
+    vi.spyOn(anthropicAdapterFactory, "createClient").mockImplementation(
+      () => createAnthropicTestClient(anthropicStubOptions) as never,
+    );
+  });
+
   afterEach(() => {
-    config.benchmark.mockMode = false;
-    MockAnthropicClient.resetStreamOptions();
+    vi.restoreAllMocks();
   });
 
   test("accumulates tool call input without [object Object] bug", async ({
@@ -262,61 +283,56 @@ describe("Anthropic V2 tool call accumulation", () => {
     app.setSerializerCompiler(serializerCompiler);
 
     await app.register(anthropicProxyRoutesV2);
-    config.benchmark.mockMode = true;
 
-    MockAnthropicClient.setStreamOptions({ includeToolUse: true });
+    anthropicStubOptions.includeToolUse = true;
 
-    try {
-      await ModelModel.upsert({
-        externalId: "anthropic/claude-opus-4-20250514",
-        provider: "anthropic",
-        modelId: "claude-opus-4-20250514",
-        inputModalities: null,
-        outputModalities: null,
-        customPricePerMillionInput: "15.00",
-        customPricePerMillionOutput: "75.00",
-        lastSyncedAt: new Date(),
-      });
+    await ModelModel.upsert({
+      externalId: "anthropic/claude-opus-4-20250514",
+      provider: "anthropic",
+      modelId: "claude-opus-4-20250514",
+      inputModalities: null,
+      outputModalities: null,
+      customPricePerMillionInput: "15.00",
+      customPricePerMillionOutput: "75.00",
+      lastSyncedAt: new Date(),
+    });
 
-      const agent = await makeAgent({ name: "Test Tool Call Agent" });
+    const agent = await makeAgent({ name: "Test Tool Call Agent" });
 
-      const response = await app.inject({
-        method: "POST",
-        url: `/v1/anthropic/${agent.id}/v1/messages`,
-        headers: {
-          "content-type": "application/json",
-          authorization: "Bearer test-key",
-          "user-agent": "test-client",
-          "anthropic-version": "2023-06-01",
-          "x-api-key": "test-anthropic-key",
-        },
-        payload: {
-          model: "claude-opus-4-20250514",
-          messages: [{ role: "user", content: "What's the weather?" }],
-          max_tokens: 1024,
-          stream: true,
-        },
-      });
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/anthropic/${agent.id}/v1/messages`,
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer test-key",
+        "user-agent": "test-client",
+        "anthropic-version": "2023-06-01",
+        "x-api-key": "test-anthropic-key",
+      },
+      payload: {
+        model: "claude-opus-4-20250514",
+        messages: [{ role: "user", content: "What's the weather?" }],
+        max_tokens: 1024,
+        stream: true,
+      },
+    });
 
-      expect(response.statusCode).toBe(200);
+    expect(response.statusCode).toBe(200);
 
-      const body = response.body;
+    const body = response.body;
 
-      // Verify stream contains tool_use events
-      expect(body).toContain("event: content_block_start");
-      expect(body).toContain('"type":"tool_use"');
-      expect(body).toContain('"name":"get_weather"');
+    // Verify stream contains tool_use events
+    expect(body).toContain("event: content_block_start");
+    expect(body).toContain('"type":"tool_use"');
+    expect(body).toContain('"name":"get_weather"');
 
-      // Verify tool input is properly accumulated without [object Object]
-      expect(body).not.toContain("[object Object]");
+    // Verify tool input is properly accumulated without [object Object]
+    expect(body).not.toContain("[object Object]");
 
-      // Verify the tool input contains valid JSON parts
-      expect(body).toContain("location");
-      expect(body).toContain("San Francisco");
-      expect(body).toContain("fahrenheit");
-    } finally {
-      MockAnthropicClient.resetStreamOptions();
-    }
+    // Verify the tool input contains valid JSON parts
+    expect(body).toContain("location");
+    expect(body).toContain("San Francisco");
+    expect(body).toContain("fahrenheit");
   });
 });
 

@@ -1,4 +1,8 @@
 {{- if .Values.archestra.worker.enabled }}
+{{- $workerPodAnnotations := mergeOverwrite (dict) (.Values.archestra.podAnnotations | default dict) (.Values.archestra.worker.podAnnotations | default dict) }}
+{{- if hasKey $workerPodAnnotations "prometheus.io/scrape" }}
+{{- $workerPodAnnotations = mergeOverwrite $workerPodAnnotations (dict "prometheus.io/port" "9000" "prometheus.io/path" "/metrics") }}
+{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -19,9 +23,9 @@ spec:
     metadata:
       labels:
         {{- include "archestra-platform.workerLabels" . | nindent 8 }}
-      {{- with (.Values.archestra.worker.podAnnotations | default .Values.archestra.podAnnotations) }}
+      {{- if $workerPodAnnotations }}
       annotations:
-        {{- toYaml . | nindent 8 }}
+        {{- toYaml $workerPodAnnotations | nindent 8 }}
       {{- end }}
     spec:
       serviceAccountName: {{ include "archestra-platform.serviceAccountName" . }}

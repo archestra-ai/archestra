@@ -20,9 +20,11 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { CodeText } from "@/components/code-text";
+import {
+  CodeBlock,
+  CodeBlockCopyButton,
+} from "@/components/ai-elements/code-block";
 import { ConnectionBaseUrlSelect } from "@/components/connection-base-url-select";
-import { CopyableCode } from "@/components/copyable-code";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
@@ -612,12 +614,19 @@ export function McpConnectionInstructions({
             <p className="text-sm text-muted-foreground">
               Configuration for MCP clients:
             </p>
-            <div className="bg-muted rounded-md p-3 relative">
-              <div className="flex justify-end gap-2">
+            <CodeBlock
+              code={mcpConfig}
+              language="json"
+              contentStyle={{
+                fontSize: "0.75rem",
+                paddingRight: "5rem",
+              }}
+            >
+              <div className="flex gap-1 rounded-md border bg-background/95 p-1 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/80">
                 <Button
                   variant="ghost"
-                  size="sm"
-                  className="gap-2 bg-transparent"
+                  size="icon"
+                  title={showExposedToken ? "Hide token" : "Expose token"}
                   onClick={handleExposeToken}
                   disabled={
                     isLoadingToken ||
@@ -627,26 +636,20 @@ export function McpConnectionInstructions({
                   }
                 >
                   {isLoadingToken ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      <span>Loading...</span>
-                    </>
+                    <Loader2 className="h-4 w-4 animate-spin" />
                   ) : showExposedToken ? (
-                    <>
-                      <EyeOff className="h-4 w-4" />
-                      <span>Hide token</span>
-                    </>
+                    <EyeOff className="h-4 w-4" />
                   ) : (
-                    <>
-                      <Eye className="h-4 w-4" />
-                      <span>Expose token</span>
-                    </>
+                    <Eye className="h-4 w-4" />
                   )}
+                  <span className="sr-only">
+                    {showExposedToken ? "Hide token" : "Expose token"}
+                  </span>
                 </Button>
                 <Button
                   variant="ghost"
-                  size="sm"
-                  className="gap-2 bg-transparent"
+                  size="icon"
+                  title="Copy with exposed token"
                   onClick={
                     isPersonalTokenSelected ||
                     hasAdminPermission ||
@@ -657,29 +660,16 @@ export function McpConnectionInstructions({
                   disabled={isCopyingConfig}
                 >
                   {isCopyingConfig ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      <span>Copying...</span>
-                    </>
+                    <Loader2 className="h-4 w-4 animate-spin" />
                   ) : copiedConfig ? (
-                    <>
-                      <Check className="h-4 w-4 text-green-500" />
-                      <span>Copied!</span>
-                    </>
+                    <Check className="h-4 w-4 text-green-500" />
                   ) : (
-                    <>
-                      <Copy className="h-4 w-4" />
-                      <span>Copy with exposed token</span>
-                    </>
+                    <Copy className="h-4 w-4" />
                   )}
+                  <span className="sr-only">Copy with exposed token</span>
                 </Button>
               </div>
-              <pre className="text-xs whitespace-pre-wrap break-all">
-                <CodeText className="text-sm whitespace pre-wrap break-all">
-                  {mcpConfig}
-                </CodeText>
-              </pre>
-            </div>
+            </CodeBlock>
           </div>
         </TabsContent>
 
@@ -721,13 +711,20 @@ function OAuthConfigBlock({ mcpUrl }: { mcpUrl: string }) {
       <p className="text-sm text-muted-foreground">
         Configuration for MCP clients:
       </p>
-      <CopyableCode value={oauthConfig} toastMessage="Configuration copied">
-        <pre className="text-xs whitespace-pre-wrap break-all">
-          <CodeText className="text-sm whitespace pre-wrap break-all">
-            {oauthConfig}
-          </CodeText>
-        </pre>
-      </CopyableCode>
+      <CodeBlock
+        code={oauthConfig}
+        language="json"
+        contentStyle={{
+          fontSize: "0.75rem",
+          paddingRight: "3.5rem",
+        }}
+      >
+        <CodeBlockCopyButton
+          title="Copy configuration"
+          onCopy={() => toast.success("Configuration copied")}
+          onError={() => toast.error("Failed to copy configuration")}
+        />
+      </CodeBlock>
     </div>
   );
 }

@@ -1,14 +1,5 @@
 import type { archestraApiTypes } from "@shared";
-import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogForm,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { useDeleteInternalMcpCatalogItem } from "@/lib/internal-mcp-catalog.query";
 
 interface DeleteCatalogDialogProps {
@@ -38,43 +29,30 @@ export function DeleteCatalogDialog({
   );
 
   return (
-    <Dialog open={!!item} onOpenChange={onClose}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle>Delete Catalog Item</DialogTitle>
-          <DialogDescription>
-            {item &&
-              (() => {
-                return installationCount > 0 ? (
-                  <span className="space-y-3 block">
-                    <ConfirmationContent name={item.name} />
-                    <span className="text-sm block">
-                      There are currently <strong>{installationCount}</strong>{" "}
-                      installation(s) of this server. Deleting this catalog
-                      entry will also uninstall all associated servers.
-                    </span>
-                  </span>
-                ) : (
-                  <ConfirmationContent name={item.name} />
-                );
-              })()}
-          </DialogDescription>
-        </DialogHeader>
-        <DialogForm onSubmit={handleConfirm}>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={onClose}>
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              variant="destructive"
-              disabled={deleteMutation.isPending}
-            >
-              {deleteMutation.isPending ? "Deleting..." : "Delete"}
-            </Button>
-          </DialogFooter>
-        </DialogForm>
-      </DialogContent>
-    </Dialog>
+    <DeleteConfirmDialog
+      open={!!item}
+      onOpenChange={() => onClose()}
+      title="Delete Catalog Item"
+      description={
+        item ? (
+          installationCount > 0 ? (
+            <span className="block space-y-3">
+              <ConfirmationContent name={item.name} />
+              <span className="block text-sm">
+                There are currently <strong>{installationCount}</strong>{" "}
+                installation(s) of this server. Deleting this catalog entry will
+                also uninstall all associated servers.
+              </span>
+            </span>
+          ) : (
+            <ConfirmationContent name={item.name} />
+          )
+        ) : (
+          ""
+        )
+      }
+      isPending={deleteMutation.isPending}
+      onConfirm={handleConfirm}
+    />
   );
 }

@@ -6,6 +6,16 @@ import type * as React from "react";
 
 import { cn } from "@/lib/utils";
 
+/**
+ * Low-level dialog primitives.
+ *
+ * Prefer the shared wrappers for normal product dialogs:
+ * - `StandardDialog`
+ * - `StandardFormDialog`
+ * - `DeleteConfirmDialog`
+ *
+ * Use these primitives directly only for intentionally custom layouts.
+ */
 function Dialog({
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Root>) {
@@ -46,6 +56,13 @@ function DialogOverlay({
   );
 }
 
+/**
+ * Low-level dialog content shell for custom modal layouts.
+ *
+ * If your dialog fits the standard product shell, prefer `StandardDialog`,
+ * `StandardFormDialog`, or `DeleteConfirmDialog` instead of assembling the
+ * primitives manually.
+ */
 function DialogContent({
   className,
   children,
@@ -156,11 +173,14 @@ function DialogStickyFooter({
 }
 
 /**
- * A form wrapper for dialog content that enables Enter key submission.
+ * A low-level form wrapper for dialog content that enables Enter key submission.
  *
  * Wrap your dialog body and footer inside `<DialogForm onSubmit={handler}>` to
  * allow pressing Enter to trigger the primary action. The primary action button
  * should use `type="submit"` and cancel/secondary buttons should use `type="button"`.
+ *
+ * Prefer `StandardFormDialog` for standard product dialogs so consumers do not
+ * need to assemble header/body/footer pieces by hand.
  *
  * @example
  * ```tsx

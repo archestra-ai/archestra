@@ -11,8 +11,9 @@ import type {
 
 export type Interaction =
   archestraApiTypes.GetInteractionsResponses["200"]["data"][number];
-export type DualLlmResult =
-  archestraApiTypes.GetDualLlmResultsByInteractionResponses["200"][number];
+export type DualLlmAnalysis = NonNullable<
+  Interaction["dualLlmAnalyses"]
+>[number];
 
 export interface RefusalInfo {
   toolName?: string;
@@ -50,7 +51,7 @@ export interface InteractionUtils {
   getLastUserMessage(): string;
   getLastAssistantResponse(): string;
 
-  mapToUiMessages(dualLlmResults?: DualLlmResult[]): PartialUIMessage[];
+  mapToUiMessages(dualLlmAnalyses?: DualLlmAnalysis[]): PartialUIMessage[];
 }
 
 export function parseRefusalMessage(refusal: string): RefusalInfo {

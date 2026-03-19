@@ -14,6 +14,7 @@ import {
   varchar,
 } from "drizzle-orm/pg-core";
 import type {
+  DualLlmAnalysis,
   InteractionRequest,
   InteractionResponse,
   ToonSkipReason,
@@ -71,6 +72,7 @@ const interactionsTable = pgTable(
     request: jsonb("request").$type<InteractionRequest>().notNull(),
     processedRequest: jsonb("processed_request").$type<InteractionRequest>(),
     response: jsonb("response").$type<InteractionResponse>().notNull(),
+    dualLlmAnalyses: jsonb("dual_llm_analyses").$type<DualLlmAnalysis[]>(),
     type: varchar("type").$type<SupportedProviderDiscriminator>().notNull(),
     model: varchar("model"),
     /**

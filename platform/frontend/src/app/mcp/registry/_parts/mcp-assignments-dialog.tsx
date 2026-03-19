@@ -5,6 +5,7 @@ import { Bot, Loader2, Pencil, X } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ToolChecklist } from "@/components/agent-tools-editor";
+import { StandardDialog } from "@/components/standard-dialog";
 import {
   DYNAMIC_CREDENTIAL_VALUE,
   TokenSelect,
@@ -14,13 +15,6 @@ import {
   type AssignmentComboboxItem,
 } from "@/components/ui/assignment-combobox";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import {
   Popover,
@@ -398,124 +392,118 @@ export function McpAssignmentsDialog({
   );
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
-        <DialogHeader>
-          <DialogTitle>{serverName} - Assignments</DialogTitle>
-          <DialogDescription>
-            Manage which agents and MCP gateways have access to tools from this
-            MCP server
-          </DialogDescription>
-        </DialogHeader>
-
-        {isLoading ? (
-          <div className="flex items-center justify-center py-8 gap-2 text-muted-foreground">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            <span>Loading...</span>
+    <StandardDialog
+      open={open}
+      onOpenChange={handleOpenChange}
+      title={`${serverName} - Assignments`}
+      description="Manage which agents and MCP gateways have access to tools from this MCP server"
+      size="medium"
+      className="max-h-[80vh]"
+      bodyClassName="space-y-4"
+      footer={
+        <Button
+          onClick={handleSaveAll}
+          disabled={!hasAnyChanges || isSaving}
+          className="w-full sm:w-auto"
+        >
+          {isSaving ? "Saving..." : "Save"}
+        </Button>
+      }
+    >
+      {isLoading ? (
+        <div className="flex items-center justify-center gap-2 py-8 text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          <span>Loading...</span>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {/* MCP Gateways Section */}
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">MCP Gateways</Label>
+            {mcpProfiles.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No MCP gateways available.
+              </p>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {selectedMcpProfiles.map((profile) => {
+                  const assignment = assignmentsByProfile.get(profile.id);
+                  const pending = pendingChanges.get(profile.id);
+                  return (
+                    <ProfileAssignmentPill
+                      key={profile.id}
+                      profile={profile}
+                      assignedTools={assignment?.tools ?? []}
+                      allTools={allTools}
+                      catalogId={catalogId}
+                      isBuiltin={isBuiltin}
+                      currentCredentialId={assignment?.credentialId ?? null}
+                      pendingChanges={pending}
+                      onPendingChanges={updatePendingChanges}
+                      onRemove={handleProfileToggle}
+                    />
+                  );
+                })}
+                <AssignmentCombobox
+                  items={mcpCombobox.items}
+                  selectedIds={mcpCombobox.selectedIds}
+                  onToggle={handleProfileToggle}
+                  placeholder="Search MCP gateways..."
+                  emptyMessage="No MCP gateways found."
+                  createAction={{
+                    label: "Create New MCP Gateway",
+                    href: "/mcp/gateways?create=true",
+                  }}
+                />
+              </div>
+            )}
           </div>
-        ) : (
-          <>
-            <div className="flex-1 overflow-y-auto space-y-4">
-              {/* MCP Gateways Section */}
-              <div className="space-y-2">
-                <Label className="text-sm font-medium">MCP Gateways</Label>
-                {mcpProfiles.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">
-                    No MCP gateways available.
-                  </p>
-                ) : (
-                  <div className="flex flex-wrap gap-2">
-                    {selectedMcpProfiles.map((profile) => {
-                      const assignment = assignmentsByProfile.get(profile.id);
-                      const pending = pendingChanges.get(profile.id);
-                      return (
-                        <ProfileAssignmentPill
-                          key={profile.id}
-                          profile={profile}
-                          assignedTools={assignment?.tools ?? []}
-                          allTools={allTools}
-                          catalogId={catalogId}
-                          isBuiltin={isBuiltin}
-                          currentCredentialId={assignment?.credentialId ?? null}
-                          pendingChanges={pending}
-                          onPendingChanges={updatePendingChanges}
-                          onRemove={handleProfileToggle}
-                        />
-                      );
-                    })}
-                    <AssignmentCombobox
-                      items={mcpCombobox.items}
-                      selectedIds={mcpCombobox.selectedIds}
-                      onToggle={handleProfileToggle}
-                      placeholder="Search MCP gateways..."
-                      emptyMessage="No MCP gateways found."
-                      createAction={{
-                        label: "Create New MCP Gateway",
-                        href: "/mcp/gateways?create=true",
-                      }}
-                    />
-                  </div>
-                )}
-              </div>
 
-              {/* Agents Section */}
-              <div className="space-y-2">
-                <Label className="text-sm font-medium">Agents</Label>
-                {agents.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">
-                    No agents available.
-                  </p>
-                ) : (
-                  <div className="flex flex-wrap gap-2">
-                    {selectedAgents.map((agent) => {
-                      const assignment = assignmentsByProfile.get(agent.id);
-                      const pending = pendingChanges.get(agent.id);
-                      return (
-                        <ProfileAssignmentPill
-                          key={agent.id}
-                          profile={agent}
-                          assignedTools={assignment?.tools ?? []}
-                          allTools={allTools}
-                          catalogId={catalogId}
-                          isBuiltin={isBuiltin}
-                          currentCredentialId={assignment?.credentialId ?? null}
-                          pendingChanges={pending}
-                          onPendingChanges={updatePendingChanges}
-                          onRemove={handleProfileToggle}
-                          showStatusDot
-                        />
-                      );
-                    })}
-                    <AssignmentCombobox
-                      items={agentCombobox.items}
-                      selectedIds={agentCombobox.selectedIds}
-                      onToggle={handleProfileToggle}
-                      placeholder="Search agents..."
-                      emptyMessage="No agents found."
-                      createAction={{
-                        label: "Create New Agent",
-                        href: "/agents?create=true",
-                      }}
+          {/* Agents Section */}
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">Agents</Label>
+            {agents.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No agents available.
+              </p>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {selectedAgents.map((agent) => {
+                  const assignment = assignmentsByProfile.get(agent.id);
+                  const pending = pendingChanges.get(agent.id);
+                  return (
+                    <ProfileAssignmentPill
+                      key={agent.id}
+                      profile={agent}
+                      assignedTools={assignment?.tools ?? []}
+                      allTools={allTools}
+                      catalogId={catalogId}
+                      isBuiltin={isBuiltin}
+                      currentCredentialId={assignment?.credentialId ?? null}
+                      pendingChanges={pending}
+                      onPendingChanges={updatePendingChanges}
+                      onRemove={handleProfileToggle}
+                      showStatusDot
                     />
-                  </div>
-                )}
+                  );
+                })}
+                <AssignmentCombobox
+                  items={agentCombobox.items}
+                  selectedIds={agentCombobox.selectedIds}
+                  onToggle={handleProfileToggle}
+                  placeholder="Search agents..."
+                  emptyMessage="No agents found."
+                  createAction={{
+                    label: "Create New Agent",
+                    href: "/agents?create=true",
+                  }}
+                />
               </div>
-            </div>
-
-            {/* Sticky Save Button */}
-            <div className="pt-4 border-t mt-4">
-              <Button
-                onClick={handleSaveAll}
-                disabled={!hasAnyChanges || isSaving}
-                className="w-full"
-              >
-                {isSaving ? "Saving..." : "Save"}
-              </Button>
-            </div>
-          </>
-        )}
-      </DialogContent>
-    </Dialog>
+            )}
+          </div>
+        </div>
+      )}
+    </StandardDialog>
   );
 }
 

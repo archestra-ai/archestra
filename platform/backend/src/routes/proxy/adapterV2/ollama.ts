@@ -32,12 +32,12 @@ import type {
   ToolCompressionStats,
   UsageView,
 } from "@/types";
+import { extractCommonMessageText } from "@/types";
 import { estimateMessagesSize } from "@/utils/message-size";
 import {
   estimateToolResultContentLength,
   previewToolResultContent,
 } from "@/utils/tool-result-preview";
-import { MockOpenAIClient } from "../mock-openai-client";
 import {
   doesModelSupportImages,
   hasImageContent,
@@ -431,6 +431,7 @@ class OllamaRequestAdapter
     for (const message of messages) {
       const commonMessage: CommonMessage = {
         role: message.role as CommonMessage["role"],
+        content: extractCommonMessageText(message),
       };
 
       // Handle tool messages (tool results)
@@ -1148,10 +1149,6 @@ export const ollamaAdapterFactory: LLMProvider<
     apiKey: string | undefined,
     options: CreateClientOptions,
   ): OpenAIProvider {
-    if (options.mockMode) {
-      return new MockOpenAIClient() as unknown as OpenAIProvider;
-    }
-
     // Use observable fetch for request duration metrics if agent is provided
     const customFetch = options.agent
       ? metrics.llm.getObservableFetch(

@@ -15,12 +15,18 @@ vi.mock("react-syntax-highlighter", () => ({
     children,
     customStyle,
     codeTagProps,
+    wrapLongLines,
   }: {
     children: string;
     customStyle?: React.CSSProperties;
     codeTagProps?: React.HTMLAttributes<HTMLElement>;
+    wrapLongLines?: boolean;
   }) => (
-    <pre data-testid="syntax-highlighter" style={customStyle}>
+    <pre
+      data-testid="syntax-highlighter"
+      data-wrap-long-lines={wrapLongLines ? "true" : "false"}
+      style={customStyle}
+    >
       <code {...codeTagProps}>{children}</code>
     </pre>
   ),
@@ -60,6 +66,10 @@ describe("JsonCodeBlock", () => {
     expect(screen.getByTestId("syntax-highlighter")).not.toHaveStyle({
       paddingTop: "2.75rem",
     });
+    expect(screen.getByTestId("syntax-highlighter")).toHaveAttribute(
+      "data-wrap-long-lines",
+      "true",
+    );
   });
 
   it("copies the formatted JSON", async () => {

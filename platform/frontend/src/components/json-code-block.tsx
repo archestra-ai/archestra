@@ -23,7 +23,8 @@ export function JsonCodeBlock({
         className="rounded-lg"
         code={formattedJson}
         language="json"
-        contentClassName={maxHeightClassName}
+        wrapLongLines
+        contentClassName={`${maxHeightClassName} overflow-x-hidden`}
         contentStyle={{
           fontSize: "0.75rem",
           paddingRight: "3.5rem",

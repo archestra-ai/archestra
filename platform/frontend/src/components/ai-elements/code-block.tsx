@@ -29,6 +29,7 @@ export type CodeBlockProps = HTMLAttributes<HTMLDivElement> & {
   code: string;
   language: string;
   showLineNumbers?: boolean;
+  wrapLongLines?: boolean;
   contentStyle?: CSSProperties;
   contentClassName?: string;
   children?: ReactNode;
@@ -38,6 +39,7 @@ export const CodeBlock = ({
   code,
   language,
   showLineNumbers = false,
+  wrapLongLines = false,
   contentStyle,
   contentClassName,
   className,
@@ -78,6 +80,7 @@ export const CodeBlock = ({
             }}
             showLineNumbers={showLineNumbers}
             style={isDark ? oneDark : oneLight}
+            wrapLongLines={wrapLongLines}
           >
             {code}
           </SyntaxHighlighter>

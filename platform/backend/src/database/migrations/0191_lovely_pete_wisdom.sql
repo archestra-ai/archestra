@@ -2,6 +2,16 @@ DROP TABLE "dual_llm_config" CASCADE;--> statement-breakpoint
 DROP TABLE "dual_llm_results" CASCADE;--> statement-breakpoint
 ALTER TABLE "interactions" ADD COLUMN "dual_llm_analyses" jsonb;--> statement-breakpoint
 
+-- Remove stale dual LLM RBAC resources from custom role JSON.
+-- These resources no longer exist and will fail permission schema validation.
+UPDATE "organization_role"
+SET "permission" = ("permission"::jsonb - 'dualLlmConfig')::text
+WHERE "permission"::text LIKE '%"dualLlmConfig":%';--> statement-breakpoint
+
+UPDATE "organization_role"
+SET "permission" = ("permission"::jsonb - 'dualLlmResult')::text
+WHERE "permission"::text LIKE '%"dualLlmResult":%';--> statement-breakpoint
+
 INSERT INTO agents (
   id,
   organization_id,

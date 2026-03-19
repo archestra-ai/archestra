@@ -474,19 +474,71 @@ You can generate an API key from the [xAI Console](https://console.x.ai/).
 ### Bedrock Connection Details
 
 - **Base URL**: `http://localhost:9000/v1/bedrock/{profile-id}`
-- **Authentication**: Pass your [Amazon Bedrock API key](https://docs.aws.amazon.com/bedrock/latest/userguide/api-keys.html) in the `Authorization` header as `Bearer <your-api-key>`
+- **Authentication**: Bearer API key or AWS IAM (see below)
+
+### Authentication Methods
+
+Bedrock supports two authentication methods:
+
+**API Key** (default) — Pass your [Bedrock API key](https://docs.aws.amazon.com/bedrock/latest/userguide/api-keys.html) via the UI or `ARCHESTRA_CHAT_BEDROCK_API_KEY` env var.
+
+**AWS IAM** — Use the AWS credential chain (IRSA, instance profiles, environment variables) instead of API keys. When enabled, Archestra authenticates to Bedrock using SigV4 signing. No API key is needed — Bedrock appears as a system-configured provider automatically.
+
+### IAM Authentication Setup (IRSA)
+
+To use IAM authentication on EKS with [IRSA](https://docs.aws.amazon.com/eks/latest/userguide/iam-roles-for-service-accounts.html):
+
+1. Create an IAM role with `AmazonBedrockFullAccess` (or a scoped policy)
+2. Create an [OIDC provider](https://docs.aws.amazon.com/eks/latest/userguide/enable-iam-roles-for-service-accounts.html) for your EKS cluster
+3. Configure the IAM role's trust policy to allow the Archestra service account:
+   ```json
+   {
+     "Effect": "Allow",
+     "Principal": {
+       "Federated": "arn:aws:iam::<ACCOUNT_ID>:oidc-provider/oidc.eks.<REGION>.amazonaws.com/id/<OIDC_ID>"
+     },
+     "Action": "sts:AssumeRoleWithWebIdentity",
+     "Condition": {
+       "StringEquals": {
+         "oidc.eks.<REGION>.amazonaws.com/id/<OIDC_ID>:sub": "system:serviceaccount:archestra:archestra-platform"
+       }
+     }
+   }
+   ```
+4. Annotate the Archestra service account:
+   ```bash
+   kubectl annotate sa archestra-platform -n archestra \
+     eks.amazonaws.com/role-arn=arn:aws:iam::<ACCOUNT_ID>:role/<ROLE_NAME>
+   ```
+5. Set the environment variables below and restart the deployment
 
 ### Environment Variables
 
-| Variable                                     | Required | Description                                                                                     |
-| -------------------------------------------- | -------- | ----------------------------------------------------------------------------------------------- |
-| `ARCHESTRA_BEDROCK_BASE_URL`                 | Yes      | Bedrock runtime endpoint URL (e.g., `https://bedrock-runtime.us-east-1.amazonaws.com`)          |
-| `ARCHESTRA_BEDROCK_INFERENCE_PROFILE_PREFIX` | No       | Region prefix for cross-region inference profiles (e.g., `us` or `eu`)                          |
-| `ARCHESTRA_CHAT_BEDROCK_API_KEY`             | No       | Default API key for Bedrock (can be overridden per conversation/team/org)                       |
+#### Common (both auth methods)
+
+| Variable                                     | Required | Description                                                                          |
+| -------------------------------------------- | -------- | ------------------------------------------------------------------------------------ |
+| `ARCHESTRA_BEDROCK_BASE_URL`                 | Yes      | Bedrock runtime endpoint URL (e.g., `https://bedrock-runtime.us-east-1.amazonaws.com`) |
+| `ARCHESTRA_BEDROCK_INFERENCE_PROFILE_PREFIX` | No       | Region prefix for cross-region inference (e.g., `us` or `eu`). Required for Claude models |
+
+#### API Key auth
+
+| Variable                         | Required | Description                                                        |
+| -------------------------------- | -------- | ------------------------------------------------------------------ |
+| `ARCHESTRA_CHAT_BEDROCK_API_KEY` | No       | Default API key for Bedrock (can be overridden per team/org in UI) |
+
+#### IAM auth (IRSA / instance profiles)
+
+| Variable                             | Required | Description                                                              |
+| ------------------------------------ | -------- | ------------------------------------------------------------------------ |
+| `ARCHESTRA_BEDROCK_IAM_AUTH_ENABLED` | Yes      | Set to `true` to enable IAM authentication                               |
+| `ARCHESTRA_BEDROCK_REGION`           | No       | Explicit AWS region. Falls back to extracting from base URL               |
+
+When IAM auth is enabled, Archestra uses the [AWS credential chain](https://docs.aws.amazon.com/sdkref/latest/guide/standardized-credentials.html) — IRSA on EKS, EC2 instance profiles, or `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` env vars. No API key is needed.
 
 #### `ARCHESTRA_BEDROCK_BASE_URL`
 
-This variable is **required** to enable the Bedrock provider. It specifies the regional endpoint for the Bedrock Runtime API. The URL format follows AWS regional endpoints:
+**Required** to enable the Bedrock provider. The URL format follows AWS regional endpoints:
 
 ```
 https://bedrock-runtime.{region}.amazonaws.com
@@ -494,6 +546,4 @@ https://bedrock-runtime.{region}.amazonaws.com
 
 #### `ARCHESTRA_BEDROCK_INFERENCE_PROFILE_PREFIX`
 
-Some Bedrock models, such as Anthropic's Claude, require [cross-region inference profiles](https://docs.aws.amazon.com/bedrock/latest/userguide/cross-region-inference.html). Set this variable to enable those models. If not set, only models with on-demand inference support will be available.
-
-For more details, see [how inference works in Amazon Bedrock](https://docs.aws.amazon.com/bedrock/latest/userguide/inference-how.html).
+Claude and other models on Bedrock require [cross-region inference profiles](https://docs.aws.amazon.com/bedrock/latest/userguide/cross-region-inference.html). Set this to `us` or `eu` to enable them. Without it, only on-demand models are available.

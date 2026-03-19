@@ -2,13 +2,11 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import {
+  type ArchestraToolShortName,
   DEFAULT_ARCHESTRA_TOOL_NAMES,
   getArchestraToolShortName,
 } from "@shared";
-import {
-  type ArchestraToolShortName,
-  getArchestraMcpTools,
-} from "@/archestra-mcp-server";
+import { getArchestraMcpTools } from "@/archestra-mcp-server";
 import { toolShortNames as knowledgeManagementToolShortNames } from "@/archestra-mcp-server/knowledge-management";
 import { TOOL_PERMISSIONS } from "@/archestra-mcp-server/rbac";
 import logger from "@/logging";

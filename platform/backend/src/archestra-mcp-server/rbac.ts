@@ -1,8 +1,7 @@
-import type { Permission } from "@shared";
+import type { ArchestraToolShortName, Permission } from "@shared";
 import { getArchestraToolShortName } from "@shared";
 import { userHasPermission } from "@/auth/utils";
 import { UserModel } from "@/models";
-import type { ArchestraToolShortName } from ".";
 import { errorResult } from "./helpers";
 import type { ArchestraContext } from "./types";
 

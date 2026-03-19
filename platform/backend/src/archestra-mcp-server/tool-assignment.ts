@@ -1,4 +1,8 @@
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import {
+  TOOL_BULK_ASSIGN_TOOLS_TO_AGENTS_SHORT_NAME,
+  TOOL_BULK_ASSIGN_TOOLS_TO_MCP_GATEWAYS_SHORT_NAME,
+} from "@shared";
 import { z } from "zod";
 import {
   getAgentTypePermissionChecker,
@@ -113,7 +117,7 @@ const BulkAssignMcpGatewaysOutputSchema = z.object({
 
 const registry = defineArchestraTools([
   defineArchestraTool({
-    shortName: "bulk_assign_tools_to_agents",
+    shortName: TOOL_BULK_ASSIGN_TOOLS_TO_AGENTS_SHORT_NAME,
     title: "Bulk Assign Tools to Agents",
     description:
       "Assign multiple tools to multiple agents in bulk with validation and error handling",
@@ -134,7 +138,7 @@ const registry = defineArchestraTools([
     },
   }),
   defineArchestraTool({
-    shortName: "bulk_assign_tools_to_mcp_gateways",
+    shortName: TOOL_BULK_ASSIGN_TOOLS_TO_MCP_GATEWAYS_SHORT_NAME,
     title: "Bulk Assign Tools to MCP Gateways",
     description:
       "Assign multiple tools to multiple MCP gateways in bulk with validation and error handling",

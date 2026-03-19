@@ -202,25 +202,6 @@ export function identifyCompactToolGroups(
     } else {
       finalizeCurrentGroup({ currentGroup, groupMap });
       currentGroup = null;
-
-      if (isEligible) {
-        currentGroup = {
-          startIndex: idx,
-          entries: [
-            {
-              partIndex: idx,
-              toolName,
-              part: rawPart,
-              toolResultPart,
-              errorText,
-            },
-          ],
-        };
-        consumedIndices.add(idx);
-        if (resultIdx !== undefined) {
-          consumedIndices.add(resultIdx);
-        }
-      }
     }
   }
 

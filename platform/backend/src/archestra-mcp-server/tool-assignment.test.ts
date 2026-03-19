@@ -8,49 +8,9 @@ import db, { schema } from "@/database";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { Agent } from "@/types";
 import { type ArchestraContext, executeArchestraTool } from ".";
-import { tools } from "./tool-assignment";
 
 const AGENTS_TOOL = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}bulk_assign_tools_to_agents`;
 const GATEWAYS_TOOL = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}bulk_assign_tools_to_mcp_gateways`;
-
-describe("tool assignment schemas", () => {
-  test("bulk_assign_tools_to_agents schema includes resolveAtCallTime", () => {
-    const tool = tools.find((t) =>
-      t.name.endsWith("bulk_assign_tools_to_agents"),
-    );
-    const itemProps = (tool?.inputSchema as any).properties.assignments.items
-      .properties;
-    expect(itemProps.resolveAtCallTime).toBeDefined();
-    expect(itemProps.resolveAtCallTime.type).toBe("boolean");
-  });
-
-  test("bulk_assign_tools_to_mcp_gateways schema includes resolveAtCallTime", () => {
-    const tool = tools.find((t) =>
-      t.name.endsWith("bulk_assign_tools_to_mcp_gateways"),
-    );
-    const itemProps = (tool?.inputSchema as any).properties.assignments.items
-      .properties;
-    expect(itemProps.resolveAtCallTime).toBeDefined();
-    expect(itemProps.resolveAtCallTime.type).toBe("boolean");
-    expect(itemProps.useDynamicTeamCredential).toBeUndefined();
-  });
-
-  test("tool assignment schema descriptions explain explicit source fields", () => {
-    const tool = tools.find((t) =>
-      t.name.endsWith("bulk_assign_tools_to_agents"),
-    );
-    const itemProps = (tool?.inputSchema as any).properties.assignments.items
-      .properties;
-
-    expect(itemProps.credentialSourceMcpServerId.description).toContain(
-      "remote MCP installation",
-    );
-    expect(itemProps.executionSourceMcpServerId.description).toContain(
-      "local MCP installation",
-    );
-    expect(itemProps.useDynamicTeamCredential).toBeUndefined();
-  });
-});
 
 describe("tool assignment tool execution", () => {
   let testAgent: Agent;
@@ -132,6 +92,17 @@ describe("tool assignment tool execution", () => {
     const parsed = JSON.parse((result.content[0] as any).text);
     expect(parsed.succeeded.length).toBe(3);
     expect(parsed.failed.length).toBe(0);
+
+    const persistedAssignments = await db
+      .select()
+      .from(schema.agentToolsTable)
+      .where(
+        and(
+          eq(schema.agentToolsTable.toolId, tool1.id),
+          eq(schema.agentToolsTable.agentId, agent1.id),
+        ),
+      );
+    expect(persistedAssignments).toHaveLength(1);
   });
 
   test("bulk_assign_tools_to_agents detects duplicates on second assignment", async ({

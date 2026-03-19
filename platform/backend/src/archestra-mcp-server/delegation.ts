@@ -1,5 +1,5 @@
 import type { CallToolResult, Tool } from "@modelcontextprotocol/sdk/types.js";
-import { AGENT_TOOL_PREFIX } from "@shared";
+import { AGENT_TOOL_PREFIX, slugify } from "@shared";
 import { z } from "zod";
 import { executeA2AMessage } from "@/agents/a2a-executor";
 import { userHasPermission } from "@/auth/utils";
@@ -9,7 +9,6 @@ import { ProviderError } from "@/routes/chat/errors";
 import {
   errorResult,
   isAbortLikeError,
-  slugify,
   successResult,
 } from "./helpers";
 import type { ArchestraContext } from "./types";

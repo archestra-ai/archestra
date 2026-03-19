@@ -10,6 +10,7 @@ import {
 } from "@shared";
 import {
   convertToModelMessages,
+  createUIMessageStream,
   createUIMessageStreamResponse,
   generateText,
   hasToolCall,
@@ -70,7 +71,6 @@ import {
   shouldProbeTextStreamForContextTrimRetry,
   trimMessagesToTokenLimit,
 } from "./context-trimming";
-import { createChatUiMessageStream } from "./create-chat-ui-message-stream";
 import {
   getActiveTraceContext,
   mapProviderError,
@@ -365,7 +365,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
               // See: https://ai-sdk.dev/docs/troubleshooting/streaming-not-working-when-proxied
               "Content-Encoding": "none",
             },
-            stream: createChatUiMessageStream({
+            stream: createUIMessageStream({
               // Preserve incoming message IDs so the client updates existing
               // assistant messages instead of rendering duplicate ones.
               originalMessages: messages as UIMessage[],

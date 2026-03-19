@@ -84,6 +84,9 @@ function resolveSwappedAgent(params: {
       return { id: matchedAgent.id, name: matchedAgent.name };
     }
 
+    // A successful swap can briefly point at a brand-new agent that has not
+    // landed in the agents query cache yet. Keep the name so the UI can show
+    // the new target while the selector falls back to the last concrete ID.
     return { id: null, name: swapTargetName };
   }
 

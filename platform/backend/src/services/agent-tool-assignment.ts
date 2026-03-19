@@ -280,7 +280,7 @@ export async function validateCredentialSource(params: {
   const hasAccess = await AgentTeamModel.userHasAgentAccess(
     owner.id,
     agentId,
-    true,
+    false,
   );
 
   if (!hasAccess) {

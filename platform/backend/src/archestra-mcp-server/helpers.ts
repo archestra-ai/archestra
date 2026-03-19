@@ -1,20 +1,21 @@
 import type { CallToolResult, Tool } from "@modelcontextprotocol/sdk/types.js";
-import { ARCHESTRA_TOOL_PREFIX } from "@shared";
+import {
+  type ArchestraToolFullName,
+  type ArchestraToolShortName,
+  getArchestraToolFullName,
+  slugify,
+} from "@shared";
 import { ZodError, type ZodType, z } from "zod";
 import logger from "@/logging";
-import { AgentModel, AgentToolModel } from "@/models";
+import {
+  AgentModel,
+  AgentToolModel,
+  InternalMcpCatalogModel,
+  McpServerModel,
+  ToolModel,
+} from "@/models";
 import { assignToolToAgent } from "@/services/agent-tool-assignment";
 import type { ArchestraContext } from "./types";
-
-/**
- * Convert a name to a URL-safe slug for tool naming
- */
-export function slugify(name: string): string {
-  return name
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "_")
-    .replace(/^_+|_+$/g, "");
-}
 
 export function isAbortLikeError(error: unknown): boolean {
   if (!(error instanceof Error)) {
@@ -68,7 +69,7 @@ export type ArchestraToolHandler<TSchema extends ZodType = ZodType> = (params: {
 }) => Promise<CallToolResult>;
 
 export type ArchestraToolDefinition<
-  ShortName extends string = string,
+  ShortName extends ArchestraToolShortName = ArchestraToolShortName,
   TSchema extends ZodType = ZodType,
 > = {
   shortName: ShortName;
@@ -91,7 +92,7 @@ export type ArchestraRuntimeToolEntry = {
 };
 
 type ArchestraToolDefinitionInput<
-  ShortName extends string = string,
+  ShortName extends ArchestraToolShortName = ArchestraToolShortName,
   TSchema extends ZodType = ZodType,
 > = Omit<ArchestraToolDefinition<ShortName, TSchema>, "invoke">;
 
@@ -102,6 +103,10 @@ export async function assignToolAssignments(
   assignments: ToolAssignmentInput[],
 ): Promise<ToolAssignmentResult[]> {
   const results: ToolAssignmentResult[] = [];
+  const preFetchedData = await buildAgentToolAssignmentPrefetch({
+    agentId,
+    assignments,
+  });
 
   for (const assignment of assignments) {
     try {
@@ -111,7 +116,10 @@ export async function assignToolAssignments(
         resolveAtCallTime: assignment.resolveAtCallTime,
         credentialSourceMcpServerId: assignment.credentialSourceMcpServerId,
         executionSourceMcpServerId: assignment.executionSourceMcpServerId,
+        // This compatibility field is only still relevant for older REST/API
+        // callers. The Archestra MCP tool schemas now expose resolveAtCallTime.
         useDynamicTeamCredential: assignment.useDynamicTeamCredential,
+        preFetchedData,
       });
 
       if (result === null || result === "updated") {
@@ -251,16 +259,8 @@ export function createToolDefinition(params: {
   };
 }
 
-export function getArchestraToolFullName<const ShortName extends string>(
-  shortName: ShortName,
-): `${typeof ARCHESTRA_TOOL_PREFIX}${ShortName}`;
-export function getArchestraToolFullName(shortName: string): string;
-export function getArchestraToolFullName(shortName: string) {
-  return `${ARCHESTRA_TOOL_PREFIX}${shortName}`;
-}
-
 export function defineArchestraTool<
-  const ShortName extends string,
+  const ShortName extends ArchestraToolShortName,
   const TSchema extends ZodType,
   const TOutputSchema extends ZodType | undefined = undefined,
 >(definition: {
@@ -283,7 +283,8 @@ export function defineArchestraTools<
   const Definitions extends readonly ArchestraToolDefinitionInput[],
 >(definitions: Definitions) {
   type ShortName = Definitions[number]["shortName"];
-  type FullName<Name extends string> = `${typeof ARCHESTRA_TOOL_PREFIX}${Name}`;
+  type FullName<Name extends ArchestraToolShortName> =
+    ArchestraToolFullName<Name>;
 
   const toolShortNames = definitions.map(
     (definition) => definition.shortName,
@@ -298,8 +299,9 @@ export function defineArchestraTools<
 
   for (const definition of definitions) {
     const shortName = definition.shortName as ShortName;
-    const fullName =
-      `${ARCHESTRA_TOOL_PREFIX}${definition.shortName}` as FullName<ShortName>;
+    const fullName = getArchestraToolFullName(
+      definition.shortName,
+    ) as FullName<ShortName>;
 
     toolFullNames[shortName] = fullName;
     toolArgsSchemas[fullName] = definition.schema;
@@ -379,6 +381,55 @@ export function catchError(error: unknown, action: string): CallToolResult {
 }
 
 // === Internal helpers ===
+
+async function buildAgentToolAssignmentPrefetch(params: {
+  agentId: string;
+  assignments: ToolAssignmentInput[];
+}) {
+  const { agentId, assignments } = params;
+  const uniqueToolIds = [
+    ...new Set(assignments.map((assignment) => assignment.toolId)),
+  ];
+  const tools = await ToolModel.getByIds(uniqueToolIds);
+  const toolsMap = new Map(tools.map((tool) => [tool.id, tool]));
+
+  const uniqueCatalogIds = [
+    ...new Set(
+      tools
+        .map((tool) => tool.catalogId)
+        .filter((catalogId): catalogId is string => catalogId != null),
+    ),
+  ];
+  const catalogItemsMap =
+    uniqueCatalogIds.length > 0
+      ? await InternalMcpCatalogModel.getByIds(uniqueCatalogIds)
+      : new Map();
+
+  const uniqueMcpServerIds = [
+    ...new Set(
+      assignments
+        .flatMap((assignment) => [
+          assignment.credentialSourceMcpServerId,
+          assignment.executionSourceMcpServerId,
+        ])
+        .filter((id): id is string => id != null),
+    ),
+  ];
+  const mcpServersBasicMap = new Map();
+  if (uniqueMcpServerIds.length > 0) {
+    const servers = await McpServerModel.findByIdsBasic(uniqueMcpServerIds);
+    for (const server of servers) {
+      mcpServersBasicMap.set(server.id, server);
+    }
+  }
+
+  return {
+    existingAgentIds: new Set([agentId]),
+    toolsMap,
+    catalogItemsMap,
+    mcpServersBasicMap,
+  };
+}
 
 export function formatZodError(error: ZodError): string {
   return error.issues.map(formatZodIssue).join("; ");

@@ -3,6 +3,7 @@ import {
   ARCHESTRA_MCP_SERVER_NAME,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
 } from "@shared";
+import { InternalMcpCatalogModel } from "@/models";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { Agent } from "@/types";
 import { type ArchestraContext, executeArchestraTool } from ".";
@@ -188,5 +189,67 @@ describe("mcp server tool execution", () => {
     expect(text).toContain("Successfully updated MCP server");
     expect(text).toContain("Updated Name");
     expect(text).toContain("Updated description");
+
+    const updatedCatalog = await InternalMcpCatalogModel.findById(catalog.id, {
+      expandSecrets: false,
+    });
+    expect(updatedCatalog?.name).toBe("Updated Name");
+    expect(updatedCatalog?.description).toBe("Updated description");
+  });
+
+  test("create_mcp_server persists a new MCP catalog item", async () => {
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_mcp_server`,
+      {
+        name: "Created Via Tool",
+        description: "Created from the Archestra MCP tool handler",
+        serverType: "remote",
+        serverUrl: "https://example.com/mcp",
+      },
+      mockContext,
+    );
+
+    expect(result.isError).toBe(false);
+
+    const createdCatalog =
+      await InternalMcpCatalogModel.findByName("Created Via Tool");
+    expect(createdCatalog).toBeTruthy();
+    expect(createdCatalog?.description).toBe(
+      "Created from the Archestra MCP tool handler",
+    );
+    expect(createdCatalog?.serverType).toBe("remote");
+    expect(createdCatalog?.serverUrl).toBe("https://example.com/mcp");
+  });
+
+  test("edit_mcp_config updates persisted MCP server configuration", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      name: "Configurable MCP Server",
+      serverType: "local",
+    });
+
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}edit_mcp_config`,
+      {
+        id: catalog.id,
+        command: "npx",
+        arguments: ["-y", "@modelcontextprotocol/server-github"],
+        transportType: "stdio",
+      },
+      mockContext,
+    );
+
+    expect(result.isError).toBe(false);
+
+    const updatedCatalog = await InternalMcpCatalogModel.findById(catalog.id, {
+      expandSecrets: false,
+    });
+    expect(updatedCatalog?.localConfig?.command).toBe("npx");
+    expect(updatedCatalog?.localConfig?.arguments).toEqual([
+      "-y",
+      "@modelcontextprotocol/server-github",
+    ]);
+    expect(updatedCatalog?.localConfig?.transportType).toBe("stdio");
   });
 });

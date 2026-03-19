@@ -61,6 +61,8 @@ function stripDanglingToolCalls(messages: ChatMessage[]): ChatMessage[] {
       // stale input-available tool part back on the next turn without a matching
       // result. Gemini rejects that replay with MissingToolResultsError, so we
       // strip only the interrupted invocation here and keep completed tool parts.
+      // This intentionally works per-message because UIMessage tool calls and
+      // results are expected to live in the same message part array.
       return completedToolCallIds.has(part.toolCallId);
     });
 

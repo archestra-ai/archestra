@@ -226,6 +226,53 @@ describe("identifyCompactToolGroups", () => {
       "google__maps",
     ]);
   });
+
+  it("does not group across a non-compact-eligible tool call", () => {
+    const parts = [
+      {
+        type: "tool-google__search",
+        toolCallId: "call_1",
+        state: "input-available",
+        input: { q: "weather" },
+      },
+      {
+        type: "tool-google__search",
+        toolCallId: "call_1",
+        state: "output-available",
+        output: "sunny",
+      },
+      {
+        type: "tool-archestra__todo_write",
+        toolCallId: "call_2",
+        state: "input-available",
+        input: { todos: [] },
+      },
+      {
+        type: "tool-archestra__todo_write",
+        toolCallId: "call_2",
+        state: "output-available",
+        output: "ok",
+      },
+      {
+        type: "tool-google__maps",
+        toolCallId: "call_3",
+        state: "input-available",
+        input: { location: "Toronto" },
+      },
+      {
+        type: "tool-google__maps",
+        toolCallId: "call_3",
+        state: "output-available",
+        output: "map",
+      },
+    ] as UIMessage["parts"];
+
+    const { groupMap } = identifyCompactToolGroups(parts);
+
+    expect(groupMap.size).toBe(2);
+    expect(groupMap.get(0)?.entries).toHaveLength(1);
+    expect(groupMap.get(4)?.entries).toHaveLength(1);
+  });
 });
 
 describe("stripDanglingToolCalls", () => {

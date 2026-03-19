@@ -1,34 +1,9 @@
-import { TOOL_CREATE_AGENT_FULL_NAME } from "@shared";
-import { describe, expect, expectTypeOf, test } from "@/test";
+import { describe, expect, test } from "@/test";
 import {
   deduplicateLabels,
   formatAssignmentSummary,
-  getArchestraToolFullName,
   isAbortLikeError,
-  slugify,
 } from "./helpers";
-
-describe("slugify", () => {
-  test("converts name to lowercase URL-safe slug", () => {
-    expect(slugify("Hello World")).toBe("hello_world");
-  });
-
-  test("replaces special characters with underscores", () => {
-    expect(slugify("My Agent (v2)!")).toBe("my_agent_v2");
-  });
-
-  test("strips leading and trailing underscores", () => {
-    expect(slugify("__test__")).toBe("test");
-  });
-
-  test("handles empty string", () => {
-    expect(slugify("")).toBe("");
-  });
-
-  test("collapses multiple separators", () => {
-    expect(slugify("a---b...c")).toBe("a_b_c");
-  });
-});
 
 describe("isAbortLikeError", () => {
   test("returns true for AbortError", () => {
@@ -81,19 +56,6 @@ describe("formatAssignmentSummary", () => {
     const lines: string[] = ["Initial"];
     formatAssignmentSummary(lines, []);
     expect(lines).toEqual(["Initial"]);
-  });
-});
-
-describe("getArchestraToolFullName", () => {
-  test("returns the fully-qualified Archestra tool name", () => {
-    expect(getArchestraToolFullName("create_agent")).toBe(
-      TOOL_CREATE_AGENT_FULL_NAME,
-    );
-  });
-
-  test("preserves the literal tool name type", () => {
-    const fullName = getArchestraToolFullName("create_agent");
-    expectTypeOf(fullName).toEqualTypeOf<typeof TOOL_CREATE_AGENT_FULL_NAME>();
   });
 });
 

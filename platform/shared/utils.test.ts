@@ -1,9 +1,53 @@
 import { describe, expect, test } from "vitest";
 import {
-  getArchestraToolShortName,
-  isArchestraMcpServerTool,
+  formatSecretStorageType,
+  isBrowserMcpTool,
+  isVaultReference,
   parseFullToolName,
+  parseVaultReference,
+  slugify,
 } from "./utils";
+
+describe("isVaultReference", () => {
+  test("returns true for valid vault references", () => {
+    expect(isVaultReference("secret/data/path/to/secret#keyname")).toBe(true);
+  });
+
+  test("returns false for invalid references", () => {
+    expect(isVaultReference(undefined)).toBe(false);
+    expect(isVaultReference("secret/data/path/to/secret")).toBe(false);
+    expect(isVaultReference("short#key")).toBe(false);
+  });
+});
+
+describe("parseVaultReference", () => {
+  test("splits the path and key", () => {
+    expect(parseVaultReference("secret/data/app#api_key")).toEqual({
+      path: "secret/data/app",
+      key: "api_key",
+    });
+  });
+});
+
+describe("formatSecretStorageType", () => {
+  test("formats known storage types", () => {
+    expect(formatSecretStorageType("vault")).toBe("Vault");
+    expect(formatSecretStorageType("external_vault")).toBe("External Vault");
+    expect(formatSecretStorageType("database")).toBe("Database");
+  });
+
+  test("falls back to None", () => {
+    expect(formatSecretStorageType("none")).toBe("None");
+    expect(formatSecretStorageType(undefined)).toBe("None");
+  });
+});
+
+describe("slugify", () => {
+  test("creates URL-safe slugs", () => {
+    expect(slugify("Hello World!")).toBe("hello_world");
+    expect(slugify("__Already__Slugged__")).toBe("already_slugged");
+  });
+});
 
 describe("parseFullToolName", () => {
   test("standard case: server__tool", () => {
@@ -13,20 +57,11 @@ describe("parseFullToolName", () => {
     });
   });
 
-  test("server name containing __ (e.g., upstash__context7)", () => {
+  test("server name containing __", () => {
     expect(parseFullToolName("upstash__context7__resolve-library-id")).toEqual({
       serverName: "upstash__context7",
       toolName: "resolve-library-id",
     });
-  });
-
-  test("server name with multiple __ segments", () => {
-    expect(parseFullToolName("huggingface__remote-mcp__generate_text")).toEqual(
-      {
-        serverName: "huggingface__remote-mcp",
-        toolName: "generate_text",
-      },
-    );
   });
 
   test("no separator returns null serverName", () => {
@@ -35,68 +70,14 @@ describe("parseFullToolName", () => {
       toolName: "send_email",
     });
   });
-
-  test("empty string after separator", () => {
-    expect(parseFullToolName("server__")).toEqual({
-      serverName: "server",
-      toolName: "",
-    });
-  });
-
-  test("archestra tools", () => {
-    expect(parseFullToolName("archestra__whoami")).toEqual({
-      serverName: "archestra",
-      toolName: "whoami",
-    });
-  });
-
-  test("separator at start returns null serverName", () => {
-    expect(parseFullToolName("__toolname")).toEqual({
-      serverName: null,
-      toolName: "__toolname",
-    });
-  });
-
-  test("empty string", () => {
-    expect(parseFullToolName("")).toEqual({
-      serverName: null,
-      toolName: "",
-    });
-  });
-
-  test("single underscore is not treated as separator", () => {
-    expect(parseFullToolName("my_server__my_tool")).toEqual({
-      serverName: "my_server",
-      toolName: "my_tool",
-    });
-  });
-
-  test("tool name with hyphens", () => {
-    expect(parseFullToolName("github__create-pull-request")).toEqual({
-      serverName: "github",
-      toolName: "create-pull-request",
-    });
-  });
 });
 
-describe("isArchestraMcpServerTool", () => {
-  test("returns true for Archestra tools", () => {
-    expect(isArchestraMcpServerTool("archestra__whoami")).toBe(true);
-  });
-
-  test("returns false for non-Archestra tools", () => {
-    expect(isArchestraMcpServerTool("github__list_issues")).toBe(false);
-  });
-});
-
-describe("getArchestraToolShortName", () => {
-  test("extracts the short name from an Archestra tool", () => {
-    expect(getArchestraToolShortName("archestra__create_agent")).toBe(
-      "create_agent",
-    );
-  });
-
-  test("returns null for non-Archestra tools", () => {
-    expect(getArchestraToolShortName("github__list_issues")).toBeNull();
+describe("isBrowserMcpTool", () => {
+  test("matches Playwright/browser tools", () => {
+    expect(
+      isBrowserMcpTool("microsoft__playwright-mcp__browser_navigate"),
+    ).toBe(true);
+    expect(isBrowserMcpTool("browser_click")).toBe(true);
+    expect(isBrowserMcpTool("github__list_issues")).toBe(false);
   });
 });

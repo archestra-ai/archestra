@@ -2,13 +2,13 @@
 
 import {
   ARCHESTRA_MCP_SERVER_NAME,
+  ARCHESTRA_TOOL_SHORT_NAMES,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
 } from "@shared";
 import { vi } from "vitest";
 import { UserModel } from "@/models";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { ArchestraContext } from ".";
-import { ALL_TOOL_SHORT_NAMES } from ".";
 import {
   checkToolPermission,
   filterToolNamesByPermission,
@@ -22,7 +22,7 @@ const t = (name: string) =>
 
 describe("TOOL_PERMISSIONS map", () => {
   test("has an entry for every registered tool", () => {
-    for (const shortName of ALL_TOOL_SHORT_NAMES) {
+    for (const shortName of ARCHESTRA_TOOL_SHORT_NAMES) {
       expect(TOOL_PERMISSIONS).toHaveProperty(shortName);
     }
   });

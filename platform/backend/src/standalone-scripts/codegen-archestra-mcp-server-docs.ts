@@ -1,7 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { ARCHESTRA_TOOL_PREFIX, DEFAULT_ARCHESTRA_TOOL_NAMES } from "@shared";
+import {
+  DEFAULT_ARCHESTRA_TOOL_NAMES,
+  getArchestraToolShortName,
+} from "@shared";
 import {
   type ArchestraToolShortName,
   getArchestraMcpTools,
@@ -176,10 +179,8 @@ lastUpdated: ${lastUpdated}
 function generateMarkdownBody(): string {
   const tools = getArchestraMcpTools();
 
-  const allPreInstalledShortNames = DEFAULT_ARCHESTRA_TOOL_NAMES.map((name) =>
-    name.startsWith(ARCHESTRA_TOOL_PREFIX)
-      ? name.slice(ARCHESTRA_TOOL_PREFIX.length)
-      : name,
+  const allPreInstalledShortNames = DEFAULT_ARCHESTRA_TOOL_NAMES.map(
+    (name) => getArchestraToolShortName(name) ?? name,
   );
 
   // Knowledge tools are conditionally assigned (only when knowledge sources are attached)
@@ -202,9 +203,7 @@ function generateMarkdownBody(): string {
   >();
 
   for (const tool of tools) {
-    const shortName = tool.name.startsWith(ARCHESTRA_TOOL_PREFIX)
-      ? tool.name.slice(ARCHESTRA_TOOL_PREFIX.length)
-      : tool.name;
+    const shortName = getArchestraToolShortName(tool.name) ?? tool.name;
 
     const typedShortName = shortName as ArchestraToolShortName;
     const group = toolGroups[typedShortName];

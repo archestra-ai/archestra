@@ -1,8 +1,5 @@
 import type { CallToolResult, Tool } from "@modelcontextprotocol/sdk/types.js";
-import {
-  ARCHESTRA_MCP_SERVER_NAME,
-  MCP_SERVER_TOOL_NAME_SEPARATOR,
-} from "@shared";
+import { ARCHESTRA_TOOL_PREFIX } from "@shared";
 import { ZodError, type ZodType, z } from "zod";
 import logger from "@/logging";
 import { AgentModel, AgentToolModel } from "@/models";
@@ -254,8 +251,12 @@ export function createToolDefinition(params: {
   };
 }
 
-export function getArchestraToolFullName(shortName: string): string {
-  return `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${shortName}`;
+export function getArchestraToolFullName<const ShortName extends string>(
+  shortName: ShortName,
+): `${typeof ARCHESTRA_TOOL_PREFIX}${ShortName}`;
+export function getArchestraToolFullName(shortName: string): string;
+export function getArchestraToolFullName(shortName: string) {
+  return `${ARCHESTRA_TOOL_PREFIX}${shortName}`;
 }
 
 export function defineArchestraTool<
@@ -282,8 +283,7 @@ export function defineArchestraTools<
   const Definitions extends readonly ArchestraToolDefinitionInput[],
 >(definitions: Definitions) {
   type ShortName = Definitions[number]["shortName"];
-  type FullName<Name extends string> =
-    `${typeof ARCHESTRA_MCP_SERVER_NAME}${typeof MCP_SERVER_TOOL_NAME_SEPARATOR}${Name}`;
+  type FullName<Name extends string> = `${typeof ARCHESTRA_TOOL_PREFIX}${Name}`;
 
   const toolShortNames = definitions.map(
     (definition) => definition.shortName,
@@ -299,7 +299,7 @@ export function defineArchestraTools<
   for (const definition of definitions) {
     const shortName = definition.shortName as ShortName;
     const fullName =
-      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${definition.shortName}` as FullName<ShortName>;
+      `${ARCHESTRA_TOOL_PREFIX}${definition.shortName}` as FullName<ShortName>;
 
     toolFullNames[shortName] = fullName;
     toolArgsSchemas[fullName] = definition.schema;

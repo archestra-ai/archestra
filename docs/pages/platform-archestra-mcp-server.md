@@ -80,9 +80,8 @@ Required RBAC permission: `agent:create`
 | `toolAssignments` | `object[]` | No | Explicit tool assignments to create immediately after the agent is created. |
 | `toolAssignments[].toolId` | `string` | Yes | The ID of the tool to assign to the agent. |
 | `toolAssignments[].resolveAtCallTime` | `boolean` | No | When true, resolve credentials and execution target at tool call time. Prefer this for builder flows. |
-| `toolAssignments[].useDynamicTeamCredential` | `boolean` | No | Legacy alias for resolveAtCallTime. Prefer resolveAtCallTime in new MCP tool calls. |
-| `toolAssignments[].credentialSourceMcpServerId` | `any` | No | Optional explicit credential source override for remote MCP tools when you do not want late-bound resolution. |
-| `toolAssignments[].executionSourceMcpServerId` | `any` | No | Optional explicit execution source override for local MCP tools when you do not want late-bound resolution. |
+| `toolAssignments[].credentialSourceMcpServerId` | `any` | No | Optional explicit remote MCP installation to use as the credential source. Use this only when you want credentials to come from one specific installed MCP server instead of resolving them at call time. |
+| `toolAssignments[].executionSourceMcpServerId` | `any` | No | Optional explicit local MCP installation to run the tool on. Use this only when you want a local MCP tool to execute on one specific installed MCP server instead of resolving the execution target at call time. |
 
 
 #### get_agent
@@ -167,14 +166,13 @@ Required RBAC permission: `agent:update`
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `id` | `string` | Yes | The ID of the agent to edit. Use get_agent or list_agents to look it up by name. |
+| `id` | `string` | Yes | The ID of the agent to edit. Use archestra__get_agent or archestra__list_agents to look it up by name. |
 | `subAgentIds` | `string[]` | No | Agent IDs to add as delegation targets. |
 | `toolAssignments` | `object[]` | No | Explicit tool assignments to add or update on the agent. |
 | `toolAssignments[].toolId` | `string` | Yes | The ID of the tool to assign to the agent. |
 | `toolAssignments[].resolveAtCallTime` | `boolean` | No | When true, resolve credentials and execution target at tool call time. Prefer this for builder flows. |
-| `toolAssignments[].useDynamicTeamCredential` | `boolean` | No | Legacy alias for resolveAtCallTime. Prefer resolveAtCallTime in new MCP tool calls. |
-| `toolAssignments[].credentialSourceMcpServerId` | `any` | No | Optional explicit credential source override for remote MCP tools when you do not want late-bound resolution. |
-| `toolAssignments[].executionSourceMcpServerId` | `any` | No | Optional explicit execution source override for local MCP tools when you do not want late-bound resolution. |
+| `toolAssignments[].credentialSourceMcpServerId` | `any` | No | Optional explicit remote MCP installation to use as the credential source. Use this only when you want credentials to come from one specific installed MCP server instead of resolving them at call time. |
+| `toolAssignments[].executionSourceMcpServerId` | `any` | No | Optional explicit local MCP installation to run the tool on. Use this only when you want a local MCP tool to execute on one specific installed MCP server instead of resolving the execution target at call time. |
 | `description` | `any` | No | New description for the agent. |
 | `icon` | `any` | No | New emoji icon for the agent. |
 | `knowledgeBaseIds` | `string[]` | No | Replace the agent's assigned knowledge bases with this set. |
@@ -1042,9 +1040,8 @@ Required RBAC permission: `agent:update`
 | `assignments` | `object[]` | Yes | Assignments to create or update for agents. |
 | `assignments[].toolId` | `string` | Yes | The ID of the tool to assign. |
 | `assignments[].resolveAtCallTime` | `boolean` | No | When true, resolve credentials and execution target at tool call time. Prefer this for builder flows. |
-| `assignments[].useDynamicTeamCredential` | `boolean` | No | Legacy alias for resolveAtCallTime. Prefer resolveAtCallTime in new MCP tool calls. |
-| `assignments[].credentialSourceMcpServerId` | `any` | No | Optional explicit credential source override for remote MCP tools when you do not want late-bound resolution. |
-| `assignments[].executionSourceMcpServerId` | `any` | No | Optional explicit execution source override for local MCP tools when you do not want late-bound resolution. |
+| `assignments[].credentialSourceMcpServerId` | `any` | No | Optional explicit remote MCP installation to use as the credential source. Use this only when you want credentials to come from one specific installed MCP server instead of resolving them at call time. |
+| `assignments[].executionSourceMcpServerId` | `any` | No | Optional explicit local MCP installation to run the tool on. Use this only when you want a local MCP tool to execute on one specific installed MCP server instead of resolving the execution target at call time. |
 | `assignments[].agentId` | `string` | Yes | The agent ID to assign the tool to. |
 
 ##### Output
@@ -1075,9 +1072,8 @@ Required RBAC permission: `mcpGateway:update`
 | `assignments` | `object[]` | Yes | Assignments to create or update for MCP gateways. |
 | `assignments[].toolId` | `string` | Yes | The ID of the tool to assign. |
 | `assignments[].resolveAtCallTime` | `boolean` | No | When true, resolve credentials and execution target at tool call time. Prefer this for builder flows. |
-| `assignments[].useDynamicTeamCredential` | `boolean` | No | Legacy alias for resolveAtCallTime. Prefer resolveAtCallTime in new MCP tool calls. |
-| `assignments[].credentialSourceMcpServerId` | `any` | No | Optional explicit credential source override for remote MCP tools when you do not want late-bound resolution. |
-| `assignments[].executionSourceMcpServerId` | `any` | No | Optional explicit execution source override for local MCP tools when you do not want late-bound resolution. |
+| `assignments[].credentialSourceMcpServerId` | `any` | No | Optional explicit remote MCP installation to use as the credential source. Use this only when you want credentials to come from one specific installed MCP server instead of resolving them at call time. |
+| `assignments[].executionSourceMcpServerId` | `any` | No | Optional explicit local MCP installation to run the tool on. Use this only when you want a local MCP tool to execute on one specific installed MCP server instead of resolving the execution target at call time. |
 | `assignments[].mcpGatewayId` | `string` | Yes | The MCP gateway ID to assign the tool to. |
 
 ##### Output

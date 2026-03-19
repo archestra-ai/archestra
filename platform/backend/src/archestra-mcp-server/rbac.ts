@@ -1,8 +1,5 @@
 import type { Permission } from "@shared";
-import {
-  ARCHESTRA_MCP_SERVER_NAME,
-  MCP_SERVER_TOOL_NAME_SEPARATOR,
-} from "@shared";
+import { getArchestraToolShortName } from "@shared";
 import { userHasPermission } from "@/auth/utils";
 import { UserModel } from "@/models";
 import type { ArchestraToolShortName } from ".";
@@ -135,7 +132,7 @@ export async function checkToolPermission(
   toolName: string,
   context: ArchestraContext,
 ) {
-  const shortName = extractShortName(toolName);
+  const shortName = getArchestraToolShortName(toolName);
   if (!shortName) return null; // Not an Archestra tool — allow (handled elsewhere)
 
   // Cast is safe: unknown-but-prefixed tools return undefined here and are
@@ -177,7 +174,7 @@ export async function filterToolNamesByPermission(
     // No user context — only include tools with no permission requirement
     return new Set(
       toolNames.filter((name) => {
-        const shortName = extractShortName(name);
+        const shortName = getArchestraToolShortName(name);
         if (!shortName) return true; // Non-Archestra tool
         const perm = TOOL_PERMISSIONS[shortName as ArchestraToolShortName];
         return perm === null; // null means no permission required
@@ -193,7 +190,7 @@ export async function filterToolNamesByPermission(
   // Collect unique permissions we need to check
   const permResults = new Map<string, boolean>();
   for (const name of toolNames) {
-    const shortName = extractShortName(name);
+    const shortName = getArchestraToolShortName(name);
     if (!shortName) continue;
     const perm = TOOL_PERMISSIONS[shortName as ArchestraToolShortName];
     if (perm) {
@@ -210,7 +207,7 @@ export async function filterToolNamesByPermission(
   // Filter tools
   const allowed = new Set<string>();
   for (const name of toolNames) {
-    const shortName = extractShortName(name);
+    const shortName = getArchestraToolShortName(name);
     if (!shortName) {
       allowed.add(name); // Non-Archestra tool
       continue;
@@ -226,13 +223,4 @@ export async function filterToolNamesByPermission(
   }
 
   return allowed;
-}
-
-// === Internal helpers ===
-
-const TOOL_PREFIX = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}`;
-
-function extractShortName(fullName: string): string | null {
-  if (!fullName.startsWith(TOOL_PREFIX)) return null;
-  return fullName.slice(TOOL_PREFIX.length);
 }

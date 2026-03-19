@@ -32,6 +32,7 @@ import {
   catchError,
   defineArchestraTool,
   defineArchestraTools,
+  getArchestraToolFullName,
   structuredSuccessResult,
 } from "./helpers";
 
@@ -64,6 +65,12 @@ const AgentCreateToolArgsSchema = CreateBaseToolArgsSchema.extend({
       "Explicit tool assignments to create immediately after the agent is created.",
     ),
 }).strict();
+
+const TOOL_GET_AGENT_FULL_NAME = getArchestraToolFullName("get_agent");
+const TOOL_LIST_AGENTS_FULL_NAME = getArchestraToolFullName("list_agents");
+const TOOL_GET_MCP_SERVER_TOOLS_FULL_NAME = getArchestraToolFullName(
+  "get_mcp_server_tools",
+);
 
 const GetAgentToolArgsSchema = GetResourceToolArgsSchema.extend({
   id: GetResourceToolArgsSchema.shape.id.describe(
@@ -99,7 +106,7 @@ const ListAgentsToolArgsSchema = z
 const EditAgentToolArgsSchema = z
   .object({
     id: UuidIdSchema.describe(
-      "The ID of the agent to edit. Use get_agent or list_agents to look it up by name.",
+      `The ID of the agent to edit. Use ${TOOL_GET_AGENT_FULL_NAME} or ${TOOL_LIST_AGENTS_FULL_NAME} to look it up by name.`,
     ),
     subAgentIds: z
       .array(UuidIdSchema)
@@ -188,8 +195,7 @@ const registry = defineArchestraTools([
   defineArchestraTool({
     shortName: "create_agent",
     title: "Create Agent",
-    description:
-      "Create a new agent with the specified name, optional description, labels, prompts, icon emoji, explicit tool assignments, and sub-agent delegations. Defaults to personal scope. IMPORTANT: When the user mentions MCP servers or sub-agents by name, you MUST first look up the exact tool IDs and agent IDs using get_mcp_server_tools / list_agents / get_agent, then pass them via toolAssignments / subAgentIds.",
+    description: `Create a new agent with the specified name, optional description, labels, prompts, icon emoji, explicit tool assignments, and sub-agent delegations. Defaults to personal scope. IMPORTANT: When the user mentions MCP servers or sub-agents by name, you MUST first look up the exact tool IDs and agent IDs using ${TOOL_GET_MCP_SERVER_TOOLS_FULL_NAME} / ${TOOL_LIST_AGENTS_FULL_NAME} / ${TOOL_GET_AGENT_FULL_NAME}, then pass them via toolAssignments / subAgentIds.`,
     schema: AgentCreateToolArgsSchema,
     async handler({ args, context }) {
       return handleCreateResource({
@@ -342,8 +348,7 @@ const registry = defineArchestraTools([
   defineArchestraTool({
     shortName: "edit_agent",
     title: "Edit Agent",
-    description:
-      "Edit an existing agent. All fields are optional except id. Only provided fields are updated. Tool assignments and sub-agent delegations are additive. Respects the calling user's access level. IMPORTANT: When the user mentions MCP servers or sub-agents by name, you MUST first look up the exact tool IDs and agent IDs using get_mcp_server_tools / list_agents / get_agent, then pass them via toolAssignments / subAgentIds.",
+    description: `Edit an existing agent. All fields are optional except id. Only provided fields are updated. Tool assignments and sub-agent delegations are additive. Respects the calling user's access level. IMPORTANT: When the user mentions MCP servers or sub-agents by name, you MUST first look up the exact tool IDs and agent IDs using ${TOOL_GET_MCP_SERVER_TOOLS_FULL_NAME} / ${TOOL_LIST_AGENTS_FULL_NAME} / ${TOOL_GET_AGENT_FULL_NAME}, then pass them via toolAssignments / subAgentIds.`,
     schema: EditAgentToolArgsSchema,
     async handler({ args, context }) {
       return handleEditResource({

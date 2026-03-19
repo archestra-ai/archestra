@@ -1,9 +1,5 @@
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import {
-  AGENT_TOOL_PREFIX,
-  type ARCHESTRA_MCP_SERVER_NAME,
-  type MCP_SERVER_TOOL_NAME_SEPARATOR,
-} from "@shared";
+import { type ARCHESTRA_TOOL_PREFIX, isAgentTool } from "@shared";
 import { ZodError, type ZodType } from "zod";
 // Import all groups
 import {
@@ -84,7 +80,7 @@ export const ALL_TOOL_SHORT_NAMES = [
 
 export type ArchestraToolShortName = (typeof ALL_TOOL_SHORT_NAMES)[number];
 export type ArchestraToolFullName =
-  `${typeof ARCHESTRA_MCP_SERVER_NAME}${typeof MCP_SERVER_TOOL_NAME_SEPARATOR}${ArchestraToolShortName}`;
+  `${typeof ARCHESTRA_TOOL_PREFIX}${ArchestraToolShortName}`;
 
 const toolEntries: Partial<
   Record<ArchestraToolFullName, ArchestraRuntimeToolEntry>
@@ -123,7 +119,7 @@ export async function executeArchestraTool(
 ): Promise<CallToolResult> {
   // Agent delegation tools are dynamic (one per agent) and not in TOOL_PERMISSIONS,
   // so they bypass centralized RBAC. They enforce team-based access checks internally.
-  if (toolName.startsWith(AGENT_TOOL_PREFIX)) {
+  if (isAgentTool(toolName)) {
     const parsedArgs = validateToolArgs(
       delegationToolArgsSchema,
       args,

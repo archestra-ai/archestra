@@ -7,10 +7,10 @@ import {
   type Tool,
 } from "@modelcontextprotocol/sdk/types.js";
 import {
-  AGENT_TOOL_PREFIX,
   ARCHESTRA_MCP_SERVER_NAME,
   ARCHESTRA_TOKEN_PREFIX,
-  MCP_SERVER_TOOL_NAME_SEPARATOR,
+  isAgentTool,
+  isArchestraMcpServerTool,
   OAUTH_TOKEN_ID_PREFIX,
   parseFullToolName,
   TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
@@ -193,18 +193,19 @@ export async function createAgentServer(
 
       try {
         // Check if this is an Archestra tool or agent delegation tool
-        const archestraToolPrefix = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}`;
-        const isArchestraTool = name.startsWith(archestraToolPrefix);
-        const isAgentTool = name.startsWith(AGENT_TOOL_PREFIX);
+        const isArchestraTool = isArchestraMcpServerTool(name);
+        const isAgentDelegationTool = isAgentTool(name);
 
-        if (isArchestraTool || isAgentTool) {
+        if (isArchestraTool || isAgentDelegationTool) {
           logger.info(
             {
               agentId,
               toolName: name,
-              toolType: isAgentTool ? "agent-delegation" : "archestra",
+              toolType: isAgentDelegationTool
+                ? "agent-delegation"
+                : "archestra",
             },
-            isAgentTool
+            isAgentDelegationTool
               ? "Agent delegation tool call received"
               : "Archestra MCP tool call received",
           );
@@ -254,7 +255,7 @@ export async function createAgentServer(
               agentId,
               toolName: name,
             },
-            isAgentTool
+            isAgentDelegationTool
               ? "Agent delegation tool call completed"
               : "Archestra MCP tool call completed",
           );

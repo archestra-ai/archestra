@@ -32,8 +32,7 @@ describe("tool assignment schemas", () => {
       .properties;
     expect(itemProps.resolveAtCallTime).toBeDefined();
     expect(itemProps.resolveAtCallTime.type).toBe("boolean");
-    expect(itemProps.useDynamicTeamCredential).toBeDefined();
-    expect(itemProps.useDynamicTeamCredential.type).toBe("boolean");
+    expect(itemProps.useDynamicTeamCredential).toBeUndefined();
   });
 
   test("tool assignment schema descriptions explain explicit source fields", () => {
@@ -49,9 +48,7 @@ describe("tool assignment schemas", () => {
     expect(itemProps.executionSourceMcpServerId.description).toContain(
       "local MCP installation",
     );
-    expect(itemProps.useDynamicTeamCredential.description).toContain(
-      "Compatibility alias",
-    );
+    expect(itemProps.useDynamicTeamCredential).toBeUndefined();
   });
 });
 
@@ -477,35 +474,5 @@ describe("tool assignment with late-bound resolution", () => {
         ),
       );
     expect(updated.useDynamicTeamCredential).toBe(true);
-  });
-
-  test("legacy useDynamicTeamCredential alias still works", async ({
-    makeAgent,
-    makeInternalMcpCatalog,
-    makeTool,
-  }) => {
-    const agent = await makeAgent({ name: "Legacy Alias Agent" });
-    const catalog = await makeInternalMcpCatalog({ serverType: "remote" });
-    const tool = await makeTool({
-      name: "legacy_alias_tool",
-      catalogId: catalog.id,
-    });
-
-    const result = await executeArchestraTool(
-      AGENTS_TOOL,
-      {
-        assignments: [
-          {
-            agentId: agent.id,
-            toolId: tool.id,
-            useDynamicTeamCredential: true,
-          },
-        ],
-      },
-      mockContext,
-    );
-    expect(result.isError).toBe(false);
-    const parsed = JSON.parse((result.content[0] as any).text);
-    expect(parsed.succeeded).toEqual([{ agentId: agent.id, toolId: tool.id }]);
   });
 });

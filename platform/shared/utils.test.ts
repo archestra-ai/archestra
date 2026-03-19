@@ -1,5 +1,9 @@
 import { describe, expect, test } from "vitest";
-import { parseFullToolName } from "./utils";
+import {
+  getArchestraToolShortName,
+  isArchestraMcpServerTool,
+  parseFullToolName,
+} from "./utils";
 
 describe("parseFullToolName", () => {
   test("standard case: server__tool", () => {
@@ -72,5 +76,27 @@ describe("parseFullToolName", () => {
       serverName: "github",
       toolName: "create-pull-request",
     });
+  });
+});
+
+describe("isArchestraMcpServerTool", () => {
+  test("returns true for Archestra tools", () => {
+    expect(isArchestraMcpServerTool("archestra__whoami")).toBe(true);
+  });
+
+  test("returns false for non-Archestra tools", () => {
+    expect(isArchestraMcpServerTool("github__list_issues")).toBe(false);
+  });
+});
+
+describe("getArchestraToolShortName", () => {
+  test("extracts the short name from an Archestra tool", () => {
+    expect(getArchestraToolShortName("archestra__create_agent")).toBe(
+      "create_agent",
+    );
+  });
+
+  test("returns null for non-Archestra tools", () => {
+    expect(getArchestraToolShortName("github__list_issues")).toBeNull();
   });
 });

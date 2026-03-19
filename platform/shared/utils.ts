@@ -1,6 +1,6 @@
 import {
   AGENT_TOOL_PREFIX,
-  ARCHESTRA_MCP_SERVER_NAME,
+  ARCHESTRA_TOOL_PREFIX,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
 } from "./consts";
 
@@ -22,9 +22,15 @@ export function parseFullToolName(fullName: string): {
 }
 
 export function isArchestraMcpServerTool(toolName: string): boolean {
-  return toolName.startsWith(
-    `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}`,
-  );
+  return toolName.startsWith(ARCHESTRA_TOOL_PREFIX);
+}
+
+export function getArchestraToolShortName(toolName: string): string | null {
+  if (!isArchestraMcpServerTool(toolName)) {
+    return null;
+  }
+
+  return toolName.slice(ARCHESTRA_TOOL_PREFIX.length);
 }
 
 /**

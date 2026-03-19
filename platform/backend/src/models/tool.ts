@@ -1,6 +1,6 @@
 import {
   AGENT_TOOL_PREFIX,
-  ARCHESTRA_MCP_SERVER_NAME,
+  ARCHESTRA_TOOL_PREFIX,
   DEFAULT_ARCHESTRA_TOOL_NAMES,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
   parseFullToolName,
@@ -1584,10 +1584,7 @@ class ToolModel {
     // Exclude Archestra built-in tools
     if (filters?.excludeArchestraTools) {
       toolWhereConditions.push(
-        notIlike(
-          schema.toolsTable.name,
-          `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}%`,
-        ),
+        notIlike(schema.toolsTable.name, `${ARCHESTRA_TOOL_PREFIX}%`),
       );
     }
 

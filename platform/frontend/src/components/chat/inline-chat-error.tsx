@@ -17,6 +17,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { useHasPermissions } from "@/lib/auth.query";
+import type { ModelSource } from "@/lib/use-chat-preferences";
 import {
   formatOriginalError,
   mapClientError,
@@ -27,12 +28,18 @@ interface InlineChatErrorProps {
   error: Error;
   conversationId?: string;
   supportMessage?: string | null;
+  agentName?: string;
+  selectedModel?: string;
+  modelSource?: ModelSource | null;
 }
 
 export function InlineChatError({
   error,
   conversationId,
   supportMessage,
+  agentName,
+  selectedModel,
+  modelSource,
 }: InlineChatErrorProps) {
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
   const { data: isAdmin } = useHasPermissions({
@@ -50,10 +57,35 @@ export function InlineChatError({
   if (chatError.spanId)
     refEntries.push({ label: "Span", value: chatError.spanId });
 
-  const copyAllIds = () => {
-    const text = refEntries.map((e) => `${e.label}: ${e.value}`).join("\n");
-    navigator.clipboard.writeText(text);
-    toast.success("Reference IDs copied");
+  const copyDebugInfo = () => {
+    const lines: string[] = [];
+
+    // Error details — matches the admin-only collapsible layout
+    const codeLine = chatError.isRetryable
+      ? `${chatError.code} Retryable`
+      : chatError.code;
+    lines.push(codeLine);
+    lines.push(chatError.message);
+    if (chatError.originalError) {
+      lines.push(formatOriginalError(chatError.originalError));
+    }
+
+    // Context
+    lines.push("");
+    if (agentName) lines.push(`Agent: ${agentName}`);
+    if (selectedModel) lines.push(`Model: ${selectedModel}`);
+    lines.push(`Model source: ${formatModelSource(modelSource)}`);
+
+    // Reference IDs
+    if (refEntries.length > 0) {
+      lines.push("");
+      for (const e of refEntries) {
+        lines.push(`${e.label}: ${e.value}`);
+      }
+    }
+
+    navigator.clipboard.writeText(lines.join("\n"));
+    toast.success("Debug info copied");
   };
 
   return (
@@ -85,8 +117,8 @@ export function InlineChatError({
                   variant="ghost"
                   size="sm"
                   className="h-5 w-5 p-0 text-muted-foreground hover:text-foreground"
-                  onClick={copyAllIds}
-                  title="Copy all reference IDs"
+                  onClick={copyDebugInfo}
+                  title="Copy debug info"
                 >
                   <Copy className="h-3 w-3" />
                 </Button>
@@ -141,4 +173,17 @@ export function InlineChatError({
       </MessageContent>
     </Message>
   );
+}
+
+function formatModelSource(source: ModelSource | null | undefined): string {
+  switch (source) {
+    case "agent":
+      return "Agent default";
+    case "organization":
+      return "Org default";
+    case "user":
+      return "User override";
+    default:
+      return "No model selected";
+  }
 }

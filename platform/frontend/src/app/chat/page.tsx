@@ -1696,6 +1696,14 @@ export default function ChatPage() {
                   optimisticToolCalls={optimisticToolCalls}
                   isLoadingConversation={isLoadingConversation}
                   onMessagesUpdate={setMessages}
+                  agentName={
+                    (currentProfileId
+                      ? internalAgents.find((a) => a.id === currentProfileId)
+                      : internalAgents.find((a) => a.id === initialAgentId)
+                    )?.name
+                  }
+                  selectedModel={conversation?.selectedModel ?? initialModel}
+                  modelSource={conversationModelSource ?? initialModelSource}
                   onUserMessageEdit={(
                     editedMessage,
                     updatedMessages,

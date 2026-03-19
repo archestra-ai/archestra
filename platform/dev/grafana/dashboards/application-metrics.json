@@ -2412,7 +2412,7 @@
       },
       "gridPos": {
         "h": 4,
-        "w": 6,
+        "w": 5,
         "x": 0,
         "y": 77
       },
@@ -2440,7 +2440,7 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "sum(pg_stat_activity_count)",
+          "expr": "sum(pg_stat_activity_count{datname!~\"template0|template1|postgres\"}) or vector(0)",
           "hide": false,
           "instant": true,
           "legendFormat": "",
@@ -2476,8 +2476,8 @@
       },
       "gridPos": {
         "h": 4,
-        "w": 6,
-        "x": 6,
+        "w": 5,
+        "x": 5,
         "y": 77
       },
       "id": 502,
@@ -2504,7 +2504,7 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "pg_settings_max_connections",
+          "expr": "max(pg_settings_max_connections)",
           "hide": false,
           "instant": true,
           "legendFormat": "",
@@ -2551,8 +2551,8 @@
       },
       "gridPos": {
         "h": 4,
-        "w": 6,
-        "x": 12,
+        "w": 5,
+        "x": 10,
         "y": 77
       },
       "id": 503,
@@ -2577,7 +2577,7 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "sum(pg_stat_activity_count) / sum(pg_settings_max_connections) * 100",
+          "expr": "((sum(pg_stat_activity_count{datname!~\"template0|template1|postgres\"}) or vector(0)) / clamp_min(max(pg_settings_max_connections), 1)) * 100",
           "hide": false,
           "instant": true,
           "legendFormat": "",
@@ -2622,8 +2622,8 @@
       },
       "gridPos": {
         "h": 4,
-        "w": 6,
-        "x": 18,
+        "w": 4,
+        "x": 15,
         "y": 77
       },
       "id": 511,
@@ -2650,7 +2650,7 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "pg_wal_size_bytes",
+          "expr": "max(pg_wal_size_bytes)",
           "hide": false,
           "instant": true,
           "legendFormat": "",
@@ -2660,6 +2660,80 @@
       ],
       "title": "WAL Size",
       "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$metrics_datasource"
+      },
+      "description": "Estimated database storage utilization for Kubernetes-backed PostgreSQL. Uses summed non-system database size divided by the PostgreSQL PVC requested storage from kube-state-metrics.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "max": 100,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 70
+              },
+              {
+                "color": "red",
+                "value": 90
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 5,
+        "x": 19,
+        "y": 77
+      },
+      "id": 513,
+      "options": {
+        "minVizHeight": 75,
+        "minVizWidth": 75,
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true,
+        "sizing": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$metrics_datasource"
+          },
+          "expr": "((sum(pg_database_size_bytes{datname!~\"template0|template1|postgres\"}) or vector(0)) / clamp_min(max(kube_persistentvolumeclaim_resource_requests_storage_bytes{persistentvolumeclaim=~\"data-.*postgresql.*\"}), 1)) * 100",
+          "hide": false,
+          "instant": true,
+          "legendFormat": "",
+          "queryType": "instant",
+          "refId": "A"
+        }
+      ],
+      "title": "DB Size Utilization",
+      "type": "gauge"
     },
     {
       "datasource": {
@@ -2748,7 +2822,7 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "pg_stat_activity_count",
+          "expr": "sum by (datname) (pg_stat_activity_count{datname!~\"template0|template1|postgres\"})",
           "hide": false,
           "instant": false,
           "legendFormat": "{{datname}}",
@@ -2816,7 +2890,49 @@
           },
           "unit": "bytes"
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "PVC requested storage"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "yellow",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "dash": [
+                    10,
+                    6
+                  ],
+                  "fill": "dash"
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 2
+              },
+              {
+                "id": "custom.pointSize",
+                "value": 0
+              },
+              {
+                "id": "custom.showPoints",
+                "value": "never"
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
         "h": 8,
@@ -2847,15 +2963,29 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "pg_database_size_bytes",
+          "expr": "sum by (datname) (pg_database_size_bytes{datname!~\"template0|template1|postgres\"})",
           "hide": false,
           "instant": false,
           "legendFormat": "{{datname}}",
           "queryType": "range",
           "range": true,
           "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$metrics_datasource"
+          },
+          "expr": "max(kube_persistentvolumeclaim_resource_requests_storage_bytes{persistentvolumeclaim=~\"data-.*postgresql.*\"})",
+          "hide": false,
+          "instant": false,
+          "legendFormat": "PVC requested storage",
+          "queryType": "range",
+          "range": true,
+          "refId": "B"
         }
       ],
+      "description": "Database sizes excluding PostgreSQL system databases. The dashed line is the inferred PostgreSQL PVC requested storage from kube-state-metrics for Kubernetes-backed deployments.",
       "title": "Database Size",
       "type": "timeseries"
     },
@@ -2962,7 +3092,7 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "rate(pg_stat_database_xact_commit[$__rate_interval])",
+          "expr": "rate(pg_stat_database_xact_commit{datname!~\"template0|template1|postgres\"}[$__rate_interval])",
           "hide": false,
           "instant": false,
           "legendFormat": "commits - {{datname}}",
@@ -2975,7 +3105,7 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "rate(pg_stat_database_xact_rollback[$__rate_interval])",
+          "expr": "rate(pg_stat_database_xact_rollback{datname!~\"template0|template1|postgres\"}[$__rate_interval])",
           "hide": false,
           "instant": false,
           "legendFormat": "rollbacks - {{datname}}",
@@ -3074,7 +3204,7 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "rate(pg_stat_database_blks_hit[$__rate_interval]) / (rate(pg_stat_database_blks_hit[$__rate_interval]) + rate(pg_stat_database_blks_read[$__rate_interval]))",
+          "expr": "rate(pg_stat_database_blks_hit{datname!~\"template0|template1|postgres\"}[$__rate_interval]) / clamp_min(rate(pg_stat_database_blks_hit{datname!~\"template0|template1|postgres\"}[$__rate_interval]) + rate(pg_stat_database_blks_read{datname!~\"template0|template1|postgres\"}[$__rate_interval]), 1e-9)",
           "hide": false,
           "instant": false,
           "legendFormat": "hit ratio - {{datname}}",
@@ -3173,7 +3303,7 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "rate(pg_stat_database_tup_inserted[$__rate_interval])",
+          "expr": "rate(pg_stat_database_tup_inserted{datname!~\"template0|template1|postgres\"}[$__rate_interval])",
           "hide": false,
           "instant": false,
           "legendFormat": "inserted - {{datname}}",
@@ -3186,7 +3316,7 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "rate(pg_stat_database_tup_updated[$__rate_interval])",
+          "expr": "rate(pg_stat_database_tup_updated{datname!~\"template0|template1|postgres\"}[$__rate_interval])",
           "hide": false,
           "instant": false,
           "legendFormat": "updated - {{datname}}",
@@ -3199,7 +3329,7 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "rate(pg_stat_database_tup_deleted[$__rate_interval])",
+          "expr": "rate(pg_stat_database_tup_deleted{datname!~\"template0|template1|postgres\"}[$__rate_interval])",
           "hide": false,
           "instant": false,
           "legendFormat": "deleted - {{datname}}",
@@ -3212,7 +3342,7 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "rate(pg_stat_database_tup_returned[$__rate_interval])",
+          "expr": "rate(pg_stat_database_tup_returned{datname!~\"template0|template1|postgres\"}[$__rate_interval])",
           "hide": false,
           "instant": false,
           "legendFormat": "returned - {{datname}}",
@@ -3225,7 +3355,7 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "rate(pg_stat_database_tup_fetched[$__rate_interval])",
+          "expr": "rate(pg_stat_database_tup_fetched{datname!~\"template0|template1|postgres\"}[$__rate_interval])",
           "hide": false,
           "instant": false,
           "legendFormat": "fetched - {{datname}}",
@@ -3324,7 +3454,7 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "pg_locks_count",
+          "expr": "pg_locks_count{datname!~\"template0|template1|postgres\"}",
           "hide": false,
           "instant": false,
           "legendFormat": "{{mode}} - {{datname}}",
@@ -3423,7 +3553,7 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "rate(pg_stat_database_deadlocks[$__rate_interval])",
+          "expr": "rate(pg_stat_database_deadlocks{datname!~\"template0|template1|postgres\"}[$__rate_interval])",
           "hide": false,
           "instant": false,
           "legendFormat": "{{datname}}",
@@ -3522,7 +3652,7 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "rate(pg_stat_database_temp_bytes[$__rate_interval])",
+          "expr": "rate(pg_stat_database_temp_bytes{datname!~\"template0|template1|postgres\"}[$__rate_interval])",
           "hide": false,
           "instant": false,
           "legendFormat": "{{datname}}",

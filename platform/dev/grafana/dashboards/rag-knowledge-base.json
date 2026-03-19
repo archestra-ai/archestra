@@ -203,7 +203,7 @@
         },
         "showPercentChange": false,
         "textMode": "auto",
-        "wideLayout": true
+        "wideLayout": false
       },
       "pluginVersion": "12.3.2",
       "targets": [
@@ -355,9 +355,9 @@
           },
           "expr": "sum(task_queue_active_tasks{task_type=~\"connector_sync|batch_embedding\"}) or vector(0)",
           "hide": false,
-          "instant": true,
           "legendFormat": "",
-          "queryType": "instant",
+          "queryType": "range",
+          "range": true,
           "refId": "A"
         }
       ],

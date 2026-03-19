@@ -47,19 +47,23 @@ PROVIDERS = {
         "panels": {
             501: {
                 "targets": [
-                    {"refId": "A", "expr": "sum(postgresql_backends)", "legendFormat": ""},
+                    {
+                        "refId": "A",
+                        "expr": 'sum(postgresql_backends{datname!~"template0|template1|postgres"}) or vector(0)',
+                        "legendFormat": "",
+                    },
                 ],
             },
             502: {
                 "targets": [
-                    {"refId": "A", "expr": "postgresql_connection_max", "legendFormat": ""},
+                    {"refId": "A", "expr": "max(postgresql_connection_max)", "legendFormat": ""},
                 ],
             },
             503: {
                 "targets": [
                     {
                         "refId": "A",
-                        "expr": "sum(postgresql_backends) / sum(postgresql_connection_max) * 100",
+                        "expr": '((sum(postgresql_backends{datname!~"template0|template1|postgres"}) or vector(0)) / clamp_min(max(postgresql_connection_max), 1)) * 100',
                         "legendFormat": "",
                     },
                 ],
@@ -71,11 +75,20 @@ PROVIDERS = {
                     {"refId": "A", "expr": "postgresql_wal_age_seconds", "legendFormat": ""},
                 ],
             },
+            513: {
+                "targets": [
+                    {
+                        "refId": "A",
+                        "expr": '((sum(postgresql_db_size_bytes{datname!~"template0|template1|postgres"}) or vector(0)) / clamp_min(max(kube_persistentvolumeclaim_resource_requests_storage_bytes{persistentvolumeclaim=~"data-.*postgresql.*"}), 1)) * 100',
+                        "legendFormat": "",
+                    },
+                ],
+            },
             504: {
                 "targets": [
                     {
                         "refId": "A",
-                        "expr": "postgresql_backends",
+                        "expr": 'sum by (datname) (postgresql_backends{datname!~"template0|template1|postgres"})',
                         "legendFormat": "{{datname}}",
                     },
                 ],
@@ -84,8 +97,13 @@ PROVIDERS = {
                 "targets": [
                     {
                         "refId": "A",
-                        "expr": "postgresql_db_size_bytes",
+                        "expr": 'sum by (datname) (postgresql_db_size_bytes{datname!~"template0|template1|postgres"})',
                         "legendFormat": "{{datname}}",
+                    },
+                    {
+                        "refId": "B",
+                        "expr": 'max(kube_persistentvolumeclaim_resource_requests_storage_bytes{persistentvolumeclaim=~"data-.*postgresql.*"})',
+                        "legendFormat": "PVC requested storage",
                     },
                 ],
             },
@@ -93,12 +111,12 @@ PROVIDERS = {
                 "targets": [
                     {
                         "refId": "A",
-                        "expr": "rate(postgresql_commits_total[$__rate_interval])",
+                        "expr": 'rate(postgresql_commits_total{datname!~"template0|template1|postgres"}[$__rate_interval])',
                         "legendFormat": "commits - {{datname}}",
                     },
                     {
                         "refId": "B",
-                        "expr": "rate(postgresql_rollbacks_total[$__rate_interval])",
+                        "expr": 'rate(postgresql_rollbacks_total{datname!~"template0|template1|postgres"}[$__rate_interval])',
                         "legendFormat": "rollbacks - {{datname}}",
                     },
                 ],
@@ -108,9 +126,11 @@ PROVIDERS = {
                     {
                         "refId": "A",
                         "expr": (
-                            "sum by (datname) (rate(postgresql_blocks_read_total{source=\"heap_hit\"}[$__rate_interval])) / "
-                            "(sum by (datname) (rate(postgresql_blocks_read_total{source=\"heap_hit\"}[$__rate_interval])) + "
-                            "sum by (datname) (rate(postgresql_blocks_read_total{source=\"heap_read\"}[$__rate_interval])))"
+                            "sum by (datname) (rate(postgresql_blocks_read_total{datname!~\"template0|template1|postgres\",source=\"heap_hit\"}[$__rate_interval])) / "
+                            "clamp_min("
+                            "sum by (datname) (rate(postgresql_blocks_read_total{datname!~\"template0|template1|postgres\",source=\"heap_hit\"}[$__rate_interval])) + "
+                            "sum by (datname) (rate(postgresql_blocks_read_total{datname!~\"template0|template1|postgres\",source=\"heap_read\"}[$__rate_interval])), "
+                            "1e-9)"
                         ),
                         "legendFormat": "hit ratio - {{datname}}",
                     },
@@ -120,22 +140,22 @@ PROVIDERS = {
                 "targets": [
                     {
                         "refId": "A",
-                        "expr": 'sum by (datname) (rate(postgresql_operations_total{operation="ins"}[$__rate_interval]))',
+                        "expr": 'sum by (datname) (rate(postgresql_operations_total{datname!~"template0|template1|postgres",operation="ins"}[$__rate_interval]))',
                         "legendFormat": "inserted - {{datname}}",
                     },
                     {
                         "refId": "B",
-                        "expr": 'sum by (datname) (rate(postgresql_operations_total{operation="upd"}[$__rate_interval]))',
+                        "expr": 'sum by (datname) (rate(postgresql_operations_total{datname!~"template0|template1|postgres",operation="upd"}[$__rate_interval]))',
                         "legendFormat": "updated - {{datname}}",
                     },
                     {
                         "refId": "C",
-                        "expr": 'sum by (datname) (rate(postgresql_operations_total{operation="del"}[$__rate_interval]))',
+                        "expr": 'sum by (datname) (rate(postgresql_operations_total{datname!~"template0|template1|postgres",operation="del"}[$__rate_interval]))',
                         "legendFormat": "deleted - {{datname}}",
                     },
                     {
                         "refId": "D",
-                        "expr": 'sum by (datname) (rate(postgresql_operations_total{operation="hot_upd"}[$__rate_interval]))',
+                        "expr": 'sum by (datname) (rate(postgresql_operations_total{datname!~"template0|template1|postgres",operation="hot_upd"}[$__rate_interval]))',
                         "legendFormat": "hot updated - {{datname}}",
                     },
                 ],
@@ -154,7 +174,7 @@ PROVIDERS = {
                 "targets": [
                     {
                         "refId": "A",
-                        "expr": "rate(postgresql_deadlocks_total[$__rate_interval])",
+                        "expr": 'rate(postgresql_deadlocks_total{datname!~"template0|template1|postgres"}[$__rate_interval])',
                         "legendFormat": "{{datname}}",
                     },
                 ],
@@ -165,7 +185,7 @@ PROVIDERS = {
                 "targets": [
                     {
                         "refId": "A",
-                        "expr": "rate(postgresql_temp_files_total[$__rate_interval])",
+                        "expr": 'rate(postgresql_temp_files_total{datname!~"template0|template1|postgres"}[$__rate_interval])',
                         "legendFormat": "{{datname}}",
                     },
                 ],
@@ -208,6 +228,12 @@ PROVIDERS = {
                         "expr": "rate(stackdriver_cloudsql_database_postgresql_write_ahead_log_inserted_bytes_count[$__rate_interval])",
                         "legendFormat": "",
                     },
+                ],
+            },
+            513: {
+                "title": "DB Size Utilization (N/A)",
+                "targets": [
+                    {"refId": "A", "expr": "", "legendFormat": ""},
                 ],
             },
             504: {
@@ -344,6 +370,12 @@ PROVIDERS = {
                         "expr": "azure_txlogs_storage_used_average",
                         "legendFormat": "",
                     },
+                ],
+            },
+            513: {
+                "title": "DB Size Utilization (N/A)",
+                "targets": [
+                    {"refId": "A", "expr": "", "legendFormat": ""},
                 ],
             },
             504: {

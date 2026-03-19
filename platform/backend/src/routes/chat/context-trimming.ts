@@ -3,9 +3,21 @@
  * When these proxies return a 400 with "maximum input length of N tokens",
  * we parse the limit, trim messages, and retry the request.
  */
+import type { SupportedProvider } from "@shared";
 import { APICallError, type ModelMessage } from "ai";
 
 const CHARS_PER_TOKEN = 4;
+
+/**
+ * Gemini can emit tool-call chunks before any text. Probing textStream to detect
+ * context errors can consume that first tool-call event, which hides the
+ * in-progress tool indicator in chat. Skip the probe there.
+ */
+export function shouldProbeTextStreamForContextTrimRetry(
+  provider: SupportedProvider,
+): boolean {
+  return provider !== "gemini";
+}
 
 /**
  * Parse max input token limit from vLLM/LiteLLM error responses.

@@ -79,9 +79,10 @@ Required RBAC permission: `agent:create`
 | `systemPrompt` | `any` | No | The system prompt that defines the agent's behavior. |
 | `toolAssignments` | `object[]` | No | Explicit tool assignments to create immediately after the agent is created. |
 | `toolAssignments[].toolId` | `string` | Yes | The ID of the tool to assign to the agent. |
-| `toolAssignments[].credentialSourceMcpServerId` | `any` | No | For remote MCP tools, the deployed MCP server ID that should supply credentials. |
-| `toolAssignments[].executionSourceMcpServerId` | `any` | No | For local MCP tools, the deployed MCP server ID that should execute the tool. |
-| `toolAssignments[].useDynamicTeamCredential` | `boolean` | No | When true, resolve credentials dynamically from the invoking team instead of pinning a deployment. |
+| `toolAssignments[].resolveAtCallTime` | `boolean` | No | When true, resolve credentials and execution target at tool call time. Prefer this for builder flows. |
+| `toolAssignments[].useDynamicTeamCredential` | `boolean` | No | Legacy alias for resolveAtCallTime. Prefer resolveAtCallTime in new MCP tool calls. |
+| `toolAssignments[].credentialSourceMcpServerId` | `any` | No | Optional explicit credential source override for remote MCP tools when you do not want late-bound resolution. |
+| `toolAssignments[].executionSourceMcpServerId` | `any` | No | Optional explicit execution source override for local MCP tools when you do not want late-bound resolution. |
 
 
 #### get_agent
@@ -170,9 +171,10 @@ Required RBAC permission: `agent:update`
 | `subAgentIds` | `string[]` | No | Agent IDs to add as delegation targets. |
 | `toolAssignments` | `object[]` | No | Explicit tool assignments to add or update on the agent. |
 | `toolAssignments[].toolId` | `string` | Yes | The ID of the tool to assign to the agent. |
-| `toolAssignments[].credentialSourceMcpServerId` | `any` | No | For remote MCP tools, the deployed MCP server ID that should supply credentials. |
-| `toolAssignments[].executionSourceMcpServerId` | `any` | No | For local MCP tools, the deployed MCP server ID that should execute the tool. |
-| `toolAssignments[].useDynamicTeamCredential` | `boolean` | No | When true, resolve credentials dynamically from the invoking team instead of pinning a deployment. |
+| `toolAssignments[].resolveAtCallTime` | `boolean` | No | When true, resolve credentials and execution target at tool call time. Prefer this for builder flows. |
+| `toolAssignments[].useDynamicTeamCredential` | `boolean` | No | Legacy alias for resolveAtCallTime. Prefer resolveAtCallTime in new MCP tool calls. |
+| `toolAssignments[].credentialSourceMcpServerId` | `any` | No | Optional explicit credential source override for remote MCP tools when you do not want late-bound resolution. |
+| `toolAssignments[].executionSourceMcpServerId` | `any` | No | Optional explicit execution source override for local MCP tools when you do not want late-bound resolution. |
 | `description` | `any` | No | New description for the agent. |
 | `icon` | `any` | No | New emoji icon for the agent. |
 | `knowledgeBaseIds` | `string[]` | No | Replace the agent's assigned knowledge bases with this set. |
@@ -1039,9 +1041,10 @@ Required RBAC permission: `agent:update`
 |-----------|------|----------|-------------|
 | `assignments` | `object[]` | Yes | Assignments to create or update for agents. |
 | `assignments[].toolId` | `string` | Yes | The ID of the tool to assign. |
-| `assignments[].credentialSourceMcpServerId` | `any` | No | For remote MCP tools, the deployed MCP server ID that should provide credentials. |
-| `assignments[].executionSourceMcpServerId` | `any` | No | For local MCP tools, the deployed MCP server ID that should execute the tool. |
-| `assignments[].useDynamicTeamCredential` | `boolean` | No | When true, resolve credentials dynamically from the invoking team instead of pinning a deployment. |
+| `assignments[].resolveAtCallTime` | `boolean` | No | When true, resolve credentials and execution target at tool call time. Prefer this for builder flows. |
+| `assignments[].useDynamicTeamCredential` | `boolean` | No | Legacy alias for resolveAtCallTime. Prefer resolveAtCallTime in new MCP tool calls. |
+| `assignments[].credentialSourceMcpServerId` | `any` | No | Optional explicit credential source override for remote MCP tools when you do not want late-bound resolution. |
+| `assignments[].executionSourceMcpServerId` | `any` | No | Optional explicit execution source override for local MCP tools when you do not want late-bound resolution. |
 | `assignments[].agentId` | `string` | Yes | The agent ID to assign the tool to. |
 
 ##### Output
@@ -1071,9 +1074,10 @@ Required RBAC permission: `mcpGateway:update`
 |-----------|------|----------|-------------|
 | `assignments` | `object[]` | Yes | Assignments to create or update for MCP gateways. |
 | `assignments[].toolId` | `string` | Yes | The ID of the tool to assign. |
-| `assignments[].credentialSourceMcpServerId` | `any` | No | For remote MCP tools, the deployed MCP server ID that should provide credentials. |
-| `assignments[].executionSourceMcpServerId` | `any` | No | For local MCP tools, the deployed MCP server ID that should execute the tool. |
-| `assignments[].useDynamicTeamCredential` | `boolean` | No | When true, resolve credentials dynamically from the invoking team instead of pinning a deployment. |
+| `assignments[].resolveAtCallTime` | `boolean` | No | When true, resolve credentials and execution target at tool call time. Prefer this for builder flows. |
+| `assignments[].useDynamicTeamCredential` | `boolean` | No | Legacy alias for resolveAtCallTime. Prefer resolveAtCallTime in new MCP tool calls. |
+| `assignments[].credentialSourceMcpServerId` | `any` | No | Optional explicit credential source override for remote MCP tools when you do not want late-bound resolution. |
+| `assignments[].executionSourceMcpServerId` | `any` | No | Optional explicit execution source override for local MCP tools when you do not want late-bound resolution. |
 | `assignments[].mcpGatewayId` | `string` | Yes | The MCP gateway ID to assign the tool to. |
 
 ##### Output

@@ -1,8 +1,10 @@
 "use client";
 
 import {
+  DocsPage,
   type AgentScope,
   type archestraApiTypes,
+  getDocsUrl,
   isBuiltInCatalogId,
 } from "@shared";
 import { useQueries } from "@tanstack/react-query";
@@ -509,52 +511,61 @@ function DialogHeader({
   breadcrumbs,
   onBack,
   extra,
+  description,
 }: {
   title: string;
   breadcrumbs?: string[];
   onBack: () => void;
   extra?: React.ReactNode;
+  description?: React.ReactNode;
 }) {
   return (
-    <div className="flex items-center gap-3 border-b px-4 py-3 shrink-0">
-      <Button
-        variant="ghost"
-        size="sm"
-        className="h-8 px-2 gap-1.5"
-        onClick={onBack}
-      >
-        <ArrowLeft className="size-4" />
-        Back
-      </Button>
-      {breadcrumbs?.length ? (
-        <div className="flex items-center gap-1.5 text-sm min-w-0">
-          {breadcrumbs.map((crumb, i) => (
-            <span key={crumb} className="flex items-center gap-1.5 min-w-0">
-              {i === 0 ? (
-                <button
-                  type="button"
-                  onClick={onBack}
-                  className="text-muted-foreground hover:text-foreground transition-colors truncate"
-                >
-                  {crumb}
-                </button>
-              ) : (
-                <span className="text-muted-foreground truncate">{crumb}</span>
-              )}
-              <span className="text-muted-foreground">/</span>
-            </span>
-          ))}
-          <span className="font-medium truncate">{title}</span>
+    <div className="border-b px-4 py-3 shrink-0">
+      <div className="flex items-center gap-3">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-8 px-2 gap-1.5"
+          onClick={onBack}
+        >
+          <ArrowLeft className="size-4" />
+          Back
+        </Button>
+        {breadcrumbs?.length ? (
+          <div className="flex items-center gap-1.5 text-sm min-w-0">
+            {breadcrumbs.map((crumb, i) => (
+              <span key={crumb} className="flex items-center gap-1.5 min-w-0">
+                {i === 0 ? (
+                  <button
+                    type="button"
+                    onClick={onBack}
+                    className="text-muted-foreground hover:text-foreground transition-colors truncate"
+                  >
+                    {crumb}
+                  </button>
+                ) : (
+                  <span className="text-muted-foreground truncate">{crumb}</span>
+                )}
+                <span className="text-muted-foreground">/</span>
+              </span>
+            ))}
+            <span className="font-medium truncate">{title}</span>
+          </div>
+        ) : (
+          <span className="text-sm font-medium">{title}</span>
+        )}
+        <div className="flex-1" />
+        {extra}
+        <DialogClose className="rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2">
+          <XIcon className="size-4" />
+          <span className="sr-only">Close</span>
+        </DialogClose>
+      </div>
+      {description ? (
+        <div className="pt-2 pl-12 text-sm text-muted-foreground">
+          {description}
         </div>
-      ) : (
-        <span className="text-sm font-medium">{title}</span>
-      )}
-      <div className="flex-1" />
-      {extra}
-      <DialogClose className="rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2">
-        <XIcon className="size-4" />
-        <span className="sr-only">Close</span>
-      </DialogClose>
+      ) : null}
     </div>
   );
 }
@@ -1485,13 +1496,34 @@ function ConfigureToolView({
   const newToolCount = useMemo(() => {
     return [...selectedToolIds].filter((id) => !assignedToolIds.has(id)).length;
   }, [selectedToolIds, assignedToolIds]);
+  const showArchestraDocsLink = isBuiltInCatalogId(catalog.id);
 
   return (
     <div className="flex flex-col h-full">
       <DialogHeader
-        title={catalog.name}
+        title="Add Tools"
         breadcrumbs={[agentName, "Add Tools"]}
         onBack={onBack}
+        description={
+          <>
+            <span className="font-medium text-foreground">{catalog.name}</span>
+            {catalog.description ? `: ${catalog.description}` : null}
+            {showArchestraDocsLink ? (
+              <>
+                {" "}
+                <a
+                  href={getDocsUrl(DocsPage.PlatformArchestraMcpServer)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-primary hover:underline"
+                >
+                  Learn more
+                  <ExternalLink className="size-3.5" />
+                </a>
+              </>
+            ) : null}
+          </>
+        }
       />
 
       <div className="flex flex-col flex-1 min-h-0">

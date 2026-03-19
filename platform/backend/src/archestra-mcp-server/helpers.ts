@@ -34,12 +34,21 @@ export function isAbortLikeError(error: unknown): boolean {
 }
 
 export type SubAgentResult = { id: string; status: string };
-export type ToolAssignmentInput = {
+export interface ToolAssignmentInput {
+  /** Exact tool ID to assign to the target agent. */
   toolId: string;
-  credentialSourceMcpServerId?: string | null;
-  executionSourceMcpServerId?: string | null;
+  /**
+   * Preferred late-bound mode for builder flows.
+   * When true, credentials and execution target are resolved at tool call time.
+   */
+  resolveAtCallTime?: boolean;
+  /** Legacy alias for late-bound mode. Prefer `resolveAtCallTime` in new code. */
   useDynamicTeamCredential?: boolean;
-};
+  /** Explicit credential source override for remote MCP tools. */
+  credentialSourceMcpServerId?: string | null;
+  /** Explicit execution source override for local MCP tools. */
+  executionSourceMcpServerId?: string | null;
+}
 export type ToolAssignmentResult = {
   toolId: string;
   status: string;
@@ -92,6 +101,7 @@ export async function assignToolAssignments(
       const result = await assignToolToAgent({
         agentId,
         toolId: assignment.toolId,
+        resolveAtCallTime: assignment.resolveAtCallTime,
         credentialSourceMcpServerId: assignment.credentialSourceMcpServerId,
         executionSourceMcpServerId: assignment.executionSourceMcpServerId,
         useDynamicTeamCredential: assignment.useDynamicTeamCredential,

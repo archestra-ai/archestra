@@ -23,17 +23,21 @@ const AgentAssignmentSchema = AgentToolAssignmentInputSchema.extend({
   toolId: AgentToolAssignmentInputSchema.shape.toolId.describe(
     "The ID of the tool to assign.",
   ),
+  resolveAtCallTime:
+    AgentToolAssignmentInputSchema.shape.resolveAtCallTime.describe(
+      "When true, resolve credentials and execution target at tool call time. Prefer this for builder flows.",
+    ),
   credentialSourceMcpServerId:
     AgentToolAssignmentInputSchema.shape.credentialSourceMcpServerId.describe(
-      "For remote MCP tools, the deployed MCP server ID that should provide credentials.",
+      "Optional explicit credential source override for remote MCP tools when you do not want late-bound resolution.",
     ),
   executionSourceMcpServerId:
     AgentToolAssignmentInputSchema.shape.executionSourceMcpServerId.describe(
-      "For local MCP tools, the deployed MCP server ID that should execute the tool.",
+      "Optional explicit execution source override for local MCP tools when you do not want late-bound resolution.",
     ),
   useDynamicTeamCredential:
     AgentToolAssignmentInputSchema.shape.useDynamicTeamCredential.describe(
-      "When true, resolve credentials dynamically from the invoking team instead of pinning a deployment.",
+      "Legacy alias for resolveAtCallTime. Prefer resolveAtCallTime in new MCP tool calls.",
     ),
   agentId: UuidIdSchema.describe("The agent ID to assign the tool to."),
 }).strict();
@@ -42,17 +46,21 @@ const McpGatewayAssignmentSchema = AgentToolAssignmentInputSchema.extend({
   toolId: AgentToolAssignmentInputSchema.shape.toolId.describe(
     "The ID of the tool to assign.",
   ),
+  resolveAtCallTime:
+    AgentToolAssignmentInputSchema.shape.resolveAtCallTime.describe(
+      "When true, resolve credentials and execution target at tool call time. Prefer this for builder flows.",
+    ),
   credentialSourceMcpServerId:
     AgentToolAssignmentInputSchema.shape.credentialSourceMcpServerId.describe(
-      "For remote MCP tools, the deployed MCP server ID that should provide credentials.",
+      "Optional explicit credential source override for remote MCP tools when you do not want late-bound resolution.",
     ),
   executionSourceMcpServerId:
     AgentToolAssignmentInputSchema.shape.executionSourceMcpServerId.describe(
-      "For local MCP tools, the deployed MCP server ID that should execute the tool.",
+      "Optional explicit execution source override for local MCP tools when you do not want late-bound resolution.",
     ),
   useDynamicTeamCredential:
     AgentToolAssignmentInputSchema.shape.useDynamicTeamCredential.describe(
-      "When true, resolve credentials dynamically from the invoking team instead of pinning a deployment.",
+      "Legacy alias for resolveAtCallTime. Prefer resolveAtCallTime in new MCP tool calls.",
     ),
   mcpGatewayId: UuidIdSchema.describe(
     "The MCP gateway ID to assign the tool to.",
@@ -216,6 +224,9 @@ async function handleBulkAssignTool(params: {
         return assignToolToAgent({
           agentId: targetId,
           toolId: String(assignment.toolId),
+          resolveAtCallTime: assignment.resolveAtCallTime as
+            | boolean
+            | undefined,
           credentialSourceMcpServerId:
             (assignment.credentialSourceMcpServerId as
               | string

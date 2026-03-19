@@ -24,21 +24,40 @@ export type AgentToolAssignmentPrefetchedData = {
   >;
 };
 
-export async function assignToolToAgent(params: {
+export interface AgentToolAssignmentRequest {
+  /** Agent receiving the tool assignment. */
   agentId: string;
+  /** Exact tool ID to assign. */
   toolId: string;
-  credentialSourceMcpServerId?: string | null;
-  executionSourceMcpServerId?: string | null;
-  preFetchedData?: Partial<AgentToolAssignmentPrefetchedData>;
+  /**
+   * Preferred late-bound assignment mode.
+   * When true, resolve credentials and execution target at tool call time.
+   */
+  resolveAtCallTime?: boolean;
+  /**
+   * Legacy alias for late-bound assignment mode.
+   * Prefer `resolveAtCallTime` in new MCP-facing code.
+   */
   useDynamicTeamCredential?: boolean;
-}): Promise<AgentToolAssignmentError | "duplicate" | "updated" | null> {
+  /** Explicit credential source override for remote MCP tools. */
+  credentialSourceMcpServerId?: string | null;
+  /** Explicit execution source override for local MCP tools. */
+  executionSourceMcpServerId?: string | null;
+  /** Optional prefetched lookup data used to avoid N+1 validation queries. */
+  preFetchedData?: Partial<AgentToolAssignmentPrefetchedData>;
+}
+
+export async function assignToolToAgent(
+  params: AgentToolAssignmentRequest,
+): Promise<AgentToolAssignmentError | "duplicate" | "updated" | null> {
+  const resolveAtCallTime = normalizeResolveAtCallTime(params);
   const validationError = await validateAssignment({
     agentId: params.agentId,
     toolId: params.toolId,
+    resolveAtCallTime,
     credentialSourceMcpServerId: params.credentialSourceMcpServerId,
     executionSourceMcpServerId: params.executionSourceMcpServerId,
     preFetchedData: params.preFetchedData,
-    useDynamicTeamCredential: params.useDynamicTeamCredential,
   });
 
   if (validationError) {
@@ -50,7 +69,7 @@ export async function assignToolToAgent(params: {
     params.toolId,
     params.credentialSourceMcpServerId,
     params.executionSourceMcpServerId,
-    params.useDynamicTeamCredential,
+    resolveAtCallTime,
   );
 
   if (result.status === "unchanged") {
@@ -64,29 +83,27 @@ export async function assignToolToAgent(params: {
   return null;
 }
 
-export async function validateAssignment(params: {
-  agentId: string;
-  toolId: string;
-  credentialSourceMcpServerId?: string | null;
-  executionSourceMcpServerId?: string | null;
-  preFetchedData?: Partial<AgentToolAssignmentPrefetchedData>;
-  useDynamicTeamCredential?: boolean;
-}): Promise<AgentToolAssignmentError | null> {
+export async function validateAssignment(
+  params: AgentToolAssignmentRequest,
+): Promise<AgentToolAssignmentError | null> {
   const {
     agentId,
     toolId,
+    resolveAtCallTime: requestedResolveAtCallTime,
+    useDynamicTeamCredential,
     credentialSourceMcpServerId,
     executionSourceMcpServerId,
     preFetchedData,
-    useDynamicTeamCredential,
   } = params;
+  const resolveAtCallTime =
+    requestedResolveAtCallTime ?? useDynamicTeamCredential ?? false;
 
   const agentExists = preFetchedData?.existingAgentIds
     ? preFetchedData.existingAgentIds.has(agentId)
     : await AgentModel.exists(agentId);
 
   if (!agentExists) {
-      return {
+    return {
       code: "not_found",
       error: {
         message: `Agent with ID ${agentId} not found`,
@@ -114,7 +131,7 @@ export async function validateAssignment(params: {
     credentialSourceMcpServerId,
     executionSourceMcpServerId,
     preFetchedData,
-    useDynamicTeamCredential,
+    resolveAtCallTime,
   });
   if (catalogValidationError) {
     return catalogValidationError;
@@ -156,14 +173,14 @@ async function validateCatalogRequirements(params: {
   credentialSourceMcpServerId?: string | null;
   executionSourceMcpServerId?: string | null;
   preFetchedData?: Partial<AgentToolAssignmentPrefetchedData>;
-  useDynamicTeamCredential?: boolean;
+  resolveAtCallTime?: boolean;
 }): Promise<AgentToolAssignmentError | null> {
   const {
     tool,
     credentialSourceMcpServerId,
     executionSourceMcpServerId,
     preFetchedData,
-    useDynamicTeamCredential,
+    resolveAtCallTime,
   } = params;
 
   if (!tool.catalogId) {
@@ -177,8 +194,8 @@ async function validateCatalogRequirements(params: {
       });
 
   if (catalogItem?.serverType === "local") {
-    if (!executionSourceMcpServerId && !useDynamicTeamCredential) {
-        return {
+    if (!executionSourceMcpServerId && !resolveAtCallTime) {
+      return {
         code: "validation_error",
         error: {
           message:
@@ -190,7 +207,7 @@ async function validateCatalogRequirements(params: {
   }
 
   if (catalogItem?.serverType === "remote") {
-    if (!credentialSourceMcpServerId && !useDynamicTeamCredential) {
+    if (!credentialSourceMcpServerId && !resolveAtCallTime) {
       return {
         code: "validation_error",
         error: {
@@ -203,6 +220,13 @@ async function validateCatalogRequirements(params: {
   }
 
   return null;
+}
+
+function normalizeResolveAtCallTime(params: {
+  resolveAtCallTime?: boolean;
+  useDynamicTeamCredential?: boolean;
+}) {
+  return params.resolveAtCallTime ?? params.useDynamicTeamCredential ?? false;
 }
 
 export async function validateCredentialSource(params: {

@@ -85,7 +85,7 @@ describe("agent tool execution", () => {
     expect(created?.connectorIds).toEqual([connector.id]);
   });
 
-  test("create_agent supports validated toolAssignments with dynamic credentials", async ({
+  test("create_agent supports validated toolAssignments with late-bound resolution", async ({
     makeInternalMcpCatalog,
     makeTool,
   }) => {
@@ -102,7 +102,7 @@ describe("agent tool execution", () => {
         toolAssignments: [
           {
             toolId: tool.id,
-            useDynamicTeamCredential: true,
+            resolveAtCallTime: true,
           },
         ],
       },
@@ -164,7 +164,7 @@ describe("agent tool execution", () => {
     expect((result.content[0] as any).text).toContain("Credential source");
   });
 
-  test("create_agent assigns local MCP tools with dynamic credentials via toolAssignments", async ({
+  test("create_agent assigns local MCP tools with late-bound resolution via toolAssignments", async ({
     makeInternalMcpCatalog,
     makeTool,
   }) => {
@@ -181,7 +181,7 @@ describe("agent tool execution", () => {
         toolAssignments: [
           {
             toolId: tool.id,
-            useDynamicTeamCredential: true,
+            resolveAtCallTime: true,
           },
         ],
       },
@@ -259,7 +259,7 @@ describe("agent tool execution", () => {
     expect(updated?.connectorIds).toEqual([replacementConnector.id]);
   });
 
-  test("edit_agent assigns MCP tools with dynamic credentials via toolAssignments", async ({
+  test("edit_agent assigns MCP tools with late-bound resolution via toolAssignments", async ({
     makeAgent,
     makeInternalMcpCatalog,
     makeTool,
@@ -287,7 +287,7 @@ describe("agent tool execution", () => {
         toolAssignments: [
           {
             toolId: tool.id,
-            useDynamicTeamCredential: true,
+            resolveAtCallTime: true,
           },
         ],
       },

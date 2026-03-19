@@ -797,7 +797,7 @@ export function ModelSelector({
             onRefresh={() => syncMutation.mutate()}
             isRefreshing={syncMutation.isPending}
           />
-          <ModelSelectorInput placeholder="Search models..." />
+          <ModelSelectorInput placeholder="Search models..." autoFocus />
           <ModelSelectorList>
             <ModelSelectorEmpty>
               {hasActiveFilters

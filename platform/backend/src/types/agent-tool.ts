@@ -8,6 +8,31 @@ import { schema } from "@/database";
 import { UuidIdSchema } from "./api";
 import { ToolParametersContentSchema } from "./tool";
 
+export interface AgentToolAssignmentIntent {
+  /** Exact tool ID to assign. */
+  toolId: string;
+  /**
+   * Preferred late-bound mode for builder flows.
+   * When true, resolve both credentials and the execution target at tool call time.
+   */
+  resolveAtCallTime?: boolean;
+  /**
+   * Legacy alias for late-bound resolution.
+   * Prefer `resolveAtCallTime` in new code and MCP tool calls.
+   */
+  useDynamicTeamCredential?: boolean;
+  /**
+   * Explicit credential source override for remote MCP tools.
+   * Use this only when you intentionally want to pin execution to a specific deployment.
+   */
+  credentialSourceMcpServerId?: string | null;
+  /**
+   * Explicit execution source override for local MCP tools.
+   * Use this only when you intentionally want to pin execution to a specific deployment.
+   */
+  executionSourceMcpServerId?: string | null;
+}
+
 export const SelectAgentToolSchema = createSelectSchema(schema.agentToolsTable)
   .omit({
     agentId: true,
@@ -33,9 +58,10 @@ export const InsertAgentToolSchema = createInsertSchema(schema.agentToolsTable);
 export const UpdateAgentToolSchema = createUpdateSchema(schema.agentToolsTable);
 export const AgentToolAssignmentInputSchema = z.object({
   toolId: UuidIdSchema,
+  resolveAtCallTime: z.boolean().optional(),
+  useDynamicTeamCredential: z.boolean().optional(),
   credentialSourceMcpServerId: UuidIdSchema.nullable().optional(),
   executionSourceMcpServerId: UuidIdSchema.nullable().optional(),
-  useDynamicTeamCredential: z.boolean().optional(),
 });
 
 export const AgentToolAssignmentBodySchema =

@@ -64,9 +64,9 @@ describe("formatAssignmentSummary", () => {
 
     expect(lines).toContain("Tool Assignments:");
     expect(lines.some((l) => l.includes("tool-1: success"))).toBe(true);
-    expect(lines.some((l) => l.includes("tool-2: error - validation failed"))).toBe(
-      true,
-    );
+    expect(
+      lines.some((l) => l.includes("tool-2: error - validation failed")),
+    ).toBe(true);
   });
 
   test("appends sub-agent results to lines", () => {

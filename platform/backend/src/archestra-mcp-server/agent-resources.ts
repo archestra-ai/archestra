@@ -59,17 +59,21 @@ export const ToolAssignmentToolInputSchema =
     toolId: AgentToolAssignmentInputSchema.shape.toolId.describe(
       "The ID of the tool to assign to the agent.",
     ),
+    resolveAtCallTime:
+      AgentToolAssignmentInputSchema.shape.resolveAtCallTime.describe(
+        "When true, resolve credentials and execution target at tool call time. Prefer this for builder flows.",
+      ),
     credentialSourceMcpServerId:
       AgentToolAssignmentInputSchema.shape.credentialSourceMcpServerId.describe(
-        "For remote MCP tools, the deployed MCP server ID that should supply credentials.",
+        "Optional explicit credential source override for remote MCP tools when you do not want late-bound resolution.",
       ),
     executionSourceMcpServerId:
       AgentToolAssignmentInputSchema.shape.executionSourceMcpServerId.describe(
-        "For local MCP tools, the deployed MCP server ID that should execute the tool.",
+        "Optional explicit execution source override for local MCP tools when you do not want late-bound resolution.",
       ),
     useDynamicTeamCredential:
       AgentToolAssignmentInputSchema.shape.useDynamicTeamCredential.describe(
-        "When true, resolve credentials dynamically from the invoking team instead of pinning a deployment.",
+        "Legacy alias for resolveAtCallTime. Prefer resolveAtCallTime in new MCP tool calls.",
       ),
   }).strict();
 
@@ -320,11 +324,7 @@ export async function handleCreateResource<
       `Teams: ${created.teams.length > 0 ? created.teams.map((team) => team.name).join(", ") : "None"}`,
       `Labels: ${created.labels.length > 0 ? created.labels.map((label) => `${label.key}: ${label.value}`).join(", ") : "None"}`,
     ];
-    formatAssignmentSummary(
-      lines,
-      subAgentResults,
-      toolAssignmentResults,
-    );
+    formatAssignmentSummary(lines, subAgentResults, toolAssignmentResults);
 
     return successResult(lines.join("\n"));
   } catch (error) {
@@ -548,11 +548,7 @@ export async function handleEditResource<
       `Teams: ${updated.teams.length > 0 ? updated.teams.map((team) => team.name).join(", ") : "None"}`,
       `Labels: ${updated.labels.length > 0 ? updated.labels.map((label) => `${label.key}: ${label.value}`).join(", ") : "None"}`,
     ];
-    formatAssignmentSummary(
-      lines,
-      subAgentResults,
-      toolAssignmentResults,
-    );
+    formatAssignmentSummary(lines, subAgentResults, toolAssignmentResults);
 
     return successResult(lines.join("\n"));
   } catch (error) {

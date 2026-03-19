@@ -14,7 +14,7 @@ The statistics view is the rollup layer for LLM traffic. It aggregates usage by 
 - which models are responsible for the largest share of cost
 - whether optimization rules or TOON compression are reducing spend over time
 
-For a fuller cost view outside the product UI, use Archestra's exported [metrics](platform-observability#metrics) and the prebuilt [Grafana dashboards](platform-observability#grafana-dashboards). Those surfaces are better suited for long-term monitoring, alerting, and cross-system cost analysis.
+For a fuller cost view outside the Archestra UI, use Archestra's exported [metrics](platform-observability#metrics) and the prebuilt [Grafana dashboards](platform-observability#grafana-dashboards). Those surfaces are better suited for long-term monitoring, alerting, and cross-system cost analysis.
 
 This page depends on model pricing being configured correctly. If a model has no pricing, usage can still be logged, but cost calculations will be incomplete.
 
@@ -90,5 +90,6 @@ See the upstream TOON format project for the format specification and benchmarks
 
 - [Dual LLM](platform-dual-llm)
 - [Policy Configuration](platform-built-in-agents-policy-config)
+- [Profiles Configuration](platform-profiles)
 - [Observability](platform-observability)
 - [Deployment](platform-deployment)

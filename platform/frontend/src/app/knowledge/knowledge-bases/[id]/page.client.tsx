@@ -25,10 +25,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { DataTable } from "@/components/ui/data-table";
-import {
-  DialogBody,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { DialogBody } from "@/components/ui/dialog";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -366,7 +363,26 @@ function AddConnectorDialog({
       <StandardDialog
         open={open && step !== "create"}
         onOpenChange={handleClose}
-        title={step === "choose" ? "Add Connector" : "Select Connectors"}
+        title={
+          step === "choose" ? (
+            "Add Connector"
+          ) : (
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7"
+                onClick={() => {
+                  setStep("choose");
+                  setSelectedIds(new Set());
+                }}
+              >
+                <ArrowLeft className="h-4 w-4" />
+              </Button>
+              <span>Select Connectors</span>
+            </div>
+          )
+        }
         description={
           step === "choose"
             ? "Reuse an existing connector or create a new one."
@@ -438,60 +454,44 @@ function AddConnectorDialog({
         )}
 
         {step === "reuse" && (
-          <>
-            <DialogTitle className="flex items-center gap-2">
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7"
-                onClick={() => {
-                  setStep("choose");
-                  setSelectedIds(new Set());
-                }}
-              >
-                <ArrowLeft className="h-4 w-4" />
-              </Button>
-              Select Connectors
-            </DialogTitle>
-            <DialogBody className="pt-4">
-              <div className="grid max-h-[50vh] grid-cols-2 gap-3 overflow-y-auto">
-                {availableConnectors.map((connector) => {
-                  const isSelected = selectedIds.has(connector.id);
-                  return (
-                    <button
-                      key={connector.id}
-                      type="button"
-                      onClick={() => toggleSelected(connector.id)}
-                      className={cn(
-                        "relative flex items-center gap-3 rounded-lg border p-3 text-left transition-colors cursor-pointer hover:bg-muted/50",
-                        isSelected && "border-primary bg-primary/5",
-                      )}
-                    >
-                      {isSelected && (
-                        <div className="absolute top-2 right-2">
-                          <Check className="h-4 w-4 text-primary" />
-                        </div>
-                      )}
-                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-muted">
-                        <ConnectorTypeIcon
-                          type={connector.connectorType}
-                          className="h-5 w-5"
-                        />
+          <DialogBody className="pt-4">
+            <div className="grid max-h-[50vh] grid-cols-2 gap-3 overflow-y-auto">
+              {availableConnectors.map((connector) => {
+                const isSelected = selectedIds.has(connector.id);
+                return (
+                  <button
+                    key={connector.id}
+                    type="button"
+                    onClick={() => toggleSelected(connector.id)}
+                    className={cn(
+                      "relative flex items-center gap-3 rounded-lg border p-3 text-left transition-colors cursor-pointer hover:bg-muted/50",
+                      isSelected && "border-primary bg-primary/5",
+                    )}
+                  >
+                    {isSelected && (
+                      <div className="absolute top-2 right-2">
+                        <Check className="h-4 w-4 text-primary" />
                       </div>
-                      <div className="min-w-0">
-                        <div className="font-medium text-sm truncate">
-                          {connector.name}
-                        </div>
-                        <div className="text-xs text-muted-foreground capitalize">
-                          {connector.connectorType}
-                        </div>
+                    )}
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-muted">
+                      <ConnectorTypeIcon
+                        type={connector.connectorType}
+                        className="h-5 w-5"
+                      />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="font-medium text-sm truncate">
+                        {connector.name}
                       </div>
-                    </button>
-                  );
-                })}
-              </div>
-            </DialogBody>
-          </>
+                      <div className="text-xs text-muted-foreground capitalize">
+                        {connector.connectorType}
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </DialogBody>
         )}
       </StandardDialog>
 

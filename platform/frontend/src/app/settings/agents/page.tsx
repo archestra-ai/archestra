@@ -15,6 +15,7 @@ import {
   SettingsSaveBar,
   SettingsSectionStack,
 } from "@/components/settings/settings-block";
+import { Button } from "@/components/ui/button";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   Select,
@@ -176,6 +177,11 @@ export default function AgentSettingsPage() {
     setDefaultAgentId(value === "__personal__" ? "" : value);
   }, []);
 
+  const handleResetDefaultModel = useCallback(() => {
+    setSelectedApiKeyId("");
+    setDefaultModel("");
+  }, []);
+
   const isRestrictive = toolPolicy === "restrictive";
   const isSaving =
     updateAgentMutation.isPending || updateSecurityMutation.isPending;
@@ -247,6 +253,20 @@ export default function AgentSettingsPage() {
                     !selectedApiKeyId
                   }
                 />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="self-end"
+                  onClick={handleResetDefaultModel}
+                  disabled={
+                    isSaving ||
+                    !hasPermission ||
+                    (!selectedApiKeyId && !defaultModel)
+                  }
+                >
+                  Reset
+                </Button>
               </div>
             )}
           </WithPermissions>

@@ -416,14 +416,16 @@ const addMetricsAuthenticationHook = (
   });
 };
 
-const registerStandaloneMetricsEndpoint = async (
-  fastify: FastifyInstanceWithZod,
-): Promise<void> => {
+const registerStandaloneMetricsEndpoint = async (params: {
+  fastify: FastifyInstanceWithZod;
+  enableDefaultMetrics: boolean;
+}): Promise<void> => {
+  const { fastify, enableDefaultMetrics } = params;
   addMetricsAuthenticationHook(fastify);
 
   await fastify.register(metricsPlugin, {
     endpoint: observability.metrics.endpoint,
-    defaultMetrics: { enabled: true },
+    defaultMetrics: { enabled: enableDefaultMetrics },
     routeMetrics: { enabled: false },
   });
 };
@@ -443,7 +445,10 @@ const startMetricsServer = async () => {
 
   metricsServer.get(HEALTH_PATH, () => ({ status: "ok" }));
 
-  await registerStandaloneMetricsEndpoint(metricsServer);
+  await registerStandaloneMetricsEndpoint({
+    fastify: metricsServer,
+    enableDefaultMetrics: false,
+  });
 
   // Start metrics server on dedicated port
   await metricsServer.listen({
@@ -830,7 +835,10 @@ const startWorker = async () => {
       return { status: "ok" };
     });
 
-    await registerStandaloneMetricsEndpoint(healthServer);
+    await registerStandaloneMetricsEndpoint({
+      fastify: healthServer,
+      enableDefaultMetrics: true,
+    });
 
     await healthServer.listen({ port: port, host });
     logger.info(`Worker server started on port ${port}`);

@@ -3191,7 +3191,7 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "rate(azure_blks_hit_total[$__rate_interval]) / (rate(azure_blks_hit_total[$__rate_interval]) + rate(azure_blks_read_total[$__rate_interval]))",
+          "expr": "rate(azure_blks_hit_total[$__rate_interval]) / clamp_min(rate(azure_blks_hit_total[$__rate_interval]) + rate(azure_blks_read_total[$__rate_interval]), 1e-9)",
           "hide": false,
           "instant": false,
           "legendFormat": "hit ratio",

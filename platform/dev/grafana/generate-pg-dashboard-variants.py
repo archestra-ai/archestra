@@ -34,6 +34,7 @@ OUTPUT_DIR = SCRIPT_DIR / "dashboards" / "pg-variants"
 # Panel transform spec:
 #   title:   override panel title (optional)
 #   unit:    override field unit (optional)
+#   overrides: replace fieldConfig.overrides (optional)
 #   targets: list of {refId, expr, legendFormat} dicts replacing all targets
 # ---------------------------------------------------------------------------
 
@@ -94,6 +95,7 @@ PROVIDERS = {
                 ],
             },
             505: {
+                "overrides": [],
                 "targets": [
                     {
                         "refId": "A",
@@ -246,6 +248,7 @@ PROVIDERS = {
                 ],
             },
             505: {
+                "overrides": [],
                 "targets": [
                     {
                         "refId": "A",
@@ -416,8 +419,10 @@ PROVIDERS = {
                         "refId": "A",
                         "expr": (
                             "rate(azure_blks_hit_total[$__rate_interval]) / "
-                            "(rate(azure_blks_hit_total[$__rate_interval]) + "
-                            "rate(azure_blks_read_total[$__rate_interval]))"
+                            "clamp_min("
+                            "rate(azure_blks_hit_total[$__rate_interval]) + "
+                            "rate(azure_blks_read_total[$__rate_interval]), "
+                            "1e-9)"
                         ),
                         "legendFormat": "hit ratio",
                     },
@@ -510,6 +515,11 @@ def transform_dashboard(base: dict, provider: dict) -> dict:
             defaults = fc.get("defaults", {})
             defaults["unit"] = spec["unit"]
             fc["defaults"] = defaults
+            panel["fieldConfig"] = fc
+
+        if "overrides" in spec:
+            fc = panel.get("fieldConfig", {})
+            fc["overrides"] = spec["overrides"]
             panel["fieldConfig"] = fc
 
         # Replace targets

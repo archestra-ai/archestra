@@ -41,19 +41,17 @@ Policy Configuration can recommend this automatically for tools that read from u
 
 ## Built-In Agent Settings
 
-Both built-in agents are edited from the standard agent dialog:
+Both built-in agents are editable:
 
 - **Dual LLM Main Agent**: system prompt, model selection, and max rounds
 - **Dual LLM Quarantine Agent**: system prompt and model selection
 
 ## What Gets Stored
 
-When Dual LLM runs, Archestra stores the analysis transcript on the interaction record:
+When Dual LLM runs, Archestra stores the analysis transcript on the log record:
 
 - the question-and-answer conversation between the two built-in agents
 - the final sanitized result used in place of the raw tool output
-
-This makes it possible to inspect Dual LLM behavior in logs without persisting a separate Dual LLM result table.
 
 ## Relationship to Tool Policies
 

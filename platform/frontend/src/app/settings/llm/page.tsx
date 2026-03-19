@@ -1,6 +1,11 @@
 "use client";
 
-import { archestraApiSdk, type archestraApiTypes } from "@shared";
+import {
+  archestraApiSdk,
+  type archestraApiTypes,
+  DocsPage,
+  getDocsUrl,
+} from "@shared";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -200,7 +205,24 @@ export default function LlmSettingsPage() {
     <SettingsSectionStack>
       <SettingsBlock
         title="Apply compression to tool results"
-        description="Reduce LLM token usage up to 60% by using TOON (Token-Oriented Object Notation) compression for tool results."
+        description={
+          <>
+            Reduce LLM token usage up to 60% by using TOON (Token-Oriented
+            Object Notation) compression for tool results.{" "}
+            <a
+              href={getDocsUrl(
+                DocsPage.PlatformCostsAndLimits,
+                "toon-compression",
+              )}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline underline-offset-4"
+            >
+              Learn how TOON compression works
+            </a>
+            .
+          </>
+        }
         control={
           <WithPermissions
             permissions={{ llmSettings: ["update"] }}

@@ -3,8 +3,6 @@
 import {
   ARCHESTRA_MCP_CATALOG_ID,
   type archestraApiTypes,
-  DocsPage,
-  getDocsUrl,
   isPlaywrightCatalogItem,
   parseFullToolName,
 } from "@shared";
@@ -51,6 +49,7 @@ import {
   getDefaultArchestraToolIds,
   sortAndFilterTools,
 } from "./agent-tools-editor.utils";
+import { CatalogDocsLink } from "./catalog-docs-link";
 import { DYNAMIC_CREDENTIAL_VALUE, TokenSelect } from "./token-select";
 
 type InternalMcpCatalogItem =
@@ -747,8 +746,6 @@ function McpServerPill({
     catalogItem.serverType !== "builtin" &&
     !isPlaywright &&
     mcpServers.length > 0;
-  const showArchestraDocsLink = catalogItem.id === ARCHESTRA_MCP_CATALOG_ID;
-
   return (
     <Popover
       open={open}
@@ -809,17 +806,13 @@ function McpServerPill({
             {catalogItem.description && (
               <p className="text-sm text-muted-foreground mt-1">
                 {catalogItem.description}
-                {showArchestraDocsLink ? (
+                {catalogItem.docsUrl ? (
                   <>
                     {" "}
-                    <a
-                      href={getDocsUrl(DocsPage.PlatformArchestraMcpServer)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-primary hover:underline"
-                    >
-                      Learn more
-                    </a>
+                    <CatalogDocsLink
+                      url={catalogItem.docsUrl}
+                      className="inline-flex items-center gap-1 text-primary hover:underline"
+                    />
                   </>
                 ) : null}
               </p>

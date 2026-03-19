@@ -12158,9 +12158,10 @@ export type UnassignToolFromAgentResponse = UnassignToolFromAgentResponses[keyof
 
 export type AssignToolToAgentData = {
     body: {
+        resolveAtCallTime?: boolean;
+        useDynamicTeamCredential?: boolean;
         credentialSourceMcpServerId?: string | null;
         executionSourceMcpServerId?: string | null;
-        useDynamicTeamCredential?: boolean;
     } | null;
     path: {
         agentId: string;
@@ -12244,9 +12245,10 @@ export type BulkAssignToolsData = {
     body: {
         assignments: Array<{
             toolId: string;
+            resolveAtCallTime?: boolean;
+            useDynamicTeamCredential?: boolean;
             credentialSourceMcpServerId?: string | null;
             executionSourceMcpServerId?: string | null;
-            useDynamicTeamCredential?: boolean;
             agentId: string;
         }>;
     };

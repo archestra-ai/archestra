@@ -34,6 +34,7 @@ import { useGenerateConversationTitle } from "@/lib/chat.query";
 const SESSION_CLEANUP_TIMEOUT = 10 * 60 * 1000; // 10 min
 const MAX_AUTO_RETRIES = 2;
 const AUTO_RETRY_DELAY_MS = 1500;
+const TOOL_CREATE_AGENT_FULL_NAME = "archestra__create_agent";
 
 /** Network-level errors that never reach the backend */
 const RETRYABLE_CLIENT_ERRORS = [
@@ -399,6 +400,14 @@ function ChatSessionHook({
         queryClient.invalidateQueries({
           queryKey: ["conversation", conversationId],
         });
+      }
+
+      // Agents created through chat tool calls bypass the normal frontend
+      // create-agent mutations, so the cached useInternalAgents() list can stay
+      // stale unless we invalidate it here. Without this, the prompt input's
+      // agent selector may not reflect a newly created/swapped-to agent yet.
+      if (toolCall.toolName === TOOL_CREATE_AGENT_FULL_NAME) {
+        queryClient.invalidateQueries({ queryKey: ["agents"] });
       }
 
       // Detect artifact_write tool and invalidate conversation to fetch updated artifact

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import {
   MCP_SERVER_TOOL_NAME_SEPARATOR,
   TOOL_ARTIFACT_WRITE_FULL_NAME,
@@ -5,6 +6,7 @@ import {
   TOOL_TODO_WRITE_FULL_NAME,
 } from "@shared";
 import { and, eq } from "drizzle-orm";
+import { ARCHESTRA_MCP_CATALOG_METADATA } from "@/archestra-mcp-server/metadata";
 import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
 import AgentToolModel from "./agent-tool";
@@ -2115,6 +2117,65 @@ describe("ToolModel", () => {
       const createdTool = result.created[0];
       expect(createdTool.id).toBeDefined();
       expect(createdTool.name).toBe("new-tool");
+    });
+  });
+
+  describe("seedArchestraTools", () => {
+    test("creates the built-in catalog entry with current metadata", async () => {
+      const catalogId = randomUUID();
+
+      await ToolModel.seedArchestraTools(catalogId);
+
+      const [catalog] = await db
+        .select()
+        .from(schema.internalMcpCatalogTable)
+        .where(eq(schema.internalMcpCatalogTable.id, catalogId));
+
+      expect(catalog).toBeDefined();
+      expect(catalog?.name).toBe(ARCHESTRA_MCP_CATALOG_METADATA.name);
+      expect(catalog?.description).toBe(
+        ARCHESTRA_MCP_CATALOG_METADATA.description,
+      );
+      expect(catalog?.docsUrl).toBe(ARCHESTRA_MCP_CATALOG_METADATA.docsUrl);
+      expect(catalog?.serverType).toBe(
+        ARCHESTRA_MCP_CATALOG_METADATA.serverType,
+      );
+      expect(catalog?.requiresAuth).toBe(
+        ARCHESTRA_MCP_CATALOG_METADATA.requiresAuth,
+      );
+    });
+
+    test("updates stale built-in catalog metadata on reseed", async () => {
+      const catalogId = randomUUID();
+
+      await db.insert(schema.internalMcpCatalogTable).values({
+        id: catalogId,
+        name: "Old Archestra",
+        description: "Outdated description",
+        docsUrl: "https://example.com/old-docs",
+        serverType: "builtin",
+        requiresAuth: true,
+      });
+
+      await ToolModel.seedArchestraTools(catalogId);
+
+      const [catalog] = await db
+        .select()
+        .from(schema.internalMcpCatalogTable)
+        .where(eq(schema.internalMcpCatalogTable.id, catalogId));
+
+      expect(catalog).toBeDefined();
+      expect(catalog?.name).toBe(ARCHESTRA_MCP_CATALOG_METADATA.name);
+      expect(catalog?.description).toBe(
+        ARCHESTRA_MCP_CATALOG_METADATA.description,
+      );
+      expect(catalog?.docsUrl).toBe(ARCHESTRA_MCP_CATALOG_METADATA.docsUrl);
+      expect(catalog?.serverType).toBe(
+        ARCHESTRA_MCP_CATALOG_METADATA.serverType,
+      );
+      expect(catalog?.requiresAuth).toBe(
+        ARCHESTRA_MCP_CATALOG_METADATA.requiresAuth,
+      );
     });
   });
 

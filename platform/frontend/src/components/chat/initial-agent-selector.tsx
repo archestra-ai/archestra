@@ -1,10 +1,8 @@
 "use client";
 
 import {
-  DocsPage,
   type AgentScope,
   type archestraApiTypes,
-  getDocsUrl,
   isBuiltInCatalogId,
 } from "@shared";
 import { useQueries } from "@tanstack/react-query";
@@ -31,6 +29,7 @@ import { AgentIcon } from "@/components/agent-icon";
 import { AgentIconPicker } from "@/components/agent-icon-picker";
 import { McpCatalogIcon, ToolChecklist } from "@/components/agent-tools-editor";
 import { PromptInputButton } from "@/components/ai-elements/prompt-input";
+import { CatalogDocsLink } from "@/components/catalog-docs-link";
 import { OAuthConfirmationDialog } from "@/components/oauth-confirmation-dialog";
 import { SystemPromptEditor } from "@/components/system-prompt-editor";
 import { TokenSelect } from "@/components/token-select";
@@ -99,11 +98,13 @@ type CatalogItem =
 
 interface InitialAgentSelectorProps {
   currentAgentId: string | null;
+  currentAgentName?: string;
   onAgentChange: (agentId: string) => void;
 }
 
 export function InitialAgentSelector({
   currentAgentId,
+  currentAgentName,
   onAgentChange,
 }: InitialAgentSelectorProps) {
   const { data: allAgents = [] } = useInternalAgents();
@@ -143,6 +144,8 @@ export function InitialAgentSelector({
       allAgents.find((a) => a.id === currentAgentId) ?? allAgents[0] ?? null,
     [allAgents, currentAgentId],
   );
+  const displayAgentName =
+    currentAgent?.name ?? currentAgentName ?? "Select agent";
 
   const canEditCurrentAgent = useMemo(() => {
     if (!currentAgent) return false;
@@ -264,7 +267,7 @@ export function InitialAgentSelector({
           >
             <AgentIcon icon={currentAgent.icon} size={16} />
             <span className="truncate flex-1 text-left">
-              {currentAgent?.name ?? "Select agent"}
+              {displayAgentName}
             </span>
             <ToolServerAvatarGroup
               catalogs={assignedCatalogs}
@@ -1504,8 +1507,6 @@ function ConfigureToolView({
   const newToolCount = useMemo(() => {
     return [...selectedToolIds].filter((id) => !assignedToolIds.has(id)).length;
   }, [selectedToolIds, assignedToolIds]);
-  const showArchestraDocsLink = isBuiltInCatalogId(catalog.id);
-
   return (
     <div className="flex flex-col h-full">
       <DialogHeader
@@ -1515,18 +1516,13 @@ function ConfigureToolView({
         description={
           <>
             {catalog.description}
-            {showArchestraDocsLink ? (
+            {catalog.docsUrl ? (
               <>
                 {" "}
-                <a
-                  href={getDocsUrl(DocsPage.PlatformArchestraMcpServer)}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                <CatalogDocsLink
+                  url={catalog.docsUrl}
                   className="inline-flex items-center gap-1 text-primary hover:underline"
-                >
-                  Learn more
-                  <ExternalLink className="size-3.5" />
-                </a>
+                />
               </>
             ) : null}
           </>

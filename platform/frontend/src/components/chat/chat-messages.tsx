@@ -58,11 +58,11 @@ import {
   extractFileAttachments,
   filterOptimisticToolCalls,
   hasTextPart,
+  identifyCompactToolGroups,
 } from "./chat-messages.utils";
 import {
   getToolErrorText,
   getToolHeaderState,
-  isCompactEligible,
 } from "./chat-tools-display.utils";
 import { CompactToolGroup } from "./compact-tool-call";
 import { EditableAssistantMessage } from "./editable-assistant-message";
@@ -306,9 +306,8 @@ export function ChatMessages({
                 className={cn(isDimmed && "opacity-40 transition-opacity")}
               >
                 {(() => {
-                  const { groupMap, consumedIndices } = identifyCompactGroups(
-                    message.parts,
-                  );
+                  const { groupMap, consumedIndices } =
+                    identifyCompactToolGroups(message.parts);
                   const partKeyTracker = new Map<string, number>();
                   return message.parts?.map((part, i) => {
                     const partKey = getMessagePartKey(
@@ -1154,126 +1153,6 @@ const getHeaderState = ({
 }) => {
   return getToolHeaderState({ state, toolResultPart, errorText });
 };
-
-type CompactGroup = {
-  startIndex: number;
-  entries: Array<{
-    partIndex: number;
-    toolName: string;
-    // biome-ignore lint/suspicious/noExplicitAny: Tool parts have dynamic structure
-    part: any;
-    // biome-ignore lint/suspicious/noExplicitAny: Tool result parts have dynamic structure
-    toolResultPart: any;
-    // biome-ignore lint/suspicious/noExplicitAny: Error text extraction is dynamic
-    errorText: any;
-  }>;
-};
-
-/**
- * Pre-processes message parts to identify groups of consecutive compact-eligible tools.
- * Returns a map from the first part index of each group to the group data,
- * and a set of all part indices consumed by compact groups.
- *
- * Pass 1: Build a map from toolCallId → result part index, and identify invocation indices.
- * Pass 2: Walk invocations in order, skipping result-only parts and non-tool parts,
- *          grouping consecutive compact-eligible invocations together.
- */
-function identifyCompactGroups(
-  // biome-ignore lint/suspicious/noExplicitAny: Message parts have dynamic structure
-  parts: any[] | undefined,
-): { groupMap: Map<number, CompactGroup>; consumedIndices: Set<number> } {
-  const groupMap = new Map<number, CompactGroup>();
-  const consumedIndices = new Set<number>();
-
-  if (!parts) return { groupMap, consumedIndices };
-
-  // Pass 1: Identify which parts are "duplicate result" parts (a result that
-  // immediately follows its invocation with the same toolCallId) vs primary
-  // tool parts. A tool part is primary if it's the first occurrence of its
-  // toolCallId. The second occurrence (the result) is a duplicate.
-  const seenToolCallIds = new Set<string>();
-  const duplicateResultIndices = new Set<number>();
-  const invocationIndices: number[] = [];
-  // Map from toolCallId to the index of the duplicate result part
-  const resultByCallId = new Map<string, number>();
-
-  for (let i = 0; i < parts.length; i++) {
-    const part = parts[i];
-    if (!isToolPart(part)) continue;
-
-    const callId = part.toolCallId;
-    if (callId && seenToolCallIds.has(callId)) {
-      // This is a duplicate result part
-      duplicateResultIndices.add(i);
-      resultByCallId.set(callId, i);
-    } else {
-      // Primary tool part (may have state "output-available" if combined)
-      if (callId) seenToolCallIds.add(callId);
-      invocationIndices.push(i);
-    }
-  }
-
-  // Pass 2: Group consecutive compact-eligible invocations
-  let currentGroup: CompactGroup | null = null;
-
-  for (const idx of invocationIndices) {
-    // biome-ignore lint/suspicious/noExplicitAny: Dynamic tool parts have toolName property
-    const rawPart = parts[idx] as any;
-
-    const toolName: string | null =
-      rawPart.type === "dynamic-tool"
-        ? rawPart.toolName
-        : rawPart.type?.startsWith("tool-")
-          ? rawPart.type.replace("tool-", "")
-          : null;
-
-    if (!toolName) {
-      if (currentGroup && currentGroup.entries.length > 0) {
-        groupMap.set(currentGroup.startIndex, currentGroup);
-        currentGroup = null;
-      }
-      continue;
-    }
-
-    // Find matching result part
-    const resultIdx = rawPart.toolCallId
-      ? resultByCallId.get(rawPart.toolCallId)
-      : undefined;
-    const toolResultPart = resultIdx !== undefined ? parts[resultIdx] : null;
-
-    const errorText = getToolErrorText({ part: rawPart, toolResultPart });
-
-    if (isCompactEligible({ part: rawPart, toolResultPart, toolName })) {
-      if (!currentGroup) {
-        currentGroup = { startIndex: idx, entries: [] };
-      }
-      currentGroup.entries.push({
-        partIndex: idx,
-        toolName,
-        part: rawPart,
-        toolResultPart,
-        errorText,
-      });
-      consumedIndices.add(idx);
-      if (resultIdx !== undefined) {
-        consumedIndices.add(resultIdx);
-      }
-    } else {
-      // Non-compact tool breaks the group
-      if (currentGroup && currentGroup.entries.length > 0) {
-        groupMap.set(currentGroup.startIndex, currentGroup);
-        currentGroup = null;
-      }
-    }
-  }
-
-  // Finalize last group
-  if (currentGroup && currentGroup.entries.length > 0) {
-    groupMap.set(currentGroup.startIndex, currentGroup);
-  }
-
-  return { groupMap, consumedIndices };
-}
 
 /**
  * Renders a "Switched to {agent}" divider after all parts of a message

@@ -25,6 +25,7 @@ import {
 import { alias } from "drizzle-orm/pg-core";
 
 import { getArchestraMcpTools } from "@/archestra-mcp-server";
+import { ARCHESTRA_MCP_CATALOG_METADATA } from "@/archestra-mcp-server/metadata";
 import db, { schema } from "@/database";
 import {
   createPaginatedResult,
@@ -589,13 +590,14 @@ class ToolModel {
       .insert(schema.internalMcpCatalogTable)
       .values({
         id: catalogId,
-        name: "Archestra",
-        description:
-          "Built-in Archestra tools for managing profiles, limits, policies, and MCP servers.",
-        serverType: "builtin",
-        requiresAuth: false,
+        ...ARCHESTRA_MCP_CATALOG_METADATA,
       })
-      .onConflictDoNothing();
+      .onConflictDoUpdate({
+        target: schema.internalMcpCatalogTable.id,
+        set: {
+          ...ARCHESTRA_MCP_CATALOG_METADATA,
+        },
+      });
 
     const archestraTools = getArchestraMcpTools();
     const archestraToolNames = archestraTools.map((t) => t.name);

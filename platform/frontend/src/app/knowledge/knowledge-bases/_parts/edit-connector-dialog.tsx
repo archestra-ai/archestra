@@ -11,7 +11,6 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { DialogForm } from "@/components/ui/dialog";
 import {
   Form,
   FormControl,
@@ -154,190 +153,129 @@ export function EditConnectorDialog({
       }
     >
       <Form {...form}>
-        <DialogForm
-          onSubmit={form.handleSubmit(handleSubmit)}
-          className="contents"
-        >
-          <div className="space-y-4">
+        <div className="space-y-4">
+          <FormField
+            control={form.control}
+            name="enabled"
+            render={({ field }) => (
+              <FormItem className="flex items-center justify-between rounded-lg border p-3">
+                <div>
+                  <FormLabel className="text-sm font-medium">Enabled</FormLabel>
+                  <FormDescription className="text-xs">
+                    When disabled, scheduled syncs will not run.
+                  </FormDescription>
+                </div>
+                <FormControl>
+                  <Switch
+                    checked={field.value}
+                    onCheckedChange={field.onChange}
+                  />
+                </FormControl>
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="name"
+            rules={{ required: "Name is required" }}
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Name</FormLabel>
+                <FormControl>
+                  <Input
+                    placeholder={getConnectorNamePlaceholder(
+                      connector.connectorType,
+                    )}
+                    {...field}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="description"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>
+                  Description{" "}
+                  <span className="text-muted-foreground font-normal">
+                    (optional)
+                  </span>
+                </FormLabel>
+                <FormControl>
+                  <Input
+                    placeholder="A short description of this connector"
+                    {...field}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            // biome-ignore lint/suspicious/noExplicitAny: dynamic field name for connector-specific URL
+            name={urlConfig.fieldName as any}
+            rules={{ required: `${urlConfig.label} is required` }}
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>{urlConfig.label}</FormLabel>
+                <FormControl>
+                  <Input
+                    placeholder={urlConfig.placeholder}
+                    {...field}
+                    value={(field.value as string) ?? ""}
+                  />
+                </FormControl>
+                <FormDescription>{urlConfig.description}</FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          {(connectorType === "jira" || connectorType === "confluence") && (
             <FormField
               control={form.control}
-              name="enabled"
+              // biome-ignore lint/suspicious/noExplicitAny: dynamic field name for connector config
+              name={"config.isCloud" as any}
               render={({ field }) => (
                 <FormItem className="flex items-center justify-between rounded-lg border p-3">
-                  <div>
-                    <FormLabel className="text-sm font-medium">
-                      Enabled
-                    </FormLabel>
-                    <FormDescription className="text-xs">
-                      When disabled, scheduled syncs will not run.
+                  <div className="space-y-0.5">
+                    <FormLabel>Cloud Instance</FormLabel>
+                    <FormDescription>
+                      Enable if this is a cloud-hosted instance.
                     </FormDescription>
                   </div>
                   <FormControl>
                     <Switch
-                      checked={field.value}
+                      checked={(field.value as boolean) ?? true}
                       onCheckedChange={field.onChange}
                     />
                   </FormControl>
                 </FormItem>
               )}
             />
+          )}
 
+          {needsEmail && (
             <FormField
               control={form.control}
-              name="name"
-              rules={{ required: "Name is required" }}
+              name="email"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Name</FormLabel>
+                  <FormLabel>Email{!emailRequired && " (optional)"}</FormLabel>
                   <FormControl>
                     <Input
-                      placeholder={getConnectorNamePlaceholder(
-                        connector.connectorType,
-                      )}
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="description"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>
-                    Description{" "}
-                    <span className="text-muted-foreground font-normal">
-                      (optional)
-                    </span>
-                  </FormLabel>
-                  <FormControl>
-                    <Input
-                      placeholder="A short description of this connector"
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              // biome-ignore lint/suspicious/noExplicitAny: dynamic field name for connector-specific URL
-              name={urlConfig.fieldName as any}
-              rules={{ required: `${urlConfig.label} is required` }}
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{urlConfig.label}</FormLabel>
-                  <FormControl>
-                    <Input
-                      placeholder={urlConfig.placeholder}
-                      {...field}
-                      value={(field.value as string) ?? ""}
-                    />
-                  </FormControl>
-                  <FormDescription>{urlConfig.description}</FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            {(connectorType === "jira" || connectorType === "confluence") && (
-              <FormField
-                control={form.control}
-                // biome-ignore lint/suspicious/noExplicitAny: dynamic field name for connector config
-                name={"config.isCloud" as any}
-                render={({ field }) => (
-                  <FormItem className="flex items-center justify-between rounded-lg border p-3">
-                    <div className="space-y-0.5">
-                      <FormLabel>Cloud Instance</FormLabel>
-                      <FormDescription>
-                        Enable if this is a cloud-hosted instance.
-                      </FormDescription>
-                    </div>
-                    <FormControl>
-                      <Switch
-                        checked={(field.value as boolean) ?? true}
-                        onCheckedChange={field.onChange}
-                      />
-                    </FormControl>
-                  </FormItem>
-                )}
-              />
-            )}
-
-            {needsEmail && (
-              <FormField
-                control={form.control}
-                name="email"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>
-                      Email{!emailRequired && " (optional)"}
-                    </FormLabel>
-                    <FormControl>
-                      <Input
-                        type="email"
-                        placeholder={
-                          emailRequired
-                            ? "user@example.com"
-                            : "Required for basic auth, leave empty for PAT"
-                        }
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormDescription>
-                      Leave empty to keep existing credentials unchanged.
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            )}
-
-            {connectorType === "servicenow" && (
-              <FormField
-                control={form.control}
-                name="email"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Username</FormLabel>
-                    <FormControl>
-                      <Input placeholder="admin" {...field} />
-                    </FormControl>
-                    <FormDescription>
-                      Leave empty to keep existing credentials unchanged.
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            )}
-
-            <FormField
-              control={form.control}
-              name="apiToken"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>
-                    {connectorType === "servicenow"
-                      ? "Password"
-                      : needsEmail
-                        ? emailRequired
-                          ? "API Token"
-                          : "API Token / Personal Access Token"
-                        : "Personal Access Token"}
-                  </FormLabel>
-                  <FormControl>
-                    <Input
-                      type="password"
+                      type="email"
                       placeholder={
-                        connectorType === "servicenow"
-                          ? "Leave empty to keep existing password"
-                          : "Leave empty to keep existing token"
+                        emailRequired
+                          ? "user@example.com"
+                          : "Required for basic auth, leave empty for PAT"
                       }
                       {...field}
                     />
@@ -349,33 +287,85 @@ export function EditConnectorDialog({
                 </FormItem>
               )}
             />
+          )}
 
-            <Collapsible>
-              <CollapsibleTrigger className="flex w-full items-center justify-between cursor-pointer group border-t pt-3">
-                <span className="text-sm font-medium">Advanced</span>
-                <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180" />
-              </CollapsibleTrigger>
-              <CollapsibleContent className="pt-4 space-y-4">
-                <SchedulePicker form={form} name="schedule" />
-                {connectorType === "jira" && (
-                  <JiraConfigFields form={form} hideUrl hideIsCloud />
-                )}
-                {connectorType === "confluence" && (
-                  <ConfluenceConfigFields form={form} hideUrl hideIsCloud />
-                )}
-                {connectorType === "github" && (
-                  <GithubConfigFields form={form} hideUrl />
-                )}
-                {connectorType === "gitlab" && (
-                  <GitlabConfigFields form={form} hideUrl />
-                )}
-                {connectorType === "servicenow" && (
-                  <ServiceNowConfigFields form={form} hideUrl />
-                )}
-              </CollapsibleContent>
-            </Collapsible>
-          </div>
-        </DialogForm>
+          {connectorType === "servicenow" && (
+            <FormField
+              control={form.control}
+              name="email"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Username</FormLabel>
+                  <FormControl>
+                    <Input placeholder="admin" {...field} />
+                  </FormControl>
+                  <FormDescription>
+                    Leave empty to keep existing credentials unchanged.
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          )}
+
+          <FormField
+            control={form.control}
+            name="apiToken"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>
+                  {connectorType === "servicenow"
+                    ? "Password"
+                    : needsEmail
+                      ? emailRequired
+                        ? "API Token"
+                        : "API Token / Personal Access Token"
+                      : "Personal Access Token"}
+                </FormLabel>
+                <FormControl>
+                  <Input
+                    type="password"
+                    placeholder={
+                      connectorType === "servicenow"
+                        ? "Leave empty to keep existing password"
+                        : "Leave empty to keep existing token"
+                    }
+                    {...field}
+                  />
+                </FormControl>
+                <FormDescription>
+                  Leave empty to keep existing credentials unchanged.
+                </FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <Collapsible>
+            <CollapsibleTrigger className="flex w-full items-center justify-between cursor-pointer group border-t pt-3">
+              <span className="text-sm font-medium">Advanced</span>
+              <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180" />
+            </CollapsibleTrigger>
+            <CollapsibleContent className="pt-4 space-y-4">
+              <SchedulePicker form={form} name="schedule" />
+              {connectorType === "jira" && (
+                <JiraConfigFields form={form} hideUrl hideIsCloud />
+              )}
+              {connectorType === "confluence" && (
+                <ConfluenceConfigFields form={form} hideUrl hideIsCloud />
+              )}
+              {connectorType === "github" && (
+                <GithubConfigFields form={form} hideUrl />
+              )}
+              {connectorType === "gitlab" && (
+                <GitlabConfigFields form={form} hideUrl />
+              )}
+              {connectorType === "servicenow" && (
+                <ServiceNowConfigFields form={form} hideUrl />
+              )}
+            </CollapsibleContent>
+          </Collapsible>
+        </div>
       </Form>
     </StandardFormDialog>
   );

@@ -60,28 +60,19 @@ export function InlineChatError({
   const copyDebugInfo = () => {
     const lines: string[] = [];
 
-    // Error details — matches the admin-only collapsible layout
-    const codeLine = chatError.isRetryable
-      ? `${chatError.code} Retryable`
-      : chatError.code;
-    lines.push(codeLine);
     lines.push(chatError.message);
-    if (chatError.originalError) {
-      lines.push(formatOriginalError(chatError.originalError));
-    }
-
-    // Context
-    lines.push("");
     if (agentName) lines.push(`Agent: ${agentName}`);
     if (selectedModel) lines.push(`Model: ${selectedModel}`);
+    if (chatError.originalError?.provider) lines.push(`Provider: ${chatError.originalError.provider}`);
     lines.push(`Model source: ${formatModelSource(modelSource)}`);
+    for (const e of refEntries) {
+      lines.push(`${e.label}: ${e.value}`);
+    }
 
-    // Reference IDs
-    if (refEntries.length > 0) {
-      lines.push("");
-      for (const e of refEntries) {
-        lines.push(`${e.label}: ${e.value}`);
-      }
+    lines.push("");
+    lines.push(`Code: ${chatError.code}${chatError.isRetryable ? " (retryable)" : ""}`);
+    if (chatError.originalError) {
+      lines.push(formatOriginalError(chatError.originalError));
     }
 
     navigator.clipboard.writeText(lines.join("\n"));
@@ -115,8 +106,14 @@ export function InlineChatError({
                   <span>{selectedModel}</span>
                 </span>
               )}
+              {chatError.originalError?.provider && (
+                <span className="inline-flex items-center gap-1 rounded bg-muted/60 px-1.5 py-0.5 text-[11px] text-muted-foreground font-mono">
+                  <span className="opacity-60">Provider</span>
+                  <span>{chatError.originalError.provider}</span>
+                </span>
+              )}
               <span className="inline-flex items-center gap-1 rounded bg-muted/60 px-1.5 py-0.5 text-[11px] text-muted-foreground font-mono">
-                <span className="opacity-60">Source</span>
+                <span className="opacity-60">Model source</span>
                 <span>{formatModelSource(modelSource)}</span>
               </span>
               {refEntries.map((entry) => (
@@ -192,12 +189,12 @@ export function InlineChatError({
 function formatModelSource(source: ModelSource | null | undefined): string {
   switch (source) {
     case "agent":
-      return "Agent default";
+      return "agent";
     case "organization":
-      return "Org default";
+      return "organization";
     case "user":
-      return "User override";
+      return "user override";
     default:
-      return "No model selected";
+      return "no model selected";
   }
 }

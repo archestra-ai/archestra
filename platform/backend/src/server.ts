@@ -411,6 +411,7 @@ const addMetricsAuthenticationHook = (
     const token = authHeader.slice(7);
     if (token !== metricsSecret) {
       reply.code(401).send({ error: "Unauthorized: Invalid token" });
+      return;
     }
   });
 };

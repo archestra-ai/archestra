@@ -8,34 +8,6 @@ import { schema } from "@/database";
 import { UuidIdSchema } from "./api";
 import { ToolParametersContentSchema } from "./tool";
 
-export interface AgentToolAssignmentIntent {
-  /** Exact tool ID to assign. */
-  toolId: string;
-  /**
-   * Preferred late-bound mode for builder flows.
-   * When true, resolve both credentials and the execution target at tool call time.
-   */
-  resolveAtCallTime?: boolean;
-  /**
-   * Compatibility alias for `resolveAtCallTime`.
-   * Keep using `resolveAtCallTime` in new code and MCP tool calls; this field only
-   * exists so older callers do not break.
-   */
-  useDynamicTeamCredential?: boolean;
-  /**
-   * Explicit remote MCP installation to use as the credential source.
-   * This means "use credentials from this specific installed MCP server" instead
-   * of resolving credentials dynamically at tool call time.
-   */
-  credentialSourceMcpServerId?: string | null;
-  /**
-   * Explicit local MCP installation to use as the execution target.
-   * This means "run the tool on this specific installed MCP server" instead of
-   * resolving the execution target dynamically at tool call time.
-   */
-  executionSourceMcpServerId?: string | null;
-}
-
 export const SelectAgentToolSchema = createSelectSchema(schema.agentToolsTable)
   .omit({
     agentId: true,

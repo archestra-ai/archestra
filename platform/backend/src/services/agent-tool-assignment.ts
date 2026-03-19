@@ -14,7 +14,7 @@ export type AgentToolAssignmentError = {
   error: { message: string; type: string };
 };
 
-type PrefetchedMcpServer = {
+export type PrefetchedMcpServer = {
   id: string;
   ownerId: string | null;
   catalogId: string | null;

@@ -177,6 +177,37 @@ describe("tool assignment tool execution", () => {
     ]);
     expect(parsed.succeeded).toEqual([]);
   });
+
+  test("bulk_assign_tools_to_agents preserves structured validation error metadata", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({ name: "Missing Tool Agent" });
+
+    const result = await executeArchestraTool(
+      AGENTS_TOOL,
+      {
+        assignments: [
+          {
+            agentId: agent.id,
+            toolId: "00000000-0000-4000-8000-000000000099",
+          },
+        ],
+      },
+      mockContext,
+    );
+
+    expect(result.isError).toBe(false);
+    const parsed = JSON.parse((result.content[0] as any).text);
+    expect(parsed.failed).toEqual([
+      {
+        agentId: agent.id,
+        toolId: "00000000-0000-4000-8000-000000000099",
+        error: "Tool with ID 00000000-0000-4000-8000-000000000099 not found",
+        errorCode: "not_found",
+        errorType: "not_found",
+      },
+    ]);
+  });
 });
 
 describe("tool assignment with late-bound resolution", () => {

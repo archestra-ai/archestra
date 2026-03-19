@@ -3,6 +3,7 @@ import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
 import {
   assignToolToAgent,
+  validateAssignment,
   validateCredentialSource,
   validateExecutionSource,
 } from "./agent-tool-assignment";
@@ -100,6 +101,61 @@ describe("validateExecutionSource", () => {
       error: {
         message:
           "Execution source MCP server must come from the same catalog item as the tool",
+        type: "validation_error",
+      },
+    });
+  });
+});
+
+describe("validateAssignment late-bound precedence", () => {
+  test("prefers resolveAtCallTime over useDynamicTeamCredential when both are provided", async ({
+    makeAgent,
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const agent = await makeAgent();
+    const remoteCatalog = await makeInternalMcpCatalog({
+      serverType: "remote",
+    });
+    const tool = await makeTool({
+      name: "precedence_remote_tool",
+      catalogId: remoteCatalog.id,
+    });
+
+    const result = await validateAssignment({
+      agentId: agent.id,
+      toolId: tool.id,
+      resolveAtCallTime: true,
+      useDynamicTeamCredential: false,
+    });
+
+    expect(result).toBeNull();
+  });
+
+  test("defaults late-bound resolution to false when both flags are omitted", async ({
+    makeAgent,
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const agent = await makeAgent();
+    const remoteCatalog = await makeInternalMcpCatalog({
+      serverType: "remote",
+    });
+    const tool = await makeTool({
+      name: "default_false_remote_tool",
+      catalogId: remoteCatalog.id,
+    });
+
+    const result = await validateAssignment({
+      agentId: agent.id,
+      toolId: tool.id,
+    });
+
+    expect(result).toEqual({
+      code: "validation_error",
+      error: {
+        message:
+          "Credential source or dynamic team credential is required for remote MCP server tools",
         type: "validation_error",
       },
     });

@@ -26,6 +26,7 @@ import {
 } from "@/models";
 import {
   assignToolToAgent,
+  type PrefetchedMcpServer,
   validateAssignment,
   validateCredentialSource,
   validateExecutionSource,
@@ -275,10 +276,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
           ].filter((id): id is string => id != null),
         ),
       ];
-      const mcpServersBasicMap = new Map<
-        string,
-        Awaited<ReturnType<typeof McpServerModel.findByIdsBasic>>[number]
-      >();
+      const mcpServersBasicMap = new Map<string, PrefetchedMcpServer>();
       if (uniqueMcpServerIds.length > 0) {
         const servers = await McpServerModel.findByIdsBasic(uniqueMcpServerIds);
         for (const s of servers) {

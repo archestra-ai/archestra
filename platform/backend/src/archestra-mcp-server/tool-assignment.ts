@@ -80,6 +80,14 @@ const BulkAgentAssignmentResultSchema = z
     agentId: UuidIdSchema.describe("The target agent ID."),
     toolId: UuidIdSchema.describe("The tool ID."),
     error: z.string().optional().describe("Validation or assignment error."),
+    errorCode: z
+      .enum(["not_found", "validation_error"])
+      .optional()
+      .describe("Structured assignment error code."),
+    errorType: z
+      .string()
+      .optional()
+      .describe("Structured assignment error type."),
   })
   .strict();
 
@@ -88,6 +96,14 @@ const BulkMcpGatewayAssignmentResultSchema = z
     mcpGatewayId: UuidIdSchema.describe("The target MCP gateway ID."),
     toolId: UuidIdSchema.describe("The tool ID."),
     error: z.string().optional().describe("Validation or assignment error."),
+    errorCode: z
+      .enum(["not_found", "validation_error"])
+      .optional()
+      .describe("Structured assignment error code."),
+    errorType: z
+      .string()
+      .optional()
+      .describe("Structured assignment error type."),
   })
   .strict();
 
@@ -256,8 +272,13 @@ async function handleBulkAssignTool(params: {
         } else if (result.value === "duplicate") {
           duplicates.push({ [idField]: entityId, toolId });
         } else {
-          const error = result.value.error.message || "Unknown error";
-          failed.push({ [idField]: entityId, toolId, error });
+          failed.push({
+            [idField]: entityId,
+            toolId,
+            error: result.value.error.message || "Unknown error",
+            errorCode: result.value.code,
+            errorType: result.value.error.type,
+          });
         }
       } else if (result.status === "rejected") {
         const error =

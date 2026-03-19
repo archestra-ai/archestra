@@ -6,7 +6,6 @@ import {
   SWAP_TO_DEFAULT_AGENT_POKE_TEXT,
 } from "@shared";
 import type { UIMessage } from "ai";
-import { useMemo } from "react";
 
 type ChatConversation = archestraApiTypes.GetChatConversationResponses["200"];
 export type ChatAgentOption = { id: string; name: string };
@@ -54,13 +53,7 @@ export function useChatAgentState(params: {
   messages?: UIMessage[];
   agents?: ChatAgentOption[];
 }): ResolvedChatAgentState {
-  const { conversation, initialAgentId, messages, agents } = params;
-
-  return useMemo(
-    () =>
-      resolveChatAgentState({ conversation, initialAgentId, messages, agents }),
-    [conversation, initialAgentId, messages, agents],
-  );
+  return resolveChatAgentState(params);
 }
 
 function resolveSwappedAgent(params: {

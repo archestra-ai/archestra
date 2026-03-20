@@ -63,14 +63,17 @@ export function InlineChatError({
     lines.push(chatError.message);
     if (agentName) lines.push(`Agent: ${agentName}`);
     if (selectedModel) lines.push(`Model: ${selectedModel}`);
-    if (chatError.originalError?.provider) lines.push(`Provider: ${chatError.originalError.provider}`);
+    if (chatError.originalError?.provider)
+      lines.push(`Provider: ${chatError.originalError.provider}`);
     lines.push(`Model source: ${formatModelSource(modelSource)}`);
     for (const e of refEntries) {
       lines.push(`${e.label}: ${e.value}`);
     }
 
     lines.push("");
-    lines.push(`Code: ${chatError.code}${chatError.isRetryable ? " (retryable)" : ""}`);
+    lines.push(
+      `Code: ${chatError.code}${chatError.isRetryable ? " (retryable)" : ""}`,
+    );
     if (chatError.originalError) {
       lines.push(formatOriginalError(chatError.originalError));
     }

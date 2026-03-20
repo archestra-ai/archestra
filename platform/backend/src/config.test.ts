@@ -16,6 +16,7 @@ import {
   getOtlpAuthHeaders,
   getTrustedOrigins,
   parseBodyLimit,
+  parseCommaSeparatedList,
   parseConnectorSyncMaxDuration,
   parseContentMaxLength,
   parseProcessType,
@@ -1077,5 +1078,36 @@ describe("parseSampleRate", () => {
 
   test("should return default for non-numeric value", () => {
     expect(parseSampleRate("abc", 0.1)).toBe(0.1);
+  });
+});
+
+describe("parseCommaSeparatedList", () => {
+  test("should parse comma-separated values", () => {
+    expect(parseCommaSeparatedList("anthropic,amazon")).toEqual([
+      "anthropic",
+      "amazon",
+    ]);
+  });
+
+  test("should trim whitespace from values", () => {
+    expect(parseCommaSeparatedList(" anthropic , amazon ")).toEqual([
+      "anthropic",
+      "amazon",
+    ]);
+  });
+
+  test("should return empty array for empty string", () => {
+    expect(parseCommaSeparatedList("")).toEqual([]);
+  });
+
+  test("should filter out empty entries from extra commas", () => {
+    expect(parseCommaSeparatedList("anthropic,,amazon,")).toEqual([
+      "anthropic",
+      "amazon",
+    ]);
+  });
+
+  test("should handle single value", () => {
+    expect(parseCommaSeparatedList("anthropic")).toEqual(["anthropic"]);
   });
 });

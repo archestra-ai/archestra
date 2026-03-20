@@ -700,6 +700,16 @@ These environment variables set the default base URL for each LLM provider. Per-
   - Optional: Falls back to extracting from `ARCHESTRA_BEDROCK_BASE_URL`
   - Example: `us-east-1`
 
+- **`ARCHESTRA_BEDROCK_ALLOWED_PROVIDERS`** - Filter Bedrock inference profiles by provider.
+  - Optional: When empty, all inference profiles are returned
+  - Comma-separated list of provider prefixes (e.g., `anthropic,amazon`)
+  - See: [Filtering Models by Provider](/docs/platform-supported-llm-providers#filtering-models-by-provider)
+
+- **`ARCHESTRA_BEDROCK_ALLOWED_INFERENCE_REGIONS`** - Filter Bedrock inference profiles by region.
+  - Optional: When empty, all inference regions are returned
+  - Comma-separated list of region prefixes (e.g., `us,global`)
+  - See: [Filtering Models by Inference Region](/docs/platform-supported-llm-providers#filtering-models-by-inference-region)
+
 - **`ARCHESTRA_GEMINI_VERTEX_AI_ENABLED`** - Enable Vertex AI mode for Gemini.
   - Default: `false`
   - Set to `true` to use Vertex AI instead of the Google AI Studio API

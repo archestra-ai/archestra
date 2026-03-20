@@ -1570,8 +1570,27 @@ async function fetchAllBedrockInferenceProfiles(
 function mapInferenceProfilesToModels(
   profiles: BedrockInferenceProfile[],
 ): ModelInfo[] {
+  const allowedProviders = config.llm.bedrock.allowedProviders;
+  const allowedRegions = config.llm.bedrock.allowedInferenceRegions;
+
   const models = profiles
     .filter((profile) => profile.status === "ACTIVE")
+    .filter((profile) => {
+      if (allowedRegions.length === 0) return true;
+      const id = profile.inferenceProfileId || "";
+      const regionPrefix = id.split(".")[0];
+      return allowedRegions.includes(regionPrefix);
+    })
+    .filter((profile) => {
+      if (allowedProviders.length === 0) return true;
+      // inferenceProfileId format: "us.anthropic.claude-..." or "global.amazon.nova-..."
+      // Strip the region prefix, then check if the provider segment matches
+      const id = profile.inferenceProfileId || "";
+      return allowedProviders.some((provider) => {
+        const withoutRegion = id.replace(/^(us|eu|ap|global)\./, "");
+        return withoutRegion.startsWith(`${provider}.`);
+      });
+    })
     .map((profile) => ({
       id: profile.inferenceProfileId || "",
       displayName:
@@ -1583,6 +1602,9 @@ function mapInferenceProfilesToModels(
   logger.info(
     {
       modelCount: models.length,
+      allowedProviders: allowedProviders.length > 0 ? allowedProviders : "all",
+      allowedInferenceRegions:
+        allowedRegions.length > 0 ? allowedRegions : "all",
       models: models.map((m) => ({ id: m.id, displayName: m.displayName })),
     },
     "[fetchBedrockModels] models from inference profiles",

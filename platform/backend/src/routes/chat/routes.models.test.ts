@@ -1084,6 +1084,253 @@ describe("chat-models", () => {
       const models = await fetchBedrockModels("test-api-key");
       expect(models).toEqual([]);
     });
+
+    describe("allowedProviders filtering", () => {
+      const originalAllowedProviders = config.llm.bedrock.allowedProviders;
+
+      afterEach(() => {
+        config.llm.bedrock.allowedProviders = originalAllowedProviders;
+      });
+
+      test("filters by allowed providers", async () => {
+        config.llm.bedrock.allowedProviders = ["anthropic", "amazon"];
+
+        const mockResponse = {
+          inferenceProfileSummaries: [
+            {
+              inferenceProfileId:
+                "us.anthropic.claude-3-5-sonnet-20241022-v2:0",
+              inferenceProfileName: "Claude 3.5 Sonnet v2",
+              status: "ACTIVE",
+            },
+            {
+              inferenceProfileId: "us.amazon.nova-pro-v1:0",
+              inferenceProfileName: "Amazon Nova Pro",
+              status: "ACTIVE",
+            },
+            {
+              inferenceProfileId: "us.stability.stable-diffusion-xl-v1",
+              inferenceProfileName: "Stable Diffusion XL",
+              status: "ACTIVE",
+            },
+            {
+              inferenceProfileId: "us.meta.llama3-70b-instruct-v1:0",
+              inferenceProfileName: "Llama 3 70B",
+              status: "ACTIVE",
+            },
+          ],
+        };
+
+        mockFetch.mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve(mockResponse),
+        });
+
+        const models = await fetchBedrockModels("test-api-key");
+
+        expect(models).toHaveLength(2);
+        expect(models.map((m) => m.id)).toEqual([
+          "us.anthropic.claude-3-5-sonnet-20241022-v2:0",
+          "us.amazon.nova-pro-v1:0",
+        ]);
+      });
+
+      test("empty allowedProviders returns all active profiles", async () => {
+        config.llm.bedrock.allowedProviders = [];
+
+        const mockResponse = {
+          inferenceProfileSummaries: [
+            {
+              inferenceProfileId:
+                "us.anthropic.claude-3-5-sonnet-20241022-v2:0",
+              inferenceProfileName: "Claude 3.5 Sonnet v2",
+              status: "ACTIVE",
+            },
+            {
+              inferenceProfileId: "us.stability.stable-diffusion-xl-v1",
+              inferenceProfileName: "Stable Diffusion XL",
+              status: "ACTIVE",
+            },
+            {
+              inferenceProfileId: "us.meta.llama3-70b-instruct-v1:0",
+              inferenceProfileName: "Llama 3 70B",
+              status: "ACTIVE",
+            },
+          ],
+        };
+
+        mockFetch.mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve(mockResponse),
+        });
+
+        const models = await fetchBedrockModels("test-api-key");
+
+        expect(models).toHaveLength(3);
+      });
+
+      test("handles global prefix profiles", async () => {
+        config.llm.bedrock.allowedProviders = ["anthropic"];
+
+        const mockResponse = {
+          inferenceProfileSummaries: [
+            {
+              inferenceProfileId:
+                "global.anthropic.claude-sonnet-4-6-20250514-v1:0",
+              inferenceProfileName: "Claude Sonnet 4.6",
+              status: "ACTIVE",
+            },
+            {
+              inferenceProfileId:
+                "us.anthropic.claude-3-5-sonnet-20241022-v2:0",
+              inferenceProfileName: "Claude 3.5 Sonnet v2",
+              status: "ACTIVE",
+            },
+            {
+              inferenceProfileId: "us.meta.llama3-70b-instruct-v1:0",
+              inferenceProfileName: "Llama 3 70B",
+              status: "ACTIVE",
+            },
+          ],
+        };
+
+        mockFetch.mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve(mockResponse),
+        });
+
+        const models = await fetchBedrockModels("test-api-key");
+
+        expect(models).toHaveLength(2);
+        expect(models.map((m) => m.id)).toEqual([
+          "global.anthropic.claude-sonnet-4-6-20250514-v1:0",
+          "us.anthropic.claude-3-5-sonnet-20241022-v2:0",
+        ]);
+      });
+    });
+
+    describe("allowedInferenceRegions filtering", () => {
+      const originalAllowedRegions = config.llm.bedrock.allowedInferenceRegions;
+
+      afterEach(() => {
+        config.llm.bedrock.allowedInferenceRegions = originalAllowedRegions;
+      });
+
+      test("filters by allowed inference regions", async () => {
+        config.llm.bedrock.allowedInferenceRegions = ["us"];
+
+        const mockResponse = {
+          inferenceProfileSummaries: [
+            {
+              inferenceProfileId:
+                "us.anthropic.claude-3-5-sonnet-20241022-v2:0",
+              inferenceProfileName: "Claude 3.5 Sonnet v2",
+              status: "ACTIVE",
+            },
+            {
+              inferenceProfileId:
+                "global.anthropic.claude-sonnet-4-6-20250514-v1:0",
+              inferenceProfileName: "Claude Sonnet 4.6",
+              status: "ACTIVE",
+            },
+            {
+              inferenceProfileId:
+                "eu.anthropic.claude-3-5-sonnet-20241022-v2:0",
+              inferenceProfileName: "Claude 3.5 Sonnet v2 (EU)",
+              status: "ACTIVE",
+            },
+          ],
+        };
+
+        mockFetch.mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve(mockResponse),
+        });
+
+        const models = await fetchBedrockModels("test-api-key");
+
+        expect(models).toHaveLength(1);
+        expect(models.map((m) => m.id)).toEqual([
+          "us.anthropic.claude-3-5-sonnet-20241022-v2:0",
+        ]);
+      });
+
+      test("empty allowedInferenceRegions returns all profiles", async () => {
+        config.llm.bedrock.allowedInferenceRegions = [];
+
+        const mockResponse = {
+          inferenceProfileSummaries: [
+            {
+              inferenceProfileId:
+                "us.anthropic.claude-3-5-sonnet-20241022-v2:0",
+              inferenceProfileName: "Claude 3.5 Sonnet v2",
+              status: "ACTIVE",
+            },
+            {
+              inferenceProfileId:
+                "global.anthropic.claude-sonnet-4-6-20250514-v1:0",
+              inferenceProfileName: "Claude Sonnet 4.6",
+              status: "ACTIVE",
+            },
+            {
+              inferenceProfileId:
+                "eu.anthropic.claude-3-5-sonnet-20241022-v2:0",
+              inferenceProfileName: "Claude 3.5 Sonnet v2 (EU)",
+              status: "ACTIVE",
+            },
+          ],
+        };
+
+        mockFetch.mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve(mockResponse),
+        });
+
+        const models = await fetchBedrockModels("test-api-key");
+
+        expect(models).toHaveLength(3);
+      });
+
+      test("allows multiple regions", async () => {
+        config.llm.bedrock.allowedInferenceRegions = ["us", "global"];
+
+        const mockResponse = {
+          inferenceProfileSummaries: [
+            {
+              inferenceProfileId:
+                "us.anthropic.claude-3-5-sonnet-20241022-v2:0",
+              inferenceProfileName: "Claude 3.5 Sonnet v2",
+              status: "ACTIVE",
+            },
+            {
+              inferenceProfileId:
+                "global.anthropic.claude-sonnet-4-6-20250514-v1:0",
+              inferenceProfileName: "Claude Sonnet 4.6",
+              status: "ACTIVE",
+            },
+            {
+              inferenceProfileId:
+                "eu.anthropic.claude-3-5-sonnet-20241022-v2:0",
+              inferenceProfileName: "Claude 3.5 Sonnet v2 (EU)",
+              status: "ACTIVE",
+            },
+          ],
+        };
+
+        mockFetch.mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve(mockResponse),
+        });
+
+        const models = await fetchBedrockModels("test-api-key");
+
+        expect(models).toHaveLength(2);
+        expect(models.map((m) => m.id)).toEqual([
+          "us.anthropic.claude-3-5-sonnet-20241022-v2:0",
+          "global.anthropic.claude-sonnet-4-6-20250514-v1:0",
+        ]);
+      });
+    });
   });
 
   describe("testProviderApiKey", () => {

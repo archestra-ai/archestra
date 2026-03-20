@@ -530,7 +530,7 @@ Archestra uses the Bedrock **Converse API** (not InvokeModel). The IAM role need
     },
     {
       "Effect": "Allow",
-      "Action": ["bedrock:ListFoundationModels"],
+      "Action": ["bedrock:ListInferenceProfiles"],
       "Resource": "*"
     }
   ]
@@ -543,9 +543,11 @@ Use `*` for the region in resource ARNs — cross-region inference profiles (`us
 
 #### Common (both auth methods)
 
-| Variable                     | Required | Description                                                                          |
-| ---------------------------- | -------- | ------------------------------------------------------------------------------------ |
-| `ARCHESTRA_BEDROCK_BASE_URL` | Yes      | Bedrock runtime endpoint URL (e.g., `https://bedrock-runtime.us-east-1.amazonaws.com`) |
+| Variable                                 | Required | Description                                                                          |
+| ---------------------------------------- | -------- | ------------------------------------------------------------------------------------ |
+| `ARCHESTRA_BEDROCK_BASE_URL`             | Yes      | Bedrock runtime endpoint URL (e.g., `https://bedrock-runtime.us-east-1.amazonaws.com`) |
+| `ARCHESTRA_BEDROCK_ALLOWED_PROVIDERS`    | No       | Comma-separated list of provider prefixes to include. When empty (default), all profiles are returned. |
+| `ARCHESTRA_BEDROCK_ALLOWED_INFERENCE_REGIONS` | No | Comma-separated list of inference region prefixes (e.g., `us,global`). When empty (default), all regions are returned. |
 
 #### API Key auth
 
@@ -573,3 +575,44 @@ https://bedrock-runtime.{region}.amazonaws.com
 #### Model Discovery
 
 Archestra uses the Bedrock [ListInferenceProfiles](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_ListInferenceProfiles.html) API to discover available models. This means only models that have inference profiles configured in your AWS account will appear — ensuring the model picker only shows models you can actually use.
+
+#### Filtering Models by Provider
+
+By default, Archestra returns all active inference profiles from your AWS account. Use `ARCHESTRA_BEDROCK_ALLOWED_PROVIDERS` to limit which providers appear in the model picker.
+
+The filter matches the provider segment of the inference profile ID (the part after the region prefix). For example, the profile `us.anthropic.claude-sonnet-4-6` has provider `anthropic`.
+
+```bash
+# Only Anthropic and Amazon models
+ARCHESTRA_BEDROCK_ALLOWED_PROVIDERS=anthropic,amazon
+
+# Only Anthropic models
+ARCHESTRA_BEDROCK_ALLOWED_PROVIDERS=anthropic
+
+# All providers (default)
+ARCHESTRA_BEDROCK_ALLOWED_PROVIDERS=
+```
+
+Common provider prefixes: `anthropic`, `amazon`, `meta`, `mistral`, `deepseek`, `cohere`, `writer`, `stability`, `twelvelabs`.
+
+#### Filtering Models by Inference Region
+
+Use `ARCHESTRA_BEDROCK_ALLOWED_INFERENCE_REGIONS` to limit which inference
+regions appear in the model picker.
+
+The filter matches the region prefix of the inference profile ID (the first
+segment before the provider). For example, the profile
+`us.anthropic.claude-sonnet-4-6` has region prefix `us`.
+
+```bash
+# Only US and global profiles
+ARCHESTRA_BEDROCK_ALLOWED_INFERENCE_REGIONS=us,global
+
+# Only EU profiles
+ARCHESTRA_BEDROCK_ALLOWED_INFERENCE_REGIONS=eu
+
+# All regions (default)
+ARCHESTRA_BEDROCK_ALLOWED_INFERENCE_REGIONS=
+```
+
+Known region prefixes: `us`, `eu`, `ap`, `global`.

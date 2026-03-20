@@ -342,6 +342,30 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.CreateAgent]: {},
   [RouteId.UpdateAgent]: {},
   [RouteId.DeleteAgent]: {},
+  [RouteId.CreateAgentScheduleTrigger]: {
+    agentTrigger: ["create"],
+  },
+  [RouteId.ListAgentScheduleTriggers]: {
+    agentTrigger: ["read"],
+  },
+  [RouteId.GetAgentScheduleTrigger]: {
+    agentTrigger: ["read"],
+  },
+  [RouteId.UpdateAgentScheduleTrigger]: {
+    agentTrigger: ["update"],
+  },
+  [RouteId.DeleteAgentScheduleTrigger]: {
+    agentTrigger: ["delete"],
+  },
+  [RouteId.EnableAgentScheduleTrigger]: {
+    agentTrigger: ["update"],
+  },
+  [RouteId.DisableAgentScheduleTrigger]: {
+    agentTrigger: ["update"],
+  },
+  [RouteId.ExecuteAgentScheduleTrigger]: {
+    agentTrigger: ["create"],
+  },
   [RouteId.GetDefaultMcpGateway]: {
     mcpGateway: ["read"],
   },

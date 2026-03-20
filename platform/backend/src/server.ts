@@ -33,6 +33,7 @@ import {
 } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { chatOpsManager } from "@/agents/chatops/chatops-manager";
+import { scheduleManager } from "@/agents/schedule-manager";
 import {
   cleanupEmailProvider,
   cleanupOldProcessedEmails,
@@ -621,6 +622,9 @@ const startWebServer = async () => {
     // Seeds DB from env vars on first run, then loads config from DB.
     await chatOpsManager.initialize();
 
+    // Initialize agent schedule triggers
+    await scheduleManager.initialize();
+
     // Start task queue worker for knowledge base connector syncs and embeddings
     // In "web" mode, a separate worker Deployment handles background jobs
     if (shouldRunWorker) {
@@ -743,6 +747,9 @@ const startWebServer = async () => {
 
         // Stop cache manager's background cleanup
         cacheManager.shutdown();
+
+        // Stop schedule manager
+        scheduleManager.shutdown();
 
         // Stop task queue worker (waits for in-flight tasks to drain)
         if (shouldRunWorker) {

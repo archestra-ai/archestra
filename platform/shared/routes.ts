@@ -22,6 +22,16 @@ export const RouteId = {
   UpdateAgentTool: "updateAgentTool",
   GetAgentAvailableTokens: "getAgentAvailableTokens",
 
+  // Agent Schedule Trigger Routes
+  CreateAgentScheduleTrigger: "createAgentScheduleTrigger",
+  ListAgentScheduleTriggers: "listAgentScheduleTriggers",
+  GetAgentScheduleTrigger: "getAgentScheduleTrigger",
+  UpdateAgentScheduleTrigger: "updateAgentScheduleTrigger",
+  DeleteAgentScheduleTrigger: "deleteAgentScheduleTrigger",
+  EnableAgentScheduleTrigger: "enableAgentScheduleTrigger",
+  DisableAgentScheduleTrigger: "disableAgentScheduleTrigger",
+  ExecuteAgentScheduleTrigger: "executeAgentScheduleTrigger",
+
   // Agent Delegation Routes (internal agents only)
   GetAgentDelegations: "getAgentDelegations",
   SyncAgentDelegations: "syncAgentDelegations",

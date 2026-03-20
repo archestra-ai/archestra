@@ -1,5 +1,25 @@
 # Changelog
 
+## [1.1.34](https://github.com/archestra-ai/archestra/compare/platform-v1.1.33...platform-v1.1.34) (2026-03-20)
+
+
+### Bug Fixes
+
+* bring back chat autoscroll ([#3480](https://github.com/archestra-ai/archestra/issues/3480)) ([c22e87d](https://github.com/archestra-ai/archestra/commit/c22e87d2f2ffbf261e6fc90b8508e1a6edce3563))
+* Prevent leak of chosen model and agent for same browser ([#3485](https://github.com/archestra-ai/archestra/issues/3485)) ([ffa301f](https://github.com/archestra-ai/archestra/commit/ffa301f992e6133f1595eba552f829a8f49571c2))
+* tighten agent builder MCP assignment and chat tool state handling ([#3477](https://github.com/archestra-ai/archestra/issues/3477)) ([4b15ac8](https://github.com/archestra-ai/archestra/commit/4b15ac807d6282cfd9ed708f83e20dbc227e510e))
+
+
+### Dependencies
+
+* bump @microsoft/msgraph-sdk-users from 1.0.0-preview.77 to 1.0.0-preview.80 in /platform ([#3479](https://github.com/archestra-ai/archestra/issues/3479)) ([5179285](https://github.com/archestra-ai/archestra/commit/5179285a6ab83124f18a5f5537a122a57e13f595))
+
+
+### Miscellaneous Chores
+
+* more debug info in mini view ([#3467](https://github.com/archestra-ai/archestra/issues/3467)) ([7931be7](https://github.com/archestra-ai/archestra/commit/7931be701131f6e7345b1f116dd1fa334dd35bcb))
+* revert prevent leak of chosen model and agent for same browser ([#3486](https://github.com/archestra-ai/archestra/issues/3486)) ([87369bd](https://github.com/archestra-ai/archestra/commit/87369bdeebbfc1da734bd234bfbdde96a549d412))
+
 ## [1.1.33](https://github.com/archestra-ai/archestra/compare/platform-v1.1.32...platform-v1.1.33) (2026-03-19)
 
 

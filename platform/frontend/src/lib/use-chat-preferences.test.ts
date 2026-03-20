@@ -1,12 +1,15 @@
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import {
   CHAT_STORAGE_KEYS,
+  chatStorageKey,
   getSavedAgent,
   resolveAutoSelectedModel,
   resolveInitialModel,
   resolveModelForAgent,
   saveAgent,
 } from "./use-chat-preferences";
+
+const TEST_USER_ID = "user-test-123";
 
 beforeEach(() => {
   localStorage.clear();
@@ -22,11 +25,26 @@ describe("CHAT_STORAGE_KEYS", () => {
   });
 });
 
+describe("chatStorageKey", () => {
+  test("scopes key by userId", () => {
+    expect(chatStorageKey("selected-chat-agent", "user-1")).toBe(
+      "selected-chat-agent:user-1",
+    );
+  });
+});
+
 describe("agent persistence", () => {
   test("saveAgent and getSavedAgent round-trip", () => {
-    expect(getSavedAgent()).toBeNull();
-    saveAgent("agent-123");
-    expect(getSavedAgent()).toBe("agent-123");
+    expect(getSavedAgent(TEST_USER_ID)).toBeNull();
+    saveAgent("agent-123", TEST_USER_ID);
+    expect(getSavedAgent(TEST_USER_ID)).toBe("agent-123");
+  });
+
+  test("different user IDs produce isolated storage", () => {
+    saveAgent("agent-A", "user-1");
+    saveAgent("agent-B", "user-2");
+    expect(getSavedAgent("user-1")).toBe("agent-A");
+    expect(getSavedAgent("user-2")).toBe("agent-B");
   });
 });
 
@@ -47,6 +65,7 @@ describe("resolveInitialModel", () => {
       agent: null,
       chatApiKeys: [],
       organization: null,
+      userId: TEST_USER_ID,
     });
     expect(result).toBeNull();
   });
@@ -60,6 +79,7 @@ describe("resolveInitialModel", () => {
         defaultLlmModel: "gpt-4o",
         defaultLlmApiKeyId: "key-openai",
       },
+      userId: TEST_USER_ID,
     });
     expect(result).toEqual({
       modelId: "claude-3-5-sonnet",
@@ -77,6 +97,7 @@ describe("resolveInitialModel", () => {
         defaultLlmModel: "gpt-4o",
         defaultLlmApiKeyId: "key-openai",
       },
+      userId: TEST_USER_ID,
     });
     expect(result).toEqual({
       modelId: "gpt-4o",
@@ -91,6 +112,7 @@ describe("resolveInitialModel", () => {
       agent: { llmModel: "claude-3-5-sonnet", llmApiKeyId: "agent-key" },
       chatApiKeys: baseChatApiKeys,
       organization: null,
+      userId: TEST_USER_ID,
     });
     expect(result).toEqual({
       modelId: "claude-3-5-sonnet",
@@ -105,6 +127,7 @@ describe("resolveInitialModel", () => {
       agent: { llmModel: "deleted-model", llmApiKeyId: "agent-key" },
       chatApiKeys: baseChatApiKeys,
       organization: null,
+      userId: TEST_USER_ID,
     });
     expect(result?.source).toBe("fallback");
   });
@@ -115,6 +138,7 @@ describe("resolveInitialModel", () => {
       agent: null,
       chatApiKeys: baseChatApiKeys,
       organization: null,
+      userId: TEST_USER_ID,
     });
     expect(result).toEqual({
       modelId: "gpt-4o",
@@ -129,6 +153,7 @@ describe("resolveInitialModel", () => {
       agent: null,
       chatApiKeys: [], // No keys at all
       organization: null,
+      userId: TEST_USER_ID,
     });
     expect(result?.modelId).toBe("gpt-4o");
     expect(result?.apiKeyId).toBeNull();
@@ -143,6 +168,7 @@ describe("resolveInitialModel", () => {
         defaultLlmModel: "gpt-4o",
         defaultLlmApiKeyId: "deleted-key",
       },
+      userId: TEST_USER_ID,
     });
     expect(result).toEqual({
       modelId: "gpt-4o",
@@ -160,6 +186,7 @@ describe("resolveInitialModel", () => {
         defaultLlmModel: "gpt-4o",
         defaultLlmApiKeyId: null,
       },
+      userId: TEST_USER_ID,
     });
     expect(result).toEqual({
       modelId: "gpt-4o",
@@ -177,6 +204,7 @@ describe("resolveInitialModel", () => {
         defaultLlmModel: "deleted-model",
         defaultLlmApiKeyId: "key-openai",
       },
+      userId: TEST_USER_ID,
     });
     expect(result?.source).toBe("fallback");
     expect(result?.modelId).toBe("gpt-4o");
@@ -296,6 +324,7 @@ describe("resolveModelForAgent", () => {
         llmApiKeyId: "key-anthropic",
       },
       context: baseContext,
+      userId: TEST_USER_ID,
     });
     expect(result).toEqual({
       modelId: "claude-3-5-sonnet",
@@ -308,6 +337,7 @@ describe("resolveModelForAgent", () => {
     const result = resolveModelForAgent({
       agent: { llmModel: null, llmApiKeyId: null },
       context: baseContext,
+      userId: TEST_USER_ID,
     });
     expect(result).toEqual({
       modelId: "gpt-4o",
@@ -330,6 +360,7 @@ describe("resolveModelForAgent", () => {
     const first = resolveModelForAgent({
       agent: agentWithConfig,
       context: baseContext,
+      userId: TEST_USER_ID,
     });
     expect(first?.modelId).toBe("claude-3-5-sonnet");
     expect(first?.apiKeyId).toBe("key-anthropic");
@@ -339,6 +370,7 @@ describe("resolveModelForAgent", () => {
     const second = resolveModelForAgent({
       agent: agentWithoutConfig,
       context: baseContext,
+      userId: TEST_USER_ID,
     });
     expect(second?.modelId).toBe("gpt-4o");
     expect(second?.apiKeyId).toBe("key-openai");
@@ -349,6 +381,7 @@ describe("resolveModelForAgent", () => {
     const result = resolveModelForAgent({
       agent: { llmModel: undefined, llmApiKeyId: undefined },
       context: baseContext,
+      userId: TEST_USER_ID,
     });
     expect(result?.source).toBe("organization");
   });
@@ -366,12 +399,14 @@ describe("resolveModelForAgent", () => {
     const resultA = resolveModelForAgent({
       agent: agentA,
       context: baseContext,
+      userId: TEST_USER_ID,
     });
     expect(resultA?.modelId).toBe("gpt-4o");
 
     const resultB = resolveModelForAgent({
       agent: agentB,
       context: baseContext,
+      userId: TEST_USER_ID,
     });
     expect(resultB?.modelId).toBe("claude-3-5-sonnet");
   });

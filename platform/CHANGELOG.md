@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.35](https://github.com/archestra-ai/archestra/compare/platform-v1.1.34...platform-v1.1.35) (2026-03-20)
+
+
+### Bug Fixes
+
+* use listInferenceProfile to discover models in aws ([#3482](https://github.com/archestra-ai/archestra/issues/3482)) ([98ecc15](https://github.com/archestra-ai/archestra/commit/98ecc15c3d9f3e33ced9cc371794aff2d95f7ed7))
+
 ## [1.1.34](https://github.com/archestra-ai/archestra/compare/platform-v1.1.33...platform-v1.1.34) (2026-03-20)
 
 

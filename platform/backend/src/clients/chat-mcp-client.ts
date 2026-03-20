@@ -1240,8 +1240,8 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<string> {
     }
   }
 
-  // Convert MCP content to string for AI SDK
-  return (result.content as Array<{ type: string; text?: string }>)
+  // Build text representation
+  const textContent = (result.content as Array<{ type: string; text?: string }>)
     .map((item: { type: string; text?: string }) => {
       if (item.type === "text" && item.text) {
         return item.text;
@@ -1249,6 +1249,18 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<string> {
       return JSON.stringify(item);
     })
     .join("\n");
+
+  // If tool result has MCP App metadata, return structured output
+  if (result._meta || result.structuredContent) {
+    return JSON.stringify({
+      content: textContent,
+      _meta: result._meta,
+      structuredContent: result.structuredContent,
+      rawContent: result.content,
+    });
+  }
+
+  return textContent;
 }
 
 /**

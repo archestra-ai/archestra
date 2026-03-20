@@ -84,4 +84,5 @@ export type McpToolAssignment = {
   useDynamicTeamCredential: boolean;
   catalogId: string | null;
   catalogName: string | null;
+  meta?: Record<string, unknown> | null;
 };

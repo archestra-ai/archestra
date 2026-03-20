@@ -17,6 +17,7 @@ import {
   inArray,
   isNotNull,
   isNull,
+  like,
   ne,
   notIlike,
   or,
@@ -470,6 +471,7 @@ class ToolModel {
       description: string | null;
       parameters: Record<string, unknown>;
       catalogId: string;
+      meta?: Record<string, unknown>;
     }>,
   ): Promise<Tool[]> {
     if (tools.length === 0) {
@@ -515,13 +517,35 @@ class ToolModel {
     for (const tool of tools) {
       const existingTool = existingToolsByName.get(tool.name);
       if (existingTool) {
-        resultTools.push(existingTool);
+        const metaChanged =
+          JSON.stringify(existingTool.meta ?? null) !==
+          JSON.stringify(tool.meta ?? null);
+
+        if (metaChanged) {
+          const [updatedTool] = await db
+            .update(schema.toolsTable)
+            .set({
+              meta: tool.meta,
+              updatedAt: new Date(),
+            })
+            .where(eq(schema.toolsTable.id, existingTool.id))
+            .returning();
+
+          if (updatedTool) {
+            resultTools.push(updatedTool);
+          } else {
+            resultTools.push(existingTool);
+          }
+        } else {
+          resultTools.push(existingTool);
+        }
       } else {
         toolsToInsert.push({
           name: tool.name,
           description: tool.description,
           parameters: tool.parameters,
           catalogId: tool.catalogId,
+          meta: tool.meta,
           agentId: null,
         });
       }
@@ -798,6 +822,7 @@ class ToolModel {
           schema.agentToolsTable.useDynamicTeamCredential,
         catalogId: schema.toolsTable.catalogId,
         catalogName: schema.internalMcpCatalogTable.name,
+        meta: schema.toolsTable.meta,
       })
       .from(schema.toolsTable)
       .innerJoin(
@@ -817,6 +842,34 @@ class ToolModel {
       );
 
     return mcpTools;
+  }
+
+  static async getMcpToolsAssignedToAgentBySuffix(
+    toolNameSuffix: string,
+    agentId: string,
+  ): Promise<McpToolAssignment[]> {
+    const assignedToolIds = await AgentToolModel.findToolIdsByAgent(agentId);
+    if (assignedToolIds.length === 0) return [];
+
+    const tools = await db
+      .select()
+      .from(schema.toolsTable)
+      .where(
+        and(
+          inArray(schema.toolsTable.id, assignedToolIds),
+          like(schema.toolsTable.name, `%__${toolNameSuffix}`),
+        ),
+      );
+
+    return tools.map((t) => ({
+      toolName: t.name,
+      credentialSourceMcpServerId: null,
+      executionSourceMcpServerId: null,
+      useDynamicTeamCredential: false,
+      catalogId: t.catalogId,
+      catalogName: null,
+      meta: t.meta,
+    }));
   }
 
   /**

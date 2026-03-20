@@ -71,6 +71,7 @@ import { EditableUserMessage } from "./editable-user-message";
 import { ExpiredAuthTool } from "./expired-auth-tool";
 import { InlineChatError } from "./inline-chat-error";
 import { hasKnowledgeBaseToolCall } from "./knowledge-graph-citations";
+import { MCPAppRenderer, hasMcpAppContent } from "./mcp-app-renderer";
 import { McpInstallDialogs } from "./mcp-install-dialogs";
 import { PolicyDeniedTool } from "./policy-denied-tool";
 import { TodoWriteTool } from "./todo-write-tool";
@@ -1061,6 +1062,12 @@ function MessageTool({
         onToolApprovalResponse={onToolApprovalResponse}
       />
     );
+  }
+
+  // MCP App: render HTML content in sandboxed iframe
+  const toolOutput = toolResultPart?.output ?? part.output;
+  if (toolOutput && hasMcpAppContent(toolOutput)) {
+    return <MCPAppRenderer output={toolOutput} toolName={toolName} agentId={agentId} />;
   }
 
   const isApprovalRequested = part.state === "approval-requested";

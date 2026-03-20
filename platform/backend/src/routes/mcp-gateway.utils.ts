@@ -132,7 +132,7 @@ export async function createAgentServer(
     const kbToolDescription = await buildKnowledgeSourcesDescription(agentId);
 
     const toolsList = permittedTools.map(
-      ({ name, description, parameters }) => ({
+      ({ name, description, parameters, meta }) => ({
         name,
         title: archestraToolTitles.get(name) || name,
         description:
@@ -140,8 +140,8 @@ export async function createAgentServer(
             ? kbToolDescription
             : description,
         inputSchema: parameters,
-        annotations: {},
-        _meta: {},
+        annotations: (meta?.annotations as Record<string, unknown>) || {},
+        _meta: (meta?._meta as Record<string, unknown>) || {},
       }),
     );
 

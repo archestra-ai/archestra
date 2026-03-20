@@ -311,6 +311,8 @@ class McpClient {
           result.content,
           !!result.isError,
           authInfo,
+          result._meta as Record<string, unknown> | undefined,
+          result.structuredContent as Record<string, unknown> | undefined,
         );
       } catch (error) {
         // Handle stale HTTP session.  The MCP SDK skips the `initialize`
@@ -676,10 +678,22 @@ class McpClient {
     | { error: CommonToolResult }
   > {
     // Get MCP tool from agent-assigned tools
-    const mcpTools = await ToolModel.getMcpToolsAssignedToAgent(
+    let mcpTools = await ToolModel.getMcpToolsAssignedToAgent(
       [toolCall.name],
       agentId,
     );
+
+    // Fallback for MCP App iframes that send unprefixed tool names
+    if (mcpTools.length === 0 && !toolCall.name.includes("__")) {
+      mcpTools = await ToolModel.getMcpToolsAssignedToAgentBySuffix(
+        toolCall.name,
+        agentId,
+      );
+      if (mcpTools.length > 0) {
+        toolCall.name = mcpTools[0].toolName;
+      }
+    }
+
     const tool = mcpTools[0];
 
     if (!tool) {
@@ -1285,12 +1299,16 @@ class McpClient {
       userId?: string;
       authMethod?: MCPGatewayAuthMethod;
     },
+    _meta?: Record<string, unknown>,
+    structuredContent?: Record<string, unknown>,
   ): Promise<CommonToolResult> {
     const toolResult: CommonToolResult = {
       id: toolCall.id,
       name: toolCall.name,
       content,
       isError,
+      _meta,
+      structuredContent,
     };
 
     await this.persistToolCall(

@@ -5,21 +5,15 @@ export const CHAT_STORAGE_KEYS = {
   userModelOverride: "chat-user-model-override",
 } as const;
 
-export function chatStorageKey(base: string, userId: string): string {
-  return `${base}:${userId}`;
-}
-
 // ===== Pure functions (testable without React) =====
 
 /**
  * Read the saved agent ID from localStorage.
  */
-export function getSavedAgent(userId: string): string | null {
+export function getSavedAgent(): string | null {
   if (typeof window === "undefined") return null;
   try {
-    return localStorage.getItem(
-      chatStorageKey(CHAT_STORAGE_KEYS.selectedAgent, userId),
-    );
+    return localStorage.getItem(CHAT_STORAGE_KEYS.selectedAgent);
   } catch {
     return null;
   }
@@ -28,13 +22,10 @@ export function getSavedAgent(userId: string): string | null {
 /**
  * Save the selected agent ID to localStorage.
  */
-export function saveAgent(agentId: string, userId: string): void {
+export function saveAgent(agentId: string): void {
   if (typeof window === "undefined") return;
   try {
-    localStorage.setItem(
-      chatStorageKey(CHAT_STORAGE_KEYS.selectedAgent, userId),
-      agentId,
-    );
+    localStorage.setItem(CHAT_STORAGE_KEYS.selectedAgent, agentId);
   } catch {
     // QuotaExceededError or private browsing restriction
   }
@@ -43,12 +34,10 @@ export function saveAgent(agentId: string, userId: string): void {
 /**
  * Read the user's model override from localStorage.
  */
-export function getSavedModelOverride(userId: string): string | null {
+export function getSavedModelOverride(): string | null {
   if (typeof window === "undefined") return null;
   try {
-    return localStorage.getItem(
-      chatStorageKey(CHAT_STORAGE_KEYS.userModelOverride, userId),
-    );
+    return localStorage.getItem(CHAT_STORAGE_KEYS.userModelOverride);
   } catch {
     return null;
   }
@@ -57,13 +46,10 @@ export function getSavedModelOverride(userId: string): string | null {
 /**
  * Save the user's model override to localStorage.
  */
-export function saveModelOverride(modelId: string, userId: string): void {
+export function saveModelOverride(modelId: string): void {
   if (typeof window === "undefined") return;
   try {
-    localStorage.setItem(
-      chatStorageKey(CHAT_STORAGE_KEYS.userModelOverride, userId),
-      modelId,
-    );
+    localStorage.setItem(CHAT_STORAGE_KEYS.userModelOverride, modelId);
   } catch {
     // QuotaExceededError or private browsing restriction
   }
@@ -72,12 +58,10 @@ export function saveModelOverride(modelId: string, userId: string): void {
 /**
  * Clear the user's model override from localStorage.
  */
-export function clearModelOverride(userId: string): void {
+export function clearModelOverride(): void {
   if (typeof window === "undefined") return;
   try {
-    localStorage.removeItem(
-      chatStorageKey(CHAT_STORAGE_KEYS.userModelOverride, userId),
-    );
+    localStorage.removeItem(CHAT_STORAGE_KEYS.userModelOverride);
   } catch {
     // ignore
   }
@@ -152,7 +136,6 @@ interface ChatContext {
 
 interface ResolveInitialModelParams extends ChatContext {
   agent: AgentInfo | null;
-  userId: string;
 }
 
 export type ModelSource = "agent" | "organization" | "user" | "fallback";
@@ -171,7 +154,7 @@ interface ResolvedModel {
 export function resolveInitialModel(
   params: ResolveInitialModelParams,
 ): ResolvedModel | null {
-  const { modelsByProvider, agent, chatApiKeys, organization, userId } = params;
+  const { modelsByProvider, agent, chatApiKeys, organization } = params;
   const allModels = Object.values(modelsByProvider).flat();
   if (allModels.length === 0) return null;
 
@@ -188,7 +171,7 @@ export function resolveInitialModel(
   };
 
   // 0. User override from localStorage
-  const userOverride = getSavedModelOverride(userId);
+  const userOverride = getSavedModelOverride();
   if (userOverride && allModels.some((m) => m.id === userOverride)) {
     const provider = findProviderForModel(userOverride);
     return {
@@ -257,11 +240,9 @@ export function resolveInitialModel(
 export function resolveModelForAgent(params: {
   agent: AgentInfo;
   context: ChatContext;
-  userId: string;
 }): ResolvedModel | null {
   return resolveInitialModel({
     ...params.context,
     agent: params.agent,
-    userId: params.userId,
   });
 }

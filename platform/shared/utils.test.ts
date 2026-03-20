@@ -1,5 +1,9 @@
 import { describe, expect, test } from "vitest";
-import { formatSecretStorageType, parseFullToolName, slugify } from "./utils";
+import {
+  formatSecretStorageType,
+  parseFullToolName,
+  slugify,
+} from "./utils";
 
 describe("formatSecretStorageType", () => {
   test("formats known storage types", () => {

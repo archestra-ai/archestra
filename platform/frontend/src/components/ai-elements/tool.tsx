@@ -216,6 +216,114 @@ export type ToolOutputProps = ComponentProps<"div"> & {
   }>;
 };
 
+type McpAppPayload = {
+  title?: string;
+  description?: string;
+  appUrl?: string;
+  html?: string;
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function extractMcpAppPayload(output: unknown): McpAppPayload | null {
+  let parsed: unknown = output;
+
+  if (typeof parsed === "string") {
+    try {
+      parsed = JSON.parse(parsed);
+    } catch {
+      return null;
+    }
+  }
+
+  if (!isRecord(parsed)) return null;
+
+  const meta = isRecord(parsed._meta) ? parsed._meta : null;
+  const mcpApp = isRecord(parsed.mcpApp) ? parsed.mcpApp : null;
+  const ui = isRecord(parsed.ui) ? parsed.ui : null;
+
+  const appUrlCandidates = [
+    mcpApp?.url,
+    ui?.url,
+    parsed.appUrl,
+    parsed.url,
+    meta?.["mcp/www_url"],
+  ];
+
+  const htmlCandidates = [
+    mcpApp?.html,
+    ui?.html,
+    parsed.html,
+    meta?.["mcp/www_html"],
+  ];
+
+  const appUrl = appUrlCandidates.find(
+    (value): value is string =>
+      typeof value === "string" && /^https?:\/\//.test(value),
+  );
+
+  const html = htmlCandidates.find(
+    (value): value is string => typeof value === "string" && value.length > 0,
+  );
+
+  if (!appUrl && !html) return null;
+
+  return {
+    title:
+      (typeof mcpApp?.title === "string" && mcpApp.title) ||
+      (typeof parsed.title === "string" && parsed.title) ||
+      "MCP App",
+    description:
+      (typeof mcpApp?.description === "string" && mcpApp.description) ||
+      (typeof parsed.description === "string" && parsed.description) ||
+      undefined,
+    appUrl,
+    html,
+  };
+}
+
+function McpAppPreview({ payload }: { payload: McpAppPayload }) {
+  return (
+    <div className="space-y-2 rounded-md border bg-muted/30 p-3">
+      <div className="space-y-1">
+        <p className="font-medium text-xs">{payload.title ?? "MCP App"}</p>
+        {payload.description ? (
+          <p className="text-muted-foreground text-xs">{payload.description}</p>
+        ) : null}
+      </div>
+
+      {payload.appUrl ? (
+        <iframe
+          className="h-[420px] w-full rounded-md border bg-background"
+          src={payload.appUrl}
+          title={payload.title ?? "MCP App"}
+          sandbox="allow-scripts allow-forms allow-popups allow-modals allow-same-origin"
+        />
+      ) : payload.html ? (
+        <iframe
+          className="h-[420px] w-full rounded-md border bg-background"
+          srcDoc={payload.html}
+          title={payload.title ?? "MCP App"}
+          sandbox="allow-scripts allow-forms allow-popups allow-modals"
+        />
+      ) : null}
+
+      {payload.appUrl ? (
+        <a
+          href={payload.appUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex text-xs underline underline-offset-2"
+        >
+          Open MCP App in new tab
+        </a>
+      ) : null}
+    </div>
+  );
+}
+
 export const ToolOutput = ({
   className,
   output,
@@ -271,6 +379,19 @@ export const ToolOutput = ({
             );
           })}
         </div>
+      </div>
+    );
+  }
+
+  const mcpAppPayload = extractMcpAppPayload(output);
+
+  if (mcpAppPayload) {
+    return (
+      <div className={cn("space-y-2 p-4", className)} {...props}>
+        <h4 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
+          {labelText}
+        </h4>
+        <McpAppPreview payload={mcpAppPayload} />
       </div>
     );
   }

@@ -1076,8 +1076,11 @@ describe("createAgentServer tools/list", () => {
     )._requestHandlers.get("tools/list");
 
     expect(listToolsHandler).toBeDefined();
+    if (!listToolsHandler) {
+      throw new Error("Expected tools/list handler to be registered");
+    }
 
-    const response = await listToolsHandler?.({
+    const response = await listToolsHandler({
       method: "tools/list",
       params: {},
     });

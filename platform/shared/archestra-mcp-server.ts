@@ -345,10 +345,7 @@ export function getArchestraToolFullName<
 >(shortName: ShortName): ArchestraToolFullName<ShortName>;
 export function getArchestraToolFullName<
   ShortName extends ArchestraToolShortName,
->(
-  shortName: ShortName,
-  options: ArchestraMcpIdentityOptions,
-): string;
+>(shortName: ShortName, options: ArchestraMcpIdentityOptions): string;
 export function getArchestraToolFullName<
   ShortName extends ArchestraToolShortName,
 >(

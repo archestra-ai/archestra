@@ -3,6 +3,7 @@
 import {
   ARCHESTRA_MCP_CATALOG_ID,
   type archestraApiTypes,
+  DEFAULT_APP_NAME,
   isPlaywrightCatalogItem,
   parseFullToolName,
 } from "@shared";
@@ -38,6 +39,7 @@ import {
   useProfileToolPatchMutation,
   useUnassignTool,
 } from "@/lib/agent-tools.query";
+import { useArchestraMcpIdentity } from "@/lib/archestra-mcp-server";
 import {
   fetchCatalogTools,
   useCatalogTools,
@@ -105,6 +107,7 @@ const AgentToolsEditorContent = forwardRef<
   { agentId, onSelectedCountChange, layout = "pills" },
   ref,
 ) {
+  const { catalogName } = useArchestraMcpIdentity();
   const invalidateAllQueries = useInvalidateToolAssignmentQueries();
   const assignTool = useAssignTool();
   const unassignTool = useUnassignTool();
@@ -440,9 +443,11 @@ const AgentToolsEditorContent = forwardRef<
         catalog.serverType !== "builtin" &&
         !allCredentials?.[catalog.id]?.length;
       const isDisabled = hasNoTools || hasNoCredentials;
+      const displayName =
+        catalog.id === ARCHESTRA_MCP_CATALOG_ID ? catalogName : catalog.name;
       return {
         id: catalog.id,
-        name: catalog.name,
+        name: displayName,
         description: catalog.description || undefined,
         icon: (
           <McpCatalogIcon
@@ -515,6 +520,11 @@ const AgentToolsEditorContent = forwardRef<
             <McpServerCard
               key={catalog.id}
               catalog={catalog}
+              displayName={
+                catalog.id === ARCHESTRA_MCP_CATALOG_ID
+                  ? catalogName
+                  : catalog.name
+              }
               isSelected={isSelected}
               isDisabled={isDisabled}
               assignedCount={assignedCount}
@@ -533,6 +543,9 @@ const AgentToolsEditorContent = forwardRef<
         <McpServerPill
           key={catalog.id}
           catalogItem={catalog}
+          displayName={
+            catalog.id === ARCHESTRA_MCP_CATALOG_ID ? catalogName : catalog.name
+          }
           assignedTools={assignedToolsByCatalog.get(catalog.id) ?? []}
           initialPendingChanges={pendingChangesRef.current.get(catalog.id)}
           onPendingChanges={registerPendingChanges}
@@ -560,6 +573,7 @@ const AgentToolsEditorContent = forwardRef<
 
 function McpServerCard({
   catalog,
+  displayName,
   isSelected,
   isDisabled,
   assignedCount,
@@ -567,6 +581,7 @@ function McpServerCard({
   onToggle,
 }: {
   catalog: InternalMcpCatalogItem;
+  displayName: string;
   isSelected: boolean;
   isDisabled: boolean;
   assignedCount: number;
@@ -586,9 +601,7 @@ function McpServerCard({
       )}
     >
       <McpCatalogIcon icon={catalog.icon} catalogId={catalog.id} size={24} />
-      <span className="text-xs font-medium truncate w-full">
-        {catalog.name}
-      </span>
+      <span className="text-xs font-medium truncate w-full">{displayName}</span>
       <span className="text-[10px] text-muted-foreground">
         {isDisabled
           ? "Not installed"
@@ -602,6 +615,7 @@ function McpServerCard({
 
 interface McpServerPillProps {
   catalogItem: InternalMcpCatalogItem;
+  displayName: string;
   assignedTools: AgentTool[];
   initialPendingChanges?: PendingCatalogChanges;
   onPendingChanges: (catalogId: string, changes: PendingCatalogChanges) => void;
@@ -616,6 +630,7 @@ interface McpServerPillProps {
 
 function McpServerPill({
   catalogItem,
+  displayName,
   assignedTools,
   initialPendingChanges,
   onPendingChanges,
@@ -772,7 +787,7 @@ function McpServerPill({
               catalogId={catalogItem.id}
               size={14}
             />
-            <span className="font-medium">{catalogItem.name}</span>
+            <span className="font-medium">{displayName}</span>
             <span className="text-muted-foreground">({displayedCount})</span>
             <Pencil className="h-3 w-3 shrink-0 text-muted-foreground" />
           </Button>
@@ -802,7 +817,7 @@ function McpServerPill({
       >
         <div className="p-4 border-b flex items-start justify-between gap-2 shrink-0">
           <div>
-            <h4 className="font-semibold">{catalogItem.name}</h4>
+            <h4 className="font-semibold">{displayName}</h4>
             {catalogItem.description && (
               <p className="text-sm text-muted-foreground mt-1">
                 {catalogItem.description}
@@ -889,7 +904,7 @@ export function McpCatalogIcon({
     return (
       <Image
         src="/logo.png"
-        alt="Archestra"
+        alt={DEFAULT_APP_NAME}
         width={size}
         height={size}
         className="shrink-0 rounded-sm object-contain"

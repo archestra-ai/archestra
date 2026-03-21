@@ -29,6 +29,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useAppName } from "@/lib/use-app-name";
 
 interface RoleMappingFormProps {
   form: UseFormReturn<IdentityProviderFormValues>;
@@ -56,6 +57,7 @@ const HANDLEBARS_EXAMPLES = [
 ];
 
 export function RoleMappingForm({ form }: RoleMappingFormProps) {
+  const appName = useAppName();
   const { fields, append, remove } = useFieldArray({
     control: form.control,
     name: "roleMapping.rules",
@@ -77,7 +79,7 @@ export function RoleMappingForm({ form }: RoleMappingFormProps) {
                   </TooltipTrigger>
                   <TooltipContent className="max-w-sm">
                     <p>
-                      Map identity provider attributes to Archestra roles using
+                      Map identity provider attributes to {appName} roles using
                       Handlebars templates. Rules are evaluated in order - first
                       match wins.
                     </p>
@@ -152,7 +154,7 @@ export function RoleMappingForm({ form }: RoleMappingFormProps) {
                           render={({ field }) => (
                             <FormItem>
                               <FormLabel className="text-xs">
-                                Archestra Role
+                                {appName} Role
                               </FormLabel>
                               <Select
                                 onValueChange={field.onChange}

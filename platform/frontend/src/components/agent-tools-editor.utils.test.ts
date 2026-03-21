@@ -180,4 +180,17 @@ describe("sortAndFilterTools", () => {
 
     expect(result.map((t) => t.id)).toEqual(["2", "1"]);
   });
+
+  it("ranks name matches ahead of description-only matches within selected tools", () => {
+    const tools = [
+      tool("1", "server__get_mcp_servers", "Use create_agent here"),
+      tool("2", "server__create_agent", "Creates an agent"),
+      tool("3", "server__deploy_mcp_server", "Create a deployment"),
+    ];
+    const selected = new Set(["1", "2"]);
+
+    const result = sortAndFilterTools(tools, selected, "create");
+
+    expect(result.map((t) => t.id)).toEqual(["2", "1", "3"]);
+  });
 });

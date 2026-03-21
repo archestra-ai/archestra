@@ -19,6 +19,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { useAppName } from "@/lib/use-app-name";
 import {
   ArchitectureGroupNode,
   type ArchitectureGroupNodeData,
@@ -49,6 +50,7 @@ const REMOTE_GROUP_X = 660;
 const LLM_GROUP_X = 660;
 
 function ArchitectureDiagramInner({ activeTab }: ArchitectureDiagramProps) {
+  const appName = useAppName();
   const { resolvedTheme } = useTheme();
   const { fitView } = useReactFlow();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -195,7 +197,7 @@ function ArchitectureDiagramInner({ activeTab }: ArchitectureDiagramProps) {
           type: "architectureGroup",
           position: { x: ARCHESTRA_GROUP_X, y: -230 },
           data: {
-            label: "Archestra.AI",
+            label: appName,
             width: 380,
             height: 450,
             logo: "/logo.png",
@@ -538,7 +540,7 @@ function ArchitectureDiagramInner({ activeTab }: ArchitectureDiagramProps) {
           selectable: false,
         },
       ];
-    }, [activeTab]);
+    }, [activeTab, appName]);
 
   const edges: Edge[] = useMemo(() => {
     const isProxy = activeTab === "proxy";

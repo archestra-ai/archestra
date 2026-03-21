@@ -7,17 +7,16 @@ import {
   type Tool,
 } from "@modelcontextprotocol/sdk/types.js";
 import {
-  ARCHESTRA_MCP_SERVER_NAME,
   ARCHESTRA_TOKEN_PREFIX,
   isAgentTool,
-  isArchestraMcpServerTool,
   OAUTH_TOKEN_ID_PREFIX,
   parseFullToolName,
-  TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
+  TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
 } from "@shared";
 import { eq } from "drizzle-orm";
 import type { FastifyRequest } from "fastify";
 import {
+  archestraMcpBranding,
   executeArchestraTool,
   filterToolNamesByPermission,
   getArchestraMcpTools,
@@ -136,7 +135,10 @@ export async function createAgentServer(
         name,
         title: archestraToolTitles.get(name) || name,
         description:
-          name === TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME && kbToolDescription
+          name ===
+            archestraMcpBranding.getToolName(
+              TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
+            ) && kbToolDescription
             ? kbToolDescription
             : description,
         inputSchema: parameters,
@@ -193,7 +195,7 @@ export async function createAgentServer(
 
       try {
         // Check if this is an Archestra tool or agent delegation tool
-        const isArchestraTool = isArchestraMcpServerTool(name);
+        const isArchestraTool = archestraMcpBranding.isToolName(name);
         const isAgentDelegationTool = isAgentTool(name);
 
         if (isArchestraTool || isAgentDelegationTool) {
@@ -264,7 +266,7 @@ export async function createAgentServer(
           try {
             await McpToolCallModel.create({
               agentId,
-              mcpServerName: ARCHESTRA_MCP_SERVER_NAME,
+              mcpServerName: archestraMcpBranding.serverName,
               method: "tools/call",
               toolCall: {
                 id: `archestra-${Date.now()}`,

@@ -1,10 +1,13 @@
 import {
   BUILT_IN_AGENT_IDS,
   BUILT_IN_AGENT_NAMES,
+  getArchestraToolFullName,
   TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
+  TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
 } from "@shared";
 import { vi } from "vitest";
 import { policyConfigurationService } from "@/agents/subagents/policy-configuration";
+import { archestraMcpBranding } from "@/archestra-mcp-server";
 import { describe, expect, test } from "@/test";
 import AgentModel from "./agent";
 import AgentToolModel from "./agent-tool";
@@ -1166,6 +1169,38 @@ describe("AgentToolModel.findAll", () => {
       const toolNames = result.data.map((at) => at.tool.name);
       expect(toolNames).toContain("regular-tool");
       expect(toolNames).not.toContain(TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME);
+    });
+
+    test("findAll excludes the white-labeled knowledge tool name as well", async ({
+      makeAgent,
+      makeTool,
+      makeAgentTool,
+    }) => {
+      archestraMcpBranding.syncFromOrganization({
+        appName: "Acme Copilot",
+        iconLogo: null,
+      });
+      const brandedKbToolName = getArchestraToolFullName(
+        TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
+        {
+          appName: "Acme Copilot",
+          fullWhiteLabeling: true,
+        },
+      );
+      const agent = await makeAgent();
+      const regularTool = await makeTool({ name: "regular-tool" });
+      const kbTool = await makeTool({ name: brandedKbToolName });
+      await makeAgentTool(agent.id, regularTool.id);
+      await makeAgentTool(agent.id, kbTool.id);
+
+      const result = await AgentToolModel.findAll({
+        filters: { agentId: agent.id, excludeArchestraTools: true },
+        skipPagination: true,
+      });
+
+      const toolNames = result.data.map((at) => at.tool.name);
+      expect(toolNames).toContain("regular-tool");
+      expect(toolNames).not.toContain(brandedKbToolName);
     });
   });
 });

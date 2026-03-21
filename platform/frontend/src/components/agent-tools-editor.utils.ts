@@ -41,15 +41,12 @@ export function getDefaultArchestraToolIds(
 export function sortAndFilterTools<
   T extends { id: string; name: string; description?: string | null },
 >(tools: T[], selectedToolIds: Set<string>, searchQuery: string): T[] {
+  const normalizedQuery = searchQuery.trim().toLowerCase();
   let result: T[] = tools;
-  if (searchQuery.trim()) {
-    const query = searchQuery.toLowerCase();
+  if (normalizedQuery) {
     result = tools.filter((tool) => {
       const formattedName = parseFullToolName(tool.name).toolName || tool.name;
-      return (
-        formattedName.toLowerCase().includes(query) ||
-        (tool.description?.toLowerCase().includes(query) ?? false)
-      );
+      return getToolSearchMatchScore(tool, formattedName, normalizedQuery) > 0;
     });
   }
 
@@ -60,6 +57,31 @@ export function sortAndFilterTools<
     const aSelected = selectedToolIds.has(a.id) ? 0 : 1;
     const bSelected = selectedToolIds.has(b.id) ? 0 : 1;
     if (aSelected !== bSelected) return aSelected - bSelected;
+    const aFormattedName = parseFullToolName(a.name).toolName || a.name;
+    const bFormattedName = parseFullToolName(b.name).toolName || b.name;
+    const aScore = normalizedQuery
+      ? getToolSearchMatchScore(a, aFormattedName, normalizedQuery)
+      : 0;
+    const bScore = normalizedQuery
+      ? getToolSearchMatchScore(b, bFormattedName, normalizedQuery)
+      : 0;
+    if (aScore !== bScore) return bScore - aScore;
     return (indexMap.get(a.id) ?? 0) - (indexMap.get(b.id) ?? 0);
   });
+}
+
+function getToolSearchMatchScore<T extends { description?: string | null }>(
+  tool: T,
+  formattedName: string,
+  query: string,
+) {
+  const name = formattedName.toLowerCase();
+  const description = tool.description?.toLowerCase() ?? "";
+
+  if (name === query) return 5;
+  if (name.startsWith(query)) return 4;
+  if (name.includes(query)) return 3;
+  if (description.startsWith(query)) return 2;
+  if (description.includes(query)) return 1;
+  return 0;
 }

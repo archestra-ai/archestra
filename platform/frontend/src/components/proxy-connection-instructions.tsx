@@ -1,11 +1,6 @@
 "use client";
 
-import {
-  DocsPage,
-  getDocsUrl,
-  providerDisplayNames,
-  type SupportedProvider,
-} from "@shared";
+import { providerDisplayNames, type SupportedProvider } from "@shared";
 import { MoreHorizontal } from "lucide-react";
 import { useState } from "react";
 import { CodeText } from "@/components/code-text";
@@ -18,7 +13,9 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { getFrontendDocsUrl } from "@/lib/archestra-mcp-server";
 import config from "@/lib/config";
+import { useAppName } from "@/lib/use-app-name";
 
 const { externalProxyUrls, internalProxyUrl } = config.api;
 
@@ -117,6 +114,8 @@ interface ProxyConnectionInstructionsProps {
 export function ProxyConnectionInstructions({
   agentId,
 }: ProxyConnectionInstructionsProps) {
+  const appName = useAppName();
+  const authDocsUrl = getFrontendDocsUrl("platform-llm-proxy-authentication");
   const [selectedProvider, setSelectedProvider] =
     useState<ProviderOption>("openai");
   const [connectionUrl, setConnectionUrl] = useState<string>(
@@ -198,7 +197,7 @@ export function ProxyConnectionInstructions({
       {"isCommand" in providerConfig ? (
         <div className="space-y-2">
           <p className="text-sm text-muted-foreground">
-            Run Claude Code with the Archestra proxy:
+            Run Claude Code with the {appName} proxy:
           </p>
           <CopyableCode
             value={claudeCodeCommand}
@@ -237,17 +236,20 @@ export function ProxyConnectionInstructions({
               className="mt-2 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-muted-foreground"
             />
             <span>
-              <a
-                href={getDocsUrl(
-                  DocsPage.PlatformLlmProxyAuthentication,
-                  "direct-provider-api-key",
-                )}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="underline hover:text-foreground"
-              >
-                Direct Provider API Key
-              </a>{" "}
+              {authDocsUrl ? (
+                <>
+                  <a
+                    href={`${authDocsUrl}#direct-provider-api-key`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline hover:text-foreground"
+                  >
+                    Direct Provider API Key
+                  </a>{" "}
+                </>
+              ) : (
+                <>Direct Provider API Key </>
+              )}
               — authenticate requests with your provider's native API key
             </span>
           </li>
@@ -273,17 +275,20 @@ export function ProxyConnectionInstructions({
               className="mt-2 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-muted-foreground"
             />
             <span>
-              <a
-                href={getDocsUrl(
-                  DocsPage.PlatformLlmProxyAuthentication,
-                  "jwks-external-identity-provider",
-                )}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="underline hover:text-foreground"
-              >
-                JWKS Authentication
-              </a>{" "}
+              {authDocsUrl ? (
+                <>
+                  <a
+                    href={`${authDocsUrl}#jwks-external-identity-provider`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline hover:text-foreground"
+                  >
+                    JWKS Authentication
+                  </a>{" "}
+                </>
+              ) : (
+                <>JWKS Authentication </>
+              )}
               — authenticate with an external identity provider
             </span>
           </li>

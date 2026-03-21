@@ -1,4 +1,4 @@
-import { isArchestraMcpServerTool } from "@shared";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import logger from "@/logging";
 import {
   AgentTeamModel,
@@ -64,7 +64,8 @@ export const evaluatePolicies = async (
   // for tools that are disabled during chat session.
   // Note: archestra__* tools are always enabled (built-in tools that bypass policies)
   const isToolEnabled = (toolName: string) =>
-    isArchestraMcpServerTool(toolName) || enabledToolNames?.has(toolName);
+    archestraMcpBranding.isToolName(toolName) ||
+    enabledToolNames?.has(toolName);
 
   let disabledToolNames: string[] = [];
   let filteredToolCalls = toolCalls;

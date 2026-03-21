@@ -3,8 +3,6 @@
 import {
   ARCHESTRA_MCP_CATALOG_ID,
   type archestraApiTypes,
-  DocsPage,
-  getDocsUrl,
   parseFullToolName,
 } from "@shared";
 import {
@@ -46,6 +44,10 @@ import {
   useAgentDelegations,
   useAllProfileTools,
 } from "@/lib/agent-tools.query";
+import {
+  getFrontendDocsUrl,
+  useArchestraMcpIdentity,
+} from "@/lib/archestra-mcp-server";
 import { useHasPermissions } from "@/lib/auth.query";
 import { useChatProfileMcpTools } from "@/lib/chat.query";
 import config from "@/lib/config";
@@ -72,6 +74,8 @@ export function McpConnectionInstructions({
   agentId,
   hideProfileSelector = false,
 }: McpConnectionInstructionsProps) {
+  const { catalogName } = useArchestraMcpIdentity();
+  const mcpAuthDocsUrl = getFrontendDocsUrl("mcp-authentication");
   const { data: profiles = [] } = useProfiles({
     filters: { agentTypes: ["profile", "mcp_gateway"] },
   });
@@ -459,7 +463,10 @@ export function McpConnectionInstructions({
             <div className="flex flex-wrap gap-2">
               {/* Archestra built-in tools */}
               {archestraTools.length > 0 && (
-                <ReadOnlyArchestraPill tools={archestraTools} />
+                <ReadOnlyArchestraPill
+                  tools={archestraTools}
+                  catalogName={catalogName}
+                />
               )}
               {/* MCP server tools */}
               {Array.from(mcpServerToolGroups.entries()).map(
@@ -527,14 +534,18 @@ export function McpConnectionInstructions({
           </TabsList>
           <p className="text-xs text-muted-foreground">
             For external identity providers, use{" "}
-            <a
-              href={getDocsUrl(DocsPage.McpAuthentication, "external-idp-jwks")}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="underline hover:text-foreground"
-            >
-              JWKS authentication
-            </a>
+            {mcpAuthDocsUrl ? (
+              <a
+                href={`${mcpAuthDocsUrl}#external-idp-jwks`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline hover:text-foreground"
+              >
+                JWKS authentication
+              </a>
+            ) : (
+              "JWKS authentication"
+            )}
           </p>
         </div>
 
@@ -985,10 +996,14 @@ function ReadOnlySubagentPill({ agent }: ReadOnlySubagentPillProps) {
 
 // Read-only Archestra Tools Pill with popover
 interface ReadOnlyArchestraPillProps {
+  catalogName: string;
   tools: Array<{ id: string; name: string; description?: string | null }>;
 }
 
-function ReadOnlyArchestraPill({ tools }: ReadOnlyArchestraPillProps) {
+function ReadOnlyArchestraPill({
+  catalogName,
+  tools,
+}: ReadOnlyArchestraPillProps) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -999,7 +1014,7 @@ function ReadOnlyArchestraPill({ tools }: ReadOnlyArchestraPillProps) {
           size="sm"
           className="h-8 px-3 gap-1.5 text-xs"
         >
-          <span className="font-medium">Archestra</span>
+          <span className="font-medium">{catalogName}</span>
           <span className="text-muted-foreground">({tools.length})</span>
         </Button>
       </PopoverTrigger>
@@ -1012,9 +1027,9 @@ function ReadOnlyArchestraPill({ tools }: ReadOnlyArchestraPillProps) {
       >
         <div className="p-4 border-b flex items-start justify-between gap-2">
           <div>
-            <h4 className="font-semibold">Archestra Built-in Tools</h4>
+            <h4 className="font-semibold">{catalogName} Built-in Tools</h4>
             <p className="text-sm text-muted-foreground mt-1">
-              Built-in tools for managing Archestra resources
+              Built-in tools for managing {catalogName} resources
             </p>
           </div>
           <Button

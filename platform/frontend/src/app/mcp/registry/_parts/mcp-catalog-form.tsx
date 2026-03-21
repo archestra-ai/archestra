@@ -61,6 +61,7 @@ import {
   VisibilitySelector,
 } from "@/components/visibility-selector";
 import { LOCAL_MCP_DISABLED_MESSAGE } from "@/consts";
+import { getVisibleDocsUrl } from "@/lib/archestra-mcp-server";
 import { useHasPermissions } from "@/lib/auth.query";
 import { useFeature } from "@/lib/config.query";
 import { useK8sImagePullSecrets } from "@/lib/internal-mcp-catalog.query";
@@ -107,6 +108,9 @@ export function McpCatalogForm({
   submitRef,
   embedded = false,
 }: McpCatalogFormProps) {
+  const defaultImageDocsUrl = getVisibleDocsUrl(
+    "https://github.com/archestra-ai/archestra/tree/main/platform/mcp_server_docker_image",
+  );
   // Fetch local config secret if it exists
   const { data: localConfigSecret } = useGetSecret(
     initialValues?.localConfigSecretId ?? null,
@@ -494,7 +498,7 @@ export function McpCatalogForm({
                         <span
                           className={`text-xs font-normal ${!isLocalMcpEnabled ? "text-muted-foreground/50" : currentServerType === "local" ? "text-primary-foreground/70" : "text-muted-foreground"}`}
                         >
-                          Orchestrated by Archestra in k8s
+                          Orchestrated in Kubernetes
                         </span>
                       </button>
                     </TooltipTrigger>
@@ -704,16 +708,22 @@ export function McpCatalogForm({
                       />
                     </FormControl>
                     <FormDescription>
-                      <a
-                        href="https://github.com/archestra-ai/archestra/tree/main/platform/mcp_server_docker_image"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-primary underline hover:no-underline"
-                      >
-                        Default image
-                      </a>{" "}
-                      includes alpine, npx, mcp[cli]. Use custom for additional
-                      packages.
+                      {defaultImageDocsUrl ? (
+                        <>
+                          <a
+                            href={defaultImageDocsUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-primary underline hover:no-underline"
+                          >
+                            Default image
+                          </a>{" "}
+                          includes alpine, npx, mcp[cli]. Use custom for
+                          additional packages.
+                        </>
+                      ) : (
+                        "The default image includes alpine, npx, and mcp[cli]. Use a custom image for additional packages."
+                      )}
                     </FormDescription>
                     <FormMessage />
                   </FormItem>

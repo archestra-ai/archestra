@@ -1,7 +1,7 @@
 import type { ArchestraToolShortName, Permission } from "@shared";
-import { getArchestraToolShortName } from "@shared";
 import { userHasPermission } from "@/auth/utils";
 import { UserModel } from "@/models";
+import { archestraMcpBranding } from "./branding";
 import { errorResult } from "./helpers";
 import type { ArchestraContext } from "./types";
 
@@ -131,7 +131,7 @@ export async function checkToolPermission(
   toolName: string,
   context: ArchestraContext,
 ) {
-  const shortName = getArchestraToolShortName(toolName);
+  const shortName = archestraMcpBranding.getToolShortName(toolName);
   if (!shortName) return null; // Not an Archestra tool — allow (handled elsewhere)
 
   // Cast is safe: unknown-but-prefixed tools return undefined here and are
@@ -173,7 +173,7 @@ export async function filterToolNamesByPermission(
     // No user context — only include tools with no permission requirement
     return new Set(
       toolNames.filter((name) => {
-        const shortName = getArchestraToolShortName(name);
+        const shortName = archestraMcpBranding.getToolShortName(name);
         if (!shortName) return true; // Non-Archestra tool
         const perm = TOOL_PERMISSIONS[shortName as ArchestraToolShortName];
         return perm === null; // null means no permission required
@@ -189,7 +189,7 @@ export async function filterToolNamesByPermission(
   // Collect unique permissions we need to check
   const permResults = new Map<string, boolean>();
   for (const name of toolNames) {
-    const shortName = getArchestraToolShortName(name);
+    const shortName = archestraMcpBranding.getToolShortName(name);
     if (!shortName) continue;
     const perm = TOOL_PERMISSIONS[shortName as ArchestraToolShortName];
     if (perm) {
@@ -206,7 +206,7 @@ export async function filterToolNamesByPermission(
   // Filter tools
   const allowed = new Set<string>();
   for (const name of toolNames) {
-    const shortName = getArchestraToolShortName(name);
+    const shortName = archestraMcpBranding.getToolShortName(name);
     if (!shortName) {
       allowed.add(name); // Non-Archestra tool
       continue;

@@ -1,7 +1,7 @@
 import {
   BUILT_IN_AGENT_IDS,
   type PaginationQuery,
-  TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
+  TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
 } from "@shared";
 import {
   and,
@@ -18,6 +18,7 @@ import {
   sql,
 } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
+import { archestraMcpBranding } from "@/archestra-mcp-server";
 import db, { schema } from "@/database";
 import {
   createPaginatedResult,
@@ -1032,7 +1033,12 @@ class AgentToolModel {
 
     // Always exclude the knowledge sources tool (auto-injected, not user-assignable)
     whereConditions.push(
-      ne(schema.toolsTable.name, TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME),
+      ne(
+        schema.toolsTable.name,
+        archestraMcpBranding.getToolName(
+          TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
+        ),
+      ),
     );
 
     const whereClause =

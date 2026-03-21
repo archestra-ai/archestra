@@ -69,6 +69,7 @@ import {
   useSyncAgentDelegations,
   useUnassignTool,
 } from "@/lib/agent-tools.query";
+import { useArchestraMcpIdentity } from "@/lib/archestra-mcp-server";
 import { useHasPermissions } from "@/lib/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import { useConnectors } from "@/lib/connector.query";
@@ -1125,6 +1126,7 @@ function AddToolView({
     }
     return ids;
   }, [assignedToolsData]);
+  const { catalogName } = useArchestraMcpIdentity();
 
   // Detect servers that are still being installed (local servers with pending status)
   const hasInstallingServers = useMemo(() => {
@@ -1318,7 +1320,9 @@ function AddToolView({
                       size={28}
                     />
                     <span className="text-sm font-medium truncate w-full">
-                      {catalog.name}
+                      {isBuiltInCatalogId(catalog.id)
+                        ? catalogName
+                        : catalog.name}
                     </span>
                     {catalog.description && !hasNoTools && (
                       <p className="text-xs text-muted-foreground line-clamp-2 w-full">

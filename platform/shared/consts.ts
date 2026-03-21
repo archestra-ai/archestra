@@ -1,5 +1,8 @@
 /** Default app name used as fallback when organization.appName is not configured */
 export const DEFAULT_APP_NAME = "Archestra";
+export const DEFAULT_APP_FULL_NAME = "Archestra.AI";
+export const DEFAULT_APP_DESCRIPTION =
+  "Enterprise MCP-native Secure AI Platform";
 
 /** Prefix for all Archestra-generated tokens (team tokens, user tokens, virtual API keys, API keys) */
 export const ARCHESTRA_TOKEN_PREFIX = "archestra_";

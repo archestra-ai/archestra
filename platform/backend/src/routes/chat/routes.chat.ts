@@ -4,8 +4,6 @@ import {
   RouteId,
   type SupportedProvider,
   TimeInMs,
-  TOOL_SWAP_AGENT_FULL_NAME,
-  TOOL_SWAP_TO_DEFAULT_AGENT_FULL_NAME,
   type TokenUsage,
 } from "@shared";
 import {
@@ -20,6 +18,7 @@ import {
 } from "ai";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { archestraMcpBranding } from "@/archestra-mcp-server";
 import { hasAnyAgentTypeAdminPermission } from "@/auth";
 import { CacheKey, cacheManager } from "@/cache-manager";
 import { getChatMcpTools } from "@/clients/chat-mcp-client";
@@ -296,11 +295,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             model,
             messages: modelMessages,
             ...(supportsToolCalling && { tools: mcpTools }),
-            stopWhen: [
-              stepCountIs(500),
-              hasToolCall(TOOL_SWAP_AGENT_FULL_NAME),
-              hasToolCall(TOOL_SWAP_TO_DEFAULT_AGENT_FULL_NAME),
-            ],
+            stopWhen: buildChatStopConditions(),
             abortSignal: chatAbortController.signal,
             onFinish: async ({ usage, finishReason }) => {
               removeAbortListeners();
@@ -1412,6 +1407,23 @@ export function extractFirstMessages(messages: unknown[]): ExtractedMessages {
   }
 
   return { firstUserMessage, firstAssistantMessage };
+}
+
+export function buildChatStopConditions() {
+  return [
+    stepCountIs(500),
+    hasToolCall(getChatStopToolNames().swapAgentToolName),
+    hasToolCall(getChatStopToolNames().swapToDefaultAgentToolName),
+  ];
+}
+
+export function getChatStopToolNames() {
+  return {
+    swapAgentToolName: archestraMcpBranding.getToolName("swap_agent"),
+    swapToDefaultAgentToolName: archestraMcpBranding.getToolName(
+      "swap_to_default_agent",
+    ),
+  };
 }
 
 /**

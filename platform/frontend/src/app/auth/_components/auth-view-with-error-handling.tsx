@@ -20,6 +20,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import config from "@/lib/config";
+import { useAppName } from "@/lib/use-app-name";
 import { SignOutWithIdpLogout } from "./sign-out-with-idp-logout";
 
 const { IdentityProviderSelector } = config.enterpriseFeatures.core
@@ -126,6 +127,7 @@ export function AuthViewWithErrorHandling({
   path,
   callbackURL,
 }: AuthViewWithErrorHandlingProps) {
+  const appName = useAppName();
   const searchParams = useSearchParams();
   const [serverError, setServerError] = useState(false);
   const [originError, setOriginError] = useState<string | null>(null);
@@ -336,7 +338,7 @@ export function AuthViewWithErrorHandling({
       </AlertTitle>
       <AlertDescription className="text-amber-700 dark:text-amber-300">
         <p className="text-sm mb-2">
-          You are accessing Archestra from <code>{originError}</code>, which is
+          You are accessing {appName} from <code>{originError}</code>, which is
           not in the list of trusted origins.
         </p>
         <p className="text-sm mb-2">

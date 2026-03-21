@@ -10,7 +10,6 @@ import {
   TOOL_GET_KNOWLEDGE_BASES_SHORT_NAME,
   TOOL_GET_KNOWLEDGE_CONNECTOR_SHORT_NAME,
   TOOL_GET_KNOWLEDGE_CONNECTORS_SHORT_NAME,
-  TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
   TOOL_UNASSIGN_KNOWLEDGE_BASE_FROM_AGENT_SHORT_NAME,
   TOOL_UNASSIGN_KNOWLEDGE_CONNECTOR_FROM_AGENT_SHORT_NAME,
@@ -38,6 +37,7 @@ import {
   UpdateKnowledgeBaseSchema,
   UuidIdSchema,
 } from "@/types";
+import { archestraMcpBranding } from "./branding";
 import {
   catchError,
   defineArchestraTool,
@@ -458,7 +458,9 @@ async function handleQueryKnowledgeSources(params: {
   logger.info(
     {
       agentId: contextAgent.id,
-      tool: TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
+      tool: archestraMcpBranding.getToolName(
+        TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
+      ),
       args,
     },
     "knowledge-management tool called",

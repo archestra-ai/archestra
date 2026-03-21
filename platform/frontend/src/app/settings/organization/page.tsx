@@ -1,5 +1,6 @@
 "use client";
 
+import { DEFAULT_APP_DESCRIPTION, DEFAULT_APP_NAME } from "@shared";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useState } from "react";
 import {
@@ -211,20 +212,21 @@ export default function OrganizationSettingsPage() {
                 <Label htmlFor="appName">App Name</Label>
                 <Input
                   id="appName"
-                  placeholder="Archestra.AI"
+                  placeholder={DEFAULT_APP_NAME}
                   value={effectiveAppName}
                   onChange={(e) => setAppName(e.target.value)}
                   maxLength={100}
                 />
                 <p className="text-xs text-muted-foreground">
-                  Shown in the browser tab title.
+                  Shown in the browser tab title. This also brands the built-in
+                  MCP server name and built-in MCP tool names and prefix.
                 </p>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="ogDescription">OpenGraph Description</Label>
                 <Textarea
                   id="ogDescription"
-                  placeholder="Enterprise MCP Platform for AI Agents"
+                  placeholder={DEFAULT_APP_DESCRIPTION}
                   value={effectiveOgDescription}
                   onChange={(e) => setOgDescription(e.target.value)}
                   maxLength={500}

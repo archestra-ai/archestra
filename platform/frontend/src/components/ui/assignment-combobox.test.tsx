@@ -192,4 +192,37 @@ describe("AssignmentCombobox", () => {
       ).toBeInTheDocument();
     });
   });
+
+  describe("search ranking", () => {
+    it("ranks name matches ahead of description-only matches", async () => {
+      const user = userEvent.setup();
+      const onToggle = vi.fn();
+
+      render(
+        <AssignmentCombobox
+          items={[
+            {
+              id: "description-only",
+              name: "Notifications",
+              description: "GitHub server for issue tracking",
+            },
+            {
+              id: "name-match",
+              name: "GitHub",
+              description: "Remote MCP server",
+            },
+          ]}
+          selectedIds={[]}
+          onToggle={onToggle}
+        />,
+      );
+
+      await openDropdown(user);
+      await user.type(screen.getByPlaceholderText("Search..."), "git");
+
+      const menuItems = screen.getAllByRole("menuitemcheckbox");
+      expect(menuItems[0]).toHaveTextContent("GitHub");
+      expect(menuItems[1]).toHaveTextContent("Notifications");
+    });
+  });
 });

@@ -1,7 +1,13 @@
 import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME } from "@shared";
+import {
+  getArchestraToolFullName,
+  TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
+  TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
+  TOOL_WHOAMI_SHORT_NAME,
+} from "@shared";
 import { jsonSchema, type Tool } from "ai";
 import { vi } from "vitest";
+import { archestraMcpBranding } from "@/archestra-mcp-server";
 import { TeamTokenModel } from "@/models";
 import { describe, expect, test } from "@/test";
 import * as chatClient from "./chat-mcp-client";
@@ -480,26 +486,39 @@ describe("filterToolsByEnabledIds", () => {
     expect(Object.keys(result)).toHaveLength(0);
   });
 
-  test("archestra tools bypass custom selection filtering", async ({
+  test("white-labeled built-in tools bypass custom selection filtering", async ({
     makeTool,
   }) => {
     // Create a real tool in the DB so getNamesByIds can find it
     const githubTool = await makeTool({ name: "github__list_repos" });
+    archestraMcpBranding.syncFromOrganization({
+      appName: "Acme Copilot",
+      iconLogo: null,
+    });
+    const brandedWhoami = getArchestraToolFullName(TOOL_WHOAMI_SHORT_NAME, {
+      appName: "Acme Copilot",
+      fullWhiteLabeling: true,
+    });
+    const brandedKnowledgeTool = getArchestraToolFullName(
+      TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
+      {
+        appName: "Acme Copilot",
+        fullWhiteLabeling: true,
+      },
+    );
 
     const tools = {
       github__list_repos: makeMockTool(),
-      [TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME]: makeMockTool("Query knowledge"),
-      archestra__whoami: makeMockTool("Who am I"),
+      [brandedKnowledgeTool]: makeMockTool("Query knowledge"),
+      [brandedWhoami]: makeMockTool("Who am I"),
     };
 
     // Only enable the github tool — archestra tools should still pass through
     const result = await filterToolsByEnabledIds(tools, [githubTool.id]);
 
     expect(Object.keys(result)).toContain("github__list_repos");
-    expect(Object.keys(result)).toContain(
-      TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
-    );
-    expect(Object.keys(result)).toContain("archestra__whoami");
+    expect(Object.keys(result)).toContain(brandedKnowledgeTool);
+    expect(Object.keys(result)).toContain(brandedWhoami);
     expect(Object.keys(result)).toHaveLength(3);
   });
 

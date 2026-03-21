@@ -1,8 +1,14 @@
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import { type ArchestraToolFullName, isAgentTool } from "@shared";
+import {
+  type ArchestraToolFullName,
+  getArchestraToolFullName,
+  getArchestraToolShortName,
+  isAgentTool,
+} from "@shared";
 import { ZodError, type ZodType } from "zod";
 // Import all groups
 import { toolEntries as agentToolEntries, tools as agentTools } from "./agents";
+import { archestraMcpBranding } from "./branding";
 import { toolEntries as chatToolEntries, tools as chatTools } from "./chat";
 import { delegationToolArgsSchema, handleDelegation } from "./delegation";
 import {
@@ -42,6 +48,7 @@ import {
 } from "./tool-assignment";
 import type { ArchestraContext } from "./types";
 
+export { archestraMcpBranding } from "./branding";
 export { getAgentTools } from "./delegation";
 export { filterToolNamesByPermission, TOOL_PERMISSIONS } from "./rbac";
 export type { ArchestraContext } from "./types";
@@ -62,7 +69,7 @@ const toolEntries: Partial<
 };
 
 export function getArchestraMcpTools() {
-  return [
+  const tools = [
     ...identityTools,
     ...agentTools,
     ...llmProxyTools,
@@ -74,6 +81,22 @@ export function getArchestraMcpTools() {
     ...knowledgeManagementTools,
     ...chatTools,
   ];
+
+  if (archestraMcpBranding.toolPrefix === "archestra__") {
+    return tools;
+  }
+
+  return tools.map((tool) => {
+    const shortName = getArchestraToolShortName(tool.name);
+    if (!shortName) {
+      return tool;
+    }
+
+    return {
+      ...tool,
+      name: archestraMcpBranding.getToolName(shortName),
+    };
+  });
 }
 
 export async function executeArchestraTool(
@@ -99,7 +122,13 @@ export async function executeArchestraTool(
   const rbacDenied = await checkToolPermission(toolName, context);
   if (rbacDenied) return rbacDenied;
 
-  const toolEntry = toolEntries[toolName as ArchestraToolFullName];
+  const resolvedToolName =
+    toolEntries[toolName as ArchestraToolFullName] != null
+      ? toolName
+      : resolveArchestraToolName(toolName);
+  const toolEntry = resolvedToolName
+    ? toolEntries[resolvedToolName as ArchestraToolFullName]
+    : undefined;
   if (!toolEntry) {
     throw {
       code: -32601,
@@ -140,6 +169,15 @@ export async function executeArchestraTool(
     }
     throw error;
   }
+}
+
+function resolveArchestraToolName(toolName: string): string | null {
+  const shortName = archestraMcpBranding.getToolShortName(toolName);
+  if (!shortName) {
+    return null;
+  }
+
+  return getArchestraToolFullName(shortName);
 }
 
 function validateToolResult(

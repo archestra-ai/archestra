@@ -25,11 +25,14 @@ vi.mock("@/models/api-key-model", () => ({
   default: { getFastestModel: mockGetFastestModel },
 }));
 
+import { archestraMcpBranding } from "@/archestra-mcp-server";
 import { createDirectLLMModel } from "@/clients/llm-client";
 import {
+  buildChatStopConditions,
   buildTitlePrompt,
   extractFirstMessages,
   generateConversationTitle,
+  getChatStopToolNames,
 } from "./routes.chat";
 
 describe("extractFirstMessages", () => {
@@ -211,6 +214,26 @@ describe("buildTitlePrompt", () => {
     expect(prompt).toContain("Respond with ONLY the title");
     expect(prompt).toContain("no quotes");
     expect(prompt).toContain("no explanation");
+  });
+});
+
+describe("buildChatStopConditions", () => {
+  it("uses the branded built-in swap tool names", () => {
+    archestraMcpBranding.syncFromOrganization({
+      appName: "Acme Control Plane",
+      iconLogo: null,
+    });
+
+    const stopConditions = buildChatStopConditions();
+    const toolNames = getChatStopToolNames();
+
+    expect(stopConditions).toHaveLength(3);
+    expect(toolNames.swapAgentToolName).toBe("acme_control_plane__swap_agent");
+    expect(toolNames.swapToDefaultAgentToolName).toBe(
+      "acme_control_plane__swap_to_default_agent",
+    );
+
+    archestraMcpBranding.syncFromOrganization(null);
   });
 });
 

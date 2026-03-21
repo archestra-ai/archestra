@@ -1,17 +1,25 @@
 import { randomUUID } from "node:crypto";
 import {
+  ARCHESTRA_MCP_CATALOG_ID,
+  getArchestraMcpCatalogName,
+  getArchestraToolFullName,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
   TOOL_ARTIFACT_WRITE_FULL_NAME,
+  TOOL_ARTIFACT_WRITE_SHORT_NAME,
   TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
+  TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
   TOOL_TODO_WRITE_FULL_NAME,
+  TOOL_TODO_WRITE_SHORT_NAME,
 } from "@shared";
 import { and, eq } from "drizzle-orm";
-import { ARCHESTRA_MCP_CATALOG_METADATA } from "@/archestra-mcp-server/metadata";
+import { archestraMcpBranding } from "@/archestra-mcp-server";
+import { getArchestraMcpCatalogMetadata } from "@/archestra-mcp-server/metadata";
 import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
 import AgentToolModel from "./agent-tool";
+import OrganizationModel from "./organization";
 import TeamModel from "./team";
-import ToolModel from "./tool";
+import ToolModel, { parseArchestraBuiltInName } from "./tool";
 
 describe("ToolModel", () => {
   describe("slugifyName", () => {
@@ -1449,6 +1457,40 @@ describe("ToolModel", () => {
       const toolIds = await AgentToolModel.findToolIdsByAgent(agent.id);
       expect(toolIds).toHaveLength(0);
     });
+
+    test("assigns white-labeled default tools by their branded names", async ({
+      makeOrganization,
+      makeAgent,
+    }) => {
+      const org = await makeOrganization();
+      await OrganizationModel.patch(org.id, { appName: "Acme Copilot" });
+      await ToolModel.syncArchestraBuiltInCatalog({
+        organization: { appName: "Acme Copilot", iconLogo: null },
+      });
+
+      const agent = await makeAgent({ organizationId: org.id });
+      await ToolModel.assignDefaultArchestraToolsToAgent(agent.id);
+
+      const assignedToolIds = await AgentToolModel.findToolIdsByAgent(agent.id);
+      const assignedTools = await ToolModel.getByIds(assignedToolIds);
+
+      expect(assignedTools.map((tool) => tool.name).sort()).toEqual(
+        (
+          [
+            TOOL_ARTIFACT_WRITE_SHORT_NAME,
+            TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
+            TOOL_TODO_WRITE_SHORT_NAME,
+          ] as const
+        )
+          .map((shortName) =>
+            getArchestraToolFullName(shortName, {
+              appName: "Acme Copilot",
+              fullWhiteLabeling: true,
+            }),
+          )
+          .sort(),
+      );
+    });
   });
 
   describe("knowledge base tool visibility", () => {
@@ -1685,6 +1727,52 @@ describe("ToolModel", () => {
 
       expect(toolNames).not.toContain(TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME);
       expect(toolNames).toContain(TOOL_ARTIFACT_WRITE_FULL_NAME);
+    });
+
+    test("getToolsByAgent and findByCatalogId use branded knowledge-tool filtering after white-label sync", async ({
+      makeOrganization,
+      makeAgent,
+      makeKnowledgeBase,
+    }) => {
+      const org = await makeOrganization();
+      await OrganizationModel.patch(org.id, { appName: "Acme Copilot" });
+      await ToolModel.syncArchestraBuiltInCatalog({
+        organization: { appName: "Acme Copilot", iconLogo: null },
+      });
+
+      const kb = await makeKnowledgeBase(org.id);
+      const agent = await makeAgent({ organizationId: org.id });
+      await db
+        .insert(schema.agentKnowledgeBasesTable)
+        .values({ agentId: agent.id, knowledgeBaseId: kb.id });
+      await ToolModel.assignArchestraToolsToAgent(
+        agent.id,
+        ARCHESTRA_MCP_CATALOG_ID,
+      );
+
+      const brandedKbToolName = getArchestraToolFullName(
+        TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
+        {
+          appName: "Acme Copilot",
+          fullWhiteLabeling: true,
+        },
+      );
+
+      const visibleTools = await ToolModel.getToolsByAgent(agent.id);
+      const visibleMcpTools = await ToolModel.getMcpToolsByAgent(agent.id);
+      const catalogTools = await ToolModel.findByCatalogId(
+        ARCHESTRA_MCP_CATALOG_ID,
+      );
+
+      expect(visibleTools.map((tool) => tool.name)).not.toContain(
+        brandedKbToolName,
+      );
+      expect(visibleMcpTools.map((tool) => tool.name)).toContain(
+        brandedKbToolName,
+      );
+      expect(catalogTools.map((tool) => tool.name)).not.toContain(
+        brandedKbToolName,
+      );
     });
 
     test("assignArchestraToolsToAgent always assigns query_knowledge_sources (filtered at query time)", async ({
@@ -2120,9 +2208,34 @@ describe("ToolModel", () => {
     });
   });
 
+  describe("parseArchestraBuiltInName", () => {
+    test("parses default built-in tool names", () => {
+      expect(parseArchestraBuiltInName("archestra__create_agent")).toEqual({
+        serverName: "archestra",
+        shortName: "create_agent",
+      });
+    });
+
+    test("parses white-labeled built-in tool names", () => {
+      expect(parseArchestraBuiltInName("acme_copilot__create_agent")).toEqual({
+        serverName: "acme_copilot",
+        shortName: "create_agent",
+      });
+    });
+
+    test("returns null shortName for non-built-in tool names", () => {
+      expect(parseArchestraBuiltInName("github__list_issues")).toEqual({
+        serverName: "github",
+        shortName: null,
+      });
+    });
+  });
+
   describe("seedArchestraTools", () => {
     test("creates the built-in catalog entry with current metadata", async () => {
       const catalogId = randomUUID();
+      archestraMcpBranding.syncFromOrganization(null);
+      const metadata = getArchestraMcpCatalogMetadata();
 
       await ToolModel.seedArchestraTools(catalogId);
 
@@ -2132,21 +2245,17 @@ describe("ToolModel", () => {
         .where(eq(schema.internalMcpCatalogTable.id, catalogId));
 
       expect(catalog).toBeDefined();
-      expect(catalog?.name).toBe(ARCHESTRA_MCP_CATALOG_METADATA.name);
-      expect(catalog?.description).toBe(
-        ARCHESTRA_MCP_CATALOG_METADATA.description,
-      );
-      expect(catalog?.docsUrl).toBe(ARCHESTRA_MCP_CATALOG_METADATA.docsUrl);
-      expect(catalog?.serverType).toBe(
-        ARCHESTRA_MCP_CATALOG_METADATA.serverType,
-      );
-      expect(catalog?.requiresAuth).toBe(
-        ARCHESTRA_MCP_CATALOG_METADATA.requiresAuth,
-      );
+      expect(catalog?.name).toBe(metadata.name);
+      expect(catalog?.description).toBe(metadata.description);
+      expect(catalog?.docsUrl).toBe(metadata.docsUrl);
+      expect(catalog?.serverType).toBe(metadata.serverType);
+      expect(catalog?.requiresAuth).toBe(metadata.requiresAuth);
     });
 
     test("updates stale built-in catalog metadata on reseed", async () => {
       const catalogId = randomUUID();
+      archestraMcpBranding.syncFromOrganization(null);
+      const metadata = getArchestraMcpCatalogMetadata();
 
       await db.insert(schema.internalMcpCatalogTable).values({
         id: catalogId,
@@ -2165,17 +2274,61 @@ describe("ToolModel", () => {
         .where(eq(schema.internalMcpCatalogTable.id, catalogId));
 
       expect(catalog).toBeDefined();
-      expect(catalog?.name).toBe(ARCHESTRA_MCP_CATALOG_METADATA.name);
-      expect(catalog?.description).toBe(
-        ARCHESTRA_MCP_CATALOG_METADATA.description,
+      expect(catalog?.name).toBe(metadata.name);
+      expect(catalog?.description).toBe(metadata.description);
+      expect(catalog?.docsUrl).toBe(metadata.docsUrl);
+      expect(catalog?.serverType).toBe(metadata.serverType);
+      expect(catalog?.requiresAuth).toBe(metadata.requiresAuth);
+    });
+
+    test("rebrands built-in catalog metadata and tool names on sync for white-labeled orgs", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+      await OrganizationModel.patch(org.id, {
+        appName: "Acme Copilot",
+        iconLogo: "https://cdn.example.com/logo.png",
+      });
+
+      await ToolModel.syncArchestraBuiltInCatalog({
+        organization: {
+          appName: "Acme Copilot",
+          iconLogo: "https://cdn.example.com/logo.png",
+        },
+      });
+
+      const [catalog] = await db
+        .select()
+        .from(schema.internalMcpCatalogTable)
+        .where(
+          eq(
+            schema.internalMcpCatalogTable.id,
+            "00000000-0000-4000-8000-000000000001",
+          ),
+        );
+      const [artifactTool] = await db
+        .select()
+        .from(schema.toolsTable)
+        .where(
+          eq(
+            schema.toolsTable.name,
+            getArchestraToolFullName(TOOL_ARTIFACT_WRITE_SHORT_NAME, {
+              appName: "Acme Copilot",
+              fullWhiteLabeling: true,
+            }),
+          ),
+        );
+
+      expect(catalog?.name).toBe(
+        getArchestraMcpCatalogName({
+          appName: "Acme Copilot",
+          fullWhiteLabeling: true,
+        }),
       );
-      expect(catalog?.docsUrl).toBe(ARCHESTRA_MCP_CATALOG_METADATA.docsUrl);
-      expect(catalog?.serverType).toBe(
-        ARCHESTRA_MCP_CATALOG_METADATA.serverType,
-      );
-      expect(catalog?.requiresAuth).toBe(
-        ARCHESTRA_MCP_CATALOG_METADATA.requiresAuth,
-      );
+      expect(catalog?.docsUrl).toBeNull();
+      expect(catalog?.icon).toBe("https://cdn.example.com/logo.png");
+      expect(catalog?.description).not.toContain("Archestra");
+      expect(artifactTool).toBeDefined();
     });
   });
 
@@ -2217,6 +2370,50 @@ describe("ToolModel", () => {
       const ids1 = result1.data.map((t) => t.id);
       const ids2 = result2.data.map((t) => t.id);
       expect(ids1).toEqual(ids2);
+    });
+
+    test("excludes the white-labeled knowledge tool from assignment listings", async ({
+      makeOrganization,
+      makeAgent,
+      makeAgentTool,
+    }) => {
+      const org = await makeOrganization();
+      await OrganizationModel.patch(org.id, { appName: "Acme Copilot" });
+      await ToolModel.syncArchestraBuiltInCatalog({
+        organization: { appName: "Acme Copilot", iconLogo: null },
+      });
+
+      const agent = await makeAgent({ organizationId: org.id });
+      const [kbTool] = await db
+        .select()
+        .from(schema.toolsTable)
+        .where(
+          eq(
+            schema.toolsTable.name,
+            getArchestraToolFullName(TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME, {
+              appName: "Acme Copilot",
+              fullWhiteLabeling: true,
+            }),
+          ),
+        );
+
+      expect(kbTool).toBeDefined();
+      await makeAgentTool(agent.id, kbTool?.id);
+
+      const result = await ToolModel.findAllWithAssignments({
+        filters: {},
+      });
+
+      expect(
+        result.data.some(
+          (tool) =>
+            tool.name ===
+            getArchestraToolFullName(TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME, {
+              appName: "Acme Copilot",
+              fullWhiteLabeling: true,
+            }),
+        ),
+      ).toBe(false);
     });
   });
 });

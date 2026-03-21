@@ -1,6 +1,7 @@
 "use client";
 
 import { ExternalLink } from "lucide-react";
+import { getVisibleDocsUrl } from "@/lib/archestra-mcp-server";
 
 export function CatalogDocsLink({
   url,
@@ -9,9 +10,14 @@ export function CatalogDocsLink({
   url: string;
   className?: string;
 }) {
+  const visibleUrl = getVisibleDocsUrl(url);
+  if (!visibleUrl) {
+    return null;
+  }
+
   return (
     <a
-      href={url}
+      href={visibleUrl}
       target="_blank"
       rel="noopener noreferrer"
       className={className}

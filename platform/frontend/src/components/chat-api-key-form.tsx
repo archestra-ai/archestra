@@ -3,9 +3,7 @@
 import {
   type archestraApiTypes,
   DEFAULT_PROVIDER_BASE_URLS,
-  DocsPage,
   E2eTestId,
-  getDocsUrl,
   PROVIDERS_WITH_OPTIONAL_API_KEY,
 } from "@shared";
 import { Building2, CheckCircle2, User, Users } from "lucide-react";
@@ -22,6 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { getFrontendDocsUrl } from "@/lib/archestra-mcp-server";
 import { useFeature, useProviderBaseUrls } from "@/lib/config.query";
 import { useTeams } from "@/lib/team.query";
 import { LlmProviderSelectItems } from "./llm-provider-options";
@@ -276,6 +275,7 @@ export function ChatApiKeyForm({
   allowedProviders,
   hideScopeAndPrimary = false,
 }: ChatApiKeyFormProps) {
+  const authDocsUrl = getFrontendDocsUrl("platform-llm-proxy-authentication");
   const byosEnabled = useFeature("byosEnabled");
   const { data: providerBaseUrls } = useProviderBaseUrls();
   const isEditMode = Boolean(existingKey);
@@ -513,18 +513,20 @@ export function ChatApiKeyForm({
             <div className="space-y-2">
               <Label htmlFor="chat-api-key-scope">Scope</Label>
               <p className="text-xs text-muted-foreground">
-                Controls who can use this key.{" "}
-                <Link
-                  href={getDocsUrl(
-                    DocsPage.PlatformLlmProxyAuthentication,
-                    "api-key-scoping",
-                  )}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="underline hover:text-foreground"
-                >
-                  Learn more
-                </Link>
+                Controls who can use this key.
+                {authDocsUrl && (
+                  <>
+                    {" "}
+                    <Link
+                      href={`${authDocsUrl}#api-key-scoping`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="underline hover:text-foreground"
+                    >
+                      Learn more
+                    </Link>
+                  </>
+                )}
               </p>
               <Select
                 value={scope}

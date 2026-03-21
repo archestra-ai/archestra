@@ -3,7 +3,6 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import {
   isAgentTool,
-  isArchestraMcpServerTool,
   isBrowserMcpTool,
   parseFullToolName,
   TimeInMs,
@@ -11,6 +10,7 @@ import {
 import { type JSONSchema7, jsonSchema, type Tool } from "ai";
 import {
   type ArchestraContext,
+  archestraMcpBranding,
   executeArchestraTool,
   getAgentTools,
 } from "@/archestra-mcp-server";
@@ -770,7 +770,7 @@ export async function getChatMcpTools({
                 try {
                   throwIfAborted(abortSignal);
                   // Check if this is an Archestra tool - handle directly without DB lookup
-                  if (isArchestraMcpServerTool(mcpTool.name)) {
+                  if (archestraMcpBranding.isToolName(mcpTool.name)) {
                     const archestraResponse = await executeArchestraTool(
                       mcpTool.name,
                       toolArguments,
@@ -1299,7 +1299,10 @@ async function filterToolsByEnabledIds(
   const filteredTools: Record<string, Tool> = {};
   const excludedTools: string[] = [];
   for (const [name, tool] of Object.entries(tools)) {
-    if (isArchestraMcpServerTool(name) || enabledToolNames.includes(name)) {
+    if (
+      archestraMcpBranding.isToolName(name) ||
+      enabledToolNames.includes(name)
+    ) {
       filteredTools[name] = tool;
     } else {
       excludedTools.push(name);

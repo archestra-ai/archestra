@@ -1,6 +1,6 @@
 "use client";
 
-import { type archestraApiTypes, DocsPage, getDocsUrl } from "@shared";
+import type { archestraApiTypes } from "@shared";
 import { AlertTriangle, ExternalLink, Info } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { getFrontendDocsUrl } from "@/lib/archestra-mcp-server";
 import { useChatOpsStatus } from "@/lib/chatops.query";
 import { useUpdateSlackChatOpsConfig } from "@/lib/chatops-config.query";
 import config from "@/lib/config";
@@ -38,7 +39,7 @@ function useSlackProviderConfig(): ProviderConfig {
     providerLabel: "Slack",
     providerIcon: "/icons/slack.png",
     webhookPath: "/api/webhooks/chatops/slack",
-    docsUrl: getDocsUrl(DocsPage.PlatformSlack),
+    docsUrl: getFrontendDocsUrl("platform-slack"),
     slashCommand: `/${appName.toLowerCase()}-select-agent`,
     buildDeepLink: (binding) => {
       if (binding.workspaceId) {
@@ -102,7 +103,7 @@ export default function SlackPage() {
         allStepsCompleted={allStepsCompleted}
         isLoading={setupDataLoading}
         providerLabel="Slack"
-        docsUrl={getDocsUrl(DocsPage.PlatformSlack)}
+        docsUrl={getFrontendDocsUrl("platform-slack")}
       >
         <SetupStep
           title="Choose connection mode"

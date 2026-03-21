@@ -3,15 +3,16 @@
 import { type UIMessage, useChat } from "@ai-sdk/react";
 import {
   EXTERNAL_AGENT_ID_HEADER,
+  getArchestraToolShortName,
   isChatErrorResponse,
   makeSwapAgentPokeText,
   SWAP_AGENT_FAILED_POKE_TEXT,
   SWAP_TO_DEFAULT_AGENT_POKE_TEXT,
-  TOOL_ARTIFACT_WRITE_FULL_NAME,
-  TOOL_CREATE_AGENT_FULL_NAME,
-  TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_FULL_NAME,
-  TOOL_SWAP_AGENT_FULL_NAME,
-  TOOL_SWAP_TO_DEFAULT_AGENT_FULL_NAME,
+  TOOL_ARTIFACT_WRITE_SHORT_NAME,
+  TOOL_CREATE_AGENT_SHORT_NAME,
+  TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_SHORT_NAME,
+  TOOL_SWAP_AGENT_SHORT_NAME,
+  TOOL_SWAP_TO_DEFAULT_AGENT_SHORT_NAME,
   type TokenUsage,
 } from "@shared";
 import { useQueryClient } from "@tanstack/react-query";
@@ -31,6 +32,8 @@ import {
 } from "react";
 import { filterOptimisticToolCalls } from "@/components/chat/chat-messages.utils";
 import { useGenerateConversationTitle } from "@/lib/chat.query";
+import appConfig from "./config";
+import { useAppName } from "./use-app-name";
 
 const SESSION_CLEANUP_TIMEOUT = 10 * 60 * 1000; // 10 min
 const MAX_AUTO_RETRIES = 2;
@@ -257,6 +260,7 @@ function ChatSessionHook({
   notifySessionUpdate: () => void;
 }) {
   const queryClient = useQueryClient();
+  const appName = useAppName();
   const [pendingCustomServerToolCall, setPendingCustomServerToolCall] =
     useState<{ toolCallId: string; toolName: string } | null>(null);
   const [optimisticToolCalls, setOptimisticToolCalls] = useState<
@@ -316,7 +320,7 @@ function ChatSessionHook({
       if (swapAgentPendingRef.current) {
         // Check if the swap tool errored — if so, poke with a "swap failed" message
         // instead of the normal swap poke, so the current agent can inform the user
-        const swapToolErrored = hasSwapToolError(message);
+        const swapToolErrored = hasSwapToolError(message, appName);
         const pokeText = swapToolErrored
           ? SWAP_AGENT_FAILED_POKE_TEXT
           : swapAgentPendingRef.current;
@@ -372,8 +376,8 @@ function ChatSessionHook({
       });
 
       if (
-        toolCall.toolName ===
-        TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_FULL_NAME
+        getCurrentArchestraToolShortName(toolCall.toolName, appName) ===
+        TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_SHORT_NAME
       ) {
         setPendingCustomServerToolCall(toolCall);
       }
@@ -382,7 +386,10 @@ function ChatSessionHook({
       // The backend's stopWhen: hasToolCall(...) stops the agentic loop
       // after swap_agent executes, so the old agent won't continue.
       // onFinish then sends a poke to trigger the new agent.
-      if (toolCall.toolName === TOOL_SWAP_AGENT_FULL_NAME) {
+      if (
+        getCurrentArchestraToolShortName(toolCall.toolName, appName) ===
+        TOOL_SWAP_AGENT_SHORT_NAME
+      ) {
         const agentName = getSwapAgentName(toolCall);
         swapAgentPendingRef.current = makeSwapAgentPokeText(
           typeof agentName === "string" ? agentName : "another agent",
@@ -392,7 +399,10 @@ function ChatSessionHook({
         });
       }
 
-      if (toolCall.toolName === TOOL_SWAP_TO_DEFAULT_AGENT_FULL_NAME) {
+      if (
+        getCurrentArchestraToolShortName(toolCall.toolName, appName) ===
+        TOOL_SWAP_TO_DEFAULT_AGENT_SHORT_NAME
+      ) {
         swapAgentPendingRef.current = SWAP_TO_DEFAULT_AGENT_POKE_TEXT;
         queryClient.invalidateQueries({
           queryKey: ["conversation", conversationId],
@@ -403,12 +413,18 @@ function ChatSessionHook({
       // create-agent mutations, so the cached useInternalAgents() list can stay
       // stale unless we invalidate it here. Without this, the prompt input's
       // agent selector may not reflect a newly created/swapped-to agent yet.
-      if (toolCall.toolName === TOOL_CREATE_AGENT_FULL_NAME) {
+      if (
+        getCurrentArchestraToolShortName(toolCall.toolName, appName) ===
+        TOOL_CREATE_AGENT_SHORT_NAME
+      ) {
         queryClient.invalidateQueries({ queryKey: ["agents"] });
       }
 
       // Detect artifact_write tool and invalidate conversation to fetch updated artifact
-      if (toolCall.toolName === TOOL_ARTIFACT_WRITE_FULL_NAME) {
+      if (
+        getCurrentArchestraToolShortName(toolCall.toolName, appName) ===
+        TOOL_ARTIFACT_WRITE_SHORT_NAME
+      ) {
         // Small delay to ensure backend has saved the artifact
         setTimeout(() => {
           queryClient.invalidateQueries({
@@ -533,13 +549,6 @@ function ChatSessionHook({
   return null;
 }
 
-const SWAP_TOOL_TYPES = new Set([
-  TOOL_SWAP_AGENT_FULL_NAME,
-  `tool-${TOOL_SWAP_AGENT_FULL_NAME}`,
-  TOOL_SWAP_TO_DEFAULT_AGENT_FULL_NAME,
-  `tool-${TOOL_SWAP_TO_DEFAULT_AGENT_FULL_NAME}`,
-]);
-
 function getSwapAgentName(toolCall: unknown): string | null {
   if (
     typeof toolCall !== "object" ||
@@ -557,11 +566,20 @@ function getSwapAgentName(toolCall: unknown): string | null {
     : null;
 }
 
-function hasSwapToolError(message: UIMessage): boolean {
+function hasSwapToolError(message: UIMessage, appName: string): boolean {
   return (message.parts ?? []).some((part) => {
     if (typeof part !== "object" || !part || !("type" in part)) return false;
     const type = part.type as string;
-    if (!SWAP_TOOL_TYPES.has(type)) return false;
+    const shortName = getCurrentArchestraToolShortName(
+      type.startsWith("tool-") ? type.slice("tool-".length) : type,
+      appName,
+    );
+    if (
+      shortName !== TOOL_SWAP_AGENT_SHORT_NAME &&
+      shortName !== TOOL_SWAP_TO_DEFAULT_AGENT_SHORT_NAME
+    ) {
+      return false;
+    }
     const toolPart = part as Record<string, unknown>;
     if (toolPart.errorText) return true;
     if (typeof toolPart.output === "string") {
@@ -573,6 +591,17 @@ function hasSwapToolError(message: UIMessage): boolean {
       }
     }
     return false;
+  });
+}
+
+function getCurrentArchestraToolShortName(
+  toolName: string,
+  appName: string,
+): string | null {
+  return getArchestraToolShortName(toolName, {
+    appName,
+    fullWhiteLabeling: appConfig.enterpriseFeatures.fullWhiteLabeling,
+    includeDefaultPrefix: true,
   });
 }
 

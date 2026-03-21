@@ -1,6 +1,5 @@
 "use client";
 
-import { DocsPage, getDocsUrl } from "@shared";
 import JSZip from "jszip";
 import { Download, ExternalLink, Loader2, TriangleAlert } from "lucide-react";
 import * as React from "react";
@@ -11,6 +10,7 @@ import { StepCard } from "@/components/step-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { getFrontendDocsUrl } from "@/lib/archestra-mcp-server";
 import { useChatOpsStatus } from "@/lib/chatops.query";
 import { useUpdateChatOpsConfigInQuickstart } from "@/lib/chatops-config.query";
 import { usePublicBaseUrl } from "@/lib/config.query";
@@ -25,6 +25,7 @@ export function MsTeamsSetupDialog({
   open,
   onOpenChange,
 }: MsTeamsSetupDialogProps) {
+  const docsUrl = getFrontendDocsUrl("platform-ms-teams");
   const configuredAppName = useAppName();
   const mutation = useUpdateChatOpsConfigInQuickstart();
   const { data: chatOpsProviders } = useChatOpsStatus();
@@ -135,16 +136,22 @@ export function MsTeamsSetupDialog({
       description={
         <>
           Follow these steps to connect your {configuredAppName} agents to
-          Microsoft Teams. Find out more in our{" "}
-          <a
-            href={getDocsUrl(DocsPage.PlatformMsTeams)}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-primary underline hover:no-underline"
-          >
-            documentation
-          </a>
-          .
+          Microsoft Teams.
+          {docsUrl && (
+            <>
+              {" "}
+              Find out more in our{" "}
+              <a
+                href={docsUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary underline hover:no-underline"
+              >
+                documentation
+              </a>
+              .
+            </>
+          )}
         </>
       }
       steps={stepContents}

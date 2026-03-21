@@ -1,6 +1,4 @@
 "use client";
-
-import { DocsPage, getDocsUrl } from "@shared";
 import { ExternalLink, Info } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
@@ -18,6 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { getFrontendDocsUrl } from "@/lib/archestra-mcp-server";
 import { useChatOpsStatus } from "@/lib/chatops.query";
 import config from "@/lib/config";
 import { useConfig, usePublicBaseUrl } from "@/lib/config.query";
@@ -35,7 +34,7 @@ const msTeamsProviderConfig: ProviderConfig = {
   providerLabel: "MS Teams",
   providerIcon: "/icons/ms-teams.png",
   webhookPath: "/api/webhooks/chatops/ms-teams",
-  docsUrl: getDocsUrl(DocsPage.PlatformMsTeams),
+  docsUrl: getFrontendDocsUrl("platform-ms-teams"),
   slashCommand: "/select-agent",
   buildDeepLink: (binding) => {
     const channelName = encodeURIComponent(
@@ -78,7 +77,7 @@ export default function MsTeamsPage() {
         allStepsCompleted={allStepsCompleted}
         isLoading={setupDataLoading}
         providerLabel="Microsoft Teams"
-        docsUrl={getDocsUrl(DocsPage.PlatformMsTeams)}
+        docsUrl={getFrontendDocsUrl("platform-ms-teams")}
       >
         {isLocalDev ? (
           <SetupStep

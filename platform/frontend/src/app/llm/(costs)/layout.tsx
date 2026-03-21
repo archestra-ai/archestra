@@ -1,6 +1,5 @@
 "use client";
 
-import { DocsPage, getDocsUrl } from "@shared";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { createContext, useContext, useMemo, useState } from "react";
@@ -28,16 +27,7 @@ const PAGE_CONFIG: Record<
         >
           Model Settings
         </Link>
-        . Check{" "}
-        <a
-          href={getDocsUrl(DocsPage.PlatformObservability)}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-primary hover:underline"
-        >
-          Prometheus metrics capabilities
-        </a>{" "}
-        to get cost-related insights at scale.
+        .
       </>
     ),
   },

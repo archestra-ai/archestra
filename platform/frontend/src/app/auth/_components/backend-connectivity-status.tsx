@@ -20,6 +20,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { useBackendConnectivity } from "@/lib/backend-connectivity";
+import { useAppName } from "@/lib/use-app-name";
 
 interface BackendConnectivityStatusProps {
   /**
@@ -138,6 +139,7 @@ function ConnectionStatusView({
   estimatedTotalAttempts: number;
   retry: () => void;
 }) {
+  const appName = useAppName();
   const isUnreachable = status === "unreachable";
 
   return (
@@ -161,7 +163,7 @@ function ConnectionStatusView({
           <CardDescription>
             {isUnreachable
               ? "Unable to establish a connection to the backend server after multiple attempts."
-              : "Establishing connection to the Archestra backend server."}
+              : `Establishing connection to the ${appName} backend server.`}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">

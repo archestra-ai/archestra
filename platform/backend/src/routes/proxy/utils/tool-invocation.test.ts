@@ -1,3 +1,5 @@
+import { getArchestraToolFullName, TOOL_LIST_AGENTS_SHORT_NAME } from "@shared";
+import { archestraMcpBranding } from "@/archestra-mcp-server";
 import { AgentTeamModel, OrganizationModel } from "@/models";
 import { describe, expect, test } from "@/test";
 import { evaluatePolicies, getGlobalToolPolicy } from "./tool-invocation";
@@ -111,15 +113,26 @@ describe("evaluatePolicies", () => {
     expect(result?.contentMessage).toContain("not enabled");
   });
 
-  test("archestra tools bypass enabledToolNames filtering", async ({
+  test("white-labeled built-in tools bypass enabledToolNames filtering", async ({
     makeAgent,
   }) => {
     const agent = await makeAgent();
+    archestraMcpBranding.syncFromOrganization({
+      appName: "Acme Copilot",
+      iconLogo: null,
+    });
+    const brandedListAgents = getArchestraToolFullName(
+      TOOL_LIST_AGENTS_SHORT_NAME,
+      {
+        appName: "Acme Copilot",
+        fullWhiteLabeling: true,
+      },
+    );
     // Only "some_tool" is enabled, but archestra__ tools should bypass
     const enabledTools = new Set(["some_tool"]);
 
     const result = await evaluatePolicies(
-      [{ toolCallName: "archestra__list_tools", toolCallArgs: "{}" }],
+      [{ toolCallName: brandedListAgents, toolCallArgs: "{}" }],
       agent.id,
       { teamIds: [] },
       true,

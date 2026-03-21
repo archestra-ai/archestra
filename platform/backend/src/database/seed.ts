@@ -533,6 +533,62 @@ async function ensureExistingUsersHavePersonalChatAgents(): Promise<void> {
   }
 }
 
+
+/**
+ * Seeds remote MCP servers that expose MCP App (text/html;profile=mcp-app) UIs.
+ * These are public, zero-configuration integrations that demonstrate the
+ * MCP Apps standard working end-to-end inside Archestra Chat.
+ *
+ * Both entries use onConflictDoNothing — existing installations are never
+ * overwritten on subsequent restarts.
+ */
+async function seedMcpAppVendorCatalogs(): Promise<void> {
+  // Excalidraw MCP — returns interactive whiteboards as MCP App resources.
+  // The remote server at https://mcp.excalidraw.com implements the MCP Apps
+  // spec by returning a text/html;profile=mcp-app resource alongside tool results,
+  // which Archestra Chat renders in a sandboxed iframe.
+  await db
+    .insert(schema.internalMcpCatalogTable)
+    .values({
+      name: "excalidraw",
+      description:
+        "Draw hand-crafted diagrams and whiteboards directly in chat. Uses the MCP Apps standard to render an interactive Excalidraw canvas inside the chat UI.",
+      serverType: "remote",
+      serverUrl: "https://mcp.excalidraw.com",
+      requiresAuth: false,
+      scope: "org",
+    })
+    .onConflictDoNothing();
+
+  // n8n MCP — exposes n8n workflow builder tools. The hosted service at
+  // n8n-mcp.com also returns MCP App UIs for workflow previews.
+  // Users must provide their own API key obtained from dashboard.n8n-mcp.com.
+  await db
+    .insert(schema.internalMcpCatalogTable)
+    .values({
+      name: "n8n-mcp",
+      description:
+        "Build and manage n8n automation workflows from chat. Requires a free API key from dashboard.n8n-mcp.com. Supports MCP Apps for workflow visualization.",
+      serverType: "remote",
+      serverUrl: "https://n8n-mcp.com/mcp",
+      requiresAuth: true,
+      authFields: [
+        {
+          name: "Authorization",
+          label: "n8n-MCP API Key",
+          type: "header",
+          required: true,
+          description:
+            "Get your free API key at dashboard.n8n-mcp.com. Format: Bearer <your-api-key>",
+        },
+      ],
+      scope: "org",
+    })
+    .onConflictDoNothing();
+
+  logger.info("Seeded MCP App vendor catalog entries (excalidraw, n8n-mcp)");
+}
+
 export async function seedRequiredStartingData(): Promise<void> {
   ensureEncryptionKeyAvailable();
   await migrateSecretsToEncrypted();
@@ -545,6 +601,7 @@ export async function seedRequiredStartingData(): Promise<void> {
   await seedPlaywrightCatalog();
   await migratePlaywrightToolsToDynamicCredential();
   await seedTestMcpServer();
+  await seedMcpAppVendorCatalogs();
   await seedTeamTokens();
   await seedChatApiKeysFromEnv();
   // Ensure all existing members have a personal default chat agent
@@ -552,3 +609,4 @@ export async function seedRequiredStartingData(): Promise<void> {
   // Clean up orphaned MCP HTTP sessions (older than 24h)
   await McpHttpSessionModel.deleteExpired();
 }
+

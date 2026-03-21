@@ -73,6 +73,11 @@ import { ExpiredAuthTool } from "./expired-auth-tool";
 import { InlineChatError } from "./inline-chat-error";
 import { hasKnowledgeBaseToolCall } from "./knowledge-graph-citations";
 import { McpInstallDialogs } from "./mcp-install-dialogs";
+import { McpAppRenderer } from "./mcp-app-renderer";
+import {
+  detectMcpAppResource,
+  getMcpAppHtml,
+} from "./chat-tools-display.utils";
 import { PolicyDeniedTool } from "./policy-denied-tool";
 import { TodoWriteTool } from "./todo-write-tool";
 import { ToolErrorLogsButton } from "./tool-error-logs-button";
@@ -1157,6 +1162,14 @@ function MessageTool({
             errorText={errorText}
           />
         )}
+        {(() => {
+          const rawOutput = toolResultPart?.output ?? part.output;
+          const mcpResource = detectMcpAppResource(rawOutput);
+          if (!mcpResource) return null;
+          const html = getMcpAppHtml(mcpResource);
+          if (!html) return null;
+          return <McpAppRenderer htmlContent={html} title={toolName} />;
+        })()}
       </ToolContent>
     </Tool>
   );

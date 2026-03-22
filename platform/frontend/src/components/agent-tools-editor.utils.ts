@@ -1,8 +1,12 @@
 import {
   ARCHESTRA_MCP_CATALOG_ID,
-  DEFAULT_ARCHESTRA_TOOL_NAMES,
+  DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
   parseFullToolName,
 } from "@shared";
+
+const DEFAULT_ARCHESTRA_TOOL_SHORT_NAME_SET = new Set<string>(
+  DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
+);
 
 /**
  * Given catalog items and a parallel array of tool lists, find the default
@@ -25,7 +29,13 @@ export function getDefaultArchestraToolIds(
 
   const toolIds = new Set(
     tools
-      .filter((t) => DEFAULT_ARCHESTRA_TOOL_NAMES.includes(t.name))
+      .filter((t) => {
+        const shortName = parseFullToolName(t.name).toolName;
+        return (
+          shortName !== null &&
+          DEFAULT_ARCHESTRA_TOOL_SHORT_NAME_SET.has(shortName)
+        );
+      })
       .map((t) => t.id),
   );
 

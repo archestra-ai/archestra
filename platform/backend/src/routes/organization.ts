@@ -89,6 +89,8 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         config.enterpriseFeatures.fullWhiteLabeling &&
         (body.appName !== undefined || body.iconLogo !== undefined)
       ) {
+        // appName renames the built-in tool/server names, and iconLogo updates
+        // the built-in catalog metadata shown across the UI.
         const appNameChanged =
           currentOrganization.appName !== organization.appName;
         const iconChanged =

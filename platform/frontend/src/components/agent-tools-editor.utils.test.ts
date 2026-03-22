@@ -91,6 +91,21 @@ describe("getDefaultArchestraToolIds", () => {
     expect(result?.toolIds.has("extra")).toBe(false);
     expect(result?.toolIds.size).toBe(defaultTools.length);
   });
+
+  it("matches branded default tool names under white-labeling", () => {
+    const catalogs = [makeCatalog(ARCHESTRA_MCP_CATALOG_ID, "Sparky")];
+    const brandedDefaultTools = DEFAULT_ARCHESTRA_TOOL_NAMES.map((name, i) => {
+      const toolName = name.replace("archestra__", "sparky__");
+      return makeTool(`branded-tool-${i}`, toolName);
+    });
+
+    const result = getDefaultArchestraToolIds(catalogs, [brandedDefaultTools]);
+
+    expect(result).not.toBeNull();
+    expect(result?.toolIds).toEqual(
+      new Set(brandedDefaultTools.map((tool) => tool.id)),
+    );
+  });
 });
 
 describe("sortAndFilterTools", () => {

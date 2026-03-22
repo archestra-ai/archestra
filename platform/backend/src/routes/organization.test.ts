@@ -104,4 +104,25 @@ describe("organization routes", () => {
     expect(response.statusCode).toBe(200);
     expect(syncSpy).not.toHaveBeenCalled();
   });
+
+  test("resyncs built-in MCP branding when iconLogo changes", async () => {
+    const syncSpy = vi
+      .spyOn(ToolModel, "syncArchestraBuiltInCatalog")
+      .mockResolvedValue();
+
+    const response = await app.inject({
+      method: "PATCH",
+      url: "/api/organization/appearance-settings",
+      payload: {
+        iconLogo: VALID_PNG_BASE64,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(syncSpy).toHaveBeenCalledWith({
+      organization: expect.objectContaining({
+        iconLogo: VALID_PNG_BASE64,
+      }),
+    });
+  });
 });

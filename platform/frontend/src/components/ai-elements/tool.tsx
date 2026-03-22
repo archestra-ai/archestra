@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
 import { CodeBlock } from "./code-block";
+import { McpAppRenderer, extractUIResource } from "./mcp-app-renderer";
 
 export type ToolProps = ComponentProps<typeof Collapsible>;
 
@@ -230,6 +231,16 @@ export const ToolOutput = ({
 
   if (!(output || errorText || conversations)) {
     return null;
+  }
+
+  // Render MCP App UI if output contains a UIResource
+  const uiResource = output ? extractUIResource(output) : null;
+  if (uiResource && !errorText) {
+    return (
+      <div className={cn("space-y-2 p-4", className)} {...props}>
+        <McpAppRenderer resource={uiResource} />
+      </div>
+    );
   }
 
   // Render conversations as chat bubbles if provided

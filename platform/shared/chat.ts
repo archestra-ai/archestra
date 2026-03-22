@@ -1,6 +1,26 @@
 import { z } from "zod";
 
 // ============================================================================
+// MCP UI Resource Types (MCP Apps)
+// ============================================================================
+
+/**
+ * A UI resource returned by an MCP tool in its output.
+ * When present, the chat renders an interactive iframe instead of raw JSON.
+ */
+export interface UIResource {
+  uri: string;
+  mimeType: UIResourceMimeType;
+  text?: string;
+  _meta?: Record<string, unknown>;
+}
+
+export type UIResourceMimeType =
+  | "text/html"
+  | "text/uri-list"
+  | "application/remote-dom+json";
+
+// ============================================================================
 // Token Usage Types
 // ============================================================================
 

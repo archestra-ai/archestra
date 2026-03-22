@@ -46,6 +46,10 @@ const RETRYABLE_CLIENT_ERRORS = [
   "network",
 ];
 
+function getChatExternalAgentId(appName: string): string {
+  return `${appName} Chat`;
+}
+
 function isRetryableError(error: Error): boolean {
   const msg = error.message;
   // Check client-side patterns
@@ -304,7 +308,7 @@ function ChatSessionHook({
       api: "/api/chat",
       credentials: "include",
       headers: {
-        [EXTERNAL_AGENT_ID_HEADER]: "Archestra Chat",
+        [EXTERNAL_AGENT_ID_HEADER]: getChatExternalAgentId(appName),
       },
     }),
     id: conversationId,

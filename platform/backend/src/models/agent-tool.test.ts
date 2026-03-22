@@ -565,18 +565,20 @@ describe("AgentToolModel.findAll", () => {
       ).toBe(true);
     });
 
-    test("excludeArchestraTools excludes tools with archestra__ prefix", async ({
+    test("excludeArchestraTools excludes built-in MCP tools by catalog ID", async ({
       makeAgent,
       makeTool,
       makeAgentTool,
+      seedAndAssignArchestraTools,
     }) => {
       const agent = await makeAgent();
+      await seedAndAssignArchestraTools(agent.id);
 
       // Create regular tools
       const regularTool1 = await makeTool({ name: "exclude_test_regular_1" });
       const regularTool2 = await makeTool({ name: "exclude_test_regular_2" });
 
-      // Create Archestra tools (double underscore prefix) with unique names
+      // Create non-built-in tools that happen to use the default prefix.
       const archestraTool1 = await makeTool({
         name: "archestra__exclude_test_tool_1",
       });
@@ -599,20 +601,21 @@ describe("AgentToolModel.findAll", () => {
       await makeAgentTool(agent.id, singleUnderscoreTool.id);
       await makeAgentTool(agent.id, noUnderscoreTool.id);
 
-      // With excludeArchestraTools: true - should exclude archestra__ tools
+      // With excludeArchestraTools: true - should exclude only built-in MCP tools.
       const resultExcluded = await AgentToolModel.findAll({
-        pagination: { limit: 10, offset: 0 },
+        pagination: { limit: 100, offset: 0 },
         filters: { agentId: agent.id, excludeArchestraTools: true },
       });
 
-      expect(resultExcluded.data).toHaveLength(4);
       const excludedToolNames = resultExcluded.data.map((at) => at.tool.name);
       expect(excludedToolNames).toContain("exclude_test_regular_1");
       expect(excludedToolNames).toContain("exclude_test_regular_2");
+      expect(excludedToolNames).toContain("archestra__exclude_test_tool_1");
+      expect(excludedToolNames).toContain("archestra__exclude_test_tool_2");
       expect(excludedToolNames).toContain("archestra_single_underscore_test");
       expect(excludedToolNames).toContain("archestranounderscore_test");
-      expect(excludedToolNames).not.toContain("archestra__exclude_test_tool_1");
-      expect(excludedToolNames).not.toContain("archestra__exclude_test_tool_2");
+      expect(excludedToolNames).not.toContain("archestra__artifact_write");
+      expect(excludedToolNames).not.toContain("archestra__todo_write");
 
       // Without excludeArchestraTools - should include all tools including archestra__ ones
       const resultIncluded = await AgentToolModel.findAll({

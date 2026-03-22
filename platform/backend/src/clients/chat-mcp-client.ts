@@ -74,6 +74,10 @@ const clientCache = new LRUCacheManager<Client>({
 const TOOL_CACHE_TTL_MS = 30 * TimeInMs.Second;
 const CLIENT_PING_TIMEOUT_MS = 5 * TimeInMs.Second;
 
+function getChatExternalAgentId(): string {
+  return `${archestraMcpBranding.catalogName} Chat`;
+}
+
 /**
  * Maximum tool cache size to prevent unbounded memory growth.
  * With 30s TTL and typical conversation patterns, 1000 entries should handle
@@ -758,7 +762,7 @@ export async function getChatMcpTools({
                     isRecord(args) ? args : {},
                     {
                       teamIds: [],
-                      externalAgentId: "Archestra Chat",
+                      externalAgentId: getChatExternalAgentId(),
                     },
                     globalToolPolicy,
                   );
@@ -948,7 +952,7 @@ export async function getChatMcpTools({
                       isRecord(args) ? args : {},
                       {
                         teamIds: [],
-                        externalAgentId: "Archestra Chat",
+                        externalAgentId: getChatExternalAgentId(),
                       },
                       globalToolPolicy,
                     );

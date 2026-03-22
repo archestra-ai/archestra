@@ -19,15 +19,36 @@ export function normalizeTimezone(timezone?: string): string {
 }
 
 export function calculateNextDueAt(
-  cronExp: string,
-  timezone: string,
+  params: {
+    scheduleKind: string;
+    cronExpression?: string | null;
+    intervalSeconds?: number | null;
+    runAt?: Date | null;
+    timezone?: string;
+  },
   fromDate: Date = new Date(),
 ): Date | null {
-  try {
-    const job = new Cron(cronExp, { timezone });
-    const nextRun = job.nextRun(fromDate);
-    return nextRun || null;
-  } catch (err) {
-    return null;
+  const { scheduleKind, cronExpression, intervalSeconds, runAt, timezone = "UTC" } = params;
+
+  if (scheduleKind === "cron" && cronExpression) {
+    try {
+      const job = new Cron(cronExpression, { timezone });
+      const nextRun = job.nextRun(fromDate);
+      return nextRun || null;
+    } catch (err) {
+      return null;
+    }
   }
+
+  if (scheduleKind === "interval" && intervalSeconds) {
+    return new Date(fromDate.getTime() + intervalSeconds * 1000);
+  }
+
+  if (scheduleKind === "one-time" && runAt) {
+    // If runAt is in the past compared to fromDate, it's already due or missed.
+    // If it's in the future, it's the next due.
+    return runAt > fromDate ? runAt : null;
+  }
+
+  return null;
 }

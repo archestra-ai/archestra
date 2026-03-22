@@ -1,6 +1,7 @@
 import {
   boolean,
   index,
+  integer,
   pgTable,
   text,
   timestamp,
@@ -15,9 +16,11 @@ export const agentScheduleTriggersTable = pgTable(
     agentId: text("agent_id").notNull(),
     name: text("name").notNull(),
     messageTemplate: text("message_template").notNull(),
-    scheduleKind: text("schedule_kind").notNull().default("cron"),
-    cronExpression: text("cron_expression").notNull(),
-    timezone: text("timezone").notNull(),
+    scheduleKind: text("schedule_kind").notNull().default("cron"), // "cron" | "interval" | "one-time"
+    cronExpression: text("cron_expression"), // Required for "cron"
+    intervalSeconds: integer("interval_seconds"), // Required for "interval"
+    runAt: timestamp("run_at", { withTimezone: true }), // Required for "one-time"
+    timezone: text("timezone").notNull().default("UTC"),
     enabled: boolean("enabled").notNull().default(true),
     actorUserId: text("actor_user_id").notNull(),
     nextDueAt: timestamp("next_due_at", { withTimezone: true }),

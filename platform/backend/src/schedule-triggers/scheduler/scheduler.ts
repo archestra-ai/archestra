@@ -54,28 +54,21 @@ export async function runSchedulerTick(batchSize = 50): Promise<number> {
         let currentDueAt = new Date(trigger.nextDueAt!);
         let slotsProcessed = 0;
 
-        // Bounded catch-up: process up to X slots that are <= now
-        // and within the last 24 hours.
+        // Bounded catch-up check
         const backfillLimit = new Date(now.getTime() - MAX_BACKFILL_WINDOW_MS);
         if (currentDueAt < backfillLimit) {
-          logger.warn(
-            { triggerId: trigger.id, missedSince: currentDueAt },
-            "[AgentScheduler] Trigger is severely overdue, skipping old slots",
-          );
-          currentDueAt = backfillLimit;
-          // Calculate the first valid cron occurrence after the backfill limit
-          const firstValid = calculateNextDueAt(
-            trigger.cronExpression,
-            trigger.timezone,
-            new Date(backfillLimit.getTime() - 1000), // -1s to include backfillLimit if it matches
-          );
-          if (!firstValid) continue;
+          logger.warn({ triggerId: trigger.id }, "[AgentScheduler] Severely overdue, skipping old slots");
+          const firstValid = calculateNextDueAt(trigger, backfillLimit);
+          if (!firstValid) {
+            await tx.update(agentScheduleTriggersTable).set({ enabled: false, nextDueAt: null }).where(eq(agentScheduleTriggersTable.id, trigger.id));
+            continue;
+          }
           currentDueAt = firstValid;
         }
 
         while (currentDueAt <= now && slotsProcessed < MAX_CATCH_UP_SLOTS_PER_TICK) {
           try {
-            // 2. Create one run per missed due slot
+            // 2. Create the run
             const [run] = await tx
               .insert(agentScheduleTriggerRunsTable)
               .values({
@@ -92,7 +85,7 @@ export async function runSchedulerTick(batchSize = 50): Promise<number> {
               })
               .returning();
 
-            // 3. Enqueue execution
+            // 3. Enqueue
             await tx.insert(schema.tasksTable).values({
               taskType: "schedule_trigger_run_execute" as TaskType,
               payload: { runId: run.id },
@@ -102,18 +95,19 @@ export async function runSchedulerTick(batchSize = 50): Promise<number> {
             totalRunsCreated++;
             slotsProcessed++;
             
-            // Advance to next slot
-            const next = calculateNextDueAt(
-              trigger.cronExpression,
-              trigger.timezone,
-              currentDueAt,
-            );
-            if (!next) break;
+            // Special handling for one-time
+            if (trigger.scheduleKind === "one-time") {
+                await tx.update(agentScheduleTriggersTable).set({ enabled: false, nextDueAt: null, lastRunAt: now }).where(eq(agentScheduleTriggersTable.id, trigger.id));
+                break;
+            }
+
+            // Advance
+            const next = calculateNextDueAt(trigger, currentDueAt);
+            if (!next || next <= currentDueAt) break;
             currentDueAt = next;
           } catch (error: any) {
             if (error?.message?.includes("uq_agent_trigger_id_due_at")) {
-              // Already exists, just advance and try next slot
-              const next = calculateNextDueAt(trigger.cronExpression, trigger.timezone, currentDueAt);
+              const next = calculateNextDueAt(trigger, currentDueAt);
               if (!next) break;
               currentDueAt = next;
               continue;
@@ -122,18 +116,24 @@ export async function runSchedulerTick(batchSize = 50): Promise<number> {
           }
         }
 
-        // 4. Update the trigger's next_due_at to the first future/next occurrence
-        await tx
-          .update(agentScheduleTriggersTable)
-          .set({ nextDueAt: currentDueAt, lastRunAt: now })
-          .where(eq(agentScheduleTriggersTable.id, trigger.id));
+        // 4. Update the trigger
+        if (trigger.enabled && trigger.scheduleKind !== "one-time") {
+           // For intervals, we prevent drift by ensuring nextDueAt is in the future
+           let finalNextDueAt = currentDueAt;
+           if (finalNextDueAt <= now) {
+              const jump = calculateNextDueAt(trigger, now);
+              if (jump) finalNextDueAt = jump;
+           }
+
+           await tx
+            .update(agentScheduleTriggersTable)
+            .set({ nextDueAt: finalNextDueAt, lastRunAt: now })
+            .where(eq(agentScheduleTriggersTable.id, trigger.id));
+        }
       }
     });
   } catch (error) {
-    logger.error(
-      { error: error instanceof Error ? error.message : String(error) },
-      "[AgentScheduler] Tick failed",
-    );
+    logger.error({ error: error instanceof Error ? error.message : String(error) }, "[AgentScheduler] Tick failed");
   }
 
   return totalRunsCreated;

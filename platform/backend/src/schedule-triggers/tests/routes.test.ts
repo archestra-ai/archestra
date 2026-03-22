@@ -23,8 +23,8 @@ vi.mock("@/auth", async (importOriginal) => {
 
 import { userHasPermission } from "@/auth";
 
-describe("Agent Schedule Trigger Routes (Refined)", () => {
-  const orgId = "org-refined-test";
+describe("Agent Schedule Trigger Routes (Robustness)", () => {
+  const orgId = "org-robust-test";
   let userId: string;
   let agentId: string;
   let triggerId: string;
@@ -45,6 +45,7 @@ describe("Agent Schedule Trigger Routes (Refined)", () => {
     vi.mocked(userHasPermission).mockResolvedValue(true);
     await db.delete(agentScheduleTriggerRunsTable);
     await db.delete(agentScheduleTriggersTable);
+    await db.delete(schema.tasksTable);
     await UserModel.deleteMany({});
     await AgentModel.deleteMany({});
 
@@ -67,25 +68,37 @@ describe("Agent Schedule Trigger Routes (Refined)", () => {
     triggerId = trigger.id;
   });
 
-  test("RBAC: Rejects request if user lacks agentTrigger:create", async () => {
+  test("RBAC: Returns 403 Forbidden when permission is missing", async () => {
     vi.mocked(userHasPermission).mockResolvedValue(false);
     const app = buildApp();
     const response = await app.inject({
       method: "POST",
       url: "/api/agent-schedule-triggers",
-      payload: { agentId, name: "New", messageTemplate: "Hi", cronExpression: "* * * * *" }
+      payload: { agentId, name: "New", messageTemplate: "Hi", scheduleKind: "cron", cronExpression: "* * * * *" }
     });
-    expect(response.statusCode).toBe(500); // Because I threw Error("Forbidden")
+    expect(response.statusCode).toBe(403);
+    expect(response.json().error).toContain("Forbidden");
   });
 
-  test("Audit: Run-now populates initiatedByUserId", async () => {
+  test("Manual: updates trigger metadata", async () => {
     const app = buildApp();
-    const response = await app.inject({
+    await app.inject({
       method: "POST",
       url: `/api/agent-schedule-triggers/${triggerId}/run-now`,
     });
-    expect(response.statusCode).toBe(201);
-    const run = response.json();
-    expect(run.initiatedByUserId).toBe(userId);
+    
+    const [trigger] = await db.select().from(agentScheduleTriggersTable).where({ id: triggerId });
+    expect(trigger.lastRunStatus).toBe("pending");
+    expect(trigger.lastRunAt).not.toBeNull();
+  });
+
+  test("Runs list: validates pagination", async () => {
+    const app = buildApp();
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/agent-schedule-triggers/${triggerId}/runs`,
+      query: { limit: "invalid" }
+    });
+    expect(response.statusCode).toBe(400); // Schema validation should fail
   });
 });

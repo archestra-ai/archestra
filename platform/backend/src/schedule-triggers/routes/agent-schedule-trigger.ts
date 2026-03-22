@@ -27,7 +27,9 @@ const AgentScheduleTriggerSchema = z.object({
   name: z.string(),
   messageTemplate: z.string(),
   scheduleKind: z.string(),
-  cronExpression: z.string(),
+  cronExpression: z.string().nullable(),
+  intervalSeconds: z.number().nullable(),
+  runAt: z.union([z.string(), z.date()]).nullable(),
   timezone: z.string(),
   enabled: z.boolean(),
   actorUserId: z.string(),
@@ -59,10 +61,14 @@ const AgentScheduleTriggerRunSchema = z.object({
 });
 
 export const agentScheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
-  // Helpers for RBAC
-  const requirePermission = async (userId: string, orgId: string, action: "read" | "create" | "update" | "delete") => {
+  // Helpers
+  const checkPermission = async (reply: any, userId: string, orgId: string, action: "read" | "create" | "update" | "delete") => {
     const allowed = await userHasPermission(userId, orgId, "agentTrigger", action);
-    if (!allowed) throw new Error("Forbidden: Missing agentTrigger:" + action);
+    if (!allowed) {
+        reply.status(403).send({ error: `Forbidden: Missing agentTrigger:${action}` });
+        return false;
+    }
+    return true;
   };
 
   const validateAgentAccess = async (agentId: string, userId: string, orgId: string) => {
@@ -81,7 +87,10 @@ export const agentScheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify)
           agentId: z.string().uuid(),
           name: z.string().min(1),
           messageTemplate: z.string().min(1),
-          cronExpression: z.string(),
+          scheduleKind: z.enum(["cron", "interval", "one-time"]),
+          cronExpression: z.string().optional(),
+          intervalSeconds: z.number().int().positive().optional(),
+          runAt: z.string().datetime().optional(),
           timezone: z.string().optional(),
           enabled: z.boolean().default(true),
         }),
@@ -89,7 +98,7 @@ export const agentScheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify)
     },
     async (request, reply) => {
       const user = request.user!;
-      await requirePermission(user.id, user.organizationId, "create");
+      if (!await checkPermission(reply, user.id, user.organizationId, "create")) return;
 
       const agent = await validateAgentAccess(request.body.agentId, user.id, user.organizationId);
       if (!agent) return reply.status(404).send({ error: "Agent not found" });
@@ -97,9 +106,18 @@ export const agentScheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify)
       const tz = normalizeTimezone(request.body.timezone);
       if (!isValidTimezone(tz)) return reply.status(400).send({ error: "Invalid timezone" });
 
-      const cron = normalizeCronExpression(request.body.cronExpression);
-      const nextDueAt = calculateNextDueAt(cron, tz);
-      if (!nextDueAt && request.body.enabled) return reply.status(400).send({ error: "Invalid cron" });
+      const cron = request.body.cronExpression ? normalizeCronExpression(request.body.cronExpression) : null;
+      const runAt = request.body.runAt ? new Date(request.body.runAt) : null;
+
+      const nextDueAt = calculateNextDueAt({
+        scheduleKind: request.body.scheduleKind,
+        cronExpression: cron,
+        intervalSeconds: request.body.intervalSeconds,
+        runAt,
+        timezone: tz,
+      });
+
+      if (!nextDueAt && request.body.enabled) return reply.status(400).send({ error: "Invalid schedule configuration" });
 
       const [trigger] = await db
         .insert(agentScheduleTriggersTable)
@@ -108,7 +126,10 @@ export const agentScheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify)
           agentId: request.body.agentId,
           name: request.body.name,
           messageTemplate: request.body.messageTemplate,
+          scheduleKind: request.body.scheduleKind,
           cronExpression: cron,
+          intervalSeconds: request.body.intervalSeconds,
+          runAt,
           timezone: tz,
           enabled: request.body.enabled,
           actorUserId: user.id,
@@ -132,7 +153,7 @@ export const agentScheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify)
     async (request, reply) => {
       const { limit, offset } = request.query;
       const user = request.user!;
-      await requirePermission(user.id, user.organizationId, "read");
+      if (!await checkPermission(reply, user.id, user.organizationId, "read")) return;
 
       const baseQuery = db.select().from(agentScheduleTriggersTable).where(eq(agentScheduleTriggersTable.organizationId, user.organizationId));
       const [{ count }] = await db.select({ count: sql<number>`count(*)::int` }).from(agentScheduleTriggersTable).where(eq(agentScheduleTriggersTable.organizationId, user.organizationId));
@@ -147,58 +168,47 @@ export const agentScheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify)
     "/:id",
     async (request, reply) => {
       const user = request.user!;
-      await requirePermission(user.id, user.organizationId, "read");
+      if (!await checkPermission(reply, user.id, user.organizationId, "read")) return;
 
       const [trigger] = await db.select().from(agentScheduleTriggersTable).where(and(eq(agentScheduleTriggersTable.id, (request.params as any).id), eq(agentScheduleTriggersTable.organizationId, user.organizationId)));
       if (!trigger) return reply.status(404).send({ error: "Not found" });
-
-      const agent = await validateAgentAccess(trigger.agentId, user.id, user.organizationId);
-      if (!agent) return reply.status(404).send({ error: "Agent access denied" });
 
       return trigger;
     },
   );
 
-  // UPDATE
-  fastify.put(
-    "/:id",
-    async (request, reply) => {
+  // ENABLE/DISABLE
+  fastify.post("/:id/enable", async (request, reply) => {
       const user = request.user!;
-      await requirePermission(user.id, user.organizationId, "update");
+      if (!await checkPermission(reply, user.id, user.organizationId, "update")) return;
 
       const triggerId = (request.params as any).id;
-      const body = request.body as any;
-
       const [existing] = await db.select().from(agentScheduleTriggersTable).where(and(eq(agentScheduleTriggersTable.id, triggerId), eq(agentScheduleTriggersTable.organizationId, user.organizationId)));
       if (!existing) return reply.status(404).send({ error: "Not found" });
 
-      const cron = body.cronExpression ? normalizeCronExpression(body.cronExpression) : existing.cronExpression;
-      const tz = body.timezone ? normalizeTimezone(body.timezone) : existing.timezone;
-      const enabled = body.enabled !== undefined ? body.enabled : existing.enabled;
+      const nextDueAt = calculateNextDueAt(existing);
+      await db.update(agentScheduleTriggersTable).set({ enabled: true, nextDueAt, updatedAt: new Date() }).where(eq(agentScheduleTriggersTable.id, triggerId));
+      return reply.status(204).send();
+  });
 
-      const nextDueAt = enabled ? calculateNextDueAt(cron, tz) : null;
+  fastify.post("/:id/disable", async (request, reply) => {
+      const user = request.user!;
+      if (!await checkPermission(reply, user.id, user.organizationId, "update")) return;
 
-      const [updated] = await db.update(agentScheduleTriggersTable).set({
-        ...body,
-        cronExpression: cron,
-        timezone: tz,
-        enabled,
-        nextDueAt,
-        actorUserId: user.id, // Plan: "Persist the creating/updating user as actorUserId"
-        updatedAt: new Date()
-      }).where(eq(agentScheduleTriggersTable.id, triggerId)).returning();
+      const triggerId = (request.params as any).id;
+      await db.update(agentScheduleTriggersTable).set({ enabled: false, nextDueAt: null, updatedAt: new Date() }).where(and(eq(agentScheduleTriggersTable.id, triggerId), eq(agentScheduleTriggersTable.organizationId, user.organizationId)));
+      return reply.status(204).send();
+  });
 
-      return updated;
-    }
-  );
+  // STATS
+  fastify.get("/stats", async (request, reply) => {
+      const user = request.user!;
+      if (!await checkPermission(reply, user.id, user.organizationId, "read")) return;
 
-  // DELETE
-  fastify.delete("/:id", async (request, reply) => {
-     const user = request.user!;
-     await requirePermission(user.id, user.organizationId, "delete");
-     
-     await db.delete(agentScheduleTriggersTable).where(and(eq(agentScheduleTriggersTable.id, (request.params as any).id), eq(agentScheduleTriggersTable.organizationId, user.organizationId)));
-     return reply.status(204).send();
+      const [{ enabledCount }] = await db.select({ enabledCount: sql<number>`count(*)::int` }).from(agentScheduleTriggersTable).where(and(eq(agentScheduleTriggersTable.organizationId, user.organizationId), eq(agentScheduleTriggersTable.enabled, true)));
+      const [{ failedRuns24h }] = await db.select({ failedRuns24h: sql<number>`count(*)::int` }).from(agentScheduleTriggerRunsTable).where(and(eq(agentScheduleTriggerRunsTable.organizationId, user.organizationId), eq(agentScheduleTriggerRunsTable.status, "failed"), sql`created_at > now() - interval '24 hours'`));
+
+      return { enabledCount, failedRuns24h };
   });
 
   // RUN NOW
@@ -206,7 +216,7 @@ export const agentScheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify)
     "/:id/run-now",
     async (request, reply) => {
       const user = request.user!;
-      await requirePermission(user.id, user.organizationId, "update");
+      if (!await checkPermission(reply, user.id, user.organizationId, "update")) return;
 
       const triggerId = (request.params as any).id;
       const [trigger] = await db.select().from(agentScheduleTriggersTable).where(and(eq(agentScheduleTriggersTable.id, triggerId), eq(agentScheduleTriggersTable.organizationId, user.organizationId)));
@@ -219,7 +229,7 @@ export const agentScheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify)
             runKind: "manual",
             status: "pending",
             dueAt: new Date(),
-            initiatedByUserId: user.id, // Audit trail
+            initiatedByUserId: user.id,
             agentIdSnapshot: trigger.agentId,
             messageTemplateSnapshot: trigger.messageTemplate,
             actorUserIdSnapshot: trigger.actorUserId,
@@ -232,6 +242,10 @@ export const agentScheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify)
             payload: { runId: newRun.id },
             maxAttempts: 1
          });
+
+         // Update metadata on parent trigger
+         await tx.update(agentScheduleTriggersTable).set({ lastRunAt: new Date(), lastRunStatus: "pending" }).where(eq(agentScheduleTriggersTable.id, triggerId));
+
          return newRun;
       });
 
@@ -242,17 +256,27 @@ export const agentScheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify)
   // LIST RUNS
   fastify.get(
     "/:id/runs",
+    {
+      schema: {
+        params: z.object({ id: z.string().uuid() }),
+        querystring: PaginationQuerySchema.extend({
+            status: z.enum(["pending", "running", "success", "failed"]).optional(),
+        }),
+        response: { 200: createPaginatedResponseSchema(AgentScheduleTriggerRunSchema as any) },
+      },
+    },
     async (request, reply) => {
-      const { limit, offset } = request.query as any;
-      const triggerId = (request.params as any).id;
+      const { limit, offset, status } = request.query;
+      const triggerId = request.params.id;
       const user = request.user!;
-      await requirePermission(user.id, user.organizationId, "read");
+      if (!await checkPermission(reply, user.id, user.organizationId, "read")) return;
 
-      const [trigger] = await db.select().from(agentScheduleTriggersTable).where(and(eq(agentScheduleTriggersTable.id, triggerId), eq(agentScheduleTriggersTable.organizationId, user.organizationId)));
-      if (!trigger) return reply.status(404).send({ error: "Not found" });
+      let baseQuery = db.select().from(agentScheduleTriggerRunsTable).where(and(eq(agentScheduleTriggerRunsTable.triggerId, triggerId), eq(agentScheduleTriggerRunsTable.organizationId, user.organizationId)));
+      if (status) {
+          baseQuery = baseQuery.where(eq(agentScheduleTriggerRunsTable.status, status)) as any;
+      }
 
-      const baseQuery = db.select().from(agentScheduleTriggerRunsTable).where(eq(agentScheduleTriggerRunsTable.triggerId, triggerId));
-      const [{ count }] = await db.select({ count: sql<number>`count(*)::int` }).from(agentScheduleTriggerRunsTable).where(eq(agentScheduleTriggerRunsTable.triggerId, triggerId));
+      const [{ count }] = await db.select({ count: sql<number>`count(*)::int` }).from(agentScheduleTriggerRunsTable).where(and(eq(agentScheduleTriggerRunsTable.triggerId, triggerId), eq(agentScheduleTriggerRunsTable.organizationId, user.organizationId), status ? eq(agentScheduleTriggerRunsTable.status, status) : sql`1=1`));
 
       const data = await applyPagination(baseQuery, { limit, offset }).orderBy(desc(agentScheduleTriggerRunsTable.createdAt));
       return { data, pagination: calculatePaginationMeta({ limit, offset }, count) };

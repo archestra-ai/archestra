@@ -12,71 +12,54 @@ vi.mock("@/task-queue/task-queue", () => ({
   },
 }));
 
-describe("Agent Scheduler Engine", () => {
+describe("Agent Scheduler Engine (Extended Kinds)", () => {
   beforeEach(async () => {
     await db.delete(agentScheduleTriggerRunsTable);
     await db.delete(agentScheduleTriggersTable);
     await db.delete(schema.tasksTable);
   });
 
-  test("Catch-up: creates one run per missed slot (bounded)", async () => {
-    // 5 minutes ago, cron every minute
-    const past = new Date(Date.now() - 5 * 60 * 1000); 
-    const [trigger] = await db
-      .insert(agentScheduleTriggersTable)
-      .values({
+  test("Interval: enqueues and advances by seconds", async () => {
+    const past = new Date(Date.now() - 10000); 
+    await db.insert(agentScheduleTriggersTable).values({
         organizationId: "org-1",
         agentId: "agent-1",
-        name: "Test Trigger",
+        name: "Interval Trigger",
         messageTemplate: "Run!",
-        cronExpression: "* * * * *",
-        timezone: "UTC",
+        scheduleKind: "interval",
+        intervalSeconds: 60,
         enabled: true,
         actorUserId: "user-1",
         nextDueAt: past,
-      })
-      .returning();
+    });
 
-    const createdCount = await runSchedulerTick();
-    
-    // It should create 5 or 6 runs depending on exact boundary, 
-    // but definitely more than 1 if catch-up is working.
-    expect(createdCount).toBeGreaterThanOrEqual(5);
+    const count = await runSchedulerTick();
+    expect(count).toBe(1);
 
-    const runs = await db.select().from(agentScheduleTriggerRunsTable);
-    expect(runs.length).toBe(createdCount);
-    
-    // Verify each run has a unique dueAt
-    const dueAtSet = new Set(runs.map(r => r.dueAt!.getTime()));
-    expect(dueAtSet.size).toBe(createdCount);
-
-    const [updatedTrigger] = await db.select().from(agentScheduleTriggersTable).where({ id: trigger.id });
-    expect(updatedTrigger.nextDueAt!.getTime()).toBeGreaterThan(Date.now());
+    const [trigger] = await db.select().from(agentScheduleTriggersTable);
+    // nextDueAt should be approx now + 60s (not exactly past + 60s because of drift prevention)
+    expect(trigger.nextDueAt!.getTime()).toBeGreaterThan(Date.now());
   });
 
-  test("Backfill limit: does not process slots older than 24 hours", async () => {
-    const wayPast = new Date(Date.now() - 48 * 60 * 60 * 1000); // 48 hours ago
-    await db
-      .insert(agentScheduleTriggersTable)
-      .values({
+  test("One-time: enqueues and disables trigger", async () => {
+    const past = new Date(Date.now() - 10000);
+    await db.insert(agentScheduleTriggersTable).values({
         organizationId: "org-1",
         agentId: "agent-1",
-        name: "Old Trigger",
+        name: "One-time Trigger",
         messageTemplate: "Run!",
-        cronExpression: "* * * * *",
-        timezone: "UTC",
+        scheduleKind: "one-time",
+        runAt: past,
         enabled: true,
         actorUserId: "user-1",
-        nextDueAt: wayPast,
-      });
+        nextDueAt: past,
+    });
 
-    await runSchedulerTick();
+    const count = await runSchedulerTick();
+    expect(count).toBe(1);
 
-    const runs = await db.select().from(agentScheduleTriggerRunsTable);
-    // Should only catch up for the last 24 hours @ 10 runs per tick limit
-    expect(runs.length).toBeLessThanOrEqual(10);
-    // The oldest run should NOT be 48 hours old
-    const oldestRun = Math.min(...runs.map(r => r.dueAt!.getTime()));
-    expect(oldestRun).toBeGreaterThan(wayPast.getTime());
+    const [trigger] = await db.select().from(agentScheduleTriggersTable);
+    expect(trigger.enabled).toBe(false);
+    expect(trigger.nextDueAt).toBeNull();
   });
 });

@@ -18,21 +18,36 @@ export function normalizeTimezone(timezone?: string): string {
   return timezone.trim();
 }
 
+export interface CronScheduleParams {
+  scheduleKind: "cron";
+  cronExpression: string;
+  timezone?: string;
+}
+
+export interface IntervalScheduleParams {
+  scheduleKind: "interval";
+  intervalSeconds: number;
+}
+
+export interface OneTimeScheduleParams {
+  scheduleKind: "one-time";
+  runAt: Date | string;
+}
+
+export type ScheduleParams =
+  | CronScheduleParams
+  | IntervalScheduleParams
+  | OneTimeScheduleParams;
+
 export function calculateNextDueAt(
-  params: {
-    scheduleKind: string;
-    cronExpression?: string | null;
-    intervalSeconds?: number | null;
-    runAt?: Date | null;
-    timezone?: string;
-  },
+  params: ScheduleParams,
   fromDate: Date = new Date(),
 ): Date | null {
-  const { scheduleKind, cronExpression, intervalSeconds, runAt, timezone = "UTC" } = params;
-
-  if (scheduleKind === "cron" && cronExpression) {
+  if (params.scheduleKind === "cron") {
     try {
-      const job = new Cron(cronExpression, { timezone });
+      const job = new Cron(params.cronExpression, {
+        timezone: params.timezone || "UTC",
+      });
       const nextRun = job.nextRun(fromDate);
       return nextRun || null;
     } catch (err) {
@@ -40,13 +55,13 @@ export function calculateNextDueAt(
     }
   }
 
-  if (scheduleKind === "interval" && intervalSeconds) {
-    return new Date(fromDate.getTime() + intervalSeconds * 1000);
+  if (params.scheduleKind === "interval") {
+    return new Date(fromDate.getTime() + params.intervalSeconds * 1000);
   }
 
-  if (scheduleKind === "one-time" && runAt) {
-    // If runAt is in the past compared to fromDate, it's already due or missed.
-    // If it's in the future, it's the next due.
+  if (params.scheduleKind === "one-time") {
+    const runAt =
+      params.runAt instanceof Date ? params.runAt : new Date(params.runAt);
     return runAt > fromDate ? runAt : null;
   }
 

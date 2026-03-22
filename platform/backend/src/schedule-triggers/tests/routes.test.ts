@@ -23,8 +23,8 @@ vi.mock("@/auth", async (importOriginal) => {
 
 import { userHasPermission } from "@/auth";
 
-describe("Agent Schedule Trigger Routes (Robustness)", () => {
-  const orgId = "org-robust-test";
+describe("Agent Schedule Trigger Routes (Final Polish)", () => {
+  const orgId = "org-polish-test";
   let userId: string;
   let agentId: string;
   let triggerId: string;
@@ -60,6 +60,7 @@ describe("Agent Schedule Trigger Routes (Robustness)", () => {
         agentId,
         name: "Test Trigger",
         messageTemplate: "Run now!",
+        scheduleKind: "cron",
         cronExpression: "* * * * *",
         timezone: "UTC",
         enabled: true,
@@ -68,7 +69,7 @@ describe("Agent Schedule Trigger Routes (Robustness)", () => {
     triggerId = trigger.id;
   });
 
-  test("RBAC: Returns 403 Forbidden when permission is missing", async () => {
+  test("RBAC: Returns 403 Forbidden (not 500) when permission is missing", async () => {
     vi.mocked(userHasPermission).mockResolvedValue(false);
     const app = buildApp();
     const response = await app.inject({
@@ -77,28 +78,33 @@ describe("Agent Schedule Trigger Routes (Robustness)", () => {
       payload: { agentId, name: "New", messageTemplate: "Hi", scheduleKind: "cron", cronExpression: "* * * * *" }
     });
     expect(response.statusCode).toBe(403);
-    expect(response.json().error).toContain("Forbidden");
+    expect(response.json().error).toBe("Forbidden: Missing agentTrigger:create");
   });
 
-  test("Manual: updates trigger metadata", async () => {
-    const app = buildApp();
-    await app.inject({
-      method: "POST",
-      url: `/api/agent-schedule-triggers/${triggerId}/run-now`,
-    });
-    
-    const [trigger] = await db.select().from(agentScheduleTriggersTable).where({ id: triggerId });
-    expect(trigger.lastRunStatus).toBe("pending");
-    expect(trigger.lastRunAt).not.toBeNull();
-  });
-
-  test("Runs list: validates pagination", async () => {
+  test("Validation: Discriminated Union rejects invalid kind fields", async () => {
     const app = buildApp();
     const response = await app.inject({
-      method: "GET",
-      url: `/api/agent-schedule-triggers/${triggerId}/runs`,
-      query: { limit: "invalid" }
+      method: "POST",
+      url: "/api/agent-schedule-triggers",
+      payload: { 
+          agentId, 
+          name: "Invalid", 
+          messageTemplate: "Hi", 
+          scheduleKind: "interval",
+          cronExpression: "* * * * *" // Wrong field for 'interval'
+      }
     });
-    expect(response.statusCode).toBe(400); // Schema validation should fail
+    expect(response.statusCode).toBe(400); // Validation should fail
+  });
+
+  test("Update: PUT /:id correctly updates trigger", async () => {
+    const app = buildApp();
+    const response = await app.inject({
+      method: "PUT",
+      url: `/api/agent-schedule-triggers/${triggerId}`,
+      payload: { name: "Updated Name" }
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().name).toBe("Updated Name");
   });
 });

@@ -1,6 +1,9 @@
 "use client";
 
-import { TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME } from "@shared";
+import {
+  type ChatMessagePart,
+  TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
+} from "@shared";
 import { ChevronDown, ChevronUp, ExternalLink, FileText } from "lucide-react";
 import { useState } from "react";
 import {
@@ -9,17 +12,7 @@ import {
 } from "@/app/knowledge/knowledge-bases/_parts/connector-icons";
 import { Button } from "@/components/ui/button";
 
-type CitationMessagePart = {
-  type: string;
-  toolName?: string;
-  toolCallId?: string;
-  state?: string;
-  output?: unknown;
-};
-
-export function hasKnowledgeBaseToolCall(
-  parts: CitationMessagePart[],
-): boolean {
+export function hasKnowledgeBaseToolCall(parts: ChatMessagePart[]): boolean {
   return parts.some((part) => {
     // dynamic-tool parts have toolName directly
     if (
@@ -121,7 +114,7 @@ function SourceIcon({ connectorType }: { connectorType: string | null }) {
 }
 
 export interface KnowledgeGraphCitationsProps {
-  parts: CitationMessagePart[];
+  parts: ChatMessagePart[];
 }
 
 const VISIBLE_COUNT = 3;

@@ -315,9 +315,7 @@ function UrlReplacementRow({
           {originalUrl}
         </CodeText>
       </div>
-      <span className="text-center text-muted-foreground md:text-left">
-        →
-      </span>
+      <span className="text-center text-muted-foreground md:text-left">→</span>
       <CopyableCode
         value={newUrl}
         toastMessage="Proxy URL copied to clipboard"

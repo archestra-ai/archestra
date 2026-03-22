@@ -3,7 +3,7 @@ import { Database, Globe, Mail } from "lucide-react";
 import Image from "next/image";
 import type { ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
-import { useAppearanceSettings } from "@/lib/organization.query";
+import { useAppIconLogo } from "@/lib/use-app-name";
 import { cn } from "@/lib/utils";
 
 export function SourceIcon({
@@ -11,13 +11,13 @@ export function SourceIcon({
 }: {
   source: InteractionSource | null | undefined;
 }) {
-  const { data: appearance } = useAppearanceSettings();
+  const appIconLogo = useAppIconLogo();
 
   if (!source) return null;
 
   return getSourceIcon({
     source,
-    chatIconLogo: appearance?.iconLogo ?? null,
+    chatIconLogo: appIconLogo,
   });
 }
 
@@ -66,12 +66,12 @@ function getSourceIcon({
   chatIconLogo,
 }: {
   source: InteractionSource;
-  chatIconLogo: string | null;
+  chatIconLogo: string;
 }): ReactNode {
   if (source === "chat") {
     return (
       <Image
-        src={chatIconLogo || "/logo.png"}
+        src={chatIconLogo}
         alt="Chat"
         width={12}
         height={12}

@@ -52,7 +52,7 @@ import { useHasPermissions, usePermissionMap } from "@/lib/auth.query";
 import config from "@/lib/config";
 import { useEnterpriseFeature } from "@/lib/config.query";
 import { useGithubStars } from "@/lib/github.query";
-import { useOrganization } from "@/lib/organization.query";
+import { useAppIconLogo } from "@/lib/use-app-name";
 import { cn } from "@/lib/utils";
 
 interface NavSubItem {
@@ -398,7 +398,7 @@ export function AppSidebar() {
   const { data: starCount } = useGithubStars();
   const formattedStarCount = starCount ?? "";
   const permissionMap = usePermissionMap(requiredPagePermissionsMap);
-  const { data: organization } = useOrganization();
+  const appIconLogo = useAppIconLogo();
   const knowledgeBaseEnabled = useEnterpriseFeature("knowledgeBase");
   // Connect page requires at least one of these (OR logic)
   const { data: canReadAgent } = useHasPermissions({ agent: ["read"] });
@@ -459,11 +459,7 @@ export function AppSidebar() {
           href="/chat"
           className="hidden group-data-[collapsible=icon]:flex"
         >
-          <img
-            src={organization?.iconLogo || "/logo.png"}
-            alt="Logo"
-            className="size-7"
-          />
+          <img src={appIconLogo} alt="Logo" className="size-7" />
         </Link>
         <SidebarTrigger className="hidden group-data-[collapsible=icon]:flex size-8 cursor-pointer" />
       </SidebarHeader>

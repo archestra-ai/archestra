@@ -46,6 +46,7 @@ import {
   useInternalMcpCatalog,
 } from "@/lib/internal-mcp-catalog.query";
 import { useMcpServersGroupedByCatalog } from "@/lib/mcp-server.query";
+import { useAppIconLogo } from "@/lib/use-app-name";
 import { cn } from "@/lib/utils";
 import {
   getDefaultArchestraToolIds,
@@ -889,10 +890,12 @@ export function McpCatalogIcon({
   catalogId?: string;
   size?: number;
 }) {
+  const appIconLogo = useAppIconLogo();
+
   if (!icon && catalogId === ARCHESTRA_MCP_CATALOG_ID) {
     return (
       <Image
-        src="/logo.png"
+        src={appIconLogo}
         alt={DEFAULT_APP_NAME}
         width={size}
         height={size}

@@ -78,6 +78,8 @@ export function SystemPromptEditor({
             automaticLayout: true,
             readOnly,
             placeholder: "Enter instruction for the LLM",
+            quickSuggestions: false,
+            wordBasedSuggestions: "off",
             // Disable EditContext API — it doesn't work inside Radix Dialog portals
             editContext: false,
           }}

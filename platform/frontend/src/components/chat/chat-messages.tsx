@@ -53,6 +53,7 @@ import {
 import { useMcpInstallOrchestrator } from "@/lib/mcp-install-orchestrator.hook";
 import { useOrganization } from "@/lib/organization.query";
 import { hasThinkingTags, parseThinkingTags } from "@/lib/parse-thinking";
+import { useAppIconLogo } from "@/lib/use-app-name";
 import type { ModelSource } from "@/lib/use-chat-preferences";
 import { cn } from "@/lib/utils";
 import { AuthRequiredTool } from "./auth-required-tool";
@@ -156,6 +157,7 @@ export function ChatMessages({
     mcpRegistry: ["read"],
   });
   const { data: organization } = useOrganization();
+  const appIconLogo = useAppIconLogo();
   const orchestrator = useMcpInstallOrchestrator();
 
   // Build tool name → icon map from agent tools + catalog data
@@ -830,7 +832,7 @@ export function ChatMessages({
             <div className="absolute bottom-[-10] left-0">
               <Message from="assistant">
                 <img
-                  src={organization?.iconLogo || "/logo.png"}
+                  src={appIconLogo}
                   alt="Loading logo"
                   className="object-contain h-6 w-auto animate-[bounce_700ms_ease_200ms_infinite]"
                 />

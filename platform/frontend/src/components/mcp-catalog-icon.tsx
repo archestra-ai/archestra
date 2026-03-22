@@ -3,6 +3,7 @@
 import { ARCHESTRA_MCP_CATALOG_ID, DEFAULT_APP_NAME } from "@shared";
 import { Server } from "lucide-react";
 import Image from "next/image";
+import { useAppIconLogo } from "@/lib/use-app-name";
 import { cn } from "@/lib/utils";
 
 interface McpCatalogIconProps {
@@ -18,10 +19,12 @@ export function McpCatalogIcon({
   size = 20,
   className,
 }: McpCatalogIconProps) {
+  const appIconLogo = useAppIconLogo();
+
   if (!icon && catalogId === ARCHESTRA_MCP_CATALOG_ID) {
     return (
       <Image
-        src="/logo.png"
+        src={appIconLogo}
         alt={DEFAULT_APP_NAME}
         width={size}
         height={size}

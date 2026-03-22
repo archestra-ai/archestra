@@ -16,10 +16,10 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { getFrontendDocsUrl } from "@/lib/archestra-mcp-server";
 import { useChatOpsStatus } from "@/lib/chatops.query";
 import config from "@/lib/config";
 import { useConfig, usePublicBaseUrl } from "@/lib/config.query";
+import { getFrontendDocsUrl } from "@/lib/docs";
 import { useAppName } from "@/lib/use-app-name";
 import { ChannelsSection } from "../_components/channels-section";
 import { CollapsibleSetupSection } from "../_components/collapsible-setup-section";

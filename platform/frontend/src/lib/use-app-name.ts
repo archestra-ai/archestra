@@ -1,11 +1,15 @@
 import { DEFAULT_APP_NAME } from "@shared";
-import { useOrganization } from "@/lib/organization.query";
+import {
+  useAppearanceSettings,
+  useOrganization,
+} from "@/lib/organization.query";
 
 /**
- * Returns the configured app name (organization.appName),
- * falling back to DEFAULT_APP_NAME if not set.
+ * Returns the configured app name, preferring authenticated organization data
+ * and falling back to public appearance settings on unauthenticated pages.
  */
 export function useAppName(): string {
   const { data: organization } = useOrganization();
-  return organization?.appName ?? DEFAULT_APP_NAME;
+  const { data: appearance } = useAppearanceSettings();
+  return organization?.appName ?? appearance?.appName ?? DEFAULT_APP_NAME;
 }

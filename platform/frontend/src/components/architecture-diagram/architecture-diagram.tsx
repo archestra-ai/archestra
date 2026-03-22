@@ -19,6 +19,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { useAppearanceSettings } from "@/lib/organization.query";
 import { useAppName } from "@/lib/use-app-name";
 import {
   ArchitectureGroupNode,
@@ -51,6 +52,7 @@ const LLM_GROUP_X = 660;
 
 function ArchitectureDiagramInner({ activeTab }: ArchitectureDiagramProps) {
   const appName = useAppName();
+  const { data: appearance } = useAppearanceSettings();
   const { resolvedTheme } = useTheme();
   const { fitView } = useReactFlow();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -200,7 +202,7 @@ function ArchitectureDiagramInner({ activeTab }: ArchitectureDiagramProps) {
             label: appName,
             width: 380,
             height: 450,
-            logo: "/logo.png",
+            logo: appearance?.iconLogo || "/logo.png",
             highlighted: isProxy || isMcp || isA2a,
             highlightColor,
           },
@@ -540,7 +542,7 @@ function ArchitectureDiagramInner({ activeTab }: ArchitectureDiagramProps) {
           selectable: false,
         },
       ];
-    }, [activeTab, appName]);
+    }, [activeTab, appName, appearance?.iconLogo]);
 
   const edges: Edge[] = useMemo(() => {
     const isProxy = activeTab === "proxy";

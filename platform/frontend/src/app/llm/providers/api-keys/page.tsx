@@ -49,7 +49,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { getFrontendDocsUrl } from "@/lib/archestra-mcp-server";
 import {
   type ChatApiKeyScope,
   useChatApiKeys,
@@ -57,6 +56,7 @@ import {
   useUpdateChatApiKey,
 } from "@/lib/chat-settings.query";
 import { useFeature } from "@/lib/config.query";
+import { getFrontendDocsUrl } from "@/lib/docs";
 import { useOrganization } from "@/lib/organization.query";
 import { useDataTableQueryParams } from "@/lib/use-data-table-query-params";
 import { useSetProviderAction } from "../layout";

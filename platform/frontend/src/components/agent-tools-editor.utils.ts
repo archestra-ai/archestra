@@ -34,6 +34,34 @@ export function getDefaultArchestraToolIds(
   return { toolIds, catalogIndex };
 }
 
+export function sortCatalogItems<
+  T extends { id: string; name: string; serverType?: string | null },
+>(
+  catalogItems: T[],
+  getAssignedCount: (catalog: T) => number,
+  getToolCount: (catalog: T) => number,
+): T[] {
+  return [...catalogItems].sort((a, b) => {
+    const aIsBuiltIn = a.id === ARCHESTRA_MCP_CATALOG_ID ? 1 : 0;
+    const bIsBuiltIn = b.id === ARCHESTRA_MCP_CATALOG_ID ? 1 : 0;
+    if (aIsBuiltIn !== bIsBuiltIn) return bIsBuiltIn - aIsBuiltIn;
+
+    const aAssigned = getAssignedCount(a);
+    const bAssigned = getAssignedCount(b);
+
+    if (aAssigned > 0 && bAssigned === 0) return -1;
+    if (aAssigned === 0 && bAssigned > 0) return 1;
+    if (aAssigned !== bAssigned) return bAssigned - aAssigned;
+
+    const aCount = getToolCount(a);
+    const bCount = getToolCount(b);
+    if (aCount > 0 && bCount === 0) return -1;
+    if (aCount === 0 && bCount > 0) return 1;
+
+    return a.name.localeCompare(b.name);
+  });
+}
+
 /**
  * Filter tools by search query (matching formatted name or description)
  * and sort with selected tools first.

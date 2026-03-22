@@ -2,7 +2,9 @@ import { describe, expect, expectTypeOf, test } from "vitest";
 import { AGENT_TOOL_PREFIX, isAgentTool } from "./agents";
 import {
   ARCHESTRA_TOOL_SHORT_NAMES,
+  getArchestraMcpServerName,
   getArchestraToolFullName,
+  getArchestraToolPrefix,
   getArchestraToolShortName,
   isArchestraMcpServerTool,
   TOOL_CREATE_AGENT_FULL_NAME,
@@ -24,6 +26,42 @@ describe("archestra MCP tool names", () => {
   test("preserves literal full-name typing", () => {
     const fullName = getArchestraToolFullName("create_agent");
     expectTypeOf(fullName).toEqualTypeOf<typeof TOOL_CREATE_AGENT_FULL_NAME>();
+  });
+
+  test("slugifies branded tool prefixes for non-alphanumeric app names", () => {
+    expect(
+      getArchestraMcpServerName({
+        appName: "Archestra ❤️",
+        fullWhiteLabeling: true,
+      }),
+    ).toBe("archestra");
+    expect(
+      getArchestraToolPrefix({
+        appName: "Archestra ❤️",
+        fullWhiteLabeling: true,
+      }),
+    ).toBe("archestra__");
+    expect(
+      getArchestraToolFullName("create_agent", {
+        appName: "Archestra ❤️",
+        fullWhiteLabeling: true,
+      }),
+    ).toBe("archestra__create_agent");
+  });
+
+  test("falls back to the default built-in prefix when branding slugifies to empty", () => {
+    expect(
+      getArchestraMcpServerName({
+        appName: "❤️",
+        fullWhiteLabeling: true,
+      }),
+    ).toBe("archestra");
+    expect(
+      getArchestraToolFullName("create_agent", {
+        appName: "❤️",
+        fullWhiteLabeling: true,
+      }),
+    ).toBe("archestra__create_agent");
   });
 
   test("extracts the short name from an Archestra tool", () => {

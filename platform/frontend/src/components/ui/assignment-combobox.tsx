@@ -20,6 +20,7 @@ export interface AssignmentComboboxItem {
   name: string;
   description?: string;
   badge?: string;
+  sortRank?: number;
   disabled?: boolean;
   disabledReason?: string;
   icon?: React.ReactNode;
@@ -71,6 +72,9 @@ export function AssignmentCombobox({
       const aScore = query ? getSearchMatchScore(a, query) : 0;
       const bScore = query ? getSearchMatchScore(b, query) : 0;
       if (aScore !== bScore) return bScore - aScore;
+      const aRank = a.sortRank ?? 0;
+      const bRank = b.sortRank ?? 0;
+      if (aRank !== bRank) return bRank - aRank;
       return a.name.localeCompare(b.name);
     });
   }, [items, search, selectedSet]);

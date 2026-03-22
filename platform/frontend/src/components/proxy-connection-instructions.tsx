@@ -13,8 +13,8 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { getFrontendDocsUrl } from "@/lib/archestra-mcp-server";
 import config from "@/lib/config";
+import { getFrontendDocsUrl } from "@/lib/docs";
 import { useAppName } from "@/lib/use-app-name";
 
 const { externalProxyUrls, internalProxyUrl } = config.api;
@@ -309,22 +309,22 @@ function UrlReplacementRow({
     return null;
   }
   return (
-    <div className="flex flex-col md:flex-row md:flex-wrap items-stretch md:items-center gap-2 min-w-0">
-      <div className="bg-muted/50 rounded-md px-3 py-2 border border-dashed border-muted-foreground/30 min-w-0 max-w-full overflow-hidden">
-        <CodeText className="text-xs line-through opacity-50 break-all">
+    <div className="grid min-w-0 gap-2 md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] md:items-center">
+      <div className="min-w-0 overflow-hidden rounded-md border border-dashed border-muted-foreground/30 bg-muted/50 px-3 py-2">
+        <CodeText className="text-xs line-through opacity-50 whitespace-normal [overflow-wrap:anywhere]">
           {originalUrl}
         </CodeText>
       </div>
-      <span className="text-muted-foreground flex-shrink-0 text-center md:text-left">
+      <span className="text-center text-muted-foreground md:text-left">
         →
       </span>
       <CopyableCode
         value={newUrl}
         toastMessage="Proxy URL copied to clipboard"
         variant="primary"
-        className="flex-1 min-w-0 max-w-full overflow-hidden"
+        className="min-w-0 max-w-full overflow-hidden"
       >
-        <CodeText className="text-xs text-primary break-all min-w-0">
+        <CodeText className="min-w-0 text-xs text-primary whitespace-normal [overflow-wrap:anywhere]">
           {newUrl}
         </CodeText>
       </CopyableCode>

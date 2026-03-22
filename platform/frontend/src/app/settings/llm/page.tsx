@@ -19,7 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { getFrontendDocsUrl } from "@/lib/archestra-mcp-server";
+import { getFrontendDocsUrl } from "@/lib/docs";
 import {
   useOrganization,
   useUpdateLlmSettings,

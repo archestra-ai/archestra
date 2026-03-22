@@ -7,7 +7,7 @@ import type { ArchitectureTabType } from "@/components/architecture-diagram/arch
 import { ConnectionOptions } from "@/components/connection-options";
 import { PageLayout } from "@/components/page-layout";
 import { useDefaultLlmProxy, useDefaultMcpGateway } from "@/lib/agent.query";
-import { getFrontendDocsUrl } from "@/lib/archestra-mcp-server";
+import { getFrontendDocsUrl } from "@/lib/docs";
 
 export default function ConnectionPage() {
   const { data: defaultMcpGateway } = useDefaultMcpGateway();

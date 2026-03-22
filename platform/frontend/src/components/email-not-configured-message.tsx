@@ -1,6 +1,6 @@
 import { ExternalLink } from "lucide-react";
 import Link from "next/link";
-import { getFrontendDocsUrl } from "@/lib/archestra-mcp-server";
+import { getFrontendDocsUrl } from "@/lib/docs";
 
 interface EmailNotConfiguredMessageProps {
   /** Optional className for the container */

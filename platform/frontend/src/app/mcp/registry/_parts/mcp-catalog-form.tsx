@@ -61,9 +61,9 @@ import {
   VisibilitySelector,
 } from "@/components/visibility-selector";
 import { LOCAL_MCP_DISABLED_MESSAGE } from "@/consts";
-import { getVisibleDocsUrl } from "@/lib/archestra-mcp-server";
 import { useHasPermissions } from "@/lib/auth.query";
 import { useFeature } from "@/lib/config.query";
+import { getVisibleDocsUrl } from "@/lib/docs";
 import { useK8sImagePullSecrets } from "@/lib/internal-mcp-catalog.query";
 import { useGetSecret } from "@/lib/secrets.query";
 import { useTeams } from "@/lib/team.query";

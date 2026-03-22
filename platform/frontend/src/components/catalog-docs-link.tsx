@@ -1,7 +1,7 @@
 "use client";
 
 import { ExternalLink } from "lucide-react";
-import { getVisibleDocsUrl } from "@/lib/archestra-mcp-server";
+import { getVisibleDocsUrl } from "@/lib/docs";
 
 export function CatalogDocsLink({
   url,

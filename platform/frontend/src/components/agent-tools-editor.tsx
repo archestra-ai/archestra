@@ -50,6 +50,7 @@ import { cn } from "@/lib/utils";
 import {
   getDefaultArchestraToolIds,
   sortAndFilterTools,
+  sortCatalogItems,
 } from "./agent-tools-editor.utils";
 import { CatalogDocsLink } from "./catalog-docs-link";
 import { DYNAMIC_CREDENTIAL_VALUE, TokenSelect } from "./token-select";
@@ -162,24 +163,11 @@ const AgentToolsEditorContent = forwardRef<
 
   // Sort catalog items: assigned tools first (by count desc), then servers with tools, then 0 tools
   const sortedCatalogItems = useMemo(() => {
-    return [...catalogItems].sort((a, b) => {
-      const aAssigned = assignedToolsByCatalog.get(a.id)?.length ?? 0;
-      const bAssigned = assignedToolsByCatalog.get(b.id)?.length ?? 0;
-
-      // Items with assigned tools come first, sorted by assigned count descending
-      if (aAssigned > 0 && bAssigned === 0) return -1;
-      if (aAssigned === 0 && bAssigned > 0) return 1;
-      if (aAssigned !== bAssigned) return bAssigned - aAssigned;
-
-      // Among items with same assigned count, sort by total tools available
-      const aCount = toolCountByCatalog.get(a.id) ?? 0;
-      const bCount = toolCountByCatalog.get(b.id) ?? 0;
-      if (aCount > 0 && bCount === 0) return -1;
-      if (aCount === 0 && bCount > 0) return 1;
-
-      // Finally, sort alphabetically by name
-      return a.name.localeCompare(b.name);
-    });
+    return sortCatalogItems(
+      catalogItems,
+      (catalog) => assignedToolsByCatalog.get(catalog.id)?.length ?? 0,
+      (catalog) => toolCountByCatalog.get(catalog.id) ?? 0,
+    );
   }, [catalogItems, assignedToolsByCatalog, toolCountByCatalog]);
 
   // State counter to force re-renders when pendingChangesRef updates
@@ -449,6 +437,7 @@ const AgentToolsEditorContent = forwardRef<
         id: catalog.id,
         name: displayName,
         description: catalog.description || undefined,
+        sortRank: catalog.id === ARCHESTRA_MCP_CATALOG_ID ? 1 : 0,
         icon: (
           <McpCatalogIcon
             icon={catalog.icon}

@@ -44,13 +44,11 @@ import {
   useAgentDelegations,
   useAllProfileTools,
 } from "@/lib/agent-tools.query";
-import {
-  getFrontendDocsUrl,
-  useArchestraMcpIdentity,
-} from "@/lib/archestra-mcp-server";
+import { useArchestraMcpIdentity } from "@/lib/archestra-mcp-server";
 import { useHasPermissions } from "@/lib/auth.query";
 import { useChatProfileMcpTools } from "@/lib/chat.query";
 import config from "@/lib/config";
+import { getFrontendDocsUrl } from "@/lib/docs";
 import { useInternalMcpCatalog } from "@/lib/internal-mcp-catalog.query";
 import {
   useMcpServers,
@@ -74,7 +72,7 @@ export function McpConnectionInstructions({
   agentId,
   hideProfileSelector = false,
 }: McpConnectionInstructionsProps) {
-  const { catalogName } = useArchestraMcpIdentity();
+  const { catalogName, serverName } = useArchestraMcpIdentity();
   const mcpAuthDocsUrl = getFrontendDocsUrl("mcp-authentication");
   const { data: profiles = [] } = useProfiles({
     filters: { agentTypes: ["profile", "mcp_gateway"] },
@@ -287,7 +285,7 @@ export function McpConnectionInstructions({
       JSON.stringify(
         {
           mcpServers: {
-            archestra: {
+            [serverName]: {
               url: mcpUrl,
               headers: {
                 Authorization: `Bearer ${tokenForDisplay}`,
@@ -298,7 +296,7 @@ export function McpConnectionInstructions({
         null,
         2,
       ),
-    [mcpUrl, tokenForDisplay],
+    [mcpUrl, serverName, tokenForDisplay],
   );
 
   const handleExposeToken = useCallback(async () => {
@@ -342,7 +340,7 @@ export function McpConnectionInstructions({
     const fullConfig = JSON.stringify(
       {
         mcpServers: {
-          archestra: {
+          [serverName]: {
             url: mcpUrl,
             headers: {
               Authorization: `Bearer ${tokenForDisplay}`,
@@ -388,7 +386,7 @@ export function McpConnectionInstructions({
     const fullConfig = JSON.stringify(
       {
         mcpServers: {
-          archestra: {
+          [serverName]: {
             url: mcpUrl,
             headers: {
               Authorization: `Bearer ${tokenValue}`,
@@ -407,6 +405,7 @@ export function McpConnectionInstructions({
     setIsCopyingConfig(false);
   }, [
     mcpUrl,
+    serverName,
     isPersonalTokenSelected,
     selectedTeamToken,
     fetchUserTokenMutation,

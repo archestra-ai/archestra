@@ -1,5 +1,6 @@
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import {
+  ARCHESTRA_TOOL_PREFIX,
   type ArchestraToolFullName,
   getArchestraToolFullName,
   getArchestraToolShortName,
@@ -82,7 +83,7 @@ export function getArchestraMcpTools() {
     ...chatTools,
   ];
 
-  if (archestraMcpBranding.toolPrefix === "archestra__") {
+  if (archestraMcpBranding.toolPrefix === ARCHESTRA_TOOL_PREFIX) {
     return tools;
   }
 

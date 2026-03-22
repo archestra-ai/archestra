@@ -14,8 +14,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { getFrontendDocsUrl } from "@/lib/archestra-mcp-server";
 import { useConfig } from "@/lib/config.query";
+import { getFrontendDocsUrl } from "@/lib/docs";
 import {
   useDeleteIncomingEmailSubscription,
   useIncomingEmailStatus,

@@ -28,6 +28,7 @@ import { AgentBadge } from "@/components/agent-badge";
 import { AgentIcon } from "@/components/agent-icon";
 import { AgentIconPicker } from "@/components/agent-icon-picker";
 import { McpCatalogIcon, ToolChecklist } from "@/components/agent-tools-editor";
+import { sortCatalogItems } from "@/components/agent-tools-editor.utils";
 import { PromptInputButton } from "@/components/ai-elements/prompt-input";
 import { CatalogDocsLink } from "@/components/catalog-docs-link";
 import { OAuthConfirmationDialog } from "@/components/oauth-confirmation-dialog";
@@ -1216,11 +1217,11 @@ function AddToolView({
           c.description?.toLowerCase().includes(lower),
       );
     }
-    return [...items].sort((a, b) => {
-      const aAssigned = assignedCatalogIds.has(a.id) ? 1 : 0;
-      const bAssigned = assignedCatalogIds.has(b.id) ? 1 : 0;
-      return aAssigned - bAssigned;
-    });
+    return sortCatalogItems(
+      items,
+      (catalog) => (assignedCatalogIds.has(catalog.id) ? 1 : 0),
+      () => 1,
+    );
   }, [catalogItems, search, assignedCatalogIds]);
 
   return (

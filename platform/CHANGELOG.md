@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.1.36](https://github.com/archestra-ai/archestra/compare/platform-v1.1.35...platform-v1.1.36) (2026-03-22)
+
+
+### Features
+
+* white-label built-in MCP server branding ([#3496](https://github.com/archestra-ai/archestra/issues/3496)) ([c11c170](https://github.com/archestra-ai/archestra/commit/c11c170be5a874a853205443c0a57d77a2799a46)), closes [#3475](https://github.com/archestra-ai/archestra/issues/3475)
+
+
+### Bug Fixes
+
+* generate https oauth metadata behind reverse proxies ([#3400](https://github.com/archestra-ai/archestra/issues/3400)) ([cabc557](https://github.com/archestra-ai/archestra/commit/cabc557f18c6db3f3481a4129a42460c7eb43875))
+
 ## [1.1.35](https://github.com/archestra-ai/archestra/compare/platform-v1.1.34...platform-v1.1.35) (2026-03-20)
 
 

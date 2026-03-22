@@ -360,6 +360,11 @@ function ChatSessionHook({
       }
     },
     onToolCall: ({ toolCall }) => {
+      const toolShortName = getCurrentArchestraToolShortName(
+        toolCall.toolName,
+        appName,
+      );
+
       setOptimisticToolCalls((current) => {
         if (current.some((call) => call.toolCallId === toolCall.toolCallId)) {
           return current;
@@ -376,8 +381,7 @@ function ChatSessionHook({
       });
 
       if (
-        getCurrentArchestraToolShortName(toolCall.toolName, appName) ===
-        TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_SHORT_NAME
+        toolShortName === TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_SHORT_NAME
       ) {
         setPendingCustomServerToolCall(toolCall);
       }
@@ -386,10 +390,7 @@ function ChatSessionHook({
       // The backend's stopWhen: hasToolCall(...) stops the agentic loop
       // after swap_agent executes, so the old agent won't continue.
       // onFinish then sends a poke to trigger the new agent.
-      if (
-        getCurrentArchestraToolShortName(toolCall.toolName, appName) ===
-        TOOL_SWAP_AGENT_SHORT_NAME
-      ) {
+      if (toolShortName === TOOL_SWAP_AGENT_SHORT_NAME) {
         const agentName = getSwapAgentName(toolCall);
         swapAgentPendingRef.current = makeSwapAgentPokeText(
           typeof agentName === "string" ? agentName : "another agent",
@@ -399,10 +400,7 @@ function ChatSessionHook({
         });
       }
 
-      if (
-        getCurrentArchestraToolShortName(toolCall.toolName, appName) ===
-        TOOL_SWAP_TO_DEFAULT_AGENT_SHORT_NAME
-      ) {
+      if (toolShortName === TOOL_SWAP_TO_DEFAULT_AGENT_SHORT_NAME) {
         swapAgentPendingRef.current = SWAP_TO_DEFAULT_AGENT_POKE_TEXT;
         queryClient.invalidateQueries({
           queryKey: ["conversation", conversationId],
@@ -413,18 +411,12 @@ function ChatSessionHook({
       // create-agent mutations, so the cached useInternalAgents() list can stay
       // stale unless we invalidate it here. Without this, the prompt input's
       // agent selector may not reflect a newly created/swapped-to agent yet.
-      if (
-        getCurrentArchestraToolShortName(toolCall.toolName, appName) ===
-        TOOL_CREATE_AGENT_SHORT_NAME
-      ) {
+      if (toolShortName === TOOL_CREATE_AGENT_SHORT_NAME) {
         queryClient.invalidateQueries({ queryKey: ["agents"] });
       }
 
       // Detect artifact_write tool and invalidate conversation to fetch updated artifact
-      if (
-        getCurrentArchestraToolShortName(toolCall.toolName, appName) ===
-        TOOL_ARTIFACT_WRITE_SHORT_NAME
-      ) {
+      if (toolShortName === TOOL_ARTIFACT_WRITE_SHORT_NAME) {
         // Small delay to ensure backend has saved the artifact
         setTimeout(() => {
           queryClient.invalidateQueries({

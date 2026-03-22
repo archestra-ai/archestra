@@ -67,4 +67,19 @@ describe("useArchestraMcpIdentity", () => {
     expect(result.current.isToolName("sparky__create_agent")).toBe(true);
     expect(result.current.isToolName("archestra__create_agent")).toBe(true);
   });
+
+  it("returns stable references across rerenders when branding inputs are unchanged", () => {
+    mockUseAppName.mockReturnValue("Sparky");
+    mockConfig.enterpriseFeatures.fullWhiteLabeling = true;
+
+    const { result, rerender } = renderHook(() => useArchestraMcpIdentity());
+    const first = result.current;
+
+    rerender();
+
+    expect(result.current).toBe(first);
+    expect(result.current.getToolName).toBe(first.getToolName);
+    expect(result.current.getToolShortName).toBe(first.getToolShortName);
+    expect(result.current.isToolName).toBe(first.isToolName);
+  });
 });

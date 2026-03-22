@@ -4,7 +4,7 @@ import { ARCHESTRA_TOOL_SHORT_NAMES, getArchestraToolFullName } from "@shared";
 import { vi } from "vitest";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
 import { UserModel } from "@/models";
-import { beforeEach, describe, expect, test } from "@/test";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { ArchestraContext } from ".";
 import {
   checkToolPermission,
@@ -22,6 +22,10 @@ const brandedTool = (name: string) =>
       fullWhiteLabeling: true,
     },
   );
+
+afterEach(() => {
+  archestraMcpBranding.syncFromOrganization(null);
+});
 
 // === Permission map completeness ===
 

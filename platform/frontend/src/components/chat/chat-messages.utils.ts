@@ -124,6 +124,9 @@ export function stripDanglingToolCalls(messages: UIMessage[]): UIMessage[] {
 
 export function identifyCompactToolGroups(
   parts: UIMessage["parts"] | undefined,
+  options?: {
+    nonCompactToolNames?: Set<string>;
+  },
 ): { groupMap: Map<number, CompactToolGroup>; consumedIndices: Set<number> } {
   const groupMap = new Map<number, CompactToolGroup>();
   const consumedIndices = new Set<number>();
@@ -178,11 +181,13 @@ export function identifyCompactToolGroups(
       part: rawPart as never,
       toolResultPart: toolResultPart as never,
     });
-    const isEligible = isCompactEligible({
-      part: rawPart as never,
-      toolResultPart: toolResultPart as never,
-      toolName,
-    });
+    const isEligible =
+      !options?.nonCompactToolNames?.has(toolName) &&
+      isCompactEligible({
+        part: rawPart as never,
+        toolResultPart: toolResultPart as never,
+        toolName,
+      });
 
     if (isEligible) {
       if (!currentGroup) {

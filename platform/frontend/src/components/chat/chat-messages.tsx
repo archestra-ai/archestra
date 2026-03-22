@@ -1,12 +1,16 @@
 import type { UIMessage } from "@ai-sdk/react";
 import {
+  type ArchestraToolShortName,
   SWAP_AGENT_FAILED_POKE_TEXT,
   SWAP_AGENT_POKE_PREFIX,
   SWAP_AGENT_POKE_TEXT,
   SWAP_TO_DEFAULT_AGENT_POKE_TEXT,
   TOOL_SWAP_AGENT_FULL_NAME,
+  TOOL_SWAP_AGENT_SHORT_NAME,
   TOOL_SWAP_TO_DEFAULT_AGENT_FULL_NAME,
+  TOOL_SWAP_TO_DEFAULT_AGENT_SHORT_NAME,
   TOOL_TODO_WRITE_FULL_NAME,
+  TOOL_TODO_WRITE_SHORT_NAME,
 } from "@shared";
 import type { ChatStatus, DynamicToolUIPart, ToolUIPart } from "ai";
 import { CheckCircleIcon, ClockIcon } from "lucide-react";
@@ -39,6 +43,7 @@ import {
   ToolInput,
   ToolOutput,
 } from "@/components/ai-elements/tool";
+import { useArchestraMcpIdentity } from "@/lib/archestra-mcp-server";
 import { useHasPermissions, useSession } from "@/lib/auth.query";
 import { useProfileToolsWithIds } from "@/lib/chat.query";
 import { useUpdateChatMessage } from "@/lib/chat-message.query";
@@ -158,7 +163,20 @@ export function ChatMessages({
   });
   const { data: organization } = useOrganization();
   const appIconLogo = useAppIconLogo();
+  const { getToolName, getToolShortName } = useArchestraMcpIdentity();
   const orchestrator = useMcpInstallOrchestrator();
+  const nonCompactToolNames = useMemo(
+    () =>
+      new Set([
+        TOOL_SWAP_AGENT_FULL_NAME,
+        TOOL_SWAP_TO_DEFAULT_AGENT_FULL_NAME,
+        TOOL_TODO_WRITE_FULL_NAME,
+        getToolName(TOOL_SWAP_AGENT_SHORT_NAME),
+        getToolName(TOOL_SWAP_TO_DEFAULT_AGENT_SHORT_NAME),
+        getToolName(TOOL_TODO_WRITE_SHORT_NAME),
+      ]),
+    [getToolName],
+  );
 
   // Build tool name → icon map from agent tools + catalog data
   const { data: agentTools } = useProfileToolsWithIds(agentId);
@@ -326,7 +344,9 @@ export function ChatMessages({
               >
                 {(() => {
                   const { groupMap, consumedIndices } =
-                    identifyCompactToolGroups(message.parts);
+                    identifyCompactToolGroups(message.parts, {
+                      nonCompactToolNames,
+                    });
                   const partKeyTracker = new Map<string, number>();
                   return message.parts?.map((part, i) => {
                     const partKey = getMessagePartKey(
@@ -340,7 +360,7 @@ export function ChatMessages({
                       if (!group) return null;
                       return (
                         <CompactToolGroup
-                          key={getCompactGroupKey(message.id, group.entries)}
+                          key={getCompactGroupKey(message.id, group.startIndex)}
                           tools={group.entries.map((entry) => ({
                             key: getToolEntryKey(message.id, entry),
                             toolName: entry.toolName,
@@ -740,6 +760,7 @@ export function ChatMessages({
                             onReauthMcp={
                               orchestrator.triggerReauthByCatalogIdAndServerId
                             }
+                            getToolShortName={getToolShortName}
                           />
                         );
                       }
@@ -782,6 +803,7 @@ export function ChatMessages({
                               onReauthMcp={
                                 orchestrator.triggerReauthByCatalogIdAndServerId
                               }
+                              getToolShortName={getToolShortName}
                             />
                           );
                         }
@@ -792,7 +814,10 @@ export function ChatMessages({
                     }
                   });
                 })()}
-                <SwapAgentDivider message={message} />
+                <SwapAgentDivider
+                  message={message}
+                  getToolShortName={getToolShortName}
+                />
               </div>
             );
           })}
@@ -825,6 +850,7 @@ export function ChatMessages({
               onToolApprovalResponse={onToolApprovalResponse}
               onInstallMcp={orchestrator.triggerInstallByCatalogId}
               onReauthMcp={orchestrator.triggerReauthByCatalogIdAndServerId}
+              getToolShortName={getToolShortName}
             />
           ))}
           {(status === "submitted" ||
@@ -847,17 +873,8 @@ export function ChatMessages({
   );
 }
 
-function getCompactGroupKey(
-  messageId: string,
-  entries: Array<{
-    toolName: string;
-    part: DynamicToolUIPart | ToolUIPart;
-  }>,
-): string {
-  const signature = entries
-    .map((entry) => entry.part.toolCallId ?? entry.toolName)
-    .join(":");
-  return `${messageId}-compact-${signature}`;
+function getCompactGroupKey(messageId: string, startIndex: number): string {
+  return `${messageId}-compact-${startIndex}`;
 }
 
 function getToolEntryKey(
@@ -947,6 +964,7 @@ function MessageTool({
   onToolApprovalResponse,
   onInstallMcp,
   onReauthMcp,
+  getToolShortName,
 }: {
   part: ToolUIPart | DynamicToolUIPart;
   toolResultPart: ToolUIPart | DynamicToolUIPart | null;
@@ -961,6 +979,7 @@ function MessageTool({
   }) => void;
   onInstallMcp?: (catalogId: string) => void;
   onReauthMcp?: (catalogId: string, serverId: string) => void;
+  getToolShortName: (toolName: string) => ArchestraToolShortName | null;
 }) {
   const errorText = getToolErrorText({ part, toolResultPart });
 
@@ -1056,15 +1075,19 @@ function MessageTool({
 
   // swap_agent / swap_to_default_agent are rendered as dividers after all message parts (see SwapAgentDivider below)
   // Show the raw tool call when the user's name ends with "(debugging)"
+  const swapToolShortName = getSwapToolShortName({
+    toolName,
+    getToolShortName,
+  });
   if (
     !isDebugging &&
-    (toolName === TOOL_SWAP_AGENT_FULL_NAME ||
-      toolName === TOOL_SWAP_TO_DEFAULT_AGENT_FULL_NAME)
+    (swapToolShortName === TOOL_SWAP_AGENT_SHORT_NAME ||
+      swapToolShortName === TOOL_SWAP_TO_DEFAULT_AGENT_SHORT_NAME)
   ) {
     return null;
   }
 
-  if (toolName === TOOL_TODO_WRITE_FULL_NAME) {
+  if (getToolShortName(toolName) === TOOL_TODO_WRITE_SHORT_NAME) {
     return (
       <TodoWriteTool
         part={part}
@@ -1194,20 +1217,29 @@ function isSwapAgentPokeMessage(message: UIMessage): boolean {
   );
 }
 
-const SWAP_TOOL_NAMES = new Set([
-  TOOL_SWAP_AGENT_FULL_NAME,
-  `tool-${TOOL_SWAP_AGENT_FULL_NAME}`,
-  TOOL_SWAP_TO_DEFAULT_AGENT_FULL_NAME,
-  `tool-${TOOL_SWAP_TO_DEFAULT_AGENT_FULL_NAME}`,
-]);
-
-function SwapAgentDivider({ message }: { message: UIMessage }) {
+function SwapAgentDivider({
+  message,
+  getToolShortName,
+}: {
+  message: UIMessage;
+  getToolShortName: (toolName: string) => ArchestraToolShortName | null;
+}) {
   if (message.role !== "assistant") return null;
 
   for (const part of message.parts ?? []) {
     if (!isToolPart(part)) continue;
-    const type = part.type as string;
-    if (!SWAP_TOOL_NAMES.has(type)) continue;
+    const toolName = getRenderedToolName(part);
+    if (!toolName) continue;
+    const swapToolShortName = getSwapToolShortName({
+      toolName,
+      getToolShortName,
+    });
+    if (
+      swapToolShortName !== TOOL_SWAP_AGENT_SHORT_NAME &&
+      swapToolShortName !== TOOL_SWAP_TO_DEFAULT_AGENT_SHORT_NAME
+    ) {
+      continue;
+    }
 
     // Don't show divider if the swap tool errored
     if (hasSwapToolError(part, message.parts ?? [])) return null;
@@ -1215,8 +1247,7 @@ function SwapAgentDivider({ message }: { message: UIMessage }) {
     // Determine agent name for the divider
     let agentName = "another agent";
     const isSwapToDefault =
-      type === TOOL_SWAP_TO_DEFAULT_AGENT_FULL_NAME ||
-      type === `tool-${TOOL_SWAP_TO_DEFAULT_AGENT_FULL_NAME}`;
+      swapToolShortName === TOOL_SWAP_TO_DEFAULT_AGENT_SHORT_NAME;
 
     if (isSwapToDefault) {
       agentName = "default agent";
@@ -1249,6 +1280,35 @@ function SwapAgentDivider({ message }: { message: UIMessage }) {
         <div className="h-px flex-1 bg-border" />
       </div>
     );
+  }
+
+  return null;
+}
+
+function getRenderedToolName(
+  part: DynamicToolUIPart | ToolUIPart,
+): string | null {
+  if (part.type === "dynamic-tool" && typeof part.toolName === "string") {
+    return part.toolName;
+  }
+
+  if (part.type.startsWith("tool-")) {
+    return part.type.replace("tool-", "");
+  }
+
+  return null;
+}
+
+function getSwapToolShortName(params: {
+  toolName: string;
+  getToolShortName: (toolName: string) => ArchestraToolShortName | null;
+}) {
+  const shortName = params.getToolShortName(params.toolName);
+  if (
+    shortName === TOOL_SWAP_AGENT_SHORT_NAME ||
+    shortName === TOOL_SWAP_TO_DEFAULT_AGENT_SHORT_NAME
+  ) {
+    return shortName;
   }
 
   return null;

@@ -9,6 +9,7 @@ import {
   LlmProviderApiKeyOptionLabel,
   LlmProviderApiKeySelectItems,
 } from "@/components/llm-provider-options";
+import { ProfileFilterOption } from "@/components/log-filter-option";
 import { WithPermissions } from "@/components/roles/with-permissions";
 import {
   SettingsBlock,
@@ -48,6 +49,13 @@ type GlobalToolPolicy = NonNullable<
 >;
 
 type FileUploadsEnabled = "enabled" | "disabled";
+
+type AgentSelectItem = {
+  value: string;
+  label: string;
+  content?: React.ReactNode;
+  selectedContent?: React.ReactNode;
+};
 
 export default function AgentSettingsPage() {
   const { getToolName } = useArchestraMcpIdentity();
@@ -167,11 +175,31 @@ export default function AgentSettingsPage() {
   );
 
   const agentItems = useMemo(() => {
-    const items = [{ value: "__personal__", label: "User's personal agent" }];
+    const items: AgentSelectItem[] = [
+      { value: "__personal__", label: "User's personal agent" },
+    ];
     for (const agent of orgAgents ?? []) {
       items.push({
         value: agent.id,
-        label: agent.icon ? `${agent.icon} ${agent.name}` : agent.name,
+        label: agent.name,
+        content: (
+          <ProfileFilterOption
+            profile={{
+              name: agent.name,
+              icon: agent.icon ?? null,
+              agentType: "agent",
+            }}
+          />
+        ),
+        selectedContent: (
+          <ProfileFilterOption
+            profile={{
+              name: agent.name,
+              icon: agent.icon ?? null,
+              agentType: "agent",
+            }}
+          />
+        ),
       });
     }
     return items;

@@ -13,6 +13,9 @@ let mockApiKeys: Array<{
   scope: string;
 }> = [];
 let mockAgents: Array<{ id: string; name: string; icon?: string | null }> = [];
+const mockSearchableSelect = vi.fn((props: { value: string }) => (
+  <div>{props.value}</div>
+));
 
 vi.mock("next/link", () => ({
   default: ({
@@ -94,7 +97,14 @@ vi.mock("@/components/settings/settings-block", () => ({
 }));
 
 vi.mock("@/components/ui/searchable-select", () => ({
-  SearchableSelect: ({ value }: { value: string }) => <div>{value}</div>,
+  SearchableSelect: (props: Record<string, unknown>) =>
+    mockSearchableSelect(props as { value: string }),
+}));
+
+vi.mock("@/components/log-filter-option", () => ({
+  ProfileFilterOption: ({ profile }: { profile: { name: string } }) => (
+    <span>profile:{profile.name}</span>
+  ),
 }));
 
 vi.mock("@/components/ui/select", () => ({
@@ -149,6 +159,11 @@ const mutateAsync = vi.fn();
 vi.mock("@/lib/organization.query", () => ({
   useOrganization: () => ({
     data: mockOrganization,
+  }),
+  useAppearanceSettings: () => ({
+    data: {
+      appName: "Spark",
+    },
   }),
   useUpdateAgentSettings: () => ({
     mutateAsync,
@@ -207,5 +222,46 @@ describe("AgentSettingsPage", () => {
 
     expect(screen.getByText("Select API key first...")).toBeInTheDocument();
     expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
+  });
+
+  it("uses the shared profile filter renderer for org agent rows in the default agent dropdown", () => {
+    mockAgents = [
+      {
+        id: "agent-1",
+        name: "Agent Builder Agent",
+        icon: "🧰",
+      },
+    ];
+
+    renderPage();
+
+    const searchableSelectCall = mockSearchableSelect.mock.calls.find(
+      ([props]) =>
+        (props as { searchPlaceholder?: string }).searchPlaceholder ===
+        "Search agents...",
+    );
+    expect(searchableSelectCall).toBeDefined();
+
+    const items = (
+      searchableSelectCall?.[0] as unknown as {
+        items: Array<{
+          value: string;
+          label: string;
+          content?: React.ReactNode;
+          selectedContent?: React.ReactNode;
+        }>;
+      }
+    ).items;
+
+    expect(items[0]).toMatchObject({
+      value: "__personal__",
+      label: "User's personal agent",
+    });
+    expect(items[1]).toMatchObject({
+      value: "agent-1",
+      label: "Agent Builder Agent",
+    });
+    expect(items[1].content).toBeTruthy();
+    expect(items[1].selectedContent).toBeTruthy();
   });
 });

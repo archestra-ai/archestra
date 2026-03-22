@@ -346,6 +346,7 @@ export function ChatMessages({
                   const { groupMap, consumedIndices } =
                     identifyCompactToolGroups(message.parts, {
                       nonCompactToolNames,
+                      getToolShortName,
                     });
                   const partKeyTracker = new Map<string, number>();
                   return message.parts?.map((part, i) => {

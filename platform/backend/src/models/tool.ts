@@ -616,12 +616,6 @@ class ToolModel {
 
     const archestraTools = getArchestraMcpTools();
     const archestraToolNames = new Set(archestraTools.map((t) => t.name));
-    const _desiredToolsByShortName = new Map(
-      archestraTools.map((tool) => [
-        extractArchestraBuiltInShortName(tool.name),
-        tool,
-      ]),
-    );
 
     // Migrate pre-existing "discovered" Archestra tools (catalog_id = NULL) to use the catalog
     // This handles tools that were auto-discovered via proxy before the catalog was introduced

@@ -1,4 +1,5 @@
 import type { UIMessage } from "@ai-sdk/react";
+import type { ArchestraToolShortName } from "@shared";
 import type { DynamicToolUIPart, ToolUIPart } from "ai";
 import {
   getToolErrorText,
@@ -126,6 +127,7 @@ export function identifyCompactToolGroups(
   parts: UIMessage["parts"] | undefined,
   options?: {
     nonCompactToolNames?: Set<string>;
+    getToolShortName?: (toolName: string) => ArchestraToolShortName | null;
   },
 ): { groupMap: Map<number, CompactToolGroup>; consumedIndices: Set<number> } {
   const groupMap = new Map<number, CompactToolGroup>();
@@ -187,6 +189,7 @@ export function identifyCompactToolGroups(
         part: rawPart as never,
         toolResultPart: toolResultPart as never,
         toolName,
+        getToolShortName: options?.getToolShortName,
       });
 
     if (isEligible) {

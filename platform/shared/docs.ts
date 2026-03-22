@@ -1,4 +1,7 @@
-const DOCS_BASE_URL = "https://archestra.ai/docs";
+import { WEBSITE_URL } from "./consts";
+
+const DOCS_BASE_URL = `${WEBSITE_URL}/docs`;
+export const COMMUNITY_DOCS_URL = getDocsUrl("platform-quickstart");
 
 /**
  * All valid documentation page slugs.

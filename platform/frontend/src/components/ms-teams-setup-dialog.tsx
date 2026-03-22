@@ -1,5 +1,6 @@
 "use client";
 
+import { WEBSITE_URL } from "@shared";
 import JSZip from "jszip";
 import { Download, ExternalLink, Loader2, TriangleAlert } from "lucide-react";
 import * as React from "react";
@@ -467,9 +468,9 @@ function buildManifest(params: {
     packageName: `com.${nameShort.toLowerCase()}.bot`,
     developer: {
       name: nameShort,
-      websiteUrl: "https://archestra.ai",
-      privacyUrl: "https://archestra.ai/privacy",
-      termsOfUseUrl: "https://archestra.ai/terms",
+      websiteUrl: WEBSITE_URL,
+      privacyUrl: `${WEBSITE_URL}/privacy`,
+      termsOfUseUrl: `${WEBSITE_URL}/terms`,
     },
     name: { short: nameShort, full: nameFull },
     description: {

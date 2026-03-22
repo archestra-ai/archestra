@@ -1,5 +1,6 @@
 "use client";
 
+import { GITHUB_REPO_URL } from "@shared";
 import {
   AlertCircle,
   CheckCircle2,
@@ -217,10 +218,7 @@ function ConnectionStatusView({
                 variant="outline"
                 size="sm"
                 onClick={() =>
-                  window.open(
-                    "https://github.com/archestra-ai/archestra/issues",
-                    "_blank",
-                  )
+                  window.open(`${GITHUB_REPO_URL}/issues`, "_blank")
                 }
               >
                 Report issue on GitHub

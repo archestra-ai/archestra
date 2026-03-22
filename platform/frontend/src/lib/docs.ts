@@ -1,4 +1,4 @@
-import { type DocsPage, getDocsUrl } from "@shared";
+import { type DocsPage, getDocsUrl, WEBSITE_URL } from "@shared";
 import appConfig from "@/lib/config";
 
 export function getFrontendDocsUrl(
@@ -21,7 +21,7 @@ export function getVisibleDocsUrl(
 
   if (
     appConfig.enterpriseFeatures.fullWhiteLabeling &&
-    url.startsWith("https://archestra.ai/")
+    url.startsWith(WEBSITE_URL)
   ) {
     return null;
   }

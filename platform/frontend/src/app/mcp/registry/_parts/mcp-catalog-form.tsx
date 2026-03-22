@@ -2,6 +2,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import type { archestraApiTypes } from "@shared";
+import { GITHUB_REPO_URL } from "@shared";
 import {
   ChevronRight,
   Globe,
@@ -109,7 +110,7 @@ export function McpCatalogForm({
   embedded = false,
 }: McpCatalogFormProps) {
   const defaultImageDocsUrl = getVisibleDocsUrl(
-    "https://github.com/archestra-ai/archestra/tree/main/platform/mcp_server_docker_image",
+    `${GITHUB_REPO_URL}/tree/main/platform/mcp_server_docker_image`,
   );
   // Fetch local config secret if it exists
   const { data: localConfigSecret } = useGetSecret(

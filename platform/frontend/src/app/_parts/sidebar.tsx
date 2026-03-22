@@ -1,6 +1,12 @@
 "use client";
 import { SignedIn, UserButton } from "@daveyplate/better-auth-ui";
-import { E2eTestId } from "@shared";
+import {
+  COMMUNITY_DOCS_URL,
+  COMMUNITY_SLACK_URL,
+  E2eTestId,
+  GITHUB_REPO_NEW_ISSUE_URL,
+  GITHUB_REPO_URL,
+} from "@shared";
 import { requiredPagePermissionsMap } from "@shared/access-control";
 import {
   BookOpen,
@@ -23,12 +29,6 @@ import { usePathname, useSearchParams } from "next/navigation";
 import React from "react";
 import { ChatSidebarSection } from "@/app/_parts/chat-sidebar-section";
 import { AppLogo } from "@/components/app-logo";
-import {
-  COMMUNITY_BUG_REPORT_URL,
-  COMMUNITY_DOCS_URL,
-  COMMUNITY_GITHUB_URL,
-  COMMUNITY_SLACK_URL,
-} from "@/components/community-links";
 import { SidebarWarningsAccordion } from "@/components/sidebar-warnings-accordion";
 import {
   Sidebar,
@@ -332,7 +332,7 @@ const NavSecondary = ({
               <SidebarMenuItem>
                 <SidebarMenuButton asChild tooltip="Star us on GitHub">
                   <a
-                    href={COMMUNITY_GITHUB_URL}
+                    href={GITHUB_REPO_URL}
                     target="_blank"
                     rel="noopener noreferrer"
                   >
@@ -374,7 +374,7 @@ const NavSecondary = ({
               <SidebarMenuItem>
                 <SidebarMenuButton asChild tooltip="Report a bug">
                   <a
-                    href={COMMUNITY_BUG_REPORT_URL}
+                    href={GITHUB_REPO_NEW_ISSUE_URL}
                     target="_blank"
                     rel="noopener noreferrer"
                   >

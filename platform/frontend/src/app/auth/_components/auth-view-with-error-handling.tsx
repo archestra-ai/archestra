@@ -1,6 +1,7 @@
 "use client";
 
 import { AuthView } from "@daveyplate/better-auth-ui";
+import { GITHUB_REPO_NEW_ISSUE_URL } from "@shared";
 import {
   AlertCircle,
   ExternalLink,
@@ -397,7 +398,7 @@ export function AuthViewWithErrorHandling({
                 asChild
               >
                 <a
-                  href="https://github.com/archestra-ai/archestra/issues/new"
+                  href={GITHUB_REPO_NEW_ISSUE_URL}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center"

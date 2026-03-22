@@ -9,7 +9,7 @@ vi.mock("@/lib/archestra-mcp-server", () => ({
   }),
 }));
 
-vi.mock("@/components/agent-tools-editor", () => ({
+vi.mock("@/components/mcp-catalog-icon", () => ({
   McpCatalogIcon: ({
     catalogId,
   }: {

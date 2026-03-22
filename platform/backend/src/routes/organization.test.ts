@@ -6,6 +6,9 @@ import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
+const VALID_PNG_BASE64 =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/58BAwAI/AL+hc2rNAAAAABJRU5ErkJggg==";
+
 vi.mock("@/config", async (importOriginal) => {
   const actual = await importOriginal<typeof originalConfigModule>();
   return {
@@ -78,6 +81,24 @@ describe("organization routes", () => {
       method: "PATCH",
       url: "/api/organization/appearance-settings",
       payload: {},
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(syncSpy).not.toHaveBeenCalled();
+  });
+
+  test("does not resync built-in MCP branding when only logo assets change", async () => {
+    const syncSpy = vi
+      .spyOn(ToolModel, "syncArchestraBuiltInCatalog")
+      .mockResolvedValue();
+
+    const response = await app.inject({
+      method: "PATCH",
+      url: "/api/organization/appearance-settings",
+      payload: {
+        logo: VALID_PNG_BASE64,
+        logoDark: VALID_PNG_BASE64,
+      },
     });
 
     expect(response.statusCode).toBe(200);

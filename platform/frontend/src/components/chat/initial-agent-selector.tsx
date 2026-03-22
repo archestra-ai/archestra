@@ -27,10 +27,11 @@ import { RemoteServerInstallDialog } from "@/app/mcp/registry/_parts/remote-serv
 import { AgentBadge } from "@/components/agent-badge";
 import { AgentIcon } from "@/components/agent-icon";
 import { AgentIconPicker } from "@/components/agent-icon-picker";
-import { McpCatalogIcon, ToolChecklist } from "@/components/agent-tools-editor";
+import { ToolChecklist } from "@/components/agent-tools-editor";
 import { sortCatalogItems } from "@/components/agent-tools-editor.utils";
 import { PromptInputButton } from "@/components/ai-elements/prompt-input";
 import { CatalogDocsLink } from "@/components/catalog-docs-link";
+import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { OAuthConfirmationDialog } from "@/components/oauth-confirmation-dialog";
 import { SystemPromptEditor } from "@/components/system-prompt-editor";
 import { TokenSelect } from "@/components/token-select";

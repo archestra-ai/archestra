@@ -72,6 +72,7 @@ const clientCache = new LRUCacheManager<Client>({
  * Tool cache TTL - 30 seconds to avoid hammering MCP Gateway
  */
 const TOOL_CACHE_TTL_MS = 30 * TimeInMs.Second;
+const CLIENT_PING_TIMEOUT_MS = 5 * TimeInMs.Second;
 
 /**
  * Maximum tool cache size to prevent unbounded memory growth.
@@ -144,6 +145,7 @@ export const __test = {
   normalizeJsonSchema,
   executeMcpTool,
   filterToolsByEnabledIds,
+  pingClientWithTimeout,
 };
 
 /**
@@ -401,7 +403,7 @@ export async function getChatMcpClient(
   if (cachedClient) {
     // Health check: ping the client to verify connection is still alive
     try {
-      await cachedClient.ping();
+      await pingClientWithTimeout(cachedClient);
       logger.info(
         { agentId, userId },
         "✅ Returning cached MCP client for agent/user (ping succeeded, session will be reused)",
@@ -516,6 +518,21 @@ export async function getChatMcpClient(
     );
     return null;
   }
+}
+
+async function pingClientWithTimeout(
+  client: Pick<Client, "ping">,
+  timeoutMs = CLIENT_PING_TIMEOUT_MS,
+): Promise<void> {
+  await Promise.race([
+    client.ping(),
+    new Promise<never>((_, reject) => {
+      const timeout = setTimeout(() => {
+        reject(new Error(`Ping timeout after ${timeoutMs}ms`));
+      }, timeoutMs);
+      timeout.unref?.();
+    }),
+  ]);
 }
 
 /**

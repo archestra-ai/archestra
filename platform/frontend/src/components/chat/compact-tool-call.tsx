@@ -4,7 +4,6 @@ import { ARCHESTRA_MCP_CATALOG_ID } from "@shared";
 import type { DynamicToolUIPart, ToolUIPart } from "ai";
 import { BotIcon, CheckCircleIcon, ClockIcon } from "lucide-react";
 import { useState } from "react";
-import { McpCatalogIcon } from "@/components/agent-tools-editor";
 import {
   Tool,
   ToolContent,
@@ -13,6 +12,7 @@ import {
   ToolInput,
   ToolOutput,
 } from "@/components/ai-elements/tool";
+import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import {
   Tooltip,
   TooltipContent,

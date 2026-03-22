@@ -3,13 +3,11 @@
 import {
   ARCHESTRA_MCP_CATALOG_ID,
   type archestraApiTypes,
-  DEFAULT_APP_NAME,
   isPlaywrightCatalogItem,
   parseFullToolName,
 } from "@shared";
 import { useQueries } from "@tanstack/react-query";
-import { Loader2, Pencil, Search, Server, X } from "lucide-react";
-import Image from "next/image";
+import { Loader2, Pencil, Search, X } from "lucide-react";
 import {
   forwardRef,
   useCallback,
@@ -46,7 +44,6 @@ import {
   useInternalMcpCatalog,
 } from "@/lib/internal-mcp-catalog.query";
 import { useMcpServersGroupedByCatalog } from "@/lib/mcp-server.query";
-import { useAppIconLogo } from "@/lib/use-app-name";
 import { cn } from "@/lib/utils";
 import {
   getDefaultArchestraToolIds,
@@ -54,6 +51,7 @@ import {
   sortCatalogItems,
 } from "./agent-tools-editor.utils";
 import { CatalogDocsLink } from "./catalog-docs-link";
+import { McpCatalogIcon } from "./mcp-catalog-icon";
 import { DYNAMIC_CREDENTIAL_VALUE, TokenSelect } from "./token-select";
 
 type InternalMcpCatalogItem =
@@ -878,57 +876,6 @@ function McpServerPill({
         )}
       </PopoverContent>
     </Popover>
-  );
-}
-
-export function McpCatalogIcon({
-  icon,
-  catalogId,
-  size = 14,
-}: {
-  icon?: string | null;
-  catalogId?: string;
-  size?: number;
-}) {
-  const appIconLogo = useAppIconLogo();
-
-  if (!icon && catalogId === ARCHESTRA_MCP_CATALOG_ID) {
-    return (
-      <Image
-        src={appIconLogo}
-        alt={DEFAULT_APP_NAME}
-        width={size}
-        height={size}
-        className="shrink-0 rounded-sm object-contain"
-      />
-    );
-  }
-
-  if (!icon) {
-    return (
-      <Server
-        className="shrink-0 text-muted-foreground"
-        style={{ width: size, height: size }}
-      />
-    );
-  }
-
-  if (icon.startsWith("data:")) {
-    return (
-      <Image
-        src={icon}
-        alt="MCP server icon"
-        width={size}
-        height={size}
-        className="shrink-0 rounded-sm object-contain"
-      />
-    );
-  }
-
-  return (
-    <span className="shrink-0 leading-none" style={{ fontSize: size }}>
-      {icon}
-    </span>
   );
 }
 

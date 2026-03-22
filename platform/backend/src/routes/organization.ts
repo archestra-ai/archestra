@@ -87,10 +87,7 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       if (
         config.enterpriseFeatures.fullWhiteLabeling &&
-        (body.appName !== undefined ||
-          body.iconLogo !== undefined ||
-          body.logo !== undefined ||
-          body.logoDark !== undefined)
+        (body.appName !== undefined || body.iconLogo !== undefined)
       ) {
         const appNameChanged =
           currentOrganization.appName !== organization.appName;

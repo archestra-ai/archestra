@@ -30,7 +30,7 @@ export { default as virtualApiKeysRoutes } from "./chat/routes.virtual-api-keys"
 export { default as chatopsRoutes } from "./chatops";
 export { default as configRoutes } from "./config";
 export { default as healthRoutes } from "./health";
-export { default as scheduleTriggerRoutes } from "../schedule-triggers/routes/schedule-trigger";
+export { default as scheduleTriggerRoutes } from "../schedule-triggers/routes/agent-schedule-trigger";
 export { default as incomingEmailRoutes } from "./incoming-email";
 export { default as interactionRoutes } from "./interaction";
 export { default as internalMcpCatalogRoutes } from "./internal-mcp-catalog";

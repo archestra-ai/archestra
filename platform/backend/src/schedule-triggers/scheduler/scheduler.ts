@@ -2,27 +2,27 @@ import { and, eq, lte } from "drizzle-orm";
 import db, { schema } from "@/database";
 import logger from "@/logging";
 import type { TaskType } from "@/types";
-import { scheduleTriggersTable } from "../models/schedule-trigger";
-import { scheduleTriggerRunsTable } from "../models/schedule-trigger-run";
+import { agentScheduleTriggersTable } from "../models/agent-schedule-trigger";
+import { agentScheduleTriggerRunsTable } from "../models/agent-schedule-trigger-run";
 import { calculateNextDueAt } from "./utils";
 
-export async function runSchedulerTick(batchSize = 25): Promise<number> {
+export async function runSchedulerTick(batchSize = 50): Promise<number> {
   let processedCount = 0;
 
   try {
     await db.transaction(async (tx) => {
       const now = new Date();
 
-      // 0. Reclaim stuck runs (running for > 15 minutes)
-      // This handles cases where a worker crashed mid-execution.
-      const timeoutThreshold = new Date(now.getTime() - 15 * 60 * 1000);
+      // 0. Reclaim stuck runs (running for > 30 minutes)
+      // Robust engine: reclaimed runs are returned to pending and re-enqueued.
+      const timeoutThreshold = new Date(now.getTime() - 30 * 60 * 1000);
       const stuckRuns = await tx
-        .update(scheduleTriggerRunsTable)
+        .update(agentScheduleTriggerRunsTable)
         .set({ status: "pending", startedAt: null })
         .where(
           and(
-            eq(scheduleTriggerRunsTable.status, "running"),
-            lte(scheduleTriggerRunsTable.startedAt, timeoutThreshold),
+            eq(agentScheduleTriggerRunsTable.status, "running"),
+            lte(agentScheduleTriggerRunsTable.startedAt, timeoutThreshold),
           ),
         )
         .returning();
@@ -35,18 +35,19 @@ export async function runSchedulerTick(batchSize = 25): Promise<number> {
         });
         logger.warn(
           { runId: run.id },
-          "[Scheduler] Reclaimed stuck run and re-enqueued",
+          "[AgentScheduler] Reclaimed stuck run and re-enqueued",
         );
       }
 
-      // Find due triggers, row lock to prevent concurrent workers from fetching the same triggers
+      // 1. Find due triggers
+      // We use FOR UPDATE SKIP LOCKED to ensure horizontal scalability.
       const dueTriggers = await tx
         .select()
-        .from(scheduleTriggersTable)
+        .from(agentScheduleTriggersTable)
         .where(
           and(
-            eq(scheduleTriggersTable.enabled, true),
-            lte(scheduleTriggersTable.nextDueAt, now),
+            eq(agentScheduleTriggersTable.enabled, true),
+            lte(agentScheduleTriggersTable.nextDueAt, now),
           ),
         )
         .limit(batchSize)
@@ -58,16 +59,18 @@ export async function runSchedulerTick(batchSize = 25): Promise<number> {
 
       for (const trigger of dueTriggers) {
         try {
-          // Compute the next due date based on the *current* time so we don't spam if we missed ticks
+          // Compute the next due date. 
+          // If we missed multiple cycles, we catch up by scheduling the MOST RECENT missed run,
+          // then resetting nextDueAt to the future run relative to 'now'.
           const nextDueAt = calculateNextDueAt(
             trigger.cronExpression,
             trigger.timezone,
             now,
           );
 
-          // 1. Create run snapshot
+          // 2. Create immutable run snapshot
           const [run] = await tx
-            .insert(scheduleTriggerRunsTable)
+            .insert(agentScheduleTriggerRunsTable)
             .values({
               triggerId: trigger.id,
               organizationId: trigger.organizationId,
@@ -82,49 +85,35 @@ export async function runSchedulerTick(batchSize = 25): Promise<number> {
             })
             .returning();
 
-          // 2. Enqueue execution job atomically
+          // 3. Atomic Enqueue
           await tx.insert(schema.tasksTable).values({
             taskType: "schedule_trigger_run_execute" as TaskType,
             payload: { runId: run.id },
             maxAttempts: 5,
           });
 
-          // 3. Update the trigger's next_due_at
+          // 4. Update the trigger
           await tx
-            .update(scheduleTriggersTable)
-            .set({ nextDueAt })
-            .where(eq(scheduleTriggersTable.id, trigger.id));
+            .update(agentScheduleTriggersTable)
+            .set({ nextDueAt, lastRunAt: now })
+            .where(eq(agentScheduleTriggersTable.id, trigger.id));
 
           processedCount++;
         } catch (error: any) {
-          // If a duplicate run is attempted (uq_trigger_id_due_at constraint), it means it was already
-          // scheduled. We can safely just advance the nextDueAt without failing the batch.
-          if (error?.message?.includes("uq_trigger_id_due_at")) {
-            const nextDueAt = calculateNextDueAt(
-              trigger.cronExpression,
-              trigger.timezone,
-              now,
-            );
-            await tx
-              .update(scheduleTriggersTable)
-              .set({ nextDueAt })
-              .where(eq(scheduleTriggersTable.id, trigger.id));
-            logger.warn(
-              { triggerId: trigger.id },
-              "[Scheduler] Prevented duplicate run, advanced nextDueAt",
-            );
+          // Idempotency: Skip if uq_agent_trigger_id_due_at violated
+          if (error?.message?.includes("uq_agent_trigger_id_due_at")) {
+             const nextDueAt = calculateNextDueAt(trigger.cronExpression, trigger.timezone, now);
+             await tx.update(agentScheduleTriggersTable).set({ nextDueAt }).where(eq(agentScheduleTriggersTable.id, trigger.id));
+             logger.info({ triggerId: trigger.id }, "[AgentScheduler] Skipped duplicate run for timestamp");
           } else {
-            // Re-throw so the transaction rolls back cleanly for this batch
-            throw error;
+            logger.error({ triggerId: trigger.id, error: error.message }, "[AgentScheduler] Failed to schedule trigger");
+            // Continue to next trigger instead of failing the whole batch
           }
         }
       }
     });
   } catch (error) {
-    logger.error(
-      { error: error instanceof Error ? error.message : String(error) },
-      "[Scheduler] Tick failed",
-    );
+    logger.error({ error: error instanceof Error ? error.message : String(error) }, "[AgentScheduler] Tick failed");
   }
 
   return processedCount;

@@ -13,6 +13,7 @@ export const InteractionSourceSchema = z.enum([
   "knowledge:embedding",
   "knowledge:reranker",
   "knowledge:query-expansion",
+  "schedule",
 ]);
 
 export type InteractionSource = z.infer<typeof InteractionSourceSchema>;
@@ -34,4 +35,5 @@ export const INTERACTION_SOURCE_DISPLAY: Record<
   "knowledge:embedding": { label: "Knowledge - Embedding" },
   "knowledge:reranker": { label: "Knowledge - Reranker" },
   "knowledge:query-expansion": { label: "Knowledge - Query Expansion" },
+  schedule: { label: "Scheduled" },
 };

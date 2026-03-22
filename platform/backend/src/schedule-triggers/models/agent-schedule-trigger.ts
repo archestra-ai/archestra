@@ -7,8 +7,8 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 
-export const scheduleTriggersTable = pgTable(
-  "schedule_triggers",
+export const agentScheduleTriggersTable = pgTable(
+  "agent_schedule_triggers",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     organizationId: text("organization_id").notNull(),
@@ -29,7 +29,7 @@ export const scheduleTriggersTable = pgTable(
   },
   (table) => {
     return {
-      enabledNextDueAtIndex: index("idx_schedule_triggers_enabled_next_due_at").on(
+      enabledNextDueAtIndex: index("idx_agent_schedule_triggers_enabled_next_due_at").on(
         table.enabled,
         table.nextDueAt,
       ),
@@ -37,6 +37,5 @@ export const scheduleTriggersTable = pgTable(
   },
 );
 
-// Helpful type exports for typical Drizzle usage
-export type ScheduleTrigger = typeof scheduleTriggersTable.$inferSelect;
-export type InsertScheduleTrigger = typeof scheduleTriggersTable.$inferInsert;
+export type AgentScheduleTrigger = typeof agentScheduleTriggersTable.$inferSelect;
+export type InsertAgentScheduleTrigger = typeof agentScheduleTriggersTable.$inferInsert;

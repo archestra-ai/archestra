@@ -1,13 +1,13 @@
 import { pgTable, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
-import { scheduleTriggersTable } from "./schedule-trigger";
+import { agentScheduleTriggersTable } from "./agent-schedule-trigger";
 
-export const scheduleTriggerRunsTable = pgTable(
-  "schedule_trigger_runs",
+export const agentScheduleTriggerRunsTable = pgTable(
+  "agent_schedule_trigger_runs",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     triggerId: uuid("trigger_id")
       .notNull()
-      .references(() => scheduleTriggersTable.id, { onDelete: "cascade" }),
+      .references(() => agentScheduleTriggersTable.id, { onDelete: "cascade" }),
     organizationId: text("organization_id").notNull(),
     runKind: text("run_kind").notNull(), // "scheduled" | "manual"
     status: text("status").notNull().default("pending"), // "pending" | "running" | "success" | "failed"
@@ -26,7 +26,7 @@ export const scheduleTriggerRunsTable = pgTable(
   },
   (table) => {
     return {
-      uniqueTriggerDueAt: unique("uq_trigger_id_due_at").on(
+      uniqueTriggerDueAt: unique("uq_agent_trigger_id_due_at").on(
         table.triggerId,
         table.dueAt,
       ),
@@ -34,6 +34,6 @@ export const scheduleTriggerRunsTable = pgTable(
   },
 );
 
-export type ScheduleTriggerRun = typeof scheduleTriggerRunsTable.$inferSelect;
-export type InsertScheduleTriggerRun =
-  typeof scheduleTriggerRunsTable.$inferInsert;
+export type AgentScheduleTriggerRun = typeof agentScheduleTriggerRunsTable.$inferSelect;
+export type InsertAgentScheduleTriggerRun =
+  typeof agentScheduleTriggerRunsTable.$inferInsert;

@@ -439,6 +439,33 @@ export const parseSampleRate = (
   return parsed;
 };
 
+/**
+ * Parse ARCHESTRA_TRUST_PROXY into the value Fastify's trustProxy option accepts.
+ *
+ * Fastify supports:
+ *   - true  – trust all proxies
+ *   - false – trust no proxies (default)
+ *   - a comma-separated string of IPs/CIDRs – trust specific proxies
+ *
+ * This maps the env var as follows:
+ *   undefined / ""  → false
+ *   "true"          → true
+ *   "false"         → false
+ *   anything else   → trimmed string passed directly to Fastify (IP/CIDR list)
+ */
+export const parseTrustProxy = (
+  envValue: string | undefined,
+): boolean | string => {
+  const trimmed = envValue?.trim();
+  if (!trimmed || trimmed === "false") return false;
+  if (trimmed === "true") return true;
+  return trimmed
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .join(",");
+};
+
 const config = {
   frontendBaseUrl,
   api: {
@@ -458,6 +485,7 @@ const config = {
       process.env.ARCHESTRA_API_BODY_LIMIT,
       DEFAULT_BODY_LIMIT,
     ),
+    trustProxy: parseTrustProxy(process.env.ARCHESTRA_TRUST_PROXY),
   },
   websocket: {
     path: "/ws",

@@ -554,6 +554,11 @@ The following environment variables can be used to configure Archestra Platform.
   - Multiple URLs example: `http://archestra.default.svc:9000,https://api.archestra.example.com`
   - Use case: Set this when your external access URL differs from the internal service URL (common in Kubernetes with ingress/load balancers)
 
+- **`ARCHESTRA_TRUST_PROXY`** - Set this when Archestra runs behind a TLS-terminating reverse proxy (e.g. AWS ALB, nginx, Cloudflare) so that generated OAuth metadata and auth URLs use the external `https://` scheme rather than the internal `http://` scheme seen by the backend.
+  - Default: `false` (no proxy trust)
+  - Values: `true`, `false`, or a comma-separated list of trusted proxy IPs/CIDRs (e.g. `10.0.0.0/8,172.16.0.0/12`)
+  - Example: `ARCHESTRA_TRUST_PROXY=true`
+
 - **`ARCHESTRA_API_BODY_LIMIT`** - Maximum request body size for LLM proxy and chat routes.
   - Default: `50MB` (52428800 bytes)
   - Format: Numeric bytes (e.g., `52428800`) or human-readable (e.g., `50MB`, `100KB`, `1GB`)

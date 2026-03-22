@@ -6,6 +6,7 @@ import {
 import { and, desc, eq, sql } from "drizzle-orm";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { userHasPermission } from "@/auth";
 import db, { schema } from "@/database";
 import { applyPagination } from "@/database/utils/pagination";
 import { AgentModel } from "@/models";
@@ -45,6 +46,7 @@ const AgentScheduleTriggerRunSchema = z.object({
   runKind: z.string(),
   status: z.string(),
   dueAt: z.union([z.string(), z.date()]).nullable(),
+  initiatedByUserId: z.string().nullable(),
   startedAt: z.union([z.string(), z.date()]).nullable(),
   completedAt: z.union([z.string(), z.date()]).nullable(),
   error: z.string().nullable(),
@@ -57,6 +59,19 @@ const AgentScheduleTriggerRunSchema = z.object({
 });
 
 export const agentScheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
+  // Helpers for RBAC
+  const requirePermission = async (userId: string, orgId: string, action: "read" | "create" | "update" | "delete") => {
+    const allowed = await userHasPermission(userId, orgId, "agentTrigger", action);
+    if (!allowed) throw new Error("Forbidden: Missing agentTrigger:" + action);
+  };
+
+  const validateAgentAccess = async (agentId: string, userId: string, orgId: string) => {
+    const agent = await AgentModel.get(agentId);
+    if (!agent || agent.organizationId !== orgId) return null;
+    if (agent.scope === "personal" && agent.authorId !== userId) return null;
+    return agent;
+  };
+
   // CREATE
   fastify.post(
     "/",
@@ -73,34 +88,31 @@ export const agentScheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify)
       },
     },
     async (request, reply) => {
-      const { agentId, name, messageTemplate, cronExpression, timezone, enabled } = request.body;
       const user = request.user!;
+      await requirePermission(user.id, user.organizationId, "create");
 
-      const agent = await AgentModel.get(agentId);
-      if (!agent || agent.organizationId !== user.organizationId) {
-        return reply.status(404).send({ error: "Agent not found" });
-      }
+      const agent = await validateAgentAccess(request.body.agentId, user.id, user.organizationId);
+      if (!agent) return reply.status(404).send({ error: "Agent not found" });
 
-      const tz = normalizeTimezone(timezone);
+      const tz = normalizeTimezone(request.body.timezone);
       if (!isValidTimezone(tz)) return reply.status(400).send({ error: "Invalid timezone" });
 
-      const cron = normalizeCronExpression(cronExpression);
+      const cron = normalizeCronExpression(request.body.cronExpression);
       const nextDueAt = calculateNextDueAt(cron, tz);
-
-      if (!nextDueAt && enabled) return reply.status(400).send({ error: "Invalid cron" });
+      if (!nextDueAt && request.body.enabled) return reply.status(400).send({ error: "Invalid cron" });
 
       const [trigger] = await db
         .insert(agentScheduleTriggersTable)
         .values({
           organizationId: user.organizationId,
-          agentId,
-          name,
-          messageTemplate,
+          agentId: request.body.agentId,
+          name: request.body.name,
+          messageTemplate: request.body.messageTemplate,
           cronExpression: cron,
           timezone: tz,
-          enabled,
+          enabled: request.body.enabled,
           actorUserId: user.id,
-          nextDueAt: enabled ? nextDueAt : null,
+          nextDueAt: request.body.enabled ? nextDueAt : null,
         })
         .returning();
 
@@ -120,6 +132,7 @@ export const agentScheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify)
     async (request, reply) => {
       const { limit, offset } = request.query;
       const user = request.user!;
+      await requirePermission(user.id, user.organizationId, "read");
 
       const baseQuery = db.select().from(agentScheduleTriggersTable).where(eq(agentScheduleTriggersTable.organizationId, user.organizationId));
       const [{ count }] = await db.select({ count: sql<number>`count(*)::int` }).from(agentScheduleTriggersTable).where(eq(agentScheduleTriggersTable.organizationId, user.organizationId));
@@ -134,8 +147,14 @@ export const agentScheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify)
     "/:id",
     async (request, reply) => {
       const user = request.user!;
+      await requirePermission(user.id, user.organizationId, "read");
+
       const [trigger] = await db.select().from(agentScheduleTriggersTable).where(and(eq(agentScheduleTriggersTable.id, (request.params as any).id), eq(agentScheduleTriggersTable.organizationId, user.organizationId)));
       if (!trigger) return reply.status(404).send({ error: "Not found" });
+
+      const agent = await validateAgentAccess(trigger.agentId, user.id, user.organizationId);
+      if (!agent) return reply.status(404).send({ error: "Agent access denied" });
+
       return trigger;
     },
   );
@@ -145,6 +164,8 @@ export const agentScheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify)
     "/:id",
     async (request, reply) => {
       const user = request.user!;
+      await requirePermission(user.id, user.organizationId, "update");
+
       const triggerId = (request.params as any).id;
       const body = request.body as any;
 
@@ -163,6 +184,7 @@ export const agentScheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify)
         timezone: tz,
         enabled,
         nextDueAt,
+        actorUserId: user.id, // Plan: "Persist the creating/updating user as actorUserId"
         updatedAt: new Date()
       }).where(eq(agentScheduleTriggersTable.id, triggerId)).returning();
 
@@ -173,6 +195,8 @@ export const agentScheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify)
   // DELETE
   fastify.delete("/:id", async (request, reply) => {
      const user = request.user!;
+     await requirePermission(user.id, user.organizationId, "delete");
+     
      await db.delete(agentScheduleTriggersTable).where(and(eq(agentScheduleTriggersTable.id, (request.params as any).id), eq(agentScheduleTriggersTable.organizationId, user.organizationId)));
      return reply.status(204).send();
   });
@@ -182,8 +206,9 @@ export const agentScheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify)
     "/:id/run-now",
     async (request, reply) => {
       const user = request.user!;
-      const triggerId = (request.params as any).id;
+      await requirePermission(user.id, user.organizationId, "update");
 
+      const triggerId = (request.params as any).id;
       const [trigger] = await db.select().from(agentScheduleTriggersTable).where(and(eq(agentScheduleTriggersTable.id, triggerId), eq(agentScheduleTriggersTable.organizationId, user.organizationId)));
       if (!trigger) return reply.status(404).send({ error: "Not found" });
 
@@ -194,6 +219,7 @@ export const agentScheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify)
             runKind: "manual",
             status: "pending",
             dueAt: new Date(),
+            initiatedByUserId: user.id, // Audit trail
             agentIdSnapshot: trigger.agentId,
             messageTemplateSnapshot: trigger.messageTemplate,
             actorUserIdSnapshot: trigger.actorUserId,
@@ -220,6 +246,7 @@ export const agentScheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify)
       const { limit, offset } = request.query as any;
       const triggerId = (request.params as any).id;
       const user = request.user!;
+      await requirePermission(user.id, user.organizationId, "read");
 
       const [trigger] = await db.select().from(agentScheduleTriggersTable).where(and(eq(agentScheduleTriggersTable.id, triggerId), eq(agentScheduleTriggersTable.organizationId, user.organizationId)));
       if (!trigger) return reply.status(404).send({ error: "Not found" });

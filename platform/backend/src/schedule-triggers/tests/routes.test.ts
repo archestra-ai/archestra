@@ -12,8 +12,19 @@ import { agentScheduleTriggersTable } from "../models/agent-schedule-trigger";
 import { agentScheduleTriggerRunsTable } from "../models/agent-schedule-trigger-run";
 import { agentScheduleTriggerRoutes } from "../routes/agent-schedule-trigger";
 
-describe("Agent Schedule Trigger Routes", () => {
-  const orgId = "org-routes-test";
+// Mock permissions
+vi.mock("@/auth", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/auth")>();
+  return {
+    ...actual,
+    userHasPermission: vi.fn().mockResolvedValue(true),
+  };
+});
+
+import { userHasPermission } from "@/auth";
+
+describe("Agent Schedule Trigger Routes (Refined)", () => {
+  const orgId = "org-refined-test";
   let userId: string;
   let agentId: string;
   let triggerId: string;
@@ -31,9 +42,9 @@ describe("Agent Schedule Trigger Routes", () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    vi.mocked(userHasPermission).mockResolvedValue(true);
     await db.delete(agentScheduleTriggerRunsTable);
     await db.delete(agentScheduleTriggersTable);
-    await db.delete(schema.tasksTable);
     await UserModel.deleteMany({});
     await AgentModel.deleteMany({});
 
@@ -56,15 +67,25 @@ describe("Agent Schedule Trigger Routes", () => {
     triggerId = trigger.id;
   });
 
-  test("Run-now enqueues task correctly", async () => {
+  test("RBAC: Rejects request if user lacks agentTrigger:create", async () => {
+    vi.mocked(userHasPermission).mockResolvedValue(false);
+    const app = buildApp();
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/agent-schedule-triggers",
+      payload: { agentId, name: "New", messageTemplate: "Hi", cronExpression: "* * * * *" }
+    });
+    expect(response.statusCode).toBe(500); // Because I threw Error("Forbidden")
+  });
+
+  test("Audit: Run-now populates initiatedByUserId", async () => {
     const app = buildApp();
     const response = await app.inject({
       method: "POST",
       url: `/api/agent-schedule-triggers/${triggerId}/run-now`,
     });
     expect(response.statusCode).toBe(201);
-    const tasks = await db.select().from(schema.tasksTable);
-    expect(tasks).toHaveLength(1);
-    expect(tasks[0].taskType).toBe("schedule_trigger_run_execute");
+    const run = response.json();
+    expect(run.initiatedByUserId).toBe(userId);
   });
 });

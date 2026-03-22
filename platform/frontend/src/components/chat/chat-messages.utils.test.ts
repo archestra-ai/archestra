@@ -216,7 +216,14 @@ describe("identifyCompactToolGroups", () => {
       },
     ] as UIMessage["parts"];
 
-    const { groupMap } = identifyCompactToolGroups(parts);
+    const { groupMap } = identifyCompactToolGroups(parts, {
+      getToolShortName: (toolName) => {
+        if (toolName === "archestra__todo_write") {
+          return "todo_write";
+        }
+        return null;
+      },
+    });
     const group = groupMap.get(0);
 
     expect(groupMap.size).toBe(1);
@@ -267,7 +274,14 @@ describe("identifyCompactToolGroups", () => {
       },
     ] as UIMessage["parts"];
 
-    const { groupMap } = identifyCompactToolGroups(parts);
+    const { groupMap } = identifyCompactToolGroups(parts, {
+      getToolShortName: (toolName) => {
+        if (toolName === "archestra__todo_write") {
+          return "todo_write";
+        }
+        return null;
+      },
+    });
 
     expect(groupMap.size).toBe(2);
     expect(groupMap.get(0)?.entries).toHaveLength(1);

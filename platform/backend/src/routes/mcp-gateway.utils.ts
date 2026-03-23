@@ -22,6 +22,7 @@ import {
   getArchestraMcpTools,
 } from "@/archestra-mcp-server";
 import { userHasPermission } from "@/auth/utils";
+import { LRUCacheManager } from "@/cache-manager";
 import mcpClient, { type TokenAuthContext } from "@/clients/mcp-client";
 import config from "@/config";
 import db, { schema as dbSchema } from "@/database";
@@ -83,15 +84,18 @@ type AgentInfo = {
   labels?: Array<{ key: string; value: string }>;
 };
 
-type CachedTokenAuthEntry = {
-  expiresAt: number;
-  result: TokenAuthResult | null;
+type TokenHashes = {
+  cacheKey: string;
+  oauthTokenHash: string;
 };
 
 const TOKEN_AUTH_CACHE_TTL_MS = 30_000;
 const TOKEN_AUTH_CACHE_NULL_TTL_MS = 5_000;
 const TOKEN_AUTH_CACHE_MAX_ENTRIES = 1_000;
-const tokenAuthCache = new Map<string, CachedTokenAuthEntry>();
+const tokenAuthCache = new LRUCacheManager<TokenAuthResult | null>({
+  maxSize: TOKEN_AUTH_CACHE_MAX_ENTRIES,
+  defaultTtl: TOKEN_AUTH_CACHE_TTL_MS,
+});
 
 export async function createAgentServer(
   agentId: string,
@@ -583,23 +587,54 @@ export async function validateUserToken(
  *
  * Returns token auth info if valid, null otherwise.
  */
+export async function validateOAuthToken(params: {
+  profileId: string;
+  tokenValue: string;
+}): Promise<TokenAuthResult | null>;
 export async function validateOAuthToken(
   profileId: string,
   tokenValue: string,
+): Promise<TokenAuthResult | null>;
+export async function validateOAuthToken(
+  profileIdOrParams:
+    | string
+    | {
+        profileId: string;
+        tokenValue: string;
+      },
+  tokenValueArg?: string,
 ): Promise<TokenAuthResult | null> {
+  const profileId =
+    typeof profileIdOrParams === "string"
+      ? profileIdOrParams
+      : profileIdOrParams.profileId;
+  const tokenValue =
+    typeof profileIdOrParams === "string"
+      ? tokenValueArg
+      : profileIdOrParams.tokenValue;
+
+  if (!tokenValue) {
+    return null;
+  }
+
+  const oauthTokenHash = buildOAuthTokenHash(tokenValue);
+  return validateOAuthTokenByHash({ profileId, oauthTokenHash });
+}
+
+async function validateOAuthTokenByHash(params: {
+  profileId: string;
+  oauthTokenHash: string;
+}): Promise<TokenAuthResult | null> {
   try {
-    const agent = await AgentModel.findAccessContextById(profileId);
+    const agent = await AgentModel.findAccessContextById(params.profileId);
     if (!agent) {
       return null;
     }
 
-    // Hash the token the same way better-auth stores it (SHA-256, base64url)
-    const tokenHash = createHash("sha256")
-      .update(tokenValue)
-      .digest("base64url");
-
     // Look up the hashed token via the model
-    const accessToken = await OAuthAccessTokenModel.getByTokenHash(tokenHash);
+    const accessToken = await OAuthAccessTokenModel.getByTokenHash(
+      params.oauthTokenHash,
+    );
 
     if (!accessToken) {
       return null;
@@ -646,9 +681,15 @@ export async function validateOAuthToken(
     }
 
     // Non-admin: user can access profile if it's teamless (org-wide) or shares a team
-    if (!(await AgentTeamModel.userHasAgentAccess(userId, profileId, false))) {
+    if (
+      !(await AgentTeamModel.userHasAgentAccess(
+        userId,
+        params.profileId,
+        false,
+      ))
+    ) {
       logger.warn(
-        { profileId, userId },
+        { profileId: params.profileId, userId },
         "validateOAuthToken: profile not accessible via OAuth token (no shared teams)",
       );
       return null;
@@ -665,7 +706,7 @@ export async function validateOAuthToken(
   } catch (error) {
     logger.debug(
       {
-        profileId,
+        profileId: params.profileId,
         error: error instanceof Error ? error.message : "unknown",
       },
       "validateOAuthToken: token validation failed",
@@ -683,7 +724,8 @@ export async function validateMCPGatewayToken(
   profileId: string,
   tokenValue: string,
 ): Promise<TokenAuthResult | null> {
-  const cachedResult = getCachedTokenAuthResult(profileId, tokenValue);
+  const tokenHashes = buildTokenHashes(profileId, tokenValue);
+  const cachedResult = getCachedTokenAuthResult(tokenHashes.cacheKey);
   if (cachedResult !== undefined) {
     return cachedResult;
   }
@@ -695,7 +737,7 @@ export async function validateMCPGatewayToken(
       tokenValue,
     );
     if (externalIdpResult) {
-      cacheTokenAuthResult(profileId, tokenValue, externalIdpResult);
+      cacheTokenAuthResult(tokenHashes.cacheKey, externalIdpResult);
       return externalIdpResult;
     }
   }
@@ -703,22 +745,27 @@ export async function validateMCPGatewayToken(
   // Try team/org token validation
   const teamTokenResult = await validateTeamToken(profileId, tokenValue);
   if (teamTokenResult) {
-    cacheTokenAuthResult(profileId, tokenValue, teamTokenResult);
+    cacheTokenAuthResult(tokenHashes.cacheKey, teamTokenResult);
     return teamTokenResult;
   }
 
   // Then try user token validation
   const userTokenResult = await validateUserToken(profileId, tokenValue);
   if (userTokenResult) {
-    cacheTokenAuthResult(profileId, tokenValue, userTokenResult);
+    cacheTokenAuthResult(tokenHashes.cacheKey, userTokenResult);
     return userTokenResult;
   }
 
   // Try OAuth token validation (for MCP clients like Open WebUI)
   if (!tokenValue.startsWith(ARCHESTRA_TOKEN_PREFIX)) {
-    const oauthResult = await validateOAuthToken(profileId, tokenValue);
+    const oauthResult = await validateOAuthTokenByHash({
+      profileId,
+      oauthTokenHash: tokenHashes.oauthTokenHash,
+    });
     if (oauthResult) {
-      cacheTokenAuthResult(profileId, tokenValue, oauthResult);
+      // This cache is intentionally short-lived and process-local. Revocations
+      // may take up to TOKEN_AUTH_CACHE_TTL_MS to fully age out across requests.
+      cacheTokenAuthResult(tokenHashes.cacheKey, oauthResult);
       return oauthResult;
     }
   }
@@ -727,7 +774,7 @@ export async function validateMCPGatewayToken(
     { profileId, tokenPrefix: tokenValue.substring(0, 14) },
     "validateMCPGatewayToken: token validation failed - not found in any token table or access denied",
   );
-  cacheTokenAuthResult(profileId, tokenValue, null);
+  cacheTokenAuthResult(tokenHashes.cacheKey, null);
   return null;
 }
 
@@ -1018,59 +1065,32 @@ const kbDescriptionCache = new Map<
 const KB_DESCRIPTION_CACHE_TTL_MS = 30_000;
 
 function getCachedTokenAuthResult(
-  profileId: string,
-  tokenValue: string,
+  cacheKey: string,
 ): TokenAuthResult | null | undefined {
-  pruneExpiredTokenAuthCacheEntries();
-
-  const cacheKey = buildTokenAuthCacheKey(profileId, tokenValue);
-  const cached = tokenAuthCache.get(cacheKey);
-  if (!cached) {
-    return undefined;
-  }
-
-  if (cached.expiresAt <= Date.now()) {
-    tokenAuthCache.delete(cacheKey);
-    return undefined;
-  }
-
-  return cached.result;
+  return tokenAuthCache.get(cacheKey);
 }
 
 function cacheTokenAuthResult(
-  profileId: string,
-  tokenValue: string,
+  cacheKey: string,
   result: TokenAuthResult | null,
 ): void {
-  pruneExpiredTokenAuthCacheEntries();
-
-  if (tokenAuthCache.size >= TOKEN_AUTH_CACHE_MAX_ENTRIES) {
-    const oldestKey = tokenAuthCache.keys().next().value;
-    if (oldestKey) {
-      tokenAuthCache.delete(oldestKey);
-    }
-  }
-
-  tokenAuthCache.set(buildTokenAuthCacheKey(profileId, tokenValue), {
-    expiresAt:
-      Date.now() +
-      (result ? TOKEN_AUTH_CACHE_TTL_MS : TOKEN_AUTH_CACHE_NULL_TTL_MS),
+  tokenAuthCache.set(
+    cacheKey,
     result,
-  });
+    result ? TOKEN_AUTH_CACHE_TTL_MS : TOKEN_AUTH_CACHE_NULL_TTL_MS,
+  );
 }
 
-function buildTokenAuthCacheKey(profileId: string, tokenValue: string): string {
-  const tokenHash = createHash("sha256").update(tokenValue).digest("hex");
-  return `${profileId}:${tokenHash}`;
+function buildTokenHashes(profileId: string, tokenValue: string): TokenHashes {
+  const digest = createHash("sha256").update(tokenValue).digest();
+  return {
+    cacheKey: `${profileId}:${digest.toString("hex")}`,
+    oauthTokenHash: digest.toString("base64url"),
+  };
 }
 
-function pruneExpiredTokenAuthCacheEntries(): void {
-  const now = Date.now();
-  for (const [cacheKey, entry] of tokenAuthCache.entries()) {
-    if (entry.expiresAt <= now) {
-      tokenAuthCache.delete(cacheKey);
-    }
-  }
+function buildOAuthTokenHash(tokenValue: string): string {
+  return createHash("sha256").update(tokenValue).digest("base64url");
 }
 
 /**

@@ -3,7 +3,7 @@ import { vi } from "vitest";
 import ApiKeyModelModel from "@/models/api-key-model";
 import ModelModel from "@/models/model";
 import { modelFetchers } from "@/routes/chat/model-fetchers";
-import { describe, expect, test } from "@/test";
+import { afterEach, describe, expect, test } from "@/test";
 import { modelSyncService } from "./model-sync";
 
 // Mock the models.dev client to avoid external API calls
@@ -14,6 +14,14 @@ vi.mock("@/clients/models-dev-client", () => ({
 }));
 
 describe("ModelSyncService", () => {
+  const originalOpenAiFetcher = modelFetchers.openai;
+  const originalGeminiFetcher = modelFetchers.gemini;
+
+  afterEach(() => {
+    modelFetchers.openai = originalOpenAiFetcher;
+    modelFetchers.gemini = originalGeminiFetcher;
+  });
+
   test("stores models with the API key's provider, not detected provider", async ({
     makeOrganization,
     makeSecret,

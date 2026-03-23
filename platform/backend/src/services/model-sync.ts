@@ -87,7 +87,7 @@ class ModelSyncService {
         "Upserted models to database",
       );
 
-      // 3. Link models to the API key with fastest/best detection
+      // 4. Link models to the API key with fastest/best detection
       const modelsWithIds = upsertedModels.map((m) => ({
         id: m.id,
         modelId: m.modelId,
@@ -167,7 +167,7 @@ export const modelSyncService = new ModelSyncService();
 // Helper functions
 // ============================================================================
 
-export interface ModelCapabilities {
+export interface ProviderModelCapabilities {
   description: string | null;
   contextLength: number | null;
   inputModalities: ModelInputModality[] | null;
@@ -211,8 +211,8 @@ export function buildModelsToUpsert(params: {
 export function resolveModelCapabilities(params: {
   provider: SupportedProvider;
   modelId: string;
-  capabilities?: ModelCapabilities;
-}): ModelCapabilities {
+  capabilities?: ProviderModelCapabilities;
+}): ProviderModelCapabilities {
   const { provider, modelId, capabilities } = params;
   const inferredCapabilities = inferModelCapabilities({
     provider,
@@ -265,8 +265,8 @@ const MODELS_DEV_PROVIDER_MAP: Record<string, SupportedProvider | null> = {
 export function buildCapabilitiesMap(
   modelsDevData: ModelsDevApiResponse,
   targetProvider: SupportedProvider,
-): Map<string, ModelCapabilities> {
-  const map = new Map<string, ModelCapabilities>();
+): Map<string, ProviderModelCapabilities> {
+  const map = new Map<string, ProviderModelCapabilities>();
 
   for (const [providerId, providerData] of Object.entries(modelsDevData)) {
     const mappedProvider = MODELS_DEV_PROVIDER_MAP[providerId];
@@ -337,7 +337,7 @@ function parseModalities<T>(
 function inferModelCapabilities(params: {
   provider: SupportedProvider;
   modelId: string;
-}): ModelCapabilities {
+}): ProviderModelCapabilities {
   const { provider, modelId } = params;
 
   if (provider === "gemini") {
@@ -347,7 +347,7 @@ function inferModelCapabilities(params: {
   return emptyCapabilities();
 }
 
-function inferGeminiCapabilities(modelId: string): ModelCapabilities {
+function inferGeminiCapabilities(modelId: string): ProviderModelCapabilities {
   const normalizedModelId = modelId.toLowerCase();
 
   if (!normalizedModelId.startsWith("gemini-")) {
@@ -391,7 +391,7 @@ function inferGeminiCapabilities(modelId: string): ModelCapabilities {
   };
 }
 
-function emptyCapabilities(): ModelCapabilities {
+function emptyCapabilities(): ProviderModelCapabilities {
   return {
     description: null,
     contextLength: null,

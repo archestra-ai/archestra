@@ -8,7 +8,7 @@ import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import { fetchBedrockModelsViaIam } from "./bedrock";
 import { fetchGeminiModelsViaVertexAi } from "./gemini";
 import { modelFetchers } from "./index";
-import type { ModelInfo } from "./types";
+import { type ModelInfo, PLACEHOLDER_API_KEY } from "./types";
 
 export async function testProviderApiKey(
   provider: SupportedProvider,
@@ -61,7 +61,7 @@ export async function fetchModelsForProvider(params: {
     } else if (provider === "bedrock" && bedrockIamEnabled) {
       models = await fetchBedrockModelsViaIam();
     } else {
-      models = await modelFetchers[provider](apiKey || "EMPTY");
+      models = await modelFetchers[provider](apiKey || PLACEHOLDER_API_KEY);
     }
 
     logger.info(

@@ -26,6 +26,7 @@ import {
   createGoogleGenAIClient,
   isVertexAiEnabled,
 } from "@/clients/gemini-client";
+import { PLACEHOLDER_BEARER_TOKEN } from "./types";
 
 const mockCreateGoogleGenAIClient = vi.mocked(createGoogleGenAIClient);
 const mockIsVertexAiEnabled = vi.mocked(isVertexAiEnabled);
@@ -139,7 +140,7 @@ describe("provider fetcher registry", () => {
 
       expect(models).toHaveLength(1);
       expect(mockFetch.mock.calls[0][1].headers.Authorization).toBe(
-        "Bearer EMPTY",
+        PLACEHOLDER_BEARER_TOKEN,
       );
     } finally {
       config.llm.vllm.enabled = originalEnabled;

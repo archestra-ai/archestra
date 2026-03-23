@@ -1,6 +1,6 @@
 import config from "@/config";
 import logger from "@/logging";
-import type { ModelInfo } from "./types";
+import { type ModelInfo, PLACEHOLDER_BEARER_TOKEN } from "./types";
 
 export async function fetchOllamaModels(
   apiKey: string,
@@ -10,7 +10,7 @@ export async function fetchOllamaModels(
   const url = `${baseUrl}/models`;
   const response = await fetch(url, {
     headers: {
-      Authorization: apiKey ? `Bearer ${apiKey}` : "Bearer EMPTY",
+      Authorization: apiKey ? `Bearer ${apiKey}` : PLACEHOLDER_BEARER_TOKEN,
     },
   });
 

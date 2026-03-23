@@ -138,6 +138,10 @@ describe("getChatExternalAgentId", () => {
     expect(getChatExternalAgentId("")).toBe("Chat");
   });
 
+  it("strips leading emoji", () => {
+    expect(getChatExternalAgentId("🚀 My App")).toBe("My App Chat");
+  });
+
   it("handles mixed ASCII and non-ISO-8859-1 characters", () => {
     expect(getChatExternalAgentId("Hello 世界 App")).toBe("Hello App Chat");
   });

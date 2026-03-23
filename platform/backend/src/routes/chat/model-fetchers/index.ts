@@ -35,7 +35,3 @@ export const modelFetchers: Record<SupportedProvider, ModelFetcher> = {
   xai: fetchXaiModels,
   zhipuai: fetchZhipuaiModels,
 };
-
-export function hasModelFetcher(provider: SupportedProvider): boolean {
-  return provider in modelFetchers;
-}

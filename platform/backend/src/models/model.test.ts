@@ -721,6 +721,24 @@ describe("ModelModel", () => {
       expect(ModelModel.supportsTextChat(model)).toBe(false);
     });
 
+    test("returns false for embedding models", async () => {
+      const model = await ModelModel.create({
+        externalId: "gemini/gemini-embedding-001",
+        provider: "gemini",
+        modelId: "gemini-embedding-001",
+        description: null,
+        contextLength: null,
+        inputModalities: ["text"],
+        outputModalities: [],
+        supportsToolCalling: false,
+        promptPricePerToken: null,
+        completionPricePerToken: null,
+        lastSyncedAt: new Date(),
+      });
+
+      expect(ModelModel.supportsTextChat(model)).toBe(false);
+    });
+
     test("returns true when modalities are unknown", async () => {
       const model = await ModelModel.create({
         externalId: "openai/gpt-4o",

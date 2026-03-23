@@ -190,7 +190,7 @@ describe("chat-models", () => {
   });
 
   describe("fetchGeminiModelsViaVertexAi", () => {
-    test("fetches Gemini models using Vertex AI SDK format", async () => {
+    test("fetches Gemini catalog entries using Vertex AI SDK format", async () => {
       // Vertex AI returns models in "publishers/google/models/xxx" format
       // without supportedActions or displayName fields
       const mockModels: Array<{
@@ -240,7 +240,8 @@ describe("chat-models", () => {
 
       const models = await fetchGeminiModelsViaVertexAi();
 
-      // Should include gemini-2.5-pro, gemini-2.5-flash, and gemini-embedding-001
+      // Should include Gemini catalog entries, including embeddings.
+      // Chat-specific filtering happens later when building /api/chat/models.
       // Should exclude imageclassification-efficientnet (non-gemini)
       expect(models).toHaveLength(3);
       expect(models).toEqual([

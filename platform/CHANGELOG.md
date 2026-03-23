@@ -1,5 +1,25 @@
 # Changelog
 
+## [1.1.37](https://github.com/archestra-ai/archestra/compare/platform-v1.1.36...platform-v1.1.37) (2026-03-23)
+
+
+### Bug Fixes
+
+* Endless retry loop on provider error bug ([#3507](https://github.com/archestra-ai/archestra/issues/3507)) ([64cbfe4](https://github.com/archestra-ai/archestra/commit/64cbfe49b9666c3fe904f34cb768f49080cb08f7))
+* probe Vertex Gemini fallback models when list only returns live audio ([#3504](https://github.com/archestra-ai/archestra/issues/3504)) ([313c9e7](https://github.com/archestra-ai/archestra/commit/313c9e790152f308737ea4e514ef8b5f9b0fb9ad))
+* simplify chat model sync and provider fetchers ([#3508](https://github.com/archestra-ai/archestra/issues/3508)) ([02ffa24](https://github.com/archestra-ai/archestra/commit/02ffa24d928df1e0422f821073f890678fc7b017))
+* strip non-ISO-8859-1 chars from chat agent ID header ([#3500](https://github.com/archestra-ai/archestra/issues/3500)) ([e2c474c](https://github.com/archestra-ai/archestra/commit/e2c474cc6bfbdf76c7cd6952834c02456584ab35))
+
+
+### Dependencies
+
+* bump the platform-dependencies group in /platform with 15 updates ([#3478](https://github.com/archestra-ai/archestra/issues/3478)) ([ab8b2f3](https://github.com/archestra-ai/archestra/commit/ab8b2f3ccb1800188250ddadd6cb4004e8afce97))
+
+
+### Miscellaneous Chores
+
+* improve MCP gateway auth performance and fix e2e coverage ([#3503](https://github.com/archestra-ai/archestra/issues/3503)) ([ad2acfd](https://github.com/archestra-ai/archestra/commit/ad2acfdd15d70a481e82920e3b0cc43a720c8a0d))
+
 ## [1.1.36](https://github.com/archestra-ai/archestra/compare/platform-v1.1.35...platform-v1.1.36) (2026-03-22)
 
 

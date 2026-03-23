@@ -86,32 +86,14 @@ class ModelSyncService {
       // 2. Fetch models.dev data for capabilities
       const modelsDevData = await modelsDevClient.fetchModelsFromApi();
 
-      // 3. Build a lookup map for models.dev capabilities
-      const capabilitiesMap = buildCapabilitiesMap(modelsDevData, provider);
-
-      // 4. Merge provider models with models.dev capabilities
+      // 3. Merge provider models with models.dev capabilities.
       // Use the API key's provider (not the fetcher's detected provider) so that
       // models from OpenAI-compatible proxies are stored under the correct provider
       // instead of being mis-classified by heuristic model ID prefix detection.
-      const modelsToUpsert: CreateModel[] = providerModels.map((model) => {
-        const capabilities = resolveModelCapabilities({
-          provider,
-          modelId: model.id,
-          capabilities: capabilitiesMap.get(model.id),
-        });
-        return {
-          externalId: `${provider}/${model.id}`,
-          provider,
-          modelId: model.id,
-          description: capabilities.description,
-          contextLength: capabilities.contextLength,
-          inputModalities: capabilities.inputModalities,
-          outputModalities: capabilities.outputModalities,
-          supportsToolCalling: capabilities.supportsToolCalling,
-          promptPricePerToken: capabilities.promptPricePerToken,
-          completionPricePerToken: capabilities.completionPricePerToken,
-          lastSyncedAt: new Date(),
-        };
+      const modelsToUpsert = buildModelsToUpsert({
+        provider,
+        models: providerModels,
+        modelsDevData,
       });
 
       const upsertedModels = forceRefresh
@@ -218,6 +200,52 @@ export interface ModelCapabilities {
   supportsToolCalling: boolean | null;
   promptPricePerToken: string | null;
   completionPricePerToken: string | null;
+}
+
+export function buildModelsToUpsert(params: {
+  provider: SupportedProvider;
+  models: Array<{ id: string }>;
+  modelsDevData: Record<
+    string,
+    {
+      models: Record<
+        string,
+        {
+          id: string;
+          name: string;
+          tool_call?: boolean;
+          limit?: { context?: number };
+          modalities?: { input?: string[]; output?: string[] };
+          cost?: { input?: number; output?: number };
+        }
+      >;
+    }
+  >;
+}): CreateModel[] {
+  const { provider, models, modelsDevData } = params;
+  const capabilitiesMap = buildCapabilitiesMap(modelsDevData, provider);
+
+  return models.map((model) => {
+    const capabilities = resolveModelCapabilities({
+      provider,
+      modelId: model.id,
+      capabilities: capabilitiesMap.get(model.id),
+    });
+
+    return {
+      externalId: `${provider}/${model.id}`,
+      provider,
+      modelId: model.id,
+      description: capabilities.description,
+      contextLength: capabilities.contextLength,
+      inputModalities: capabilities.inputModalities,
+      outputModalities: capabilities.outputModalities,
+      supportsToolCalling: capabilities.supportsToolCalling,
+      promptPricePerToken: capabilities.promptPricePerToken,
+      completionPricePerToken: capabilities.completionPricePerToken,
+      lastSyncedAt: new Date(),
+    };
+  });
 }
 
 export function resolveModelCapabilities(params: {

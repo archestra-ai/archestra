@@ -5,8 +5,7 @@ import { modelsDevClient } from "@/clients/models-dev-client";
 import logger from "@/logging";
 import { ApiKeyModelModel, ChatApiKeyModel, ModelModel } from "@/models";
 import {
-  buildCapabilitiesMap,
-  resolveModelCapabilities,
+  buildModelsToUpsert,
 } from "@/services/model-sync";
 import type { CreateModel } from "@/types";
 
@@ -181,28 +180,13 @@ class SystemKeyManager {
 
     // Fetch models.dev data for capabilities
     const modelsDevData = await modelsDevClient.fetchModelsFromApi();
-    const capabilitiesMap = buildCapabilitiesMap(modelsDevData, provider);
 
-    // Merge provider models with models.dev capabilities
-    const modelsToUpsert: CreateModel[] = models.map((model) => {
-      const capabilities = resolveModelCapabilities({
-        provider,
-        modelId: model.id,
-        capabilities: capabilitiesMap.get(model.id),
-      });
-      return {
-        externalId: `${provider}/${model.id}`,
-        provider,
-        modelId: model.id,
-        description: capabilities.description,
-        contextLength: capabilities.contextLength,
-        inputModalities: capabilities.inputModalities,
-        outputModalities: capabilities.outputModalities,
-        supportsToolCalling: capabilities.supportsToolCalling,
-        promptPricePerToken: capabilities.promptPricePerToken,
-        completionPricePerToken: capabilities.completionPricePerToken,
-        lastSyncedAt: new Date(),
-      };
+    // Merge provider models with models.dev capabilities, falling back to
+    // inferred capabilities when models.dev lacks metadata for a specific model.
+    const modelsToUpsert: CreateModel[] = buildModelsToUpsert({
+      provider,
+      models,
+      modelsDevData,
     });
 
     const upsertedModels = await ModelModel.bulkUpsert(modelsToUpsert);

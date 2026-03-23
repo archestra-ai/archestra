@@ -31,8 +31,8 @@ import {
   useState,
 } from "react";
 import { filterOptimisticToolCalls } from "@/components/chat/chat-messages.utils";
-import { getChatExternalAgentId } from "@/lib/chat-utils";
 import { useGenerateConversationTitle } from "@/lib/chat.query";
+import { getChatExternalAgentId } from "@/lib/chat-utils";
 import appConfig from "./config";
 import { useAppName } from "./use-app-name";
 

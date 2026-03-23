@@ -240,10 +240,9 @@ describe("chat-models", () => {
 
       const models = await fetchGeminiModelsViaVertexAi();
 
-      // Should include gemini-2.5-pro and gemini-2.5-flash
-      // Should exclude gemini-embedding-001 (embedding model)
+      // Should include gemini-2.5-pro, gemini-2.5-flash, and gemini-embedding-001
       // Should exclude imageclassification-efficientnet (non-gemini)
-      expect(models).toHaveLength(2);
+      expect(models).toHaveLength(3);
       expect(models).toEqual([
         {
           id: "gemini-2.5-pro",
@@ -253,6 +252,11 @@ describe("chat-models", () => {
         {
           id: "gemini-2.5-flash",
           displayName: "Gemini 2.5 Flash",
+          provider: "gemini",
+        },
+        {
+          id: "gemini-embedding-001",
+          displayName: "Gemini Embedding 001",
           provider: "gemini",
         },
       ]);
@@ -268,7 +272,7 @@ describe("chat-models", () => {
       expect(mockClient.models.get).not.toHaveBeenCalled();
     });
 
-    test("excludes non-chat models by pattern", async () => {
+    test("excludes non-gemini models", async () => {
       const mockModels = [
         {
           name: "publishers/google/models/gemini-2.0-flash-001",
@@ -311,10 +315,18 @@ describe("chat-models", () => {
 
       const models = await fetchGeminiModelsViaVertexAi();
 
-      // Only gemini-2.0-flash-001 should be included
-      // embedding, imagen, and text-bison should be excluded
-      expect(models).toHaveLength(1);
-      expect(models[0].id).toBe("gemini-2.0-flash-001");
+      expect(models).toEqual([
+        {
+          id: "gemini-2.0-flash-001",
+          displayName: "Gemini 2.0 Flash 001",
+          provider: "gemini",
+        },
+        {
+          id: "gemini-embedding-001",
+          displayName: "Gemini Embedding 001",
+          provider: "gemini",
+        },
+      ]);
     });
 
     test("generates display name from model ID", async () => {

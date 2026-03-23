@@ -4,7 +4,10 @@ import { isVertexAiEnabled } from "@/clients/gemini-client";
 import { modelsDevClient } from "@/clients/models-dev-client";
 import logger from "@/logging";
 import { ApiKeyModelModel, ChatApiKeyModel, ModelModel } from "@/models";
-import { buildCapabilitiesMap } from "@/services/model-sync";
+import {
+  buildCapabilitiesMap,
+  resolveModelCapabilities,
+} from "@/services/model-sync";
 import type { CreateModel } from "@/types";
 
 /**
@@ -182,18 +185,22 @@ class SystemKeyManager {
 
     // Merge provider models with models.dev capabilities
     const modelsToUpsert: CreateModel[] = models.map((model) => {
-      const capabilities = capabilitiesMap.get(model.id);
+      const capabilities = resolveModelCapabilities({
+        provider,
+        modelId: model.id,
+        capabilities: capabilitiesMap.get(model.id),
+      });
       return {
         externalId: `${provider}/${model.id}`,
         provider,
         modelId: model.id,
-        description: capabilities?.description ?? null,
-        contextLength: capabilities?.contextLength ?? null,
-        inputModalities: capabilities?.inputModalities ?? null,
-        outputModalities: capabilities?.outputModalities ?? null,
-        supportsToolCalling: capabilities?.supportsToolCalling ?? null,
-        promptPricePerToken: capabilities?.promptPricePerToken ?? null,
-        completionPricePerToken: capabilities?.completionPricePerToken ?? null,
+        description: capabilities.description,
+        contextLength: capabilities.contextLength,
+        inputModalities: capabilities.inputModalities,
+        outputModalities: capabilities.outputModalities,
+        supportsToolCalling: capabilities.supportsToolCalling,
+        promptPricePerToken: capabilities.promptPricePerToken,
+        completionPricePerToken: capabilities.completionPricePerToken,
         lastSyncedAt: new Date(),
       };
     });

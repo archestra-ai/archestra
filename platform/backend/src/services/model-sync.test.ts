@@ -165,4 +165,107 @@ describe("ModelSyncService", () => {
     expect(afterForceRefresh?.inputModalities).toBeNull();
     expect(afterForceRefresh?.outputModalities).toBeNull();
   });
+
+  test("infers Gemini modalities and backfills missing values without overwriting user edits", async ({
+    makeOrganization,
+    makeSecret,
+    makeChatApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const secret = await makeSecret({ secret: { apiKey: "vertex-placeholder" } });
+    const apiKey = await makeChatApiKey(org.id, secret.id, {
+      provider: "gemini",
+    });
+
+    await ModelModel.create({
+      externalId: "gemini/gemini-2.5-flash",
+      provider: "gemini",
+      modelId: "gemini-2.5-flash",
+      description: null,
+      contextLength: null,
+      inputModalities: null,
+      outputModalities: null,
+      supportsToolCalling: null,
+      promptPricePerToken: null,
+      completionPricePerToken: null,
+      lastSyncedAt: new Date(),
+    });
+
+    modelSyncService.registerFetcher("gemini", async () => [
+      {
+        id: "gemini-2.5-flash",
+        displayName: "Gemini 2.5 Flash",
+        provider: "gemini" as SupportedProvider,
+      },
+      {
+        id: "gemini-embedding-001",
+        displayName: "Gemini Embedding 001",
+        provider: "gemini" as SupportedProvider,
+      },
+      {
+        id: "gemini-live-2.5-flash-native-audio",
+        displayName: "Gemini Live 2.5 Flash Native Audio",
+        provider: "gemini" as SupportedProvider,
+      },
+      {
+        id: "gemini-2.5-flash-image-preview",
+        displayName: "Gemini 2.5 Flash Image Preview",
+        provider: "gemini" as SupportedProvider,
+      },
+    ]);
+
+    await modelSyncService.syncModelsForApiKey({
+      apiKeyId: apiKey.id,
+      provider: "gemini",
+      apiKeyValue: "vertex-placeholder",
+    });
+
+    const flash = await ModelModel.findByProviderAndModelId(
+      "gemini",
+      "gemini-2.5-flash",
+    );
+    expect(flash).not.toBeNull();
+    expect(flash?.inputModalities).toEqual(["text"]);
+    expect(flash?.outputModalities).toEqual(["text"]);
+
+    const embedding = await ModelModel.findByProviderAndModelId(
+      "gemini",
+      "gemini-embedding-001",
+    );
+    expect(embedding?.inputModalities).toEqual(["text"]);
+    expect(embedding?.outputModalities).toEqual([]);
+
+    const liveAudio = await ModelModel.findByProviderAndModelId(
+      "gemini",
+      "gemini-live-2.5-flash-native-audio",
+    );
+    expect(liveAudio?.inputModalities).toEqual(["text", "audio"]);
+    expect(liveAudio?.outputModalities).toEqual(["audio"]);
+
+    const imagePreview = await ModelModel.findByProviderAndModelId(
+      "gemini",
+      "gemini-2.5-flash-image-preview",
+    );
+    expect(imagePreview?.inputModalities).toEqual(["text", "image"]);
+    expect(imagePreview?.outputModalities).toEqual(["image"]);
+
+    // biome-ignore lint/style/noNonNullAssertion: asserted above
+    await ModelModel.update(flash!.id, {
+      inputModalities: ["text", "image"],
+      outputModalities: ["text", "image"],
+    });
+
+    await modelSyncService.syncModelsForApiKey({
+      apiKeyId: apiKey.id,
+      provider: "gemini",
+      apiKeyValue: "vertex-placeholder",
+    });
+
+    const flashAfterResync = await ModelModel.findByProviderAndModelId(
+      "gemini",
+      "gemini-2.5-flash",
+    );
+    expect(flashAfterResync?.inputModalities).toEqual(["text", "image"]);
+    expect(flashAfterResync?.outputModalities).toEqual(["text", "image"]);
+  });
 });

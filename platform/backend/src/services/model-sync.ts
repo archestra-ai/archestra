@@ -94,19 +94,22 @@ class ModelSyncService {
       // models from OpenAI-compatible proxies are stored under the correct provider
       // instead of being mis-classified by heuristic model ID prefix detection.
       const modelsToUpsert: CreateModel[] = providerModels.map((model) => {
-        const capabilities = capabilitiesMap.get(model.id);
+        const capabilities = resolveModelCapabilities({
+          provider,
+          modelId: model.id,
+          capabilities: capabilitiesMap.get(model.id),
+        });
         return {
           externalId: `${provider}/${model.id}`,
           provider,
           modelId: model.id,
-          description: capabilities?.description ?? null,
-          contextLength: capabilities?.contextLength ?? null,
-          inputModalities: capabilities?.inputModalities ?? null,
-          outputModalities: capabilities?.outputModalities ?? null,
-          supportsToolCalling: capabilities?.supportsToolCalling ?? null,
-          promptPricePerToken: capabilities?.promptPricePerToken ?? null,
-          completionPricePerToken:
-            capabilities?.completionPricePerToken ?? null,
+          description: capabilities.description,
+          contextLength: capabilities.contextLength,
+          inputModalities: capabilities.inputModalities,
+          outputModalities: capabilities.outputModalities,
+          supportsToolCalling: capabilities.supportsToolCalling,
+          promptPricePerToken: capabilities.promptPricePerToken,
+          completionPricePerToken: capabilities.completionPricePerToken,
           lastSyncedAt: new Date(),
         };
       });
@@ -215,6 +218,32 @@ export interface ModelCapabilities {
   supportsToolCalling: boolean | null;
   promptPricePerToken: string | null;
   completionPricePerToken: string | null;
+}
+
+export function resolveModelCapabilities(params: {
+  provider: SupportedProvider;
+  modelId: string;
+  capabilities?: ModelCapabilities;
+}): ModelCapabilities {
+  const { provider, modelId, capabilities } = params;
+  const inferredCapabilities = inferModelCapabilities({
+    provider,
+    modelId,
+  });
+
+  return {
+    description: capabilities?.description ?? null,
+    contextLength:
+      capabilities?.contextLength ?? inferredCapabilities.contextLength,
+    inputModalities:
+      capabilities?.inputModalities ?? inferredCapabilities.inputModalities,
+    outputModalities:
+      capabilities?.outputModalities ?? inferredCapabilities.outputModalities,
+    supportsToolCalling:
+      capabilities?.supportsToolCalling ?? inferredCapabilities.supportsToolCalling,
+    promptPricePerToken: capabilities?.promptPricePerToken ?? null,
+    completionPricePerToken: capabilities?.completionPricePerToken ?? null,
+  };
 }
 
 /**
@@ -329,4 +358,70 @@ function parseModalities<T>(
   }
 
   return validated.length > 0 ? validated : null;
+}
+
+function inferModelCapabilities(params: {
+  provider: SupportedProvider;
+  modelId: string;
+}): ModelCapabilities {
+  const { provider, modelId } = params;
+
+  if (provider === "gemini") {
+    return inferGeminiCapabilities(modelId);
+  }
+
+  return emptyCapabilities();
+}
+
+function inferGeminiCapabilities(modelId: string): ModelCapabilities {
+  const normalizedModelId = modelId.toLowerCase();
+
+  if (!normalizedModelId.startsWith("gemini-")) {
+    return emptyCapabilities();
+  }
+
+  if (normalizedModelId.includes("embedding")) {
+    return {
+      ...emptyCapabilities(),
+      inputModalities: ["text"],
+      outputModalities: [],
+      supportsToolCalling: false,
+    };
+  }
+
+  if (normalizedModelId.includes("live") || normalizedModelId.includes("audio")) {
+    return {
+      ...emptyCapabilities(),
+      inputModalities: ["text", "audio"],
+      outputModalities: ["audio"],
+      supportsToolCalling: false,
+    };
+  }
+
+  if (normalizedModelId.includes("image")) {
+    return {
+      ...emptyCapabilities(),
+      inputModalities: ["text", "image"],
+      outputModalities: ["image"],
+      supportsToolCalling: false,
+    };
+  }
+
+  return {
+    ...emptyCapabilities(),
+    inputModalities: ["text"],
+    outputModalities: ["text"],
+  };
+}
+
+function emptyCapabilities(): ModelCapabilities {
+  return {
+    description: null,
+    contextLength: null,
+    inputModalities: null,
+    outputModalities: null,
+    supportsToolCalling: null,
+    promptPricePerToken: null,
+    completionPricePerToken: null,
+  };
 }

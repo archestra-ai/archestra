@@ -665,4 +665,78 @@ describe("ModelModel", () => {
       expect(capabilities.pricePerMillionOutput).toBe("15.00");
     });
   });
+
+  describe("supportsTextChat", () => {
+    test("returns true when modalities include text input and output", async () => {
+      const model = await ModelModel.create({
+        externalId: "gemini/gemini-2.5-flash",
+        provider: "gemini",
+        modelId: "gemini-2.5-flash",
+        description: null,
+        contextLength: null,
+        inputModalities: ["text", "image"],
+        outputModalities: ["text"],
+        supportsToolCalling: null,
+        promptPricePerToken: null,
+        completionPricePerToken: null,
+        lastSyncedAt: new Date(),
+      });
+
+      expect(ModelModel.supportsTextChat(model)).toBe(true);
+    });
+
+    test("returns false when input modalities do not include text", async () => {
+      const model = await ModelModel.create({
+        externalId: "gemini/gemini-live-2.5-flash-native-audio",
+        provider: "gemini",
+        modelId: "gemini-live-2.5-flash-native-audio",
+        description: null,
+        contextLength: null,
+        inputModalities: ["audio"],
+        outputModalities: ["audio"],
+        supportsToolCalling: null,
+        promptPricePerToken: null,
+        completionPricePerToken: null,
+        lastSyncedAt: new Date(),
+      });
+
+      expect(ModelModel.supportsTextChat(model)).toBe(false);
+    });
+
+    test("returns false when output modalities do not include text", async () => {
+      const model = await ModelModel.create({
+        externalId: "gemini/gemini-2.5-flash-image-preview",
+        provider: "gemini",
+        modelId: "gemini-2.5-flash-image-preview",
+        description: null,
+        contextLength: null,
+        inputModalities: ["text", "image"],
+        outputModalities: ["image"],
+        supportsToolCalling: null,
+        promptPricePerToken: null,
+        completionPricePerToken: null,
+        lastSyncedAt: new Date(),
+      });
+
+      expect(ModelModel.supportsTextChat(model)).toBe(false);
+    });
+
+    test("returns true when modalities are unknown", async () => {
+      const model = await ModelModel.create({
+        externalId: "openai/gpt-4o",
+        provider: "openai",
+        modelId: "gpt-4o",
+        description: null,
+        contextLength: null,
+        inputModalities: null,
+        outputModalities: null,
+        supportsToolCalling: null,
+        promptPricePerToken: null,
+        completionPricePerToken: null,
+        lastSyncedAt: new Date(),
+      });
+
+      expect(ModelModel.supportsTextChat(model)).toBe(true);
+    });
+  });
 });

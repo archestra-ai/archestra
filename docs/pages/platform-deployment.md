@@ -729,6 +729,7 @@ These environment variables set the default base URL for each LLM provider. Per-
 - **`ARCHESTRA_GEMINI_VERTEX_AI_LOCATION`** - Google Cloud location/region for Vertex AI.
   - Default: `us-central1`
   - Example: `us-central1`, `europe-west1`, `asia-northeast1`
+  - In our testing, `us-central1` and `global` returned the most reliable Gemini publisher model listings. Some regions, including `us-east1`, may return incomplete model catalogs from Vertex AI model discovery APIs.
 
 - **`ARCHESTRA_GEMINI_VERTEX_AI_CREDENTIALS_FILE`** - Path to Google Cloud service account JSON key file.
   - Optional: Only needed when running outside of GCP or without Workload Identity

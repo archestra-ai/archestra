@@ -1094,14 +1094,16 @@ const chatModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         : dbModels;
 
       // Transform to response format with capabilities and markers
-      const models = filteredModels.map(({ model, isBest, isFastest }) => ({
-        id: model.modelId,
-        displayName: model.description || model.modelId,
-        provider: model.provider,
-        capabilities: ModelModel.toCapabilities(model),
-        isBest,
-        isFastest,
-      }));
+      const models = filteredModels
+        .filter(({ model }) => ModelModel.supportsTextChat(model))
+        .map(({ model, isBest, isFastest }) => ({
+          id: model.modelId,
+          displayName: model.description || model.modelId,
+          provider: model.provider,
+          capabilities: ModelModel.toCapabilities(model),
+          isBest,
+          isFastest,
+        }));
 
       logger.info(
         { organizationId, provider, totalModels: models.length },
@@ -1352,13 +1354,6 @@ const chatModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 };
 
-const VERTEX_GEMINI_EXCLUDE_PATTERNS = [
-  "embedding",
-  "imagen",
-  "text-bison",
-  "code-bison",
-];
-
 const VERTEX_GEMINI_FALLBACK_MODEL_IDS = [
   "gemini-2.5-pro",
   "gemini-2.5-flash",
@@ -1375,14 +1370,6 @@ function extractVertexGeminiModel(model: {
 }): ModelInfo | null {
   const modelName = model.name ?? "";
   if (!modelName.includes("gemini")) {
-    return null;
-  }
-
-  const lowerModelName = modelName.toLowerCase();
-  const isExcluded = VERTEX_GEMINI_EXCLUDE_PATTERNS.some((pattern) =>
-    lowerModelName.includes(pattern),
-  );
-  if (isExcluded) {
     return null;
   }
 

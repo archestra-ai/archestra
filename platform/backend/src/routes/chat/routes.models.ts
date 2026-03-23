@@ -1295,22 +1295,34 @@ const chatModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         (m) => !linkedModelIds.has(m.id),
       );
 
-      // Transform to response format with capabilities and markers
+      // Transform to response format with computed pricing and markers
       const response = [
-        ...modelsWithApiKeys.map(({ model, isFastest, isBest, apiKeys }) => ({
-          ...model,
-          isFastest,
-          isBest,
-          apiKeys,
-          capabilities: ModelModel.toCapabilities(model),
-        })),
-        ...unlinkedLlmProxyModels.map((model) => ({
-          ...model,
-          isFastest: false,
-          isBest: false,
-          apiKeys: [],
-          capabilities: ModelModel.toCapabilities(model),
-        })),
+        ...modelsWithApiKeys.map(({ model, isFastest, isBest, apiKeys }) => {
+          const pricing = ModelModel.toCapabilities(model);
+          return {
+            ...model,
+            isFastest,
+            isBest,
+            apiKeys,
+            pricePerMillionInput: pricing.pricePerMillionInput,
+            pricePerMillionOutput: pricing.pricePerMillionOutput,
+            isCustomPrice: pricing.isCustomPrice,
+            priceSource: pricing.priceSource,
+          };
+        }),
+        ...unlinkedLlmProxyModels.map((model) => {
+          const pricing = ModelModel.toCapabilities(model);
+          return {
+            ...model,
+            isFastest: false,
+            isBest: false,
+            apiKeys: [],
+            pricePerMillionInput: pricing.pricePerMillionInput,
+            pricePerMillionOutput: pricing.pricePerMillionOutput,
+            isCustomPrice: pricing.isCustomPrice,
+            priceSource: pricing.priceSource,
+          };
+        }),
       ];
 
       logger.debug(

@@ -55,7 +55,7 @@ describe("calculateCost", () => {
       lastSyncedAt: new Date(),
     });
 
-    await ModelModel.updatePricing(model.id, {
+    await ModelModel.update(model.id, {
       customPricePerMillionInput: "10.00",
       customPricePerMillionOutput: "30.00",
     });

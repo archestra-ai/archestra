@@ -17396,6 +17396,7 @@ export type GetModelsWithApiKeysResponses = {
         completionPricePerToken: string | null;
         customPricePerMillionInput: string | null;
         customPricePerMillionOutput: string | null;
+        ignored: boolean;
         discoveredViaLlmProxy: boolean;
         lastSyncedAt: string;
         createdAt: string;
@@ -17409,16 +17410,10 @@ export type GetModelsWithApiKeysResponses = {
             scope: string;
             isSystem: boolean;
         }>;
-        capabilities: {
-            contextLength: number | null;
-            inputModalities: Array<'text' | 'image' | 'audio' | 'video' | 'pdf'> | null;
-            outputModalities: Array<'text' | 'image' | 'audio'> | null;
-            supportsToolCalling: boolean | null;
-            pricePerMillionInput: string | null;
-            pricePerMillionOutput: string | null;
-            isCustomPrice: boolean;
-            priceSource: 'custom' | 'models_dev' | 'default';
-        };
+        pricePerMillionInput: string | null;
+        pricePerMillionOutput: string | null;
+        isCustomPrice: boolean;
+        priceSource: 'custom' | 'models_dev' | 'default';
     }>;
 };
 
@@ -17428,6 +17423,7 @@ export type UpdateModelData = {
     body: {
         customPricePerMillionInput?: string | null;
         customPricePerMillionOutput?: string | null;
+        ignored?: boolean;
         inputModalities?: Array<'text' | 'image' | 'audio' | 'video' | 'pdf'> | null;
         outputModalities?: Array<'text' | 'image' | 'audio'> | null;
     };
@@ -17515,6 +17511,7 @@ export type UpdateModelResponses = {
         completionPricePerToken: string | null;
         customPricePerMillionInput: string | null;
         customPricePerMillionOutput: string | null;
+        ignored: boolean;
         discoveredViaLlmProxy: boolean;
         lastSyncedAt: string;
         createdAt: string;

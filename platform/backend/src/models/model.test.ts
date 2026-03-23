@@ -441,7 +441,7 @@ describe("ModelModel", () => {
         completionPricePerToken: "0.000015",
         lastSyncedAt: new Date(),
       });
-      await ModelModel.updatePricing(model.id, {
+      await ModelModel.update(model.id, {
         customPricePerMillionInput: "20.00",
         customPricePerMillionOutput: "60.00",
       });
@@ -667,6 +667,25 @@ describe("ModelModel", () => {
   });
 
   describe("supportsTextChat", () => {
+    test("returns false when a model is marked as ignored", async () => {
+      const model = await ModelModel.create({
+        externalId: "openai/gpt-4o",
+        provider: "openai",
+        modelId: "gpt-4o",
+        description: null,
+        contextLength: null,
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        supportsToolCalling: true,
+        promptPricePerToken: null,
+        completionPricePerToken: null,
+        lastSyncedAt: new Date(),
+        ignored: true,
+      });
+
+      expect(ModelModel.supportsTextChat(model)).toBe(false);
+    });
+
     test("returns true when modalities include text input and output", async () => {
       const model = await ModelModel.create({
         externalId: "gemini/gemini-2.5-flash",
@@ -755,6 +774,34 @@ describe("ModelModel", () => {
       });
 
       expect(ModelModel.supportsTextChat(model)).toBe(true);
+    });
+  });
+
+  describe("update", () => {
+    test("can update ignored alongside editable model settings", async () => {
+      const model = await ModelModel.create({
+        externalId: "openai/gpt-4o-mini",
+        provider: "openai",
+        modelId: "gpt-4o-mini",
+        description: null,
+        contextLength: 128000,
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        supportsToolCalling: true,
+        promptPricePerToken: "0.000001",
+        completionPricePerToken: "0.000002",
+        lastSyncedAt: new Date(),
+      });
+
+      const updated = await ModelModel.update(model.id, {
+        ignored: true,
+        inputModalities: ["text", "image"],
+        outputModalities: ["text"],
+      });
+
+      expect(updated).not.toBeNull();
+      expect(updated?.ignored).toBe(true);
+      expect(updated?.inputModalities).toEqual(["text", "image"]);
     });
   });
 });

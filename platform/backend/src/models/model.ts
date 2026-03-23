@@ -8,7 +8,6 @@ import type {
   ModelCapabilities,
   PatchModelBody,
   PriceSource,
-  UpdateModelPricing,
 } from "@/types";
 
 /**
@@ -392,6 +391,9 @@ class ModelModel {
     if (data.customPricePerMillionOutput !== undefined) {
       set.customPricePerMillionOutput = data.customPricePerMillionOutput;
     }
+    if (data.ignored !== undefined) {
+      set.ignored = data.ignored;
+    }
     if (data.inputModalities !== undefined) {
       set.inputModalities = data.inputModalities;
     }
@@ -402,27 +404,6 @@ class ModelModel {
     const [result] = await db
       .update(schema.modelsTable)
       .set(set)
-      .where(eq(schema.modelsTable.id, id))
-      .returning();
-
-    return result || null;
-  }
-
-  /**
-   * Update custom pricing for a model by its internal UUID.
-   * Set to null to reset to default pricing.
-   */
-  static async updatePricing(
-    id: string,
-    data: UpdateModelPricing,
-  ): Promise<Model | null> {
-    const [result] = await db
-      .update(schema.modelsTable)
-      .set({
-        customPricePerMillionInput: data.customPricePerMillionInput,
-        customPricePerMillionOutput: data.customPricePerMillionOutput,
-        updatedAt: new Date(),
-      })
       .where(eq(schema.modelsTable.id, id))
       .returning();
 
@@ -570,17 +551,15 @@ class ModelModel {
   }
 
   static supportsTextChat(model: Model): boolean {
-    if (
-      model.inputModalities &&
-      !model.inputModalities.includes("text")
-    ) {
+    if (model.ignored) {
       return false;
     }
 
-    if (
-      model.outputModalities &&
-      !model.outputModalities.includes("text")
-    ) {
+    if (model.inputModalities && !model.inputModalities.includes("text")) {
+      return false;
+    }
+
+    if (model.outputModalities && !model.outputModalities.includes("text")) {
       return false;
     }
 

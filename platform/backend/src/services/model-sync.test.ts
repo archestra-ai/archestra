@@ -122,12 +122,9 @@ describe("ModelSyncService", () => {
     const model = await ModelModel.findByProviderAndModelId("openai", "gpt-4o");
     expect(model).not.toBeNull();
     // biome-ignore lint/style/noNonNullAssertion: asserted above
-    await ModelModel.updatePricing(model!.id, {
+    await ModelModel.update(model!.id, {
       customPricePerMillionInput: "1.00",
       customPricePerMillionOutput: "2.00",
-    });
-    // biome-ignore lint/style/noNonNullAssertion: asserted above
-    await ModelModel.update(model!.id, {
       inputModalities: ["text", "image"],
       outputModalities: ["text"],
     });
@@ -172,7 +169,9 @@ describe("ModelSyncService", () => {
     makeChatApiKey,
   }) => {
     const org = await makeOrganization();
-    const secret = await makeSecret({ secret: { apiKey: "vertex-placeholder" } });
+    const secret = await makeSecret({
+      secret: { apiKey: "vertex-placeholder" },
+    });
     const apiKey = await makeChatApiKey(org.id, secret.id, {
       provider: "gemini",
     });

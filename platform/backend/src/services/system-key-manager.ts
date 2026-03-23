@@ -4,9 +4,7 @@ import { isVertexAiEnabled } from "@/clients/gemini-client";
 import { modelsDevClient } from "@/clients/models-dev-client";
 import logger from "@/logging";
 import { ApiKeyModelModel, ChatApiKeyModel, ModelModel } from "@/models";
-import {
-  buildModelsToUpsert,
-} from "@/services/model-sync";
+import { buildModelsToUpsert } from "@/services/model-sync";
 import type { CreateModel } from "@/types";
 
 /**

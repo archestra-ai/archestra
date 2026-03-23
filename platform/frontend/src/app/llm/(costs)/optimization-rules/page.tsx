@@ -100,8 +100,8 @@ export default function OptimizationRulesPage() {
       modelsWithApiKeys.map((model) => ({
         model: model.modelId,
         provider: model.provider,
-        pricePerMillionInput: model.capabilities?.pricePerMillionInput ?? "0",
-        pricePerMillionOutput: model.capabilities?.pricePerMillionOutput ?? "0",
+        pricePerMillionInput: model.pricePerMillionInput ?? "0",
+        pricePerMillionOutput: model.pricePerMillionOutput ?? "0",
       })),
     [modelsWithApiKeys],
   );

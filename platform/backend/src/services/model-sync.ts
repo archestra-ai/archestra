@@ -256,7 +256,8 @@ export function resolveModelCapabilities(params: {
     outputModalities:
       capabilities?.outputModalities ?? inferredCapabilities.outputModalities,
     supportsToolCalling:
-      capabilities?.supportsToolCalling ?? inferredCapabilities.supportsToolCalling,
+      capabilities?.supportsToolCalling ??
+      inferredCapabilities.supportsToolCalling,
     promptPricePerToken: capabilities?.promptPricePerToken ?? null,
     completionPricePerToken: capabilities?.completionPricePerToken ?? null,
   };
@@ -390,7 +391,10 @@ function inferGeminiCapabilities(modelId: string): ModelCapabilities {
     };
   }
 
-  if (normalizedModelId.includes("live") || normalizedModelId.includes("audio")) {
+  if (
+    normalizedModelId.includes("live") ||
+    normalizedModelId.includes("audio")
+  ) {
     return {
       ...emptyCapabilities(),
       inputModalities: ["text", "audio"],

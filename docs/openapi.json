@@ -61951,6 +61951,9 @@
                         "nullable": true,
                         "type": "string"
                       },
+                      "ignored": {
+                        "type": "boolean"
+                      },
                       "discoveredViaLlmProxy": {
                         "type": "boolean"
                       },
@@ -62005,76 +62008,24 @@
                           "additionalProperties": false
                         }
                       },
-                      "capabilities": {
-                        "type": "object",
-                        "properties": {
-                          "contextLength": {
-                            "nullable": true,
-                            "type": "integer",
-                            "minimum": -2147483648,
-                            "maximum": 2147483647
-                          },
-                          "inputModalities": {
-                            "nullable": true,
-                            "type": "array",
-                            "items": {
-                              "type": "string",
-                              "enum": [
-                                "text",
-                                "image",
-                                "audio",
-                                "video",
-                                "pdf"
-                              ]
-                            }
-                          },
-                          "outputModalities": {
-                            "nullable": true,
-                            "type": "array",
-                            "items": {
-                              "type": "string",
-                              "enum": [
-                                "text",
-                                "image",
-                                "audio"
-                              ]
-                            }
-                          },
-                          "supportsToolCalling": {
-                            "nullable": true,
-                            "type": "boolean"
-                          },
-                          "pricePerMillionInput": {
-                            "nullable": true,
-                            "type": "string"
-                          },
-                          "pricePerMillionOutput": {
-                            "nullable": true,
-                            "type": "string"
-                          },
-                          "isCustomPrice": {
-                            "type": "boolean"
-                          },
-                          "priceSource": {
-                            "type": "string",
-                            "enum": [
-                              "custom",
-                              "models_dev",
-                              "default"
-                            ]
-                          }
-                        },
-                        "required": [
-                          "contextLength",
-                          "inputModalities",
-                          "outputModalities",
-                          "supportsToolCalling",
-                          "pricePerMillionInput",
-                          "pricePerMillionOutput",
-                          "isCustomPrice",
-                          "priceSource"
-                        ],
-                        "additionalProperties": false
+                      "pricePerMillionInput": {
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      "pricePerMillionOutput": {
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      "isCustomPrice": {
+                        "type": "boolean"
+                      },
+                      "priceSource": {
+                        "type": "string",
+                        "enum": [
+                          "custom",
+                          "models_dev",
+                          "default"
+                        ]
                       }
                     },
                     "required": [
@@ -62091,6 +62042,7 @@
                       "completionPricePerToken",
                       "customPricePerMillionInput",
                       "customPricePerMillionOutput",
+                      "ignored",
                       "discoveredViaLlmProxy",
                       "lastSyncedAt",
                       "createdAt",
@@ -62098,7 +62050,10 @@
                       "isFastest",
                       "isBest",
                       "apiKeys",
-                      "capabilities"
+                      "pricePerMillionInput",
+                      "pricePerMillionOutput",
+                      "isCustomPrice",
+                      "priceSource"
                     ],
                     "additionalProperties": false
                   }
@@ -62347,6 +62302,9 @@
                     "nullable": true,
                     "type": "string"
                   },
+                  "ignored": {
+                    "type": "boolean"
+                  },
                   "inputModalities": {
                     "nullable": true,
                     "minItems": 1,
@@ -62488,6 +62446,9 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "ignored": {
+                      "type": "boolean"
+                    },
                     "discoveredViaLlmProxy": {
                       "type": "boolean"
                     },
@@ -62518,6 +62479,7 @@
                     "completionPricePerToken",
                     "customPricePerMillionInput",
                     "customPricePerMillionOutput",
+                    "ignored",
                     "discoveredViaLlmProxy",
                     "lastSyncedAt",
                     "createdAt",

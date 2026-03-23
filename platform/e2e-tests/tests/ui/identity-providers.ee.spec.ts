@@ -3,6 +3,7 @@ import {
   ADMIN_EMAIL,
   ADMIN_PASSWORD,
   E2eTestId,
+  getIdpRoleMappingRuleRowTestId,
   KEYCLOAK_OIDC,
   KEYCLOAK_SAML,
   SSO_DOMAIN,
@@ -133,7 +134,7 @@ async function fillOidcProviderForm(
 }
 
 function getRoleMappingRuleRow(page: Page, index: number) {
-  return page.getByTestId(`role-mapping-rule-${index}`);
+  return page.getByTestId(getIdpRoleMappingRuleRowTestId(index));
 }
 
 /**
@@ -734,12 +735,13 @@ test.describe("Identity Provider Role Mapping E2E", () => {
       // The Roles settings page is only accessible to admins
       await ssoPage.goto(`${UI_BASE_URL}/settings/roles`);
       await ssoPage.waitForLoadState("domcontentloaded");
+      await expect(ssoPage).toHaveURL(/\/settings\/roles/, { timeout: 10000 });
 
       // If user has admin role, they should see the Roles page
       // If they got editor role (from rule 1) or member role (default), they would not see this
-      await expect(
-        ssoPage.getByText("Roles", { exact: true }).first(),
-      ).toBeVisible({ timeout: 10000 });
+      await expect(ssoPage.getByRole("heading", { name: "Roles" })).toBeVisible(
+        { timeout: 10000 },
+      );
 
       // Success! The second rule matched and assigned admin role
     } finally {

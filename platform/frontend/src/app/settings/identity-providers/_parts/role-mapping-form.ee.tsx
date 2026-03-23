@@ -1,6 +1,10 @@
 "use client";
 
-import { E2eTestId, type IdentityProviderFormValues } from "@shared";
+import {
+  E2eTestId,
+  getIdpRoleMappingRuleRowTestId,
+  type IdentityProviderFormValues,
+} from "@shared";
 import { Info, Plus, Trash2 } from "lucide-react";
 import { type UseFormReturn, useFieldArray } from "react-hook-form";
 import {
@@ -124,7 +128,7 @@ export function RoleMappingForm({ form }: RoleMappingFormProps) {
                     <div
                       key={field.id}
                       className="flex items-start gap-3 p-3 border rounded-md"
-                      data-testid={`role-mapping-rule-${index}`}
+                      data-testid={getIdpRoleMappingRuleRowTestId(index)}
                     >
                       <div className="flex items-start gap-3 w-full flex-1 min-w-0">
                         <FormField

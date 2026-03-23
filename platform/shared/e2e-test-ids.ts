@@ -86,3 +86,7 @@ export const E2eTestId = {
 } as const;
 
 export type E2eTestId = (typeof E2eTestId)[keyof typeof E2eTestId];
+
+export function getIdpRoleMappingRuleRowTestId(index: number): string {
+  return `role-mapping-rule-${index}`;
+}

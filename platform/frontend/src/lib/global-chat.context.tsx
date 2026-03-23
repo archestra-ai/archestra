@@ -288,7 +288,7 @@ function ChatSessionHook({
   // Auto-retry state for transient errors
   const retryCountRef = useRef(0);
   const retryTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const prevMessagesLenRef = useRef(0);
+  const lastUserMessageIdRef = useRef<string | null>(null);
 
   const {
     messages,
@@ -445,12 +445,16 @@ function ChatSessionHook({
   // Keep sendMessageRef up-to-date for onFinish callback
   sendMessageRef.current = sendMessage;
 
-  // Reset retry counter when a new user message is sent (messages array grows).
-  // regenerate() doesn't add messages, so this won't reset during retries.
-  if (messages.length > prevMessagesLenRef.current) {
+  // Reset retry counter only when the user sends a genuinely new message.
+  // We track the last user message ID to avoid resetting during regenerate(),
+  // which manipulates the messages array without a new user message.
+  const lastUserMessage = [...messages]
+    .reverse()
+    .find((m) => m.role === "user");
+  if (lastUserMessage && lastUserMessage.id !== lastUserMessageIdRef.current) {
+    lastUserMessageIdRef.current = lastUserMessage.id;
     retryCountRef.current = 0;
   }
-  prevMessagesLenRef.current = messages.length;
 
   useEffect(() => {
     if (optimisticToolCalls.length === 0) {

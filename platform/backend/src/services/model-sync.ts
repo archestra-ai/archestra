@@ -1,5 +1,8 @@
 import type { SupportedProvider } from "@shared";
-import { modelsDevClient } from "@/clients/models-dev-client";
+import {
+  type ModelsDevApiResponse,
+  modelsDevClient,
+} from "@/clients/models-dev-client";
 import logger from "@/logging";
 import { ApiKeyModelModel, ModelModel } from "@/models";
 import type {
@@ -205,22 +208,7 @@ export interface ModelCapabilities {
 export function buildModelsToUpsert(params: {
   provider: SupportedProvider;
   models: Array<{ id: string }>;
-  modelsDevData: Record<
-    string,
-    {
-      models: Record<
-        string,
-        {
-          id: string;
-          name: string;
-          tool_call?: boolean;
-          limit?: { context?: number };
-          modalities?: { input?: string[]; output?: string[] };
-          cost?: { input?: number; output?: number };
-        }
-      >;
-    }
-  >;
+  modelsDevData: ModelsDevApiResponse;
 }): CreateModel[] {
   const { provider, models, modelsDevData } = params;
   const capabilitiesMap = buildCapabilitiesMap(modelsDevData, provider);
@@ -302,22 +290,7 @@ const MODELS_DEV_PROVIDER_MAP: Record<string, SupportedProvider | null> = {
  * Build a map of modelId -> capabilities from models.dev data for a specific provider.
  */
 export function buildCapabilitiesMap(
-  modelsDevData: Record<
-    string,
-    {
-      models: Record<
-        string,
-        {
-          id: string;
-          name: string;
-          tool_call?: boolean;
-          limit?: { context?: number };
-          modalities?: { input?: string[]; output?: string[] };
-          cost?: { input?: number; output?: number };
-        }
-      >;
-    }
-  >,
+  modelsDevData: ModelsDevApiResponse,
   targetProvider: SupportedProvider,
 ): Map<string, ModelCapabilities> {
   const map = new Map<string, ModelCapabilities>();

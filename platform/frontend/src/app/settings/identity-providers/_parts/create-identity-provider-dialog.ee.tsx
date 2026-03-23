@@ -144,7 +144,7 @@ export function CreateIdentityProviderDialog({
             >
               {createIdentityProvider.isPending
                 ? "Creating..."
-                : "Create & Test"}
+                : "Create Provider"}
             </PermissionButton>
           </DialogStickyFooter>
         </DialogForm>

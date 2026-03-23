@@ -717,8 +717,10 @@ async function fetchDeepSeekModels(
 }
 
 /**
- * Fetch models from AWS Bedrock API
- * Uses Bearer token authentication (proxy handles AWS credentials)
+ * Fetch models from AWS Bedrock API using ListInferenceProfiles.
+ * Only returns models the customer actually has access to (inference profiles),
+ * unlike ListFoundationModels which returns all models in the region.
+ * Uses Bearer token authentication (proxy handles AWS credentials).
  */
 export async function fetchBedrockModels(
   apiKey: string,
@@ -730,105 +732,18 @@ export async function fetchBedrockModels(
     return [];
   }
 
-  // Remove '-runtime' from base URL to get the control plane endpoint
-  const url = `${baseUrl.replace("-runtime", "")}/foundation-models?byOutputModality=TEXT&byInputModality=TEXT`;
-
-  const response = await fetch(url, {
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-    },
+  const controlPlaneUrl = baseUrl.replace("-runtime", "");
+  const profiles = await fetchAllBedrockInferenceProfiles(controlPlaneUrl, {
+    Authorization: `Bearer ${apiKey}`,
   });
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    logger.error(
-      { status: response.status, error: errorText },
-      "Failed to fetch Bedrock models",
-    );
-    throw new Error(`Failed to fetch Bedrock models: ${response.status}`);
-  }
-
-  const data = (await response.json()) as {
-    modelSummaries?: Array<{
-      modelId?: string;
-      modelName?: string;
-      providerName?: string;
-      inferenceTypesSupported?: string[];
-      inputModalities?: string[];
-    }>;
-  };
-
-  logger.info(
-    { url, modelCount: data.modelSummaries?.length, data },
-    "[fetchBedrockModels] full response from Bedrock ListFoundationModels",
-  );
-
-  if (!data.modelSummaries) {
-    logger.warn("No models returned from Bedrock ListFoundationModels");
-    return [];
-  }
-
-  // Filter to include models that support on-demand or inference profile (cross-region)
-  // INFERENCE_PROFILE models (like Claude) require the prefix env var to be set
-  const inferenceProfilePrefix = config.llm.bedrock.inferenceProfilePrefix;
-
-  const models = data.modelSummaries
-    .filter((model) => {
-      // Must support TEXT input modality
-      if (!model.inputModalities?.includes("TEXT")) {
-        return false;
-      }
-
-      const supportsOnDemand =
-        model.inferenceTypesSupported?.includes("ON_DEMAND");
-      const supportsInferenceProfile =
-        model.inferenceTypesSupported?.includes("INFERENCE_PROFILE");
-
-      // Include ON_DEMAND models always
-      // Include INFERENCE_PROFILE models only if prefix is configured
-      return (
-        supportsOnDemand || (supportsInferenceProfile && inferenceProfilePrefix)
-      );
-    })
-    .map((model) => {
-      // Generate a readable display name
-      const providerName = model.providerName || "Unknown";
-      const modelName = model.modelName || model.modelId || "Unknown Model";
-      const displayName = `${providerName} ${modelName}`;
-
-      // For INFERENCE_PROFILE models, prefix with region (e.g., "us" or "eu")
-      const isInferenceProfile =
-        model.inferenceTypesSupported?.includes("INFERENCE_PROFILE");
-      const prefix = inferenceProfilePrefix.endsWith(".")
-        ? inferenceProfilePrefix
-        : `${inferenceProfilePrefix}.`;
-      const modelId =
-        isInferenceProfile && inferenceProfilePrefix
-          ? `${prefix}${model.modelId}`
-          : model.modelId;
-
-      return {
-        id: modelId || "",
-        displayName,
-        provider: "bedrock" as const,
-      };
-    });
-
-  logger.info(
-    {
-      modelCount: models.length,
-      models: models.map((m) => ({ id: m.id, displayName: m.displayName })),
-    },
-    "[fetchBedrockModels] filtered models returned for bedrock",
-  );
-
-  return models;
+  return mapInferenceProfilesToModels(profiles);
 }
 
 /**
  * Fetch models from AWS Bedrock API via IAM credentials (IRSA, env vars, instance profile).
  * Uses SigV4 signing for authentication instead of API keys.
- * This is the Bedrock equivalent of fetchGeminiModelsViaVertexAi.
+ * Uses ListInferenceProfiles to only return models the customer has access to.
  */
 export async function fetchBedrockModelsViaIam(): Promise<ModelInfo[]> {
   const baseUrl = config.llm.bedrock.baseUrl;
@@ -837,89 +752,17 @@ export async function fetchBedrockModelsViaIam(): Promise<ModelInfo[]> {
     return [];
   }
 
+  const controlPlaneUrl = baseUrl.replace("-runtime", "");
   const region = getBedrockRegion(baseUrl);
-  const url = `${baseUrl.replace("-runtime", "")}/foundation-models?byOutputModality=TEXT&byInputModality=TEXT`;
-
   const creds = await getBedrockCredentialProvider()();
 
-  const signer = new AwsV4Signer({
-    url,
-    method: "GET",
-    region,
-    accessKeyId: creds.accessKeyId,
-    secretAccessKey: creds.secretAccessKey,
-    sessionToken: creds.sessionToken,
-    service: "bedrock",
-  });
-
-  const signed = await signer.sign();
-  const response = await fetch(signed.url, { headers: signed.headers });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    logger.error(
-      { status: response.status, error: errorText },
-      "Failed to fetch Bedrock models via IAM",
-    );
-    throw new Error(
-      `Failed to fetch Bedrock models via IAM: ${response.status}`,
-    );
-  }
-
-  const data = (await response.json()) as {
-    modelSummaries?: Array<{
-      modelId?: string;
-      modelName?: string;
-      providerName?: string;
-      inferenceTypesSupported?: string[];
-      inputModalities?: string[];
-    }>;
-  };
-
-  if (!data.modelSummaries) {
-    logger.warn("No models returned from Bedrock ListFoundationModels via IAM");
-    return [];
-  }
-
-  const inferenceProfilePrefix = config.llm.bedrock.inferenceProfilePrefix;
-
-  const models = data.modelSummaries
-    .filter((model) => {
-      if (!model.inputModalities?.includes("TEXT")) return false;
-      const supportsOnDemand =
-        model.inferenceTypesSupported?.includes("ON_DEMAND");
-      const supportsInferenceProfile =
-        model.inferenceTypesSupported?.includes("INFERENCE_PROFILE");
-      return (
-        supportsOnDemand || (supportsInferenceProfile && inferenceProfilePrefix)
-      );
-    })
-    .map((model) => {
-      const providerName = model.providerName || "Unknown";
-      const modelName = model.modelName || model.modelId || "Unknown Model";
-      const displayName = `${providerName} ${modelName}`;
-      const isInferenceProfile =
-        model.inferenceTypesSupported?.includes("INFERENCE_PROFILE");
-      const prefix = inferenceProfilePrefix.endsWith(".")
-        ? inferenceProfilePrefix
-        : `${inferenceProfilePrefix}.`;
-      const modelId =
-        isInferenceProfile && inferenceProfilePrefix
-          ? `${prefix}${model.modelId}`
-          : model.modelId;
-      return {
-        id: modelId || "",
-        displayName,
-        provider: "bedrock" as const,
-      };
-    });
-
-  logger.info(
-    { modelCount: models.length },
-    "[fetchBedrockModelsViaIam] fetched models",
+  const profiles = await fetchAllBedrockInferenceProfiles(
+    controlPlaneUrl,
+    {},
+    { region, creds },
   );
 
-  return models;
+  return mapInferenceProfilesToModels(profiles);
 }
 
 /**
@@ -1628,6 +1471,146 @@ function formatVertexGeminiDisplayName(modelId: string): string {
 
 function isPrimaryVertexGeminiModel(modelId: string): boolean {
   return modelId.includes("flash") || modelId.includes("pro");
+}
+
+// ============================================================================
+// Bedrock ListInferenceProfiles helpers
+// ============================================================================
+
+interface BedrockInferenceProfile {
+  inferenceProfileId?: string;
+  inferenceProfileName?: string;
+  description?: string;
+  status?: string;
+  type?: string;
+  models?: Array<{ modelArn?: string }>;
+}
+
+interface BedrockIamSigningParams {
+  region: string;
+  creds: {
+    accessKeyId: string;
+    secretAccessKey: string;
+    sessionToken?: string;
+  };
+}
+
+/**
+ * Fetch all inference profiles from Bedrock, handling pagination.
+ * Supports both Bearer token auth and IAM SigV4 signing.
+ */
+async function fetchAllBedrockInferenceProfiles(
+  controlPlaneUrl: string,
+  headers: Record<string, string>,
+  iamParams?: BedrockIamSigningParams,
+): Promise<BedrockInferenceProfile[]> {
+  const allProfiles: BedrockInferenceProfile[] = [];
+  let nextToken: string | undefined;
+
+  do {
+    const params = new URLSearchParams({ maxResults: "1000" });
+    if (nextToken) {
+      params.set("nextToken", nextToken);
+    }
+    const url = `${controlPlaneUrl}/inference-profiles?${params.toString()}`;
+
+    let response: Response;
+    if (iamParams) {
+      const signer = new AwsV4Signer({
+        url,
+        method: "GET",
+        region: iamParams.region,
+        accessKeyId: iamParams.creds.accessKeyId,
+        secretAccessKey: iamParams.creds.secretAccessKey,
+        sessionToken: iamParams.creds.sessionToken,
+        service: "bedrock",
+      });
+      const signed = await signer.sign();
+      response = await fetch(signed.url, { headers: signed.headers });
+    } else {
+      response = await fetch(url, { headers });
+    }
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      const authType = iamParams ? "IAM" : "API key";
+      logger.error(
+        { status: response.status, error: errorText },
+        `Failed to fetch Bedrock inference profiles via ${authType}`,
+      );
+      throw new Error(
+        `Failed to fetch Bedrock inference profiles: ${response.status}`,
+      );
+    }
+
+    const data = (await response.json()) as {
+      inferenceProfileSummaries?: BedrockInferenceProfile[];
+      nextToken?: string;
+    };
+
+    if (data.inferenceProfileSummaries) {
+      allProfiles.push(...data.inferenceProfileSummaries);
+    }
+
+    nextToken = data.nextToken;
+  } while (nextToken);
+
+  logger.info(
+    { profileCount: allProfiles.length },
+    "[fetchBedrockInferenceProfiles] fetched inference profiles",
+  );
+
+  return allProfiles;
+}
+
+/**
+ * Map Bedrock inference profiles to our ModelInfo format.
+ * Uses the inferenceProfileId as the model ID (e.g., "us.anthropic.claude-3-5-sonnet-20241022-v2:0").
+ */
+function mapInferenceProfilesToModels(
+  profiles: BedrockInferenceProfile[],
+): ModelInfo[] {
+  const allowedProviders = config.llm.bedrock.allowedProviders;
+  const allowedRegions = config.llm.bedrock.allowedInferenceRegions;
+
+  const models = profiles
+    .filter((profile) => profile.status === "ACTIVE")
+    .filter((profile) => {
+      if (allowedRegions.length === 0) return true;
+      const id = profile.inferenceProfileId || "";
+      const regionPrefix = id.split(".")[0];
+      return allowedRegions.includes(regionPrefix);
+    })
+    .filter((profile) => {
+      if (allowedProviders.length === 0) return true;
+      // inferenceProfileId format: "us.anthropic.claude-..." or "global.amazon.nova-..."
+      // Strip the region prefix, then check if the provider segment matches
+      const id = profile.inferenceProfileId || "";
+      return allowedProviders.some((provider) => {
+        const withoutRegion = id.replace(/^(us|eu|ap|global)\./, "");
+        return withoutRegion.startsWith(`${provider}.`);
+      });
+    })
+    .map((profile) => ({
+      id: profile.inferenceProfileId || "",
+      displayName:
+        profile.inferenceProfileName || profile.inferenceProfileId || "Unknown",
+      provider: "bedrock" as const,
+    }))
+    .filter((model) => model.id);
+
+  logger.info(
+    {
+      modelCount: models.length,
+      allowedProviders: allowedProviders.length > 0 ? allowedProviders : "all",
+      allowedInferenceRegions:
+        allowedRegions.length > 0 ? allowedRegions : "all",
+      models: models.map((m) => ({ id: m.id, displayName: m.displayName })),
+    },
+    "[fetchBedrockModels] models from inference profiles",
+  );
+
+  return models;
 }
 
 export default chatModelsRoutes;

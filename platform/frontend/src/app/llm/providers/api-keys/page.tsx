@@ -1,11 +1,6 @@
 "use client";
 
-import {
-  DocsPage,
-  E2eTestId,
-  formatSecretStorageType,
-  getDocsUrl,
-} from "@shared";
+import { E2eTestId, formatSecretStorageType } from "@shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
   AlertTriangle,
@@ -61,6 +56,7 @@ import {
   useUpdateChatApiKey,
 } from "@/lib/chat-settings.query";
 import { useFeature } from "@/lib/config.query";
+import { getFrontendDocsUrl } from "@/lib/docs";
 import { useOrganization } from "@/lib/organization.query";
 import { useDataTableQueryParams } from "@/lib/use-data-table-query-params";
 import { useSetProviderAction } from "../layout";
@@ -84,6 +80,7 @@ const DEFAULT_FORM_VALUES: ChatApiKeyFormValues = {
 };
 
 export default function ApiKeysPage() {
+  const docsUrl = getFrontendDocsUrl("platform-supported-llm-providers");
   const { searchParams, updateQueryParams } = useDataTableQueryParams();
   const search = searchParams.get("search") || "";
   const providerFilter = searchParams.get("provider") || "all";
@@ -317,18 +314,17 @@ export default function ApiKeysPage() {
           row.original.isSystem ? (
             <span className="text-sm text-muted-foreground">
               Env Vars{" "}
-              <a
-                href={getDocsUrl(
-                  DocsPage.PlatformSupportedLlmProviders,
-                  "using-vertex-ai",
-                )}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-primary hover:underline"
-              >
-                Docs
-                <ExternalLink className="h-3 w-3" />
-              </a>
+              {docsUrl && (
+                <a
+                  href={`${docsUrl}#using-vertex-ai`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-primary hover:underline"
+                >
+                  Docs
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+              )}
             </span>
           ) : (
             <span className="text-sm text-muted-foreground">
@@ -403,7 +399,7 @@ export default function ApiKeysPage() {
         },
       },
     ],
-    [openEditDialog, openDeleteDialog, getKeyUsage],
+    [docsUrl, openEditDialog, openDeleteDialog, getKeyUsage],
   );
 
   return (

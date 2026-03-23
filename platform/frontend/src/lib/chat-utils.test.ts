@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { getConversationDisplayTitle, preserveNewlines } from "./chat-utils";
+import {
+  getChatExternalAgentId,
+  getConversationDisplayTitle,
+  preserveNewlines,
+} from "./chat-utils";
 
 const DEFAULT_SESSION_NAME = "New Chat Session";
 
@@ -110,6 +114,36 @@ describe("getConversationDisplayTitle", () => {
     expect(getConversationDisplayTitle(null, messages)).toBe(
       DEFAULT_SESSION_NAME,
     );
+  });
+});
+
+describe("getChatExternalAgentId", () => {
+  it("returns appName suffixed with Chat", () => {
+    expect(getChatExternalAgentId("Archestra")).toBe("Archestra Chat");
+  });
+
+  it("strips emoji characters (non-ISO-8859-1)", () => {
+    expect(getChatExternalAgentId("My App 🚀")).toBe("My App Chat");
+  });
+
+  it("strips CJK characters", () => {
+    expect(getChatExternalAgentId("应用")).toBe("Chat");
+  });
+
+  it("preserves ISO-8859-1 accented characters", () => {
+    expect(getChatExternalAgentId("Café")).toBe("Café Chat");
+  });
+
+  it("handles empty appName", () => {
+    expect(getChatExternalAgentId("")).toBe("Chat");
+  });
+
+  it("strips leading emoji", () => {
+    expect(getChatExternalAgentId("🚀 My App")).toBe("My App Chat");
+  });
+
+  it("handles mixed ASCII and non-ISO-8859-1 characters", () => {
+    expect(getChatExternalAgentId("Hello 世界 App")).toBe("Hello App Chat");
   });
 });
 

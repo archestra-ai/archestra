@@ -1,8 +1,9 @@
 import { createHash } from "node:crypto";
 import { OAUTH_TOKEN_ID_PREFIX } from "@shared";
 import { vi } from "vitest";
+import { archestraMcpBranding } from "@/archestra-mcp-server";
 import type * as originalConfigModule from "@/config";
-import { TeamTokenModel, UserTokenModel } from "@/models";
+import { TeamTokenModel, ToolModel, UserTokenModel } from "@/models";
 import type { JwksValidationResult } from "@/services/jwks-validator";
 import { describe, expect, test } from "@/test";
 
@@ -25,6 +26,7 @@ vi.mock("@/services/jwks-validator", () => ({
 }));
 
 const {
+  createAgentServer,
   validateMCPGatewayToken,
   validateOAuthToken,
   validateExternalIdpToken,
@@ -1034,5 +1036,61 @@ describe("buildKnowledgeSourcesDescription", () => {
     const match = result?.match(/Connected sources: (.+?)\./);
     expect(match).not.toBeNull();
     expect(match?.[1]).toBe("jira");
+  });
+});
+
+describe("createAgentServer tools/list", () => {
+  test("returns branded built-in tool names through the MCP tools/list handler", async ({
+    makeAgent,
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({ organizationId: org.id });
+
+    await ToolModel.syncArchestraBuiltInCatalog({
+      organization: {
+        appName: "Acme Control Plane",
+        iconLogo: null,
+      },
+    });
+    await ToolModel.assignArchestraToolsToAgent(
+      agent.id,
+      "00000000-0000-4000-8000-000000000001",
+    );
+
+    archestraMcpBranding.syncFromOrganization({
+      appName: "Acme Control Plane",
+      iconLogo: null,
+    });
+
+    const { server } = await createAgentServer(agent.id);
+    const listToolsHandler = (
+      server as unknown as {
+        _requestHandlers: Map<
+          string,
+          (request: unknown) => Promise<{
+            tools: Array<{ name: string; description?: string }>;
+          }>
+        >;
+      }
+    )._requestHandlers.get("tools/list");
+
+    expect(listToolsHandler).toBeDefined();
+    if (!listToolsHandler) {
+      throw new Error("Expected tools/list handler to be registered");
+    }
+
+    const response = await listToolsHandler({
+      method: "tools/list",
+      params: {},
+    });
+
+    expect(
+      response.tools.some((tool) =>
+        tool.name.startsWith("acme_control_plane__"),
+      ),
+    ).toBe(true);
+
+    archestraMcpBranding.syncFromOrganization(null);
   });
 });

@@ -1,10 +1,7 @@
-import {
-  CONTEXT_EXTERNAL_AGENT_ID,
-  CONTEXT_TEAM_IDS,
-  isArchestraMcpServerTool,
-} from "@shared";
+import { CONTEXT_EXTERNAL_AGENT_ID, CONTEXT_TEAM_IDS } from "@shared";
 import { desc, eq, inArray } from "drizzle-orm";
 import { get } from "lodash-es";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import db, { schema } from "@/database";
 import type { ResultPolicyCondition } from "@/database/schemas/trusted-data-policy";
 import logger from "@/logging";
@@ -424,22 +421,22 @@ class TrustedDataPolicyModel {
       return results;
     }
 
-    // Handle Archestra MCP server tools
+    // Handle built-in MCP server tools
     for (let i = 0; i < toolCalls.length; i++) {
       const { toolName } = toolCalls[i];
-      if (isArchestraMcpServerTool(toolName)) {
+      if (archestraMcpBranding.isToolName(toolName)) {
         results.set(i.toString(), {
           isTrusted: true,
           isBlocked: false,
           shouldSanitizeWithDualLlm: false,
-          reason: "Archestra MCP server tool",
+          reason: "Built-in MCP server tool",
         });
       }
     }
 
-    // Get all non-Archestra tool names
+    // Get all non-built-in tool names
     const nonArchestraToolCalls = toolCalls.filter(
-      ({ toolName }) => !isArchestraMcpServerTool(toolName),
+      ({ toolName }) => !archestraMcpBranding.isToolName(toolName),
     );
 
     if (nonArchestraToolCalls.length === 0) {
@@ -499,7 +496,7 @@ class TrustedDataPolicyModel {
       const { toolName, toolOutput } = toolCalls[i];
 
       // Skip Archestra tools (already handled)
-      if (isArchestraMcpServerTool(toolName)) {
+      if (archestraMcpBranding.isToolName(toolName)) {
         continue;
       }
 

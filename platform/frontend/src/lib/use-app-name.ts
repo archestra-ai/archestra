@@ -1,11 +1,21 @@
 import { DEFAULT_APP_NAME } from "@shared";
-import { useOrganization } from "@/lib/organization.query";
+import { useAppearanceSettings } from "@/lib/organization.query";
+
+export const DEFAULT_APP_LOGO = "/logo.png";
 
 /**
- * Returns the configured app name (organization.appName),
- * falling back to DEFAULT_APP_NAME if not set.
+ * Returns the configured app name, preferring authenticated organization data
+ * and falling back to public appearance settings on unauthenticated pages.
  */
 export function useAppName(): string {
-  const { data: organization } = useOrganization();
-  return organization?.appName ?? DEFAULT_APP_NAME;
+  const { data: appearance } = useAppearanceSettings();
+  return appearance?.appName ?? DEFAULT_APP_NAME;
+}
+
+/**
+ * Returns the configured app icon logo with a stable frontend fallback.
+ */
+export function useAppIconLogo(): string {
+  const { data: appearance } = useAppearanceSettings();
+  return appearance?.iconLogo ?? DEFAULT_APP_LOGO;
 }

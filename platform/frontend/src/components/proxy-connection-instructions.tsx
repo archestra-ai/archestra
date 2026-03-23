@@ -1,11 +1,6 @@
 "use client";
 
-import {
-  DocsPage,
-  getDocsUrl,
-  providerDisplayNames,
-  type SupportedProvider,
-} from "@shared";
+import { providerDisplayNames, type SupportedProvider } from "@shared";
 import { MoreHorizontal } from "lucide-react";
 import { useState } from "react";
 import { CodeText } from "@/components/code-text";
@@ -19,6 +14,8 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import config from "@/lib/config";
+import { getFrontendDocsUrl } from "@/lib/docs";
+import { useAppName } from "@/lib/use-app-name";
 
 const { externalProxyUrls, internalProxyUrl } = config.api;
 
@@ -117,6 +114,8 @@ interface ProxyConnectionInstructionsProps {
 export function ProxyConnectionInstructions({
   agentId,
 }: ProxyConnectionInstructionsProps) {
+  const appName = useAppName();
+  const authDocsUrl = getFrontendDocsUrl("platform-llm-proxy-authentication");
   const [selectedProvider, setSelectedProvider] =
     useState<ProviderOption>("openai");
   const [connectionUrl, setConnectionUrl] = useState<string>(
@@ -198,7 +197,7 @@ export function ProxyConnectionInstructions({
       {"isCommand" in providerConfig ? (
         <div className="space-y-2">
           <p className="text-sm text-muted-foreground">
-            Run Claude Code with the Archestra proxy:
+            Run Claude Code with the {appName} proxy:
           </p>
           <CopyableCode
             value={claudeCodeCommand}
@@ -237,17 +236,20 @@ export function ProxyConnectionInstructions({
               className="mt-2 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-muted-foreground"
             />
             <span>
-              <a
-                href={getDocsUrl(
-                  DocsPage.PlatformLlmProxyAuthentication,
-                  "direct-provider-api-key",
-                )}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="underline hover:text-foreground"
-              >
-                Direct Provider API Key
-              </a>{" "}
+              {authDocsUrl ? (
+                <>
+                  <a
+                    href={`${authDocsUrl}#direct-provider-api-key`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline hover:text-foreground"
+                  >
+                    Direct Provider API Key
+                  </a>{" "}
+                </>
+              ) : (
+                <>Direct Provider API Key </>
+              )}
               — authenticate requests with your provider's native API key
             </span>
           </li>
@@ -273,17 +275,20 @@ export function ProxyConnectionInstructions({
               className="mt-2 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-muted-foreground"
             />
             <span>
-              <a
-                href={getDocsUrl(
-                  DocsPage.PlatformLlmProxyAuthentication,
-                  "jwks-external-identity-provider",
-                )}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="underline hover:text-foreground"
-              >
-                JWKS Authentication
-              </a>{" "}
+              {authDocsUrl ? (
+                <>
+                  <a
+                    href={`${authDocsUrl}#jwks-external-identity-provider`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline hover:text-foreground"
+                  >
+                    JWKS Authentication
+                  </a>{" "}
+                </>
+              ) : (
+                <>JWKS Authentication </>
+              )}
               — authenticate with an external identity provider
             </span>
           </li>
@@ -304,22 +309,20 @@ function UrlReplacementRow({
     return null;
   }
   return (
-    <div className="flex flex-col md:flex-row md:flex-wrap items-stretch md:items-center gap-2 min-w-0">
-      <div className="bg-muted/50 rounded-md px-3 py-2 border border-dashed border-muted-foreground/30 min-w-0 max-w-full overflow-hidden">
-        <CodeText className="text-xs line-through opacity-50 break-all">
+    <div className="grid min-w-0 gap-2 md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] md:items-center">
+      <div className="min-w-0 overflow-hidden rounded-md border border-dashed border-muted-foreground/30 bg-muted/50 px-3 py-2">
+        <CodeText className="text-xs line-through opacity-50 whitespace-normal [overflow-wrap:anywhere]">
           {originalUrl}
         </CodeText>
       </div>
-      <span className="text-muted-foreground flex-shrink-0 text-center md:text-left">
-        →
-      </span>
+      <span className="text-center text-muted-foreground md:text-left">→</span>
       <CopyableCode
         value={newUrl}
         toastMessage="Proxy URL copied to clipboard"
         variant="primary"
-        className="flex-1 min-w-0 max-w-full overflow-hidden"
+        className="min-w-0 max-w-full overflow-hidden"
       >
-        <CodeText className="text-xs text-primary break-all min-w-0">
+        <CodeText className="min-w-0 text-xs text-primary whitespace-normal [overflow-wrap:anywhere]">
           {newUrl}
         </CodeText>
       </CopyableCode>

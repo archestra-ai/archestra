@@ -47,6 +47,7 @@ import {
 } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
+import { useAppName } from "@/lib/use-app-name";
 import { useDataTableQueryParams } from "@/lib/use-data-table-query-params";
 import { DEFAULT_SORT_BY, DEFAULT_SORT_DIRECTION } from "@/lib/utils";
 import { AgentActions } from "./agent-actions";
@@ -616,6 +617,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
 }
 
 function AgentConnectionColumns({ agentId }: { agentId: string }) {
+  const appName = useAppName();
   // Fetch agent data for A2A connection instructions
   const { data: profiles, isPending } = useProfiles();
   const agent = profiles?.find((p) => p.id === agentId);
@@ -632,7 +634,7 @@ function AgentConnectionColumns({ agentId }: { agentId: string }) {
     <div className="space-y-6">
       <ConnectDialogSection
         title="A2A Connection"
-        description="Connect directly to this agent with Archestra's A2A endpoint, tokens, deep links, and optional email invocation."
+        description={`Connect directly to this agent with ${appName}'s A2A endpoint, tokens, deep links, and optional email invocation.`}
       >
         <A2AConnectionInstructions agent={agent} />
       </ConnectDialogSection>

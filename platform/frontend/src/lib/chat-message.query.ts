@@ -4,7 +4,7 @@ import { handleApiError } from "./utils";
 
 const { updateChatMessage } = archestraApiSdk;
 
-export function useUpdateChatMessage(conversationId: string) {
+export function useUpdateChatMessage(conversationId?: string) {
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -32,6 +32,10 @@ export function useUpdateChatMessage(conversationId: string) {
       return data;
     },
     onSuccess: () => {
+      if (!conversationId) {
+        return;
+      }
+
       queryClient.invalidateQueries({
         queryKey: ["conversation", conversationId],
       });

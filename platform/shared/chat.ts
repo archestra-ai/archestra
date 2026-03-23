@@ -15,6 +15,31 @@ export interface TokenUsage {
 }
 
 // ============================================================================
+// Chat Message Part Types
+// ============================================================================
+
+export type ChatMessagePart = {
+  type: string;
+  output?: unknown;
+  result?: unknown;
+  toolName?: string;
+  text?: string;
+  toolCallId?: string;
+  state?: string;
+  source?: unknown;
+  // Chat history consumers touch loosely-typed UI message parts coming from the
+  // AI SDK and persisted JSON payloads, so this remains permissive until we
+  // have a stable discriminated union for all supported part shapes.
+  [key: string]: unknown;
+};
+
+export type ChatMessage = {
+  id?: string;
+  role: "system" | "user" | "assistant" | "tool";
+  parts?: ChatMessagePart[];
+};
+
+// ============================================================================
 // Zod Schemas for Model Modalities
 // ============================================================================
 

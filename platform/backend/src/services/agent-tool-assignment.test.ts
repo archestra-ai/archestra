@@ -1,0 +1,244 @@
+import { and, eq } from "drizzle-orm";
+import db, { schema } from "@/database";
+import { describe, expect, test } from "@/test";
+import {
+  assignToolToAgent,
+  validateAssignment,
+  validateCredentialSource,
+  validateExecutionSource,
+} from "./agent-tool-assignment";
+
+describe("validateCredentialSource", () => {
+  test("returns a validation error when the credential owner cannot access the target agent", async ({
+    makeAgent,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeMember,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const organization = await makeOrganization();
+    const owner = await makeUser();
+    const otherUser = await makeUser();
+
+    await makeMember(owner.id, organization.id, { role: "member" });
+    await makeMember(otherUser.id, organization.id, { role: "member" });
+
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      authorId: otherUser.id,
+      scope: "personal",
+    });
+    const catalog = await makeInternalMcpCatalog({ serverType: "remote" });
+    const mcpServer = await makeMcpServer({
+      ownerId: owner.id,
+      catalogId: catalog.id,
+    });
+
+    const result = await validateCredentialSource({
+      agentId: agent.id,
+      credentialSourceMcpServerId: mcpServer.id,
+    });
+
+    expect(result).toEqual({
+      code: "validation_error",
+      error: {
+        message:
+          "The credential owner must be a member of a team that this agent is assigned to",
+        type: "validation_error",
+      },
+    });
+  });
+});
+
+describe("validateExecutionSource", () => {
+  test("accepts prefetched tool data to avoid a redundant tool lookup", async ({
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({ serverType: "local" });
+    const tool = await makeTool({
+      catalogId: catalog.id,
+      name: "tool_1",
+    });
+
+    const result = await validateExecutionSource({
+      toolId: tool.id,
+      preFetchedTool: tool,
+      executionSourceMcpServerId: "server-1",
+      preFetchedServer: {
+        id: "server-1",
+        catalogId: catalog.id,
+      },
+    });
+
+    expect(result).toBeNull();
+  });
+
+  test("returns a validation error when the prefetched execution source comes from another catalog", async ({
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const toolCatalog = await makeInternalMcpCatalog({ serverType: "local" });
+    const otherCatalog = await makeInternalMcpCatalog({ serverType: "local" });
+    const tool = await makeTool({
+      catalogId: toolCatalog.id,
+      name: "tool_1",
+    });
+
+    const result = await validateExecutionSource({
+      toolId: tool.id,
+      preFetchedTool: tool,
+      executionSourceMcpServerId: "server-1",
+      preFetchedServer: {
+        id: "server-1",
+        catalogId: otherCatalog.id,
+      },
+    });
+
+    expect(result).toEqual({
+      code: "validation_error",
+      error: {
+        message:
+          "Execution source MCP server must come from the same catalog item as the tool",
+        type: "validation_error",
+      },
+    });
+  });
+});
+
+describe("validateAssignment late-bound precedence", () => {
+  test("prefers resolveAtCallTime over useDynamicTeamCredential when both are provided", async ({
+    makeAgent,
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const agent = await makeAgent();
+    const remoteCatalog = await makeInternalMcpCatalog({
+      serverType: "remote",
+    });
+    const tool = await makeTool({
+      name: "precedence_remote_tool",
+      catalogId: remoteCatalog.id,
+    });
+
+    const result = await validateAssignment({
+      agentId: agent.id,
+      toolId: tool.id,
+      resolveAtCallTime: true,
+      useDynamicTeamCredential: false,
+    });
+
+    expect(result).toBeNull();
+  });
+
+  test("defaults late-bound resolution to false when both flags are omitted", async ({
+    makeAgent,
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const agent = await makeAgent();
+    const remoteCatalog = await makeInternalMcpCatalog({
+      serverType: "remote",
+    });
+    const tool = await makeTool({
+      name: "default_false_remote_tool",
+      catalogId: remoteCatalog.id,
+    });
+
+    const result = await validateAssignment({
+      agentId: agent.id,
+      toolId: tool.id,
+    });
+
+    expect(result).toEqual({
+      code: "validation_error",
+      error: {
+        message:
+          "Credential source or dynamic team credential is required for remote MCP server tools",
+        type: "validation_error",
+      },
+    });
+  });
+});
+
+describe("assignToolToAgent", () => {
+  test("returns duplicate when the assignment is unchanged", async ({
+    makeAgent,
+    makeTool,
+  }) => {
+    const agent = await makeAgent();
+    const tool = await makeTool({ name: "duplicate_test_tool" });
+
+    const firstResult = await assignToolToAgent({
+      agentId: agent.id,
+      toolId: tool.id,
+    });
+    const secondResult = await assignToolToAgent({
+      agentId: agent.id,
+      toolId: tool.id,
+    });
+
+    expect(firstResult).toBeNull();
+    expect(secondResult).toBe("duplicate");
+  });
+
+  test("returns updated when an existing assignment changes its credential source", async ({
+    makeAgent,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeMember,
+    makeOrganization,
+    makeTool,
+    makeUser,
+  }) => {
+    const organization = await makeOrganization();
+    const owner = await makeUser();
+    await makeMember(owner.id, organization.id, { role: "admin" });
+
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      authorId: owner.id,
+      scope: "personal",
+    });
+    const catalog = await makeInternalMcpCatalog({ serverType: "remote" });
+    const tool = await makeTool({
+      name: "remote_assignment_tool",
+      catalogId: catalog.id,
+    });
+    const firstServer = await makeMcpServer({
+      ownerId: owner.id,
+      catalogId: catalog.id,
+    });
+    const secondServer = await makeMcpServer({
+      ownerId: owner.id,
+      catalogId: catalog.id,
+    });
+
+    const createResult = await assignToolToAgent({
+      agentId: agent.id,
+      toolId: tool.id,
+      credentialSourceMcpServerId: firstServer.id,
+    });
+    const updateResult = await assignToolToAgent({
+      agentId: agent.id,
+      toolId: tool.id,
+      credentialSourceMcpServerId: secondServer.id,
+    });
+
+    expect(createResult).toBeNull();
+    expect(updateResult).toBe("updated");
+
+    const [assignment] = await db
+      .select()
+      .from(schema.agentToolsTable)
+      .where(
+        and(
+          eq(schema.agentToolsTable.agentId, agent.id),
+          eq(schema.agentToolsTable.toolId, tool.id),
+        ),
+      );
+
+    expect(assignment?.credentialSourceMcpServerId).toBe(secondServer.id);
+  });
+});

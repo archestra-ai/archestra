@@ -2,10 +2,10 @@ import {
   CONTEXT_EXTERNAL_AGENT_ID,
   CONTEXT_TEAM_IDS,
   isAgentTool,
-  isArchestraMcpServerTool,
 } from "@shared";
 import { desc, eq, inArray } from "drizzle-orm";
 import { get } from "lodash-es";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import db, { schema } from "@/database";
 import logger from "@/logging";
 import type {
@@ -236,7 +236,7 @@ class ToolInvocationPolicyModel {
     }
 
     // Archestra tools always bypass policies (consistent with evaluateBatch)
-    if (isArchestraMcpServerTool(toolName)) {
+    if (archestraMcpBranding.isToolName(toolName)) {
       return false;
     }
 
@@ -433,7 +433,7 @@ class ToolInvocationPolicyModel {
     // Filter out Archestra tools and agent delegation tools (always allowed)
     const externalToolCalls = toolCalls.filter(
       (tc) =>
-        !isArchestraMcpServerTool(tc.toolCallName) &&
+        !archestraMcpBranding.isToolName(tc.toolCallName) &&
         !isAgentTool(tc.toolCallName),
     );
 

@@ -6,6 +6,7 @@ import { PostHogProviderWrapper } from "./_parts/posthog-provider";
 import { ArchestraQueryClientProvider } from "./_parts/query-client-provider";
 import { ThemeProvider } from "./_parts/theme-provider";
 import "./globals.css";
+import { DEFAULT_APP_DESCRIPTION } from "@shared";
 import { DynamicHead } from "@/components/dynamic-head";
 import { OrgThemeLoader } from "@/components/org-theme-loader";
 import { ChatProvider } from "@/lib/global-chat.context";
@@ -138,7 +139,7 @@ const libreBaskervilleFont = localFont({
 });
 
 export const metadata: Metadata = {
-  description: "Enterprise MCP Platform for AI Agents",
+  description: DEFAULT_APP_DESCRIPTION,
 };
 
 export default function RootLayout({

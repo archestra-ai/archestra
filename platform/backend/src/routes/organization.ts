@@ -9,6 +9,7 @@ import { and, eq, inArray, like } from "drizzle-orm";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import OpenAI from "openai";
 import { z } from "zod";
+import config from "@/config";
 import db, { schema } from "@/database";
 import { resolveApiKeyFromChatApiKey } from "@/knowledge-base/kb-llm-client";
 import {
@@ -21,6 +22,7 @@ import {
   McpToolCallModel,
   MemberModel,
   OrganizationModel,
+  ToolModel,
   UserModel,
   UserTokenModel,
 } from "@/models";
@@ -71,10 +73,34 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ organizationId, body }, reply) => {
+      const currentOrganization =
+        await OrganizationModel.getById(organizationId);
+      if (!currentOrganization) {
+        throw new ApiError(404, "Organization not found");
+      }
+
       const organization = await OrganizationModel.patch(organizationId, body);
 
       if (!organization) {
         throw new ApiError(404, "Organization not found");
+      }
+
+      if (
+        config.enterpriseFeatures.fullWhiteLabeling &&
+        (body.appName !== undefined || body.iconLogo !== undefined)
+      ) {
+        // appName renames the built-in tool/server names, and iconLogo updates
+        // the built-in catalog metadata shown across the UI.
+        const appNameChanged =
+          currentOrganization.appName !== organization.appName;
+        const iconChanged =
+          currentOrganization.iconLogo !== organization.iconLogo;
+
+        if (appNameChanged || iconChanged) {
+          await ToolModel.syncArchestraBuiltInCatalog({
+            organization: organization,
+          });
+        }
       }
 
       return reply.send(organization);

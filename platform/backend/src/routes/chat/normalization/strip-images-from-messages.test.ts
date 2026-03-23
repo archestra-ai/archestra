@@ -1,9 +1,6 @@
 import { describe, expect, test } from "@/test";
-import {
-  __test,
-  stripImagesFromMessages,
-  type UiMessage,
-} from "./strip-images-from-messages";
+import type { ChatMessage } from "@/types";
+import { __test, stripImagesFromMessages } from "./strip-images-from-messages";
 
 const { isBase64ImageData, stripImagesFromObject, IMAGE_STRIPPED_PLACEHOLDER } =
   __test;
@@ -124,7 +121,7 @@ describe("strip-images-from-messages", () => {
 
   describe("stripImagesFromMessages", () => {
     test("converts image blocks to text in tool-result parts", () => {
-      const messages: UiMessage[] = [
+      const messages: ChatMessage[] = [
         {
           id: "msg1",
           role: "assistant",
@@ -160,7 +157,7 @@ describe("strip-images-from-messages", () => {
     });
 
     test("converts direct image parts to text parts", () => {
-      const messages: UiMessage[] = [
+      const messages: ChatMessage[] = [
         {
           id: "msg1",
           role: "user",
@@ -188,7 +185,7 @@ describe("strip-images-from-messages", () => {
     });
 
     test("preserves text parts", () => {
-      const messages: UiMessage[] = [
+      const messages: ChatMessage[] = [
         {
           id: "msg1",
           role: "assistant",
@@ -204,7 +201,7 @@ describe("strip-images-from-messages", () => {
     });
 
     test("handles messages without parts", () => {
-      const messages: UiMessage[] = [{ id: "msg1", role: "system" }];
+      const messages: ChatMessage[] = [{ id: "msg1", role: "system" }];
 
       const result = stripImagesFromMessages(messages);
 
@@ -212,7 +209,7 @@ describe("strip-images-from-messages", () => {
     });
 
     test("preserves model-generated image parts in assistant messages", () => {
-      const messages: UiMessage[] = [
+      const messages: ChatMessage[] = [
         {
           id: "msg1",
           role: "assistant",
@@ -240,7 +237,7 @@ describe("strip-images-from-messages", () => {
     });
 
     test("strips image parts from user messages but preserves in assistant messages", () => {
-      const messages: UiMessage[] = [
+      const messages: ChatMessage[] = [
         {
           id: "msg1",
           role: "user",
@@ -283,7 +280,7 @@ describe("strip-images-from-messages", () => {
     });
 
     test("handles mixed content", () => {
-      const messages: UiMessage[] = [
+      const messages: ChatMessage[] = [
         {
           id: "msg1",
           role: "assistant",

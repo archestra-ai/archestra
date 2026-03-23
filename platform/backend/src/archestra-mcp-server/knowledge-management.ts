@@ -1,4 +1,22 @@
-import { TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME } from "@shared";
+import {
+  TOOL_ASSIGN_KNOWLEDGE_BASE_TO_AGENT_SHORT_NAME,
+  TOOL_ASSIGN_KNOWLEDGE_CONNECTOR_TO_AGENT_SHORT_NAME,
+  TOOL_ASSIGN_KNOWLEDGE_CONNECTOR_TO_KNOWLEDGE_BASE_SHORT_NAME,
+  TOOL_CREATE_KNOWLEDGE_BASE_SHORT_NAME,
+  TOOL_CREATE_KNOWLEDGE_CONNECTOR_SHORT_NAME,
+  TOOL_DELETE_KNOWLEDGE_BASE_SHORT_NAME,
+  TOOL_DELETE_KNOWLEDGE_CONNECTOR_SHORT_NAME,
+  TOOL_GET_KNOWLEDGE_BASE_SHORT_NAME,
+  TOOL_GET_KNOWLEDGE_BASES_SHORT_NAME,
+  TOOL_GET_KNOWLEDGE_CONNECTOR_SHORT_NAME,
+  TOOL_GET_KNOWLEDGE_CONNECTORS_SHORT_NAME,
+  TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
+  TOOL_UNASSIGN_KNOWLEDGE_BASE_FROM_AGENT_SHORT_NAME,
+  TOOL_UNASSIGN_KNOWLEDGE_CONNECTOR_FROM_AGENT_SHORT_NAME,
+  TOOL_UNASSIGN_KNOWLEDGE_CONNECTOR_FROM_KNOWLEDGE_BASE_SHORT_NAME,
+  TOOL_UPDATE_KNOWLEDGE_BASE_SHORT_NAME,
+  TOOL_UPDATE_KNOWLEDGE_CONNECTOR_SHORT_NAME,
+} from "@shared";
 import { z } from "zod";
 import { buildUserAcl, queryService } from "@/knowledge-base";
 import logger from "@/logging";
@@ -19,6 +37,7 @@ import {
   UpdateKnowledgeBaseSchema,
   UuidIdSchema,
 } from "@/types";
+import { archestraMcpBranding } from "./branding";
 import {
   catchError,
   defineArchestraTool,
@@ -244,7 +263,7 @@ type ConnectorAgentAssignmentArgs = z.infer<
 
 const registry = defineArchestraTools([
   defineArchestraTool({
-    shortName: "query_knowledge_sources",
+    shortName: TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
     title: "Query Knowledge Sources",
     description:
       "Query the organization's knowledge sources to retrieve relevant information. Use this tool when the user asks a question you cannot answer from your training data alone, or when they explicitly ask you to search internal documents and data sources. Pass the user's original query as-is — do not rephrase, summarize, or expand it. The system performs its own query optimization internally.",
@@ -256,7 +275,7 @@ const registry = defineArchestraTools([
   }),
   // --- Knowledge Base CRUD ---
   defineArchestraTool({
-    shortName: "create_knowledge_base",
+    shortName: TOOL_CREATE_KNOWLEDGE_BASE_SHORT_NAME,
     title: "Create Knowledge Base",
     description:
       "Create a new knowledge base for organizing knowledge connectors.",
@@ -267,7 +286,7 @@ const registry = defineArchestraTools([
     },
   }),
   defineArchestraTool({
-    shortName: "get_knowledge_bases",
+    shortName: TOOL_GET_KNOWLEDGE_BASES_SHORT_NAME,
     title: "Get Knowledge Bases",
     description: "List all knowledge bases in the organization.",
     schema: EmptyToolArgsSchema,
@@ -277,7 +296,7 @@ const registry = defineArchestraTools([
     },
   }),
   defineArchestraTool({
-    shortName: "get_knowledge_base",
+    shortName: TOOL_GET_KNOWLEDGE_BASE_SHORT_NAME,
     title: "Get Knowledge Base",
     description: "Get details of a specific knowledge base by ID.",
     schema: GetKnowledgeBaseToolArgsSchema,
@@ -287,7 +306,7 @@ const registry = defineArchestraTools([
     },
   }),
   defineArchestraTool({
-    shortName: "update_knowledge_base",
+    shortName: TOOL_UPDATE_KNOWLEDGE_BASE_SHORT_NAME,
     title: "Update Knowledge Base",
     description: "Update an existing knowledge base.",
     schema: KnowledgeBaseUpdateToolArgsSchema,
@@ -297,7 +316,7 @@ const registry = defineArchestraTools([
     },
   }),
   defineArchestraTool({
-    shortName: "delete_knowledge_base",
+    shortName: TOOL_DELETE_KNOWLEDGE_BASE_SHORT_NAME,
     title: "Delete Knowledge Base",
     description: "Delete a knowledge base by ID.",
     schema: DeleteKnowledgeBaseToolArgsSchema,
@@ -307,7 +326,7 @@ const registry = defineArchestraTools([
   }),
   // --- Knowledge Connector CRUD ---
   defineArchestraTool({
-    shortName: "create_knowledge_connector",
+    shortName: TOOL_CREATE_KNOWLEDGE_CONNECTOR_SHORT_NAME,
     title: "Create Knowledge Connector",
     description:
       "Create a new knowledge connector for ingesting data from external sources.",
@@ -318,7 +337,7 @@ const registry = defineArchestraTools([
     },
   }),
   defineArchestraTool({
-    shortName: "get_knowledge_connectors",
+    shortName: TOOL_GET_KNOWLEDGE_CONNECTORS_SHORT_NAME,
     title: "Get Knowledge Connectors",
     description: "List all knowledge connectors in the organization.",
     schema: EmptyToolArgsSchema,
@@ -328,7 +347,7 @@ const registry = defineArchestraTools([
     },
   }),
   defineArchestraTool({
-    shortName: "get_knowledge_connector",
+    shortName: TOOL_GET_KNOWLEDGE_CONNECTOR_SHORT_NAME,
     title: "Get Knowledge Connector",
     description: "Get details of a specific knowledge connector by ID.",
     schema: GetKnowledgeConnectorToolArgsSchema,
@@ -338,7 +357,7 @@ const registry = defineArchestraTools([
     },
   }),
   defineArchestraTool({
-    shortName: "update_knowledge_connector",
+    shortName: TOOL_UPDATE_KNOWLEDGE_CONNECTOR_SHORT_NAME,
     title: "Update Knowledge Connector",
     description: "Update an existing knowledge connector.",
     schema: ConnectorUpdateToolArgsSchema,
@@ -348,7 +367,7 @@ const registry = defineArchestraTools([
     },
   }),
   defineArchestraTool({
-    shortName: "delete_knowledge_connector",
+    shortName: TOOL_DELETE_KNOWLEDGE_CONNECTOR_SHORT_NAME,
     title: "Delete Knowledge Connector",
     description: "Delete a knowledge connector by ID.",
     schema: DeleteKnowledgeConnectorToolArgsSchema,
@@ -358,7 +377,7 @@ const registry = defineArchestraTools([
   }),
   // --- Connector <-> Knowledge Base Assignments ---
   defineArchestraTool({
-    shortName: "assign_knowledge_connector_to_knowledge_base",
+    shortName: TOOL_ASSIGN_KNOWLEDGE_CONNECTOR_TO_KNOWLEDGE_BASE_SHORT_NAME,
     title: "Assign Knowledge Connector to Knowledge Base",
     description: "Assign a knowledge connector to a knowledge base.",
     schema: ConnectorKnowledgeBaseAssignmentSchema,
@@ -370,7 +389,7 @@ const registry = defineArchestraTools([
     },
   }),
   defineArchestraTool({
-    shortName: "unassign_knowledge_connector_from_knowledge_base",
+    shortName: TOOL_UNASSIGN_KNOWLEDGE_CONNECTOR_FROM_KNOWLEDGE_BASE_SHORT_NAME,
     title: "Unassign Knowledge Connector from Knowledge Base",
     description: "Remove a knowledge connector from a knowledge base.",
     schema: ConnectorKnowledgeBaseAssignmentSchema,
@@ -383,7 +402,7 @@ const registry = defineArchestraTools([
   }),
   // --- Knowledge Base <-> Agent Assignments ---
   defineArchestraTool({
-    shortName: "assign_knowledge_base_to_agent",
+    shortName: TOOL_ASSIGN_KNOWLEDGE_BASE_TO_AGENT_SHORT_NAME,
     title: "Assign Knowledge Base to Agent",
     description: "Assign a knowledge base to an agent.",
     schema: KnowledgeBaseAgentAssignmentSchema,
@@ -392,7 +411,7 @@ const registry = defineArchestraTools([
     },
   }),
   defineArchestraTool({
-    shortName: "unassign_knowledge_base_from_agent",
+    shortName: TOOL_UNASSIGN_KNOWLEDGE_BASE_FROM_AGENT_SHORT_NAME,
     title: "Unassign Knowledge Base from Agent",
     description: "Remove a knowledge base from an agent.",
     schema: KnowledgeBaseAgentAssignmentSchema,
@@ -402,7 +421,7 @@ const registry = defineArchestraTools([
   }),
   // --- Knowledge Connector <-> Agent Assignments ---
   defineArchestraTool({
-    shortName: "assign_knowledge_connector_to_agent",
+    shortName: TOOL_ASSIGN_KNOWLEDGE_CONNECTOR_TO_AGENT_SHORT_NAME,
     title: "Assign Knowledge Connector to Agent",
     description:
       "Directly assign a knowledge connector to an agent (bypassing knowledge base).",
@@ -412,7 +431,7 @@ const registry = defineArchestraTools([
     },
   }),
   defineArchestraTool({
-    shortName: "unassign_knowledge_connector_from_agent",
+    shortName: TOOL_UNASSIGN_KNOWLEDGE_CONNECTOR_FROM_AGENT_SHORT_NAME,
     title: "Unassign Knowledge Connector from Agent",
     description:
       "Remove a directly-assigned knowledge connector from an agent.",
@@ -439,7 +458,9 @@ async function handleQueryKnowledgeSources(params: {
   logger.info(
     {
       agentId: contextAgent.id,
-      tool: TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
+      tool: archestraMcpBranding.getToolName(
+        TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
+      ),
       args,
     },
     "knowledge-management tool called",

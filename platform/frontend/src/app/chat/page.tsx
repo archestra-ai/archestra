@@ -83,6 +83,7 @@ import {
   useUpdateConversation,
   useUpdateConversationEnabledTools,
 } from "@/lib/chat.query";
+import { useChatAgentState } from "@/lib/chat-agent-state.hook";
 import { useChatModels, useModelsByProvider } from "@/lib/chat-models.query";
 import {
   type SupportedProvider,
@@ -687,42 +688,6 @@ export default function ChatPage() {
     chatModels,
   ]);
 
-  // Find the specific internal agent for this conversation (if any)
-  const _conversationInternalAgent = conversation?.agentId
-    ? internalAgents.find((a) => a.id === conversation.agentId)
-    : undefined;
-
-  // Get current agent info
-  const currentProfileId = conversation?.agentId;
-  const browserToolsAgentId = conversationId
-    ? (conversation?.agentId ?? conversation?.agent?.id)
-    : (initialAgentId ?? undefined);
-
-  const playwrightSetupAgentId = conversationId
-    ? (conversation?.agentId ?? undefined)
-    : (initialAgentId ?? undefined);
-
-  const { hasPlaywrightMcpTools, isLoading: isLoadingBrowserTools } =
-    useHasPlaywrightMcpTools(browserToolsAgentId, conversationId);
-  // Show while loading so it doesn't flash hidden for members whose agent already has playwright
-  // tools. Once loading is done, hides only if the user lacks permission AND agent has no tools.
-  const showBrowserButton =
-    canUpdateAgent ||
-    hasPlaywrightMcpTools ||
-    (!!conversationId && isLoadingConversation) ||
-    (!!browserToolsAgentId && isLoadingBrowserTools);
-
-  const {
-    isLoading: isPlaywrightCheckLoading,
-    isRequired: isPlaywrightSetupRequired,
-  } = usePlaywrightSetupRequired(playwrightSetupAgentId, conversationId, {
-    enabled: hasChatAccess && canUpdateAgent !== false,
-  });
-  // Treat both loading and required as "visible" for disabling submit, hiding arrow, etc.
-  // Only applies to users who can actually perform the installation.
-  const isPlaywrightSetupVisible =
-    !!canUpdateAgent && (isPlaywrightSetupRequired || isPlaywrightCheckLoading);
-
   // Create conversation mutation (requires agentId)
   const createConversationMutation = useCreateConversation();
 
@@ -787,6 +752,57 @@ export default function ChatPage() {
   const setPendingCustomServerToolCall =
     chatSession?.setPendingCustomServerToolCall;
   const tokenUsage = chatSession?.tokenUsage;
+
+  const {
+    conversationAgentId,
+    activeAgentId,
+    promptAgentId,
+    swappedAgentName,
+  } = useChatAgentState({
+    conversation,
+    initialAgentId,
+    messages,
+    agents: internalAgents.map((agent) => ({
+      id: agent.id,
+      name: agent.name,
+    })),
+  });
+
+  // Find the specific internal agent for this conversation (if any)
+  const _conversationInternalAgent = conversationAgentId
+    ? internalAgents.find((a) => a.id === conversationAgentId)
+    : undefined;
+
+  // Get current agent info
+  const currentProfileId = conversationAgentId;
+  const browserToolsAgentId = conversationId
+    ? (conversationAgentId ?? promptAgentId ?? undefined)
+    : (initialAgentId ?? undefined);
+
+  const playwrightSetupAgentId = conversationId
+    ? (conversationAgentId ?? undefined)
+    : (initialAgentId ?? undefined);
+
+  const { hasPlaywrightMcpTools, isLoading: isLoadingBrowserTools } =
+    useHasPlaywrightMcpTools(browserToolsAgentId, conversationId);
+  // Show while loading so it doesn't flash hidden for members whose agent already has playwright
+  // tools. Once loading is done, hides only if the user lacks permission AND agent has no tools.
+  const showBrowserButton =
+    canUpdateAgent ||
+    hasPlaywrightMcpTools ||
+    (!!conversationId && isLoadingConversation) ||
+    (!!browserToolsAgentId && isLoadingBrowserTools);
+
+  const {
+    isLoading: isPlaywrightCheckLoading,
+    isRequired: isPlaywrightSetupRequired,
+  } = usePlaywrightSetupRequired(playwrightSetupAgentId, conversationId, {
+    enabled: hasChatAccess && canUpdateAgent !== false,
+  });
+  // Treat both loading and required as "visible" for disabling submit, hiding arrow, etc.
+  // Only applies to users who can actually perform the installation.
+  const isPlaywrightSetupVisible =
+    !!canUpdateAgent && (isPlaywrightSetupRequired || isPlaywrightCheckLoading);
 
   // Use actual token usage when available from the stream (no fallback to estimation)
   const tokensUsed = tokenUsage?.totalTokens;
@@ -1348,9 +1364,6 @@ export default function ChatPage() {
     selectConversation,
   ]);
 
-  // Determine which agent ID to use for prompt input
-  const activeAgentId = conversation?.agent?.id ?? initialAgentId;
-
   // Check if the conversation's agent was deleted
   const isAgentDeleted = conversationId && conversation && !conversation.agent;
 
@@ -1683,6 +1696,14 @@ export default function ChatPage() {
                   optimisticToolCalls={optimisticToolCalls}
                   isLoadingConversation={isLoadingConversation}
                   onMessagesUpdate={setMessages}
+                  agentName={
+                    (currentProfileId
+                      ? internalAgents.find((a) => a.id === currentProfileId)
+                      : internalAgents.find((a) => a.id === initialAgentId)
+                    )?.name
+                  }
+                  selectedModel={conversation?.selectedModel ?? initialModel}
+                  modelSource={conversationModelSource ?? initialModelSource}
                   onUserMessageEdit={(
                     editedMessage,
                     updatedMessages,
@@ -1742,7 +1763,7 @@ export default function ChatPage() {
                         status={status}
                         selectedModel={conversation?.selectedModel ?? ""}
                         onModelChange={handleModelChange}
-                        agentId={conversation?.agent?.id ?? activeAgentId}
+                        agentId={promptAgentId ?? activeAgentId}
                         conversationId={conversationId}
                         currentConversationChatApiKeyId={
                           conversation?.chatApiKeyId
@@ -1762,7 +1783,8 @@ export default function ChatPage() {
                         }
                         submitDisabled={isPlaywrightSetupVisible}
                         isPlaywrightSetupVisible={isPlaywrightSetupVisible}
-                        selectorAgentId={conversation?.agentId ?? null}
+                        selectorAgentId={activeAgentId}
+                        selectorAgentName={swappedAgentName ?? undefined}
                         onAgentChange={handleConversationAgentChange}
                         modelSource={conversationModelSource}
                         onResetModelOverride={

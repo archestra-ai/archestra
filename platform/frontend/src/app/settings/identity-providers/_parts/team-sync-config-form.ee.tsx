@@ -26,6 +26,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useAppName } from "@/lib/use-app-name";
 
 interface TeamSyncConfigFormProps {
   form: UseFormReturn<IdentityProviderFormValues>;
@@ -47,6 +48,7 @@ const HANDLEBARS_EXAMPLES = [
 ];
 
 export function TeamSyncConfigForm({ form }: TeamSyncConfigFormProps) {
+  const appName = useAppName();
   return (
     <div className="space-y-6">
       <Separator />
@@ -89,7 +91,7 @@ export function TeamSyncConfigForm({ form }: TeamSyncConfigFormProps) {
                     <FormLabel>Enable Team Sync</FormLabel>
                     <FormDescription>
                       When enabled, users are automatically added/removed from
-                      Archestra teams based on their SSO group memberships.
+                      {appName} teams based on their SSO group memberships.
                     </FormDescription>
                   </div>
                 </FormItem>

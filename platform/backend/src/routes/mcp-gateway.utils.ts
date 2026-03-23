@@ -7,17 +7,16 @@ import {
   type Tool,
 } from "@modelcontextprotocol/sdk/types.js";
 import {
-  AGENT_TOOL_PREFIX,
-  ARCHESTRA_MCP_SERVER_NAME,
   ARCHESTRA_TOKEN_PREFIX,
-  MCP_SERVER_TOOL_NAME_SEPARATOR,
+  isAgentTool,
   OAUTH_TOKEN_ID_PREFIX,
   parseFullToolName,
-  TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
+  TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
 } from "@shared";
 import { eq } from "drizzle-orm";
 import type { FastifyRequest } from "fastify";
 import {
+  archestraMcpBranding,
   executeArchestraTool,
   filterToolNamesByPermission,
   getArchestraMcpTools,
@@ -136,7 +135,10 @@ export async function createAgentServer(
         name,
         title: archestraToolTitles.get(name) || name,
         description:
-          name === TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME && kbToolDescription
+          name ===
+            archestraMcpBranding.getToolName(
+              TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
+            ) && kbToolDescription
             ? kbToolDescription
             : description,
         inputSchema: parameters,
@@ -193,18 +195,19 @@ export async function createAgentServer(
 
       try {
         // Check if this is an Archestra tool or agent delegation tool
-        const archestraToolPrefix = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}`;
-        const isArchestraTool = name.startsWith(archestraToolPrefix);
-        const isAgentTool = name.startsWith(AGENT_TOOL_PREFIX);
+        const isArchestraTool = archestraMcpBranding.isToolName(name);
+        const isAgentDelegationTool = isAgentTool(name);
 
-        if (isArchestraTool || isAgentTool) {
+        if (isArchestraTool || isAgentDelegationTool) {
           logger.info(
             {
               agentId,
               toolName: name,
-              toolType: isAgentTool ? "agent-delegation" : "archestra",
+              toolType: isAgentDelegationTool
+                ? "agent-delegation"
+                : "archestra",
             },
-            isAgentTool
+            isAgentDelegationTool
               ? "Agent delegation tool call received"
               : "Archestra MCP tool call received",
           );
@@ -254,7 +257,7 @@ export async function createAgentServer(
               agentId,
               toolName: name,
             },
-            isAgentTool
+            isAgentDelegationTool
               ? "Agent delegation tool call completed"
               : "Archestra MCP tool call completed",
           );
@@ -263,7 +266,7 @@ export async function createAgentServer(
           try {
             await McpToolCallModel.create({
               agentId,
-              mcpServerName: ARCHESTRA_MCP_SERVER_NAME,
+              mcpServerName: archestraMcpBranding.serverName,
               method: "tools/call",
               toolCall: {
                 id: `archestra-${Date.now()}`,

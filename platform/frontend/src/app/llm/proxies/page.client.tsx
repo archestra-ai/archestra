@@ -4,9 +4,7 @@ import {
   type AgentType,
   archestraApiSdk,
   type archestraApiTypes,
-  DocsPage,
   E2eTestId,
-  getDocsUrl,
 } from "@shared";
 import { useQuery } from "@tanstack/react-query";
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
@@ -54,6 +52,7 @@ import {
 import { useDeleteProfile, useProfilesPaginated } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
+import { getFrontendDocsUrl } from "@/lib/docs";
 import { useDataTableQueryParams } from "@/lib/use-data-table-query-params";
 import { DEFAULT_SORT_BY, DEFAULT_SORT_DIRECTION } from "@/lib/utils";
 import { LlmProxyActions } from "./llm-proxy-actions";
@@ -182,6 +181,7 @@ function VisibilityBadge({
 }
 
 function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
+  const docsUrl = getFrontendDocsUrl("platform-llm-proxy");
   const {
     searchParams,
     pageIndex,
@@ -429,15 +429,20 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
         description={
           <p className="text-sm text-muted-foreground">
             LLM Proxies provide security, observability, and cost management for
-            your LLM API calls.{" "}
-            <a
-              href={getDocsUrl(DocsPage.PlatformLlmProxy)}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="underline hover:text-foreground"
-            >
-              Read more in the docs
-            </a>
+            your LLM API calls.
+            {docsUrl && (
+              <>
+                {" "}
+                <a
+                  href={docsUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline hover:text-foreground"
+                >
+                  Read more in the docs
+                </a>
+              </>
+            )}
           </p>
         }
         actionButton={

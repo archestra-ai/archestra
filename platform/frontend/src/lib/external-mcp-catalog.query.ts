@@ -39,7 +39,7 @@ export function useMcpRegistryServersInfinite(
       });
       if (!response.data) {
         handleApiError({
-          error: new Error("No data returned from Archestra catalog"),
+          error: new Error("No data returned from the catalog"),
         });
         return {
           servers: [],
@@ -89,7 +89,7 @@ export function useMcpServerCategories() {
       const response = await archestraCatalogSdk.getMcpServerCategories();
       if (!response.data) {
         handleApiError({
-          error: new Error("No categories returned from Archestra catalog"),
+          error: new Error("No categories returned from the catalog"),
         });
         return [];
       }

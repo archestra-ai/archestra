@@ -17,6 +17,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { useHasPermissions } from "@/lib/auth.query";
+import type { ModelSource } from "@/lib/use-chat-preferences";
 import {
   formatOriginalError,
   mapClientError,
@@ -27,12 +28,18 @@ interface InlineChatErrorProps {
   error: Error;
   conversationId?: string;
   supportMessage?: string | null;
+  agentName?: string;
+  selectedModel?: string;
+  modelSource?: ModelSource | null;
 }
 
 export function InlineChatError({
   error,
   conversationId,
   supportMessage,
+  agentName,
+  selectedModel,
+  modelSource,
 }: InlineChatErrorProps) {
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
   const { data: isAdmin } = useHasPermissions({
@@ -50,10 +57,29 @@ export function InlineChatError({
   if (chatError.spanId)
     refEntries.push({ label: "Span", value: chatError.spanId });
 
-  const copyAllIds = () => {
-    const text = refEntries.map((e) => `${e.label}: ${e.value}`).join("\n");
-    navigator.clipboard.writeText(text);
-    toast.success("Reference IDs copied");
+  const copyDebugInfo = () => {
+    const lines: string[] = [];
+
+    lines.push(chatError.message);
+    if (agentName) lines.push(`Agent: ${agentName}`);
+    if (selectedModel) lines.push(`Model: ${selectedModel}`);
+    if (chatError.originalError?.provider)
+      lines.push(`Provider: ${chatError.originalError.provider}`);
+    lines.push(`Model source: ${formatModelSource(modelSource)}`);
+    for (const e of refEntries) {
+      lines.push(`${e.label}: ${e.value}`);
+    }
+
+    lines.push("");
+    lines.push(
+      `Code: ${chatError.code}${chatError.isRetryable ? " (retryable)" : ""}`,
+    );
+    if (chatError.originalError) {
+      lines.push(formatOriginalError(chatError.originalError));
+    }
+
+    navigator.clipboard.writeText(lines.join("\n"));
+    toast.success("Debug info copied");
   };
 
   return (
@@ -69,29 +95,49 @@ export function InlineChatError({
               <p className="text-sm text-foreground">{chatError.message}</p>
             )}
 
-            {/* Reference IDs — compact row with copy-all button */}
-            {refEntries.length > 0 && (
-              <div className="flex items-center gap-1.5 flex-wrap">
-                {refEntries.map((entry) => (
-                  <span
-                    key={entry.label}
-                    className="inline-flex items-center gap-1 rounded bg-muted/60 px-1.5 py-0.5 text-[11px] text-muted-foreground font-mono"
-                  >
-                    <span className="opacity-60">{entry.label}</span>
-                    <span>{entry.value.slice(0, 8)}</span>
-                  </span>
-                ))}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-5 w-5 p-0 text-muted-foreground hover:text-foreground"
-                  onClick={copyAllIds}
-                  title="Copy all reference IDs"
+            {/* Context & reference IDs — compact row with copy button */}
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {agentName && (
+                <span className="inline-flex items-center gap-1 rounded bg-muted/60 px-1.5 py-0.5 text-[11px] text-muted-foreground font-mono">
+                  <span className="opacity-60">Agent</span>
+                  <span>{agentName}</span>
+                </span>
+              )}
+              {selectedModel && (
+                <span className="inline-flex items-center gap-1 rounded bg-muted/60 px-1.5 py-0.5 text-[11px] text-muted-foreground font-mono">
+                  <span className="opacity-60">Model</span>
+                  <span>{selectedModel}</span>
+                </span>
+              )}
+              {chatError.originalError?.provider && (
+                <span className="inline-flex items-center gap-1 rounded bg-muted/60 px-1.5 py-0.5 text-[11px] text-muted-foreground font-mono">
+                  <span className="opacity-60">Provider</span>
+                  <span>{chatError.originalError.provider}</span>
+                </span>
+              )}
+              <span className="inline-flex items-center gap-1 rounded bg-muted/60 px-1.5 py-0.5 text-[11px] text-muted-foreground font-mono">
+                <span className="opacity-60">Model source</span>
+                <span>{formatModelSource(modelSource)}</span>
+              </span>
+              {refEntries.map((entry) => (
+                <span
+                  key={entry.label}
+                  className="inline-flex items-center gap-1 rounded bg-muted/60 px-1.5 py-0.5 text-[11px] text-muted-foreground font-mono"
                 >
-                  <Copy className="h-3 w-3" />
-                </Button>
-              </div>
-            )}
+                  <span className="opacity-60">{entry.label}</span>
+                  <span>{entry.value.slice(0, 8)}</span>
+                </span>
+              ))}
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-5 w-5 p-0 text-muted-foreground hover:text-foreground"
+                onClick={copyDebugInfo}
+                title="Copy debug info"
+              >
+                <Copy className="h-3 w-3" />
+              </Button>
+            </div>
 
             {/* Admin-only: collapsible error details */}
             {isAdmin && (
@@ -141,4 +187,17 @@ export function InlineChatError({
       </MessageContent>
     </Message>
   );
+}
+
+function formatModelSource(source: ModelSource | null | undefined): string {
+  switch (source) {
+    case "agent":
+      return "agent";
+    case "organization":
+      return "organization";
+    case "user":
+      return "user override";
+    default:
+      return "no model selected";
+  }
 }

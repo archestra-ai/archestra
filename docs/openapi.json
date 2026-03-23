@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "1.1.33"
+    "version": "1.1.36"
   },
   "components": {
     "schemas": {
@@ -42909,6 +42909,12 @@
                 "nullable": true,
                 "type": "object",
                 "properties": {
+                  "resolveAtCallTime": {
+                    "type": "boolean"
+                  },
+                  "useDynamicTeamCredential": {
+                    "type": "boolean"
+                  },
                   "credentialSourceMcpServerId": {
                     "nullable": true,
                     "type": "string",
@@ -42920,9 +42926,6 @@
                     "type": "string",
                     "format": "uuid",
                     "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
-                  },
-                  "useDynamicTeamCredential": {
-                    "type": "boolean"
                   }
                 }
               }
@@ -43478,6 +43481,12 @@
                           "format": "uuid",
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
                         },
+                        "resolveAtCallTime": {
+                          "type": "boolean"
+                        },
+                        "useDynamicTeamCredential": {
+                          "type": "boolean"
+                        },
                         "credentialSourceMcpServerId": {
                           "nullable": true,
                           "type": "string",
@@ -43489,9 +43498,6 @@
                           "type": "string",
                           "format": "uuid",
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
-                        },
-                        "useDynamicTeamCredential": {
-                          "type": "boolean"
                         },
                         "agentId": {
                           "type": "string",

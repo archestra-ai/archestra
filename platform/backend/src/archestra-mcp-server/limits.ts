@@ -1,4 +1,12 @@
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import {
+  TOOL_CREATE_LIMIT_SHORT_NAME,
+  TOOL_DELETE_LIMIT_SHORT_NAME,
+  TOOL_GET_AGENT_TOKEN_USAGE_SHORT_NAME,
+  TOOL_GET_LIMITS_SHORT_NAME,
+  TOOL_GET_LLM_PROXY_TOKEN_USAGE_SHORT_NAME,
+  TOOL_UPDATE_LIMIT_SHORT_NAME,
+} from "@shared";
 import { z } from "zod";
 import logger from "@/logging";
 import { LimitModel } from "@/models";
@@ -101,7 +109,7 @@ const CreateLimitToolArgsSchema = z
 
 const registry = defineArchestraTools([
   defineArchestraTool({
-    shortName: "create_limit",
+    shortName: TOOL_CREATE_LIMIT_SHORT_NAME,
     title: "Create Limit",
     description:
       "Create a new cost or usage limit for an organization, team, agent, LLM proxy, or MCP gateway. Supports token_cost, mcp_server_calls, and tool_calls limit types.",
@@ -146,7 +154,7 @@ const registry = defineArchestraTools([
     },
   }),
   defineArchestraTool({
-    shortName: "get_limits",
+    shortName: TOOL_GET_LIMITS_SHORT_NAME,
     title: "Get Limits",
     description:
       "Retrieve all limits, optionally filtered by entity type and/or entity ID.",
@@ -217,7 +225,7 @@ const registry = defineArchestraTools([
     },
   }),
   defineArchestraTool({
-    shortName: "update_limit",
+    shortName: TOOL_UPDATE_LIMIT_SHORT_NAME,
     title: "Update Limit",
     description:
       "Update mutable fields on an existing limit. At least one update field must be provided.",
@@ -267,7 +275,7 @@ const registry = defineArchestraTools([
     },
   }),
   defineArchestraTool({
-    shortName: "delete_limit",
+    shortName: TOOL_DELETE_LIMIT_SHORT_NAME,
     title: "Delete Limit",
     description: "Delete an existing limit by ID.",
     schema: z
@@ -304,7 +312,7 @@ const registry = defineArchestraTools([
     },
   }),
   defineArchestraTool({
-    shortName: "get_agent_token_usage",
+    shortName: TOOL_GET_AGENT_TOKEN_USAGE_SHORT_NAME,
     title: "Get Agent Token Usage",
     description:
       "Get the total token usage (input and output) for a specific agent. If no id is provided, returns usage for the current agent.",
@@ -330,7 +338,7 @@ const registry = defineArchestraTools([
     },
   }),
   defineArchestraTool({
-    shortName: "get_llm_proxy_token_usage",
+    shortName: TOOL_GET_LLM_PROXY_TOKEN_USAGE_SHORT_NAME,
     title: "Get LLM Proxy Token Usage",
     description:
       "Get the total token usage (input and output) for a specific LLM proxy. If no id is provided, returns usage for the current agent.",

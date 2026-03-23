@@ -1371,7 +1371,7 @@ export function AgentDialog({
                   <Label>Tools ({selectedToolsCount})</Label>
                   {!agent && selectedToolsCount > 0 && (
                     <p className="text-xs text-muted-foreground">
-                      Some recommended Archestra MCP tools are pre-selected for
+                      Some recommended {appName} MCP tools are pre-selected for
                       you
                     </p>
                   )}

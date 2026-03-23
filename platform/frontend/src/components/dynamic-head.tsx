@@ -1,5 +1,6 @@
 "use client";
 
+import { DEFAULT_APP_DESCRIPTION, DEFAULT_APP_FULL_NAME } from "@shared";
 import { useEffect } from "react";
 import { useAppearanceSettings } from "@/lib/organization.query";
 
@@ -13,7 +14,7 @@ export function DynamicHead() {
   // Update document title only after data has loaded to avoid flashing default
   useEffect(() => {
     if (!isFetched) return;
-    document.title = appearance?.appName || "Archestra.AI";
+    document.title = appearance?.appName || DEFAULT_APP_FULL_NAME;
   }, [appearance?.appName, isFetched]);
 
   // Update favicon only after data has loaded to avoid flashing default
@@ -38,9 +39,8 @@ export function DynamicHead() {
 
   // Update meta description, OG description, and OG title
   useEffect(() => {
-    const description =
-      appearance?.ogDescription || "Enterprise MCP Platform for AI Agents";
-    const title = appearance?.appName || "Archestra.AI";
+    const description = appearance?.ogDescription || DEFAULT_APP_DESCRIPTION;
+    const title = appearance?.appName || DEFAULT_APP_FULL_NAME;
 
     upsertMeta("name", "description", description);
     upsertMeta("property", "og:description", description);

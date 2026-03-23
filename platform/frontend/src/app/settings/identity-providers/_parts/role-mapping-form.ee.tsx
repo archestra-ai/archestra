@@ -29,6 +29,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useAppName } from "@/lib/use-app-name";
 
 interface RoleMappingFormProps {
   form: UseFormReturn<IdentityProviderFormValues>;
@@ -56,6 +57,7 @@ const HANDLEBARS_EXAMPLES = [
 ];
 
 export function RoleMappingForm({ form }: RoleMappingFormProps) {
+  const appName = useAppName();
   const { fields, append, remove } = useFieldArray({
     control: form.control,
     name: "roleMapping.rules",
@@ -77,7 +79,7 @@ export function RoleMappingForm({ form }: RoleMappingFormProps) {
                   </TooltipTrigger>
                   <TooltipContent className="max-w-sm">
                     <p>
-                      Map identity provider attributes to Archestra roles using
+                      Map identity provider attributes to {appName} roles using
                       Handlebars templates. Rules are evaluated in order - first
                       match wins.
                     </p>
@@ -121,14 +123,15 @@ export function RoleMappingForm({ form }: RoleMappingFormProps) {
                   {fields.map((field, index) => (
                     <div
                       key={field.id}
-                      className="flex gap-3 items-start p-3 border rounded-md"
+                      className="flex items-start gap-3 p-3 border rounded-md"
+                      data-testid={`role-mapping-rule-${index}`}
                     >
-                      <div className="flex-1 space-y-3">
+                      <div className="flex items-start gap-3 w-full flex-1 min-w-0">
                         <FormField
                           control={form.control}
                           name={`roleMapping.rules.${index}.expression`}
                           render={({ field }) => (
-                            <FormItem>
+                            <FormItem className="flex-[3] min-w-0">
                               <FormLabel className="text-xs">
                                 Handlebars Template
                               </FormLabel>
@@ -150,9 +153,9 @@ export function RoleMappingForm({ form }: RoleMappingFormProps) {
                           control={form.control}
                           name={`roleMapping.rules.${index}.role`}
                           render={({ field }) => (
-                            <FormItem>
+                            <FormItem className="flex-1 min-w-[220px] max-w-[360px]">
                               <FormLabel className="text-xs">
-                                Archestra Role
+                                {appName} Role
                               </FormLabel>
                               <Select
                                 onValueChange={field.onChange}
@@ -178,7 +181,7 @@ export function RoleMappingForm({ form }: RoleMappingFormProps) {
                         type="button"
                         variant="ghost"
                         size="icon"
-                        className="text-destructive hover:text-destructive"
+                        className="shrink-0 mt-6 text-destructive hover:text-destructive"
                         onClick={() => remove(index)}
                       >
                         <Trash2 className="h-4 w-4" />

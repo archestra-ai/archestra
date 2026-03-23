@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import config from "@/lib/config";
 import { useLatestGitHubRelease } from "@/lib/github-release.query";
 import { useHealth } from "@/lib/health.query";
 import {
@@ -24,6 +25,7 @@ export function Version({ inline = false }: VersionProps) {
   // Prefer authenticated org data; fall back to public appearance for unauthenticated pages (e.g. sign-in)
   const footerText = organization?.footerText ?? appearance?.footerText;
   const version = data?.version;
+  const hideReleaseLink = config.enterpriseFeatures.fullWhiteLabeling;
 
   const hasNewVersion = useMemo(() => {
     if (!version || !latestRelease?.tag_name) return false;
@@ -80,7 +82,7 @@ export function Version({ inline = false }: VersionProps) {
   return (
     <div className={className}>
       {footerString}
-      {hasNewVersion && latestRelease && (
+      {!hideReleaseLink && hasNewVersion && latestRelease && (
         <>
           , new:{" "}
           <Link
